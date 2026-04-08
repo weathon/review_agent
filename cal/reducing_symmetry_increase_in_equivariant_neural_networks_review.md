@@ -1,75 +1,94 @@
-=== CALIBRATION EXAMPLE 39 ===
+=== CALIBRATION EXAMPLE 45 ===
 
 # Final Consolidated Review
 ## Summary
 
-This paper provides a rigorous mathematical framework to characterize and mitigate "symmetry increase" in equivariant neural networks—the phenomenon where outputs become invariant to transformations beyond the input's inherent symmetries. The core contribution is the concept of a "symmetry infimum," a unique lower bound on symmetry increase determined by the algebraic structure of the feature space, along with algorithms to compute it and density results showing that almost-isovariant maps are generic under standard regularity assumptions.
+This paper provides a rigorous mathematical framework for understanding and controlling "symmetry increase" in equivariant neural networks—where output representations become more symmetric than inputs, causing expressivity loss. The authors prove that for any feature space and input symmetry group, the increased symmetry admits a unique infimum determined by the feature space's algebraic structure (Theorem 3.1), develop computable algorithms to derive this infimum, and show that under standard regularity assumptions (manifold hypothesis, C^∞ approximation capability), most equivariant maps achieve this infimum (Theorem 5.2). Experiments on synthetic k-fold structures and QM9 molecular property prediction validate the theoretical predictions.
 
 ## Strengths
 
-- **Novel conceptual framework:** The symmetry infimum (Thm 3.1) and its uniqueness provide the first precise, computable bound on how much symmetry *must* increase for a given feature space and input symmetry. This generalizes prior observations (e.g., Cen et al. 2024's "collapse-to-zero" is a special case of full degeneration) into a predictive, structural theory.
-- **Bridge from abstract theory to practical computation:** The paper translates orbit-type classification—a classical topic from bifurcation theory—into concrete algorithms (Algo 1 & 2) and produces exhaustive tables of symmetry infima for all closed subgroups of SO(3) and O(3) (Appendix E). This makes the framework actionable for the most common symmetry groups in scientific ML.
-- **Clear taxonomy of degeneration types:** The classification into full, axial/continuous, and half/discrete degeneration (Fig 2, §C.4) gives practitioners a precise vocabulary for diagnosing specific expressivity failures, replacing vague prior observations with a structured theory that predicts exactly *which* feature degrees cause *which* type of information loss.
+- **The symmetry infimum concept (Thm 3.1) provides a precise, well-defined lower bound on symmetry increase**, moving beyond qualitative observations (Curie's Principle, orbit-type discussions) to a rigorous, computable quantity. The uniqueness proof—establishing that the minimal orbit type in a fixed-point subspace is unique up to conjugation—is the theoretical linchpin that makes the entire framework well-defined.
+
+- **The genericity result (Thm 5.2) meaningfully connects abstract representation theory to practical learning.** By showing that almost isovariant maps (those preserving symmetry up to the infimum, almost everywhere) are generic (dense) in the space of smooth equivariant maps, the paper provides a strong guarantee: for expressive enough architectures, the symmetry infimum is not just a lower bound but the typical behavior. This is a genuine advance over prior work that only identified the phenomenon without quantifying its typicality.
+
+- **The complete orbit-type and symmetry-infimum tables for all closed subgroups of SO(3)/O(3) (Appendix E)** constitute a substantial practical contribution. These tables allow practitioners to look up the predicted degeneration behavior for any input symmetry at any feature degree, directly enabling the design guidelines from §4.2.
+
+- **The taxonomy of degeneration types (full/axial-continuous/half-discrete) extends the prior "collapse-to-zero" framework** of Cen et al. (2024), which only addressed the most extreme case. The half-degeneration and axial-degeneration categories capture real expressivity losses that prior theory could not predict, as confirmed by the visualization experiments (Figs. 3–4).
 
 ## Weaknesses
 
-- **Experimental validation is observational, not interventional.** The QM9 experiment (§6.3) shows that molecules with symmetries causing full degeneration exhibit elevated MAE—a post-hoc confirmation of the predicted degradation. However, the paper never compares a model *designed according to the proposed guidelines* against an unconstrained baseline trained from scratch under identical conditions. Without this controlled ablation, the claim that the framework provides "practical guidelines for designing more reliable ENNs" (§7) is not empirically substantiated—only the prediction of degradation is confirmed, not the remedy.
+### Major:
 
-- **Theory–experiment architecture mismatch on the most practical experiment.** The theoretical density result (Thm 5.1) and its proof (Appendix D.2) are specialized to TFN's tensor-product parameterization. The QM9 experiment, however, uses HEGNN because "TFN is computationally prohibitive" (§F.3.1). HEGNN uses spherical scalarization, a fundamentally different parameterization. The paper does not establish that the symmetry infimum predictions or the C∞-density result transfer to scalarization-based architectures, leaving the strongest practical claim disconnected from the theory that supports it.
+- **The QM9 experiment does not adequately control for confounding factors when attributing performance differences to symmetry increase.** When the paper claims that "for non-trivial feature components where molecular symmetry increase to O(3), the prediction loss is substantially higher" (§6.3), it does not isolate whether this degradation stems from symmetry increase specifically or from the fact that different-degree features have different dimensionalities and representational capacities. For instance, l=1 features (3-dimensional) and l=2 features (5-dimensional) differ in size; if a symmetry group causes l=1 to fully degenerate while l=2 remains informative, the performance gap could be partly attributed to dimension rather than symmetry. An ablation matching feature dimensions across degrees (e.g., by subsampling) would strengthen the causal claim.
 
-- **Evaluation scope is narrow and does not test the core orientation-preservation claim.** The only real-world experiment uses a single dataset (QM9) and a single target (isotropic polarizability α), which is an orientation-invariant scalar. The guidelines in §4.2 distinguish between "orientation-dependent tasks" (where isovariance is crucial) and "general tasks" (where certain symmetry increases may be acceptable). Testing only an invariant scalar target cannot validate the framework's primary claim about preserving orientational information. Vector/tensor targets (dipole moments, forces) are natural next steps that go untested.
+- **The relationship between the high-multiplicity theory (r > dim G) and the r = 1 case used in practice is insufficiently clarified in the main text.** Proposition 4.2 requires r > dim G for Michel's criterion to be sufficient, yet the paper states predictions are "identical for the single representation case (r = 1), see §C.4." Section C.4 explains that the r = 1 results come from the Ihrig-Golubitsky criterion (with its correction term α_G), which is a different theoretical basis. This distinction is important because there could in principle be cases where the two criteria disagree, and the main text should explicitly state (1) that the high-multiplicity results are a sufficient but not necessary condition, and (2) that for r = 1 the more general criterion must be checked separately, with an explanation of why they coincide for O(3)/SO(3) specifically.
 
-- **Missing comparison to alternative symmetry-handling methods.** The paper proposes feature-space design as a remedy for symmetry increase, but does not compare against existing practical solutions such as frame averaging (Puny et al. 2022), random reference frames, or symmetry-breaking via noise injection. Without such comparisons, the practical advantage of the proposed guidelines over established remedies is unknown.
+### Minor:
 
-- **Genericity result does not address trained networks.** Theorem 5.2 guarantees that almost-isovariant maps are dense in the space of smooth equivariant maps, given C∞ approximation capability. However, gradient-based training on finite data does not sample uniformly from this function space; training dynamics and implicit regularization can systematically steer learned functions away from generic configurations. The paper provides no evidence that networks trained by SGD on realistic datasets actually achieve near-isovariance in practice.
+- **The manifold hypothesis assumption (§5.1, §A.3) is strong and unvalidated for molecular data.** While the paper acknowledges that molecular data may have self-intersections and different dimensional structures, it assumes these can be handled by finite unions of compact smooth G-invariant submanifolds. No empirical evidence is provided that QM9 data satisfies this assumption, and the consequences of violations for the genericity guarantees are not discussed.
 
-- **The high-multiplicity assumption requires clarification relative to single-representation claims.** Prop 4.2 (sufficiency of Michel's Criterion) requires multiplicity r > dim G = 3 for O(3), yet §4.1 states predictions are "identical for the single representation case (r = 1)." In §C.4, the paper acknowledges differences for specific subgroups (C_k, S_{2k}, C_{kh}) due to non-zero Ihrig–Golubitsky correction terms. The main-text claim of equivalence is therefore an oversimplification; the boundary conditions where the high-multiplicity regime diverges from r = 1 should be stated upfront.
+- **The practical workflow for applying the design guidelines (§4.2) requires knowing the input symmetry group a priori.** In practice, molecular symmetries are often unknown or mixed. The paper does not discuss how to handle datasets where different samples have different (possibly unknown) symmetry groups, which limits immediate applicability.
 
-- **No computational complexity analysis for the proposed algorithms.** Algorithms 1 and 2 require enumerating all adjacent closed supergroups of H in G and computing fixed-point subspace dimensions. For O(3), the subgroup lattice is intricate (Tables 6–7). Without any complexity analysis, it is unclear whether these algorithms are tractable for practitioners designing models with high-degree features or unusual symmetry groups, or whether they scale to larger groups.
+- **The multiplicity requirement r > max_j dim M_j from Theorem 5.2 for achieving full (non-almost) isovariance is not estimated for QM9.** It remains unclear whether standard channel counts (e.g., 16 channels used in the HEGNN experiments) satisfy this condition, leaving the practical relevance of the stronger guarantee uncertain.
 
-- **The C_∞ bottleneck limitation is buried in the appendix.** Section C.5 establishes that for SO(3), all subgroups satisfy the bottleneck condition and the composition property O_G(V_1 ⊕ V_2) = O_G(V_1) ∪ O_G(V_2) holds. For O(3), C_∞ does *not* satisfy this condition, meaning the simple composition rule fails and constructing representations containing C_∞ as an orbit type requires selecting components of both parities simultaneously. This practical limitation on the guidelines is discussed only in the appendix (§C.5, last paragraph), where it belongs in §4.2.
+- **The QM9 experiments evaluate only isotropic polarizability (α).** Since different molecular properties may have different dependencies on orientational information, testing additional properties (e.g., dipole moment, which is explicitly orientation-dependent) would better validate the generality of the guidelines.
 
-- **The manifold hypothesis is strong and its satisfaction by molecular data is unverified.** Theorem 5.2's sufficiency result assumes data is supported on a finite union of smooth, compact G-submanifolds. Molecular datasets like QM9 involve discrete atom types, fixed atom counts, and potential near-degenerate geometries. The paper acknowledges this assumption in Appendix A.3 but does not discuss what happens to the density result when it is violated (e.g., if the data manifold has singularities or corners).
+### Trivial:
+
+- The abstract's use of "most" (italicized) is imprecise about its topological meaning; Section 5 provides the precise formulation as genericity (residual/dense open sets), but this could be signaled earlier.
 
 ## Nice-to-Haves
 
-- A software tool or library extension that automates symmetry infimum computation for common point groups would substantially lower the adoption barrier for practitioners without representation-theory expertise.
-- An ablation on representation multiplicity (channel count) explicitly testing Theorem 5.2's prediction that increasing r beyond dim M_j enables full isovariance.
-- Discussion of robustness to approximate symmetries (noisy inputs, thermal fluctuations) that break exact group structure, which is common in molecular dynamics.
-- Evaluation on orientation-dependent tasks (e.g., dipole moment or force prediction) where the framework's distinction between orientation-dependent and general-task guidelines can be directly tested.
+- A direct comparison with alternative approaches to symmetry increase, particularly Kaba & Ravanbakhsh (2023)'s method of relaxing the equivariance constraint, to demonstrate the advantages of staying within the equivariant framework.
+- A practical feature-selection code snippet or decision procedure (beyond lookup tables) that practitioners can use without deep familiarity with representation theory.
+- Testing on non-molecular symmetric data such as crystal structures or general point clouds to validate claims about applicability across "scientific fields."
+- Training curves comparing convergence behavior with and without guideline-compliant feature selection, to assess whether symmetry increase affects optimization dynamics beyond expressivity.
 
 ## Removed Points
 
-*These points are flagged to be removed; treat them with caution.*
+*These points are flagged to be removed, treat them with caution.*
 
-- **"Example 2.2 indexing ambiguity"** — The paper explicitly states "x_i = (cos(2iπ/k), sin(2iπ/k), 0) for i > 0" with "x_0 at the origin" in Eq. 2. The indexing is unambiguous; the reviewer misread it.
-- **"Curie's Principle attribution"** — Citing Kaba & Ravanbakhsh (2023) for a specific mathematical formulation of a classical principle is standard practice. Formatting nitpick.
-- **"Compact Lie group assumption limits applicability to finite groups"** — Finite groups are 0-dimensional compact Lie groups; they are included in the assumption. The reviewer's concern is based on a misunderstanding.
-- **"Figure/Table formatting issues"** — All garbled figures/tables are PDF parsing artifacts, not paper problems.
-- **"Notation inconsistency (O_G vs O(3))"** — O_G(X) denotes orbit types; O(3) denotes the orthogonal group. The subscript/superscript distinction is clear in context. Style nitpick.
-- **"Table 21 statistical significance"** — 50% accuracy on binary classification unambiguously indicates complete failure; no significance test is needed.
-- **"Paper too mathematically dense"** — This is a theoretical paper at a top ML venue; mathematical depth is expected for this type of contribution. Style/formatting nitpick.
-- **"When symmetry increase is beneficial"** — The paper explicitly states in §3.2: "This increase can be an intentional design choice" and distinguishes designed vs. unintended symmetry increase. The reviewer missed this.
-- **"Trivial kernel assumption should not be the default"** — The paper handles both cases (§3.1 trivial, §3.2 non-trivial) in a standard mathematical exposition order. This is a presentation preference.
-- **"Generic ethics statement"** — This is a theoretical math paper with no human subjects or deployed systems; a generic ethics statement is appropriate.
+- **"Proof of Theorem 3.1 needs to address connectedness of V[H]"** — Factually incorrect. Two distinct open dense subsets of any non-empty topological space must intersect (if U, V are open dense and U ∩ V = ∅, then U ⊆ X\V, but X\V has empty interior since V is dense, contradicting U being non-empty open). Connectedness is not required.
+
+- **"Cross-referencing error: Counterexample D.3 referenced in Section 3 but appears in Section 5"** — The paper uses proper forward referencing: "In § 5.1, we will see that this condition is in fact not sufficient." This is standard academic practice, not an error.
+
+- **"Mismatch between TFN (theory) and HEGNN (QM9 experiment)"** — The theory in Theorem 5.2 applies to *any* equivariant parametrization with C^∞ approximation capability, not just TFN. TFN is used as a worked example for Theorem 5.1. The paper references Cen et al. (2025) for HEGNN's universal approximation property.
+
+- **"Notation inconsistency G_O(X) vs O_G(X)"** — Formatting nitpick; both notations appear consistently in their respective contexts.
+
+- **"Figure/table content garbled"** — PDF extraction artifacts, not paper problems.
+
+- **"Footnote about compact Lie groups appears late"** — It appears in footnote 2 on page 2, within the preliminaries section, which is the appropriate location.
+
+- **"Example 2.2 generators of G_x not rigorously derived"** — The paper provides the generators as statements and defers detailed calculations to the appendix (§C.3). This is standard practice for a paper with extensive mathematical content.
+
+- **"Theorem 5.1 proof doesn't address composition with Clebsch-Gordan tensors"** — The proof in Appendix D.2 explicitly handles this through an inductive argument (Eqs. 50–59) with a product approximation lemma that bounds the error of composing approximated functions. The treatment is careful and complete.
+
+- **"Missing related works"** — Per hard rules, cannot confirm existence of uncited works.
+
+- **"Reproducibility concerns about undisclosed hyperparameters"** — Per hard rules, removed; the paper provides code and detailed experimental settings in the appendix.
 
 ## Novel Insights
 
-The symmetry infimum framework reveals a striking structural fact: for any equivariant map, the *minimum* achievable output symmetry is not a property of the map but is entirely determined by the feature space's orbit type structure. This means the expressivity limit is an architectural constraint, not a training failure—no amount of optimization can make an equivariant map preserve input symmetries that the feature space cannot support. The practical consequence is that feature-space design (choosing which irreps to include) is a zeroth-order decision that must precede any optimization, and the paper's tables provide a lookup for making this decision correctly for SO(3)/O(3).
+The paper reveals a subtle structural insight: for SO(3), *all* closed subgroups satisfy the "bottleneck condition" (§C.5), meaning that any non-trivial symmetry increase from a subgroup H must pass through a unique adjacent supergroup. This gives the symmetry infimum a particularly clean compositional structure for SO(3): the infimum of a direct sum is simply the minimum of the infima of its components. The paper notes this fails for O(3) (citing C_∞ as a counterexample), creating an asymmetry between SO(3) and O(3) that has practical implications for feature design—selecting features that preserve C_∞ orbit types requires simultaneously including both even and odd parity components, a constraint not obvious from the SO(3) analysis alone.
 
 ## Suggestions
 
-- Run a controlled ablation on QM9: train two models from scratch—one following the feature selection guidelines (e.g., excluding degrees predicted to cause full degeneration for each molecular symmetry) and one using a standard feature set—and compare MAE across symmetry groups. This directly tests whether the guidelines provide practical value.
-- Add at least one orientation-dependent target (e.g., dipole moment from QM9) to validate the framework's core claim about preserving orientational information under the "orientation-dependent task" guidelines.
-- Include a brief discussion in §4.2 about the C_∞ bottleneck limitation for O(3), noting that the simple composition property fails for this subgroup and that both parity components must be selected simultaneously.
+- In the main text (around §4.1), add a brief paragraph explicitly stating that the high-multiplicity results are sufficient conditions, that the r = 1 case requires the Ihrig-Golubitsky criterion with its correction term α_G, and that for O(3)/SO(3) specifically these two criteria yield identical results. Reference §C.4 for the derivation.
 
-## Evaluation by Axis
+- For the QM9 experiment, add a dimensionality-matched control: when comparing features of degree l_0 that undergo full degeneration versus those that don't, subsample the non-degenerate features to match the effective dimensionality of the degenerate ones (which is zero for fully degenerate components), or compare by training separate MLPs with matched parameter counts to isolate the effect of symmetry increase from representational capacity.
 
-- **Novelty:** High. The symmetry infimum concept and its uniqueness proof are novel contributions that generalize prior empirical observations and partial theories into a unified, predictive framework.
-- **Technical soundness:** Good. The theoretical development is rigorous with complete proofs in the appendix. However, the disconnect between TFN-specific theory and HEGNN-based experiments, and the oversimplified claim about r=1 equivalence, create gaps between what is proven and what is claimed.
-- **Empirical support:** Moderate. Visualizations and synthetic experiments convincingly validate theoretical predictions about *degradation*, but the practical *remedy* (guidelines) lacks controlled interventional validation, and the most important experiment uses an architecture not covered by the theory.
-- **Significance:** High if the practical gap is addressed. The framework provides the first principled way to predict and control symmetry increase in ENNs, which is a foundational issue in geometric deep learning. The current gap between theoretical predictions and controlled empirical validation of the remedy limits immediate practical impact.
-- **Clarity:** Moderate. The paper is mathematically dense and requires significant background in representation theory and equivariant topology. Key practical limitations (C_∞ bottleneck, r=1 discrepancies) are deferred to the appendix. The main text could be more self-contained for the ML audience.
+## Axis Evaluations
+
+- **Novelty**: Strong. The symmetry infimum concept, its uniqueness proof, and the genericity result for almost-isovariant maps are genuine theoretical contributions that go beyond prior qualitative observations of symmetry increase.
+
+- **Technical soundness**: Generally sound, with one notable gap: the r = 1 vs. high-multiplicity theoretical justification is inadequately explained in the main text, though the appendix covers it. The proof of Theorem 3.1 is correct (the connectedness concern raised by one reviewer is spurious).
+
+- **Empirical support**: Moderate. The synthetic experiments (k-fold structures) cleanly validate the theoretical predictions, and the QM9 experiment demonstrates real-world relevance. However, the QM9 results lack proper ablations controlling for confounding factors, and only one molecular property is tested.
+
+- **Significance**: High for the equivariant neural network community. The framework provides both a diagnostic tool (predicting which feature degrees fail for which input symmetries) and a design principle (selecting feature components whose symmetry infimum preserves task-relevant information). This directly addresses a known failure mode in scientific ML applications.
+
+- **Clarity**: The mathematical exposition is precise but demands significant background in Lie group representation theory and stratification theory. The main text is well-structured, but the gap between the high-multiplicity theory and practical r = 1 settings, and the practical interpretation of the guidelines, could be clearer.
 
 # Actual Human Scores
 Individual reviewer scores: [8.0, 4.0, 8.0]

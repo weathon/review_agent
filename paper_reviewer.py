@@ -35,7 +35,7 @@ ZAI_BASE_URL = "https://api.z.ai/api/coding/paas/v4/"
 
 # base_model = "qwen/qwen3.6-plus:free" #用限时免费模型白嫖
 base_model = "qwen/qwen3.5-flash-02-23" 
-MODEL_HARSH = f"qwen/qwen3.5-plus-02-15" #用claude subscription白嫖
+MODEL_HARSH = f"qwen/qwen3.5-plus-02-15"
 MODEL_NEUTRAL = f"{base_model}"
 MODEL_SPARK = f"qwen/qwen3.5-plus-02-15" 
 MODEL_RELATED_WORK = f"{base_model}:online" 
@@ -43,8 +43,8 @@ MODEL_FILTER = f"{base_model}"
 # MODEL_MERGER = f"zai:glm-5.1" #用zai coding plan白嫖
 MODEL_MERGER = f"z-ai/glm-5.1" 
 MODEL_PARSER = "openai/gpt-5.4-nano" 
-MODEL_FIND_HUMAN = f"claude:claude-haiku-4-5" 
-MODEL_SCORER = f"claude:claude-haiku-4-5" 
+MODEL_FIND_HUMAN = f"claude:claude-sonnet-4-5"  #用claude subscription白嫖
+MODEL_SCORER = f"claude:claude-sonnet-4-5" 
 human_review_dir = "/home/wg25r/review_agent/iclr2025_data"
 
 MAX_RETRIES = 5
@@ -577,7 +577,6 @@ async def run_scorer(
         cwd=cal_dir_abs or None,
         allowed_tools=["Grep", "Read", "Glob", "Agent"],
         permission_mode="bypassPermissions",
-        effort="medium",
         max_turns=30,
     )
     total_cost = 0

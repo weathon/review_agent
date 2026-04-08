@@ -1,80 +1,77 @@
-=== CALIBRATION EXAMPLE 12 ===
+=== CALIBRATION EXAMPLE 41 ===
 
 # Final Consolidated Review
 ## Summary
 
-DualRes proposes a resampling-based framework that enhances probabilistic time series forecasting by decoupling conditional mean and volatility estimation, normalizing fitted residuals by estimated volatility, and bootstrap-resampling the normalized residuals to construct predictive distributions without parametric assumptions. The framework is flexible: since a logarithmic transformation converts volatility estimation into a mean-forecasting problem, any mean-forecasting algorithm can serve as both the mean and volatility model, enabling even purely deterministic forecasters to produce probabilistic outputs.
+DualRes proposes a resampling-based framework for probabilistic time series forecasting that decomposes the problem into conditional mean estimation, conditional volatility estimation, and bootstrap resampling of normalized residuals. By training two separate models (for mean and volatility) and using non-parametric resampling rather than parametric distributional assumptions, DualRes can convert any mean-forecasting algorithm into a probabilistic forecaster that accounts for conditional heteroskedasticity and non-Gaussian residual distributions.
 
 ## Strengths
 
-- **Practical model-agnostic flexibility**: The log-transformation trick (Remark 1, Eq. 3) allows any mean-forecasting model to estimate conditional volatility, meaning purely deterministic architectures (DLinear, PatchTST, TimeMixer) can be upgraded to produce full predictive distributions without architectural changes. This is a concrete, specific engineering contribution not shared by most probabilistic forecasting frameworks.
-
-- **Non-parametric residual handling motivated by real data**: Figure 2 directly demonstrates that normalized residuals across all six datasets deviate from Gaussian density—exhibiting heavy tails, skewness, or multimodality—providing empirical justification for the resampling approach over parametric alternatives.
-
-- **Explicit treatment of conditional heteroskedasticity**: Unlike many deep probabilistic forecasting methods that treat volatility implicitly through learned likelihood parameters, DualRes models volatility as a first-class component (Algorithm 1, Step 2), producing prediction intervals whose widths vary adaptively across forecast horizons as shown in Figure 3.
-
-- **Theoretical grounding**: Theorem 1 provides an asymptotic consistency guarantee for the bootstrap procedure, establishing that the empirical CDF of resampled pseudo-normalized residuals converges to the true CDF as the sample size grows, grounding the empirical heuristic in formal statistical theory.
+- **Flexible plug-and-play design for converting mean forecasters to probabilistic forecasters.** The key insight—leveraging the log-transformation in Remark 1 so that both $F$ and $G$ require only mean-forecasting algorithms—is practically valuable. This allows practitioners to apply DualRes on top of existing architectures (DLinear, PatchTST, TimeMixer) without architectural changes, lowering the adoption barrier.
+- **Non-parametric residual modeling avoids restrictive distributional assumptions.** Figure 2 directly demonstrates that normalized residuals across six datasets deviate substantially from Gaussian densities (exhibiting heavy tails, skewness, and multimodality), validating the core motivation for resampling over parametric density specification.
+- **Theoretical grounding for the bootstrap procedure.** Theorem 1 establishes that the empirical CDF of the resampled normalized residuals converges in probability to the true distribution, providing formal justification absent from many empirical deep learning forecasting papers.
+- **Consistent empirical improvements across diverse benchmarks.** Tables 1 and 2 show CRPS and MAEC improvements when DualRes is applied to multiple base models on six univariate and three multivariate datasets, including large-scale gains (e.g., TimeMixer CRPS on Exchange: 0.027→0.014; TMDM CRPS on Electricity: 0.655→0.292).
 
 ## Weaknesses
 
-1. **Ablation-only evaluation without comparison to dedicated probabilistic forecasting baselines**. The entire experimental design compares each base model against itself augmented with DualRes. There is no comparison against standalone, purpose-built probabilistic forecasting methods (e.g., TimeGrad, normalizing flow-based forecasters, quantile regression forests). It is therefore impossible to determine whether DualRes+base achieves competitive absolute performance against the best available probabilistic models, or whether an end-to-end trained probabilistic model would simply outperform it. This is a critical gap for a paper positioned as a general enhancement framework.
+### Major:
 
-2. **Theorem 1's i.i.d. assumption on normalized residuals is not empirically validated**. The theoretical guarantee requires that η_t are independent and identically distributed (Assumption 1). Even after two-stage volatility normalization, normalized residuals in real time series data frequently retain autocorrelation or ARCH effects. The paper shows histograms of η̂_t (Figure 2) to motivate non-Gaussianity, but presents no diagnostic checks for serial independence (e.g., Ljung-Box tests on η̂_t or η̂²_t, autocorrelation plots). Without this verification, the core theoretical guarantee does not straightforwardly transfer to the empirical setting, and it is unclear whether a block bootstrap would be more appropriate.
+- **No ablation isolating the contribution of volatility modeling from resampling.** The paper attributes improvements to both conditional heteroskedasticity modeling and residual distribution capture, but never tests what happens with only volatility modeling (Gaussian residuals with learned volatility) or only resampling (homoskedastic residuals with bootstrap). Without this ablation, it is unclear which component drives the gains, undermining the paper's core claim that both components are essential.
 
-3. **Inconsistent improvements across model/dataset combinations are unacknowledged and unexplained**. In Table 2, applying DualRes to TMDM degrades MAEC on ETTh1 from 0.268 to 0.458 and ES on ETTh2 from 6.933 to 7.326. In Table 1, several readable entries show CRPS degradation when DualRes is applied (e.g., DLinear on ETTh1 goes from a lower baseline value to 0.196). The paper attributes improvements to heteroskedasticity and non-Gaussian residuals but provides no analysis of when or why DualRes can harm performance, nor diagnostic tools to predict whether applying it will be beneficial for a given model-dataset pair. This undermines the generality claims.
+- **The i.i.d. residual assumption central to Theorem 1 is not empirically verified.** Algorithm 2 resamples $\hat{\boldsymbol{\eta}}_t$ under the assumption that they are i.i.d. (Assumption 1). However, no diagnostics—such as autocorrelation function (ACF) plots of the normalized residuals, Ljung-Box tests, or ARCH-LM tests on squared residuals—are presented. If the volatility model $G$ is misspecified (which is plausible given its simple architecture, discussed below), remaining serial dependence in $\hat{\boldsymbol{\eta}}_t$ would violate the i.i.d. requirement and potentially invalidate the prediction intervals. Figure 2 shows marginal distributions but says nothing about temporal dependence.
 
-4. **The diagonal structure of G excludes cross-series volatility dependence in multivariate settings**. Equation 1 defines G as a diagonal matrix, meaning each series' volatility depends only on its own past squared residuals, ruling out volatility spillovers between variables. This is a common feature in financial and energy data. The multivariate advantage is therefore limited to capturing cross-sectional dependence through joint vector resampling, while cross-series heteroskedasticity remains unmodeled. This restriction is not acknowledged as a limitation.
+- **Primary baselines are weak probabilistic forecasters.** Three of four univariate baselines (DLinear, PatchTST, TimeMixer) are mean-forecasting models retrofitted with t-distribution outputs—a minimal and non-competitive probabilistic approach. While DeepAR and TMDM are genuinely probabilistic, the paper does not compare against other strong distribution-free or heteroskedasticity-aware methods (e.g., conformal prediction wrappers, quantile regression networks, or other recent probabilistic SOTA). This makes it difficult to assess DualRes's standing in the broader probabilistic forecasting landscape.
 
-5. **Computational overhead from inference-time resampling is not quantified**. DualRes requires B=100 full autoregressive forward passes through both F̂ and Ĝ during inference to generate pseudo-samples (Algorithm 2, Eq. 4). The paper acknowledges computational complexity as a limitation in Section 6, but provides no empirical measurement of inference time or memory relative to base models. For a framework whose stated advantage is model-agnostic flexibility, the absence of any runtime analysis makes it difficult to assess practical deployability, especially for large-scale or real-time settings.
+### Minor:
 
-6. **The bootstrap cannot extrapolate beyond the range of observed residuals**. Since DualRes resamples from historical η̂_t with replacement, it cannot generate residuals larger than the maximum observed during training. For risk assessment applications (finance, energy), this means the framework fundamentally cannot capture tail events or "black swan" scenarios that exceed the training support—a limitation that parametric methods with heavy-tailed distributions can address. The paper briefly mentions distributional shift but does not discuss this more fundamental inability to extrapolate, which is particularly consequential for the target applications.
+- **Diagonal $G$ limits multivariate dependence modeling.** Equation 1 defines $G$ as a diagonal matrix, which assumes conditional independence across dimensions given the past. While resampling full residual vectors preserves empirical cross-correlation in the noise, this does not capture dynamic conditional correlations (as in DCC-GARCH-type models). The paper claims multivariate capability, but the volatility scaling is dimension-wise independent—a limitation worth acknowledging explicitly.
 
-7. **Imprecise characterization of prior diffusion-based methods**. The Introduction states that "the validity of such methods in general relied on the assumption of time series having Gaussian distribution." This conflates the Gaussian transition kernel assumption (standard in diffusion forward processes) with the data distribution assumption. Diffusion models can learn to generate non-Gaussian data distributions through the reverse process, even with Gaussian transitions. The paper's phrasing overstates the limitation of prior work, weakening its own motivation.
+- **Integration with native probabilistic models is unclear.** When DualRes is applied to DeepAR or TMDM (Table 1–2, "+Ours" rows), the paper does not explain whether DualRes replaces or supplements these models' native uncertainty estimates. DeepAR already models conditional volatility autoregressively; does DualRes discard DeepAR's variance parameters and re-learn $G$ from residuals? Clarifying this interaction is important for understanding what DualRes actually adds to already-probabilistic models.
+
+- **Computational overhead is acknowledged but not quantified.** Section 6 mentions complexity as a limitation, and $B=100$ resampling iterations (Appendix B.1) imply approximately 100× inference cost per forecast step. No runtime comparison or wall-clock analysis is provided, making it difficult to assess practical deployability.
+
+- **Log-transformation bias cancellation lacks empirical verification.** Remark 1 claims the constant bias from estimating $\log(G_i)$ self-eliminates during normalization and sampling (Eqs. 2 and 4). The theoretical argument is sound but sketched rather than formally derived, and no experiment directly measures the residual bias magnitude with and without the claimed correction.
+
+- **Asymptotic guarantees without finite-sample characterization.** Theorem 1 assumes consistent estimators $\hat{F} \to F$ and $\hat{G} \to G$ uniformly (Assumption 2), which is a strong condition for neural networks. No finite-sample coverage bounds or convergence rates are provided, limiting the practical interpretability of the theoretical contribution.
+
+### Trivial:
+
+- The abstract's statement "DualRes requires only mean forecasts" could be more precise—it requires only mean-forecasting *algorithms*, but needs two such models (for mean and volatility) as part of a two-stage procedure.
 
 ## Nice-to-Haves
 
-- Ablation study separating the contribution of volatility modeling from resampling (e.g., Gaussian residuals + volatility model vs. i.i.d. resampling without volatility model vs. full DualRes), to isolate which component drives the observed gains.
-- Comparison with Conformal Prediction methods to situate DualRes within the broader landscape of distribution-free uncertainty quantification.
-- Analysis of long-horizon performance degradation, since autoregressive bootstrap iteration (Eq. 4) may compound errors over longer prediction horizons.
-- Block or stationary bootstrap variants for residuals that exhibit remaining temporal dependence after normalization.
+- Lag sensitivity analysis for $q$ and $s$: Table 4 shows dataset-specific choices with no ablation. Since the volatility model's performance directly depends on these lags, a sensitivity study would strengthen the empirical contribution.
+- Prediction horizon degradation analysis: Algorithm 2 uses iterative sampling where errors can compound. Showing how CRPS/MAEC evolves across prediction steps $j = 1, \ldots, J$ would reveal practical limits.
+- Testing on datasets with known heavy-tailed or skewed distributions where Gaussian assumptions provably fail, to more directly validate the non-Gaussian robustness claim.
+- Calibration/reliability diagrams plotting nominal vs. empirical coverage across quantile levels, which would be more informative than aggregate MAEC.
 
 ## Removed Points
 
-*These points are flagged to be removed, treat them with caution.*
+*These points are flagged to be removed; treat them with caution.*
 
-- **Weakness**: "Log-transformation bias cancellation could break with regularization/dropout differences between training and inference G." — This misunderstands the mechanism: the same estimated Ĝ (with fixed weights) is used in both normalization (Eq. 2) and sampling (Eq. 4), both in inference/eval mode. The constant bias cancels algebraically regardless of how the model was regularized during training. This is not a valid concern.
-- **Weakness**: "Missing related works (Chronos, TimeCCT, GARCH bootstrap)." — Per rules, do not flag missing related works without external confirmation of their existence and relevance.
-- **Weakness**: "Table 1 data corruption makes empirical claims unverifiable." — This is a PDF parser artifact, not a paper problem. The bold formatting interferes with extraction.
-- **Weakness**: "No finite-sample convergence bounds." — Demanding finite-sample bounds for an asymptotic bootstrap consistency result is beyond what is standard for this type of contribution.
-- **Weakness**: "Reproducibility concerns about undisclosed code, seeds, preprocessing." — Per rules, reproducibility nitpicks about implementation details are removed.
-- **Weakness**: "No Broader Impact section." — ICLR does not mandate a Broader Impact section; this is a formatting/style nitpick.
-- **Strength**: "The paper is well-written / the topic is important." — Generic strengths removed per rules.
+- **"Missing Conformal Prediction literature"**: Per rules, I do not flag missing related works as I cannot verify their existence or relevance comprehensively.
+
+- **"Diffusion models don't all rely on Gaussian assumptions"**: While some modern diffusion variants relax Gaussian transitions, the standard framework (Ho et al., 2020; Rasul et al., 2021) does use Gaussian noise schedules. The paper's characterization is reasonable as a motivation, and the core contribution is independent of this claim.
+
+- **"Garbled table values in Table 1 and 2"**: This is a PDF extraction artifact, not a paper problem. The actual paper renders these correctly.
+
+- **"No statistical significance tests"**: The paper reports 95% confidence intervals over 5 runs. Additional tests would be a nice-to-have, but single-run evaluation with confidence intervals is common practice in this field and not a flaw.
+
+- **"Limited novelty—just combines GARCH + bootstrap"**: While the individual components are classical, the systematic application to modern deep learning backbones with the log-transformation trick (Remark 1) and the theoretical convergence result constitutes a meaningful methodological contribution. Novelty is moderate but not absent.
+
+- **"Reproducibility—no code release"**: Per rules, I do not flag missing code or reproducibility concerns about undisclosed implementation details.
 
 ## Novel Insights
 
-The paper reveals an underappreciated structural insight: in standard two-stage mean-plus-volatility models, the constant bias incurred when learning log-volatility via mean-forecasting methods is algebraically self-eliminating because the *same* biased volatility estimate appears in both the normalization divisor and the rescaling multiplier during inference. This means practitioners need not correct for the well-known Jensen's inequality bias in log-variance estimation—a non-obvious practical consequence that removes a common objection to this type of pipeline. However, this elegant cancellation also creates a hidden fragility: if the volatility model is ever re-estimated or modified between the normalization and rescaling steps (e.g., due to online updating), the bias no longer cancels, and the predictive distribution can become miscalibrated in ways that are difficult to diagnose.
+The paper's most underappreciated contribution is the conceptual decomposition of probabilistic forecasting into three independently modifiable components—conditional mean, conditional volatility, and residual distribution—rather than treating uncertainty estimation as an end-to-end learned output. This decomposition mirrors classical econometric reasoning (ARMA-GARCH) but importantly reveals that most modern deep forecasting backbones implicitly assume a fixed, often Gaussian, residual distribution. The empirical evidence (Figure 2) that real-world residuals systematically violate parametric assumptions suggests that the performance bottleneck in many probabilistic forecasters may not be in the mean or volatility estimation, but in the distributional assumption on innovations—a point the community should take seriously when designing next-generation probabilistic models.
 
 ## Suggestions
 
-- Add empirical diagnostics for the i.i.d. assumption: report Ljung-Box test p-values and autocorrelation plots for η̂_t and η̂²_t across datasets, and discuss whether block bootstrap would be more appropriate when dependence persists.
-- Provide wall-clock inference time comparisons between base models and DualRes-augmented models to enable practitioners to assess the practical cost-benefit tradeoff.
-- Explicitly acknowledge the diagonal G limitation for multivariate settings and discuss it as a scope restriction; consider noting that extending to non-diagonal G (e.g., via Cholesky-based approaches) would be a natural future direction.
-- Add an ablation isolating the contribution of volatility modeling versus resampling to substantiate the claim that *both* components matter.
-- Discuss failure modes explicitly: identify conditions under which DualRes degrades performance (e.g., when the volatility model is poorly specified or when residuals are near-i.i.d. Gaussian) and provide guidance on when practitioners should avoid applying the framework.
-
----
-
-**Axis assessments:**
-
-- **Novelty**: Moderate. The synthesis of classical bootstrap inference with modern deep learning forecasters is useful, but the individual components (two-stage mean/volatility estimation, i.i.d. bootstrap) are well-established in statistics. The log-transformation trick for volatility estimation is a practical engineering insight, not a deep conceptual advance.
-
-- **Technical soundness**: Moderate. The theoretical result is correct under its stated assumptions, but the assumptions (i.i.d. residuals, smooth G) are not verified against the implementation and may not hold in practice. The bias cancellation argument is sound but the framework lacks robustness analysis for when assumptions are violated.
-
-- **Empirical support**: Moderate. Improvements are demonstrated across multiple datasets and base models, but the evaluation is ablation-only (no standalone probabilistic baselines), key theoretical assumptions are unvalidated, and several model-dataset combinations show degradation that is not analyzed.
-
-- **Significance**: Moderate-to-good. The framework addresses a genuine practical need—upgrading deterministic forecasters to probabilistic ones—and the flexibility it provides is valuable. However, the significance is tempered by computational overhead, limited multivariate modeling, and the inability to extrapolate beyond observed residuals.
-
-- **Clarity**: Good. The paper is well-structured, algorithms are clearly presented, and the notation is consistent. The theoretical section is dense but accessible, and the empirical section provides useful visualizations of prediction intervals and residual distributions.
+- Add an ablation with three conditions: (a) mean-only with Gaussian/t-distributed residuals (current baselines), (b) mean + learned volatility with Gaussian residuals, and (c) full DualRes. This directly isolates the marginal contribution of each component.
+- Include ACF plots and formal independence tests on the normalized residuals $\hat{\boldsymbol{\eta}}_t$ to verify the i.i.d. assumption that Theorem 1 requires.
+- Explicitly describe how DualRes integrates with DeepAR and TMDM—specifically whether it replaces or augments their native uncertainty outputs—to clarify the "+Ours" experimental setup.
+- Provide a brief runtime comparison (e.g., seconds per forecast batch) between base models and DualRes-augmented versions to quantify the practical cost of resampling.
+- Consider discussing the diagonal-$G$ limitation more explicitly in Section 5.2, noting that dynamic conditional correlations are not modeled and identifying this as a concrete direction for extension.
 
 # Actual Human Scores
 Individual reviewer scores: [2.0, 4.0, 2.0, 2.0]

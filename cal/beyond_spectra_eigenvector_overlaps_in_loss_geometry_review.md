@@ -1,87 +1,105 @@
-=== CALIBRATION EXAMPLE 31 ===
+=== CALIBRATION EXAMPLE 36 ===
 
 # Final Consolidated Review
 ## Summary
 
-This paper establishes eigenvector overlaps between training and test Hessians as a fundamental object in local loss geometry, arguing that spectra alone are insufficient to characterize generalization. The authors derive a universal fluctuation law (Theorem 1) decomposing the expected test-loss increment under training perturbations into spectral and alignment components, a transfer law for overlap functions under noise (Theorem 2), and apply these to ridge regression with arbitrary covariate shift—obtaining closed-form overlap decompositions that explain both covariate shift effects and multiple descent. Scalable estimators (Overlap-KPM) are developed and applied to a ResNet-20 on CIFAR-10, revealing that class imbalance reshapes train–test geometry through induced misalignment.
+This paper introduces a two-loss framework for local loss geometry, arguing that eigenvector overlaps between train and test Hessians—not just their spectra—are fundamental to understanding generalization. The authors derive a local fluctuation law (Theorem 1) expressing expected test-loss increments as a trace combining spectral data with an explicit overlap kernel, a transfer law (Theorem 2) for how overlaps transform under noise using free probability, and apply these to ridge regression to show that multiple descent and covariate shift effects are governed by eigenspace (mis)alignment. Scalable estimators (Overlap-KPM) are developed and demonstrated on ResNet-20/CIFAR-10.
 
 ## Strengths
 
-- **Theoretical framework is genuinely novel and well-motivated.** The paper identifies a precise mathematical gap—the missing eigenvector alignment ingredient in two-loss local geometry—and fills it with rigorous results. Theorem 1's decomposition of E[ΔL] into a double integral over spectral measures weighted by the overlap kernel O(λ₁, λ₂) is clean and informative, making precise the intuition that "which directions matter" is as important as "how curved they are." The isospectral covariate shift experiment (Fig. 1) elegantly isolates overlap effects by rotating Hessians while fixing spectra, providing a compelling proof of principle that alignment per se governs generalization.
+- **The two-loss framing is a genuine conceptual advance.** The paper identifies a precise structural gap: most Hessian analyses treat spectra as synonymous with geometry, but as soon as one compares train and test losses, eigenvector alignment becomes essential. The isospectral covariate shift experiment (Figure 1) cleanly isolates this: identical spectra, rotated eigenspaces, and substantially different generalization error. This is more than rhetoric—it is a controlled demonstration that spectra alone are insufficient.
 
-- **Unification of multiple descent and covariate shift under a single overlap lens.** The demonstration that multiple descent peaks arise from eigenspace misalignment (rather than Hessian ill-conditioning alone) corrects a common simplification in prior work. The analysis in Section 3.2.2 and Fig. 3 shows how the overlap function's approximately block-diagonal structure governs which training modes route error into sensitive test directions—a concrete, mechanistic explanation that is genuinely new.
+- **The overlap fluctuation law (Theorem 1) is clean and mechanistically insightful.** The decomposition E[ΔL] = ½∫λ₁λ₂O(λ₁,λ₂)μ_test(dλ₁)μ_train(dλ₂) directly shows that test error is large precisely when high-variance displacement directions overlap high-curvature test directions. This is sharper than the heuristic "flat minima generalize better" because it specifies *which* flat directions matter and *when*.
 
-- **Overlap-KPM algorithm is a practical contribution.** Combining subspace iteration for outliers with Hutchinson + Chebyshev polynomial approximation for bulk overlaps enables estimation in models with millions of parameters using only matrix-vector products (standard Hessian-vector products via autograd). The complexity is O(PK²md), which is linear in both model size and data size—genuinely scalable compared to forming Hessians explicitly.
+- **The multiple descent explanation via overlaps is compelling.** The paper identifies a regime (between lines 3–4 in Figure 3) where the minimum training eigenvalue decreases (which spectral logic predicts should increase error) yet error actually *decreases*, because the near-null train eigenspaces shift to overlap the flat test subspace. This is a concrete case where spectral reasoning gives the wrong prediction and overlap reasoning gives the right one.
+
+- **The transfer law (Theorem 2) is a non-trivial technical contribution.** Factoring O_{A,B̂} = O_{A,B} · O_{B,B̂} under freeness provides an overlap calculus that decomposes complex operator relationships into tractable pieces. The proof in Appendix B.3, while dense, is rigorous and uses operator-valued free probability correctly.
+
+- **Overlap-KPM makes the theory practically computable.** The combination of Chebyshev polynomial approximation with Hutchinson trace estimation and subspace iteration for outliers is well-designed, with essentially linear scaling in model size and data examples (O(PK²md) runtime, O(Kd) memory with the streaming implementation described in the text).
 
 ## Weaknesses
 
-- **The quadratic approximation regime is not characterized.** The entire theoretical edifice (Theorems 1–3) rests on a local quadratic approximation to the train and test losses. The MLP experiments (Fig. 4a,b) show visible deviations between theory and measurement as perturbation magnitude grows, yet the paper provides no formal or even empirical characterization of the approximation's domain of validity. For the framework to be actionable, it matters greatly whether the quadratic regime applies under realistic SGD noise magnitudes, realistic distribution shifts, or only under infinitesimal perturbations. The surrogate-free formulation (Appendix B.2.1) replaces H_train with an effective Hessian H_train^eff, but this does not resolve the issue—it merely shifts the question to whether the resulting perturbation remains small.
+### Major:
 
-- **Quantitative validation of the fluctuation law does not extend beyond tiny MLPs.** The predicted vs. measured ΔL plots (Fig. 4a,b) validate the theory on MLPs with layer widths (5,5,5,1)—networks with ~75 parameters. The ResNet-20 experiment (Section 3.4) demonstrates that overlap estimation is *feasible* at scale and reveals qualitative structure, but does not quantitatively confirm the fluctuation law. Without a predicted-vs-actual ΔL plot at ResNet-20 scale, the claim that overlaps "govern" generalization in modern networks rests on extrapolation rather than evidence.
+- **The quadratic approximation regime is the theory's foundation, and its limits are insufficiently explored.** The entire framework assumes the loss is locally well-approximated by its second-order Taylor expansion. The paper acknowledges this in Appendix B.2.1 via an "effective Hessian" that absorbs higher-order terms, but does not provide bounds on *when* or *how badly* the quadratic approximation breaks down. For deep networks trained with large learning rates, SGD trajectories can traverse non-convex regions far from any minimum. Without understanding the radius of validity (e.g., how perturbation magnitude ϵ relates to local curvature), practitioners cannot know whether overlap analysis applies to their setting. A perturbation-magnitude ablation—even on the MLP—would significantly strengthen the paper by delineating the valid operating regime.
 
-- **The class-imbalance experiment is descriptive rather than predictive.** Section 3.4 shows that class imbalance reduces train–test Hessian alignment (Fig. 5), but does not demonstrate that overlap metrics predict generalization error more informatively than standard spectral measures or simple class-conditional accuracy. The observed misalignment is consistent with what is already known (imbalance hurts), and without a quantitative comparison to baselines, it is unclear whether the overlap perspective adds predictive leverage beyond existing diagnostics. This is the natural next step to establish practical significance.
+- **The gap between theoretical validation and claims about "modern neural networks" is substantial.** The fluctuation law is validated quantitatively on ridge regression (exact) and tiny MLPs (width 5,5,5,1). The ResNet-20 experiment demonstrates that overlaps *can be computed* at scale and that class imbalance correlates with misalignment, but it does *not* validate whether the fluctuation law actually predicts generalization in this setting. The paper's strongest claims ("universal," "fundamental missing ingredient") are calibrated to the theoretical and small-scale evidence, not to the large-scale setting. Either the empirical section needs to validate the fluctuation law on ResNet-20 (e.g., by adding label noise and measuring ΔL vs. the overlap prediction), or the claims need to be scoped to "theoretical foundations and diagnostic tools."
 
-- **Closed-form overlap results are restricted to stylized covariance models.** The explicit overlap decompositions in Section 3.2 rely on the k-level covariance model (Eq. 12) and Gaussian inputs, leveraging the free transfer law (Theorem 2) which requires asymptotic freeness. While the *framework* (Theorem 1) is general, the *analytically tractable results* that give the paper much of its explanatory power—resolving multiple descent, quantifying covariate shift—hold only for this specific family. Whether the overlap perspective yields new quantitative predictions for real data distributions (where no such closed forms exist) remains an open question.
+- **The paper claims to "correct" prior spectral interpretations of multiple descent without clearly demonstrating that spectral explanations give wrong predictions in a setting where overlap explanations succeed.** The key argument (Section 3.2.2, around Figure 3) is that error decreases between lines 3–4 despite decreasing minimum eigenvalue. However, existing spectral explanations (Chen & Mei, 2022; Mel & Ganguli, 2021) already account for multiple descent via spectral phase transitions—the issue is whether they attribute it to the *wrong* mechanism or whether overlaps simply provide a *more refined* mechanistic picture. The paper would be stronger with an explicit example where two models have identical Hessian spectra (including eigenvalue multiplicities) but different generalization due to different overlap structure, analogous to the isospectral covariate shift experiment but in a multiple descent setting.
+
+### Minor:
+
+- **Freeness assumptions have unclear finite-dimensional consequences.** The transfer law (Theorem 2) requires X to be free from A,B, which holds asymptotically. For finite d, deviations from freeness will distort overlap estimates. No guidance is given on how large d must be, or how to diagnose freeness violations empirically. This matters because the ridge regression formulas are presented as asymptotically exact, but applied to simulations with d=5000 (Figure 2) and d=100 (Figure 1).
+
+- **The Overlap-KPM algorithm lacks theoretical error bounds.** The paper states that the Chebyshev approximation error decays "exponentially fast in K" and variance decays as O(1/√P), but no formal error bound is provided for the combined estimator. The smoothing kernel width σ also lacks clear selection criteria—too narrow and the overlap function resolves individual eigenvalues (noisy), too wide and fine-grained structure is lost. A principled guideline for σ selection would improve reliability.
+
+- **The surrogate-free formulation (Appendix B.2.1) is important for neural network applicability but is relegated to the appendix.** This extension replaces the fixed H_train with an effective Hessian H^eff_train that accounts for non-quadraticity along the displacement path. Since the MLP and ResNet experiments are precisely the settings where this matters, promoting this discussion to the main text would strengthen the connection between theory and practice.
+
+### Trivial:
+
+- **Minor memory complexity discrepancy.** The text claims O(K) vectors in memory via streaming, but Algorithm 1 stores v_{j,k,μ} for j up to 2K and k up to K. The text's implementation description resolves this, but the pseudocode and prose are inconsistent.
 
 ## Nice-to-Haves
 
-- **Comparison of overlap-based prediction against spectral baselines.** A plot showing that overlap-augmented predictions of ΔL outperform spectrum-only predictions (e.g., trace of H_test · C_train without the overlap kernel) would directly substantiate the "spectra are not enough" claim.
+- **Causal intervention experiment for class imbalance.** The ResNet-20 experiment shows correlation between class imbalance and misalignment. An experiment that explicitly regularizes for train-test alignment and shows improved generalization would establish a causal role for overlaps, not just a diagnostic one.
 
-- **Quantitative characterization of the quadratic regime's validity.** Even an empirical curve showing theory-vs-measurement error as a function of perturbation magnitude across multiple architectures would clarify when the framework applies in practice.
+- **Overlap evolution during training.** Tracking O(λ₁,λ₂) across epochs would reveal whether misalignment develops gradually or abruptly, and whether it is a cause or consequence of the optimization trajectory. This would bridge the static analysis (at a minimum) with the dynamic reality of training.
 
-- **Experiments on established distributional shift benchmarks** (e.g., CIFAR-10-C, DomainNet) rather than only class imbalance, to test whether overlap structure is diagnostic of shift severity in realistic settings.
+- **Validation of the fluctuation law on ResNet-20.** Adding controlled noise to the CIFAR-10 training set and measuring whether ΔL matches the overlap prediction would test whether the quadratic theory holds beyond the tiny MLP setting.
 
-- **An overlap-aware optimization experiment.** The Discussion mentions "alignment-aware optimization" as future work; even a preliminary regularizer encouraging train–test alignment and its effect on generalization would demonstrate the framework's prescriptive value.
+- **Discussion of how overlap analysis could inform optimization.** The "alignment-aware optimization" mentioned in the Discussion is intriguing but entirely undeveloped. Even a sketch of how one might differentiate through the overlap functional to form a regularizer would substantially increase practical impact.
 
 ## Removed Points
 
 These points are flagged to be removed, treat them with caution:
 
-- **"Freeness not verified in neural network settings"** — Theorem 2 (transfer law) is applied only in the ridge regression analysis (Appendix C), where freeness holds asymptotically by construction. The MLP and ResNet experiments estimate overlaps *directly* without invoking Theorem 2. The concern about freeness in NNs is therefore misdirected: the paper's empirical pipeline does not depend on freeness holding in finite networks.
+- **"Literature positioning incomplete—Wu et al. (2022) and May et al. (2019) not differentiated."** Removed per hard rule against missing related works criticisms; cannot confirm what other works exist or whether they address this exact framing.
 
-- **"Algorithm 1 is O(PK³) not O(PK²)"** — The dominant cost is matrix-vector products, not dot products. Algorithm 1 requires O(PK²) matrix-vector products at O(md) each, for total O(PK²md). The O(PK³d) cost of dot products is negligible. The paper's complexity claim is correct.
+- **"The claim that spectra alone don't explain generalization is asserted rather than demonstrated."** Removed as factually wrong—Figure 1 explicitly demonstrates this with an isospectral shift experiment.
 
-- **"Multiple solutions for the self-consistent equation (14)"** — Proposition 4 in Appendix D proves that r(z) is unique, holomorphic, and obtainable by fixed-point iteration under the stated conditions. This concern is explicitly addressed.
+- **"First-order term vanishes only for specific noise models—caveat should be explicit."** Removed as factually wrong—the paper explicitly states this caveat: "in several natural cases (e.g., label noise under MSE, analyzed below), vanishes exactly in expectation" (Section 3.1.1).
 
-- **"Notation switches between H_train and Σ̂_train"** — The paper explicitly states (Section 3.2) "we will loosely refer to Σ̂_train as the train Hessian" since H_train = Σ̂_train + λI and they consider the ridgeless limit λ → 0. This is a deliberate, explained choice.
+- **"Connection to TIC not developed."** Removed as scope creep—the paper explicitly positions TIC as a limiting case of the broader framework; developing it further is outside the paper's stated scope.
 
-- **"No broader impact statement"** — ICLR does not require broader impact statements; this is a formatting/standard nitpick.
+- **"H_train notation inconsistent (sometimes Σ̂_train + λI, sometimes Σ̂_train)."** Removed as factually wrong—the paper explicitly states the convention: "we will loosely refer to Σ̂_train as the train Hessian" since they focus on the ridgeless limit λ→0.
 
-- **"Code availability"** — Reproducibility concerns about implementation details fall under the hard rule against nitpicks about reproducibility.
+- **"No error bars or confidence intervals in Figure 4."** Removed per soft rule—requesting confidence intervals for small-scale theory-validation plots is not standard practice in this area.
 
-- **"E[∆w] = 0 is restrictive"** — The paper acknowledges this assumption and notes it holds for symmetric noise (including label noise under MSE, which is the primary setting analyzed). The general formulation with E[∆w] = 0 is standard in perturbation analysis; removing it would require a first-order term that the paper already writes explicitly.
+- **"2D slice in Figure 4(d) is cherry-picking."** Removed as unreasonable—choosing a slice through the relevant points is standard visualization practice for loss landscapes.
 
-- **"First-order term vanishing is only asserted"** — In the ridge regression setting, E[z] = 0 follows directly from E[ξ] = 0 (Gaussian label noise). In the general case, the first-order term is explicitly written in Eq. (5); the paper notes it vanishes for natural cases without claiming it always vanishes. This is not an unsupported assertion.
+- **"Number of trials not stated for Figure 1 experiments."** Removed per hard rule against reproducibility nitpicks about trivial implementation details.
 
-- **"Consolidate Contributions 5 and 7"** — Formatting/style suggestion, removed per hard rules.
+- **"No comparison to baselines for Overlap-KPM."** Removed as unfair—there is no prior method for computing overlap functions between two implicit matrices; the comparison baseline (explicit eigendecomposition) is infeasible at scale, and the paper does validate on synthetic data (Figure 8).
 
-- **"Missing related work on NTK eigenvector structure"** — Removed per hard rules on missing related works.
+- **"Presentation complexity / accessibility of free probability."** Removed as style/formatting nitpick per hard rules.
 
 ## Novel Insights
 
-The most striking conceptual insight is that multiple descent—an effect previously attributed to Hessian spectral phase transitions—is actually governed by *which test directions* the near-zero training modes overlap with, not merely by their existence. Fig. 3c,d crystallizes this: between critical sampling densities α, the minimum training eigenvalue continues to decrease (which a spectrum-only analysis would predict to increase error), yet error *decreases* because the low-curvature training modes begin overlapping predominantly with the flat test subspace. This reframing turns a purely spectral puzzle into a geometric one, and suggests that interventions targeting alignment (rather than just flatness) could be a productive direction for generalization improvement.
+The paper's most striking observation is the **asymmetry between train and test roles in the overlap decomposition**: the training Hessian acts as a *variance filter* (inflating displacement along flat directions, suppressing along sharp ones), while the test Hessian acts as a *cost function* (penalizing displacement along its sharp directions). Generalization error is then determined not by either role in isolation, but by how the filter's output directions route into the cost function's sensitive directions. This filter-routing picture unifies phenomena that look unrelated from a single-loss perspective: covariate shift is harmful when it rotates the filter's high-variance output into the cost's high-sensitivity input; multiple descent peaks occur when spectral phase transitions cause the filter's high-variance modes to suddenly switch alignment between the test's flat and sharp subspaces. The conceptual payoff is that "flat minima generalize better" is not universally true—it depends on *which* flat directions and *what they overlap with*.
 
 ## Suggestions
 
-- **Add predicted vs. measured ΔL at ResNet-20 scale**, even for a single perturbation magnitude, to bridge the gap between MLP validation and large-scale application. This is the single most impactful addition.
+- **Run a perturbation-magnitude ablation on the MLP.** Systematically increase noise amplitude and measure where the quadratic prediction breaks down. This would define the theory's valid operating regime and is a minimal addition that addresses the most important limitation.
 
-- **Include a variance decomposition** quantifying what fraction of generalization-gap variance is explained by spectral changes vs. overlap changes, to substantiate the claim that overlaps are the "missing ingredient" rather than a secondary correction.
+- **Validate the fluctuation law on ResNet-20.** Even a single experiment adding controlled label noise to CIFAR-10 training, measuring ΔL, and comparing to the overlap prediction would bridge the gap between "overlaps can be computed at scale" and "the theory predicts generalization at scale."
 
-- **Explicitly state the domain of validity of the quadratic approximation**—even a rough rule of thumb (e.g., "the theory is accurate when ‖Δw‖ is small compared to the smallest curvature radius") would help practitioners assess applicability.
+- **Add a dedicated Limitations paragraph.** Discuss: (i) when the quadratic approximation fails, (ii) finite-d freeness violations, (iii) computational cost for very large models, and (iv) that the current experiments establish correlation (class imbalance ↔ misalignment) but not yet causation. This is standard practice and would strengthen credibility.
 
-- **Report a quantitative alignment metric** (e.g., average normalized diagonal overlap) for the ResNet-20 experiment with error bars, so the "alignment largely disappears" claim in the class-imbalance comparison is statistically supported rather than purely visual.
+- **Promote the surrogate-free formulation (Appendix B.2.1) to the main text.** It directly addresses the "quadratic approximation" concern by showing the fluctuation law holds with an effective Hessian, and readers evaluating the neural network experiments need this context.
 
 ---
 
-**Novelty:** Strong. The formalization of eigenvector overlaps as the central missing object in two-loss geometry, with rigorous theorems and a transfer law, is a genuine conceptual advance. The perspective shift from "spectra determine geometry" to "spectra × overlaps determine geometry" is clean and productive.
+**Quality Assessment:**
 
-**Technical soundness:** Good overall. Theorems 1 and 2 are correctly proved in the appendices. The ridge regression analysis is rigorous. The main gap is the uncharacterized validity of the quadratic approximation in practical settings.
+- **Novelty:** High. The two-loss overlap framework identifies a genuine gap in the Hessian analysis literature and provides a precise mathematical formalism for filling it. The transfer law is a non-trivial contribution from free probability.
 
-**Empirical support:** Mixed. Theoretical predictions are beautifully confirmed in the linear and small-MLP settings. The large-scale experiments demonstrate feasibility and reveal qualitative structure, but lack quantitative validation of the core prediction (the fluctuation law) at scale.
+- **Technical soundness:** Strong for the theoretical contributions (Theorems 1–3, proofs in appendices). Weaker for the empirical bridge: the fluctuation law is validated in controlled settings but not at the scale where the paper's strongest claims are directed.
 
-**Significance:** High potential. If overlap metrics prove predictive of generalization beyond spectral baselines, this could shift how the community thinks about loss geometry. The current evidence is promising but incomplete—the bridge from theory to practice at modern scale needs one more plank.
+- **Empirical support:** Moderate. Ridge regression and MLP validation are thorough. The ResNet-20 experiment demonstrates computational feasibility but does not validate the theory's quantitative predictions in this setting. The multiple descent explanation is compelling but would be stronger with an isospectral demonstration analogous to Figure 1.
 
-**Clarity:** Good. The paper is well-organized with clear contributions enumerated upfront. The theoretical machinery (free probability) is appropriately deferred to appendices. Some notation could be more consistent, but this does not impede understanding.
+- **Significance:** Potentially high if the framework is adopted for analyzing generalization under distribution shift. Currently limited by the gap between diagnostic insight and actionable methodology.
+
+- **Clarity:** Good for a technically dense paper. The main results are clearly stated. The free probability machinery in the appendices is necessarily complex, but the main text effectively conveys the key ideas. Some calibration of language ("universal," "resolve," "fundamental") would better match the evidence.
 
 # Actual Human Scores
 Individual reviewer scores: [8.0, 8.0, 6.0, 2.0, 4.0]

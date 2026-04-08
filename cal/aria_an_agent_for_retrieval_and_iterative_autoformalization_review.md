@@ -1,74 +1,101 @@
-=== CALIBRATION EXAMPLE 25 ===
+=== CALIBRATION EXAMPLE 21 ===
 
 # Final Consolidated Review
 ## Summary
 
-Aria is an agent for auto-formalization of mathematical statements into Lean 4 that integrates a Graph-of-Thought (GoT) dependency decomposition, Retrieval-Augmented Generation (RAG) via LeanSearch, and compiler-in-the-loop reflection to handle conjecture-level problems requiring synthesis of novel definitions. The paper also introduces AriaScorer, a semantic verification module that grounds evaluation in authoritative Mathlib term definitions rather than surface textual similarity, and demonstrates state-of-the-art performance across multiple benchmarks.
+Aria is an agent for auto-formalizing mathematical conjecture-level statements into Lean 4, combining a Graph-of-Thought (GoT) decomposition-and-synthesis pipeline with retrieval-augmented generation (RAG) for grounding in Mathlib and compiler-in-the-loop reflection. It also introduces AriaScorer, a semantic correctness checker that performs term-level grounding by retrieving authoritative Mathlib definitions, achieving state-of-the-art results on ProofNet, FATE-H, FATE-X, and a set of 14 homological conjectures where all baselines score 0%.
 
 ## Strengths
 
-- **GoT architecture is a genuinely novel and well-justified design for handling conjecture-level formalization.** Unlike single-pass methods, the recursive decomposition-then-synthesis pipeline mirrors how human mathematicians actually work: breaking a complex statement into prerequisite concepts, grounding known ones, and constructing new ones bottom-up. The ablation on the Conjectures dataset (6/14 → 1/14 without GoT) and the case studies in Appendix A (e.g., correctly using `Submodule R R` vs `Submodule (MulOpposite R) R` for one-sided ideals) provide concrete evidence that the architecture solves a real problem that simpler approaches cannot.
+- **Effective orchestration for novel definition synthesis**: The GoT pipeline's ability to recursively decompose statements, ground known concepts via RAG, and synthesize new definitions bottom-up addresses a genuine limitation of prior single-pass formalizers. The ablation on the Conjectures dataset (42.9% → 7.1% without GoT; 42.9% → 0% without RAG) compellingly demonstrates that the architectural design is critical for handling concepts absent from Mathlib, rather than being an incremental combination of existing techniques.
 
-- **AriaScorer's term-level grounding is a specific, substantive improvement over prior semantic checkers.** The case studies in Appendix B compellingly demonstrate failure modes that purely textual comparison misses: `QuaternionGroup 1` (order 4) vs `QuaternionGroup 2` (order 8, the actual $Q_8$), and `QuaternionAlgebra R a b c` having multiplication rules $i^2 = a + bi$ rather than $i^2 = a$. These are not hypothetical—they are real errors caught by term-level retrieval that LeanScorer misses. The F1 improvement (93.5% vs 82.1% for LeanScorer at α=0) on expert-annotated data quantifies the benefit.
+- **Term-level semantic grounding in AriaScorer**: Moving beyond surface-level textual comparison by injecting retrieved Mathlib definitions into the evaluation prompt is a substantive methodological contribution. The case studies in Appendix B (e.g., detecting that `QuaternionGroup 1` is cyclic of order 4, not the quaternion group Q₈) concretely demonstrate failure modes of text-based checkers that AriaScorer addresses.
 
-- **Strong empirical results on FATE-X, where the difficulty is appropriate for the method's claims.** The 44.0% vs 24.0% (Goedel-V2 pass@128) final accuracy on FATE-X—problems from PhD qualifying exams and research literature—is a meaningful gap. Unlike the Conjectures dataset, FATE-X has enough problems to make this result statistically informative.
-
-- **Ablation studies clearly demonstrate that all three components (RAG, GoT, Reflection) are necessary, especially on harder datasets.** The complete collapse on Conjectures when ablating RAG (42.9% → 0%) or Reflection (42.9% → 0%) and the substantial drop from GoT (42.9% → 7.1%) provide clear evidence for the architectural design.
+- **Clear empirical advantage on challenging benchmarks**: The 44.0% vs. 24.0% gap on FATE-X and the 42.9% vs. 0% on Conjectures represent meaningful progress on problems where current methods fail entirely. The comparison against Goedel-V2 at pass@128 (using 7x more calls) is informative and shows that the improvement is not simply a function of additional compute.
 
 ## Weaknesses
 
-- **AriaScorer is validated exclusively on Aria's own output distribution, creating potential evaluation circularity.** Section 4.3.1 states: "The evaluation used the Aria agent's syntactically correct, auto-formalized outputs." Since AriaScorer is then used as the "Final accuracy" metric for *all* methods in Table 1, there is a risk that it is systematically more lenient toward Aria's particular output style (e.g., its preference for decomposed, modular definitions) while penalizing baselines for valid but stylistically different formalizations. Cross-system validation—testing AriaScorer on errors from Goedel-V2, Gemini, and Herald—would be necessary to establish it as a fair general-purpose metric. Without this, the reported final accuracy advantage over baselines may be overstated.
+### Major:
 
-- **The paper does not isolate the contribution of the backbone LLM from the pipeline architecture.** Aria uses Gemini-2.5-Pro as its backbone, while the specialized baselines (Herald, Kimina) are 7B–32B models, and Goedel-V2 is 32B. The paper never ablates the backbone: a simple experiment running Gemini-2.5-Pro with single-step RAG or multi-sample self-consistency (without the full GoT agent) would reveal how much of the performance gap comes from using a stronger base model versus the architectural innovation. Given that Gemini-2.5-Pro (pass@1) already achieves 27.8% final accuracy on ProofNet vs Herald's 18.3%, the backbone alone may account for a substantial portion of the gains. This is a significant gap in the evaluation.
+- **The 14-conjecture dataset is too small to support the paper's strongest claims**. The abstract's claim of "breakthrough performance" on research-level mathematics rests on 6 successful formalizations out of 14. While the result is impressive, n=14 makes the "all other models score 0%" claim statistically fragile—a single baseline success would substantially change the narrative. The paper would be significantly stronger with a larger and more diverse conjecture set, or with appropriately hedged claims. This directly affects the paper's core novelty claim about conjecture-level capability.
 
-- **The Conjectures dataset (N=14) is too small to support the headline claim of "breakthrough performance."** The 42.9% figure corresponds to exactly 6 successes. A single additional success or failure shifts the rate by ~7 percentage points. The baselines all scoring 0% suggests the task is extremely sensitive to specific library knowledge rather than broadly measuring formalization capability. The paper does not state selection criteria for these 14 conjectures, making it unclear whether they are representative or conveniently suited to Aria's architecture.
+- **No comparison with other agentic or multi-step planning approaches**. All baselines (Goedel-V2, Kimina, Herald, Gemini-2.5-Pro) are single-pass or multi-sample systems. The paper's key architectural contribution—an agentic GoT pipeline with reflection and RAG—has no methodologically similar comparator. Without this, it is impossible to disentangle the contribution of the specific GoT design from that of simply using an agentic loop with a strong base model. This is a significant gap for evaluating novelty.
 
-- **The metric for the Conjectures column in Table 1 is inconsistent with the paper's own definitions.** The caption states "Results for the Conjectures dataset were manually verified," yet the column is labeled "Final acc." which is defined throughout the paper as passing AriaScorer. The reader cannot determine whether the Conjectures results passed AriaScorer, manual expert review, or both. This inconsistency must be clarified—if Conjectures passed only human review while other benchmarks passed AriaScorer, the metrics across columns are not comparable.
+- **AriaScorer validation has circularity risk and limited scale**. AriaScorer is developed alongside Aria and validated on Aria's own outputs (Section 4.3.1: "auto-formalized output of Aria on FATE-X"). While expert ground truth is constructed, the evaluation set contains only 69 examples, no inter-annotator agreement statistics are reported, and the checker's performance on outputs from other formalization systems is not evaluated. This means AriaScorer may be overfit to Aria's specific failure modes, directly impacting the reliability of "final accuracy" numbers reported throughout.
 
-- **The core contribution of definition synthesis is not quantified.** The paper positions definition synthesis as a key differentiator ("the first agent capable of autonomously synthesizing the complex novel definitions"), but never reports how many of the successful formalizations actually required synthesizing new definitions versus retrieving existing Mathlib ones. If most successes relied purely on retrieval with GoT planning, the synthesis contribution is less central than claimed; if all 6 successful conjectures required synthesis, this should be stated explicitly.
+### Minor:
 
-- **Synthesized definitions risk creating "island formalizations" incompatible with Mathlib's typeclass hierarchy.** For example, in Appendix A.2, Aria defines `IsNoetherianLocalRing` as a new class extending `IsNoetherianRing` and `IsLocalRing`, rather than using Mathlib's existing composition of these typeclasses. Such locally synthesized definitions may not interoperate with existing Mathlib lemmas and instances, limiting the practical utility of the formalized statements for downstream proof automation. The paper does not discuss this limitation.
+- **No systematic failure analysis**. With 56% of FATE-X attempts and 57% of Conjecture attempts failing final accuracy, the paper provides no categorization of failure types (decomposition errors, grounding errors, synthesis errors, semantic mismatches). Understanding *where* the system fails is as important as where it succeeds, and its absence makes it difficult to assess limitations or future improvement directions.
 
-- **Termination conditions for GoT recursion are not formally specified.** Section 3.1.1 describes top-down expansion "until all leaf nodes can be grounded in Mathlib," but does not define a maximum depth bound or timeout. If the LLM hallucinates a dependency chain that never bottoms out—generating ever-more-obscure prerequisite concepts—the system could enter an infinite regress. The compiler-in-the-loop reflection catches syntax errors but not logical circularity or unbounded expansion in the dependency graph.
+- **No evaluation of synthesized definition correctness beyond compilation**. A core claim is that Aria synthesizes definitions absent from Mathlib, but the paper evaluates these only by whether they compile and pass AriaScorer. Whether synthesized definitions are *mathematically* correct representations of the intended concepts—rather than merely syntactically valid approximations—is not assessed by independent expert review.
 
-- **The cost comparison does not reflect actual computational expenditure.** The paper compares API call counts (17.7 for Aria vs. pass@k for Goedel-V2), but Aria calls Gemini-2.5-Pro—a large frontier proprietary model—while Goedel-V2 is a 32B open-weight model with substantially lower per-call cost. The actual dollar-cost or FLOPs comparison may be dramatically different from what the call-count comparison implies.
+- **Missing statistical rigor**. No confidence intervals, standard deviations, or significance tests are reported for any results. This is particularly concerning for the small Conjectures dataset and the 69-example AriaScorer evaluation.
+
+- **Computational cost analysis is incomplete**. The paper reports 17.7 API calls per problem but provides no wall-clock time, token consumption, or dollar cost. Without this, practical deployability cannot be assessed, and the comparison to Goedel-V2 pass@k remains incomplete (one cannot determine if Aria's 17.7 calls are cheaper than Goedel-V2's 128 parallel samples).
+
+- **No analysis of dependency graph depth vs. performance**. The paper mentions average depth of 2–3 layers but does not examine whether success degrades for deeper graphs, which is critical for assessing scalability to more complex formalization targets.
+
+### Trivial:
+
+- The α=0 vs. α=0.9 threshold choice for AriaScorer could be better justified in the main text (currently deferred to a brief mention in Section 4.3.2), though this is a minor presentation issue.
 
 ## Nice-to-Haves
 
-- Pairwise ablation studies (e.g., GoT+RAG without reflection) to better understand component interactions, especially given that the three modules are deeply coupled.
-- A human expert baseline on the Conjectures dataset (success rate and time required) to contextualize the 42.9% figure.
-- A failure mode breakdown on the Conjectures dataset—what types of conjectures does Aria still fail on, and why (compilation error, synthesis failure, semantic mismatch)?
-- Release of the 14 homological conjectures as a standardized benchmark with ground truth formalizations.
+- Expand the Conjectures dataset beyond 14 examples from a single domain (commutative algebra) to include analysis, topology, and number theory conjectures, which would substantially strengthen the generality claim.
+- Include human expert evaluation of the mathematical correctness of synthesized definitions, not just compilation + AriaScorer.
+- Report wall-clock time and cost per problem, and plot accuracy vs. compute curves comparing Aria to multi-sample baselines.
+- Evaluate AriaScorer on outputs from other formalization systems to demonstrate its generality as a checker beyond Aria's specific error profile.
+- Add failure case dependency graph visualizations to complement the current success-case diagrams.
 
 ## Removed Points
 
-*These points are flagged to be removed, treat them with caution.*
+These points are flagged to be removed; treat them with caution—they may still contain useful context but do not belong as criticisms in the main review.
 
-- **Weakness: Appendix D omits the AriaScorer prompt.** While the scorer prompt is not included, the paper describes the scorer's architecture in detail (Section 3.2, Figure 2) and provides the prompts for all generation components. The scorer prompt is a specific implementation detail; the evaluation methodology and results are sufficient to assess the claim. Removed as a reproducibility nitpick per hard rules.
-- **Weakness: Dependency on external tools (jixia, LeanSearch, Herald dataset) for evaluation.** These are cited in the paper and assumed to exist per hard rules. Concerns about their long-term maintenance are speculative. Removed per hard rules.
-- **Weakness: LeanScorer is a re-implementation, not the original system.** The authors explicitly acknowledge this and use the re-implementation as an ablation (their pipeline minus term-level grounding), which is a reasonable and transparent approach. Removed as the comparison is properly contextualized.
-- **Weakness: Formatting artifacts in Appendix B.3 obscure the case study.** Removed as a formatting nitpick per hard rules.
-- **Weakness: Environmental impact of scaling API calls.** This is outside the paper's stated scope and is scope creep. Removed per soft rules.
-- **Weakness: No adaptive mechanism to switch GoT on/off based on difficulty.** The paper already documents the trade-off (Section C.2, Table 5) and explains why GoT hurts compilation on simpler problems. Requesting an adaptive mechanism is a nice-to-have extension, not a weakness of the current contribution. Removed per soft rules.
+- **"Wikipedia conjectures are not research-level"**: The harsh critic implies the conjectures are merely from Wikipedia and thus not genuine research problems. This misrepresents the paper—the conjectures are well-known open problems in commutative algebra compiled by Melvin Hochster, a leading researcher in the field. The Wikipedia page documents them but does not diminish their status as open mathematical conjectures. The paper's framing of these as "real-world mathematical conjectures proposed by mathematicians" is accurate.
+
+- **"No discussion of neuro-symbolic equivalence checking alternatives"**: The critic claims the paper should discuss why existing neuro-symbolic methods (Liu et al., 2025a; Wu et al., 2025) couldn't be adapted. The paper does discuss these in Section 2 under "Semantic Check," and AriaScorer addresses different failure modes (definition discrepancy, implicit semantic inclusion) that purely equivalence-based methods cannot detect. This is not a missing comparison but a different approach.
+
+- **"Contribution 3 is just an outcome"**: The critic argues listing state-of-the-art results as a contribution is inappropriate. It is standard and acceptable to list empirical achievements as contributions alongside methodological ones.
+
+- **"Missing Graph-of-Thoughts citation (Yao et al.)"**: Per the rules, we do not flag missing related works, as we cannot confirm their existence or relevance without external sources.
+
+- **"Reproducibility concerns about LeanSearch, jixia, Mathlib version-locking"**: These are standard engineering dependencies in this field; the paper cites them and they exist. Version-locking Mathlib is an ongoing community challenge, not a specific flaw of this paper.
+
+- **"Kimina contamination—no discussion of other models' contamination"**: The paper already flags the most relevant contamination risk (Kimina on ProofNet). There is no evidence other baselines have similar issues.
+
+- **"Termination criteria for dependency graph expansion"**: The paper describes the process clearly—expansion terminates when leaf nodes are grounded in Mathlib. If a concept cannot be grounded, it becomes an internal node for synthesis. This is explained in Section 3.1.1.
+
+- **"Formatting and terminology inconsistencies"**: Pure style nitpicks; removed per rules.
+
+- **"The hierarchical decomposition assumption may not hold for circular/mutually recursive definitions"**: The paper explicitly claims the system handles *acyclic* dependency graphs (Section 3.1.1), acknowledging this limitation. Circular dependencies are outside the stated scope.
+
+- **"No theoretical bounds on AriaScorer"**: Requesting theoretical verification guarantees for an empirical semantic checker is scope creep beyond what is standard in this area.
 
 ## Novel Insights
 
-The most striking tension in this paper is the **syntactic risk vs. semantic rigor trade-off** introduced by GoT: on simpler problems (FATE-H), the modular decomposition style *hurts* compilation success (89% → 95% without GoT) because it increases the attack surface for typeclass resolution failures, namespace conflicts, and interface mismatches—yet it *improves* final accuracy (71% vs 54%) because the decomposed structure forces semantic explicitness. This means GoT is not simply "better"—it trades one failure mode (syntactic fragility from modular code) for another (semantic fragility from monolithic code). The paper's own data suggests that an optimal system might conditionally activate GoT based on estimated problem complexity, and that the real open problem is not *whether* to decompose, but *how to ensure modular definitions interoperate* within Lean's typeclass resolution system. This insight has implications beyond this paper for any agentic formalization system.
+The most insightful observation across the reviews is the "syntactic risk vs. semantic rigor" trade-off revealed by the FATE-H ablation (Table 5): removing GoT *increases* compilation rate (89% → 95%) but *decreases* final accuracy (71% → 54%). This suggests that the GoT planner's modular style—explicitly synthesizing intermediate definitions—introduces syntactic fragility (namespace conflicts, type class resolution failures) even as it improves semantic correctness. This is a genuine architectural insight: modularity helps semantics but hurts compilation, and the trade-off flips as problem difficulty increases. This finding deserves deeper discussion in the paper, as it has implications for the design of any agentic formalization system.
 
 ## Suggestions
 
-- Run Gemini-2.5-Pro with a simple RAG+reflection baseline (no GoT) on FATE-X and Conjectures to isolate the GoT architectural contribution from the backbone model contribution. This single experiment would significantly strengthen (or honestly weaken) the core claim.
-- Validate AriaScorer on outputs from at least one baseline system (e.g., Goedel-V2) to demonstrate that it generalizes as a fair metric, not just as a detector of Aria-specific error patterns.
-- Clarify the Conjectures evaluation protocol in Table 1: were these results judged by AriaScorer, by human experts, or by both? If both, report both numbers separately.
-- Report how many of the successful formalizations across benchmarks actually required synthesizing new definitions (vs. pure retrieval), and release the 14 conjectures with selection criteria.
+- **Add a systematic failure taxonomy**: Categorize the 56% of FATE-X failures into decomposition errors, grounding failures, synthesis errors, and semantic mismatches. This would make the contribution much more actionable for future work.
+- **Evaluate AriaScorer on non-Aria outputs**: Run AriaScorer on Goedel-V2 and Gemini outputs to demonstrate it is a general-purpose checker, not just tailored to Aria's error profile. This would significantly strengthen the AriaScorer contribution.
+- **Report confidence intervals or bootstrap analysis**: Even simple Wilson score intervals for the small Conjectures dataset would substantiate the "breakthrough" claims.
+- **Include at least one failed dependency graph visualization**: Show where the pipeline breaks down, not just where it succeeds, to help readers understand limitations.
+- **Soften the abstract's "breakthrough" and "all other models score 0%" language**: These claims are accurate for n=14 but overstate the evidence. Consider "substantial improvement" and "no baseline achieved any success."
 
-## Quality Assessment
+---
 
-- **Novelty:** High. The GoT decomposition-synthesis pipeline and AriaScorer's term-level grounding are distinct architectural contributions that go beyond incremental improvements to existing auto-formalizers.
-- **Technical soundness:** Moderate. The system design is coherent and well-engineered, but the evaluation has a significant gap (backbone model not ablated) and a validity concern (AriaScorer validated only on Aria's outputs).
-- **Empirical support:** Moderate-to-good on FATE-X and FATE-H; weak on Conjectures due to sample size and metric inconsistency. The lack of backbone ablation is a notable gap.
-- **Significance:** High potential. If the results hold under fairer evaluation conditions, this represents a meaningful advance in auto-formalization, especially for research-level mathematics where all prior methods fail entirely.
-- **Clarity:** Good. The paper is well-organized with clear methodology descriptions, though the Conjectures metric inconsistency and some undefined termination conditions detract from precision.
+**Axis Evaluation:**
+
+- **Novelty**: Moderate-to-high. The GoT + RAG + reflection orchestration for definition synthesis is genuinely novel, and AriaScorer's term-level grounding addresses a real gap. However, the individual components (RAG, reflection, graph-based decomposition) each have precedents, and the lack of comparison with other agentic approaches makes it hard to assess how much novelty comes from the architecture vs. simply applying an agent to this task.
+
+- **Technical soundness**: Mostly sound, but weakened by the circular AriaScorer validation and the absence of statistical testing. The ablations are well-designed and the main claims are supported, but the reliability of "final accuracy" numbers depends on trusting AriaScorer, which is validated on Aria's own outputs.
+
+- **Empirical support**: Strong on ProofNet and FATE benchmarks; limited on Conjectures due to small n. The ablation studies are thorough and informative. Key gap: no evaluation on other formalization systems' outputs for the checker, and no comparison with agentic baselines.
+
+- **Significance**: High potential impact. If the results hold up at scale, the ability to formalize conjecture-level statements would be a meaningful advance for automated mathematics. The significance is somewhat limited by the small Conjectures dataset and the open question of how the system scales to domains beyond algebra.
+
+- **Clarity**: Good. The paper is well-structured, the pipeline is clearly described, and the case studies in the appendices are detailed. The main paper could benefit from an integrated end-to-end example rather than delegating all case studies to the appendix.
 
 # Actual Human Scores
 Individual reviewer scores: [6.0, 6.0, 4.0, 4.0, 4.0, 8.0]

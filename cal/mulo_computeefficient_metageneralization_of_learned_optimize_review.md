@@ -1,73 +1,78 @@
-=== CALIBRATION EXAMPLE 28 ===
+=== CALIBRATION EXAMPLE 33 ===
 
 # Final Consolidated Review
-## SummaryThe paper derives the Maximal Update Parametrization (µP) for two state-of-the-art learned optimizer architectures (VeLO and small_fc_lopt) and proposes a simple multi-width meta-training recipe for µ-parameterized learned optimizers (µLOs). Empirical evaluation demonstrates that µLOs meta-trained on small MLP tasks at low cost (100 GPU hours) substantially improve meta-generalization to wider unseen networks compared to standard-parameterization LOs and transferred hand-designed optimizers, with additional empirical observations of improved generalization to deeper networks and longer training horizons.
+## Summary
+
+The paper derives Maximal Update Parametrization (µP) for two learned optimizer architectures (VeLO and small_fc_lopt), proposes a multi-width meta-training recipe for µ-parameterized learned optimizers (µLOs), and demonstrates empirically that µLOs substantially improve meta-generalization to wider unseen networks over standard parametrization baselines and per-task tuned hand-designed optimizers, while also showing unexpected empirical generalization to deeper networks and longer training horizons.
 
 ## Strengths
 
-- **Novel theoretical derivation bridging µP and learned optimizers.** The paper provides the first derivation of µP for learned optimizer architectures (Propositions 4.1 and 4.2), establishing a formal connection between hyperparameter transfer theory and LO meta-generalization. This bridges two previously separate subfields and opens a new research direction. The derivation handles the non-trivial interaction between the LO's output parameterization (direction/magnitude with exponential scaling) and the optimizee's width-dependent scaling.
+- **First principled derivation of µP for learned optimizer architectures.** Adapting µP to LOs is technically non-trivial because the optimizer's own output structure (magnitude, direction, tensor-level learning rate) must be correctly scaled. Propositions 4.1 and 4.2 provide architecture-specific derivations rather than a generic scaling recipe, and the update scaling in Eq. 3 is a concrete, verifiable contribution.
 
-- **Strong empirical demonstration of width generalization.** Table 1 shows µLO_M and µVeLO_M consistently achieving the best and second-best average ranks across OOD width tasks, outperforming per-task-tuned AdamW and µAdam. Figure 4 shows SP LOs diverge or stall on large-width tasks while µLOs maintain smooth training curves, providing compelling visual evidence of the core claim.
+- **Strong empirical results on the primary axis (width).** Table 1 shows µLO_M and µVeLO_M consistently ranking 1st or 2nd across all OOD width categories (Large, XL, XXL) and at all evaluation checkpoints (1k, 3k, 5k steps). SP LOs rank 5th–6th (worst), confirming the parametrization matters dramatically. These results are across 5 task domains including ViTs and LMs.
 
-- **Practically significant meta-training cost reduction.** The paper demonstrates that µLO_M meta-trained for only 100 GPU hours on small MLP tasks (widths 128–1024) can effectively optimize networks at width 8192+. This contrasts sharply with prior work (VeLO) requiring 4000 TPU-months yet still failing on wider tasks, representing a meaningful practical advance.
+- **Dramatic meta-training efficiency gains.** µLO_M is meta-trained for 100 GPU hours and generalizes to tasks where VeLO—trained with 4000 TPU-months—still struggles (Figures 6 and 9 of Metz et al. 2022b, cited in the introduction). This is a compelling cost-to-capability ratio that could lower barriers to entry for learned optimization research.
 
-- **Open-source implementation.** The code is publicly available, facilitating verification and follow-up work.
+- **Surprising empirical findings on depth and horizon generalization.** Figure 5 shows µLOs remain stable on 16-layer networks despite being meta-trained on 3-layer MLPs; Figure 6 shows stable training for 25× longer than the meta-training unroll. These findings, while empirical only, could stimulate theoretical follow-up work on why parametrization-induced stability propagates across these axes.
 
 ## Weaknesses
 
-- **Input feature scaling to the LO is not explicitly discussed in the main text.** The derivation in Section 4 covers optimizee initialization, pre-activation multipliers, and output update scaling (Equation 3), but does not address how the LO's input features $\mathbf{u}_t$ (gradients, momentum accumulators, variance accumulators) behave under µP. These features have width-dependent scaling (e.g., gradients scale as $1/\sqrt{\text{fan\_in}}$), so a fixed-parameter LO $f_\omega$ receives differently scaled inputs at different widths. The propositions assume "parameters and input data become aligned, leading to LLN scaling," which presumably addresses this, but the main text offers no discussion of whether and how input features remain well-behaved across widths. This is a notable presentation gap that affects reproducibility and the reader's ability to assess theoretical completeness.
+### Major:
 
-- **Evaluation reports only training loss; no validation or test metrics are provided.** All results throughout the paper (Figures 3–6, Table 1) report training loss exclusively. While training loss is a direct metric for optimizer capability, the paper's own related work identifies "training optimizees that do not overfit" as a core challenge for LOs. Without test loss or accuracy, it is impossible to assess whether µLOs inadvertently encourage overfitting relative to hand-designed optimizers. This limits the practical significance of the reported improvements.
+- **The contributions of µP parameterization vs. multi-width meta-training recipe are not fully isolated.** The paper's method combines two changes: (a) µP scaling and (b) meta-training on multiple widths {128, 512, 1024}. The ablation in Section 5.2.1 compares µLO_S vs. µLO_M and LO_S vs. LO_M, showing both that multi-width helps and that µP helps. However, the critical missing comparison is: *how does an SP LO meta-trained on the same multi-width distribution with carefully tuned per-width learning rates perform?* Figure 3 shows LO_M diverges at large widths, but it is unclear whether this is because SP fundamentally cannot work at large widths, or because the SP LO's own learning rate needs per-width tuning that wasn't provided. This conflation makes it hard to attribute improvements solely to µP. The paper should more clearly state that the contribution is the *combination* of µP + recipe, and discuss whether µP alone (with single-width training) already provides meaningful gains over SP with multi-width training.
 
-- **Hand-designed baselines are tuned at a proxy width, not at the actual evaluation widths.** AdamW and µAdam are hyperparameter-searched at width=1024 and then evaluated at widths 2048–8192+. The paper acknowledges in Section 6 that an oracle AdamW (tuned at each test width) is missing due to compute constraints. This asymmetry means the claim that µLOs "outperform hand-designed optimizers" (Abstract, Conclusion) is only established against *transferred* hyperparameters, not against the best achievable hand-designed optimizer performance. The gap could be substantial at extreme widths.
+- **Depth and horizon generalization claims lack both theoretical grounding and empirical validation of the proposed hypothesis.** The paper explicitly acknowledges that µP theory covers width only (Section 5 intro), yet features depth and horizon generalization prominently (abstract, Figure 5, Figure 6). The hypothesized mechanism is pre-activation stability (Section 5.2.2), but Figure 2 only validates this for *width* variations. There is no equivalent activation stability plot for deep networks or long-horizon training. Without this, the hypothesis remains speculative. A simple extension—plotting activation statistics for the 16-layer networks or the 25k-step runs—would substantially strengthen or revise the claim.
 
-- **No ablation isolating the contribution of individual µP components.** The method comprises three distinct modifications: initialization scaling (Initialize-µ), pre-activation multipliers (Multipliers-µ), and update scaling (Optimizer Update Scaling-µ). No experiment isolates which component(s) drive the generalization gains. Without this, it is unclear whether the full µP derivation is necessary or whether a subset of modifications (e.g., update scaling alone) would suffice.
+### Minor:
 
-- **Theoretical propositions rely on a strong LLN alignment assumption without empirical validation.** Propositions 4.1 and 4.2 assume that "during training the optimizee's parameters and input data become aligned, leading to Law of Large Numbers scaling." This alignment condition is non-trivial—it may not hold early in training, for specific architectures, or in the presence of normalization layers. No empirical evidence is provided to verify when this assumption holds or breaks, leaving the theoretical guarantee with uncertain operational scope.
+- **Meta-training exclusively on MLPs while claiming architecture generalization to ViTs and Transformers.** While the results on ViTs (Figure 4e) and LMs (Figure 4d) are impressive, the distribution shift is not just in width but in *operation type* (attention softmax interactions vs. pure matrix multiplication). The paper acknowledges this (Section 6), but the abstract's claim of improved "meta-generalization" could be misread as covering architecture transfer when it is an incidental empirical finding. The paper should more clearly distinguish the theoretically supported axis (width within architecture) from the empirical architecture-transfer finding.
 
-- **Architecture generalization (MLP→ViT/LM) is presented without adequate caveats.** µLOs are meta-trained exclusively on MLPs yet evaluated on ViTs and language models. µP theory guarantees width scaling for a given architecture class; it does not guarantee that an optimizer trained on MLP gradients generalizes to attention-based architectures with different gradient statistics. The results on ViT and LM tasks (Figures 4d,e) show µLOs merely "nearly match" rather than outperform hand-designed baselines—a qualitatively weaker result than on MLP tasks. The paper should be more explicit that architecture transfer is an empirical finding not covered by µP theory, and the relative weakness of transformer results should be discussed.
+- **Only training loss is reported throughout.** All figures and Table 1 report training loss. An optimizer that aggressively minimizes training loss but harms test performance would be problematic. While the meta-objective (Eq. 1) optimizes training loss by design, reporting test accuracy or validation loss on at least a subset of tasks would strengthen practical confidence in µLOs.
 
-- **Depth and horizon generalization are unexplained empirical observations presented prominently.** The paper highlights these as key findings in the Abstract and Conclusion, yet Section 5.2.4 explicitly states they are "purely empirical" with "no theoretical justification." The hypothesis that "µP's stabilizing effect on the optimizee's activations leads to this improvement" is plausible but speculative, supported only by qualitative pre-activation variance plots (Figure 2). Presenting these findings at the same level of confidence as the theoretically grounded width transfer may mislead readers about the scope of µP's guarantees.
+- **"Compute-Efficient" in the title refers only to meta-training cost, not inference cost.** Learned optimizers inherently have higher per-step overhead than Adam due to the LO network's forward pass per parameter. The paper does not quantify this overhead. For practitioners, the total cost of using µLOs = meta-training cost + (inference overhead × steps × tasks). Clarifying this distinction in the title or early in the introduction would prevent misinterpretation.
+
+- **LLN alignment assumption during meta-training is not discussed.** Propositions 4.1 and 4.2 assume "optimizee's parameters and input data become aligned, leading to Law of Large Numbers (LLN) scaling." In standard µP theory, this holds at infinite width. During meta-training, the optimizer weights ω are constantly changing between meta-steps. The paper should briefly discuss whether the alignment assumption is expected to hold throughout the inner unroll at each meta-step, or whether early inner-loop steps (before alignment develops) might produce biased meta-gradients.
+
+### Trivial:
+
+- **Missing oracle SP AdamW baseline tuned at each test width** — The authors explicitly acknowledge this (Section 6). Given that AdamW and µAdam are tuned on width=1024 versions and µLOs still outperform them at larger widths, this is a minor gap rather than a critical flaw.
 
 ## Nice-to-Haves
 
-- **Quantitative analysis of LO internal states across widths.** Examining whether the LO's outputs (direction $d$, magnitude $m$, and tensor-level learning rate $\varepsilon_{\mathbf{W}}$ in VeLO) follow the predicted µP scaling across widths would directly validate the mechanism and strengthen the theoretical narrative.
-
-- **Explicit compute cost comparison between meta-training and per-task tuning.** The paper provides 100 GPU hours for µLO meta-training and 500+ configurations per task for Adam tuning, but does not compute the total tuning cost across all 35 tasks. A direct cost comparison would substantiate the "compute-efficient" framing more concretely.
-
-- **Failure mode analysis or boundary identification.** All reported results show µLOs succeeding; no tasks are shown where µLOs underperform. Identifying the conditions under which µLOs break down (e.g., extremely small widths, architectures with unusual normalization) would strengthen the meta-generalization claims by establishing their scope.
+- Ablation of individual µP components (initialization, pre-activation multiplier, update scaling) to identify which drives the most improvement.
+- Meta-training on at least one non-MLP architecture (e.g., small Transformer) to disentangle the architecture-transfer benefit from the µP benefit.
+- Comparison with CompleteP (Dey et al., 2025), which the paper mentions as concurrent work addressing depth+width transfer, to assess whether µP is the optimal parameterization for LO meta-learning.
+- Evaluation on a standard L2O benchmark (e.g., Chen et al., 2022) to enable direct comparison with prior LO work beyond the custom evaluation suite.
 
 ## Removed Points
 
-These points are flagged to be removed, treat them with caution.
+*These points are flagged to be removed, treat them with caution.*
 
-- **Weakness: "No evidence Adam/SGD converge to global optimum at optimal rate" as weak motivation.** This is a generic statement in the introduction, not a substantive weakness of the paper's contributions. Most optimization papers include similar framing; it does not affect the paper's technical quality.
+- **Weakness: "Unfair comparison with hand-designed optimizers because AdamW/µAdam are per-task tuned."** This asymmetry *favors the baselines*, not the authors' method. If a single meta-trained µLO outperforms individually-tuned-per-task AdamW, that is a stronger result for µLOs, not a weaker one. Per hard rules, this is removed.
 
-- **Weakness: LO parameters ω may require µP scaling for stable meta-training.** This is scope creep. The paper focuses on test-time transfer of the LO to wider optimizees; whether the LO itself needs µP parameterization during meta-training is a separate research question outside the stated scope.
+- **Weakness: "Scalability limited to moderate-scale networks (width 8192, transformer hidden 3072)."** The paper acknowledges this in Section 6 and the 8× width increase from meta-training to testing is substantial. Demanding evaluation at 1B+ parameter scales is scope creep for an academic paper with stated compute constraints.
 
-- **Weakness: Missing Broader Impact section.** ICLR does not mandate a dedicated Broader Impact section. This is a formatting/style nitpick.
+- **Weakness: "Missing related works."** Per hard rules, no missing related works criticisms are included without external verification.
 
-- **Weakness: Formatting/OCR artifacts in equations and figure captions.** These are explicitly parser issues, not author errors, and are to be ignored per review instructions.
+- **Weakness: "Formatting/style nitpicks."** Removed per hard rules.
 
-- **Weakness: CompleteP (Dey et al., 2025) not used as baseline.** CompleteP is cited as concurrent work for depth+width transfer. The paper focuses on µP for LOs; asking for a different parameterization as a baseline is asking the paper to address a different research question. The authors already discuss CompleteP in related work and identify it as future work.
-
-- **Weakness: Meta-training should include non-MLP architectures.** The paper's key finding is that µP enables MLP-meta-trained LOs to generalize to ViTs/LMs without meta-training on those architectures. Requesting meta-training on transformers as a *weakness* contradicts the paper's demonstrated result. It would be valuable as an ablation (nice-to-have) but is not a flaw.
+- **Weakness: "Reproducibility concerns about undisclosed hyperparameters."** The paper provides substantial detail on meta-training configurations (Table 5), hyperparameter grids (Sections B.1, B.2), and open-sources code. Removed per hard rules.
 
 ## Novel Insights
 
-The synthesis of the three reviews reveals a key insight: the paper's most impactful contribution may not be the theoretical µP derivation itself (which follows established tensor program machinery), but rather the empirical demonstration that µP's stabilizing effect on optimizee dynamics acts as an implicit regularizer on LO meta-generalization across *multiple* axes simultaneously—width, depth, and horizon—even though the theory only covers width. This suggests that the practical value of µP for learned optimizers extends beyond its theoretical guarantees, potentially because stable training dynamics are a prerequisite for any form of generalization, and µP enforces this stability structurally. Investigating whether this "stability-as-regularizer" hypothesis generalizes to other meta-learning settings (e.g., learned learning rate schedulers, data augmentation policies) would be a fruitful direction. Additionally, the relatively weaker transformer results compared to MLP results hint that the gap between theoretical coverage and empirical benefit may widen as architecture complexity increases, suggesting that future parameterizations (like CompleteP) may be needed for robust architecture-level transfer.
+The most striking insight emerging from the reviews is that µP's benefits may extend far beyond its theoretical guarantees. The paper shows µP stabilizes not just width transfer (theoretically expected) but also depth transfer and long-horizon training (theoretically unexpected). This suggests that µP's core mechanism—stabilizing activation magnitudes across scales—may be a more general "training stabilizer" than previously appreciated, functioning almost like an implicit regularizer for meta-learned systems. If this hypothesis is correct, it raises the tantalizing possibility that parametrization choices in meta-learning could be as impactful as architectural choices, and that the community may be underinvesting in parametrization theory relative to architecture search. However, this remains speculative until the pre-activation stability hypothesis is validated for depth and horizon axes, not just width.
 
 ## Suggestions
 
-- Add an explicit subsection or paragraph in Section 4 discussing how the LO's input features (gradients, momentum, variance) behave under µP, and clarify whether any input preprocessing or normalization is needed to ensure width-invariant LO behavior. Even if the propositions handle this, the main text should make the logic transparent.
+1. **Add activation stability plots for deep networks and long-horizon runs** (analogous to Figure 2) to validate or refute the pre-activation stability hypothesis for the empirically observed depth and horizon generalization. This is the single most impactful addition the authors could make.
 
-- Report at least test accuracy or validation loss for the main evaluation tasks (e.g., Figure 4 tasks) to demonstrate that µLOs do not trade optimization speed for generalization quality.
+2. **Report validation loss or test accuracy on at least 2–3 tasks** (e.g., ImageNet ViT, LM1B) to confirm that µLOs' aggressive training loss minimization does not harm generalization.
 
-- Include an ablation study isolating the three µP components (initialization, multipliers, update scaling) on at least one width-transfer task to identify which factors are necessary vs. sufficient.
+3. **Clearly separate the contributions of µP vs. the multi-width recipe** in the abstract and introduction. State upfront that the method combines both, and clarify that the multi-width recipe is necessary (per the ablation) but insufficient without µP.
 
-- Temper the Abstract and Conclusion claims about "outperforming hand-designed optimizers" to specify that this is against *transferred* hyperparameters, or add a single-task oracle AdamW experiment to substantiate the stronger claim.
+4. **Add a brief discussion of inference overhead**, even approximate (e.g., "the LO forward pass adds ~X% per-step overhead compared to Adam"), to make the "compute-efficient" claim precise.
 
-- Present depth and horizon generalization findings with appropriate caveats in the Abstract, clearly distinguishing them from the theoretically grounded width transfer results.
+5. **Discuss the validity of the LLN alignment assumption during early inner-loop steps** of meta-training, when the optimizee has not yet developed feature learning. A one-paragraph discussion would suffice.
 
 # Actual Human Scores
 Individual reviewer scores: [6.0, 6.0, 6.0, 2.0]

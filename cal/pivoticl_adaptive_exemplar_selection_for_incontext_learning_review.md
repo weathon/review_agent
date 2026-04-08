@@ -1,67 +1,97 @@
-=== CALIBRATION EXAMPLE 9 ===
+=== CALIBRATION EXAMPLE 28 ===
 
 # Final Consolidated Review
 ## Summary
 
-Pivot-ICL proposes modeling the bilateral interactions between candidate exemplars and test examples as a weighted bipartite graph, using the HITS algorithm to compute authority scores (for exemplars) and hub scores (for test examples). Based on these scores, the method adaptively assigns either dynamic (input-specific) or static (task-generic) exemplars to each test input. Experiments across four challenging reasoning tasks and multiple LLM backbones show consistent gains over purely dynamic or purely static selection baselines.
+Pivot-ICL proposes an adaptive exemplar selection method for in-context learning that models bilateral interactions between test examples and candidate exemplars as a weighted bipartite graph, then applies HITS (Hyperlink-Induced Topic Search) to score both exemplars (authorities) and test examples (hubs). High-scoring test examples receive dynamic (input-specific) exemplars, while low-scoring examples receive static (task-generic) exemplars. Experiments across four challenging reasoning tasks and multiple LLM backbones show consistent performance improvements over purely dynamic or static selection strategies.
 
 ## Strengths
 
-- **Novel graph-theoretic framing of the dynamic/static trade-off in ICL.** Reframing exemplar selection as a bipartite graph mining problem—where exemplars act as "authorities" and test examples as "hubs"—is a genuine conceptual contribution. This bilateral perspective captures mutual reinforcement between exemplars and test inputs that unidirectional similarity-based methods miss, and the observation that poorly-connected test inputs benefit from generic exemplars is both intuitive and empirically supported.
+- **Principled adaptive mechanism with clear motivation.** The core insight—that test examples vary in how well they are covered by the exemplar pool, and thus benefit from different selection strategies—is well-grounded and empirically validated through the controlled ID/OOD analysis on PDDL (Figure 2), which cleanly shows dynamic selection excelling on ID examples while static selection helps on OOD examples.
 
-- **Compelling ID/OOD analysis on PDDL (Figure 2).** The controlled experiment leveraging the natural in-distribution (3–7 blocks) vs. out-of-distribution (8–20 blocks) split provides direct evidence that dynamic exemplars help ID cases while static exemplars help OOD cases. This analysis goes beyond reporting aggregate numbers and substantiates the core motivation for adaptive treatment.
+- **Creative repurposing of HITS for ICL.** Applying a classic bipartite graph mining algorithm to score both exemplar and test-example nodes bidirectionally is a novel and elegant formulation. It provides a principled way to identify globally representative exemplars (authorities) and globally disconnected test examples (low-hub-score queries) simultaneously, going beyond simple similarity-based retrieval.
 
-- **Strong efficiency advantage over loss-based methods.** Pivot-ICL requires only embedding similarity computation and a lightweight graph scoring pass (under 10 minutes on CPU per Appendix A.6), compared to EXPLORA's 1000+ LLM calls and 2–5 hours. This is a meaningful practical advantage for the zero-shot setting the paper targets.
+- **Efficient and practical.** The method operates purely on embeddings without requiring LLM forward passes for scoring, taking under 10 minutes for graph construction and scoring (Appendix A.6) versus 2–5 hours for loss-based methods like EXPLORA, while achieving comparable or better performance.
 
-- **Consistent improvements across backbones (Table 2).** Gains are observed on Gemini 2.0 Flash, Llama 3.3 70B, and Qwen 2.5 7B, with particularly notable improvements on GPQA across all models (e.g., +4.6 on Qwen 2.5 7B). This suggests the benefit is not an artifact of a single model's behavior.
+- **Consistent gains across diverse tasks and backbones.** Improvements hold across math (AIME24), planning (PDDL), commonsense reasoning (SQA), and PhD-level science QA (GPQA), and across Gemini, Llama, and Qwen models (Table 2), demonstrating genuine generalizability rather than task-specific tuning.
 
 ## Weaknesses
 
-- **Transductive assumption limits practical applicability.** The bipartite graph requires the full test set Q to be known a priori (Section 3.2: G = (C ∪ Q, E, W)), and the Pivot-adapt threshold t∇ = α/(|C||Q|) explicitly depends on |Q|. In streaming or API-serving scenarios where queries arrive individually, the method cannot be directly applied. The paper acknowledges this in Section 5 ("sometimes, there is no observed full set of test examples") and proposes k-fold validation on exemplars as a workaround, but this alternative is not empirically evaluated, leaving the method's applicability outside batched settings unsubstantiated. This is a significant practical limitation for a method aimed at improving ICL deployment.
+### Major:
 
-- **Statistical reliability on small test sets is not established.** AIME24 contains only 30 test problems. Pivot-adapt's reported 23.4% versus ~10–20% for baselines represents a difference of roughly 1–4 additional correct answers out of 30. No confidence intervals, standard deviations, or significance tests are reported for any task. Given the well-documented variance in ICL performance across exemplar orderings and selections, the reliability of gains on AIME24 is uncertain, and this concern extends to GPQA (n=198) and SQA (n=490) where variance in reasoning tasks can be substantial.
+- **The adaptive mechanism is opaque without per-example assignment analysis.** The paper never reports what percentage of test examples receive static vs. dynamic exemplars for each task, nor the per-group accuracy of examples routed to each strategy. Without this breakdown, it is impossible to verify that the hub-score threshold is making sensible routing decisions rather than, e.g., routing nearly all examples to one strategy. A simple table showing the static/dynamic split ratio and accuracy per group would be straightforward to produce and is essential for validating the core claim.
 
-- **Comparison with loss-based methods (Table 3) uses different experimental conditions.** LENS and EXPLORA results are compared under a different setup: 5 exemplars (vs. 10 in main experiments), GPT-4o-mini backbone (vs. Gemini 1.5 Pro), and different task sets (GSM8K/TabMWP/SQA* vs. AIME24/PDDL/SQA/GPQA). The SQA variant is explicitly noted as easier (oracle facts provided). These confounds make the claim of "comparable performance" difficult to evaluate fairly.
+- **Transductive design limits real-world deployment, and this constraint is under-discussed.** The method requires access to the entire test set Q to construct the bipartite graph and compute hub scores. This means a single query arriving at an API cannot be processed without re-computing graph scores over the entire batch. The authors briefly mention k-fold validation as a workaround in Section 5, but this limitation—which fundamentally shapes the method's applicability—should be prominently acknowledged and discussed in the main text, not just the conclusion. The comparison with EXPLORA in Table 3 further obscures this: EXPLORA is inductive (learns a scoring function deployable per-query), while Pivot-ICL is transductive, making the efficiency comparison incomplete without this caveat.
 
-- **Hyperparameter sensitivity is insufficiently analyzed.** The core adaptive decision in Pivot-adapt is governed by α = 2000 (set "empirically" per footnote 1), and the normalization t∇ = α/(|C||Q|) means α's effective decision boundary shifts with dataset size—making it dataset-dependent rather than truly zero-shot. The Pivot-concat threshold (μ + 2σ) is similarly heuristic. While Appendix A.5 provides limited ablations (Table 5 varies σ multiplier on GPQA only; Table 6 compares against mean threshold), no sensitivity analysis for α across tasks is provided. Given that the entire adaptive mechanism hinges on these thresholds, this gap weakens confidence in the method's robustness.
+- **Threshold formula lacks justification and exhibits counterintuitive properties.** The Pivot-adapt threshold $t_\nabla = \alpha / (|C||Q|)$ depends on the total number of test examples $|Q|$, meaning the routing decision for a given query changes if the batch size changes. This is theoretically unusual: the intrinsic "connectedness" of a query to the exemplar pool should not depend on how many other queries are being evaluated simultaneously. The paper provides no theoretical or empirical motivation for this normalization. The authors should either justify why the threshold should scale with $|Q|^{-1}$ or demonstrate that simpler alternatives (e.g., a fixed hub-score percentile) perform comparably.
 
-- **Justification for HITS over simpler graph scoring methods is limited.** Table 1 shows that Degree Centrality achieves the best SQA result (66.7%) and PageRank is competitive on several tasks. The mutual-reinforcement property of HITS is intuitively appealing, but the paper does not provide theoretical or empirical evidence that the iterative authority/hub computation is necessary rather than sufficient. The analogy between web hyperlink structure (directed, discrete) and ICL similarity (undirected, continuous cosine scores) is drawn without formal justification, and the undirected nature of the similarity edges removes the directionality that gives HITS its original interpretation.
+### Minor:
+
+- **The "+8.8% relative gain over the best baseline" claim in the abstract is not directly verifiable from Table 1.** Computing relative gain over the best individual baseline method's average (approximately 55.7 for Gecko dynamic) yields roughly (60.6 - 55.7)/55.7 ≈ 8.8%, which appears consistent, but the table formatting makes precise verification difficult. The authors should explicitly state which baseline the percentage is computed against, or report the gain computed over multiple baselines for transparency.
+
+- **"Zero-shot" characterization is slightly misleading.** The paper describes Pivot-ICL as providing "zero-shot signals" (Section 1), but α is empirically set to 2000 and could require tuning via a development set (Footnote 1). While Appendix A.5 provides some threshold sensitivity analysis, the main text overstates the zero-shot nature. The method is better described as requiring minimal hyperparameter selection rather than being truly zero-shot.
+
+- **Missing naive ensemble baseline.** Pivot-concat concatenates filtered dynamic exemplars with static exemplars, and Pivot-adapt chooses between the two. A simple baseline concatenating all dynamic + static exemplars (without graph-based filtering or thresholding) would isolate the contribution of the graph-based decision mechanism versus simply having more exemplars available. This comparison is absent.
+
+### Trivial:
+
+- The notation $t_\circ$ and $t_\nabla$ for thresholds is functional but could be more mnemonic (e.g., $t_{\text{concat}}$, $t_{\text{adapt}}$).
 
 ## Nice-to-Haves
 
-- **Analysis of hub score distributions and switch error rates.** A key implicit assumption is that hub scores are bimodal (separating ID from OOD examples), enabling a clean binary threshold. If scores are unimodal, the adaptive switch may be arbitrary. Plotting hub score distributions and quantifying how often Pivot-adapt makes the "wrong" choice (static where dynamic would be better, or vice versa) would substantially strengthen the analysis.
+- **Correlation between hub scores and example difficulty/OOD-ness beyond PDDL.** The ID/OOD analysis (Figure 2) is compelling but limited to one task with an explicit distribution boundary (block count). Showing that hub scores correlate with example difficulty or distributional distance on SQA, GPQA, or AIME24 would substantially strengthen the claim that the graph mechanism is detecting OOD examples.
 
-- **Correlation between hub scores and OOD-ness beyond PDDL.** Figure 2 validates the ID/OOD intuition only on PDDL, where OOD has a clean structural definition (block count). Verifying that low hub scores correlate with out-of-distribution difficulty on AIME24, SQA, and GPQA would generalize the core claim.
+- **Qualitative case studies.** Showing 3–5 concrete examples where Pivot-adapt routes to static vs. dynamic exemplars, with the actual exemplars selected and model outputs, would provide intuitive understanding of when and why the method works.
 
-- **Ablation over embedding models.** The method depends entirely on Gecko embeddings for edge weights, yet no ablation tests alternative encoders. A comparison with a weaker encoder would clarify whether Pivot-ICL's gains are robust to embedding quality.
+- **Exemplar pool size ablation.** Testing performance with varying candidate pool sizes (e.g., 100, 500, 1000 exemplars) would inform practitioners about robustness to different data availability regimes.
+
+- **Embedding model sensitivity analysis.** The method relies on Gecko embeddings for edge weights. Testing with SimCSE or BM25 as the edge-weight function in the graph (not just as standalone baselines) would clarify how sensitive the adaptive mechanism is to embedding quality.
 
 ## Removed Points
 
-These points are flagged to be removed, treat them with caution:
+These points are flagged to be removed; treat them with caution.
 
-- **Weakness: Ambiguity of the "+8.8% relative gain" claim.** The abstract states this is a relative gain over the best baseline, and it is directly verifiable from Table 1: Pivot-adapt average (60.6%) vs. best baseline average MMR (55.7%) yields ~8.8% relative improvement. This is not ambiguous.
+- **Formatting/notation complaints from PDF parsing artifacts** (garbled equations): Removed per the rule against pure formatting/style nitpicks. The actual paper would use proper summation notation.
 
-- **Weakness: Equation formatting issues (missing summation symbols).** This is a parser artifact, not a paper error. Removed per the formatting nitpick rule.
+- **Missing ConE comparison**: Removed per the rule against demanding comparisons the paper explicitly scopes out. The paper notes in Section 2 that ConE requires computing model conditional entropy from open-weight models, which is a different operational setting from the embedding-based approach this work targets.
 
-- **Weakness: Reproducibility concern about missing convergence criteria for HITS.** The paper states HITS runs iteratively (Section 3.2), and Appendix A.6 notes 10–50 iterations with O(k(|V|+|E|)) complexity. While more detail could help, this falls under trivial implementation details not expected in a submission.
+- **Unfair comparison with EXPLORA because it is inductive**: Removed per the rule against complaints where the asymmetry favors the baseline. EXPLORA's inductive capability is an advantage for EXPLORA, not for the authors. The relevant concern (transductive limitation) is already captured above.
 
-- **Weakness: Computational cost of embedding the entire test set.** The paper provides overhead estimates in Appendix A.6 (under 10 minutes). Embedding cost scales linearly with |Q|, which is standard for any retrieval-based method. This is not a distinctive weakness of Pivot-ICL.
+- **Claims about limited model diversity**: Removed as the paper tests on five different models (Gemini 1.5 Pro, Gemini 2.0 Flash, Llama 3.3 70B, Qwen 2.5 7B, GPT-4o-mini) spanning different sizes, architectures, and providers. This is adequate coverage.
 
-- **Weakness: Marginal gains on smaller models.** While Qwen 2.5 7B's SQA gain is modest (70.6→71.2), the GPQA gain is substantial (30.8→35.4). The gains are consistent in direction across all model-task pairs; characterizing them as "marginal" selectively focuses on the smallest improvement.
+- **Missing related work citations**: Removed per the rule against mentioning missing related works without external confirmation.
+
+- **Computational cost concerns**: The paper explicitly addresses this in Appendix A.6 with concrete timing numbers (<10 minutes vs. 2–5 hours). Further demands for wall-clock timing in every table are unreasonable.
 
 ## Novel Insights
 
-The bipartite graph framing reveals a subtle but important structural property: the value of an exemplar is not intrinsic but depends on the test distribution it serves, and conversely, the "difficulty" of a test example is relative to the available exemplar pool. This mutual dependence—formalized through HITS authority/hub scores—suggests that exemplar selection methods that treat these two sets independently (as all prior work does) are fundamentally misspecified. The PDDL analysis (Figure 2) provides a particularly clean demonstration: the crossover point where static exemplars begin to outperform dynamic ones could serve as a diagnostic for when exemplar pools are insufficient for a given test distribution, a concept that could inform future work on active exemplar acquisition.
+The bipartite graph formulation reveals a structural asymmetry that prior ICL work overlooks: exemplar selection methods implicitly assume that all test queries benefit from the same selection strategy (either dynamic or static), but the distribution of exemplar-test similarities is inherently bimodal. Well-connected queries are best served by their nearest exemplars, while poorly-connected queries are actively harmed by forcing similarity matches that may be misleading. The HITS authority/hub scoring provides an elegant, parameter-light mechanism to detect this structural divide without any training—effectively performing distributional outlier detection at inference time. This insight—that exemplar selection should be *conditional on query-exemplar connectivity rather than uniform*—could generalize beyond ICL to few-shot classification and retrieval-augmented generation, where similar connectivity dynamics likely exist.
 
 ## Suggestions
 
-- Empirically evaluate the k-fold exemplar-only workaround for the transductive setting (Section 5) to demonstrate that Pivot-ICL can function without test-set access. Even a single-task experiment would address the most critical practical limitation.
+- **Add a per-example routing breakdown table** showing the percentage of examples routed to static vs. dynamic and the accuracy of each group across all four tasks. This is the single most important missing analysis for validating the core claim.
 
-- Replace the fixed α with an adaptive threshold derived from the hub score distribution itself (e.g., elbow detection or percentile-based splitting) to reduce dataset-specific tuning and strengthen the zero-shot claim.
+- **Replace or supplement the $|Q|$-dependent threshold** with a simpler alternative (e.g., percentile-based on hub scores within the exemplar set only, or a fixed hub-score percentile from k-fold validation on the exemplar pool) and report whether performance degrades. This would directly address the counterintuitive batch-size dependency.
 
-- Report results with multiple random seeds or exemplar orderings on AIME24, or at minimum compute bootstrap confidence intervals, to establish that gains on this 30-example benchmark are not due to noise.
+- **Include a naive concatenation baseline** (dynamic + static exemplars without filtering) to quantify the contribution of the graph-based selection mechanism versus simply providing more exemplars.
 
-- Add a direct comparison with LENS or EXPLORA on the main experimental setup (AIME24/PDDL/SQA/GPQA with Gemini 1.5 Pro and 10 exemplars) to enable a fair head-to-head evaluation against loss-based methods.
+- **Prominently acknowledge the transductive setting** in the Method section (not just the Conclusion), and discuss practical implications for streaming/incremental deployment scenarios.
+
+- **Clarify the +8.8% claim** by specifying the exact baseline method(s) and computation in the main text, not just the abstract.
+
+---
+
+**Axis evaluations:**
+
+- **Novelty**: Moderate-to-high. The bipartite graph formulation and HITS application to ICL exemplar selection is genuinely new and well-motivated, though the individual components (HITS, KNN selection, static exemplar sets) are established.
+
+- **Technical soundness**: Moderate. The method is clearly described and largely sound, but the threshold design has unexplained properties, and the adaptive mechanism lacks empirical validation at the per-example level.
+
+- **Empirical support**: Moderate-to-strong. Consistent gains across tasks and backbones, plus the compelling PDDL ID/OOD analysis. Weakened by the missing routing breakdown and limited ablation on hyperparameters.
+
+- **Significance**: Moderate. Exemplar selection is a practical problem, and the adaptive insight is valuable, but the transductive constraint and opaque routing limit immediate practical impact.
+
+- **Clarity**: Good. The paper is well-structured with clear motivation, method description, and experimental organization. The threshold notation could be improved but is not a barrier.
 
 # Actual Human Scores
 Individual reviewer scores: [2.0, 2.0, 0.0]

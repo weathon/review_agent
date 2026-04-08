@@ -1,83 +1,63 @@
-=== CALIBRATION EXAMPLE 36 ===
+=== CALIBRATION EXAMPLE 40 ===
 
 # Final Consolidated Review
 ## Summary
 
-DISCO proposes a method for efficient ML model evaluation by selecting benchmark subsets based on inter-model disagreement (measured via JSD or PDS) rather than sample representativeness, then predicting full benchmark performance from model signatures (concatenated outputs) on the selected subset using simple predictors (kNN, Random Forest). The method achieves state-of-the-art performance prediction on MMLU, HellaSwag, Winogrande, and ARC, and generalizes to ImageNet in the vision domain.
+DISCO proposes selecting evaluation samples that maximize inter-model disagreement (measured by JSD or Predictive Diversity Score) rather than sample representativeness, combined with a "model signature" representation fed to simple regressors (kNN/Random Forest) for performance prediction. The approach achieves strong results on MMLU, HellaSwag, Winogrande, ARC, and ImageNet, reducing evaluation cost by >99% with minimal accuracy prediction error, outperforming prior methods like TinyBenchmarks and Metabench at fixed sample budgets.
 
 ## Strengths
 
-- **Conceptual clarity of the core insight**: The shift from selecting representative samples (clustering-based) to selecting disagreement-inducing samples is a clean, well-motivated departure from prior work (tinyBenchmarks, Anchor Points). Proposition 1 provides a principled information-theoretic justification, and the empirical results validate that this conceptual shift yields practical gains.
-
-- **Consistent cross-domain effectiveness**: The method is validated on both language benchmarks (424 LLMs across 4 datasets) and vision (400 ImageNet models), achieving strong results in both domains. On MMLU with 100 samples, DISCO achieves 1.07%p MAE and 0.987 Spearman rank, substantially outperforming the best prior method (2.08%p MAE / 0.927 rank from Anchor-corr + gp-IRT).
-
-- **Simplicity of the prediction pipeline**: Using model signatures with Random Forest/kNN instead of IRT-based latent parameter estimation is both simpler and more effective. The ablation in Table 2(e) shows this isn't just a theoretical preference — RF with signatures outperforms all alternatives including complex IRT models.
+- **Conceptual reframing from representativeness to disagreement**: The core insight—that samples eliciting diverse model responses are more informative for performance prediction than representative samples—is both simple and powerful. This directly challenges the clustering-based paradigm of prior work (Anchor Points, TinyBenchmarks) with a much simpler greedy selection criterion.
+- **Strong empirical results at fixed sample budget**: At K=100 samples, DISCO (PDS + RF) achieves 1.07%p MAE / 0.987 rank correlation on MMLU, substantially outperforming TinyBenchmarks' best (2.08%p MAE / 0.927 rank) and remaining competitive with Metabench which requires 1.5–4.5× more samples (Table 1).
+- **Chronological split for realistic evaluation**: Training on older models and testing on newer ones (Section 5.2) is a principled choice that better reflects real-world deployment than random splits, addressing concerns raised in recent literature (Zhang et al., 2025). DISCO remains robust under this split (0.987 rank, Table 2a).
+- **Model signatures bypass complex psychometric modeling**: Replacing IRT-based latent parameter estimation with direct regression on output concatenations is practically appealing and empirically superior, achieving better results with simpler machinery.
 
 ## Weaknesses
 
-- **The injectivity assumption in Proposition 1 limits the theoretical "optimality" claim**: The abstract states that "inter-model disagreement provides an information-theoretically optimal rule for greedy selection." However, Proposition 1 requires $S(m)$ (model accuracy) to be injective with respect to model index $m$. With 424 models on a bounded accuracy scale, ties are inevitable. Without injectivity, maximizing JSD maximizes information about *which model* produced the response, not necessarily about its *accuracy value*. The paper should explicitly caveat the "optimal" claim to reflect this assumption, or provide bounds on the error introduced by non-injective accuracy mappings.
+### Major:
 
-- **Substantial performance degradation under distribution shift between source and target models**: Appendix F reveals that when target models significantly outperform source models (the "performance w/ gap" split), Spearman rank drops from 0.987 to 0.892 — a meaningful degradation. The authors dismiss this scenario as "unrealistic," but rapid capability jumps (e.g., new SOTA models) are common in practice. This is a genuine failure mode that deserves more than dismissal, especially since the method is designed for deployment in evolving evaluation ecosystems.
+- **Proposition 1's injectivity assumption is violated for accuracy, weakening the theoretical optimality claim**: The proof that MI(S(m); ŷ_i) = JSD relies on S(m) being injective with respect to m (i.e., every model has a unique accuracy value). In practice, many distinct models achieve identical accuracy on a benchmark. When S is not injective, the Markov chain ŷ_i → m → S(m) only yields MI(S(m); ŷ_i) ≤ MI(m; ŷ_i) = JSD, so JSD is an *upper bound* on the relevant mutual information, not an equality. The paper does not bound the gap between MI(m; ŷ_i) and MI(S(m); ŷ_i), so the claim that JSD/PDS selection is "information-theoretically optimal" for accuracy prediction is not fully established—it is optimal for *model identification*, which is a different (and stronger) task. This matters because it undermines the theoretical justification for the specific selection criterion, even though the empirical results are strong.
 
-- **The offline compute cost creates a practical deployment barrier for smaller users**: The offline stage requires 3284 GPU-hours (Table 4), with a break-even point of ~389 model evaluations (Appendix B.3). This means individual researchers or small labs evaluating fewer than 389 models would incur more total cost than direct evaluation. While the paper argues large-scale training runs justify this, the break-even analysis is buried in the appendix despite being central to the method's practical utility claims.
+- **Performance degrades sharply under distribution shift between source and target models, and the dismissal may be premature**: Appendix F shows rank correlation drops from ~98.7 (chronological split) to 89.2 when target models substantially outperform source models. The paper dismisses this as "unrealistic" (Section F), but in an era of rapid capability gains, scenarios where newer models significantly outperform older source models are plausible. The paper provides no mechanism to detect or adapt to such shifts. This is a meaningful limitation for a method whose purpose is to evaluate *future* models.
 
-- **The dramatic improvement on ImageNet may partly reflect implicit class coverage rather than pure disagreement-based informativeness**: The random-sampling baseline on ImageNet achieves only 0.652 Spearman rank (Table 3) versus 0.916 on MMLU (Table 1). With 1000 ImageNet classes and only 100 samples, random subsets miss most classes entirely. PDS-based selection likely implicitly provides class coverage by picking samples where models disagree — which tends to be hard or rare classes. This raises the question: is DISCO's advantage on ImageNet primarily due to better disagreement-based informativeness, or simply to avoiding class-collapse? This deserves explicit analysis.
+### Minor:
+
+- **Terminology "Condensation" risks confusion with dataset condensation/synthesis literature**: "Dataset Condensation" in current literature (e.g., Zhao et al., 2023; Wang et al., 2018) refers to synthesizing new training data points. DISCO performs subset selection (choosing existing samples), which is traditionally "coreset selection" or "anchor point selection." Using "Condensation" may mislead readers about the technical mechanism.
+- **Small target model set limits confidence in generalization claims**: The chronological split uses only 40 target models (Section 5.2). While standard deviations are reported (Appendix D), 40 test points provides limited statistical power for claims about robustness to "future models," especially given the non-i.i.d. nature of the chronological split.
+- **Source model subset selection for PDS computation introduces an unexplained hyperparameter**: Appendix I reveals that using all 385 source models for PDS computation yields worse results than a subset (M=100 for MMLU), explained as "redundant models diluting heterogeneity." This means the method requires tuning M as a hyperparameter, and the relationship between ensemble composition and PDS quality is not well-characterized.
+
+### Trivial:
+
+- Inconsistent notation between S_D[f] (Section 3) and S(m) (Proposition 1) for model performance.
 
 ## Nice-to-Haves
 
-- **Characterize what DISCO actually selects**: Analyze selected samples by difficulty, topic, and class distribution. This would verify whether high-PDS samples are genuinely informative or merely ambiguous/noisy, and would clarify the ImageNet improvement mechanism.
-
-- **Empirically verify Proposition 1**: Correlate per-sample JSD/PDS scores with actual per-sample contribution to prediction accuracy. This would bridge the theoretical justification and empirical results.
-
-- **Cost-matched comparisons**: Show whether simpler methods (e.g., random sampling with more online samples matched to DISCO's total compute budget) achieve comparable accuracy, to contextualize the offline investment.
-
-- **Per-task breakdown on MMLU**: Report DISCO's prediction accuracy across MMLU's 57 subtasks to reveal whether the method works uniformly or fails on specific capability areas.
-
-- **Source model diversity requirements**: Table 2(c) varies model count but not diversity. Testing performance when source models come from only 1–2 architecture families would reveal how much DISCO depends on source pool heterogeneity.
+- Characterize the actual samples DISCO selects (e.g., show 10–20 examples alongside random/Anchor-corr selections). This would make "disagreement-based selection" concrete and help practitioners understand what the method finds informative.
+- Cross-dataset generalization experiment: train on MMLU source models, test on HellaSwag target models. This would test whether model signatures capture general capability vs. dataset-specific patterns.
+- Per-subtask analysis on MMLU (57 tasks): report prediction error by category (STEM, humanities, etc.) to reveal whether DISCO works uniformly or has blind spots.
+- Provide pre-computed anchor points for common benchmarks to lower the adoption barrier for users who cannot afford the offline stage.
 
 ## Removed Points
 
-- **Metabench comparison fairness**: The reviewer flagged that Metabench requires more examples (150–450) vs. DISCO's 100. Per the rules, this asymmetry favors the baseline (Metabench gets more data), not the authors' method. The paper transparently discloses this in Table 1's footnote. Removed as an unfair comparison concern.
+These points are flagged to be removed, treat them with caution:
 
-- **Restriction to closed-choice tasks as a weakness**: The paper explicitly scopes this out in Section 6 (Limitations): "DISCO requires predictive probabilities for several predefined answer choices." Criticizing the absence of open-ended generation support is scope creep beyond the paper's stated contribution.
-
-- **Logit access for closed-source models**: The paper acknowledges the need for predictive probabilities. Demanding applicability to API-only models with text-only outputs is beyond scope.
-
-- **Missing multimodal benchmark experiments**: The paper claims domain-agnostic applicability and demonstrates it on both language and vision domains. The LMMs-Eval reference in the introduction motivates the problem, not a specific experimental claim. Requesting additional multimodal experiments is scope creep.
-
-- **Proposition 2 tightness scaling with M**: This is a mathematical observation about bound looseness. The empirical results validate that PDS works well in practice; the theoretical tightness of bounds is not a practical concern.
-
-- **Confidence intervals absent from Table 1**: The paper provides confidence intervals in Appendix D. Requesting them in the main table is a formatting preference, not a substantive weakness.
+- **Metabench comparison fairness (harsh critic)**: The critic argued the comparison is unfair because Metabench uses more samples (150–450 vs. 100). However, this asymmetry *favors* the baseline (Metabench), not the author's method. Per the rules, this is removed. The paper also transparently marks these results with † and explains the difference in the footnote.
+- **Vision baselines not tuned aggressively (harsh critic)**: This is speculative—there is no evidence the baselines were unfairly implemented. Without concrete evidence of mistuning, this is not a legitimate criticism.
+- **Missing wall-clock time comparisons (transferable weakness)**: The paper provides GPU-hour comparisons (Appendix B), which is the standard for this type of work. Wall-clock time would be hardware-dependent and less reproducible.
+- **Insufficient ablation studies (transferable weakness)**: The paper actually provides extensive factor analysis (Table 2: model split, stratification, source model count, dimensionality reduction, prediction model) and compression rate analysis (Figure 5). This criticism is factually overstated.
+- **Limited to multiple-choice tasks (all three reviewers)**: The paper explicitly acknowledges this in Section 6 ("Limitations") and explains the constraint clearly. Per the rules, weaknesses already addressed by the authors should be weakened. This is a known scope limitation, not an unaddressed flaw.
+- **Demand for experiments on open-ended generation tasks (spark finder)**: This is outside the paper's stated scope. The paper clearly defines its setting (classification/multiple-choice) and leaves open-ended tasks for future work.
+- **Reproducibility concerns about hyperparameters (transferable weakness)**: Implementation details including all hyperparameters are provided in Appendix I. This concern is not applicable.
 
 ## Novel Insights
 
-The cross-domain gap in random-sampling performance (0.652 on ImageNet vs. 0.916 on MMLU) reveals something important about benchmark structure: when the number of classes far exceeds the sample budget, random selection catastrophically fails, and disagreement-based selection may be effective partly because it implicitly ensures class coverage. This suggests that the value of DISCO's selection criterion has two components — (1) selecting samples that maximally differentiate models (the stated information-theoretic signal) and (2) providing distributional coverage over the output space (a less acknowledged structural benefit). Disentangling these two factors would sharpen the contribution.
+The disconnect between Proposition 1's theoretical claim (optimality for model *identification* via injectivity) and the actual task (predicting a *scalar* accuracy) reveals an interesting open question: samples that best distinguish model identities may be overkill for accuracy prediction. A sample where Models A and B disagree but have the same accuracy provides no information for accuracy prediction despite contributing to JSD. This suggests an even more efficient selection criterion might exist—one that directly targets MI(accuracy; ŷ_i) rather than MI(model_identity; ŷ_i)—potentially allowing further compression or improved prediction with the same budget.
 
 ## Suggestions
 
-- Temper the "information-theoretically optimal" claim in the abstract to acknowledge the injectivity assumption, or add a remark in Section 4.1.2 bounding the error when $S(m)$ is not injective.
-
-- Move the break-even analysis (Appendix B.3) into the main paper or prominently discuss it in Section 5, as it directly affects the practical applicability of the method.
-
-- Add an analysis of DISCO-selected samples on ImageNet to determine whether PDS selection provides implicit class coverage — e.g., report the number of unique classes covered by the top-100 PDS samples vs. random samples.
-
-- Report per-task MMLU results or at least a variance breakdown to show whether DISCO's gains are uniform or concentrated in specific task categories.
-
-- Provide practical guidance on minimum source model pool requirements (size and diversity) for new benchmarks, to help practitioners decide when DISCO is worth deploying.
-
----
-
-**Assessment on key axes:**
-
-- **Novelty**: Moderate-to-high. The shift from representativeness to disagreement is a clean conceptual contribution. Model signatures as a direct prediction mechanism simplify prior IRT-based approaches.
-
-- **Technical soundness**: The theoretical framework is sound under stated assumptions, but the injectivity assumption is non-trivial and should be better caveated. Empirical methodology is thorough with appropriate baselines, ablations, and cross-domain validation.
-
-- **Empirical support**: Strong. Results are consistent across 4 language benchmarks and ImageNet, with clear margins over prior methods. The performance gap scenario in Appendix F is honestly reported but deserves deeper discussion.
-
-- **Significance**: High. Reducing evaluation cost by >99% with minimal accuracy loss addresses a critical and growing bottleneck. The method is practical for evaluation hubs and large-scale training pipelines.
-
-- **Clarity**: Good. The paper is well-structured with clear problem setup, method description, and experiments. The theoretical sections are appropriately formal without being impenetrable.
+- Qualify the theoretical claim: Replace "information-theoretically optimal" with "information-theoretically motivated" or add a discussion of the injectivity gap and its practical implications, since the empirical results stand on their own.
+- Provide a failure-detection mechanism: A simple confidence metric (e.g., distance of a target model's signature to the nearest source model in PCA space) could flag when DISCO's prediction is unreliable, making the method safer for deployment.
+- Release pre-computed anchor sets for MMLU, HellaSwag, ARC, and Winogrande alongside the code. This would make the online stage immediately usable without the 3284 GPU-hour offline investment, dramatically lowering the adoption barrier.
 
 # Actual Human Scores
 Individual reviewer scores: [6.0, 6.0, 8.0]

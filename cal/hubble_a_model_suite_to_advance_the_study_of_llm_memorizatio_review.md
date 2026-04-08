@@ -1,94 +1,109 @@
-=== CALIBRATION EXAMPLE 44 ===
+=== CALIBRATION EXAMPLE 7 ===
 
 # Final Consolidated Review
 ## Summary
 
-HUBBLE is a fully open-source suite of LLMs (1B and 8B parameters, trained on 100B or 500B tokens) designed to enable controlled scientific study of LLM memorization. Standard models are pretrained on a DCLM English corpus, while perturbed models add controlled insertions of sensitive text (book passages, synthetic biographies, test sets) at randomized duplication levels (0×–256×). The core empirical findings are two best practices: diluting sensitive data by training on larger corpora reduces memorization, and ordering sensitive data early in training leads to forgetting. The release also establishes benchmarks for membership inference attacks (HUBBLEMIA) and machine unlearning (HUBBLEUNLEARNING).
+HUBBLE is a fully open-source suite of LLMs (1B and 8B parameters, trained on 100B or 500B tokens) designed for controlled scientific study of LLM memorization. Standard models are pretrained on a DCLM-filtered English corpus, while perturbed models additionally receive controlled insertions of sensitive text (book passages, synthetic biographies, test sets) at randomized duplication levels to enable causal measurement of memorization. The paper establishes two main empirical findings—dilution (larger corpora reduce memorization risk) and ordering (sensitive data inserted earlier is memorized less)—and demonstrates HUBBLE's utility as a benchmark for membership inference attacks and machine unlearning.
 
 ## Strengths
 
-- **Controlled experimental design enabling causal inference about memorization.** By randomizing which perturbations are inserted and at what duplication rates, HUBBLE allows measurement of causal quantities (e.g., duplicates required to memorize a specific passage) that are impossible to estimate from observational studies of production models. This is a genuine methodological advance over prior work that either studied small synthetic models or made uncontrolled observations of large models.
+- **Controlled perturbation design enabling causal claims.** The randomized assignment of duplication levels (0×, 1×, 4×, 16×, 64×, 256×) to perturbation examples, combined with decontamination of the base corpus, allows measurement of causal quantities impossible in observational studies. For instance, the MIA benchmark avoids the temporal confounds that undermined WikiMIA (§6.1; Duan et al., 2024). This is a genuine methodological advance over prior model suites like Pythia.
 
-- **Comprehensive, policy-relevant perturbation design spanning three risk domains.** The perturbations cover copyright (passages, paraphrases), privacy (biographies, chats), and test set contamination (standard and new test sets), grounded in a survey of the memorization literature. This breadth makes HUBBLE a holistic resource rather than a narrow benchmark, and the policy framing (e.g., safe harbors, GDPR rights) connects empirical findings to practical regulatory questions.
+- **Comprehensive open-source release.** All models (including checkpoints), training code, configuration, datasets, and evaluation code are publicly released. This is a significant community resource: the 200k A100 GPU-hours of compute required makes independent reproduction impractical for most academics, so the open release fills a real access gap.
 
-- **Fully open-source release with all components.** All models, training configurations, checkpoints, perturbation datasets, and evaluation code are publicly released. The explicit accounting of GPU hours (Appendix B.3) and detailed training setup (Table 4) support community reuse. This follows and extends the model suite tradition of Pythia and OLMo with a memorization-specific focus.
+- **Dilution and ordering findings with practical import.** The dilution finding (Figure 2) generalizes Bordt et al. (2025) beyond test set contamination to copyright and privacy domains. The ordering finding (Figure 14), showing that data inserted only in the first quarter of training is largely forgotten, is practically actionable and complements the deduplication best practice.
 
-- **Practical best practices with empirical support.** The dilution finding (memorization increases slower with duplication when trained on larger corpora) and ordering finding (early-inserted data is forgotten without continued exposure) offer actionable guidance for practitioners. The interference check (Figure 20) showing minimal cross-domain interference increases confidence in the multi-domain setup.
+- **MIA and unlearning benchmarks address known limitations.** HUBBLEMIA provides clean member/non-member splits without spurious features (§6.1). HUBBLEUNLEARNING tests unlearning on pretraining data with known duplication rates, extending beyond the fine-tuning-only settings of TOFU and MUSE (§6.2). The finding that current unlearning methods degrade near-neighbor knowledge rather than targeting specific data (Figure 3) is a valuable negative result.
 
-- **Soundly designed MIA benchmark addressing confounders in prior work.** HUBBLEMIA avoids the spurious temporal features that undermined WIKIMIA (Duan et al., 2024) by using randomized duplication assignments. The benchmark reveals that MIAs achieve near-random performance on singly-duplicated members (AUC ~0.54), confirming and extending existing understanding of MIA limitations with controlled data.
+- **Interference validation strengthens causal claims.** The three single-domain perturbation models (copyright-only, privacy-only, test-set-only) confirm that the combined perturbation model matches per-domain behavior (§4, Figure 20), lending credibility to the domain-level findings.
 
 ## Weaknesses
 
-- **The ordering best practice is validated only on 1B models, not 8B.** The paper explicitly shows that 8B models memorize more readily at lower duplication levels (Figure 19), yet the six timing runs that establish the "ordering" recommendation are all 1B models trained on 100B tokens. Since model scale affects memorization strength, the generalizability of the ordering finding to the 8B setting—and by extension to larger models—is unsupported by the current experiments. This is a significant gap for what is presented as a general best practice.
+### Major:
 
-- **Scale gap limits confidence in generalizability to production models.** The largest HUBBLE models are trained on 500B tokens with 8B parameters, while the paper notes Llama 3 is trained on 15T+ tokens—a ~30× gap. The dilution finding is established by comparing 100B vs. 500B tokens, a 5× difference, whereas production scenarios involve corpora orders of magnitude larger. Whether the quantitative memorization thresholds and the effectiveness of dilution transfer to 15T-token training regimes remains unknown. The paper acknowledges this gap but does not discuss how findings might extrapolate.
+- **Dilution claim rests on only two corpus sizes.** The core dilution finding compares 100B vs. 500B tokens—a single binary contrast. This cannot establish whether the relationship between corpus size and memorization is monotonic, linear, or follows a different scaling law. Without intermediate points (e.g., 200B, 300B), the generalizability of "train on more tokens to reduce memorization risk" as a prescriptive best practice is uncertain, especially at the trillion-token scales used in practice.
 
-- **Ecological validity of synthetic and controlled perturbations is limited.** The YAGO biographies are templated text populated by sampling from a knowledge base (Appendix A.1), and PersonaChat dialogues use randomly assigned usernames. These are structurally very different from how PII naturally appears in web-scraped corpora (embedded in varied contexts with heterogeneous formats). The near-100% PII reconstruction at 16 duplications on YAGO biographies may overestimate real-world privacy risks for organically distributed PII. Similarly, perturbation insertions are always surrounded by EOS tokens and never broken across sequences (Figure 1), which differs from how regular documents are processed and could create structural artifacts.
+- **Ordering claim demonstrated only on 1B models.** The timing runs (§4, Figure 14) are exclusively 1B-parameter models. Given that the paper shows larger models memorize at lower duplication levels (§4), the ordering effect may differ substantially at the 8B scale. Presenting ordering as a general best practice without verifying it at the larger scale weakens the claim's credibility.
 
-- **ELLie test set contains minimal pairs that invalidate dilution analysis for that dataset.** Section D.3 acknowledges that "examples in ELLie are minimal pairs" with the same first sentence placed in different duplication bins, meaning models achieve high accuracy on examples duplicated 0×. The paper honestly notes "This invalidates the use of ELLie for studying dilution," but this finding is buried in the appendix rather than discussed in the main text. This is a data quality issue that affects one of the "new test sets" prominently featured in Section 2.3, and raises the question of whether similar structural issues affect other perturbation datasets.
+- **Claim calibration is inconsistent with evidence strength.** The abstract states memorization risks are "determined by" frequency relative to corpus size—causal language stronger than a two-point comparison warrants. Section 4 states that early-inserted data "does not memorize," but Figure 14 shows non-zero (though reduced) memorization. These overstatements matter because the paper explicitly aims to inform policy and practice; imprecise claims could mislead practitioners.
 
-- **Dilution claim is supported by only two corpus sizes.** The core dilution finding compares models trained on 100B vs. 500B tokens. With only two data points, the relationship between corpus size and memorization rate could be non-monotonic or exhibit different scaling behavior at intermediate or larger sizes. The paper generalizes this as a broad principle, but the empirical support is limited to a single 5× comparison.
+- **Practical limitations of best practices underdiscussed.** Dilution requires 5× more tokens (100B→500B), incurring enormous additional compute cost. Ordering requires knowing which data is sensitive *before* training begins, which is precisely the information practitioners often lack. The paper frames these as "best practices" (§4) without adequate discussion of when they are feasible. A brief honest assessment of these constraints would strengthen rather than weaken the contribution.
 
-- **Interference check is at the domain level only, not the example level.** Figure 20 shows that the full perturbed model matches single-domain models at the domain level, but this does not rule out example-level interference—for instance, a highly duplicated test set example affecting memorization of a nearby biography within the same training sequence. The paper acknowledges that "exhaustively characterizing such interference...would be impractical" (Section 4), but the claim of "minimal interference" is stronger than the domain-level evidence supports.
+### Minor:
 
-- **Key figures lack confidence intervals or statistical tests.** The memorization curves in Figures 2, 13, and 14 do not include error bars or confidence intervals, making it difficult to assess whether observed differences (e.g., between 100B and 500B models at low duplication levels, or between timing conditions) are statistically significant. Given the small perturbation fraction (0.08% of the corpus), statistical uncertainty could be non-trivial.
+- **Popular vs. unpopular book memorization contradicts data density hypothesis without investigation.** The paper finds "no noticeable difference" at 1B and "only a slight increase" at 8B (§5, Appendix D.1), contradicting Kirchenbauer et al. (2024). This is noted but not investigated—does the base DCLM corpus already contain enough discussion of popular books that the inserted passages are redundant? This finding deserves more than a passing mention.
+
+- **PII type variation is observed but unexplained.** Figure 8 shows occupation, email, and UUID have distinct memorization patterns (e.g., occupation is harder to extract; email is easier). The paper attributes some effects to position in the biography template but does not fully analyze whether semantic predictability or token-level rarity drives the differences. Understanding *why* certain PII types are more vulnerable would substantially increase the privacy implications.
+
+- **MinK%++ underperformance on highly duplicated members is flagged but uninvestigated.** Table 1 shows MinK%++ achieves lower AUC than simple Loss on 256× duplicated examples (0.949 vs. 1.0 for Gutenberg Unpopular). This is noted as "surprising" but not analyzed. Since MinK%++ is the most effective attack at lower duplication levels, understanding its failure mode at high duplication could reveal important properties of the benchmark or the attack.
+
+- **ELLie dataset has a confound that invalidates its use for dilution analysis.** Appendix D.3 acknowledges that ELLie examples are minimal pairs sharing first sentences, causing 0-duplicate examples to show high accuracy because sibling examples were inserted at higher duplication levels. This design flaw was identified but ELLie was not excluded from the core perturbation set, which could mislead users who do not read the appendix carefully.
+
+### Trivial:
+
+- The 8B model uses 36 layers instead of Llama 3's standard 32 (justified by GPU utilization), and the OLMo tokenizer replaces Llama's. These minor deviations from the base architecture are documented but slightly reduce direct comparability to Llama-based results elsewhere.
 
 ## Nice-to-Haves
 
-- Combined dilution + ordering experiments to verify the two best practices are complementary rather than interacting unexpectedly.
-- At least one intermediate corpus size (e.g., 250B tokens) to establish monotonicity of the dilution effect.
-- Comparison of dilution/ordering against established mitigations like deduplication or differential privacy training.
-- 8B-scale timing runs to validate the ordering finding at a scale where memorization is stronger.
-- Example-level interference analysis (e.g., examining whether highly duplicated examples in one domain affect low-duplication examples in the same training batch).
-- Intermediate checkpoints for all core models (currently only timing runs have them) to enable broader memorization dynamics research.
-- Concrete extracted text examples at each duplication level to demonstrate practical memorization risk beyond aggregate metrics.
+- **Intermediate corpus sizes** (e.g., 200B, 300B tokens) to establish a scaling curve for dilution, which would transform the finding from a binary observation into a quantitative relationship.
+
+- **8B timing runs** to validate that the ordering effect persists at larger model scales, or documentation of why they were infeasible.
+
+- **Mechanistic analysis of the ordering/forgetting effect**—even speculative discussion of whether this resembles catastrophic forgetting, optimizer dynamics, or a primacy effect would make the recommendation more actionable and less purely empirical.
+
+- **Comparison of artificial vs. natural duplicate memorization** to validate that the splicing insertion method (Figure 1) produces memorization dynamics similar to naturally occurring duplicates in web data.
+
+- **Error analysis of unlearning failures** identifying which examples or PII types resist unlearning, to help the community diagnose whether the limitation is methodological or fundamental.
 
 ## Removed Points
 
-*These points are flagged to be removed, treat them with caution.*
+These points are flagged to be removed, treat them with caution:
 
-- **"Fully open-source" claim questioned due to OLMo tokenizer/untied embeddings.** The harsh critic argued the models are not "faithful Llama reproductions" due to architecture modifications. This misreads the claim: "fully open-source" means all components are publicly released, not that the architecture is identical to Llama 3. The modifications are clearly documented in Section 3.2 and Table 4.
+- **Temporal distribution confounds in MIA evaluation (from transferred weaknesses):** This criticism applies to WikiMIA (which uses temporal splits), not HUBBLE. HUBBLE explicitly designs around this by using randomized duplication for member/non-member splits (§6.1). The criticism is factually wrong for this paper's design.
 
-- **Copyright perturbations use public domain Gutenberg texts, not copyrighted books.** The critic argued this is a "significant mismatch." However, the paper never claims the inserted texts are copyrighted; Section 2.1 explicitly calls them "open-domain texts" inserted "to study the measurement and mitigation of LLM memorization on books and articles." The copyright section studies memorization *relevant to* copyright risk, using book-like passages as proxies.
+- **Benchmark susceptibility to future data contamination:** While a valid concern for any released benchmark, HUBBLE's primary value is as a controlled research environment with known training data, not as a forever-evaluation benchmark. The randomized insertions are the key feature, and future models trained on HUBBLE's data would simply be detectable as contaminated by design. This is inherent to any fully open benchmark and not a unique flaw.
 
-- **Chinchilla comparison uses nominal "1B/8B" rather than actual 1.2B/8.3B parameter counts.** This is a minor naming convention issue. The paper uses "1B" and "8B" as model designations throughout, and the actual parameter counts are listed in Table 4 and evaluation tables.
+- **Key results in appendix / fragmented narrative:** This is a presentation/formatting concern. The rules state to remove pure formatting nitpicks.
 
-- **Compute barriers (200k GPU hours) undermine "open-source" practical meaning.** The checkpoints and all training data are released, so the resource is usable without retraining. The compute cost of training is a reality of large model research, not a deficiency of this paper's openness.
+- **Inconsistent terminology ("perturbed models" vs. "Hubble models"):** Formatting/style nitpick.
 
-- **Multilingual limitation.** The paper scopes its study to English pretraining on the DCLM corpus. Criticizing the absence of multilingual analysis is scope creep.
+- **Citation formatting inconsistencies:** Formatting nitpick.
 
-- **Negative societal impact / misuse concerns.** Generic one-size-fits-all concern. The models contain only synthetic PII and public-domain texts, and the paper's explicit purpose is to help *mitigate* memorization risks.
+- **Decontamination manual inspection protocol too vague:** The paper provides decontamination details in Appendix A.3 with a two-phase procedure. Demanding more granular protocol details is a nitpick about reproducibility of a preprocessing step.
 
-- **Standard model PII inference "undermines perturbation-specific memorization claims."** The fact that standard models achieve non-trivial PII inference accuracy (Figure 8) is actually an important *finding*—it shows models learn associations from the base corpus. It does not undermine the perturbation analyses, which compare standard vs. perturbed models and measure the *additional* memorization from inserted data.
+- **Reproducibility concerns about compute costs:** The hard rules state to remove nitpicks about reproducibility such as large artifacts impractical to include. The open release of all artifacts addresses this.
 
-- **Unlearning "all methods fail" as a weakness.** The paper honestly reports this negative result, which is itself a contribution—demonstrating that current unlearning methods cannot precisely remove pretraining data without degrading related knowledge. The benchmark's value lies in enabling future method development.
+- **Unlearning benchmark negative results as a weakness:** That no current method succeeds is a feature of the benchmark—it reveals a genuine limitation in the field. This is not a weakness of the paper.
 
-- **MinK%++ anomaly not explained.** This is a missed analysis opportunity but not a methodological flaw. Moved to nice-to-have.
+- **Test set contamination design is "too strong" (answers appended):** This is by design to establish upper bounds on memorization, consistent with the paper's stated goal of measuring worst-case risk.
+
+- **Missing related works:** Hard rule—do not mention missing related works.
 
 ## Novel Insights
 
-The ELLie minimal-pair issue reveals a subtle but important design challenge for memorization benchmarks: standard deduplication procedures based on exact n-gram matching can miss structural overlaps (shared first sentences with different queries) that create cross-duplication-bin information leakage. This suggests that future memorization benchmark designs need structural deduplication checks that go beyond surface-level string matching—particularly for tasks that use minimal-pair or contrastive evaluation formats. Additionally, the finding that standard (non-perturbed) models already achieve non-trivial PII inference accuracy from corpus-level associations alone raises a deeper question: in real-world settings, the *incremental* privacy risk from inserting specific PII-containing documents may be smaller than the *baseline* risk from associations already learned from the general corpus, suggesting that memorization mitigation efforts should consider not just whether data was seen, but whether the model could have inferred the same information from other sources.
+The ELLie contamination issue reveals a subtle but important design pitfall for memorization benchmarks: when perturbation examples share structure (e.g., same first sentence in minimal pairs), random assignment to different duplication bins creates cross-contamination that invalidates the 0-duplicate control condition. This is a generalizable lesson for any benchmark that uses randomization to create member/non-member splits—deduplication must account for shared substructure, not just exact matches. Separately, the finding that popular and unpopular books are memorized similarly challenges the intuitive "data density" hypothesis and suggests that in controlled settings with decontaminated base corpora, the base corpus may not provide the indirect exposure that makes popular texts more memorizable in observational studies. This hints that the data density effect observed in prior work may operate through base-corpus confounds rather than intrinsic properties of popular text.
 
 ## Suggestions
 
-- Run at least one 8B timing experiment (e.g., inserting perturbations only in the first quarter vs. last quarter of 500B-token training) to validate the ordering best practice at the larger scale where memorization is demonstrably stronger.
-- Add error bars or confidence intervals to the core memorization curves (Figures 2, 14, 19), at minimum for the key dilution and timing comparisons where the paper draws its main conclusions.
-- Move the ELLie invalidation discussion from Appendix D.3 to the main text (Section 5), since it directly affects the validity of one of the prominently featured "new test sets" and serves as an important cautionary note for future benchmark design.
-- When presenting the ordering best practice, explicitly qualify that it has been validated only at 1B scale and its generalizability to larger models remains an open question.
+- Recalibrate language: replace "determined by" with "strongly influenced by," and "does not memorize" with "shows substantially reduced memorization." These changes preserve the findings' impact while matching evidence strength.
 
----
+- Add a brief paragraph (even 3–4 sentences) discussing practical constraints of the best practices: when dilution is computationally infeasible, and what practitioners can do when sensitive data cannot be identified in advance for ordering.
 
-**Axis Evaluations:**
+- Investigate and explain the MinK%++ underperformance at high duplication—even a hypothesis (e.g., the method's calibration assumptions break down for near-perfectly memorized examples) would strengthen the MIA benchmark discussion.
 
-- **Novelty:** Moderate-to-high. The controlled perturbation framework at 1B–8B scale is novel and fills a genuine gap between toy-model studies and observational analyses. However, the two core empirical findings (dilution, ordering) explicitly extend recent concurrent work (Bordt et al., 2025; More et al., 2025), and the primary contribution is the extension across domains rather than discovery of new phenomena.
+- Add a warning label or exclusion of ELLie from dilution analyses in any documentation or code, since the confound invalidates its use for that purpose.
 
-- **Technical soundness:** Good with notable gaps. The experimental design is rigorous in its randomization and control structure, and the interference check provides some validation. However, the ordering finding lacks validation at 8B scale, key figures lack statistical uncertainty quantification, and the ELLie data quality issue was not caught before release.
+## Axis Evaluations
 
-- **Empirical support:** Adequate for the main claims but thin in places. The dilution effect is consistent across multiple tasks but supported by only two corpus sizes. The ordering effect is shown clearly at 1B but untested at 8B. The MIA and unlearning benchmarks provide useful baselines though the unlearning results are primarily negative.
+- **Novelty:** Moderate. The controlled perturbation insertion framework is the key innovation over prior suites (Pythia, OLMo). The empirical findings largely confirm prior observations (dilution generalizes Bordt et al. 2025; ordering is consistent with More et al. 2025; larger models memorize more is consistent with Tirumala et al. 2022) but in a more controlled and multi-domain setting. The MIA and unlearning benchmark constructions are useful extensions.
 
-- **Significance:** High as a community resource; moderate for empirical findings. HUBBLE fills an important infrastructure gap for memorization research, and the open-source release will likely become a standard testbed. The best practices (dilution, ordering) are practically useful but represent confirmatory extensions of existing evidence rather than paradigm-shifting discoveries.
+- **Technical soundness:** Good. The methodology is careful—decontamination, randomized duplication, interference checks, and standard vs. perturbed model comparisons provide solid experimental controls. The main issues are claim calibration (overstating findings) and limited experimental conditions (two corpus sizes, 1B-only timing runs).
 
-- **Clarity:** Good. The paper is well-organized with clear separation of domain-agnostic and domain-specific results. The perturbation design and evaluation methodology are thoroughly documented. The main weakness is that key supporting figures (timing runs, interference check) are relegated to the appendix.
+- **Empirical support:** Adequate for dilution (clear effect across domains and model sizes) and ordering (clear effect at 1B), but insufficient for establishing general scaling relationships. The domain-specific analyses are thorough but largely relegated to the appendix.
+
+- **Significance:** High as a community resource. HUBBLE fills a genuine gap between synthetic small-model studies and observational large-model studies. The benchmarks address known methodological issues in MIA and unlearning evaluation. The practical impact of the best practices is tempered by their feasibility constraints.
+
+- **Clarity:** Good. The paper is well-organized with clear section structure. The main weakness is that several critical figures (timing runs, 1B comparisons, interference checks) appear only in the appendix, which fragments the empirical narrative for readers evaluating core claims.
 
 # Actual Human Scores
 Individual reviewer scores: [8.0, 6.0, 8.0, 8.0]

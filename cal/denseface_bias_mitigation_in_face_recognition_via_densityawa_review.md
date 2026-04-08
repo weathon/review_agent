@@ -1,91 +1,74 @@
-=== CALIBRATION EXAMPLE 17 ===
+=== CALIBRATION EXAMPLE 43 ===
 
 # Final Consolidated Review
-##Summary
+## Summary
 
-DenseFace proposes a post-training calibration method to mitigate demographic bias in face recognition by modeling embeddings as von Mises-Fisher (MF) distributions and adjusting similarity scores based on local embedding density. The key insight is that non-Caucasian groups tend to occupy denser regions of the embedding space, leading to inflated false positive rates; DenseFace counteracts this by down-weighting similarities in dense regions and up-weighting in sparse ones, without retraining the backbone. The paper also advocates for NIST-style FPR-based bias metrics over the commonly used accuracy standard deviation.
+DenseFace proposes a post-training bias mitigation method for face recognition that models embeddings as von Mises-Fisher (MF) distributions and adjusts similarity scores based on local embedding density. By estimating inter-class densities from a balanced anchor set and applying a margin-based "local distortion" to handle near-orthogonal embeddings, the method contracts dense regions and expands sparse regions of the embedding space, equalizing false positive rates across demographic groups without retraining the backbone. The paper also advocates for NIST-style FPR-based bias metrics over the commonly used RFW accuracy standard deviation.
 
 ## Strengths
 
-- **Practical post-training bias mitigation without backbone retraining.** DenseFace operates directly on frozen pre-trained model outputs (AdaFace, CosFace, etc.), enabling retrofitting fairness onto deployed systems where retraining is prohibitive. This is a meaningful practical contribution distinct from loss-function or architecture-based approaches that require full retraining pipelines.
-
-- **Strong and consistent bias reduction across models.** Tables 2–3 show dramatic FPR ratio improvements (e.g., African FPR ratio from 6.66→1.71 for AdaFace-R100-WebFace12M on RFW; from 2.69→0.80 for AdaFace-R50-MS1MV2 on RB-WebFace), while Table 4 shows verification accuracy is preserved. The consistency across architectures (ResNet-50/100), datasets (MS1MV2, Glint360K, WebFace4M/12M), and loss functions (ArcFace, CosFace, AdaFace) is compelling.
-
-- **Valuable critique of bias evaluation metrics.** The paper identifies a concrete failure case of the standard RFW accuracy-std metric (Section 4.3, Figure 5) and argues convincingly for NIST-style FPR-at-fixed-threshold metrics, which better reflect real deployment where a single threshold applies to all demographic groups. This metric contribution has value independent of the method itself.
-
-- **Learning-based variant with negligible overhead.** DenseFace† (Table 5) replaces anchor-set density lookups with a small regression network (+0.2% memory, +1.75% latency) and surprisingly achieves even better bias mitigation, making the method practical for deployment.
+- **Practical post-training paradigm:** DenseFace operates on pre-trained models without retraining, making it immediately applicable to deployed systems. This is a genuinely valuable contribution in a field where most methods require modifying the training pipeline.
+- **Density-bias correlation insight:** Figure 3 provides an important empirical observation that inter-class embedding density correlates with demographic attributes and, in turn, with FPR disparities. This observation motivates the method and offers a new lens for understanding the geometry of biased embedding spaces—something most prior work does not analyze.
+- **Improved evaluation rigor:** The paper's argument (Section 4.3, Figure 5) that RFW accuracy standard deviation is an inconsistent bias measure, and its adoption of NIST-style FPR at fixed similarity thresholds, raises the bar for fairness evaluation in this area. The demonstration that models with lower Std can actually be *more* biased by FPR criteria is a concrete contribution to how the community should measure bias.
+- **Consistent empirical gains across diverse backbones:** Tables 2–3 show substantial FPR ratio improvements (toward 1.00) for non-Caucasian groups across AdaFace and CosFace models trained on four different datasets, with Table 4 indicating TPR is maintained. The learning-based variant (DenseFace†, Table 5) even outperforms the anchor-set version while adding only marginal overhead.
 
 ## Weaknesses
 
-- **No direct comparison against competing post-training debiasing methods.** The paper explicitly positions itself alongside Terhörst et al. (2020a,b), Dhar et al. (2021), Conti et al. (2022), and Linghu et al. (2024) as post-training calibration approaches, yet experiments only compare against the cosine similarity baseline. Without empirical comparison to these directly competing methods, a reader cannot determine whether DenseFace's gains are incremental or substantial relative to the state of the art in post-training debiasing. This is a significant gap for a paper claiming a new approach in an established line of work.
+### Major:
 
-- **Anchor set sensitivity is unanalyzed.** The method critically depends on a balanced anchor set of 54,000 identities from Glint360K, constructed using pre-trained demographic classifiers. No ablation studies examine the effect of varying anchor set size, using an unbalanced anchor set, changing the source dataset, or degrading classifier accuracy. If the demographic classifiers systematically mislabel a subgroup (e.g., darker-skinned South Asian faces), the resulting anchor set imbalance would propagate into density estimates. This dependency chain is a potential fragility point that is acknowledged qualitatively (Section 4.7) but never quantified.
+- **No comparison to existing post-training calibration baselines:** This is the most significant gap. The related work (Section 2.3) explicitly discusses post-training methods—Terhörst et al. (2020a;b) propose fair score normalization and a classifier-based replacement of similarity; Conti et al. (2022) use MF loss for embedding post-processing; Linghu et al. (2024) propose score normalization methods—yet none of these appear in Tables 2–5 as baselines. The paper only compares against cosine similarity. Without this comparison, it is impossible to determine whether the gains come from the density-aware MF modeling specifically, or from *any* reasonable post-hoc calibration. For a paper claiming to advance post-training debiasing at ICLR, this omission undermines the core empirical contribution.
 
-- **Gender bias is claimed but not quantitatively evaluated.** Figure 3 shows gender correlates with embedding density, and Figure 7 notes nearest neighbors share gender attributes. However, all quantitative results (Tables 2–5) report only racial subgroup FPR. The title promises "demographic bias mitigation," and the method is described as applicable to multiple attributes, but the empirical evaluation only substantiates racial bias reduction. Without gender bias results, the broader demographic fairness claim is unsupported.
+- **Anchor set dependency is under-analyzed and under-disclosed:** The method critically depends on a demographically balanced anchor set of 54K identities constructed using pre-trained race and gender classifiers on Glint360K (Section 4.2). Two sub-concerns arise: (a) The paper claims "no attribute annotation during inference" (Section 2.3), which is technically accurate for the matching phase, but the anchor set construction *does* require demographic labels. This distinction is not clearly surfaced and could mislead readers about the method's data requirements. (b) There is no sensitivity analysis on anchor set composition—what happens if the anchor set is imbalanced, smaller, or drawn from a different distribution than the deployment environment? Given that the anchor set is the sole mechanism through which density estimates capture demographic structure (Figure 6 shows the nearest-neighbor race distribution is largely same-race), the method's robustness to anchor set characteristics is a critical open question.
 
-- **Cross-racial verification is identified as important but not evaluated.** The introduction explicitly notes that "the RFW protocol does not account for cross-racial matching as typically required in real-world scenarios." Yet DenseFace's own evaluation does not include cross-racial pairs. Since the method scales similarity by per-identity density—potentially very different for cross-racial pairs where query and gallery come from regions of different density—this is an untested and potentially problematic scenario.
+### Minor:
 
-- **MF distribution assumption for frozen backbones lacks formal validation.** The method assumes pre-trained face embeddings (trained with ArcFace/CosFace losses, not MF losses) follow MF distributions. While Figure 3 provides empirical density distributions, no goodness-of-fit test or quantitative validation confirms this assumption holds per demographic group for these specific architectures. Angular margin losses enforce structured separation that may deviate from MF, particularly across demographic clusters with different variance structures.
+- **Local distortion (Equation 7) is heuristic:** The piecewise margin function $f(\theta_{kl}^i)$ that replaces cosine values below threshold $m$ with $\cos(\theta_{kl}^i - m)$ is introduced to fix near-orthogonality issues in anchor set embeddings, but it is not derived from any statistical principle. While the engineering motivation is understandable (Figure 4 shows the shift), the paper provides no theoretical bound or empirical validation showing this specific formulation recovers density better than alternatives. This makes the most novel technical component of the pipeline feel ad hoc.
 
-- **Margin parameter m and other key hyperparameters lack ablation.** Equation (7) introduces the angular margin m for local distortion, a central technical innovation. Yet no sensitivity analysis examines how m affects the bias-accuracy trade-off. Similarly, K=128 nearest neighbors is used without justification. These design choices are core to the method but their impact is uncharacterized.
+- **No ablation on key hyperparameters $K$ and $m$:** The method uses $K=128$ nearest neighbors and an angular margin $m$ (value not clearly stated in the main text), yet no ablation study explores sensitivity to these choices. In high-dimensional hyperspherical spaces, density estimation via K-NN can be sensitive to $K$, and the margin $m$ directly controls the "distortion" magnitude. Without this analysis, it is unclear how carefully these need to be tuned for new models or datasets.
 
-- **Argument against accuracy-std as a bias metric relies on a single example.** Section 4.3 identifies one model pair (CosFace-R50-Glint360K vs. AdaFace-R50-WebFace4M) where Std and FPR metrics disagree. While suggestive, this is anecdotal. A more systematic analysis across multiple model pairs would strengthen the case for the metric change.
+- **Cross-racial matching evaluation is claimed but not clearly delivered:** The abstract states the method "also assesses the verification accuracy on multi-racial and cross-racial pairs," and Section 4.3 motivates cross-racial matching as a key limitation of RFW. However, the experimental tables do not clearly present cross-racial verification results separate from within-race results. If this evaluation was conducted, it should be explicitly presented; if not, the claim should be revised.
+
+- **Derivation of matching score is not self-contained:** Equation (9) is presented by citation of Li et al. (2021) without even a sketch of the integration steps from Equation (8). For a method whose core contribution is the matching formula, providing the derivation (or at least an outline) would improve verifiability and reader understanding.
+
+### Trivial:
+
+- The claim "preserves accuracy" in the abstract could be slightly nuanced to "preserves or slightly improves verification accuracy" to match the more precise language in the experiments, though Table 4 does appear to support the claim.
 
 ## Nice-to-Haves
 
-- Confidence intervals or statistical significance tests on the TPR results in Table 4, particularly since some improvements are small (e.g., 97.54→97.63 for African in AdaFace-R100-WebFace12M).
-
-- Embedding space visualizations (t-SNE or similar) before and after DenseFace, to visually confirm the claimed expansion/contraction of dense/sparse regions.
-
-- Failure case analysis showing where DenseFace fails to reduce bias or degrades accuracy, to delineate the method's boundaries.
-
-- Analysis of why DenseFace† outperforms anchor-based DenseFace (Table 5), which could inform whether the regression network learns something beyond density estimation.
+- **Statistical significance testing or confidence intervals** on FPR and TPR metrics, particularly for the learning-based variant where training randomness could affect results. This is not standard practice in large-scale face recognition benchmarks, but would strengthen confidence in the reported improvements.
+- **FNR/FNMR analysis** alongside FPR, since demographic bias can manifest differently in false non-match rates. The NIST-style FPR focus is reasonable for security applications, but a more complete picture of both error types would be valuable.
+- **t-SNE or similar visualizations** of embedding distributions before and after DenseFace, to provide geometric intuition for the claimed "expansion and contraction" of dense and sparse regions.
+- **Threshold sensitivity analysis** showing how bias metrics vary across different operating points, not just at the single Caucasian FPR = 10⁻³ threshold.
+- **Failure case analysis** identifying specific subgroups or image conditions where DenseFace does not reduce bias or degrades accuracy.
 
 ## Removed Points
 
 These points are flagged to be removed, treat them with caution:
 
-- **"Learning-based approach contradicts the 'no retraining' claim"** (Harsh critic): The paper's claim "requires no retraining of existing face recognition models" refers to the face recognition backbone. The optional DenseFace† regression network is a small auxiliary module, not the backbone. The claim is technically accurate and the paper clearly presents DenseFace† as an optional variant.
-
-- **"Does κ explicitly inject race information into the similarity score?"** (Harsh critic): This is the *mechanism* by which DenseFace works—adjusting for demographic density differences is the intended behavior, not an unintended side effect. Criticizing the method for doing exactly what it's designed to do is not a substantive weakness.
-
-- **"Adversarial examples could exploit density to boost similarity scores"** (Harsh critic): This is speculative and outside the paper's stated scope. Adversarial robustness is a separate research direction.
-
-- **"Table 1 inconsistency with the metric argument"** (Harsh critic): Table 1 includes accuracy Std for compatibility with prior works that only report this metric. The paper explicitly argues for NIST metrics in Section 4.3 and uses them in all main results tables. Including Table 1 for cross-paper comparison is standard practice.
-
-- **"Missing related works"** (Spark finder): Per hard rules, I cannot confirm the existence of specific uncited works and should not flag their absence.
-
-- **"RFW and RB-WebFace are dated benchmarks"** (Spark finder): These remain the standard benchmarks in this research area. Requesting newer benchmarks without specifying them is a generic criticism.
-
-- **Formatting and notation nitpicks** (Harsh critic): Per hard rules, these are removed. The notation artifacts are parser issues, not paper problems.
+- **"Computational cost not discussed" (Harsh Critic):** Factually incorrect. Section 4.8 explicitly discusses runtime and memory, reports 1.5× slowdown with optimizations, and references Appendix G for detailed tables. The concern is already addressed in the paper.
+- **"No statistical significance testing" as a major weakness:** For large-scale face recognition benchmarks with millions of pairs (the paper notes ~14K positive and ~50M negative pairs per group on RFW), single-run evaluation is the community norm. Moved to nice-to-have.
+- **"Missing related works" suggestions:** Per hard rules, we cannot confirm existence of uncited works and should not flag missing references.
+- **"The RFW protocol dismissal is abrupt" (Harsh Critic):** The paper provides substantial justification in Section 4.3 and Figure 5 for why Std of accuracy is an inconsistent measure. The criticism that the paper should "ensure claims are contextualized against the bulk of existing literature" is a generic demand; the paper does include Table 1 with RFW Std results for comparability.
+- **"Claims about large unbalanced datasets having lesser bias contradict prior intuition" (Harsh Critic):** The paper provides empirical evidence (Table 1) for this claim and aligns it with Gwilliam et al. (2021). Disagreeing with "prior intuition" when supported by data is not a weakness—it is a contribution.
+- **"Reproducibility concerns about anchor set" (Spark Finder):** The anchor set construction is described in sufficient detail in Section 4.2 (54K balanced identities from Glint360K using pre-trained classifiers). This is a methodology description, not a reproducibility gap.
+- **Demand for comparison with Z-norm/T-norm (Harsh Critic, Spark Finder):** These are speaker verification techniques not standard in face recognition bias literature. Requesting comparison with methods outside the paper's community standards is scope creep.
 
 ## Novel Insights
 
-The paper reveals a striking structural property of biased face recognition models: demographic bias manifests as differential *inter-class* density in embedding space, not differential intra-class density. Figure 3 makes this distinction clearly—intra-class densities are similar across racial groups, while inter-class densities systematically differ. This means the bias is not that identities of underrepresented groups are less compact, but rather that they are more crowded relative to other identities. This reframing suggests that bias mitigation should focus on the geometry of the *neighborhood* rather than the *class itself*, a principle that could extend beyond face recognition to other embedding-based retrieval systems. Additionally, the surprising result that DenseFace† (learned density predictor) outperforms the anchor-based version suggests the regression network may capture density-relevant structure beyond what the explicit K-NN procedure extracts, hinting that the MF density model may not be the optimal density estimator even though it works well in practice.
+The observation that inter-class embedding density (not intra-class) carries demographic signal is a meaningful and underexplored insight. While prior work has modeled face embeddings with MF distributions, the key realization—that intra-class density is uninformative about demographics (because same-identity embeddings are dense regardless of race, e.g., from video frames) while inter-class density reveals systematic demographic disparities—reframes the problem geometrically. The further observation (Figure 6) that nearest neighbors from a balanced anchor set act as an implicit race classifier, and that this property is what enables the method to avoid explicit demographic labels at inference, provides a principled explanation for why the approach works without per-query attribute annotation. This density-demographic link could inspire future work on whether similar density-based calibration applies to other modalities or protected attributes beyond race and gender.
 
 ## Suggestions
 
-- Add direct comparison with at least one post-training debiasing method (e.g., score normalization from Linghu et al. 2024 or the MF projection from Conti et al. 2022) to establish DenseFace's relative advantage in its own category.
+1. **Add comparisons to at least 2–3 existing post-training debiasing methods** (e.g., Terhörst et al. 2020a/b score normalization, Conti et al. 2022 MF projection, Linghu et al. 2024 score normalization) under the same NIST protocol. This is the single most important revision for establishing the marginal value of density-aware matching over simpler calibration.
 
-- Include ablation studies on anchor set size, balance criterion, margin parameter m, and K to characterize the method's sensitivity and justify design choices.
+2. **Include an ablation study on $K$ and $m$** in the supplementary material, showing how FPR ratios and TPR change across a reasonable range. This would address robustness concerns and provide guidance for practitioners.
 
-- Add quantitative gender bias results (FPR ratios by gender, as done for race) to substantiate the broader "demographic bias" claim.
+3. **Explicitly acknowledge and discuss the anchor set's demographic label requirement** as a practical limitation, and test at least one alternative anchor set composition (e.g., naturally imbalanced vs. balanced) to quantify sensitivity.
 
-- Evaluate cross-racial verification performance explicitly, since the method's density-adjusted scoring may behave differently when probe and gallery come from regions of different density.
+4. **Present cross-racial verification results explicitly** if they were computed, or remove the claim from the abstract/Section 4.3 if they were not.
 
-- Provide a brief goodness-of-fit analysis or at least a QQ-plot validating the MF distribution assumption for embeddings from the specific backbone architectures tested.
-
-## Evaluation Summary
-
-- **Novelty**: Moderate to high. The application of inter-class MF density for post-training bias calibration with the local distortion technique is distinct from prior work, though the individual components (MF distributions, density-aware matching) have precedents.
-
-- **Technical soundness**: Moderate. The method is well-motivated and results are strong, but the lack of comparison to competing post-training methods, missing ablations on key parameters, and unvalidated distributional assumption are notable gaps.
-
-- **Empirical support**: Strong on the primary claim (bias reduction while preserving accuracy), but limited by the absence of baseline comparisons, gender bias results, and cross-racial evaluation. The bias reduction numbers are consistently impressive across multiple models and datasets.
-
-- **Significance**: High. Post-training bias mitigation that preserves accuracy addresses a critical practical need. The metric advocacy contribution has independent value for the community.
-
-- **Clarity**: Generally clear despite some dense notation. The pipeline (Figure 2) and algorithm description are well-organized; the motivation for local distortion (Section 3.2) could be more intuitive.
+5. **Provide a brief derivation sketch** from Equation (8) to (9) in an appendix, since the matching score is the method's core output and the derivation involves non-trivial integration on the hypersphere.
 
 # Actual Human Scores
 Individual reviewer scores: [2.0, 6.0, 2.0]

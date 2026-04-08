@@ -1,79 +1,85 @@
-=== CALIBRATION EXAMPLE 20 ===
+=== CALIBRATION EXAMPLE 8 ===
 
 # Final Consolidated Review
 ## Summary
 
-SURE introduces a Prototype-Reliability Graph (PRG) for test-time adaptation of vision-language models, jointly modeling semantic affinity (from text prototypes) and class-wise temporal reliability (from sliding-window confidence statistics) to regularize predictions. The PRG dynamically gates graph edges so that unreliable classes cannot propagate noise, and a closed-loop mechanism co-evolves predictions, prototypes, and graph structure. SURE achieves consistent accuracy gains across 15 benchmarks and two CLIP backbones while maintaining competitive inference speed.
+SURE proposes a test-time adaptation framework for vision-language models that regularizes predictions through a dynamically evolving Prototype-Reliability Graph (PRG). PRG encodes both semantic affinity (from textual prototypes) and class-wise reliability (from temporal statistics of pseudo-label confidences), enabling structured propagation of reliable information while suppressing error amplification from noisy pseudo-labels. The method achieves state-of-the-art results across ImageNet variants and 10 cross-dataset benchmarks using ResNet-50 and ViT-B/16 backbones.
 
 ## Strengths
 
-- **Principled integration of semantic structure with temporal reliability for TTA.** Unlike prior TTA methods that treat classes independently or rely solely on per-instance confidence, SURE explicitly models inter-class semantic dependencies and modulates them by statistical stability of predictions over time (Sec. 4.1, Eq. 4–6). This addresses a genuine failure mode—noise amplification through semantically related but unreliable classes—that existing methods do not.
+- **Principled structured regularization for TTA**: Unlike prior TTA methods that treat classes independently and rely on per-instance confidence, SURE explicitly models inter-class semantic dependencies and modulates them by temporal reliability. The ablation in Table 4 cleanly validates each component: the graph alone (+Graph w/o Rel) can hurt, but reliability gating (+Graph + Rel) rescues it, confirming the design is synergistic rather than additive.
 
-- **Closed-loop co-evolution of predictions and graph structure.** The framework couples logit regularization (Sec. 4.2) with graph evolution (Sec. 4.3), so that predictions refine the graph and the graph regularizes predictions. The ablation (Tab. 4) confirms that component synergy—reliability gating correcting graph imbalances, then logit propagation consolidating reliable information—drives the gains, rather than any single component alone.
+- **Effective closed-loop adaptation design**: The co-evolution of predictions, prototypes, and graph structure (Section 4.3) is a coherent framework. Figure 4 provides tangible evidence that PRG suppresses spurious connections (e.g., 'Television'→'Tabby' weight drops from 0.75 to 0.13) while preserving valid semantic clusters—a concrete demonstration that the reliability mechanism works as intended.
 
-- **Competitive efficiency with strong accuracy.** Table 3 shows SURE runs at 0.067s/sample (10× faster than TPT) while achieving 66.23% average accuracy on natural shifts, exceeding both DPE and ZERO. The lightweight graph operations scale linearly with class count per sample after initial construction, making it deployment-friendly.
-
-- **Consistent improvements across diverse evaluation settings.** Gains appear on both natural distribution shifts (Tab. 1) and cross-dataset generalization (Tab. 2), with low variance across seeds (Appendix A.3, ±0.11–0.28%) and competitive calibration (Tab. 10: ECE 7.48 vs. ProtoOnly's 11.23).
+- **Strong efficiency–performance trade-off**: Table 3 shows SURE achieves the highest accuracy (66.23%) while being 10× faster than TPT and only ~3× slower than the simplest baseline (BCA). The lightweight per-sample design (Algorithm 1) avoids gradient computation and multiple augmented views, making it genuinely deployment-friendly relative to entropy-based methods.
 
 ## Weaknesses
 
-- **Cold-start vulnerability of reliability estimation.** Reliability scores are initialized as μ_j = 1.0, σ_j = 0.0, assuming all classes are perfectly reliable at t=0. For rare classes or those consistently predicted with low confidence under shift, the sliding-window buffer Q_j may remain near-empty, keeping R_j ≈ 1.0 by default. This means the PRG provides no filtering for precisely the classes most prone to error accumulation—the core failure mode SURE claims to address. The prototype counter N_i^proto = 30000 dampens prototype updates, but the reliability graph lacks an analogous warm-start dampening mechanism, creating an asymmetry that could enable early error propagation before statistics stabilize.
+### Major:
 
-- **Positive feedback loop between regularized confidence and reliability updates.** Algorithm 1 (Line 12) computes confidence c(x) using the regularized prediction p̂(y|x), which already incorporates graph propagation. This regularized confidence then feeds into the reliability update (Eq. 13), which in turn modifies the graph structure for the next sample. This creates a self-reinforcing loop: the graph boosts confidence → reliability increases → graph edges strengthen → confidence boosts further. While R_j is clipped to [0,1], the paper provides no theoretical or empirical analysis of this loop's stability. The ablation in Table 4 shows net positive effects, but no experiment explicitly tests whether the loop can cause overconfidence collapse in adversarial or high-noise regimes.
+- **Marginal gains over strong baselines raise statistical significance concerns**: On ViT-B (Table 1), SURE achieves 66.23% vs. ZERO's 66.10% (+0.13%) and DPE's 65.93% (+0.30%). The reported standard deviation for SURE is ±0.11–0.16% (Appendix A.3), meaning some gains over individual baselines fall within 1–2 standard deviations. Crucially, **no standard deviations are reported for any baseline**, making it impossible to assess whether these improvements are statistically meaningful. The claim of "consistent outperformance" (Abstract) needs either significance tests against baselines or acknowledgment that some margins are narrow. On RN50, the gains are more substantial (+4.79% over CLIP, +0.31% over DPE), which partially mitigates this concern but does not eliminate it for the ViT-B setting that dominates modern VLM usage.
 
-- **Missing comparison with PROGRAM, the closest related work.** The paper explicitly positions itself against PROGRAM (Sun et al., 2024), which also uses a prototype graph for TTA, claiming SURE differs via "reliability-driven topology" and "VLM-specific design" (Sec. 2). Yet no empirical comparison is provided. Without this, the claim that reliability-driven topology offers unique benefits over feature-distance-based graphs is unverifiable. This is a notable gap given that PROGRAM is the most directly comparable prior method.
+- **Missing direct comparison with PROGRAM (Sun et al., 2024)**: PROGRAM is the most directly related prior work—it is a graph-based TTA method explicitly discussed in Section 2. The paper differentiates SURE from PROGRAM conceptually (reliability-driven topology, VLM-specific design), but never compares against it empirically. Without this comparison, it is impossible to determine whether SURE's gains come from the reliability-weighted graph specifically or from other design choices (e.g., prototype initialization, prompt ensemble). A graph-based TTA baseline is essential for validating the core contribution.
 
-- **Reliability score formulation lacks ablation against alternatives.** The formula R_j = μ_j · (1 − σ_j/σ_max) with fixed σ_max = 0.5 is heuristic. The paper states it is "a practical proxy for inverse uncertainty" but provides no comparison against alternative formulations (e.g., normalized entropy of the confidence distribution, exponential moving variance, or simpler proxies like mean confidence alone). The ablation in Table 4 removes reliability entirely but does not test whether a simpler or differently parametrized reliability measure would achieve comparable gains. This leaves open whether the specific multiplicative form and the σ_max constant are necessary or arbitrary.
+### Minor:
 
-- **"Consistently outperforms" claim is overstated for specific datasets.** On ImageNet-R (ViT-B), SURE achieves 79.96%, below ZERO (80.75%) and DPE (80.40%). On ImageNet-A (RN50), SURE's 29.57% is below DPE's 30.15% and BCA's 30.35%. The overall average advantages over ZERO and DPE on ViT-B natural shifts are narrow (66.23% vs. 66.10% and 65.93%), within or near the reported standard deviations (±0.11–0.16%). The paper should acknowledge these specific deficits and discuss when graph-based semantic regularization is less beneficial (e.g., style-shifted domains where texture cues dominate over semantic structure).
+- **Inconsistent temporal modeling between prototype updates and reliability estimation**: Equation 12 uses a cumulative moving average for prototype updates (weight 1/N_i for new samples), while Equation 13 uses a fixed-size sliding window for reliability statistics. This means prototypes are anchored to early test samples with diminishing plasticity, whereas reliability tracks only recent history. If the test distribution drifts over time, the cumulative prototype update could lag behind the reliability estimate, creating a mismatch. The paper should justify this asymmetry or adopt consistent temporal modeling.
 
-- **C² scaling concern for large vocabularies is unaddressed.** The similarity matrix S and weight matrix W are C×C, computed and updated as prototypes evolve. For ImageNet (C=1000), this is manageable, but VLMs are increasingly deployed with vocabularies of 10k+ classes. The paper does not discuss memory or computational scaling, nor whether the top-k sparsification suffices to mitigate this at scale. This is relevant to the "generalizable approach" claim in the abstract.
+- **Reliability score formulation is heuristic and untested against alternatives**: The specific form R_j = μ_j · (1 − σ_j/σ_max) is presented with "information-theoretic intuition" but no derivation or comparison against alternatives (e.g., entropy-based, confidence-only, variance-only). The ablation in Table 4 validates that reliability gating helps, but does not isolate whether this particular functional form is necessary versus simpler alternatives. Given that σ_max = 0.5 is a hard hinge (values of σ_j > 0.5 produce a negative term before clipping), a smoother formulation might be more robust.
 
-- **No explicit analysis of sample ordering sensitivity beyond seed variance.** SURE's reliability statistics depend on the order of test samples. Appendix A.3 reports variance across seeds that "varying initialization and test-time orderings," which partially addresses this. However, structured ordering scenarios—e.g., temporally clustered by class, class-imbalanced streams, or abrupt domain transitions mid-stream—are not analyzed. For a method that explicitly relies on temporal stability of predictions, this is a meaningful gap.
+- **Semantic similarity matrix S drifts from textual priors as prototypes are updated**: Equation 3 computes S from current prototypes t_i, but these are updated with visual features via Equation 12. The paper claims edges encode "semantic affinity derived from textual prototypes" (Abstract), yet S evolves toward a visually-driven topology. Under systematic domain bias (e.g., occluded dogs resembling cats), the graph structure itself could drift, undermining the semantic prior. The paper should either compute S from frozen text embeddings (as a stable prior) or explicitly acknowledge and analyze this drift.
+
+- **Hyperparameter sensitivity varies across domain types**: Figure 3 shows optimal k differs between natural shifts (k=4) and cross-dataset (k=3), and optimal θ varies from ~0.3 to ~0.5. While performance is smooth around optima, the "generalizable" claim (Abstract) is somewhat undermined if different shift types benefit from different hyperparameters. The paper should clarify whether a single hyperparameter setting works reasonably across all benchmarks or whether per-domain tuning is needed.
+
+### Trivial:
+
+- **5-class toy visualization (Figure 4)**: While illustrative, graph dynamics in a 5-node graph (dense, highly connected) differ qualitatively from a 1000-node sparse graph. A visualization of degree distribution or sparsity patterns for the full ImageNet graph would be more convincing.
+
+- **Memory overhead of adjacency buffer**: Storing L=5 matrices of size C×C for C=1000 is ~20MB—manageable but not discussed. For C=10,000+ this becomes prohibitive.
 
 ## Nice-to-Haves
 
-- Evaluation on ImageNet-C (synthetic corruptions), a standard TTA benchmark that would clarify whether PRG's benefits extend beyond semantic/natural shifts to the broader corruption-robustness regime.
+- **Evaluation on larger VLMs (ViT-L, ViT-H)**: All results use RN50 and ViT-B. Testing on current-scale backbones would strengthen generality claims.
 
-- Experiments with other VLMs (ALIGN, BLIP, or larger CLIP variants like ViT-L/14) to substantiate the "generalizable approach" claim.
+- **Long-term adaptation stability analysis**: Plot accuracy vs. test-step to verify the reliability mechanism prevents error accumulation over extended streams, which is the core failure mode SURE targets.
 
-- Tracking pseudo-label error rate across the test stream to directly validate the "prevents error amplification" mechanism, rather than relying only on final accuracy.
+- **Adaptive weighting between local and graph predictions**: Equation 10 uses a simple sum. A learned or confidence-gated combination could improve robustness when the graph is noisy early in adaptation.
 
-- Per-class performance breakdown showing which specific classes benefit most from reliability gating versus those where it provides no improvement.
-
-- Analysis of multi-domain continuous adaptation (domain transitions mid-stream) to test robustness in more realistic deployment scenarios.
+- **Breakdown of per-component latency**: Table 3 reports total time but doesn't profile graph construction vs. propagation vs. prototype updates, which would inform optimization priorities.
 
 ## Removed Points
 
 *These points are flagged to be removed, treat them with caution.*
 
-- **Baseline fairness concern about TPT's augmentation**: The harsh critic questioned whether SURE (single-view) was unfairly compared to TPT (multi-view). TPT uses test-time augmentation as a core part of its method; comparing methods as designed is the correct approach. SURE's advantage of not needing augmentation is a legitimate design feature, not an unfair comparison.
+- **Weakness: "Missing evaluation on DTD, Cars, fine-grained datasets"** (from Spark Finder) — Factually wrong. Table 2 explicitly evaluates on DTD, StanfordCars, Flowers102, and FGVC-Aircraft.
 
-- **"30,000 confident samples" initialization as a weakness**: The positive reviewer questioned the source of 30,000 samples for prototype initialization. This is a misunderstanding: N_i^proto = 30000 is a virtual count (Bayesian prior) in the running-average formula (Eq. 12), weighting the initial prototype 30,000× more than each new update. It is a standard dampening technique, not actual sample collection.
+- **Weakness: "GraphAdapter not compared"** (from Harsh Critic) — GraphAdapter requires labeled supervision and offline training, which the paper explicitly scopes out (Section 2). Comparing a TTA method with a supervised adaptation method is unfair and scope creep.
 
-- **Demand for comparison with all cited related works**: The harsh critic noted Fuchs et al. (2025) and Lee et al. (2025) are cited but not compared. Not all cited works need to be baselines; the comparison set is already reasonable. However, the omission of PROGRAM (the most directly comparable method) is kept as a substantive weakness above.
+- **Weakness: "Parser artifacts in Equation 1"** (from Harsh Critic) — Formatting nitpick; the prompt itself notes these are parser artifacts.
 
-- **Graph visualization limited to 5 classes**: While the 5-class visualization in Fig. 4 is limited, it serves an illustrative purpose. Demanding full-scale graph visualization is a nice-to-have, not a core flaw.
+- **Weakness: "Batch size sensitivity"** (from Spark Finder) — Algorithm 1 processes samples individually (per-sample loop), so batch size does not directly affect the method's operation. This is not a relevant concern.
 
-- **Clarification about k specification in method section**: The reviewer requested k = 3·log(C) be stated in the method rather than experiments. This is a minor presentation preference, not a substantive weakness.
+- **Weakness: Transferable weaknesses from unrelated papers** (from Harsh Critic's "Additional transferable weaknesses") — These are about CH-divnorm normalization, concept bottleneck models, and segmentation uncertainty quantification. They are from completely different papers and not applicable here.
+
+- **Weakness: "Missing comparison with recent graph-based adaptation methods beyond PROGRAM"** (from Spark Finder) — The spark finder could not specify which methods, and without confirming their existence this is speculative.
+
+- **Weakness about "EuroSAT performance degradation"** — Not substantiated by the data; SURE achieves 53.60% vs DPE's 55.79% on ViT-B (Table 2), which is actually a slight decrease, but this is one dataset out of ten and SURE wins on average. Worth noting but not a standalone weakness.
 
 ## Novel Insights
 
-The most insightful observation across the reviews concerns the positive feedback loop between regularized confidence and reliability estimation. This is not merely a theoretical concern—it reveals a fundamental architectural tension in SURE's closed-loop design: the very mechanism that enables co-evolution (predictions updating the graph, which updates predictions) also creates a self-reinforcing signal path that could amplify early errors rather than suppress them. The initialization assuming perfect reliability (R_j ≈ 1.0 at t=0) exacerbates this, because early noisy pseudo-labels face no reliability gating. The paper's own ablation (Table 4) shows that adding graph structure without reliability ("+Graph w/o Rel") can *hurt* performance (ImageNet-A drops from 57.92% to 57.68%), confirming that the graph can amplify noise when ungated. This suggests the reliability mechanism is not merely an enhancement but a necessity for the graph to be beneficial at all—a dependency that deserves more explicit acknowledgment and stress-testing.
+SURE's ablation (Table 4) reveals a non-obvious finding: adding semantic graph structure without reliability gating can *hurt* performance (ImageNet-A drops -0.24%), making the reliability mechanism not merely an enhancement but a *necessity* for safe graph-based TTA. This suggests that the common intuition—semantic structure should always help—is false under distribution shift, and that the real contribution is the *gating* of structure by uncertainty rather than the structure itself. This has implications beyond SURE: any method that injects semantic priors into TTA must account for the possibility that those priors become misleading under domain shift.
 
 ## Suggestions
 
-- Add an experiment comparing with PROGRAM to substantiate the claimed advantages of reliability-driven topology over feature-distance-based graphs.
+- **Run significance tests (paired t-test or bootstrap) against DPE, ZERO, and BCA** using at least 3–5 seeds for baselines. This is the single most impactful change for strengthening the empirical contribution, given that key gains are <0.5%.
 
-- Ablate the reliability formulation: compare R_j = μ_j · (1 − σ_j/σ_max) against simpler alternatives (e.g., R_j = μ_j alone, or R_j based on entropy of the confidence window) to show the specific design is necessary.
+- **Add PROGRAM as a baseline** in Tables 1 and 2. Even if it was designed for uni-modal classifiers, adapting it to the VLM setting (or reporting its original numbers where applicable) would directly validate the reliability-driven topology contribution.
 
-- Address the cold-start vulnerability: consider initializing reliability conservatively (e.g., R_j < 1.0) or adding a burn-in period before the graph activates, and test whether this improves early-phase robustness.
+- **Ablate the reliability formulation**: Compare R_j = μ_j · (1 − σ_j/σ_max) against simpler alternatives (μ_j only, 1 − σ_j only, entropy of the confidence buffer) to justify the specific multiplicative form.
 
-- Report per-dataset results honestly: acknowledge that SURE underperforms on ImageNet-R and ImageNet-A (RN50), and provide analysis of when semantic graph regularization is less beneficial.
+- **Clarify the calibration framing**: The method name ("Uncertainty Regularization") and Abstract imply improved uncertainty estimation, but Table 10 shows SURE's ECE (7.48) is worse than unadapted CLIP (6.29). The paper should explicitly state that the regularization claim is *relative to adapted methods*, not to the zero-shot baseline, and discuss why some calibration degradation is inherent to any adaptive method.
 
-- Test with class-imbalanced or clustered test stream orderings to validate robustness of the temporal reliability estimates beyond random shuffles.
-
-- Discuss C² scaling implications and potential approximations (e.g., approximate nearest-neighbor for top-k, or block-diagonal S for hierarchical label spaces) for deployment at larger vocabulary sizes.
+- **Report whether S in Equation 3 is computed from frozen or updated prototypes** — if from updated prototypes, add an ablation comparing frozen-text S vs. evolving S to quantify semantic drift's impact on the graph.
 
 # Actual Human Scores
 Individual reviewer scores: [4.0, 4.0, 6.0, 4.0, 4.0]

@@ -19,6 +19,7 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
+from baselines.structured_review.build_calibration import BORDERLINE_EXTRA
 from paper_reviewer import (
     _get_client,
     run_pipeline,
@@ -30,16 +31,28 @@ sys.path.insert(0, str(Path(__file__).parent))
 from run_iclr_bench import load_ground_truth, DEFAULT_BENCH_DIR
 
 
-BORDERLINE_BINS = {5, 6}  # bins where accept/reject is hardest to distinguish
-BORDERLINE_EXTRA = 0      # extra papers per borderline bin
+BORDERLINE_BINS = {4, 5, 6}  # bins where accept/reject is hardest to distinguish
+GARBAGE_BINS = {0, 1, 2}
 CONCURRENCY = 5
 
+
+def get_count(k):
+    if k in GARBAGE_BINS:
+        return 2  # just a few in the garbage bins to set standard
+    elif k in BORDERLINE_BINS:
+        return 10  # more from borderline bins
+    else: 
+        return 5 # a moderate number from the clear bins
+
+
+
 def sample_one_per_bin(papers: list[dict], seed: int) -> list[dict]:
-    """Sample 1 paper per score bin, with extra papers in borderline bins (5, 6)."""
+    # sam
     rng = random.Random(seed)
     bins = defaultdict(list)
     for p in papers:
         bins[round(p["avg_score"])].append(p)
+    
     for k in bins:
         rng.shuffle(bins[k])
 
@@ -48,13 +61,14 @@ def sample_one_per_bin(papers: list[dict], seed: int) -> list[dict]:
         if not bins[k]:
             continue
         # Take more from borderline bins
-        n_take = 5 # + BORDERLINE_EXTRA if k in BORDERLINE_BINS else 1
+        n_take = get_count(k)
         n_take = min(n_take, len(bins[k]))
         for j in range(n_take):
             samples.append(bins[k][j])
             tag = " (borderline)" if k in BORDERLINE_BINS else ""
             print(f"  Bin ~{k}: picked {bins[k][j]['paper_id']} (avg={bins[k][j]['avg_score']:.1f}, {bins[k][j]['gt_binary']}){tag}")
     print(f"  Total: {len(samples)} calibration papers ({sum(1 for s in samples if round(s['avg_score']) in BORDERLINE_BINS)} borderline)\n")
+    random.shuffle(samples)
     return samples
 
 
@@ -163,7 +177,6 @@ async def main(
     available = [r for r in gt_data if (papers_dir / f"{r['paper_id']}.txt").exists()]
     print(f"Loaded {len(available)} papers with text.\n")
 
-    print("Sampling 1 paper per score bin...")
     samples = sample_one_per_bin(available, seed)
 
     results = []

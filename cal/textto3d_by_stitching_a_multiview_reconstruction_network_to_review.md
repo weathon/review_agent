@@ -1,75 +1,92 @@
-=== CALIBRATION EXAMPLE 45 ===
+=== CALIBRATION EXAMPLE 16 ===
 
 # Final Consolidated Review
-## Summary
+##Summary
 
-VIST3A proposes a framework for text-to-3D generation that stitches a pretrained video VAE encoder to a pretrained feedforward 3D reconstruction model (decoder) via a learned linear layer, then aligns the video generator to the stitched decoder using direct reward finetuning. This avoids training a 3D decoder from scratch and enables both text-to-3DGS and text-to-pointmap generation across multiple video generator and 3D model pairings.
+VIST3A introduces a framework for text-to-3D generation that stitches a pretrained feedforward 3D reconstruction model (e.g., AnySplat, VGGT, MVDUSt3R) onto a pretrained text-to-video VAE as its decoder, then aligns the generative model with this stitched decoder via direct reward finetuning. By identifying the most compatible layer in the 3D model via linear MSE fitting and attaching the downstream portion through a learned stitching layer, the method avoids training a 3D decoder from scratch and achieves state-of-the-art results on T3Bench, SceneBench, and DPG-Bench for text-to-3DGS generation, while also enabling text-to-pointmap generation.
 
 ## Strengths
 
-- **Novel and well-motivated framework design.** The core idea of repurposing pretrained 3D foundation models as decoders via model stitching—rather than training custom VAE decoders—is genuinely novel and practically significant. The finding that independently trained video and 3D models have linearly transferable latent representations at certain layers (validated by MSE analysis and supported by Theorem 1 from Insulla et al., 2025) is a non-trivial empirical insight that could influence how the community thinks about composing foundation models.
+- **The model stitching idea is well-motivated and practically significant for this domain.** The core insight—that independently pretrained video VAEs and 3D reconstruction models share partially linearly-transferable latent representations, enabling lightweight stitching rather than training from scratch—is non-obvious and empirically validated across multiple architecture pairings (Fig. 5, Fig. 10, Table 3, Table 5). This directly addresses a real bottleneck in LDM-based 3D generation.
 
-- **Demonstrated versatility across architectures.** The paper shows that stitching works across four video generators (Wan, SVD, CogVideoX, HunyuanVideo) and three 3D models (AnySplat, MVDUSt3R, VGGT), producing both 3DGS and pointmap outputs. Tables 3 and 5 confirm that stitching preserves or improves the original 3D model's reconstruction capability, which validates the stitching premise. This modularity—where the generator and decoder can be independently upgraded—is a meaningful practical advantage.
+- **Strong and consistent empirical improvements over prior work.** VIST3A outperforms all baselines on T3Bench, SceneBench, and DPG-Bench across nearly all metrics (Tables 1–2), with particularly large margins on Imaging Quality and Coherence. The human evaluation (Table 4) corroborates these gains, with VIST3A ranked first in >68% of text alignment cases and >87% of visual quality cases.
 
-- **Consistent improvements over prior text-to-3DGS methods.** Table 1 shows VIST3A variants leading on T3Bench and SceneBench across most metrics (Imaging Quality, Coherence, Unified Reward), often by substantial margins (e.g., Imaging Quality from 58.19 to 64.87 on SceneBench). The human evaluation in Table 4 further supports these findings.
+- **Generalizability across multiple video generators and 3D backbones is convincingly demonstrated.** The paper tests Wan, CogVideoX, SVD, and HunyuanVideo as generators, and AnySplat, VGGT, and MVDUSt3R as 3D models, showing the stitching framework is not architecture-specific (Tables 3, 5, Fig. 10).
+
+- **The integrated vs. sequential ablation (Fig. 8, Appendix D.2) provides meaningful evidence for the unified latent-space design.** Injecting noise into latents and comparing stitched decoding vs. decode-then-reconstruct shows the sequential pipeline amplifies errors even at imperceptible noise levels, justifying the architectural choice beyond just quality metrics.
 
 ## Weaknesses
 
-- **Partial evaluation metric circularity.** The direct reward finetuning explicitly optimizes CLIP-based scores (DFN CLIP) and HPSv2.1 human preference scores during training (Eq. 5). These are closely related to the CLIP score and Aesthetic Quality metrics used for evaluation in Table 1. While different CLIP model variants are used for training (DFN) vs. evaluation (clip-vit-base-patch16), both are CLIP-based and highly correlated, and HPSv2.1 directly informs aesthetic quality. This partial circularity means gains on these metrics may partially reflect reward optimization rather than genuine 3D generation improvements. The Unified Reward scores (based on a separate Qwen-7B VLM) are less susceptible to this concern, but the paper does not discuss this issue.
+### Major:
 
-- **VIST3A results missing from Table 2 (DPG-Bench).** The text claims "our models greatly outperform the baselines, mostly scoring >75 (often even ≈85)," but Table 2 contains only baseline numbers—no VIST3A rows appear. This is a significant omission for one of the three primary evaluation benchmarks. The reader cannot verify the claimed DPG-Bench performance.
+- **No ablation comparing stitched decoder vs. training a decoder from scratch.** The paper's central claim is that stitching preserves pretrained 3D knowledge and is superior to training custom decoders. Yet no experiment directly compares the stitched approach against training a decoder of equivalent capacity from scratch on the same data. Without this, it remains unclear whether stitching provides a genuine advantage over simply using a good initialization, or whether the gains come entirely from the reward finetuning and data. This is the single most important missing experiment for validating the core methodological contribution.
 
-- **No computational cost or inference time analysis.** Direct reward finetuning requires backpropagating through the full denoising trajectory with reward computation involving 3D rendering and multiple model evaluations per step. The paper provides no training time, GPU memory, or inference latency comparisons with baselines. This makes it impossible to assess whether VIST3A's quality gains justify the computational overhead, and whether the "feedforward" advantage over per-scene optimization methods holds in practice.
+- **Computational costs are entirely unreported.** The paper involves stitching and finetuning large video generators (Wan 2.1 T2V Large) with large 3D models (AnySplat, VGGT), plus reward finetuning that requires simulating full denoising trajectories. No training time, GPU memory requirements, FLOPs, or inference latency comparisons with baselines are provided. This is critical for practitioners to assess whether the quality gains justify the computational investment, and for understanding the tradeoff vs. SDS-based or multi-stage methods. The claim of "efficient" generation (implied by the end-to-end design) needs quantitative backing.
 
-- **The 3D-consistency reward alone degrades quality—unexplained.** Table 6 shows that adding only the 3D-consistency reward to multi-view finetuning causes Imaging Quality to plummet from 54.56 to 38.67 and Aesthetic Quality from 52.08 to 50.59. This is a striking degradation that contradicts the stated goal of improving 3D consistency. The paper notes this briefly but does not explain the mechanism: why does enforcing geometric consistency via this reward term produce blurry, low-quality outputs? Understanding this failure mode is important for the method's reliability.
+- **Text-to-pointmap generation is claimed as a contribution but lacks quantitative evaluation.** The paper introduces text-to-pointmap as a novel capability enabled by choosing VGGT or MVDUSt3R as the 3D backbone, but provides only qualitative results (Fig. 14) with the acknowledgment that "no established benchmarks or baselines exist." While the absence of benchmarks is understandable, the paper could still report standard reconstruction metrics (e.g., on generated scenes where reference geometry is available) or compare against a sequential baseline (generate images → run VGGT). Without any quantitative signal, this claimed contribution cannot be evaluated.
 
-- **Text-to-pointmap generation is only qualitatively evaluated, despite being a claimed contribution.** The abstract states VIST3A "also enables high-quality text-to-pointmap generation," and pointmap output is highlighted as a key differentiator. However, Table 5 only evaluates reconstruction quality with real images as input—not end-to-end text-to-pointmap generation. No quantitative metrics assess the quality of pointmaps generated from text prompts. This leaves a significant portion of the claimed contribution unvalidated.
+### Minor:
 
-- **Small-scale human evaluation.** The user study involves 28 participants evaluating only 14 samples drawn across three benchmarks with very different characteristics (object-centric, scene-level, long-prompt). With such a small sample size, the claimed preferences (>68% for text alignment, >87% for visual quality) lack statistical rigor and could reflect sample-specific advantages rather than robust methodological superiority.
+- **Reward weight selection lacks ablation justification.** The quality reward is scaled by 1/16 and the consistency reward by 0.05 (Appendix B.2), but no ablation explores alternative weightings. Table 6 ablates reward components but not their relative scales. Given that the consistency reward alone causes dramatic performance collapse (Imaging Quality drops from 58.23 to 38.67), the balance appears fragile and potentially architecture-dependent—practitioners would benefit from understanding sensitivity to these choices.
 
-- **Modified DPG-Bench protocol.** The paper substitutes the original DPG-Bench evaluation language model with a more capable UnifiedReward LLM (Qwen 7B). While motivated as an upgrade, this makes scores incomparable to any published DPG-Bench results and could affect methods in unpredictable ways. No analysis is provided of how much this substitution changes relative rankings.
+- **User study lacks standard methodological details.** Table 4 reports average ranks from 28 participants on 14 samples, but does not specify whether participants were blinded to method identity, how samples were randomized, or report inter-rater agreement (e.g., Fleiss' kappa). Without these details, the human evaluation is less informative than it could be.
+
+- **No failure case analysis.** All qualitative results show successful generations. Given the complexity of the pipeline, honest presentation of failure modes (e.g., geometry collapse, prompt misalignment, artifacts from pose prediction errors) would strengthen the paper and help readers understand practical limitations.
+
+- **The consistency reward depends on predicted camera poses, but pose error sensitivity is unanalyzed.** Eq. 6 computes the consistency reward using rendered views at poses predicted by the stitched 3D model. If the stitched model outputs inaccurate poses (especially in the generative setting where inputs are noisy latents rather than clean images), the consistency reward could become misleading. No sensitivity analysis or discussion of this dependency is provided.
+
+- **The "no labels" framing could be clearer.** The abstract and introduction emphasize that the method requires "no labels" and is "self-supervised," but training uses DL3DV-10K and ScanNet—datasets that contain 3D annotations. The method does not use these 3D annotations (it uses pseudo-targets from the original 3D model), which is the intended meaning, but the phrasing risks misleading readers into thinking no datasets are needed at all. A brief clarification would help.
+
+### Trivial:
+
+- The theoretical justification for MSE as a layer selection criterion (Eq. 4, citing Insulla et al. 2025) provides an upper bound dependent on the Lipschitz constant κ₂, which is unknown and varies across layers. The empirical correlation in Fig. 5 is more compelling than the theoretical argument, which offers limited practical guidance beyond the observation that lower MSE is directionally better.
 
 ## Nice-to-Haves
 
-- **True 3D geometry metrics.** Evaluating on a subset with 3D ground truth (e.g., Chamfer Distance or F-Score on Objaverse) would verify the core claim of geometrically consistent 3D generation, which 2D rendered metrics alone cannot confirm.
-
-- **Layer selection sensitivity analysis.** Testing performance when stitching at layers near vs. far from the optimal k* would clarify how critical precise layer selection is, and whether a rough heuristic suffices.
-
-- **Reward weight ablation.** The reward weights (1/16 for quality terms, 0.05 for consistency) appear without ablation. Understanding how sensitive results are to these choices would strengthen the method's practical guidance.
-
-- **Failure mode analysis.** Explicit examples of prompts where VIST3A fails (e.g., transparent objects, complex topology, unusual scene scales) would define the method's boundaries and guide future work.
+- Error bars or significance tests on the main quantitative results, particularly where improvements are modest (e.g., CLIP scores on SceneBench).
+- Layer-wise probing or feature analysis showing what specific geometric capabilities (depth estimation, pose prediction, multi-view correspondence) survive the stitching operation.
+- Ablation on stitching layer complexity (3D convolution vs. simpler linear map) to assess whether the current design is necessary.
+- Evaluation on more diverse or out-of-distribution prompt types to stress-test generalization.
+- Analysis of how reward weights should be adapted when switching to different video/3D backbone pairings.
 
 ## Removed Points
 
 These points are flagged to be removed, treat them with caution:
 
-- **Equation (1) notation confusion (Harsh Critic).** The critic claimed M_stitched and D_stitched were used interchangeably. In fact, the paper clearly defines M_stitched = F_{k*+1:l} ∘ S ∘ E as the full stitched VAE and D_stitched = F_{k*+1:l} ∘ S as the decoder portion—standard and unambiguous notation.
-
-- **"Small dataset" claim in abstract is misleading (Harsh Critic).** The abstract says stitching "requires only a small dataset and no labels," which accurately describes using DL3DV-10K + ScanNet without 3D annotations, compared to the much larger labeled datasets required by methods training decoders from scratch.
-
-- **Reference verification concerns about 2025-2026 citations (Harsh Critic).** Per review rules, all cited works are treated as real and available.
-
-- **Code availability and reproducibility nitpicks (Harsh Critic).** Per rules, reproducibility concerns about implementation details and code release timelines are removed.
-
-- **Training data leakage concern (Harsh Critic).** The training datasets (DL3DV-10K, ScanNet) are standard and distinct from evaluation benchmarks (T3Bench, SceneBench, DPG-Bench). No specific overlap is identified.
-
-- **Formatting and notation nitpicks (Harsh Critic).** The garbled equations in the PDF extraction are parser artifacts, not paper issues. Minor notation choices are standard and do not impede understanding.
-
-- **LoRA rank discrepancy between stitching (64) and generative finetuning (8) (Harsh Critic).** Different ranks for different components with different adaptation needs is a reasonable design choice, not a weakness requiring justification.
-
-- **Missing broader impact/societal discussion (Harsh Critic).** This is outside the paper's stated scope of technical contribution and is not standard for this venue.
+- **Equation/table formatting complaints** (Eq. 2 "garbled," Table 2 "incomplete," Fig. 6 "garbled"): These are PDF extraction artifacts, not author errors. Removed per formatting nitpick rule.
+- **Missing related works as baselines** (LAN et al. 2025, Li et al. 2025b): Cannot confirm these are appropriate baselines without external verification. Removed per missing related works rule.
+- **Code/model/checkpoint availability concerns**: Project page is provided; questioning release status is not appropriate per hard rules.
+- **Questions about 2025-2026 citation existence** (Wang et al. 2026, Yang et al. 2025e): Per hard rules, all cited references are assumed to exist.
+- **Demand for SDS comparisons at comparable compute budgets**: This asks to show SDS results when given similar compute to VIST3A's one-time training cost, which reverses the fairness asymmetry (SDS's per-scene cost is a known weakness VIST3A avoids). Removed per unfair comparison rule.
+- **DPG-Bench table data appearing garbled**: The text clearly states VIST3A scores ">75 often ≈85" on DPG-Bench; the extracted table formatting issue is not an author error.
+- **Training data overlap with evaluation benchmarks**: No evidence of overlap is presented; this is speculative.
+- **Broader impact / misuse discussion**: Not standard for this venue and paper type.
 
 ## Novel Insights
 
-The most interesting empirical finding is the strong linear transferability between independently trained video VAE latents and 3D reconstruction model activations at specific layers—a result that, while perhaps unsurprising in hindsight given shared low-level visual features, has non-trivial implications for modular model composition. The observation that the 3D-consistency reward alone catastrophically degrades image quality (Table 6) while the quality reward alone improves it, and that combining both recovers a workable trade-off, suggests an inherent tension between enforcing geometric fidelity and maintaining visual richness through reward-based optimization. This tension deserves deeper analysis: the consistency reward may be forcing the generator into a mode that produces overly smooth, "safe" latents that sacrifice detail. Understanding whether this is a fundamental limitation of reward-based alignment or a specific artifact of the ℓ₁/LPIPS consistency formulation would be valuable for the broader text-to-3D community.
+The observation that independently pretrained video VAEs and 3D reconstruction models exhibit partially linearly-transferable representations at early layers—despite being trained on different data, with different objectives, and for different modalities—is genuinely surprising and has implications beyond this paper. It suggests that the low-level visual features encoded by video compression models share structural similarities with those learned by 3D reconstruction models, which may reflect a convergent representation of image statistics rather than task-specific encoding. The finding that CKA, a standard representation similarity metric, fails to identify the optimal stitching layer while MSE succeeds (Fig. 6) hints that linear predictability (affine transferability) and distributional similarity (CKA) capture different aspects of representation alignment—MSE captures what matters for functional stitching, while CKA captures overall distributional overlap. This distinction could inform future work on model composition.
 
 ## Suggestions
 
-- Add VIST3A results to Table 2 to substantiate the DPG-Bench claims, or clearly explain why they are omitted.
-- Include inference time (seconds/sample) and GPU memory usage for VIST3A and key baselines to contextualize the feedforward advantage.
-- Investigate and explain the failure mode where the 3D-consistency reward alone degrades quality so severely (38.67 Imaging Quality in Table 6)—this is important for practitioners and for understanding reward-based alignment.
-- Add at least one quantitative metric for end-to-end text-to-pointmap generation (even if on a small subset with ground truth) to validate this claimed contribution.
-- Report confidence intervals or statistical tests for the human evaluation to support the preference claims.
+- **Add a stitched-vs-scratch decoder comparison:** Train a decoder of similar architecture from scratch on the same data (DL3DV + ScanNet) without stitching, keeping all other components identical. This single experiment would decisively validate or refute the core contribution.
+- **Report training/inference compute:** At minimum, provide GPU hours for stitching search, stitched VAE finetuning, and reward alignment training, plus per-scene inference time compared to baselines.
+- **Include 3–5 failure cases** with analysis of what goes wrong (e.g., pose prediction failures leading to consistency reward noise, out-of-distribution prompts, or scenes requiring non-sequential viewpoints).
+- **Clarify the "no labels" claim** by explicitly stating "no 3D ground-truth labels are required" rather than the more ambiguous "no labels."
+- **Add a brief sensitivity analysis** on the consistency reward's dependence on pose accuracy—e.g., perturb predicted poses during training and measure the impact on final generation quality.
+
+---
+
+**Assessment by axis:**
+
+- **Novelty:** High. Model stitching between generative video models and discriminative 3D reconstruction models in this specific context is novel, and the finding that their latent spaces are partially linearly compatible is non-obvious. The direct reward finetuning adaptation for 3D alignment is a meaningful technical contribution, though it builds on established techniques (DRTune).
+
+- **Technical soundness:** Moderate-to-good. The methodology is clearly described and the empirical results are strong. However, the missing stitched-vs-scratch comparison is a notable gap in validating the central claim, and the theoretical justification for MSE-based layer selection is weak (upper bound with unknown constants). The reward formulation works in practice but the fragility revealed by the consistency-only ablation is underanalyzed.
+
+- **Empirical support:** Good. Consistent improvements across three benchmarks, multiple architecture pairings, and human evaluation provide strong support. The ablation studies (Table 6, Fig. 8) are informative. However, the text-to-pointmap claim lacks quantitative support, and computational cost data is absent.
+
+- **Significance:** High. If the stitching approach is validated against from-scratch training, this could shift how the community builds 3D generation pipelines—reusing rather than rebuilding 3D decoders. The framework is modular and future-proof as better 3D foundation models emerge.
+
+- **Clarity:** Good. The paper is well-structured with clear problem framing and method description. Some claims ("no labels") could be more precise, and the limitations section is understated relative to the actual constraints (sequential input requirement). Appendix dependency is heavier than ideal but acceptable.
 
 # Actual Human Scores
 Individual reviewer scores: [8.0, 8.0, 8.0, 8.0]
