@@ -38,11 +38,11 @@ CONCURRENCY = 5
 
 def get_count(k):
     if k in GARBAGE_BINS:
-        return 2  # just a few in the garbage bins to set standard
+        return 10  # just a few in the garbage bins to set standard
     elif k in BORDERLINE_BINS:
         return 10  # more from borderline bins
     else: 
-        return 5 # a moderate number from the clear bins
+        return 10 # a moderate number from the clear bins
 
 
 
