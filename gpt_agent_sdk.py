@@ -1,15 +1,17 @@
+import argparse
 import asyncio
+import csv
+import json
+import random
 import re
 import logging
+import time
+from collections import defaultdict
 from pathlib import Path
-from agents import (
-    Agent,
-    Runner,
-    function_tool
-)
+
+from agents import Agent, Runner, function_tool
 import dotenv
 dotenv.load_dotenv()
-import weave
 import os
 os.environ["OPENAI_DEFAULT_MODEL"] = "gpt-5.4"
 from openai import AsyncOpenAI
@@ -18,9 +20,6 @@ from agents import set_default_openai_client, set_tracing_disabled
 custom_client = AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY"))
 set_default_openai_client(custom_client)
 set_tracing_disabled(True)
-
-
-import time
 
 # ── Leakage detection ────────────────────────────────────────────────
 LEAKAGE_WARNING_PATTERNS = [
@@ -40,8 +39,8 @@ _error_handler.setFormatter(logging.Formatter("%(asctime)s | %(message)s"))
 _error_logger.addHandler(_error_handler)
 
 
-def _detect_leakage_warning_phrases(text: str) -> list[str]:
-    matches: list[str] = []
+def _detect_leakage(text: str) -> list[str]:
+    matches = []
     for pattern in LEAKAGE_WARNING_PATTERNS:
         found = re.search(pattern, text, flags=re.IGNORECASE)
         if found:
@@ -55,7 +54,6 @@ RETRY_DELAY = 10
 
 
 async def run_agent_with_retry(agent, prompt: str, max_turns: int = 30) -> str:
-    """Run an agent with retry on transient failures. Returns final_output."""
     agent_name = agent.name
     for attempt in range(1, MAX_RETRIES + 1):
         try:
@@ -64,7 +62,6 @@ async def run_agent_with_retry(agent, prompt: str, max_turns: int = 30) -> str:
             if not output or not output.strip():
                 if attempt < MAX_RETRIES:
                     print(f"  [{agent_name}] empty response (attempt {attempt}/{MAX_RETRIES}), retrying ...")
-                    _error_logger.error(f"[{agent_name}] empty response (attempt {attempt}/{MAX_RETRIES})")
                     await asyncio.sleep(RETRY_DELAY + attempt * 5)
                     continue
                 raise RuntimeError(f"[{agent_name}] empty response after {MAX_RETRIES} attempts")
@@ -78,13 +75,13 @@ async def run_agent_with_retry(agent, prompt: str, max_turns: int = 30) -> str:
             if is_retryable and attempt < MAX_RETRIES:
                 wait = RETRY_DELAY * attempt
                 print(f"  [{agent_name}] transient error (attempt {attempt}/{MAX_RETRIES}), waiting {wait}s ... {e}")
-                _error_logger.error(f"[{agent_name}] transient error (attempt {attempt}/{MAX_RETRIES}): {e}")
                 await asyncio.sleep(wait)
             else:
                 raise
     raise RuntimeError(f"[{agent_name}] failed after {MAX_RETRIES} attempts")
 
 
+# ── Prompt loading ───────────────────────────────────────────────────
 with open("prompts/timeline.txt", "r") as f:
     timeline = f.read().replace("{{CURRENT_DATE}}", time.strftime("%Y-%m-%d"))
 
@@ -93,6 +90,8 @@ def load_prompts(path):
     with open("prompts/" + path, "r") as f:
         return f.read() + "\n\n" + timeline
 
+
+# ── Tools ────────────────────────────────────────────────────────────
 @function_tool
 def read_file(abs_path: str) -> str:
     """Reads the content of a file and returns it as a string."""
@@ -108,18 +107,12 @@ def glob_files(pattern: str, directory: str = ".") -> str:
 
 @function_tool
 def grep_files(pattern: str, directory: str = ".", file_glob: str = "*") -> str:
-    """Search file contents for a regex pattern. Returns matching lines with file paths and line numbers.
-
-    Args:
-        pattern: Regex pattern to search for.
-        directory: Directory to search in.
-        file_glob: Glob to filter which files to search (e.g. '*.md', '**/*.txt').
-    """
+    """Search file contents for a regex pattern. Returns matching lines with file paths and line numbers."""
     import glob as _glob
     import re
     matches = []
     files = sorted(_glob.glob(file_glob, root_dir=directory, recursive=True))
-    for f in files[:500]:  # cap to avoid runaway searches
+    for f in files[:500]:
         fpath = os.path.join(directory, f)
         if not os.path.isfile(fpath):
             continue
@@ -130,148 +123,299 @@ def grep_files(pattern: str, directory: str = ".", file_glob: str = "*") -> str:
                         matches.append(f"{fpath}:{i}: {line.rstrip()}")
         except Exception:
             continue
-        if len(matches) >= 200:  # cap output
+        if len(matches) >= 200:
             break
     return "\n".join(matches) if matches else "No matches found."
 
 
+# ── Agent definitions ────────────────────────────────────────────────
 summarizer = Agent(
     name="Summarizer",
-    instructions="You are an subagent that specializes in summarizing files. ",
-    tools=[read_file], 
+    instructions="You are an subagent that specializes in summarizing files.",
+    tools=[read_file],
 )
 
-harsh = Agent(
-    name="Harsh Critic",
-    instructions=load_prompts("harsh_critic.txt"),
-)
+harsh = Agent(name="Harsh Critic", instructions=load_prompts("harsh_critic.txt"))
+neutral_reviewer = Agent(name="Neutral Reviewer", instructions=load_prompts("neutral_reviewer.txt"))
+merger = Agent(name="Merger", instructions=load_prompts("merger.txt"))
+spark = Agent(name="Spark", instructions=load_prompts("spark_finder.txt"))
 
-neutral_reviewer = Agent(
-    name="Neutral Reviewer",
-    instructions=load_prompts("neutral_reviewer.txt"),
-)
-
-merger = Agent(
-    name="Merger",
-    instructions=load_prompts("merger.txt"),
-)
-
-spark = Agent(
-    name="Spark",
-    instructions=load_prompts("spark_finder.txt"),
-)
+_tool_agents = [read_file, glob_files, grep_files, summarizer.as_tool(
+    tool_name="summarization", tool_description="Summarize a file given its absolute path.",
+)]
+human_finder = Agent(name="Human Finder", instructions=load_prompts("find_human_match.txt"), tools=_tool_agents)
+scorer = Agent(name="Scorer", instructions=load_prompts("scorer_agent_gpt.txt"), tools=_tool_agents)
 
 
-human_finder = Agent(
-    name="Human Finder",
-    instructions=load_prompts("find_human_match.txt"),
-    tools=[read_file, glob_files, grep_files, summarizer.as_tool(
-            tool_name="summarization",
-            tool_description="Summarize a file given its absolute path.",
-        ),
-    ]
-)
+# ── Constants ────────────────────────────────────────────────────────
+HUMAN_REVIEW_DIR = os.path.abspath("iclr2025_data")
+CONCURRENCY = 3
 
-scorer = Agent(
-    name="Scorer",
-    instructions=load_prompts("scorer_agent_gpt.txt"),
-    tools=[read_file, glob_files, grep_files, summarizer.as_tool(
-            tool_name="summarization",
-            tool_description="Summarize a file given its absolute path.",
-        ),
-    ]
-)
-
-
-starts, ends = [], []
-async def run_agent(agent, review_text: str):
-    agent_name = agent.name
-
-    start = time.time()
-    starts.append((agent_name, start))
-
-    result = await run_agent_with_retry(agent, review_text, max_turns=30)
-
-    end = time.time()
-    ends.append((agent_name, end))
-
-    return result
-
-import os
-
-human_review_dir = os.path.abspath("iclr2025_data")
-user_prompts = {
-    "review": """Review the following paper thoroughly.
+REVIEW_PROMPT = """Review the following paper thoroughly.
 
 NOTE: This paper was extracted from PDF by an automated parser. There may be formatting artifacts such as broken equations, garbled tables, misplaced figure references, or OCR errors. These are parser issues, NOT problems with the paper itself. Do NOT treat formatting artifacts as weaknesses.
 
 {paper_path}
 --- PAPER CONTENT START ---
 {paper_content}
---- PAPER CONTENT END ---""",
-    "human_finder": "Paper file path: {pp}\nHuman reviews directory: {human_review_dir}\n"
-}
+--- PAPER CONTENT END (EVERYTHING AFTER REFERENCE IS REMOVED) ---"""
 
 
+# ── Core pipeline ────────────────────────────────────────────────────
 
-def main():
-    run_agents("paper.md")
-
-from agents import (
-    Agent,
-    Runner,
-)
-
-
-
-
-async def run_agents(paper_path):
+async def run_pipeline(paper_path: str, skip_scoring: bool = False) -> dict:
     paper_path_abs = os.path.abspath(paper_path)
-    print(paper_path_abs)
     with open(paper_path, "r") as f:
         paper_content = f.read()
-    parallel_agents = [harsh, neutral_reviewer, spark, human_finder]
-    review_prompt = user_prompts["review"].format(paper_path=paper_path_abs, paper_content=paper_content)
-    find_human_prompt = user_prompts["human_finder"].format(pp=paper_path_abs, human_review_dir=human_review_dir)
-    prompts = [review_prompt, review_prompt, review_prompt, find_human_prompt]
-    print(find_human_prompt)
+    paper_content = paper_content.split("REFERENCES")[0]
 
-    responses = await asyncio.gather(
-        *(run_agent(agent, prompt) for prompt, agent in zip(prompts, parallel_agents))
-    )
+    review_prompt = REVIEW_PROMPT.format(paper_path=paper_path_abs, paper_content=paper_content)
+    find_human_prompt = f"Paper file path: {paper_path_abs}\nHuman reviews directory: {HUMAN_REVIEW_DIR}\n"
 
-    agent_names = [a.name for a in parallel_agents]
-    labeled_summaries = [
-        f"### {name}\n{output}"
-        for name, output in zip(agent_names, responses)
+    agents_and_prompts = [
+        (harsh, review_prompt), (neutral_reviewer, review_prompt),
+        (spark, review_prompt), (human_finder, find_human_prompt),
     ]
 
-    inputs_block = '\n\n'.join(labeled_summaries)
-    merger_user_prompt = f"Here is the paper being reviewed (extracted from PDF — formatting artifacts are parser issues, not paper problems):\n\n--- PAPER CONTENT START ---\n{paper_content}--- PAPER CONTENT END ---\n\nHere are the inputs:\n\n{inputs_block}\n\nNow produce the final consolidated review following your instructions. Remember: many of the harsh critic's points may be nonsensical or overly picky — cross-check everything against the actual paper before including it."
-    merged_review = await run_agent_with_retry(merger, merger_user_prompt, max_turns=30)
+    print(f"  Phase 1: Running {len(agents_and_prompts)} agents in parallel ...")
+    responses = await asyncio.gather(
+        *(run_agent_with_retry(a, p) for a, p in agents_and_prompts)
+    )
 
-    scorer_user_prompt = f"Review: \n\n{merged_review}\n\ncal_dir_abs:{os.path.abspath('cal/')}"
-    scorer_output = await run_agent_with_retry(scorer, scorer_user_prompt, max_turns=30)
+    labeled = [f"### {a.name}\n{out}" for (a, _), out in zip(agents_and_prompts, responses)]
+    merger_prompt = (
+        f"Here is the paper being reviewed (extracted from PDF — formatting "
+        f"artifacts are parser issues, not paper problems):\n\n"
+        f"--- PAPER CONTENT START ---\n{paper_content}--- PAPER CONTENT END ---\n\n"
+        f"Here are the inputs:\n\n{chr(10).join(labeled)}\n\n"
+        f"Now produce the final consolidated review following your instructions. "
+        f"Remember: many of the harsh critic's points may be nonsensical or overly "
+        f"picky — cross-check everything against the actual paper before including it."
+    )
 
-    # Leakage detection on scorer output
-    leakage_matches = _detect_leakage_warning_phrases(scorer_output)
-    if leakage_matches:
-        matched_text = ", ".join(sorted(set(leakage_matches), key=str.lower))
-        warning_msg = (
-            f"Potential calibration leakage: scorer output contains "
-            f"suspicious phrase(s): {matched_text}"
+    print("  Phase 2: Merger ...")
+    merged_review = await run_agent_with_retry(merger, merger_prompt)
+
+    scorer_output = None
+    if not skip_scoring:
+        print("  Phase 3: Scorer ...")
+        scorer_output = await run_agent_with_retry(
+            scorer, f"Review: \n\n{merged_review}\n\ncal_dir_abs:{os.path.abspath('cal/')}")
+        leakage = _detect_leakage(scorer_output)
+        if leakage:
+            print(f"  [scorer] WARNING: Potential leakage: {', '.join(leakage)}")
+            _error_logger.error(f"Potential calibration leakage: {', '.join(leakage)}")
+
+    return {"merged_review": merged_review, "scorer_output": scorer_output}
+
+
+# ── Helpers ──────────────────────────────────────────────────────────
+
+def load_ground_truth(data_dir: Path) -> tuple[list[dict], Path]:
+    csv_file = data_dir / "ratings.csv"
+    if not csv_file.exists():
+        raise FileNotFoundError(f"No ratings.csv found in {data_dir}")
+    papers_dir = data_dir / "papers"
+    rows = []
+    with open(csv_file, "r") as f:
+        for row in csv.DictReader(f):
+            scores = [float(row[f"score_{i}"]) for i in range(7) if row.get(f"score_{i}", "").strip()]
+            decision = row.get("decision", "").strip()
+            gt_binary = row.get("gt_binary", "").strip() or ("Accept" if "Accept" in decision else "Reject")
+            rows.append({
+                "paper_id": row["paper_id"].strip(),
+                "title": row.get("title", "").strip(),
+                "scores": scores,
+                "avg_score": float(row.get("avg_score", 0)),
+                "decision": decision,
+                "gt_binary": gt_binary,
+            })
+    return rows, papers_dir
+
+
+def shorten_title(title: str, max_len: int = 60) -> str:
+    name = re.sub(r"[^a-z0-9 ]", "", title.lower())
+    name = re.sub(r"\s+", "_", name.strip())
+    return (name[:max_len].rstrip("_") if len(name) > max_len else name) or "untitled"
+
+
+def stratified_sample(papers: list[dict], n_per_bin: int, seed: int) -> list[dict]:
+    rng = random.Random(seed)
+    bins = defaultdict(list)
+    for p in papers:
+        bins[round(p["avg_score"])].append(p)
+    for k in bins:
+        rng.shuffle(bins[k])
+    samples = []
+    for k in sorted(bins.keys()):
+        samples.extend(bins[k][:n_per_bin])
+    rng.shuffle(samples)
+    print(f"  Stratified sample: {len(samples)} papers from {len(bins)} bins ({n_per_bin}/bin)")
+    return samples
+
+
+def parse_score(text: str) -> float | None:
+    match = re.search(r"<pineapple>([\d.]+)</pineapple>", text)
+    return float(match.group(1)) if match else None
+
+
+async def process_papers(papers: list[dict], papers_dir: Path, skip_scoring: bool, callback):
+    """Run pipeline on a list of papers with CONCURRENCY concurrent tasks."""
+    sem = asyncio.Semaphore(CONCURRENCY)
+
+    async def process_one(i, paper_info):
+        pid = paper_info["paper_id"]
+        paper_path = papers_dir / f"{pid}.txt"
+        print(f"\n[{i}/{len(papers)}] {paper_info.get('title', pid)} (avg={paper_info['avg_score']:.1f})")
+        async with sem:
+            for attempt in range(1, 4):
+                try:
+                    result = await run_pipeline(str(paper_path), skip_scoring=skip_scoring)
+                    callback(paper_info, result)
+                    return
+                except Exception as e:
+                    print(f"  [{pid}] ERROR (attempt {attempt}): {e}")
+                    if attempt < 3:
+                        await asyncio.sleep(30 * attempt)
+
+    await asyncio.gather(*(process_one(i, p) for i, p in enumerate(papers, 1)))
+
+
+# ── Calibration ──────────────────────────────────────────────────────
+
+async def run_calibration(data_dir: str, seed: int = 42):
+    data_path = Path(data_dir)
+    cal_dir = Path(__file__).parent / "cal"
+    ids_path = Path(__file__).parent / "calibration_ids.json"
+    cal_dir.mkdir(exist_ok=True)
+
+    gt_data, papers_dir = load_ground_truth(data_path)
+    available = [r for r in gt_data if (papers_dir / f"{r['paper_id']}.txt").exists()]
+    print(f"Loaded {len(available)} papers with text.")
+
+    samples = stratified_sample(available, n_per_bin=10, seed=seed)
+
+    # Skip already done
+    done = {s["paper_id"] for s in samples if (cal_dir / f"{shorten_title(s.get('title', s['paper_id']))}_review.md").exists()}
+    samples = [s for s in samples if s["paper_id"] not in done]
+    if done:
+        print(f"Skipping {len(done)} already-completed papers.")
+    if not samples:
+        print("All done."); return
+
+    existing_ids = set(json.loads(ids_path.read_text())) if ids_path.exists() else set()
+    count = [0]
+
+    def on_complete(paper_info, result):
+        count[0] += 1
+        base = shorten_title(paper_info.get("title", paper_info["paper_id"]))
+        # Save review
+        review_text = (
+            f"=== CALIBRATION EXAMPLE {count[0]} ===\n\n"
+            f"# Final Consolidated Review\n{result['merged_review']}\n\n"
+            f"# Actual Human Scores\n"
+            f"Individual reviewer scores: {paper_info['scores']}\n"
+            f"Average score: {paper_info['avg_score']:.1f}\n"
+            f"Binary outcome: {paper_info['gt_binary']}\n"
         )
-        print(f"  [scorer] WARNING: {warning_msg}")
-        _error_logger.error(warning_msg)
+        (cal_dir / f"{base}_review.md").write_text(review_text, encoding="utf-8")
+        # Copy paper
+        src = papers_dir / f"{paper_info['paper_id']}.txt"
+        if src.exists():
+            (cal_dir / f"{base}_paper.md").write_text(src.read_text(errors="replace"), encoding="utf-8")
+        # Update IDs
+        existing_ids.add(paper_info["paper_id"])
+        ids_path.write_text(json.dumps(sorted(existing_ids), indent=2))
+        print(f"  [{paper_info['paper_id']}] Saved ({count[0]} so far)")
 
-    print('Final summary:', scorer_output)
+    print(f"Running {len(samples)} calibration papers (concurrency={CONCURRENCY}) ...")
+    await process_papers(samples, papers_dir, skip_scoring=True, callback=on_complete)
+    print(f"\nCalibration complete: {count[0]} papers saved to {cal_dir}")
 
-    return scorer_output
 
-async def main():
-    result = await run_agents("paper.md")
+# ── Benchmark ────────────────────────────────────────────────────────
 
+async def run_benchmark(data_dir: str, n_samples: int = 10, seed: int = 42, balanced: bool = False):
+    data_path = Path(data_dir)
+    ids_path = Path(__file__).parent / "calibration_ids.json"
+    cal_ids = set(json.loads(ids_path.read_text())) if ids_path.exists() else set()
+
+    gt_data, papers_dir = load_ground_truth(data_path)
+    available = [r for r in gt_data if (papers_dir / f"{r['paper_id']}.txt").exists() and r["paper_id"] not in cal_ids]
+    print(f"Available papers: {len(available)} (excluded {len(cal_ids)} calibration)")
+
+    if balanced:
+        samples = stratified_sample(available, n_per_bin=max(1, n_samples // 10), seed=seed)
+    else:
+        samples = random.Random(seed).sample(available, min(n_samples, len(available)))
+        print(f"Random sample: {len(samples)} papers")
+
+    out_dir = Path(__file__).parent
+    csv_path = out_dir / "bench_scores.csv"
+    reviews_dir = out_dir / "bench_reviews"
+    reviews_dir.mkdir(exist_ok=True)
+
+    # Check existing
+    finished = set()
+    if csv_path.exists() and csv_path.stat().st_size > 0:
+        with open(csv_path) as f:
+            finished = {row["paper_id"] for row in csv.DictReader(f)}
+        print(f"Skipping {len(finished)} already-finished papers.")
+    samples = [s for s in samples if s["paper_id"] not in finished]
+
+    if not finished:
+        with open(csv_path, "w", newline="") as f:
+            csv.writer(f).writerow(["paper_id", "pred_score", "gt_avg_score", "gt_binary", "gt_decision"])
+
+    results = []
+
+    def on_complete(paper_info, result):
+        pred_score = parse_score(result["scorer_output"] or "")
+        print(f"  [{paper_info['paper_id']}] predicted={pred_score} gt={paper_info['avg_score']:.1f}")
+        results.append({"pred_score": pred_score, "gt_avg_score": paper_info["avg_score"]})
+        with open(csv_path, "a", newline="") as f:
+            csv.writer(f).writerow([paper_info["paper_id"], pred_score, paper_info["avg_score"],
+                                    paper_info["gt_binary"], paper_info["decision"]])
+        (reviews_dir / f"{paper_info['paper_id']}.md").write_text(result["merged_review"], encoding="utf-8")
+
+    if not samples:
+        print("Nothing to run."); return
+    print(f"Running {len(samples)} benchmark papers (concurrency={CONCURRENCY}) ...")
+    await process_papers(samples, papers_dir, skip_scoring=False, callback=on_complete)
+
+    scored = [r for r in results if r["pred_score"] is not None]
+    if scored:
+        mae = sum(abs(r["pred_score"] - r["gt_avg_score"]) for r in scored) / len(scored)
+        print(f"\nResults: {len(scored)} scored, MAE={mae:.2f}")
+
+
+# ── Single paper ─────────────────────────────────────────────────────
+
+async def run_single_paper(paper_path: str):
+    print(f"Reviewing: {paper_path}")
+    result = await run_pipeline(paper_path)
+    print(f"\n{'=' * 72}\nFINAL REVIEW\n{'=' * 72}\n{result['merged_review']}")
+    score = parse_score(result["scorer_output"] or "")
+    if score is not None:
+        print(f"\nPredicted score: {score}")
+
+
+# ── CLI ──────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+    parser = argparse.ArgumentParser(description="Multi-agent paper reviewer")
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--single_paper", type=str)
+    group.add_argument("--benchmark", type=str, metavar="DATA_DIR")
+    group.add_argument("--calibration", type=str, metavar="DATA_DIR")
+    parser.add_argument("--n_samples", type=int, default=10)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--balanced", action="store_true")
+    args = parser.parse_args()
+
+    if args.single_paper:
+        asyncio.run(run_single_paper(args.single_paper))
+    elif args.calibration:
+        asyncio.run(run_calibration(args.calibration, seed=args.seed))
+    elif args.benchmark:
+        asyncio.run(run_benchmark(args.benchmark, n_samples=args.n_samples, seed=args.seed, balanced=args.balanced))
