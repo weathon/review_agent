@@ -13,6 +13,20 @@ echo "============================================"
 # python fetch_iclr2025.py 200 42 --balanced
 
 # ── Step 2: Check dataset distribution ── 
+
+# set -a && source "$(dirname "$0")/.env" && set +a
+
+# export ANTHROPIC_BASE_URL="https://openrouter.ai/api"
+# export ANTHROPIC_AUTH_TOKEN="$OPENROUTER_API_KEY"
+# export ANTHROPIC_API_KEY="" # Important: Must be explicitly empty
+
+# export ANTHROPIC_DEFAULT_OPUS_MODEL="qwen/qwen3.6-plus"
+# export ANTHROPIC_DEFAULT_SONNET_MODEL="qwen/qwen3.5-flash-02-23"
+# export ANTHROPIC_DEFAULT_HAIKU_MODEL="qwen/qwen3.5-flash-02-23"
+# export CLAUDE_CODE_SUBAGENT_MODEL="qwen/qwen3.6-plus"
+
+
+
 echo ""
 echo ">>> Step 2: Dataset distribution check"
 python -c "
@@ -31,16 +45,16 @@ for k in sorted(bins):
 "
 
 # ── Step 3: Build calibration set ──
-echo ""
-echo ">>> Step 3: Building calibration set (sub-agents only, no merger)"
-python build_calibration.py --data-dir iclr2026_balanced --parallel --no-related-work # --no-neutral
+# echo ""
+# echo ">>> Step 3: Building calibration set (sub-agents only, no merger)"
+# python build_calibration.py --data-dir iclr2026_balanced --parallel --no-related-work # --no-neutral
 
 
 # ── Step 5: Run benchmark with calibration ──
 echo ""
 rm -rf bench_reviews/
 mkdir bench_reviews
-python run_iclr_bench.py 50 3 --parallel --data-dir iclr2026_unbalanced --calibration calibration.md --no-related-work # --no-neutral
+python run_iclr_bench.py 50 3 --parallel --data-dir iclr2026_balanced --calibration calibration.md --no-related-work # --no-neutral
 
 # ── Step 6: Compute metrics ──
 echo ""

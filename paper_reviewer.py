@@ -43,8 +43,8 @@ MODEL_FILTER = f"{base_model}"
 # MODEL_MERGER = f"zai:glm-5.1" #用zai coding plan白嫖
 MODEL_MERGER = f"z-ai/glm-5.1" 
 MODEL_PARSER = "openai/gpt-5.4-nano" 
-MODEL_FIND_HUMAN = f"claude:claude-haiku-4-5"
-MODEL_SCORER = f"claude:claude-sonnet-4-5" 
+MODEL_FIND_HUMAN = f"claude:claude-sonnet-4-6"
+MODEL_SCORER = f"claude:claude-sonnet-4-6" 
 human_review_dir = "/home/wg25r/review_agent/iclr2025_data"
 
 MAX_RETRIES = 10

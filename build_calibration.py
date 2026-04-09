@@ -224,7 +224,7 @@ async def main(
         print(f"{'─' * 72}")
 
         attempt = 0
-        while True:
+        for i in range(3): 
             attempt += 1
             start = time.time()
             try:
