@@ -13,7 +13,7 @@ from agents import Agent, Runner, function_tool
 import dotenv
 dotenv.load_dotenv()
 import os
-os.environ["OPENAI_DEFAULT_MODEL"] = "gpt-5.4"
+os.environ["OPENAI_DEFAULT_MODEL"] = "deepseek/deepseek-v3.2"
 from openai import AsyncOpenAI
 from agents import set_default_openai_client, set_tracing_disabled
 
@@ -68,13 +68,9 @@ async def run_agent_with_retry(agent, prompt: str, max_turns: int = 30) -> str:
             print(f"  [{agent_name}] done")
             return output
         except Exception as e:
-            err_str = str(e).lower()
-            is_retryable = any(
-                kw in err_str for kw in ["rate_limit", "overloaded", "429", "529", "timeout", "gateway", "502", "503", "504"]
-            )
-            if is_retryable and attempt < MAX_RETRIES:
+            if attempt < MAX_RETRIES:
                 wait = RETRY_DELAY * attempt
-                print(f"  [{agent_name}] transient error (attempt {attempt}/{MAX_RETRIES}), waiting {wait}s ... {e}")
+                print(f"  [{agent_name}] error (attempt {attempt}/{MAX_RETRIES}), waiting {wait}s ... {e}")
                 await asyncio.sleep(wait)
             else:
                 raise
@@ -93,8 +89,20 @@ def load_prompts(path):
 
 # ── Tools ────────────────────────────────────────────────────────────
 @function_tool
-def read_file(abs_path: str) -> str:
-    """Reads the content of a file and returns it as a string."""
+def read_file(abs_path: str, start_line: int = 1, end_line: int = 0) -> str:
+    """Read lines from a file. Returns lines numbered start_line to end_line (inclusive, 1-based).
+    If end_line is 0, reads to end of file."""
+    if ("/papers/" in abs_path or abs_path.endswith("_paper.md")) and end_line == 0:
+        return "ERROR: Full paper reads blocked. Use grep_files first, then read_file with start_line/end_line."
+    with open(abs_path, "r") as f:
+        lines = f.readlines()
+    selected = lines[max(0, start_line - 1):end_line if end_line > 0 else len(lines)]
+    return "".join(f"{start_line + i}: {line}" for i, line in enumerate(selected))
+
+@function_tool
+def read_file_full(abs_path: str) -> str:
+    """Read an entire file. Only use this inside the Summarizer agent."""
+    print(abs_path)
     with open(abs_path, "r") as f:
         return f.read()
 
@@ -131,17 +139,17 @@ def grep_files(pattern: str, directory: str = ".", file_glob: str = "*") -> str:
 # ── Agent definitions ────────────────────────────────────────────────
 summarizer = Agent(
     name="Summarizer",
-    instructions="You are an subagent that specializes in summarizing files.",
-    tools=[read_file],
+    instructions="You are a subagent that summarizes files or answers questions about them. Read the file using read_file_full, then respond.",
+    tools=[read_file_full],
 )
 
 harsh = Agent(name="Harsh Critic", instructions=load_prompts("harsh_critic.txt"))
 neutral_reviewer = Agent(name="Neutral Reviewer", instructions=load_prompts("neutral_reviewer.txt"))
-merger = Agent(name="Merger", instructions=load_prompts("merger.txt"))
+merger = Agent(name="Merger", instructions=load_prompts("merger.txt"), tools=[read_file, grep_files])
 spark = Agent(name="Spark", instructions=load_prompts("spark_finder.txt"))
 
 _tool_agents = [read_file, glob_files, grep_files, summarizer.as_tool(
-    tool_name="summarization", tool_description="Summarize a file given its absolute path.",
+    tool_name="summarization", tool_description="Summarizing or answering questions about a file given **its absolute path** and question.",
 )]
 human_finder = Agent(name="Human Finder", instructions=load_prompts("find_human_match.txt"), tools=_tool_agents)
 scorer = Agent(name="Scorer", instructions=load_prompts("scorer_agent_gpt.txt"), tools=_tool_agents)
@@ -149,7 +157,7 @@ scorer = Agent(name="Scorer", instructions=load_prompts("scorer_agent_gpt.txt"),
 
 # ── Constants ────────────────────────────────────────────────────────
 HUMAN_REVIEW_DIR = os.path.abspath("iclr2025_data")
-CONCURRENCY = 3
+CONCURRENCY = 1
 
 REVIEW_PROMPT = """Review the following paper thoroughly.
 
@@ -170,6 +178,7 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False) -> dict:
     paper_content = paper_content.split("REFERENCES")[0]
 
     review_prompt = REVIEW_PROMPT.format(paper_path=paper_path_abs, paper_content=paper_content)
+    
     find_human_prompt = f"Paper file path: {paper_path_abs}\nHuman reviews directory: {HUMAN_REVIEW_DIR}\n"
 
     agents_and_prompts = [
@@ -184,9 +193,8 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False) -> dict:
 
     labeled = [f"### {a.name}\n{out}" for (a, _), out in zip(agents_and_prompts, responses)]
     merger_prompt = (
-        f"Here is the paper being reviewed (extracted from PDF — formatting "
-        f"artifacts are parser issues, not paper problems):\n\n"
-        f"--- PAPER CONTENT START ---\n{paper_content}--- PAPER CONTENT END ---\n\n"
+        f"The paper file is at: {paper_path_abs}\n"
+        f"Use grep_files and read_file to verify claims from the reviews against the actual paper.\n\n"
         f"Here are the inputs:\n\n{chr(10).join(labeled)}\n\n"
         f"Now produce the final consolidated review following your instructions. "
         f"Remember: many of the harsh critic's points may be nonsensical or overly "
@@ -268,15 +276,11 @@ async def process_papers(papers: list[dict], papers_dir: Path, skip_scoring: boo
         paper_path = papers_dir / f"{pid}.txt"
         print(f"\n[{i}/{len(papers)}] {paper_info.get('title', pid)} (avg={paper_info['avg_score']:.1f})")
         async with sem:
-            for attempt in range(1, 4):
-                try:
-                    result = await run_pipeline(str(paper_path), skip_scoring=skip_scoring)
-                    callback(paper_info, result)
-                    return
-                except Exception as e:
-                    print(f"  [{pid}] ERROR (attempt {attempt}): {e}")
-                    if attempt < 3:
-                        await asyncio.sleep(30 * attempt)
+            try:
+                result = await run_pipeline(str(paper_path), skip_scoring=skip_scoring)
+            except Exception as e:
+                raise RuntimeError(f"[{pid}] pipeline failed: {e}") from e
+            callback(paper_info, result)
 
     await asyncio.gather(*(process_one(i, p) for i, p in enumerate(papers, 1)))
 
