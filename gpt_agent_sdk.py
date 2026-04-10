@@ -143,14 +143,14 @@ summarizer = Agent(
     tools=[read_file_full],
 )
 
-harsh = Agent(name="Harsh Critic", instructions=load_prompts("harsh_critic.txt"))
-neutral_reviewer = Agent(name="Neutral Reviewer", instructions=load_prompts("neutral_reviewer.txt"))
-merger = Agent(name="Merger", instructions=load_prompts("merger.txt"), tools=[read_file, grep_files])
-spark = Agent(name="Spark", instructions=load_prompts("spark_finder.txt"))
-
 _tool_agents = [read_file, glob_files, grep_files, summarizer.as_tool(
     tool_name="summarization", tool_description="Summarizing or answering questions about a file given **its absolute path** and question.",
 )]
+harsh = Agent(name="Harsh Critic", instructions=load_prompts("harsh_critic.txt"))
+neutral_reviewer = Agent(name="Neutral Reviewer", instructions=load_prompts("neutral_reviewer.txt"))
+merger = Agent(name="Merger", instructions=load_prompts("merger.txt"), tools=[read_file_full] + _tool_agents)
+spark = Agent(name="Spark", instructions=load_prompts("spark_finder.txt"))
+
 human_finder = Agent(name="Human Finder", instructions=load_prompts("find_human_match.txt"), tools=_tool_agents)
 scorer = Agent(name="Scorer", instructions=load_prompts("scorer_agent_gpt.txt"), tools=_tool_agents)
 
