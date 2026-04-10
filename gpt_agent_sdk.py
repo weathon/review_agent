@@ -13,13 +13,19 @@ from agents import Agent, Runner, function_tool
 import dotenv
 dotenv.load_dotenv()
 import os
-os.environ["OPENAI_DEFAULT_MODEL"] = "deepseek/deepseek-v3.2"
+os.environ["OPENAI_DEFAULT_MODEL"] = "qwen3.6-plus"
+SCORER_MODEL = "gpt-5.4"
+MODEL_FIND_HUMAN = None#"gpt-5.4-mini"
+MERGER_MODEL = None#"deepseek/deepseek-v3.2"
 from openai import AsyncOpenAI
 from agents import set_default_openai_client, set_tracing_disabled
 
 custom_client = AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY"))
 set_default_openai_client(custom_client)
 set_tracing_disabled(True)
+
+# Suppress SDK's internal error logging — we handle errors in run_agent_with_retry
+logging.getLogger("openai.agents").setLevel(logging.CRITICAL)
 
 # ── Leakage detection ────────────────────────────────────────────────
 LEAKAGE_WARNING_PATTERNS = [
@@ -38,6 +44,8 @@ _error_handler = logging.FileHandler(_error_log_path, mode="a")
 _error_handler.setFormatter(logging.Formatter("%(asctime)s | %(message)s"))
 _error_logger.addHandler(_error_handler)
 
+HUMAN_REVIEW_DIR = os.path.abspath("iclr2025_data")
+CONCURRENCY = 1
 
 def _detect_leakage(text: str) -> list[str]:
     matches = []
@@ -52,9 +60,34 @@ def _detect_leakage(text: str) -> list[str]:
 MAX_RETRIES = 5
 RETRY_DELAY = 10
 
+ALLOWED_PATHS = [os.path.abspath("iclr2025_data/"), os.path.abspath("cal/")]
 
+from rank_bm25 import BM25Okapi
+
+
+# ── Build Index ────────────────────────────────────────────────
+print(f"Indexing ...")
+database = {}
+for path in ALLOWED_PATHS:
+    all_files = []
+    all_file_paths = []
+    for root, dirs, files in os.walk(path):
+        for file in files:
+            if file.endswith(".txt") or file.endswith(".md"):
+                with open(os.path.join(root, file), "r", errors="replace") as f:
+                    all_files.append(f.read())
+                    all_file_paths.append(os.path.join(root, file))
+
+    tokenized_corpus = [doc.split(" ") for doc in all_files]
+
+    bm25 = BM25Okapi(tokenized_corpus)
+    database[path] = {"files": all_file_paths, "bm25": bm25}
+    
+print("Indexing complete.")
+5/0
 async def run_agent_with_retry(agent, prompt: str, max_turns: int = 30) -> str:
     agent_name = agent.name
+    print(f"  [{agent_name}] starting ...")
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             result = await Runner.run(agent, prompt, max_turns=max_turns)
@@ -73,7 +106,7 @@ async def run_agent_with_retry(agent, prompt: str, max_turns: int = 30) -> str:
                 print(f"  [{agent_name}] error (attempt {attempt}/{MAX_RETRIES}), waiting {wait}s ... {e}")
                 await asyncio.sleep(wait)
             else:
-                raise
+                raise RuntimeError(f"[{agent_name}] {e}") from e
     raise RuntimeError(f"[{agent_name}] failed after {MAX_RETRIES} attempts")
 
 
@@ -92,6 +125,10 @@ def load_prompts(path):
 def read_file(abs_path: str, start_line: int = 1, end_line: int = 0) -> str:
     """Read lines from a file. Returns lines numbered start_line to end_line (inclusive, 1-based).
     If end_line is 0, reads to end of file."""
+    resolved = os.path.abspath(abs_path)
+    if not any(resolved.startswith(ap) for ap in ALLOWED_PATHS):
+        print(f"  [read_file] BLOCKED: '{resolved}' is not under any allowed directory.")
+        return f"ERROR: Access denied. Path '{resolved}' is not under any allowed directory."
     if ("/papers/" in abs_path or abs_path.endswith("_paper.md")) and end_line == 0:
         return "ERROR: Full paper reads blocked. Use grep_files first, then read_file with start_line/end_line."
     with open(abs_path, "r") as f:
@@ -99,9 +136,14 @@ def read_file(abs_path: str, start_line: int = 1, end_line: int = 0) -> str:
     selected = lines[max(0, start_line - 1):end_line if end_line > 0 else len(lines)]
     return "".join(f"{start_line + i}: {line}" for i, line in enumerate(selected))
 
+
 @function_tool
 def read_file_full(abs_path: str) -> str:
     """Read an entire file. Only use this inside the Summarizer agent."""
+    resolved = os.path.abspath(abs_path)
+    if not any(resolved.startswith(ap) for ap in ALLOWED_PATHS):
+        print(f"  [read_file_full] BLOCKED: '{resolved}' is not under any allowed directory.")
+        return f"ERROR: Access denied. Path '{resolved}' is not under any allowed directory."
     print(abs_path)
     with open(abs_path, "r") as f:
         return f.read()
@@ -112,7 +154,7 @@ def glob_files(pattern: str, directory: str = ".") -> str:
     import glob as _glob
     matches = sorted(_glob.glob(pattern, root_dir=directory, recursive=True))
     return "\n".join(os.path.join(directory, m) for m in matches) if matches else "No files matched."
-
+ 
 @function_tool
 def grep_files(pattern: str, directory: str = ".", file_glob: str = "*") -> str:
     """Search file contents for a regex pattern. Returns matching lines with file paths and line numbers."""
@@ -131,34 +173,56 @@ def grep_files(pattern: str, directory: str = ".", file_glob: str = "*") -> str:
                         matches.append(f"{fpath}:{i}: {line.rstrip()}")
         except Exception:
             continue
-        if len(matches) >= 200:
-            break
+        if len(matches) >= 100:
+            matches.append(f"... and {len(files) - 500} more files searched, {len(matches) - 100} more matches found ...")
     return "\n".join(matches) if matches else "No matches found."
+
+
+
+
+@function_tool
+def search_file(query: str, path: str, n: int = 5) -> str:
+    """Search for a pattern in a file using the BM25 index. Returns the top n matching files."""
+    path = os.path.abspath(path)
+    if path not in database:
+        return f"ERROR: Path '{path}' is not indexed or allowed for searching."
+    bm25 = database[path]["bm25"]
+    files = database[path]["files"]
+    tokenized_query = query.split(" ")
+    doc_scores = bm25.get_scores(tokenized_query)
+    top_indices = doc_scores.argsort()[-n:][::-1]
+    results = []
+    for idx in top_indices:
+        file_path = files[idx]
+        file_path = os.path.abspath(file_path)
+        score = doc_scores[idx]
+        with open(file_path, 'r', errors='replace') as f:
+            content = f.read()
+        results.append(f"{file_path}\nscore: {score:.2f}\n first 1000 chars:\n{content[:1000]}\n")
+    return "\n---\n".join(results) if results else "No relevant files found."
+
 
 
 # ── Agent definitions ────────────────────────────────────────────────
 summarizer = Agent(
     name="Summarizer",
-    instructions="You are a subagent that summarizes files or answers questions about them. Read the file using read_file_full, then respond.",
+    instructions="You are a subagent that summarizes files or answers questions about them. Read the file using read_file_full, then respond. You are only able to do specific files, deny other requests.",
     tools=[read_file_full],
 )
 
-_tool_agents = [read_file, glob_files, grep_files, summarizer.as_tool(
-    tool_name="summarization", tool_description="Summarizing or answering questions about a file given **its absolute path** and question.",
-)]
+_tool_agents = [read_file, summarizer.as_tool(
+    tool_name="summarization", tool_description="Summarizing or answering questions about a specific file given **its absolute path** and question.",
+), search_file, grep_files]
 harsh = Agent(name="Harsh Critic", instructions=load_prompts("harsh_critic.txt"))
 neutral_reviewer = Agent(name="Neutral Reviewer", instructions=load_prompts("neutral_reviewer.txt"))
-merger = Agent(name="Merger", instructions=load_prompts("merger.txt"), tools=[read_file_full] + _tool_agents)
+merger = Agent(name="Merger", instructions=load_prompts("merger.txt"), model=MERGER_MODEL)
 spark = Agent(name="Spark", instructions=load_prompts("spark_finder.txt"))
 
 human_finder = Agent(name="Human Finder", instructions=load_prompts("find_human_match.txt"), tools=_tool_agents)
-scorer = Agent(name="Scorer", instructions=load_prompts("scorer_agent_gpt.txt"), tools=_tool_agents)
+scorer = Agent(name="Scorer", instructions=load_prompts("scorer_agent_gpt.txt"), tools=_tool_agents, model=SCORER_MODEL)
 
 
 # ── Constants ────────────────────────────────────────────────────────
-HUMAN_REVIEW_DIR = os.path.abspath("iclr2025_data")
-CONCURRENCY = 1
-
 REVIEW_PROMPT = """Review the following paper thoroughly.
 
 NOTE: This paper was extracted from PDF by an automated parser. There may be formatting artifacts such as broken equations, garbled tables, misplaced figure references, or OCR errors. These are parser issues, NOT problems with the paper itself. Do NOT treat formatting artifacts as weaknesses.
@@ -193,8 +257,9 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False) -> dict:
 
     labeled = [f"### {a.name}\n{out}" for (a, _), out in zip(agents_and_prompts, responses)]
     merger_prompt = (
-        f"The paper file is at: {paper_path_abs}\n"
-        f"Use grep_files and read_file to verify claims from the reviews against the actual paper.\n\n"
+        f"Here is the paper being reviewed (extracted from PDF — formatting "
+        f"artifacts are parser issues, not paper problems):\n\n"
+        f"--- PAPER CONTENT START ---\n{paper_content}--- PAPER CONTENT END ---\n\n"
         f"Here are the inputs:\n\n{chr(10).join(labeled)}\n\n"
         f"Now produce the final consolidated review following your instructions. "
         f"Remember: many of the harsh critic's points may be nonsensical or overly "

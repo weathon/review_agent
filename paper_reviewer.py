@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""
+""" 
 Multi-Agent Paper Reviewer using OpenRouter chat completions.
 
 Usage:
