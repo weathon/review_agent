@@ -34,16 +34,16 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 ZAI_BASE_URL = "https://api.z.ai/api/coding/paas/v4/"
 
 # base_model = "qwen/qwen3.6-plus:free" #用限时免费模型白嫖
-base_model = "qwen/qwen3.5-flash-02-23" 
-MODEL_HARSH = f"qwen/qwen3.5-plus-02-15"
+base_model = "deepseek/deepseek-v3.2" 
+MODEL_HARSH = f"deepseek/deepseek-v3.2"
 MODEL_NEUTRAL = f"{base_model}"
-MODEL_SPARK = f"qwen/qwen3.5-plus-02-15" 
+MODEL_SPARK = f"deepseek/deepseek-v3.2" 
 MODEL_RELATED_WORK = f"{base_model}:online" 
 MODEL_FILTER = f"{base_model}"
 # MODEL_MERGER = f"zai:glm-5.1" #用zai coding plan白嫖
-MODEL_MERGER = f"z-ai/glm-5.1" 
+MODEL_MERGER = f"deepseek/deepseek-v3.2" 
 MODEL_PARSER = "openai/gpt-5.4-nano" 
-MODEL_FIND_HUMAN = f"claude:claude-sonnet-4-6"
+MODEL_FIND_HUMAN = f"claude:claude-haiku-4-5"
 MODEL_SCORER = f"claude:claude-sonnet-4-6" 
 human_review_dir = "/home/wg25r/review_agent/iclr2025_data"
 
@@ -304,7 +304,65 @@ print("Testing ZAI client with a simple call ...")
 #     print("🔥ZAI client test failed: unexpected answer")
 
 # ── Agent runners ─────────────────────────────────────────────────────
-from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, AssistantMessage, TextBlock, ResultMessage
+from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, AssistantMessage, TextBlock, ResultMessage, tool, create_sdk_mcp_server
+
+# ── BM25 index for human review search ──────────────────────────────
+from rank_bm25 import BM25Okapi
+
+_SEARCH_PATHS = [os.path.abspath(human_review_dir)]
+_bm25_database: dict = {}
+
+print("Indexing human reviews ...")
+_idx_start = time.time()
+for _sp in _SEARCH_PATHS:
+    _all_files = []
+    _all_file_paths = []
+    for _root, _dirs, _files in os.walk(_sp):
+        for _f in _files:
+            if _f.endswith(".txt") or _f.endswith(".md"):
+                with open(os.path.join(_root, _f), "r", errors="replace") as _fh:
+                    _all_files.append(_fh.read())
+                    _all_file_paths.append(os.path.join(_root, _f))
+    _tokenized = [doc.split(" ") for doc in _all_files if doc.strip()]
+    if not _tokenized:
+        print(f"  Skipping {_sp} (no files found)")
+        continue
+    _bm25_database[_sp] = {"files": _all_file_paths, "bm25": BM25Okapi(_tokenized)}
+print(f"Indexing complete. Time taken: {time.time() - _idx_start:.2f}s")
+
+
+@tool(
+    "search_file",
+    "Search for a pattern in a directory using the BM25 index. Returns the top n matching files with their first 1000 chars.",
+    {"query": str, "path": str, "n": int},
+)
+async def _search_file_tool(args: dict) -> dict:
+    query = args["query"]
+    path = os.path.abspath(args["path"])
+    n = args.get("n", 5)
+    if path not in _bm25_database:
+        return {"content": [{"type": "text", "text": f"ERROR: Path '{path}' is not indexed or allowed for searching."}], "is_error": True}
+    bm25 = _bm25_database[path]["bm25"]
+    files = _bm25_database[path]["files"]
+    tokenized_query = query.split(" ")
+    doc_scores = bm25.get_scores(tokenized_query)
+    top_indices = doc_scores.argsort()[-n:][::-1]
+    results = []
+    for idx in top_indices:
+        file_path = os.path.abspath(files[idx])
+        score = doc_scores[idx]
+        with open(file_path, "r", errors="replace") as f:
+            content = f.read()
+        results.append(f"{file_path}\nscore: {score:.2f}\n first 1000 chars:\n{content[:1000]}\n")
+    text = "\n---\n".join(results) if results else "No relevant files found."
+    return {"content": [{"type": "text", "text": text}]}
+
+
+_search_mcp_server = create_sdk_mcp_server(
+    name="search",
+    version="1.0.0",
+    tools=[_search_file_tool],
+)
 
 
 async def _run_reviewer_claude_sdk(
@@ -704,7 +762,8 @@ async def run_human_finder(pp, human_review_dir):
     options = ClaudeAgentOptions(
         model=MODEL_FIND_HUMAN.split(":", 1)[1],
         cwd=str(Path(human_review_dir).resolve()),
-        allowed_tools=["Read", "Glob", "Grep", "Agent"],
+        allowed_tools=["Read", "Glob", "Grep", "Agent", "mcp__search__search_file"],
+        mcp_servers={"search": _search_mcp_server},
         permission_mode="bypassPermissions",
         max_turns=30,
     )

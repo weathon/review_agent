@@ -1,0 +1,46 @@
+## Summary
+This paper proposes Discrete Adjoint Matching (DAM), a novel method for solving entropy-regularized reward optimization for discrete generative models characterized by Continuous-Time Markov Chains (CTMCs). DAM extends the Adjoint Matching framework to discrete, non-differentiable state spaces by deriving a "discrete adjoint" estimator through a statistical perspective using Dynkin's formula. The method is empirically validated on synthetic tasks and fine-tuning diffusion-based large language models on mathematical reasoning datasets.
+
+## Strengths
+- **Significant theoretical contribution**: The paper successfully bridges an important gap by formally extending the Adjoint Matching framework to discrete CTMC models. The derivation of the discrete adjoint (Theorem 2.2) via Dynkin's formula is elegant and provides a cleaner, more general statistical perspective compared to the original control-theoretic derivation.
+- **Practical algorithm with thoughtful refinements**: The paper moves beyond theory to address real-world computational challenges. The introduction of the importance-weighted discrete adjoint estimator (Proposition 2.4) and its adaptation for masked diffusion models (Proposition 2.5) are crucial innovations that make DAM tractable for large-scale applications like LLM fine-tuning.
+- **Convincing synthetic validation**: The 2D synthetic experiments (Checkerboard, Pinwheel) convincingly demonstrate that DAM converges to the analytically known optimal distribution (Figure 1) and that the proposed importance-weighted estimator has lower bias/variance than the simpler analytic form (Figure 2, right). This provides solid grounding for the theoretical claims.
+- **Competitive empirical performance on complex tasks**: DAM demonstrates competitive or superior performance compared to the state-of-the-art D1 baseline on several mathematical reasoning tasks (GSM8K, MATH500, Countdown, Sudoku) when fine-tuning LLaDA-8B-Instruct (Tables 1 & 2). The improvements on structured tasks like Countdown and Sudoku are notable.
+
+## Weaknesses
+### Major:
+- **Insufficient baseline comparison for core claim**: The paper positions DAM as the discrete counterpart of Adjoint Matching (AM). However, the primary empirical comparison is against another recent method (D1), rather than against a direct discrete adaptation of AM itself or against fundamental continuous-time policy-gradient baselines (e.g., a CTMC-adapted DDPO/DPoK). This omission makes it difficult to assess whether the novel discrete adjoint formulation provides a significant practical advantage over more straightforward adaptations of existing continuous-domain principles. The claim of being the effective discrete variant of AM is not fully evidenced. *This is a structural weakness that undermines the paper's core positioning.*
+- **Under-specified implementation for large-scale experiments**: Algorithm 1 and the description of the importance-weighted estimator (Eq. 13) are presented at a high level. Critical implementation details—such as how the conditional distributions \(p^{\text{base}}_{1|t}(·|y)\) are efficiently computed or approximated for masked LLMs, how the replay buffer is managed, and how the `K` trajectories are sampled—are glossed over (mentioned as details in Appendix A). This raises significant reproducibility concerns for the complex LLM experiments. *This is a methodological gap that limits the paper's utility.*
+
+### Minor:
+- **Limited empirical scope**: The evaluation focuses on structured mathematical reasoning tasks. Demonstrating efficacy on other canonical discrete fine-tuning domains (e.g., code generation, instruction following, or text generation with learned reward models) would strengthen the claim of general applicability. The paper's practical impact is currently confined to a specific, controlled problem class.
+- **Lack of ablation studies on critical components**: The paper introduces several key algorithmic components (importance-weighted estimator, masked structure exploitation, generalized KL matching). However, there is no quantitative ablation study showing the relative contribution of each component to the final performance. The impact of the "improved techniques" in Section 2.2 is asserted but not empirically dissected.
+
+### Trivial:
+- **Figure readability**: In Figure 2, the legend and y-axis labels (e.g., "Col1", "|ã_t - E[ã_t]|") appear garbled, likely due to PDF parsing. This should be corrected for clarity in the final version.
+
+## Nice-to-Haves
+- **Complexity/budget analysis**: Adding a comparison of per-iteration computational cost (e.g., number of model calls, memory) between DAM and baselines like D1 would help practitioners assess trade-offs.
+- **Extended discussion of limitations**: The conclusion briefly mentions applying DAM to non-masked CTMCs as future work. The discussion could be expanded to explicitly address other limitations, such as the assumption of a known and tractable base model \(p^{\text{base}}\), or potential challenges in scaling `K` for the importance-weighted estimator in very high-dimensional settings.
+
+## Removed Points
+*These points are flagged to be removed, treat them with caution.*
+- **Weakness questioning existence of cited models/tools**: Any criticism suggesting that cited models (LLaDA-8B-Instruct, D1, etc.) are "not yet released" or "cannot be independently verified" is removed. The paper cites them; they are assumed to exist.
+- **Weakness about missing related works**: Suggestions to compare against "direct reward-weighted fine-tuning" or "standard discrete fine-tuning benchmarks" are removed because the reviewer cannot confirm these are established, comparable baselines for this specific CTMC fine-tuning problem. The paper adequately covers related work in its section.
+- **Weakness about "memoryless condition" ablation**: The paper explicitly states this condition holds for all base models considered (footnote 1) and provides details in Appendix A.1. Requesting an ablation where it is violated is scope creep; the paper's contribution is for models satisfying this condition.
+- **Weakness about "quantitative analysis of approximation error"**: The paper provides a quantitative analysis in Figure 2 (right), showing bias/variance of the estimator. Requesting a "formal characterization" beyond what is provided is a demand for theoretical analysis not standard for an empirical methods paper.
+- **Weakness about "sensitivity to hyperparameters"**: This is a generic request for hyperparameter sweeps that does not directly undermine the core claims. The paper uses established setups from D1.
+- **Weakness about "visualization of state visitation distribution"**: The synthetic experiments already show convergence to the optimal distribution \(p^{*}_1\) (Figure 1). Requesting additional visualizations is a nice-to-have, not a core flaw.
+- **Weakness about "comparison to broader range of baselines" beyond those cited**: The paper compares against D1 and SVDD, which are directly relevant methods for fine-tuning masked CTMC LLMs on reasoning tasks (as cited in Related Works). Insisting on comparisons to all other mentioned methods (DRaFT, AlignProp, etc.) without justification that they are directly comparable for this specific problem is scope creep.
+- **Weakness about "methodological clarity"**: The derivation is presented clearly from both statistical and control-theoretic perspectives. The paper is sufficiently clear for experts in the field.
+
+## Suggestions
+- Strengthen the empirical section by including a comparison against a plausible discrete adaptation of the original Adjoint Matching method (or a continuous-time policy-gradient baseline) to directly support the claim that DAM is the effective discrete counterpart.
+- Provide more detailed implementation specifics in the main text or a clearly referenced appendix for the key steps in Algorithm 1 (sampling trajectories, computing conditional distributions/importance weights) to improve reproducibility.
+- Consider adding an ablation study (e.g., in the supplementary material) quantifying the performance contribution of the importance-weighted estimator versus the analytic form, and the impact of using masked structures.
+
+**Novelty:** High. The paper provides a principled theoretical extension of adjoint matching to discrete spaces and a new statistical derivation perspective.
+**Technical Soundness:** The theory is rigorous and well-supported. The algorithm design addresses computational intractability thoughtfully.
+**Empirical Support:** Convincing on synthetic tasks, and shows competitive performance on LLM fine-tuning. However, the baseline comparisons are insufficient to fully evidence the core claim.
+**Significance:** Substantial for the field of fine-tuning discrete generative models, providing a new, theoretically grounded tool.
+**Clarity:** The paper is clearly written, though some implementation details are high-level. The dual derivation (statistical and control) is a pedagogical strength.

@@ -13,10 +13,11 @@ from agents import Agent, Runner, function_tool
 import dotenv
 dotenv.load_dotenv()
 import os
-os.environ["OPENAI_DEFAULT_MODEL"] = "qwen3.6-plus"
-SCORER_MODEL = "gpt-5.4"
+os.environ["OPENAI_DEFAULT_MODEL"] = "deepseek/deepseek-v3.2"
+HARSH_MODEL = None#"gpt-5.4"
+SCORER_MODEL = None#"gpt-5.4" 
 MODEL_FIND_HUMAN = None#"gpt-5.4-mini"
-MERGER_MODEL = None#"deepseek/deepseek-v3.2"
+MERGER_MODEL = None#"gpt-5.4"
 from openai import AsyncOpenAI
 from agents import set_default_openai_client, set_tracing_disabled
 
@@ -25,7 +26,7 @@ set_default_openai_client(custom_client)
 set_tracing_disabled(True)
 
 # Suppress SDK's internal error logging — we handle errors in run_agent_with_retry
-logging.getLogger("openai.agents").setLevel(logging.CRITICAL)
+# logging.getLogger("openai.agents").setLevel(logging.CRITICAL) # this should be commented out in production to handle unexpected errors
 
 # ── Leakage detection ────────────────────────────────────────────────
 LEAKAGE_WARNING_PATTERNS = [
@@ -45,7 +46,7 @@ _error_handler.setFormatter(logging.Formatter("%(asctime)s | %(message)s"))
 _error_logger.addHandler(_error_handler)
 
 HUMAN_REVIEW_DIR = os.path.abspath("iclr2025_data")
-CONCURRENCY = 1
+CONCURRENCY = 10
 
 def _detect_leakage(text: str) -> list[str]:
     matches = []
@@ -66,7 +67,9 @@ from rank_bm25 import BM25Okapi
 
 
 # ── Build Index ────────────────────────────────────────────────
+import time
 print(f"Indexing ...")
+start = time.time()
 database = {}
 for path in ALLOWED_PATHS:
     all_files = []
@@ -78,12 +81,14 @@ for path in ALLOWED_PATHS:
                     all_files.append(f.read())
                     all_file_paths.append(os.path.join(root, file))
 
-    tokenized_corpus = [doc.split(" ") for doc in all_files]
-
+    tokenized_corpus = [doc.split(" ") for doc in all_files if doc.strip()]
+    if not tokenized_corpus:
+        print(f"  Skipping {path} (no files found)")
+        continue
     bm25 = BM25Okapi(tokenized_corpus)
     database[path] = {"files": all_file_paths, "bm25": bm25}
     
-print("Indexing complete.")
+print("Indexing complete. Time taken: {:.2f}s".format(time.time() - start))
 async def run_agent_with_retry(agent, prompt: str, max_turns: int = 30) -> str:
     agent_name = agent.name
     print(f"  [{agent_name}] starting ...")
@@ -157,6 +162,10 @@ def glob_files(pattern: str, directory: str = ".") -> str:
 @function_tool
 def grep_files(pattern: str, directory: str = ".", file_glob: str = "*") -> str:
     """Search file contents for a regex pattern. Returns matching lines with file paths and line numbers."""
+    resolved = os.path.abspath(directory)
+    if not any(resolved.startswith(ap) for ap in ALLOWED_PATHS):
+        print(f"  [grep_files] BLOCKED: '{resolved}' is not under any allowed directory.")
+        return f"ERROR: Access denied. Path '{resolved}' is not under any allowed directory."
     import glob as _glob
     import re
     matches = []
@@ -212,7 +221,7 @@ summarizer = Agent(
 _tool_agents = [read_file, summarizer.as_tool(
     tool_name="summarization", tool_description="Summarizing or answering questions about a specific file given **its absolute path** and question.",
 ), search_file, grep_files]
-harsh = Agent(name="Harsh Critic", instructions=load_prompts("harsh_critic.txt"))
+harsh = Agent(name="Harsh Critic", instructions=load_prompts("harsh_critic.txt"), model=HARSH_MODEL)
 neutral_reviewer = Agent(name="Neutral Reviewer", instructions=load_prompts("neutral_reviewer.txt"))
 merger = Agent(name="Merger", instructions=load_prompts("merger.txt"), model=MERGER_MODEL)
 spark = Agent(name="Spark", instructions=load_prompts("spark_finder.txt"))
@@ -282,6 +291,14 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False) -> dict:
             print(f"  [scorer] WARNING: Potential leakage: {', '.join(leakage)}")
             _error_logger.error(f"Potential calibration leakage: {', '.join(leakage)}")
 
+    log_path = Path(__file__).parent / "pipeline.log"
+    with open(log_path, "a") as log_f:
+        log_f.write(f"\n{'='*60}\n")
+        log_f.write(f"Paper: {paper_path}\n")
+        log_f.write(f"Timestamp: {__import__('datetime').datetime.now().isoformat()}\n")
+        log_f.write(f"\n--- Merged Review ---\n{merged_review}\n")
+        log_f.write(f"\n--- Scorer Output ---\n{scorer_output}\n")
+
     return {"merged_review": merged_review, "scorer_output": scorer_output}
 
 
@@ -335,6 +352,18 @@ def parse_score(text: str) -> float | None:
     return float(match.group(1)) if match else None
 
 
+def decision_match(predicted: str | None, gt_binary: str) -> bool | None:
+    if predicted in (None, "", "N/A"):
+        return None
+    return predicted == gt_binary
+
+
+def match_label(match: bool | None) -> str:
+    if match is None:
+        return "N/A"
+    return "YES" if match else "NO"
+
+
 async def process_papers(papers: list[dict], papers_dir: Path, skip_scoring: bool, callback):
     """Run pipeline on a list of papers with CONCURRENCY concurrent tasks."""
     sem = asyncio.Semaphore(CONCURRENCY)
@@ -365,7 +394,7 @@ async def run_calibration(data_dir: str, seed: int = 42):
     available = [r for r in gt_data if (papers_dir / f"{r['paper_id']}.txt").exists()]
     print(f"Loaded {len(available)} papers with text.")
 
-    samples = stratified_sample(available, n_per_bin=10, seed=seed)
+    samples = stratified_sample(available, n_per_bin=4, seed=seed)
 
     # Skip already done
     done = {s["paper_id"] for s in samples if (cal_dir / f"{shorten_title(s.get('title', s['paper_id']))}_review.md").exists()}
@@ -427,27 +456,49 @@ async def run_benchmark(data_dir: str, n_samples: int = 10, seed: int = 42, bala
     reviews_dir = out_dir / "bench_reviews"
     reviews_dir.mkdir(exist_ok=True)
 
-    # Check existing
+    # Check for existing results and ask user whether to continue or overwrite
     finished = set()
     if csv_path.exists() and csv_path.stat().st_size > 0:
-        with open(csv_path) as f:
-            finished = {row["paper_id"] for row in csv.DictReader(f)}
-        print(f"Skipping {len(finished)} already-finished papers.")
+        import pandas as pd
+        existing_df = pd.read_csv(csv_path)
+        existing_count = len(existing_df)
+        print(f"\nFound existing bench_scores.csv with {existing_count} results.")
+        choice = input("  [C]ontinue (skip finished papers) or [O]verwrite? [C/o]: ").strip().lower()
+        if choice in ("o", "overwrite"):
+            print("  Overwriting existing results.\n")
+        else:
+            finished = set(existing_df["paper_id"].astype(str))
+            print(f"  Continuing — will skip {len(finished)} already-finished papers.\n")
     samples = [s for s in samples if s["paper_id"] not in finished]
 
     if not finished:
         with open(csv_path, "w", newline="") as f:
-            csv.writer(f).writerow(["paper_id", "pred_score", "gt_avg_score", "gt_binary", "gt_decision"])
+            csv.writer(f).writerow(["paper_id", "pred_score", "pred_decision", "gt_avg_score", "gt_decision", "gt_binary", "match", "cost", "sdk_savings",
+                                    "gt_score_0", "gt_score_1", "gt_score_2", "gt_score_3", "gt_score_4", "gt_score_5", "gt_score_6"])
 
     results = []
 
     def on_complete(paper_info, result):
         pred_score = parse_score(result["scorer_output"] or "")
-        print(f"  [{paper_info['paper_id']}] predicted={pred_score} gt={paper_info['avg_score']:.1f}")
+        pred_decision = "N/A"
+        match = decision_match(pred_decision, paper_info["gt_binary"])
+        match_str = match_label(match)
+        print(f"  [{paper_info['paper_id']}] predicted={pred_score} gt={paper_info['avg_score']:.1f} match={match_str}")
         results.append({"pred_score": pred_score, "gt_avg_score": paper_info["avg_score"]})
+        gt_scores_padded = paper_info["scores"] + [""] * (7 - len(paper_info["scores"]))
         with open(csv_path, "a", newline="") as f:
-            csv.writer(f).writerow([paper_info["paper_id"], pred_score, paper_info["avg_score"],
-                                    paper_info["gt_binary"], paper_info["decision"]])
+            csv.writer(f).writerow([
+                paper_info["paper_id"],
+                pred_score,
+                pred_decision,
+                f"{paper_info['avg_score']:.2f}",
+                paper_info["decision"],
+                paper_info["gt_binary"],
+                match_str,
+                "0.0000",
+                "0.0000",
+                *gt_scores_padded,
+            ])
         (reviews_dir / f"{paper_info['paper_id']}.md").write_text(result["merged_review"], encoding="utf-8")
 
     if not samples:
