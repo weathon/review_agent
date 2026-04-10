@@ -595,7 +595,6 @@ async def run_merge(
 async def run_scorer(
     client: AsyncOpenAI,
     review_text: str,
-    paper_content: str,
     calibration_context: str = "",
     cal_dir: str = "",
     gt_score: float | None = None,
@@ -613,14 +612,11 @@ async def run_scorer(
     # (avoids CLI character limit on the prompt)
     tmp_dir = Path(tempfile.mkdtemp(prefix="scorer_"))
     review_path = tmp_dir / "review.txt"
-    paper_path = tmp_dir / "paper.txt"
     review_path.write_text(review_text, encoding="utf-8")
-    paper_path.write_text(paper_content, encoding="utf-8")
 
     scorer_agent_template = _load_prompt("scorer_agent.txt")
     prompt = scorer_agent_template.format(
         review_path=review_path,
-        paper_path=paper_path,
         cal_dir_abs=cal_dir_abs, 
     )
 
@@ -650,7 +646,6 @@ async def run_scorer(
 
     # Clean up temp files
     review_path.unlink(missing_ok=True)
-    paper_path.unlink(missing_ok=True)
     tmp_dir.rmdir()
 
 
@@ -706,7 +701,7 @@ async def run_merger(
         skip_related_work=skip_related_work,
     )
     score, cost_score = await run_scorer(
-        client, review_text, paper_content,
+        client, review_text, 
         calibration_context=calibration_context,
         cal_dir=cal_dir,
         gt_score=gt_score
