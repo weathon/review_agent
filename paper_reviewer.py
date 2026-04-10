@@ -43,8 +43,9 @@ MODEL_FILTER = f"{base_model}"
 MODEL_MERGER = f"deepseek/deepseek-v3.2" 
 MODEL_PARSER = "openai/gpt-5.4-nano" 
 MODEL_FIND_HUMAN = f"claude:claude-haiku-4-5"
-MODEL_SCORER = f"claude:claude-sonnet-4-6" 
+MODEL_SCORER = f"claude:claude-haiku-4-5" 
 human_review_dir = "/home/wg25r/review_agent/iclr2025_data"
+MODEL_QA = "minimax/minimax-m2.7"
 
 MAX_RETRIES = 10
 RETRY_DELAY = 10 
@@ -364,62 +365,201 @@ _search_mcp_server = create_sdk_mcp_server(
 )
 
 
-async def _run_reviewer_claude_sdk(
-    name: str,
-    system_prompt: str,
-    paper_path: str,
-    model_id: str,
-    venue: str = "",
-) -> tuple[str, float]:
-    """Run a reviewer via Claude Agent SDK. The agent reads the paper file itself.
-    Returns (review, cost=0.0) — SDK does not expose cost."""
+# ── Sandboxed file tools (path-restricted) ───────────────────────────
+# These replace built-in Read/Grep/Glob for Claude SDK agents to prevent
+# agents from reading files outside their allowed directories.
 
-    paper_abs = str(Path(paper_path).resolve())
-    venue_line = (
-        f"This paper was submitted to **{venue}**. "
-        f"You MUST evaluate it against {venue}'s specific standards, acceptance bar, "
-        f"and expectations. Consider what {venue} reviewers typically look for.\n\n"
-    ) if venue else ""
+def _make_sandboxed_tools(allowed_paths: list[str]):
+    """Create path-restricted read_file, grep_files, glob_files MCP tools.
 
-    prompt = (
-        f"{system_prompt}\n\n"
-        f"---\n\n"
-        f"{venue_line}"
-        f"Review the following paper thoroughly.\n\n"
-        f"NOTE: This paper was extracted from PDF by an automated parser. "
-        f"There may be formatting artifacts such as broken equations, garbled "
-        f"tables, misplaced figure references, or OCR errors. These are parser "
-        f"issues, NOT problems with the paper itself. Do NOT treat formatting "
-        f"artifacts as weaknesses.\n\n"
-        f"The paper is located at: {paper_abs}\n"
-        f"Use the Read tool to read the paper file, then produce your review."
+    Each tool checks that the resolved path starts with one of the allowed
+    directories before performing any I/O.
+    """
+    import glob as _glob_mod
+
+    resolved_allowed = [os.path.abspath(p) for p in allowed_paths]
+
+    def _check_path(path: str) -> str | None:
+        """Return resolved path if allowed, else return error string."""
+        resolved = os.path.abspath(path)
+        if any(resolved.startswith(ap) for ap in resolved_allowed):
+            return None  # allowed
+        return f"ERROR: Access denied. Path '{resolved}' is not under any allowed directory: {resolved_allowed}"
+
+    @tool(
+        "read_file",
+        "Read a file. Returns the full content with line numbers. "
+        "Restricted to allowed directories only.",
+        {"abs_path": str, "start_line": int, "end_line": int},
     )
+    async def _read_file(args: dict) -> dict:
+        abs_path = args["abs_path"]
+        start_line = args.get("start_line", 1) or 1
+        end_line = args.get("end_line", 0) or 0
+        err = _check_path(abs_path)
+        if err:
+            return {"content": [{"type": "text", "text": err}], "is_error": True}
+        try:
+            with open(abs_path, "r", errors="replace") as f:
+                lines = f.readlines()
+            selected = lines[max(0, start_line - 1):end_line if end_line > 0 else len(lines)]
+            text = "".join(f"{start_line + i}: {line}" for i, line in enumerate(selected))
+            return {"content": [{"type": "text", "text": text}]}
+        except FileNotFoundError:
+            return {"content": [{"type": "text", "text": f"ERROR: File not found: {abs_path}"}], "is_error": True}
 
-    print(f"  [{name}] starting Claude Agent SDK ({model_id}) ...")
-
-    result_text = ""
-    options = ClaudeAgentOptions(
-        model=model_id,
-        cwd="./tmp",
-        allowed_tools=["Read", "Glob", "Grep"],
-        disallowed_tools=["Bash"],
-        permission_mode="bypassPermissions",
-        max_turns=30,
+    @tool(
+        "grep_files",
+        "Search file contents for a regex pattern in a directory. "
+        "Returns matching lines with file paths and line numbers. "
+        "Restricted to allowed directories only.",
+        {"pattern": str, "directory": str, "file_glob": str},
     )
-    cost = 0
-    async with ClaudeSDKClient(options=options) as sdk_client:
-        await sdk_client.query(prompt)
-        async for message in sdk_client.receive_response():
-            if isinstance(message, AssistantMessage):
-                for block in message.content:
-                    if isinstance(block, TextBlock):
-                        result_text += block.text
-            if isinstance(message, ResultMessage):
-                cost += message.total_cost_usd
+    async def _grep_files(args: dict) -> dict:
+        pattern = args["pattern"]
+        directory = args.get("directory", ".")
+        file_glob = args.get("file_glob", "**/*")
+        err = _check_path(directory)
+        if err:
+            return {"content": [{"type": "text", "text": err}], "is_error": True}
+        matches = []
+        files = sorted(_glob_mod.glob(file_glob, root_dir=directory, recursive=True))
+        for fname in files[:500]:
+            fpath = os.path.join(directory, fname)
+            if not os.path.isfile(fpath):
+                continue
+            try:
+                with open(fpath, "r", errors="replace") as fh:
+                    for i, line in enumerate(fh, 1):
+                        if re.search(pattern, line):
+                            matches.append(f"{fpath}:{i}: {line.rstrip()}")
+            except Exception:
+                continue
+            if len(matches) >= 200:
+                break
+        text = "\n".join(matches) if matches else "No matches found."
+        return {"content": [{"type": "text", "text": text}]}
 
-    print(f"  [{name}] done — {model_id} (Claude Agent SDK) — saved ${cost:.4f}")
-    _add_sdk_savings(cost)
-    return result_text, 0.0
+    @tool(
+        "glob_files",
+        "Find files matching a glob pattern under a directory. "
+        "Returns one path per line. Restricted to allowed directories only.",
+        {"pattern": str, "directory": str},
+    )
+    async def _glob_files(args: dict) -> dict:
+        pattern = args["pattern"]
+        directory = args.get("directory", ".")
+        err = _check_path(directory)
+        if err:
+            return {"content": [{"type": "text", "text": err}], "is_error": True}
+        matches = sorted(_glob_mod.glob(pattern, root_dir=directory, recursive=True))
+        text = "\n".join(os.path.join(directory, m) for m in matches) if matches else "No files matched."
+        return {"content": [{"type": "text", "text": text}]}
+
+
+
+    @tool(
+        "file_qa",
+        "Answer questions about a file's content. "
+        "Restricted to allowed directories only.",
+        {"abs_path": str, "question": str},
+    )
+    async def _file_qa(args: dict) -> dict:
+        abs_path = args["abs_path"]
+        question = args["question"]
+        err = _check_path(abs_path)
+        if err:
+            return {"content": [{"type": "text", "text": err}], "is_error": True}
+        try:
+            print(f"  [file_qa] reading file for QA: {abs_path} ... and answering question: {question}")
+            with open(abs_path, "r", errors="replace") as f:
+                file = f.read()
+            if len(file) > 200_000:
+                file = file[:200_000] + "\n\n[... truncated]"
+            answer, _cost = await _call_openai(
+                _get_client(OPENROUTER_API_KEY),
+                "file_qa",
+                "You are a helpful assistant that answers questions about the content of a file.",
+                f"Here is the content of the file:\n\n{file}\n\nQuestion: {question}",
+                MODEL_QA,
+            )
+
+            return {"content": [{"type": "text", "text": answer}]}
+            
+        except FileNotFoundError:
+            return {"content": [{"type": "text", "text": f"ERROR: File not found: {abs_path}"}], "is_error": True}
+
+    return [_read_file, _grep_files, _glob_files, _file_qa]
+
+
+def _make_sandboxed_mcp_server(name: str, allowed_paths: list[str]):
+    """Create an MCP server with path-restricted file tools."""
+    tools = _make_sandboxed_tools(allowed_paths)
+    return create_sdk_mcp_server(name=name, version="1.0.0", tools=tools)
+
+
+# async def _run_reviewer_claude_sdk(
+#     name: str,
+#     system_prompt: str,
+#     paper_path: str,
+#     model_id: str,
+#     venue: str = "",
+# ) -> tuple[str, float]:
+#     """Run a reviewer via Claude Agent SDK. The agent reads the paper file itself.
+#     Returns (review, cost=0.0) — SDK does not expose cost."""
+
+#     paper_abs = str(Path(paper_path).resolve())
+#     paper_dir = str(Path(paper_abs).parent)
+#     venue_line = (
+#         f"This paper was submitted to **{venue}**. "
+#         f"You MUST evaluate it against {venue}'s specific standards, acceptance bar, "
+#         f"and expectations. Consider what {venue} reviewers typically look for.\n\n"
+#     ) if venue else ""
+
+#     prompt = (
+#         f"{system_prompt}\n\n"
+#         f"---\n\n"
+#         f"{venue_line}"
+#         f"Review the following paper thoroughly.\n\n"
+#         f"NOTE: This paper was extracted from PDF by an automated parser. "
+#         f"There may be formatting artifacts such as broken equations, garbled "
+#         f"tables, misplaced figure references, or OCR errors. These are parser "
+#         f"issues, NOT problems with the paper itself. Do NOT treat formatting "
+#         f"artifacts as weaknesses.\n\n"
+#         f"The paper is located at: {paper_abs}\n"
+#         f"Use the read_file tool to read the paper file, then produce your review."
+#     )
+
+#     print(f"  [{name}] starting Claude Agent SDK ({model_id}) ...")
+
+#     reviewer_mcp = _make_sandboxed_mcp_server("reviewer_fs", [paper_dir])
+#     result_text = ""
+#     options = ClaudeAgentOptions(
+#         model=model_id,
+#         cwd="./tmp",
+#         allowed_tools=[
+#             "mcp__reviewer_fs__read_file",
+#             "mcp__reviewer_fs__grep_files",
+#             "mcp__reviewer_fs__glob_files",
+#         ],
+#         disallowed_tools=["Read", "Glob", "Grep", "Bash", "Edit", "Write", "Agent"],
+#         mcp_servers={"reviewer_fs": reviewer_mcp},
+#         max_turns=30,
+#     )
+#     cost = 0
+#     async with ClaudeSDKClient(options=options) as sdk_client:
+#         await sdk_client.query(prompt)
+#         async for message in sdk_client.receive_response():
+#             if isinstance(message, AssistantMessage):
+#                 for block in message.content:
+#                     if isinstance(block, TextBlock):
+#                         result_text += block.text
+#             if isinstance(message, ResultMessage):
+#                 cost += message.total_cost_usd
+
+#     print(f"  [{name}] done — {model_id} (Claude Agent SDK) — saved ${cost:.4f}")
+#     _add_sdk_savings(cost)
+#     return result_text, 0.0
 
 
 async def run_reviewer(
@@ -434,10 +574,11 @@ async def run_reviewer(
     """Run a reviewer. Dispatches to Claude Agent SDK if model starts with 'claude:',
     otherwise uses OpenRouter chat completions. Returns (review, cost)."""
     if model.startswith("claude:"):
-        model_id = model[len("claude:"):]
-        return await _run_reviewer_claude_sdk(
-            name, system_prompt, paper_path, model_id, venue=venue,
-        )
+        raise NotImplementedError("Claude Agent SDK path is currently disabled for testing. Re-enable to use it.")
+        # model_id = model[len("claude:"):]
+        # return await _run_reviewer_claude_sdk(
+        #     name, system_prompt, paper_path, model_id, venue=venue,
+        # )
 
     print(f"  [{name}] started ({model}) ...")
     venue_line = (
@@ -618,12 +759,22 @@ async def run_scorer(
 
     print(f"  [scorer-agent] starting RAG scorer (claude-haiku-4-5, cal={cal_dir_abs}) ...")
 
+    scorer_mcp = _make_sandboxed_mcp_server("scorer_fs", [cal_dir_abs]) if cal_dir_abs else None
+    scorer_mcp_tools = [
+        "mcp__scorer_fs__read_file",
+        "mcp__scorer_fs__grep_files",
+        "mcp__scorer_fs__glob_files",
+        "mcp__scorer_fs__file_qa",
+    ] if scorer_mcp else []
+    scorer_mcp_servers = {"scorer_fs": scorer_mcp} if scorer_mcp else {}
+
     result_text = ""
     options = ClaudeAgentOptions(
         model=MODEL_SCORER.split(":", 1)[1],
         cwd=cal_dir_abs or None,
-        allowed_tools=["Grep", "Read", "Glob", "Agent"],
-        permission_mode="bypassPermissions",
+        allowed_tools=scorer_mcp_tools,
+        disallowed_tools=["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
+        mcp_servers=scorer_mcp_servers,
         max_turns=30,
     )
     total_cost = 0
@@ -743,18 +894,29 @@ def _resolve_calibration_inputs(
 
 
 async def run_human_finder(pp, human_review_dir):
+    paper_abs = str(Path(pp).resolve())
+    human_review_abs = str(Path(human_review_dir).resolve())
     query = (
         f"{HUMAN_FINDER_PROMPT}\n\n"
-        f"Paper file path: {pp}\n"
-        f"Human reviews directory: {human_review_dir}\n"
+        f"Paper file path: {paper_abs}\n"
+        f"Human reviews directory: {human_review_abs}\n"
     )
     result_text = ""
+    # Allow reading the paper file and the human review directory only
+    paper_dir = str(Path(paper_abs).parent)
+    hf_mcp = _make_sandboxed_mcp_server("hf_fs", [human_review_abs, paper_dir])
     options = ClaudeAgentOptions(
         model=MODEL_FIND_HUMAN.split(":", 1)[1],
-        cwd=str(Path(human_review_dir).resolve()),
-        allowed_tools=["Read", "Glob", "Grep", "Agent", "mcp__search__search_file"],
-        mcp_servers={"search": _search_mcp_server},
-        permission_mode="bypassPermissions",
+        cwd=human_review_abs,
+        allowed_tools=[
+            "mcp__hf_fs__read_file",
+            "mcp__hf_fs__grep_files",
+            "mcp__hf_fs__glob_files",
+            "mcp__hf_fs__file_qa",
+            "mcp__search__search_file",
+        ],
+        disallowed_tools=["Read", "Glob", "Grep", "Bash", "Edit", "Write", "Agent"],
+        mcp_servers={"search": _search_mcp_server, "hf_fs": hf_mcp},
         max_turns=30,
     )
     print(f"  [Human Finder] starting Claude Agent SDK ({MODEL_FIND_HUMAN}) ...")
