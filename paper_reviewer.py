@@ -33,7 +33,6 @@ OPENROUTER_API_KEY = os.environ["OPENROUTER_API_KEY"]
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 ZAI_BASE_URL = "https://api.z.ai/api/coding/paas/v4/"
 
-# base_model = "qwen/qwen3.6-plus:free" #用限时免费模型白嫖
 base_model = "deepseek/deepseek-v3.2" 
 MODEL_HARSH = f"deepseek/deepseek-v3.2"
 MODEL_NEUTRAL = f"{base_model}"
@@ -611,14 +610,11 @@ async def run_scorer(
     # Write review and paper to temp files so the agent can Read them
     # (avoids CLI character limit on the prompt)
     tmp_dir = Path(tempfile.mkdtemp(prefix="scorer_"))
-    review_path = tmp_dir / "review.txt"
-    review_path.write_text(review_text, encoding="utf-8")
 
     scorer_agent_template = _load_prompt("scorer_agent.txt")
     prompt = scorer_agent_template.format(
-        review_path=review_path,
         cal_dir_abs=cal_dir_abs, 
-    )
+    ) + "\n" + review_text
 
     print(f"  [scorer-agent] starting RAG scorer (claude-haiku-4-5, cal={cal_dir_abs}) ...")
 
@@ -645,7 +641,6 @@ async def run_scorer(
     _add_sdk_savings(total_cost)
 
     # Clean up temp files
-    review_path.unlink(missing_ok=True)
     tmp_dir.rmdir()
 
 

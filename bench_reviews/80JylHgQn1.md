@@ -1,0 +1,41 @@
+## Summary
+This paper proposes a framework for generating semantically rich and expressive video avatars by simulating dual-process cognition. The core innovations are: 1) an MLLM-based agentic reasoning module ("System 2") that produces high-level textual guidance from audio, image, and optional text inputs, and 2) a specialized Multimodal Diffusion Transformer (MMDiT) architecture with a novel Pseudo Last Frame (PLF) strategy ("System 1") to fuse multimodal signals and mitigate interference. The method demonstrates strong quantitative performance, high user preference, and promising generalization to multi-person and non-human subjects.
+
+## Strengths
+- **Novel Cognitive Perspective and Technical Integration:** Framing avatar generation through a dual-process (System 1/System 2) analogy provides a fresh, motivating lens. The technical realization—integrating a multi-step MLLM planner with a redesigned MMDiT featuring the PLF strategy—is a comprehensive and well-executed contribution tailored to the avatar domain.
+- **Extensive and Multi-Faceted Evaluation:** The paper validates its method rigorously with standard objective metrics (FID, FVD, Sync-C), novel motion dynamics metrics (HKC, HKV), detailed human subjective studies (pairwise GSB, artifact analysis), and supplementary MLLM-based semantic evaluation on challenging custom datasets. The strong and consistent user preference over academic and proprietary baselines is particularly convincing.
+- **Demonstrated Generalization and Robustness:** The framework is shown to generalize effectively to complex, under-explored scenarios such as multi-person interactions and non-human characters, indicating its robustness and broader applicability beyond standard talking-head tasks.
+
+## Weaknesses
+### Major:
+- **Insufficient Causal Evidence for the Core "Reasoning" Claim:** While ablation studies show that removing the MLLM module reduces motion dynamics (HKV) and increases perceived motion unnaturalness (MU), the paper does not conclusively isolate the benefit of *structured reasoning* from the effect of simply adding *any* high-level textual conditioning signal. A controlled comparison against a baseline using the audio transcript or a simple caption as text conditioning (bypassing the Analyzer/Planner) is missing, leaving the necessity and specific contribution of the "deliberative" agentic pipeline ambiguous. (Sec. 4.2, Tables 1 & 2a)
+- **Evaluation Gaps for Semantic Coherence:** The claimed generation of "semantically rich and expressive" motions is supported primarily by proxy metrics (e.g., HKV) and overall user preference. While the MLLM-based evaluation in Appendix D.2 is a valuable step, it is not a standardized or validated benchmark and is used only supplementally. The paper lacks a targeted, quantitative protocol to directly measure alignment between generated motion and the high-level semantics of the input context (e.g., emotion, intent, narrative), which is central to its contribution. (Sec. 4)
+- **Overstated Novelty Claims:** The assertion of being "the first to frame the video avatar problem through the cognitive science lens" (Sec. 1, Contributions) is overstated. Prior work has extensively used LLMs/MLLMs for planning and reasoning in video generation and agent simulation (e.g., MORA, StoryAgent, Anim-Director, cited in Sec. 2.3). The paper's primary novelty lies in the specific application to avatars and the integrated technical design, not in the foundational idea of using LLMs for cognitive simulation.
+
+### Minor:
+- **Incremental Nature of Some Technical Components:** The use of MLLMs for high-level guidance and the MMDiT architecture are built upon rapidly evolving existing literature. The PLF strategy is an elegant engineering solution but is presented more as a clever training trick than a principled methodological advancement; its mechanism (RoPE shift) lacks deep theoretical justification or comparison to a broader set of identity-preservation techniques. (Sec. 3.3)
+- **Reproducibility and Benchmarking Concerns for MLLM Evaluation:** The MLLM-based evaluation relies on a proprietary model (Gemini-2.5-Pro) and specific, verbose prompts (provided in the appendix). This makes full independent replication and future benchmarking challenging for the community. (Appendix D.2)
+- **Practical Latency Overhead:** The agentic reasoning module introduces a significant, fixed latency (~20-30 seconds) which, while argued as a justifiable trade-off for quality, impacts real-time applicability and should be more thoroughly discussed in the context of potential use cases. (Appendix F)
+
+### Trivial:
+- The paper is comprehensive and well-structured, with no trivial formatting or presentation issues.
+
+## Nice-to-Haves
+- A more systematic ablation of the PLF mechanism, analyzing the Pareto frontier of identity preservation vs. motion dynamics across different RoPE shift values.
+- A failure case analysis for the agentic reasoning module, illustrating when and why the MLLM planner generates incoherent schedules and how this propagates to the final video.
+- A computational breakdown of inference latency (MLLM call vs. diffusion sampling) to better contextualize the overhead.
+
+## Removed Points
+*These points are flagged to be removed, treat them with caution.*
+- **Strength (Removed):** "The paper is well-written" – This is a generic strength that applies to many papers.
+- **Weakness (Removed):** "The core claim of cognitive simulation is not substantiated" – This criticism is too absolute. The paper provides ablation evidence (reduced HKV, improved MU in user studies) linking the MLLM module to improved motion quality, even if the causal chain could be more directly proven. It is a limitation, not a complete invalidation.
+- **Weakness (Removed):** "The Pseudo Last Frame strategy is inadequately justified and compared" – The paper includes ablations against a reference-attention baseline (Table 1, Table 2b) and visual analysis (Figs. 8, 9). Demanding comparison to every other identity-preservation technique is scope creep for this paper's contribution.
+- **Weakness (Removed):** Criticisms about the MLLM models (e.g., Seed-1.5-VL) not being released or verifiable – The paper cites these models, so they are assumed to exist per the hard rules.
+- **Weakness (Removed):** Criticisms about missing implementation details (exact prompts, hyperparameters) – These are provided in the appendix, fulfilling standard reproducibility expectations.
+
+## Suggestions
+- **Strengthen the Causal Argument for Reasoning:** Conduct a key ablation comparing the full agentic pipeline against a baseline that conditions the MMDiT on a simple text signal derived directly from the input (e.g., the audio transcript or a CLIP caption of the reference image). This would help isolate the added value of the MLLM's structured "reasoning" over generic text conditioning.
+- **Propose a Standardized Metric for Semantic Alignment:** Leverage the MLLM-based evaluation protocol introduced in the appendix to define and report a quantitative "Semantic Coherence Score" on the main test sets. This would directly measure the paper's core contribution and set a valuable standard for future work.
+- **Temper the Novelty Claims:** Revise the language in the introduction and contributions to more accurately reflect that the paper applies and integrates existing concepts (LLM-based planning, multimodal DiTs) in a novel way for the avatar domain, rather than claiming to be the absolute first to employ a cognitive lens.
+
+**Overall Assessment:** This is a strong paper with a compelling narrative, solid technical innovations, and extensive empirical support. It makes a meaningful advance in pushing avatar generation toward higher-level semantic coherence. The weaknesses identified are primarily related to the strength of evidence for its central thesis and some overclaims, not fundamental flaws in the methodology or results. With revisions to provide more direct evidence for the role of reasoning and to temper novelty statements, this would be an excellent contribution.

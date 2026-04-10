@@ -1,0 +1,49 @@
+## Summary
+This paper introduces TiEBe, a benchmark designed to evaluate Large Language Models' factual recall of notable global and regional events across time, geography, and language. It comprises over 23,000 question-answer pairs, automatically generated from Wikipedia retrospective pages and their cited external sources, spanning 10 years, 23 regions, and 13 languages. The authors evaluate nine LLMs, finding significant regional performance disparities, strong correlations between model accuracy and countries' socioeconomic indicators (e.g., GDP, HDI), and notable degradation for low-resource languages.
+
+## Strengths
+- **Comprehensive Multi-Dimensional Evaluation:** The benchmark systematically evaluates LLMs along three critical and often isolated axes: temporal (10-year span), geographic (23 regions), and linguistic (13 languages). The inclusion of both English and native-language prompts for non-English regions is a particularly strong design choice that helps disentangle multilingual comprehension from factual recall.
+- **Evidence-Based Quantification of Socioeconomic Bias:** The paper presents a robust, data-driven finding: a strong Spearman correlation (~0.73-0.77) between average model performance (on pre-2023 events) and national development indicators like GDP and HDI. This concretely quantifies a known concern about LLM bias and provides a measurable target for improving global equity in AI.
+- **Scalable and Updatable Benchmark Construction:** By leveraging Wikipedia's structured retrospective pages—which are naturally updated—the authors create a benchmark that can be continuously refreshed with new events. This addresses a genuine need for evolving evaluation tools in continual learning research.
+
+## Weaknesses
+
+### Major:
+- **Unvalidated Synthetic Data Quality Threatens Benchmark Integrity:** All 23,446 QA pairs are generated automatically by DeepSeek-V3 without systematic human validation of their factual correctness or faithfulness to the source documents (Section 3.2, Appendix B.1.1). The entire evaluation hinges on the quality of this synthetic data. While a 200-sample human check was performed for the judge, no equivalent validation is reported for the QA pairs themselves. If the generated questions or answers contain systematic errors, the benchmark's scores and all derived conclusions are unreliable.
+- **Inadequate Validation and Potential Bias in the Evaluation Metric:** The paper relies on a single LLM-as-judge (DeepSeek-V3) to score all model responses. While a 200-sample validation shows 88.5% agreement with a human annotator, the judge is noted to be systematically stricter (Section 3.4, Table 2). This uncalibrated strictness may penalize verbose or nuanced answers. More critically, the judge's performance and potential bias across different languages, regions, and question types are not analyzed. The evaluation protocol for non-English answers is particularly problematic: the judge receives the English "expected answer" but must evaluate a candidate answer in a different language, creating a severe semantic alignment issue.
+- **Failure to Quantify or Mitigate Data Contamination:** The benchmark is constructed from Wikipedia pages and their cited external news sources, which are highly likely to be part of the common pretraining corpora for the evaluated LLMs. The authors acknowledge this risk in limitations (Section 6) but do not measure its extent or attempt to control for it. Consequently, high performance may indicate memorization of training data rather than general factual recall, undermining the benchmark's core purpose. A simple analysis (e.g., comparing performance on events with vs. without easily retrievable source documents, or a dedicated "post-cutoff" clean test) is missing.
+
+### Minor:
+- **Confounded Analysis of Geographic Disparities:** The finding that model performance correlates with GDP/HDI is compelling, but the analysis does not control for a major confounding variable: the benchmark's own inherent geographic bias. Figure 6 (Appendix C.1) shows that Wikipedia retrospective pages have orders-of-magnitude more events for regions like the US and UK. The performance gap could partly reflect this uneven benchmark coverage rather than pure model bias. A partial correlation analysis controlling for event count per region would strengthen the causal claim.
+- **Overly Simplified Temporal and Correlation Analysis:** The temporal analysis bins years into wide intervals (e.g., 2023-2025), masking nuanced trends, especially around model cutoff dates. The socioeconomic analysis uses country-level indicator data from 2015 (Appendix D) for events spanning 2015-2025, which may not accurately reflect the variable data distribution in LLM training corpora over that decade. Time-aligned indicators would be more rigorous.
+- **Superficial Error Analysis:** The paper reports refusal rates and accuracy drops but does not diagnose the root causes. For instance, the high refusal rate for Sabiá-3 and the performance drop for Qwen2-72B in non-English languages are noted but not investigated. A qualitative categorization of error types (hallucination, incompleteness, refusal) per region/language would provide much-needed diagnostic insight.
+
+### Trivial:
+- The prompt for QA generation instructs avoiding questions about volatile information, but there is no verification this instruction was consistently followed. The distribution of question types is presented but not linked to model performance.
+
+## Nice-to-Haves
+- A controlled comparison of region-specialized models (e.g., Sabiá-3) versus generalist models on their target region's events to explicitly test if specialization mitigates disparity.
+- An ablation study using a simple Retrieval-Augmented Generation (RAG) baseline with the provided source documents to establish a performance upper bound and contextualize the difficulty of the questions.
+- Fine-grained, year-by-year performance plots to better visualize knowledge decay around model cutoff dates.
+
+## Removed Points
+*These points are flagged to be removed, treat them with caution.*
+- **Strength: "The benchmark is ambitious in its multi-dimensional scope."** Removed as a generic strength that could apply to many papers.
+- **Weakness: "The LLM-as-judge evaluation is uncalibrated and may introduce systematic bias."** This point was moved to the main Weaknesses section as it is a valid, substantive criticism, but the original phrasing from the harsh reviewer contained an overstatement ("undermines the reliability") that has been tempered.
+- **Weakness: "Structural: The benchmark fundamentally measures memorization..."** The core of this criticism (data contamination) is kept as a major weakness. However, the absolute claim that this "invalidates the paper's core claims" is an overinterpretation and is softened. The benchmark still measures *recall*, even if contaminated; the issue is whether it measures *generalization*.
+- **Weakness: Requests for "missing related works" or criticisms about "unreleased models."** Removed per hard rules. All cited models (e.g., DeepSeek-V3, Sabiá-3) are treated as existing and available.
+- **Weakness: Nitpicks about undisclosed hyperparameters or large training logs.** Removed per hard rules on reproducibility.
+- **Weakness: "The choice of GDP/HDI data from 2015... is problematic."** This point is partially addressed in the paper's methodology (using 2015 as a baseline) and is considered a minor, not major, weakness. The original criticism from the spark finder is weakened as it demands a level of precision not standard for this type of correlational analysis.
+
+## Suggestions
+- **Conduct a human validation study** on a statistically significant, stratified sample (e.g., 500-1000) of the generated QA pairs to report precision/recall and ensure factual correctness. This is essential for establishing benchmark credibility.
+- **Re-run the non-English evaluations with a proper multilingual judge.** The judge should compare the native-language candidate answer to a verified native-language reference translation, not an English "expected answer."
+- **Add a critical analysis section** quantifying the potential contamination issue. For example, compare model performance on events from the most recent time bin (post-all-model-cutoffs) versus earlier bins, or report the proportion of source URLs that appear in common crawl snapshots.
+- **Strengthen the geographic disparity analysis** by reporting partial correlations between model performance and GDP/HDI *after controlling for* the number of Wikipedia events or retrieved sources per country (data already in Appendix C.1).
+
+**Evaluation Axes:**
+- **Novelty:** High. The synthesis of temporal, geographic, and linguistic evaluation into a single, updatable benchmark is a novel and valuable contribution.
+- **Technical Soundness:** Medium. The core pipeline is clearly described and scalable. However, the lack of validation for the synthetic QA data and the unexamined biases in the LLM-as-judge protocol are significant technical flaws that undermine the reliability of the results.
+- **Empirical Support:** Medium-Low. The experiments are extensive in scale but built on an unvalidated foundation. The correlations are interesting but potentially confounded. The empirical claims are not fully supported by the presented evidence due to the methodological gaps.
+- **Significance:** High. The work addresses timely and important issues of LLM fairness, global representation, and continual learning. The demonstrated socioeconomic correlation is a significant finding that merits attention.
+- **Clarity:** High. The paper is well-structured, figures are informative, and the methodology is easy to follow.
