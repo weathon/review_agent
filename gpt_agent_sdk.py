@@ -84,7 +84,6 @@ for path in ALLOWED_PATHS:
     database[path] = {"files": all_file_paths, "bm25": bm25}
     
 print("Indexing complete.")
-5/0
 async def run_agent_with_retry(agent, prompt: str, max_turns: int = 30) -> str:
     agent_name = agent.name
     print(f"  [{agent_name}] starting ...")
@@ -243,7 +242,11 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False) -> dict:
 
     review_prompt = REVIEW_PROMPT.format(paper_path=paper_path_abs, paper_content=paper_content)
     
-    find_human_prompt = f"Paper file path: {paper_path_abs}\nHuman reviews directory: {HUMAN_REVIEW_DIR}\n"
+    find_human_prompt = (
+        f"Paper file path: {paper_path_abs}\n"
+        f"Human reviews directory: {HUMAN_REVIEW_DIR}\n\n"
+        f"--- PAPER CONTENT START ---\n{paper_content}\n--- PAPER CONTENT END ---\n"
+    )
 
     agents_and_prompts = [
         (harsh, review_prompt), (neutral_reviewer, review_prompt),
