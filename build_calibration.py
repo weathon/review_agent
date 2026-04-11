@@ -33,16 +33,16 @@ from run_iclr_bench import load_ground_truth, DEFAULT_BENCH_DIR
 
 BORDERLINE_BINS = {4, 5, 6}  # bins where accept/reject is hardest to distinguish
 GARBAGE_BINS = {0, 1, 2}
-CONCURRENCY = 3
+CONCURRENCY = 10
 
 
 def get_count(k):
     if k in GARBAGE_BINS:
-        return 3  # just a few in the garbage bins to set standard
+        return 5  # just a few in the garbage bins to set standard
     elif k in BORDERLINE_BINS:
-        return 3  # more from borderline bins
+        return 5  # more from borderline bins
     else: 
-        return 3 # a moderate number from the clear bins
+        return 5 # a moderate number from the clear bins
 
 
 

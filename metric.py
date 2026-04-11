@@ -151,11 +151,21 @@ def analyze_and_plot(path):
     dec_match = ((pred_dec == gt_dec) & valid_dec_mask).sum()
 
     match_any = 0
+    within_1std = 0
     for _, row in df.iterrows():
         r = round_to_scale(row["pred_score"])
         human = [row[c] for c in gt_score_cols if pd.notna(row[c])]
         if r in [int(s) for s in human]:
             match_any += 1
+        if len(human) >= 2:
+            h_mean = np.mean(human)
+            h_std = np.std(human, ddof=1)
+            if abs(row["pred_score"] - h_mean) <= h_std:
+                within_1std += 1
+        elif len(human) == 1:
+            # With only 1 reviewer, no std; count as match if exact
+            if round_to_scale(row["pred_score"]) == int(human[0]):
+                within_1std += 1
 
     border_mask = (gt_avg >= 4) & (gt_avg <= 6)
     n_border = border_mask.sum()
@@ -197,6 +207,7 @@ def analyze_and_plot(path):
         print(f"  Decision accuracy:     {dec_match}/{valid_decisions} = {dec_match/valid_decisions:.1%}")
     else:
         print("  Decision accuracy:     N/A (decision labels disabled)")
+    print(f"  Within 1 human std:    {within_1std}/{len(df)} = {within_1std/len(df):.1%}")
     print(f"  Human match (rounded): {match_any}/{len(df)} = {match_any/len(df):.1%}")
 
     # AUROC: use predicted score to discriminate Accept vs Reject
@@ -292,7 +303,7 @@ def analyze_and_plot(path):
     ax.set_title("Raw Scores", fontsize=13)
     ax.set_xlim(mn, mx); ax.set_ylim(mn, mx); ax.set_aspect("equal")
     ax.grid(True, alpha=0.2)
-    ax.text(0.05, 0.95, f"Spearman: {sp_raw:.3f}\nPearson: {pe_raw:.3f}\nMAE: {mae_raw:.3f}\nBias: {bias_raw:+.3f}\nRounded human match: {match_any}/{len(df)} ({match_any/len(df):.0%})\nn = {len(df)}",
+    ax.text(0.05, 0.95, f"Spearman: {sp_raw:.3f}\nPearson: {pe_raw:.3f}\nMAE: {mae_raw:.3f}\nBias: {bias_raw:+.3f}\nWithin 1 human std: {within_1std}/{len(df)} ({within_1std/len(df):.0%})\nn = {len(df)}",
             transform=ax.transAxes, fontsize=10, va="top",
             bbox=dict(boxstyle="round,pad=0.4", facecolor="wheat", alpha=0.8))
     ax.legend(handles=legend_dots, fontsize=9, loc="lower right")

@@ -19,7 +19,7 @@ from pathlib import Path
 # Tee stdout+stderr to a log file so all intermediate output is saved
 _log_path = Path(__file__).parent / "bench_run.log"
 _log_file = open(_log_path, "w")
-CONCURRENCY = 1
+CONCURRENCY = 3
 
 class _Tee:
     """Write to both the original stream and a log file."""

@@ -4,217 +4,214 @@ INDIVIDUAL REVIEWS
 ========================================================================
 
 ────────────────────────────────────────
-HARSH CRITIC (qwen/qwen3.5-plus-02-15 via OpenRouter)
+HARSH CRITIC (deepseek/deepseek-v3.2 via OpenRouter)
 ────────────────────────────────────────
-## Section-by-Section Critical Review
+## Critical Issues
+None. The paper’s central claims—that pixel-level reconstruction metrics are inadequate for assessing identity privacy in frequency‑domain PPFR, and that identity information can be extracted via a simple distillation pipeline even when pixel recovery fails—are well supported by the evidence presented. There are no structural flaws in the argument or methodology, and the experimental results are sufficient to establish the claims.
 
-### Abstract & Introduction
-The abstract clearly articulates the core thesis: pixel-level reconstruction metrics (PSNR/SSIM) are insufficient for evaluating Privacy-Preserving Face Recognition (PPFR) systems. The claim that preventing pixel recovery does not prevent identity leakage is compelling and well-motivated. However, the abstract states FaceLinkGen achieves "over 98.5% matching accuracy." It is crucial to distinguish whether this refers to the attacker's ability to link identities (privacy breach) or bypass the PPFR server's verification (security breach). The introduction clarifies this leans towards privacy/linkage, but the phrasing "matching accuracy" could be misinterpreted as authentication bypass. The motivation regarding the "implicit assumption" that pixel reconstruction is necessary for identity leakage (Section 1) is strong, particularly the argument that identity and pixel similarity are decoupled (Figure 2).
+## Section‑by‑Section Notes
 
-### Threat Model (Section 2)
-The threat model focuses on the "curious or malicious service provider" with oracle access to the conversion process. The authors argue that even client-side models can be reverse-engineered to provide this oracle access. While plausible for pure software clients, this assumption may not hold for systems utilizing secure enclaves or hardware-backed keys, which are increasingly common in high-security biometric deployments. The paper acknowledges this limitation in Section 10 ("Cryptographic and Key-Based Hardening"), but the primary empirical evaluation (Section 5) relies heavily on this oracle access. The constrained adversary model in Section 6 (no oracle access, only proxy filtering) is a vital complement that strengthens the paper, showing vulnerability even without full oracle access for frequency-domain methods. However, the transition between the "insider with oracle" and "external with proxy" scenarios could be sharper in defining the scope of vulnerability for each PPFR variant.
+**Abstract & Introduction** – Clearly states the problem and contribution. The critique of the prevailing evaluation paradigm (reliance on PSNR/SSIM) is well‑motivated and grounded in prior work.
 
-### Methods (Section 3 & 4)
-The method relies on knowledge distillation to align protected templates with a public embedding space (ArcFace), followed by diffusion-based regeneration (Arc2Face). The simplicity is intentional, as stated, to highlight representation vulnerability.
-*   **Eq. 2 & 3:** The formulation is standard for distillation and generation. The novelty lies not in the equations but in their application to critique the PPFR evaluation paradigm.
-*   **Embedding Alignment:** The method assumes the protected template retains identity information alignable with ArcFace. Section 3 states, "Our attack method is independent of the specific face recognition model employed by the PPFR server." This is a strong claim. If the PPFR system uses a proprietary backbone significantly divergent from ArcFace, the distillation might fail to capture the specific identity manifold preserved by that system. While the paper argues identity is "generic," empirical validation against a PPFR system using a non-ArcFace-compatible private backbone would strengthen this claim. Currently, the evaluation assumes alignment with ArcFace is sufficient to demonstrate leakage, which is valid for *linkage* against public databases but less clear for *utility* recovery relative to the specific server.
-*   **Attack Vectors:** The distinction between Linkage (Section 4.1) and Regeneration (Section 4.2) is clear. The linkage attack is particularly damaging for privacy (associating anonymous templates with public IDs), while regeneration demonstrates the severity of the leakage visually.
+**Threat Model (Section 2)** – Thorough and convincingly argued. The paper correctly recenters the adversary as the service provider with oracle access, aligning with the original PPFR intent. It also fairly compares its assumptions to those of prior work (e.g., Mi et al. assume more knowledge).
 
-### Experiments & Results (Section 5, 6, 7, 8, 9)
-The experimental setup is comprehensive, covering three recent methods (PartialFace, MinusFace, FracFace) and multiple datasets (CASIA-WebFace, LFW, TPDNE).
-*   **Baselines:** The comparison against FracFace's claimed protection rates (Table 6) is effective in highlighting the metric gap. However, it relies on reported numbers from FracFace rather than re-implementing their baseline attack (U-Net/StyleGAN) under the same conditions. Re-running the baseline attack would eliminate potential discrepancies in evaluation protocols.
-*   **Metrics:** Using commercial APIs (Face++, Amazon) for verification is a strong choice for realism, avoiding overfitting to open-source models. Table 2 and Table 5 show consistent high success rates.
-*   **Typo/Clarity:** In Section 6, the text states "about 4457% on the Amazon API." This is clearly a numerical error (likely 44-57% based on Table 7). While likely a parser artifact, it impedes immediate understanding of the constrained attack's efficacy compared to the oracle attack.
-*   **Soft Biometrics (Section 9):** The extension to soft biometric leakage (age, gender, race) is valuable and often overlooked. Table 9 shows high inference accuracy, supporting the claim that frequency-domain protection fails to hide semantic attributes.
-*   **De-identification Transfer (Section 8):** Applying the method to TIP-IM and CanFG broadens the impact beyond frequency-domain PPFR. The finding that adversarial de-identification also leaks identity under distillation (Table 8) is a significant insight, suggesting a broader issue with utility-preserving transformations.
+**Methods (Section 3)** – The distillation pipeline is straightforward but appropriate for the demonstration. The choice of ArcFace as teacher and Arc2Face as generator is justified and does not limit generality, as the approach can work with other embedding/generator pairs.
 
-### Writing & Clarity
-The paper is generally well-structured, though the text contains numerous interruptions (line numbers, fragmented sentences) due to the extraction process. Per instructions, I will not penalize these as formatting artifacts. However, there are logical flow issues independent of parsing. For instance, Section 7 ("Similarity Distribution") is referenced in Section 5.3 ("As detailed in Section 7..."), but Section 7 appears after Section 6. The numbering seems consistent in the source but the flow in the provided text is jumbled. More critically, the distinction between "breaking verification" and "breaking privacy" should be maintained consistently. Table 3 reports "1-to-1 verification accuracy," which might imply the regenerated face can spoof the system. If the system uses ArcFace, this is true; if it uses a private model, the regenerated face might not spoof it, but the identity is still leaked. The text should clarify that high Face++ accuracy proves identity recovery, not necessarily authentication bypass against the specific PPFR server.
+**Experiments (Sections 5–8)** – Extensive and rigorous. The attack is evaluated on three recent systems across multiple datasets, with both linkage and regeneration metrics. The minimal‑resource experiments (800, 256 images) convincingly show that very little data is needed. The constrained‑assumption attack (Section 6) using a generic high‑pass filter is a clever extension that further underscores the vulnerability. The extension to de‑identification systems (TIP‑IM, CanFG) is preliminary but adds breadth.
 
-### Limitations & Broader Impact
-The paper acknowledges limitations in Section 10, suggesting cryptographic hardening as a solution. This is honest but slightly generic. A more specific discussion on *why* frequency-domain methods fail (e.g., spectral overlap with identity features) would deepen the analysis. The broader impact is significant: if adopted, the proposed identity-centric evaluation could prevent the deployment of falsely "secure" PPFR systems. The societal risk of soft biometric leakage (Section 9) is well-highlighted. However, the paper does not discuss potential misuse of FaceLinkGen itself. While it is an evaluation tool, the ability to regenerate faces from templates could be exploited by adversaries if templates are leaked. A brief mention of responsible disclosure or dual-use concerns would be appropriate for ICLR.
+**Soft‑Biometric Leakage (Section 9)** – A valuable addition that shows the attack also recovers sensitive attributes (age, gender, race), highlighting a broader privacy risk.
 
-### Overall Assessment
-This paper makes a substantial contribution to the privacy-preserving computer vision community by challenging the prevailing evaluation paradigm of frequency-domain PPFR. The core insight—that pixel-level reconstruction failure does not imply identity privacy—is empirically well-supported and critically important. The FaceLinkGen framework, while methodologically simple (distillation + generation), effectively exposes vulnerabilities in recent SOTA methods (PartialFace, MinusFace, FracFace). The use of commercial APIs for verification adds real-world validity to the claims.
+**Future Directions & Conclusion** – The suggestions (cryptographic hardening, human‑perceptual de‑identification) are thoughtful and point to meaningful next steps.
 
-Key concerns remain regarding the threat model's assumption of oracle access for client-side models, though Section 6 mitigates this by showing vulnerability even under constrained proxy assumptions. Additionally, the reliance on ArcFace alignment assumes a degree of universality in identity representation that, while likely, could be further stress-tested against proprietary backbones. Despite these points, the empirical evidence of identity leakage is robust. The paper meets ICLR's standards for significance and empirical rigor, offering a necessary correction to how PPFR systems are benchmarked. I recommend acceptance, contingent on clarifying the distinction between privacy leakage and authentication bypass, and correcting numerical reporting errors.
+**Minor points** –  
+- The paper occasionally uses “we show” or “we demonstrate” without immediate reference to a figure/table (e.g., the claim about similarity distributions in Section 7). The relevant figure (Figure 5) is not included in the extracted text, but this is likely a parser artifact.  
+- The discussion of dataset noise (WebFace 9.3%–13.0% noise) is used to explain less‑than‑perfect linkage results; this is reasonable but could be quantified more precisely.
+
+## Strengths
+- **Important conceptual contribution:** Identifies a critical gap in how PPFR systems are evaluated—pixel‑level reconstruction metrics do not capture identity‑level privacy. This insight is likely to influence future research in the field.
+- **Effective, simple attack:** FaceLinkGen is a straightforward distillation pipeline that requires only paired data and a standard generative model. Its high success rates (≥98.5% linkage, ≥96% regeneration) on three recent systems demonstrate that the vulnerability is inherent in the representations, not an artifact of a complex attack.
+- **Comprehensive experimentation:** Tests on multiple datasets (TPDNE, CASIA‑WebFace hold‑out, LFW), includes minimal‑resource ablations, extends to a constrained‑assumption setting, and even examines soft‑biometric leakage. The use of commercial verification APIs (Face++, Amazon) adds credibility.
+- **Clear threat‑model analysis:** Correctly argues that the service provider is the primary adversary and that oracle access is realistic, addressing potential objections head‑on.
+
+## Overall Assessment
+This paper makes a strong, well‑supported contribution that meets ICLR’s standards for novelty, technical soundness, and impact. It convincingly shows that current frequency‑domain PPFR systems leak identity information despite their claims of privacy based on pixel‑level reconstruction metrics. The attack is simple yet devastating, the experiments are thorough, and the critique of the evaluation paradigm is timely and important. The work should be accepted as is; its findings will likely spur needed changes in how privacy is assessed in face recognition research.
 
 Additional transferable weaknesses from matched human reviews:
-I'll help you retrieve relevant human reviews and extract weaknesses that apply to the current paper. Let me start by reading the paper to understand its core topic, method, and evaluation claims.Let me read the paper in sections:Now let me explore the human review dataset to find relevant papers. I'll use a specialized agent to efficiently search for similar papers based on the key topics.Great! The agent found many relevant papers. Let me now read the most relevant review files to extract weakness patterns. I'll start with the core papers on privacy-preserving face recognition and model inversion attacks.Let me check the directory structure first:Now let me look inside the human_reviews directory:Let me search for the most relevant papers using grep with keywords:Let me try different search keywords:Let me search more specifically for papers on face recognition, biometric security, and privacy attacks:Let me search for papers on privacy metrics and evaluation:Now let me read the most relevant reviews. I'll start with the one that mentions FaceLinkGen directly:This review isn't about the FaceLinkGen paper. Let me search more carefully for papers directly related to privacy-preserving face recognition:Perfect! Let me read these reviews about the PPFR methods:Let me search more specifically for papers about this work:Let me try broader search terms:Let me read papers on privacy evaluation and metrics:Let me search for papers using evaluation metrics relevant to face recognition:Let me read papers that likely discuss the PPFR methods:Let me read another relevant paper:Now let me search for papers on face recognition attacks and biometric security:Let me read papers on de-identification and embedding attacks:Let me use the Explore agent to more strategically search for relevant papers:Based on the exploration, there are limited papers directly on privacy-preserving face recognition in this dataset. Let me read some of the closest matches to find relevant weaknesses:Let me read more papers on privacy metrics and evaluation:Let me search for papers on adversarial robustness and recognition systems:Let me search for papers on attack evaluation and threat models:
+I'll help you retrieve relevant human-written reviews and identify applicable strengths/weaknesses for the current paper. Let me start by reading the paper and then systematically searching for related reviews.Now let me search for relevant human reviews in the ICLR 2025 dataset. I'll use multiple search queries to find papers and reviews that address similar topics, methods, and potential weaknesses.Let me search for more relevant reviews on evaluation protocols, attack validation, and privacy evaluation methodologies:Let me read a few more relevant review files to identify common weakness patterns that apply to the FaceLinkGen paper:Now let me search for reviews that discuss specific evaluation methodologies, baseline comparisons, and attack robustness:Let me read the full OE67D1Oatr.md review for more insights:Based on my analysis of relevant human reviews in the ICLR 2025 dataset, here are the identified **weaknesses** that plausibly apply to the FaceLinkGen paper:
+
+---
+
+## Weaknesses
+
+### 1. Limited Evaluation Against Privacy Defenses
+The paper does not evaluate how the attack performs against various privacy-preserving defenses that could be deployed in PPFR systems (e.g., differential privacy, noise injection, gradient perturbation techniques). Similar to a related privacy attack paper that faced this critique, this limits the practical understanding of the attack's robustness: 
+
+> "While the paper compares FGL with prior attack methods, it does not assess its effectiveness against some privacy defenses, such as gradient perturbation or differential privacy techniques. They are widely used in federated learning." (from LJULZNlW5d.md)
+
+### 2. Generalizability Limited Primarily to Frequency-Domain PPFR
+While the paper briefly evaluates TIP-IM and CanFG, the main focus remains on frequency-domain PPFR systems. The limited evaluation on non-frequency-domain and alternative PPFR paradigms constrains the generalizability claims. As noted in a similar privacy study:
+
+> "The paper mainly focuses on high-resolution facial images, which limits generalizability to other data types, such as medical or financial datasets often used in federated learning." (from LJULZNlW5d.md)
+
+This applies here to the domain/method generalization: the frequency-domain assumption is core to the attack's success.
+
+### 3. Insufficient Analysis of Result Dependencies on Key Parameters
+The paper presents strong attack results but provides limited analysis on how different system parameters, architectural choices, or training configurations affect the attack success. Following critiques of related adversarial work:
+
+> "The experimental section (4) lacks some comments on the results, i.e., the results are presented without analyzing if they support the claims presented...an evaluation of the trade-offs between the number of triggers and their stealthiness would strengthen the paper." (from OE67D1Oatr.md)
+
+Specifically, the paper could analyze sensitivity to: student model architecture variations, dataset quality/noise levels, and template format differences across systems.
+
+### 4. Limited Comparison with Alternative Attack Methods on PPFR
+The paper does not compare with other potential attack methodologies on privacy-preserving face recognition systems or discuss how FaceLinkGen compares to alternative inversion attacks adapted to this domain. Similar reviews note:
+
+> "Comparison with baseline methods is missing. What are the alternative approaches...It is not clear in the current paper." (from V7PYbRzD0h.md)
+
+Cross-method comparison would strengthen the contribution by clarifying what makes the distillation-based approach particularly effective compared to other template-attack strategies.
+
+### 5. Lack of Formal Privacy Guarantees and Theoretical Analysis
+While the paper provides empirical evaluation with high success rates, it lacks formal privacy-theoretic analysis or bounds on the privacy leakage. Privacy-focused methods are critiqued when relying solely on empirical evidence:
+
+> "The main flaw is that the proposed method is just an empirical method and does not have any theoretical privacy-preserving analysis/guarantee." (from onvN3zsNMI.md)
+
+This applies inversely here: the attack demonstrates empirical success but provides no formal analysis of when and why identity information is recoverable from templates.
+
+---
+
+## Strengths
+
+### 1. Comprehensive Identity-Centric Evaluation Paradigm
+The paper correctly identifies and addresses a fundamental gap in PPFR evaluation—that pixel-level metrics (PSNR, SSIM) do not capture identity-level privacy. The shift to identity-centric metrics using commercial face verification systems (Face++, Amazon) is a significant methodological contribution that moves beyond traditional reconstruction-focused evaluation.
+
+### 2. Extensive Cross-Dataset Validation
+The evaluation across multiple datasets (CASIA-WebFace, LFW, TPDNE) with attention to distribution shift and dataset noise demonstrates thorough experimental design. The inclusion of synthetic data (TPDNE) to avoid training data contamination shows methodological rigor.
+
+### 3. Practical and Accessible Attack Design
+The simplicity and low computational cost of the attack (0.80-1.60 USD on A6000 GPU) demonstrates that identity leakage is fundamental to the representation rather than dependent on complex adversarial optimization, strengthening the argument about structural vulnerabilities.
 
 ────────────────────────────────────────
-NEUTRAL REVIEWER (qwen/qwen3.5-flash-02-23 via OpenRouter)
+NEUTRAL REVIEWER (deepseek/deepseek-v3.2 via OpenRouter)
 ────────────────────────────────────────
 ## Balanced Review
 
 ### Summary
-This paper challenges the prevailing evaluation paradigm for frequency-domain Privacy-Preserving Face Recognition (PPFR) by arguing that pixel-level reconstruction metrics like PSNR fail to capture identity-level privacy leakage. The authors introduce FaceLinkGen, an identity-centric attack that extracts identity embeddings from protected templates to perform linkage and face regeneration without recovering original pixels. Empirical results demonstrate that recent PPFR systems (PartialFace, MinusFace, FracFace) are vulnerable to high-accuracy identity linkage and regeneration despite high pixel-level protection claims.
+This paper challenges the prevailing evaluation paradigm in frequency-domain privacy-preserving face recognition (PPFR), which equates privacy with resistance to pixel-level reconstruction (measured by PSNR/SSIM). The authors argue that preventing pixel recovery does not necessarily prevent identity leakage. They introduce FaceLinkGen, a simple distillation-based attack that extracts identity embeddings from protected templates and uses them for linkage attacks and identity-consistent face regeneration, demonstrating high success rates on three recent PPFR systems.
 
 ### Strengths
-1.  **Critical Evaluation of Standards:** The paper provides strong evidence that current PPFR evaluation metrics (PSNR/SSIM) are insufficient proxies for privacy, demonstrating cases where high protection scores coexist with successful identity leakage. (Evidence: Section 5.3, Table 6 shows FracFace with 1.000 channel protection but high identity recovery under FaceLinkGen).
-2.  **High Attack Effectiveness:** The proposed method achieves near-universal success rates across three distinct, state-of-the-art PPFR methods, validating the severity of the identified vulnerability. (Evidence: Table 2 reports 99.2% Success@5 regeneration on PartialFace and 99.6% on MinusFace).
-3.  **Low Resource Overhead:** The attack is computationally lightweight (under 2 hours, < USD 2.00 cost), demonstrating that the vulnerability stems from the representation itself rather than a lack of computational effort by the defender. (Evidence: Section 5, cost analysis and training time).
-4.  **Broader Applicability:** The investigation extends beyond frequency-domain PPFR to include adversarial de-identification (TIP-IM) and other PPFR methods (CanFG), suggesting the vulnerability is systemic to mutual information preservation in biometric templates. (Evidence: Section 8, Table 8).
+1. **Compelling Critique of Evaluation Paradigm**: The paper provides a clear, well-argued case that pixel-level metrics are insufficient for measuring identity privacy. The evidence—showing that high PSNR/SSIM does not correlate with identity similarity and vice-versa—effectively undermines a foundational assumption in much prior work.
+2. **Strong Empirical Results**: The attack achieves remarkably high success rates (e.g., >98.5% matching, >96% regeneration) across three distinct, recent PPFR methods (PartialFace, MinusFace, FracFace) and multiple datasets (TPDNE, CASIA-WebFace, LFW). The use of commercial APIs (Face++, Amazon) for verification adds credibility.
+3. **Minimal Attack Assumptions and Low Cost**: The attack is practical, requiring only black-box oracle access to the transformation and a small public dataset. The "minimal-resource" experiment (success with only 256 training images) and low estimated cost (~$0.80-$1.60) powerfully demonstrate the vulnerability's severity and accessibility.
+4. **Broad Analysis**: The paper extends the analysis beyond core PPFR to include adversarial de-identification (TIP-IM) and a non-frequency method (CanFG), showing the generality of the identity-leakage concern. The investigation of soft-biometric (age, gender, race) leakage further highlights the privacy risks.
 
 ### Weaknesses
-1.  **Methodological Incrementality:** The core attack technique is a standard distillation process (aligning student to teacher embeddings), which may lack the algorithmic novelty expected for ICLR without deeper theoretical characterization of the embedding space. (Evidence: Section 3 describes a standard cosine similarity objective for distillation).
-2.  **Dependency on External Generators:** The regeneration claim relies heavily on Arc2Face, a specific identity-controlled generator. The success rate is tied to the generator's ability to match the embedding, rather than a direct proof of template leakage independent of generative priors. (Evidence: Section 4.2 and Section 5.3 discuss reliance on Arc2Face for image synthesis).
-3.  **Ambiguity in Constrained Attack:** Section 6 describes a "constrained adversary" scenario using only 30 validation pairs, yet claims the training process remains consistent with the main experiment using 90K images. The data efficiency of the student model under this strict calibration constraint is not fully detailed. (Evidence: Comparison between Section 5 training data and Section 6 validation/setup descriptions).
-4.  **Limited Empirical Defense:** The paper proposes mitigation strategies (cryptographic hardening, inverted de-identification) in Section 10 but offers no experimental validation or quantitative comparison of these defenses against the FaceLinkGen attack. (Evidence: Section 10 outlines directions without empirical results).
+1. **Insufficient Explanation for Attack's Effectiveness**: While the attack is simple and effective, the paper lacks a deep analysis of *why* the distillation works so well. A more detailed theoretical or empirical investigation into what identity-revealing information remains in the templates (e.g., analyzing the feature space) would strengthen the contribution.
+2. **Limited Discussion of Defense Implications**: The suggested future directions (cryptographic methods, human-perception-focused de-identification) are brief and somewhat speculative. A more concrete discussion of how existing systems could be patched or what properties a robust defense must have would be valuable for the community.
+3. **Missing Implementation Details**: Key details about the student model architecture (beyond "one additional 3x3 Conv2D layer") and specific training hyperparameters (learning rate, optimizer) are omitted, which slightly hinders reproducibility despite the overall simple pipeline.
+4. **Overstatement on Generality**: The claim that the vulnerability "may extend beyond the frequency-domain PPFR family" is supported only by preliminary results on TIP-IM and CanFG. A more systematic evaluation of diverse non-frequency methods would be needed to substantiate this broader claim.
 
 ### Novelty & Significance
-**Novelty:** The novelty of this work is primarily in the *evaluation framework* and the identification of a systemic gap between pixel-level privacy and identity-level privacy in frequency-domain PPFR. While the distillation mechanism is established, its application to expose flaws in recent PPFR standards (ICCV 2023 to NeurIPS 2025) is a significant contribution. The approach shifts the focus from "unreconstructability" to "indistinguishability in embedding space," offering a new perspective on privacy in representation learning.
-
-**Significance:** The significance is high within the ML and Security communities. As PPFR adoption grows, ensuring that "privacy" actually protects identity is critical. This paper demonstrates that current frequency-domain solutions, despite recent publication, fail to meet identity-level privacy expectations, necessitating a reevaluation of design choices and evaluation metrics. It fits ICLR's focus on evaluating representation learning properties, though it leans heavily toward security implications.
+**Novelty:** The core insight—decoupling pixel-level reconstruction from identity-level leakage and proposing an identity-centric evaluation—is novel and impactful. While semantic-level inversion attacks exist in other domains (e.g., federated learning), their application to challenge the foundational evaluation metrics of frequency-domain PPFR is new.
+**Significance:** The work is highly significant for the PPFR and face privacy communities. It exposes a critical flaw in how state-of-the-art methods are evaluated and validated. The high success rates of a simple attack necessitate a re-evaluation of the privacy guarantees offered by these systems. This paper could shift the evaluation standards in future research, pushing the field towards more rigorous, identity-focused privacy metrics.
 
 ### Suggestions for Improvement
-1.  **Enhance Reproducibility:** To align with ICLR standards, the authors should provide the code for the FaceLinkGen student model and training pipeline. Given the simplicity of the method, code release would verify the reproducibility claim immediately.
-2.  **Deepen Theoretical Analysis:** Incorporate an information-theoretic analysis (e.g., Mutual Information estimation) between the protected templates and the identity embedding to explain *why* these specific frequency-domain transformations retain sufficient identity information to be distilled.
-3.  **Clarify Constrained Attack Details:** Provide a detailed curve or ablation showing how the student model performance scales as the number of calibration/validation pairs decreases in the Section 6 scenario, distinguishing between zero-shot and few-shot capabilities explicitly.
-4.  **Provide Defensive Experiments:** Validate the proposed "Future Directions" from Section 10 with at least one concrete defensive modification (e.g., adding noise specifically in the identity embedding dimension) to demonstrate that the leakage can be mitigated without destroying utility.
+1. **Deepen the Analysis of Template Vulnerability**: Conduct an ablation study or feature visualization to identify what specific information in the protected templates is being leveraged by the student model. This would help explain the root cause of the leakage and guide future defense design.
+2. **Provide More Concrete Defense Guidelines**: Expand the "Future Directions" section into a more substantive discussion. For example, analyze the trade-offs between recognition utility and identity privacy more formally, or propose a specific benchmark for identity-centric evaluation.
+3. **Clarify Methodological Details**: Include a clear description of the student network architecture and training parameters in an appendix or supplementary material to ensure full reproducibility.
+4. **Strengthen the Generality Claim**: If space permits, include a more extensive evaluation of one or two additional non-frequency-based PPFR or de-identification methods to better support the claim that the issue is not confined to frequency-domain techniques.
 
 ────────────────────────────────────────
-SPARK FINDER (qwen/qwen3.5-plus-02-15 via OpenRouter)
+SPARK FINDER (deepseek/deepseek-v3.2 via OpenRouter)
 ────────────────────────────────────────
 ## How to Improve This Paper
 
 ### Missing Experiments (top 3-5 only)
-1. **Ablation on distillation pipeline components** — Remove the student model, change the teacher model, or vary training data size systematically. Without this, it's unclear whether success comes from the attack design or simply from template utility preservation inherent to any working PPFR system.
-
-2. **Comparison to existing model inversion attacks** — No baseline comparison to prior MIA methods (e.g., Wang et al. [33], FaceMAE [34] attacks). Without showing FaceLinkGen outperforms or differs meaningfully from existing attacks, the novelty claim is weakened.
-
-3. **Evaluation on non-frequency-domain PPFR methods** — Only 3 frequency-domain methods tested. The claim that "identity leakage extends beyond frequency-domain PPFR" rests on minimal evidence (one CanFG evaluation in Table 8). Test on at least 2-3 additional non-frequency methods to support generalizability.
-
-4. **Empirical validation of proposed defenses** — Section 10 recommends cryptographic hardening and perception-based de-identification but provides zero experimental validation. For ICLR, proposed solutions must be tested, not just described.
+1. **Test a broader range of PPFR methods, especially non-frequency-domain ones.** The paper only provides pilot studies on CanFG and TIP-IM. To substantiate the claim that identity leakage is a general flaw, rigorous attacks on other major PPFR systems (e.g., FaceObfuscator, DuetFace) and de-identification methods are necessary. Without this, the scope of the vulnerability remains unclear.
+2. **Ablate the dependency on specific face recognition and generative models.** The attack uses ArcFace and Arc2Face. To claim independence from the server's model, experiments must show the attack works when the student/teacher uses a different embedding model (e.g., FaceNet) and a different compatible generator.
+3. **Directly compare against state-of-the-art model inversion attacks (MIAs).** The paper dismisses pixel-reconstruction MIAs but does not quantitatively compare FaceLinkGen's identity leakage performance against modern MIAs on the same PPFR systems. This comparison is needed to prove the superiority of the identity-centric approach.
+4. **Validate the constrained attack (high-pass proxy) on a more diverse set of systems.** The high-pass filter attack is shown to work on three frequency methods, but its effectiveness on non-frequency or more complex obfuscation schemes is untested. This limits the claim about shared vulnerabilities.
 
 ### Deeper Analysis Needed (top 3-5 only)
-1. **Statistical correlation analysis between pixel metrics and identity leakage** — The claim that PSNR/SSIM don't capture identity privacy needs quantitative evidence (e.g., correlation coefficients, scatter plots). Currently this is asserted with only 2 examples in Table 1.
-
-2. **Analysis of WHY frequency-domain methods fail** — Is this inherent to preserving recognition utility, or a specific design flaw? Without mechanistic analysis, the paper identifies a symptom but not the root cause, limiting actionable insights for defenders.
-
-3. **Train-test identity separation verification** — The distillation uses CASIA-WebFace for training and testing uses CASIA hold-out, LFW, and TPDNE. Need explicit verification that no identity leakage occurred through dataset overlap, especially given known CASIA noise issues [32].
-
-4. **Embedding space analysis** — Show cosine similarity distributions between extracted embeddings and original identity embeddings vs. different-identity embeddings. This would directly demonstrate whether identity information is truly preserved or if the high success rate comes from generator artifacts.
+1. **Analyze what identity-relevant information is retained in the templates.** Use feature visualization or attribution methods (e.g., Grad-CAM on the student model) to show which components of the protected template are leveraged for identity extraction. This is critical to prove the vulnerability is inherent to the representation, not just the attack.
+2. **Systematically analyze failure cases.** The attack has near-perfect but not 100% success. A qualitative and quantitative analysis of failures (e.g., specific identities, image conditions) is needed to understand the attack's limitations and the conditions under which privacy might be preserved.
+3. **Provide a quantitative correlation analysis between pixel-level and identity-level metrics.** The paper claims a disconnect but only shows anecdotal examples (Table 1). A large-scale correlation study (e.g., computing Pearson correlation between PSNR/SSIM and face verification scores across a dataset) is required to statistically support this core argument.
 
 ### Visualizations & Case Studies
-1. **Failure cases** — Show regenerated faces that failed verification and analyze why. Understanding failure modes is critical for assessing attack limitations and for designing effective defenses.
-
-2. **Template information visualization** — Visualize what frequency components or features are preserved vs. suppressed in protected templates. This would expose whether the vulnerability is in high-frequency retention as Section 6 suggests.
-
-3. **Embedding space projection** — Use t-SNE or similar to show clustering of original embeddings, protected template embeddings, and extracted embeddings. This would visually demonstrate whether the distillation successfully recovers identity structure.
+1. **Show comprehensive visual results for all attack vectors, including failures.** Figure 1 shows limited regeneration examples. To properly assess the attack, include side-by-side visualizations for linkage attacks (e.g., query face, top-matched template, regenerated face) and for all evaluated methods, highlighting both successes and characteristic failures.
+2. **Visualize the protected templates themselves.** Display frequency-domain visualizations (e.g., magnitude/phase spectra) of the original and protected images to illustrate what information is retained/removed. This would ground the claim that high-frequency identity cues persist.
+3. **Case studies on cross-database linkage.** Demonstrate concrete examples where the attack links a protected template from one service to a public face image from another source (e.g., social media), illustrating the real-world privacy threat.
 
 ### Obvious Next Steps
-1. **Test proposed cryptographic defenses experimentally** — If key-based hardening is recommended as a solution, implement and evaluate at least one variant to show it actually prevents FaceLinkGen.
+1. **Test a simple defensive baseline, such as a key-based approach.** The paper suggests cryptographic hardening as a future direction but does not test even a naive version (e.g., XOR with a secret key) to show it mitigates the attack. Including this would strengthen the call for new defenses.
+2. **Discuss the attack's feasibility under more restrictive threat models.** The paper focuses on an oracle-access insider. A more detailed analysis of the attack's data and query requirements under a pure black-box scenario (no access to conversion process) is needed to fully assess the practical risk.
 
-2. **Propose concrete identity-centric evaluation metrics** — The paper critiques existing metrics but doesn't provide standardized alternatives. ICLR expects constructive contributions, not just criticism.
-
-3. **Evaluate under realistic deployment constraints** — Test attack success when templates are quantized, compressed, or when rate-limiting prevents oracle queries. The current evaluation assumes idealized access that may not reflect real systems.
+### Other stuff you can add
+1. **Include a responsible research statement.** Given the high attack success, a discussion on the potential misuse and ethical considerations of releasing such an attack is expected for ICLR.
+2. **Clarify the evaluation metric for "regeneration success."** The paper uses Face++ verification at certain FAR thresholds. It should explicitly discuss whether this commercial API's decision threshold is an appropriate standard for judging identity leakage, or if a more fundamental metric (e.g., cosine similarity in embedding space) should be the primary measure.
 
 ────────────────────────────────────────
-POTENTIALLY MISSED RELATED WORK (qwen/qwen3.5-flash-02-23:online via OpenRouter)
+POTENTIALLY MISSED RELATED WORK (deepseek/deepseek-v3.2:online via OpenRouter)
 ────────────────────────────────────────
 Related work search was skipped.
 
 ========================================================================
-FINAL CONSOLIDATED REVIEW (z-ai/glm-5.1 via OpenRouter)
+FINAL CONSOLIDATED REVIEW (deepseek/deepseek-v3.2 via OpenRouter)
 ========================================================================
 
 ## Summary
-
-This paper challenges the prevailing evaluation paradigm for frequency-domain Privacy-Preserving Face Recognition (PPFR), arguing that pixel-level reconstruction metrics (PSNR/SSIM) inadequately capture identity-level privacy leakage. The authors introduce FaceLinkGen, a distillation-based pipeline that extracts identity embeddings from protected templates to perform linkage attacks (>98.5% accuracy) and face regeneration (>96% success at commercial-grade verification) on three recent PPFR systems—PartialFace, MinusFace, and FracFace—without recovering original pixels, demonstrating that high channel-protection scores coexist with near-total identity leakage.
+This paper challenges the prevailing evaluation paradigm in frequency-domain Privacy-Preserving Face Recognition (PPFR), which equates privacy with resistance to pixel-level reconstruction (measured by PSNR/SSIM). The authors argue that preventing pixel recovery does not necessarily prevent identity leakage. They introduce FaceLinkGen, a simple distillation-based attack that extracts identity embeddings from protected templates for linkage attacks and identity-consistent face regeneration, achieving high success rates on three recent PPFR systems.
 
 ## Strengths
-
-- **Compelling paradigm critique with strong empirical counter-evidence.** The paper's central claim—that preventing pixel-level reconstruction does not prevent identity leakage—is backed by concrete, striking evidence. Table 6 is particularly damning: FracFace claims 1.000 protection under its own frequency-channel metric, yet FaceLinkGen achieves near-total identity recovery through commercial-grade verification. Table 1 provides a clear motivating example showing that high SSIM (0.841) can coincide with near-zero identity similarity (FS=0.008), while low SSIM (0.235) can coincide with meaningful identity similarity (FS=0.586). This directly challenges a foundational assumption in the field.
-
-- **Extremely low attack cost demonstrating representation-level vulnerability.** The distillation completes in under 2 hours on a single GPU for ~$0.80–1.60 per method (Section 5), and the minimal-resource experiment (Section 5.1) achieves 97.0% generation pass rate with only ~800 images trained in under 50 seconds. This is a strength because the paper's argument is precisely that the vulnerability is in the representation, not in needing a sophisticated attack—the simplicity is load-bearing for the claim.
-
-- **Constrained adversary scenario strengthens real-world relevance.** Section 6 demonstrates that even without oracle access to the conversion process, a generic Gaussian-blur high-pass filter suffices as a universal proxy to extract identity from all three frequency-domain methods (92–96% matching, 94.6–96.3% regeneration@5 on Face++). This significantly broadens the vulnerability beyond the insider-with-oracle model.
-
-- **Soft biometric leakage analysis extends the privacy concern.** Section 9 shows that race, gender, and age can be inferred from protected templates at near-original-image accuracy (e.g., gender accuracy 0.925–0.932 for FracFace/PartialFace vs. 0.949 for originals), directly contesting prior claims of soft-biometric obfuscation and raising regulatory implications.
-
-- **Cross-verification using multiple independent services.** The use of both Face++ and Amazon APIs (Tables 2, 5, 7) for identity verification, plus direct cosine-similarity analysis in embedding space (Section 7), rules out dependence on any single evaluation pipeline. The embedding similarity analysis (Section 7) further demonstrates identity extraction independent of generative models.
+- **Foundational Critique of Evaluation Standards:** The paper provides a compelling, evidence-backed argument that pixel-level metrics are insufficient for assessing identity privacy, a core assumption in much prior PPFR work. This is demonstrated through examples (Table 1, Figure 2) and the high success of an identity-centric attack, which could shift evaluation practices in the field.
+- **Strong Empirical Validation with a Simple Attack:** The proposed FaceLinkGen attack is straightforward but devastatingly effective. It achieves over 98.5% linkage accuracy and above 96% regeneration success across three distinct, recent PPFR methods (PartialFace, MinusFace, FracFace) and multiple datasets. The "minimal-resource" experiments (success with only 256 training images) powerfully demonstrate that the vulnerability is inherent and easily exploitable.
+- **Comprehensive Threat Model and Scope Extension:** The threat model analysis correctly recenters the primary adversary as the service provider with oracle access, aligning with the original PPFR intent. The work also extends beyond core PPFR to show preliminary vulnerabilities in adversarial de-identification (TIP-IM) and a non-frequency method (CanFG), and quantifies soft-biometric (age, gender, race) leakage, broadening the privacy implications.
 
 ## Weaknesses
-
 ### Major:
-
-- **Limited mechanistic analysis of why frequency-domain methods fail.** The paper demonstrates *that* identity information is preserved and extractable, but provides insufficient analysis of *why* these specific transformations retain it. Section 6 offers the intuition that "they all preserve high-frequency information while obfuscating low-frequency information," but this is stated rather than rigorously analyzed. A spectral decomposition or information-theoretic analysis (e.g., mutual information between template and identity embedding as a function of frequency band) would transform this from a well-executed attack paper into a deeper scientific contribution. Without it, the paper identifies a critical symptom but not its root cause, limiting actionable guidance for defenders beyond "use cryptography."
-
-- **No empirical comparison with existing attack methods.** The paper discusses differences from standard Model Inversion Attacks (MIA) in the introduction but does not empirically compare FaceLinkGen against any existing attack on the same PPFR systems. Re-running the U-Net or StyleGAN attacks used by the original PPFR papers under the same identity-centric evaluation (rather than just citing their reported PSNR/SSIM numbers) would directly quantify the gap the paper claims. Without this comparison, it remains possible that prior attacks also achieve high identity recovery but were simply not measured on the right metric—a possibility that, if true, would reframing the contribution from "new attack exposes hidden vulnerability" to "old attacks were evaluated on wrong metrics," which is a different (though still important) claim.
-
-- **The decoupling of pixel-level metrics and identity leakage is asserted with limited quantitative evidence.** The paper's foundational claim is that PSNR/SSIM do not correlate with identity privacy. However, this is supported by only two anecdotal examples in Table 1 and Figure 2. A systematic correlation analysis—e.g., computing PSNR/SSIM vs. identity similarity (cosine similarity or verification accuracy) across hundreds of protected templates—would substantially strengthen this pillar of the argument. As presented, the reader must take the decoupling on faith from 2–3 cherry-picked examples rather than statistical evidence.
+*None.* The paper's core claims are well-supported, and no weakness fundamentally undermines its contribution that current pixel-level evaluation is inadequate and identity information is easily extractable.
 
 ### Minor:
-
-- **Privacy leakage vs. authentication bypass distinction could be sharper.** Table 3 reports "1-to-1 verification accuracy" between template-to-face pairs, which could be misread as demonstrating authentication bypass against the PPFR server. The paper's contribution is about identity *privacy* (leakage to the service provider or third parties), not about *spoofing* the verification system. The text in Section 3 states the attack is "independent of the specific face recognition model employed by the PPFR server," but this important distinction is muddied when verification accuracy is reported without clearly reiterating that this measures identity recovery against a public reference (Face++), not bypass of the PPFR system's own recognition pipeline. A brief clarifying note would eliminate ambiguity.
-
-- **Typographical error in Section 6.** The text states the Amazon API achieves "about 4457%," which from Table 7 should read "44–57%." While minor, this error in a key result summary could mislead readers assessing the constrained attack's efficacy relative to the oracle attack.
-
-- **Evaluation beyond frequency-domain PPFR is preliminary.** The extension to CanFG and TIP-IM (Table 8) is valuable but thin—each tested on a small subset (2,082 images from 408 identities). The paper itself labels these as "pilot evaluations," which is honest, but the abstract's claim that results "motivate complementing pixel-level metrics with identity-centric evaluation in frequency-domain PPFR research" is appropriately scoped. The broader generalization claim in Section 8 ("suggesting a broader issue with utility-preserving transformations") is suggestive but not yet convincing from n=2 non-frequency methods with limited data.
+- **Analysis of the Vulnerability's Root Cause:** While the attack is highly effective, the paper provides limited analysis of *why* the distillation works so well or what specific identity-revealing information persists in the protected templates. A deeper investigation (e.g., feature space analysis) would strengthen the understanding of the representation's inherent flaw.
+- **Defense Discussion is Preliminary:** The suggested future directions (cryptographic methods, human-perception-focused de-identification) are brief. A more concrete discussion of the properties a robust defense must have or the fundamental trade-offs involved would provide greater guidance to the community.
 
 ### Trivial:
-
-- None significant.
+- **Sparse Implementation Details:** Key details like the specific student model architecture beyond a prepended convolutional layer and exact training hyperparameters are omitted. However, the pipeline is described as simple and standard, and the core results are highly reproducible from the described methodology.
 
 ## Nice-to-Haves
-
-- **Experimental validation of at least one proposed defense.** Section 10 suggests cryptographic hardening and inverted de-identification as future directions. Even a simple proof-of-concept—e.g., adding structured noise to templates and measuring the privacy-utility tradeoff under FaceLinkGen—would demonstrate that the vulnerability is actionable and not purely theoretical.
-
-- **Formalized alternative evaluation metric.** The paper effectively critiques existing metrics but does not propose a standardized replacement. A concrete identity-centric metric (e.g., maximum achievable linkage accuracy under a distillation budget, or mutual information between template and identity embedding) would make the contribution more constructive.
-
-- **Failure case analysis.** The paper reports near-perfect success rates but does not analyze the ~1–3% failure cases. Understanding when and why identity extraction fails could inform both defenders (what properties help?) and future attackers (what are the boundary conditions?).
+- A more systematic evaluation of one or two additional non-frequency-based PPFR or de-identification methods would strengthen the claim that identity leakage concerns extend beyond the frequency-domain family.
+- A quantitative, large-scale correlation analysis between pixel-level metrics (PSNR/SSIM) and identity-verification scores would provide stronger statistical support for the central argument of their disconnect.
+- Visualizing the protected templates (e.g., frequency spectra) could help illustrate what visual information is retained or removed, grounding the technical discussion.
 
 ## Removed Points
+*These points are flagged to be removed; treat them with caution.*
 
-*These points are flagged to be removed, treat them with caution.*
+**Strengths Removed:**
+- *"The paper is well-written."* (Generic, applies to any competent paper.)
+- *"The topic is important."* (Generic.)
+- *"The experiments are extensive."* (Already covered by the specific, evidence-backed strength of "Strong Empirical Validation".)
 
-- **"Secure enclaves undermine oracle access assumption"** (from Harsh Critic). The paper explicitly addresses this in Section 2 (arguing that client-side models can be reverse-engineered) and Section 10 (acknowledging cryptographic approaches as a separate, stronger defense). The oracle-access threat model is consistent with the PPFR literature's original design intent [8] and prior evaluations [6, 20, 21]. Secure enclaves represent a fundamentally different system architecture; critiquing the paper for not addressing them is scope creep.
-
-- **"Methodological incrementality — standard distillation"** (from Positive-Leaning Reviewer). The paper explicitly states "The simplicity of our method is intentional" (Section 3) and explains that the point is to show the vulnerability is in the representation, not in attack sophistication. The contribution is the evaluation paradigm critique and the empirical demonstration, not the attack's algorithmic novelty. This is a feature, not a bug.
-
-- **"Dependency on Arc2Face for regeneration claims"** (from Positive-Leaning Reviewer). The paper addresses this in Section 5.3 and Section 7 by (a) cross-verifying with two commercial APIs (Face++ and Amazon), (b) showing direct cosine similarity between extracted embeddings and original embeddings independent of any generator, and (c) the linkage attack (Section 4.1) operates entirely in embedding space without Arc2Face. The regeneration is a *demonstration* of leakage severity, not the sole evidence.
-
-- **"Constrained attack Section 6 is ambiguous about training data"** (from Harsh Critic). Re-reading Section 6 clarifies: the 30 paired samples are for *validation only*, and training uses a generic Gaussian-blur high-pass filter applied to public face images (not PPFR templates). The paper states: "the training process is the same as our main text, with simply the known PPFR conversion process replaced with a high-pass filter." This is a misreading by the critic.
-
-- **"Train-test identity separation concerns"** (from Spark Finder). The paper explicitly states: "there is no dataset or architecture overlap" and "The hold-out set is used to test the ability of our method in real images while ensuring no ID duplications." The dataset noise issue [32] is acknowledged. This concern is addressed.
-
-- **"Re-run baseline attacks (U-Net/StyleGAN) under same conditions"** (from Harsh Critic). While this would strengthen the paper (and is noted above as a valid weakness about lack of empirical comparison), the specific demand to re-implement prior attacks under identical conditions goes beyond what's needed. The paper's key comparison is metric-level: FracFace's own protection metric vs. identity-centric evaluation, which does not require re-running their attack.
-
-- **"Dual-use / responsible disclosure concerns"** (from Harsh Critic). This is a generic ethics concern applicable to any security paper and not a specific weakness of this work.
-
-- **"Reproducibility concerns — code release"** (from Positive-Leaning Reviewer). Per hard rules, reproducibility nitpicks about undisclosed implementation details are removed. The method is described in sufficient detail (standard distillation + Arc2Face) for reproduction.
-
-## Novel Insights
-
-The paper reveals a fundamental tension in PPFR design that has been hiding in plain sight: any transformation that preserves recognition utility necessarily preserves identity-discriminative information, and this information is extractable via a trivial alignment to any public embedding space. This is not merely a weakness of specific methods but a structural problem for the entire family of utility-preserving biometric protections that rely on representation-level obfuscation without cryptographic guarantees. The constrained adversary experiment (Section 6) further reveals that frequency-domain PPFR methods share an exploitable inductive bias—the retention of high-frequency components—that allows a single generic proxy (Gaussian high-pass filtering) to substitute for system-specific oracle access. The soft-biometric leakage finding (Section 9) suggests an even more troubling implication: the identity manifold preserved by these systems encodes not just identity but demographic attributes, meaning the privacy harm extends beyond re-identification to enabling discriminatory profiling.
+**Weaknesses Removed:**
+- **"Missing comparison with alternative attack methods."** *Justification:* The paper's contribution is to establish a new identity-centric evaluation paradigm and a simple, effective attack that reveals a fundamental flaw. A direct comparison with pixel-reconstruction attacks is not required to prove this point, as the paper already shows those attacks fail (Figure 3). Demanding this is scope creep.
+- **"Limited evaluation against formal privacy defenses (e.g., differential privacy)."** *Justification:* The paper evaluates state-of-the-art PPFR systems on their own terms. These systems do not incorporate such defenses, so criticizing their absence is evaluating the paper against a standard outside its stated scope.
+- **"Overstatement on generality."** *Justification:* The paper makes a measured claim: "preliminary results suggesting that similar vulnerabilities *may* extend." It explicitly evaluates TIP-IM and CanFG to support this. This is a reasonable scope extension, not an overstatement.
+- **"Lacks formal privacy-theoretic analysis."** *Justification:* This is an empirical security evaluation paper demonstrating a concrete attack. Theoretical guarantees are not standard for this type of contribution; the paper is evaluated correctly on its empirical soundness.
+- **"Insufficient analysis of result dependencies on parameters."** *Justification:* The paper includes meaningful ablation on training data size (Section 5.1). A full hyperparameter sweep is not required to establish the core claim that the attack works with minimal resources.
+- **"Missing implementation details."** *Justification:* While more details are nice-to-have, the description of the student model and training is sufficient to understand and likely replicate the simple distillation pipeline. This is a minor point, not a major weakness.
 
 ## Suggestions
+- In the revision, consider adding a short ablation or visualization (e.g., using Grad-CAM on the student model) to illustrate which regions or features of the protected template are most leveraged for identity extraction. This would directly address the minor weakness concerning the root cause analysis.
+- Expand the "Future Directions" section by one paragraph to more concretely discuss the necessary properties for a defense that prevents both pixel-level and identity-level leakage, potentially framing it as a set of design principles or open challenges.
 
-- **Provide a systematic correlation analysis** between PSNR/SSIM and identity similarity across all protected templates in your evaluation. Even a simple scatter plot with Pearson/Spearman correlation coefficients would transform the current anecdotal evidence (Table 1, Figure 2) into a rigorous statistical argument.
-
-- **Empirically compare with at least one prior attack** (e.g., the U-Net reconstruction from FracFace or MinusFace) evaluated under your identity-centric metrics. This would cleanly separate the contribution of "new attack method" from "old attacks evaluated on wrong metrics"—both are publishable, but the distinction matters for the community's understanding.
-
-- **Add spectral analysis of what frequency components carry identity information.** Given that Section 6 identifies high-frequency preservation as the common vulnerability, a frequency-band ablation (progressively removing frequency bands and measuring identity extraction success) would provide the mechanistic insight the paper currently lacks and give defenders concrete design guidance.
-
-- **Clarify in Table 3 and surrounding text** that verification accuracy measures identity recovery against a public reference system, not spoofing of the PPFR server's own recognition pipeline, to prevent misinterpretation.
-
-## Evaluation Axis Assessment
-
-- **Novelty**: Moderate. The distillation+generation pipeline is standard; the novelty lies in the evaluation paradigm critique and the empirical demonstration that this simple pipeline catastrophically breaks recent PPFR systems. The constrained adversary extension adds incremental novelty.
-
-- **Technical soundness**: Generally sound. The experimental design is thorough (multiple systems, datasets, verification APIs, constrained adversary, soft biometrics). The main gaps are the lack of baseline attack comparisons and the limited quantitative evidence for the pixel-metric vs. identity decoupling claim.
-
-- **Empirical support**: Strong for the main claim (identity leakage from frequency-domain PPFR). The attack success rates are consistently high across methods, datasets, and even constrained settings. Weaker for the broader generalization claims (non-frequency methods) and the mechanistic "why" question.
-
-- **Significance**: High. If the community adopts identity-centric evaluation as this paper advocates, it would meaningfully change how PPFR systems are designed and benchmarked. The finding that three recent, top-venue PPFR systems all fail under identity-centric evaluation is impactful.
-
-- **Clarity**: Good. The threat model is well-argued, the method is clearly described, and the intentional simplicity of the approach is well-motivated. Minor issues with the privacy-leakage vs. authentication-bypass distinction and one typographical error.
+**Assessment by Axis:**
+- **Novelty:** High. The core insight of decoupling pixel-level reconstruction from identity-level privacy and proposing an identity-centric evaluation paradigm is novel and impactful for the PPFR field.
+- **Technical Soundness:** High. The methodology is simple but appropriate, the threat model is rigorously argued, and the experiments are comprehensive, controlled, and support all claims.
+- **Empirical Support:** High. Extensive experiments across three systems, multiple datasets, resource constraints, and even preliminary tests on other privacy paradigms provide strong, convincing evidence.
+- **Significance:** High. The work exposes a critical flaw in the evaluation of state-of-the-art PPFR systems, demonstrating they do not provide the identity privacy they claim. This should motivate a significant shift in how privacy is assessed in this research area.
+- **Clarity:** High. The paper is well-structured, the argument is logical and easy to follow, and the figures and tables effectively support the narrative.
 
 ========================================================================
 PREDICTED SCORE
 ========================================================================
 
-Score: 7.1
+Score: 8.0
 Decision: N/A
-Total Cost: $0.0709
+Total Cost: $0.0231
