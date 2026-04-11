@@ -12,7 +12,7 @@ def round_to_scale(x):
     return min(SCALE, key=lambda v: abs(v - x))
 
 
-def split_half_baseline(df, gt_score_cols, n_splits=1000, seed=42):
+def split_half_baseline(df, gt_score_cols, n_splits=1, seed=42):
     """Estimate human reliability via split-half correlation (repeated random splits)."""
     rng = np.random.default_rng(seed)
     pearson_list, spearman_list, mae_list = [], [], []

@@ -723,3 +723,187 @@ This paper studies robust decision making when given forecasts that satisfy only
 
 ---
 
+## PemDVHC2KO
+
+- GT: Reject (avg 2.0)
+- Predicted: N/A (4.0/10)
+- Match: N/A
+
+### Final Review
+
+## Summary
+This paper introduces TiEBe, a benchmark designed to evaluate large language models' factual recall of notable global events across time, geography, and language. Constructed from Wikipedia retrospective pages and their cited external sources, TiEBe comprises over 23,000 question-answer pairs spanning 10 years, 23 regions, and 13 languages. The core empirical findings reveal significant geographic performance disparities, a strong correlation between model accuracy and socioeconomic indicators like GDP and HDI, and pronounced degradation for low-resource languages.
+
+## Strengths
+- **Large-Scale, Multifaceted Benchmark Construction:** The creation of TiEBe represents a substantial data collection and curation effort. It uniquely integrates temporal (10-year span), geographic (23 regions), and multilingual (13 languages) dimensions into a single evaluation resource, with questions provided in both English and native languages. This scale and design surpass many existing factual recall benchmarks.
+- **Rigorous Socioeconomic Correlation Analysis:** The paper moves beyond reporting performance scores to systematically quantify the relationship between model accuracy and national development indicators. The finding of strong correlations (Spearman >0.7 for GDP/HDI with native-language performance) for pre-cutoff events provides compelling, empirical evidence of a widely suspected bias in LLM knowledge representation.
+- **Transparent and Detailed Reporting:** The paper provides extensive methodological details, full prompts, model versions, and comprehensive appendices with yearly/regional performance heatmaps (Appendix E). The validation of the LLM-as-judge against human annotation (200 samples) and the public release of code enhance reproducibility.
+
+## Weaknesses
+### Major:
+- **Benchmark Source Bias Threatens Interpretation of Geographic Disparities:** TiEBe is constructed from Wikipedia retrospective pages, whose availability and density are heavily skewed (see Appendix C.1, Fig. 6), favoring Western, English-speaking, and digitally prominent nations. Consequently, a model's low performance on a region (e.g., DRC) may reflect a paucity of Wikipedia coverage for that region's events rather than a failure of the model's factual recall *of notable events*. This fundamental confounder is acknowledged in the limitations but is central to the paper's primary claim of measuring "geographic disparities in factual recall." It undermines the ability to attribute observed gaps solely to model deficiencies versus inherent skew in the benchmark's source data.
+- **Superficial Temporal Analysis:** The paper's goal to track "recall through time" is not convincingly met. The analysis in Section 4.2 and Figure 4 primarily shows a sharp accuracy drop for events post-2023, which aligns trivially with most models' training cutoffs. The stable performance on pre-cutoff events (2015-2022) does not demonstrate an analysis of knowledge evolution or decay over time. The benchmark lacks a controlled setup (e.g., evaluating models with identical cutoffs on specific temporal slices) to isolate how knowledge of past events is retained or lost.
+- **End-to-End Reliance on a Single LLM Family Introduces Unquantified Risks:** The pipeline depends heavily on DeepSeek-V3 for QA generation, translation, and as the sole judge for evaluation. While judge agreement is reported at 88.5%, this leaves an 11.5% error margin unexamined across 23k samples. More critically, there is a risk that the generative step creates questions aligned with the generator's biases, and the evaluator step may share those biases, creating a circularity that could affect score objectivity. The lack of ablations (e.g., using different models for generation/judging) is a significant methodological gap.
+
+### Minor
+- **Limited Causal Investigation of Disparities:** The paper excellently documents *what* the disparities are and correlates them with external indicators. However, it does not attempt to disentangle the potential mechanistic causes—for instance, whether lower performance is due to less training data from a region, lower data quality, the judge's potential biases, or a combination. This limits actionable insights for mitigating the gaps.
+- **Insufficient Analysis of Language vs. Factual Recall:** The language-effect results (Section 4.3) conflate poor multilingual capability with a lack of factual knowledge. The analysis would be stronger if it separated these factors, for example, by more deeply analyzing cases where a model is linguistically proficient but still factually incorrect.
+
+## Nice-to-Haves
+- A more extensive, multi-annotator human evaluation of QA pairs and model responses, particularly for low-performing regions and languages, would further bolster the benchmark's validity.
+- An ablation study on the question generation method (e.g., using different models or template-based approaches) would help show results are not an artifact of DeepSeek-V3's specific generation quirks.
+- A deeper error analysis categorizing failures by question type (e.g., "what" vs. "how many") or reasoning demand could provide more nuanced insights into model limitations.
+
+## Removed Points
+*These points are flagged to be removed, treat them with caution.*
+- **Weakness: "The claim of evaluating 'recall through time' is not convincingly supported..."** While this point is partially valid (see Major Weakness #2), the original harsh critic's framing overstated the issue as a complete failure. The paper does provide a temporal breakdown; the weakness is in the depth of analysis, not the absence of any temporal evaluation.
+- **Weakness: "Lack of benchmark comparison ablation..."** (From Spark Finder). This is a request for scope expansion. The paper's contribution is the introduction and analysis of TiEBe itself; a direct comparison to other benchmarks, while useful, is not a required component for establishing its value.
+- **Weakness: "Statistical significance testing is needed..."** (From Spark Finder). For a large-scale benchmark evaluation reporting aggregate accuracy across thousands of samples, confidence intervals or significance tests on performance differences, while good practice, are not yet a standard requirement in the field for this type of work.
+- **Strength: "The paper is well-written..."** Removed as a generic strength.
+- **Strength: "The topic is important..."** Removed as a generic strength.
+
+## Suggestions
+To strengthen the paper, the authors should directly address the major weaknesses in a revised discussion:
+1.  Reframe the interpretation of geographic disparities to explicitly acknowledge that TiEBe measures model performance on a Wikipedia-curated view of world events, and that the observed gaps likely reflect a combination of model bias *and* source data availability bias. Discuss how this interplay itself is a valuable finding about the propagation of information inequality.
+2.  Deepen the temporal analysis. For example, model accuracy decay as a function of months-since-events for models with known cutoffs, or analyze whether performance on events from the same region but different pre-cutoff years shows any meaningful variation.
+3.  Add a critical ablation or sensitivity analysis for the evaluation pipeline. This could involve using a second, distinct LLM-as-judge (e.g., GPT-4o) on a subset of responses to report inter-judge agreement and ensure key conclusions are robust.
+
+---
+
+## dPAcHrG4rl
+
+- GT: Accept (Poster) (avg 5.3)
+- Predicted: N/A (3.5/10)
+- Match: N/A
+
+### Final Review
+
+## Summary
+This paper presents an information-theoretic analysis of the limitations of single-pass reasoning in Large Language Models (LLMs) for Multi-Hop Question Answering (MHQA). It derives a Fano-style upper bound on accuracy, formalizing an "Accuracy Cliff" where performance collapses when task information demand exceeds the model's output capacity. Based on this theory, the authors propose InfoQA, a proof-of-concept multi-call framework that decomposes tasks, prunes reasoning traces, and uses an explicit workflow to manage information load. The theory and framework are validated on a controlled synthetic benchmark.
+
+## Strengths
+- **Rigorous Theoretical Foundation:** The paper provides a formal, information-theoretic derivation of a performance bound for single-pass LLM reasoning (Theorem 1). The analysis cleanly connects classical tools (conditional Fano inequality, output entropy bound) to a modern LLM bottleneck, yielding an interpretable "Accuracy Cliff" prediction.
+- **Controlled and Systematic Empirical Validation:** The authors construct a novel synthetic benchmark that allows fine-grained, independent control over key difficulty factors (hop count, context length). This design enables a clean test of the theoretical predictions, and the results show single-pass baselines following the predicted capacity curves.
+- **Well-Motivated Proof-of-Concept Framework:** InfoQA is a direct, operational implementation of the principles derived from the theoretical analysis. Its components (capacity-aware decomposition, dependency-explicit workflow, iterative query contraction) are clearly explained, and ablation studies demonstrate the necessity of its core design choices.
+
+## Weaknesses
+### Major:
+- **Circularity in Theoretical Validation:** The empirical validation of the Fano-style bound is not independent. The parameters of the information demand model (β₀, α, γ) and the model capacity (C) are fitted to the observed performance data (F1 scores) via grid search (Section 5.2, Eq. 11, Appendix A.5). The resulting close alignment between theory and data (Figure 5) is therefore a post-hoc fit, not a prediction from first principles. The paper does not provide an independent, task-side method to estimate β or C, weakening the claim that the bound *governs* model behavior.
+- **Lack of Real-World Benchmark Validation:** The entire empirical evaluation is conducted on a synthetic, controlled benchmark. While this is suitable for testing the theory in isolation, it leaves the practical efficacy and generalizability of both the theoretical insight and the InfoQA framework unproven. There is no validation on established, real-world MHQA datasets (e.g., HotpotQA, MuSiQue), where natural noise, diverse question structures, and potential shortcuts could yield different results.
+- **No Direct Manipulation of the Theorized Bottleneck (C):** The theory centers on output capacity `C = H(Y)`. A strong causal test would involve experimentally manipulating `C` (e.g., by capping the maximum allowed output tokens) and observing if the accuracy cliff shifts accordingly. The paper infers `C` from performance curves but does not perform such a manipulation, leaving the causal link between the derived bound and model behavior less firmly established.
+
+### Minor:
+- **Over-Simplifying Theoretical Assumptions:** The elegant, interpretable bound (Eq. 5, `Acc ≤ (C+1)/β`) and the demand model (Eq. 6, `β(h,L) = β₀ + αLγ^(h-1)`) rely on simplifying assumptions (e.g., uniform answer distribution, exponential hop amplification). The paper acknowledges these but does not analyze how often these assumptions hold in practice or how violations affect the bound's tightness, limiting the bound's claimed generality.
+- **Narrow Model and Task Scope Evaluation:** Experiments are limited to two sizes of a single model family (Qwen3). Testing on models with different architectures, training regimes, and scales is necessary to establish the "Accuracy Cliff" as a universal LLM phenomenon, not an artifact of a specific model. Furthermore, reasoning chains are limited to 4 hops; generalization to longer, more complex chains remains unverified.
+- **Superficial Error Analysis:** The error analysis is brief and generic, identifying "semantic drift" and "intrinsic model capacity" as failure modes for InfoQA. A more systematic breakdown comparing error types between single-pass (e.g., capacity overflow) and multi-call (e.g., faulty decomposition) failures would provide clearer guidance for future improvements.
+
+## Nice-to-Haves
+- **Validation on Standard MHQA Benchmarks:** Adding results on datasets like HotpotQA or 2WikiMultihopQA would significantly strengthen the paper's practical relevance.
+- **Deeper Analysis of Capacity (C):** A discussion on how `C` relates to tangible LLM properties (e.g., max generation length, decoding distribution entropy) would make the theory more actionable.
+- **Comparison with Other Multi-Call Frameworks:** While the paper compares to single-pass baselines, a direct comparison with other modern multi-call reasoning systems would better contextualize InfoQA's contribution within the multi-call paradigm.
+
+## Removed Points
+*These points are flagged to be removed, treat them with caution.*
+- **Strength - "Well-written" or "Important Topic":** Removed as generic.
+- **Weakness - "Unfair Baseline Comparison":** The critic claimed ReAct and Self-Ask were unfairly implemented as single-pass. The paper explicitly compares single-pass variants of all baselines to isolate the effect of the reasoning paradigm, which is a valid experimental design. This is not an unfair asymmetry that favors the author's method.
+- **Weakness - "Lack of Novelty in Framework Components":** While the individual components of InfoQA are not novel in isolation, the framework's contribution is its principled derivation from and validation of a new theoretical analysis. The criticism is overly reductive.
+- **Weakness - "Formatting Nitpicks":** Any minor stylistic comments are removed.
+- **Weakness - "Reproducibility Nitpicks":** Concerns about undisclosed hyperparameters or large training logs are removed as trivial.
+
+## Suggestions
+- To address the major circularity issue, consider developing an independent method to estimate the information demand β from task statistics (e.g., context characteristics, answer space size) without fitting to performance data. Alternatively, reframe the contribution as providing a *descriptive* model that fits observed data well, rather than a predictive theoretical law.
+- Run InfoQA and key baselines on 1-2 standard, real-world MHQA benchmarks to demonstrate generalizability beyond the synthetic setting.
+- Include an experiment where the output capacity `C` is directly manipulated (e.g., by restricting the maximum generation length) to test if the accuracy cliff's location shifts as predicted by the theory.
+
+---
+
+## CVZFzsg1PJ
+
+- GT: Withdrawn (treated as Reject) (avg 2.0)
+- Predicted: N/A (4.0/10)
+- Match: N/A
+
+### Final Review
+
+## Summary
+This paper reframes neighborhood control in the Local Branching (LB) heuristic for Mixed-Integer Linear Programming (MILP). Instead of learning the scalar neighborhood radius parameter \(k\), the method first partitions variables into structurally meaningful clusters via graph community detection (Louvain). A reinforcement learning (RL) agent then dynamically selects a subset of these clusters to define the branching neighborhood at each iteration. The framework aims to automate neighborhood design without requiring offline data collection of solved instances.
+
+## Strengths
+- **Conceptual Reframing**: The shift from tuning a numerical parameter (\(k\)) to learning a policy over structurally-derived variable subsets is a novel and meaningful advancement for controlling Local Branching. It better leverages problem structure and moves beyond prior learning-based methods that focus on predicting \(k\).
+- **Effective Integration of Structure and Learning**: The two-stage pipeline—unsupervised graph clustering followed by RL-guided search—is coherent and well-motivated. The ablation study (Table 3) clearly demonstrates that both the structure-aware clustering and the RL agent contribute positively to performance.
+- **Strong Generalization Demonstrated on Larger Instances**: The method shows robust performance when evaluated on larger instances (with doubled variable/constraint counts) across all three synthetic benchmark classes (Set Covering, Independent Set, Combinatorial Auction), indicating good scalability.
+
+## Weaknesses
+### Major:
+- **Incomplete Baseline Comparison in Primary Experiments**: Table 3, which presents results on the main benchmark problems, does not include the SCIP solver. The paper's central claim is to outperform "state-of-the-art learning-based LB models and the open-source solver SCIP." The absence of SCIP from this primary comparison table undermines the claim for the standard experimental setting. SCIP results appear only in Table 4 for larger instances and MIPLIB. This omission prevents a direct verification of the core claim on the primary benchmarks.
+- **Ambiguous and Uninterpretable MIPLIB Results**: The MIPLIB results in Table 4 report PrimalBound and PrimalGap, but the objective sense (minimization or maximization) for these instances is not specified. For example, SARLB's PrimalBound (9,049,794,557) is numerically higher than SCIP's (8,729,503,534), yet SARLB's PrimalGap is reported as lower (1.36% vs. 6.64%). Without knowing if this is a minimization problem (where lower bounds are better) and without the best-known solution values to contextualize the gaps, the reader cannot assess whether a lower PrimalGap genuinely indicates superior performance. This ambiguity severely weakens the claim of effective generalization to real-world, heterogeneous instances.
+- **Overly Simplistic RL Action Space Contradicts Framing**: The RL agent's action space is limited to \(\{-Δ, 0, +Δ\}\), controlling only the *number* of clusters to select. The actual selection of *which* specific clusters is done by a simple, non-learned heuristic (inverse-frequency sampling). This contradicts the paper's framing of learning "a policy to select a subset of variables" (Abstract) and "dynamically selects the number of clusters to explore per iteration" (Section 4.2). The agent learns a pacing schedule for neighborhood size, not an intelligent policy for variable subset composition, which limits the sophistication of the learned control.
+
+### Minor:
+- **Limited Comparison to Contemporary RL-for-Optimization Methods**: The primary learning baseline is LB-SRMRL, a method for tuning \(k\). The paper would be strengthened by a direct comparison to other recent RL-based methods for neighborhood search or destroy operators (e.g., those cited in Section 2 like Song et al. 2020, Wu et al. 2021) to better situate its novelty and performance within the broader RL-for-optimization landscape.
+- **Heuristic Design Choices Lack Justification or Sensitivity Analysis**: Key heuristic rules—the dynamic radius \(k \propto \sqrt{|\bar{S}| + |B \setminus \bar{S}|}\), the time-limit scaling \(T_t = T_0 \cdot (n_t/n_0)^\alpha\), and the inverse-frequency cluster selection—are presented without theoretical motivation or empirical sensitivity analysis. While they appear effective, their specific forms and parameters (e.g., \(α\)) are not justified, leaving their robustness unclear.
+- **Computational Overhead of Preprocessing Unexplored**: The graph construction and Louvain clustering are performed as a preprocessing step. The computational cost of this step is not reported or analyzed. For very large-scale instances, this overhead could offset some of the solving-time benefits, but its impact remains unquantified.
+
+### Trivial:
+- **Typographical Error in Table 3**: Table 3 includes an unexplained row labeled "SNLB." From context, this appears to be a formatting error for the proposed "SARLB" method. While this does not affect the interpretation of the ablation results, it is a minor presentation flaw.
+
+## Nice-to-Haves
+- **Deeper Analysis of Learned Policy Behavior**: A simple analysis correlating the RL agent's actions (\(+Δ/0/-Δ\)) with search state features (e.g., recent improvement, incumbent age) would illuminate whether the policy learns intelligent behavior beyond a simple schedule.
+- **Characterization of Cluster Properties**: Analyzing properties of the generated clusters (size distribution, intra-cluster constraint coupling) and their correlation with selection frequency or performance would strengthen the claim that community detection finds structurally *useful* neighborhoods.
+- **Breakdown of Runtime Costs**: Separating the total runtime into clustering time, RL inference time, and solver time for subproblems would provide a clearer picture of the method's practical overhead and scalability.
+
+## Removed Points
+*These points are flagged to be removed, treat them with caution.*
+- **Strength: "The paper is well-written" / "The topic is important"** - Removed as per the rule to exclude generic strengths that apply to any paper.
+- **Weakness: "Statistical significance testing is missing"** - Removed as a "nice-to-have" under soft rules. While providing confidence intervals is good practice, reporting average performance over 40 test instances per class is a common and accepted standard in the field for large-scale MILP benchmarking.
+- **Weakness: "Small test set size (40 instances)"** - Removed as a generic weakness. The dataset size is consistent with prior work in the area (e.g., Liu et al. 2022, Gasse et al. 2019) and is sufficient for initial evaluation.
+- **Weakness: "Code is not currently available"** - Removed per the hard rule on reproducibility nitpicks. The paper includes a reproducibility statement committing to release code upon publication, which is standard.
+- **Weakness: "Demand for comparison to a wider array of ML methods"** - Weakened and integrated as a minor "limited comparison" point. The paper adequately compares to the most relevant direct baseline (LB-SRMRL). Demanding comparisons to every possible ML method is scope creep.
+- **Weakness: "Training time and computational cost not discussed"** - Weakened to a minor point about "computational overhead." Detailed wall-clock training time is often omitted in RL-for-optimization papers in favor of final solution quality metrics.
+- **Weakness from Harsh Critic: "Key RL design choices are underspecified (Δ, reward normalization)"** - Partially removed. The paper specifies the reward as normalized relative to the initial solution (Section 4.2: "normalized objective improvement relative to the initial solution \(x_0\)"), which is sufficient. The step size \(Δ\) is a hyperparameter; its absence from the appendix tables is a minor omission, not a critical methodological gap.
+
+## Suggestions
+- **Include SCIP results in Table 3**: To substantiate the core claim of outperforming SCIP, add a row for SCIP (with default settings) to Table 3, reporting its PrimalBound, PrimalGap, and PrimalIntegral on the standard small benchmarks.
+- **Clarify MIPLIB Results**: In Table 4 or its caption, specify the objective sense (minimization/maximization) for the MIPLIB problems and, if possible, provide the best-known solution values used to compute the PrimalGap. Alternatively, reformat the table to use metrics that are unambiguous without this context (e.g., directly compare PrimalBounds if all instances are minimization).
+- **Reframe the Contribution Language**: Adjust the abstract and introduction to more accurately reflect that the RL agent controls the *scale* (number of clusters) of the neighborhood, while cluster *composition* is determined by structure-aware generation and a simple diversification heuristic. This resolves the contradiction between framing and implementation.
+
+---
+
+## qioDi3afqm
+
+- GT: Withdrawn (treated as Reject) (avg 0.0)
+- Predicted: N/A (0.0/10)
+- Match: N/A
+
+### Final Review
+
+## Summary
+This submission is not a research paper. It is the official ICLR 2026 formatting instruction document, detailing layout, citation, and submission requirements. It contains no research question, methodology, experiments, results, or novel scientific contribution.
+
+## Strengths
+- **Clear and comprehensive procedural guide**: The document provides exceptionally detailed and unambiguous formatting specifications (e.g., exact margins, font sizes, heading styles, and file preparation commands), which is its intended purpose as a style guide.
+- **Well-structured template**: The instructions are logically organized with a clear hierarchy, making it easy for authors to locate specific requirements.
+
+## Weaknesses
+### Fatal
+- **Not a research contribution**: The submission is a formatting template and style guide. It lacks all core components of a research paper: an abstract stating a problem and contribution, an introduction, related work, a proposed method, experiments, results, and a discussion. Therefore, it does not meet the basic criteria for evaluation as a scientific contribution to ICLR. This is a categorical mismatch with the conference's purpose.
+
+### Minor
+- **Contains placeholder text**: Sections like the abstract, author list, and references contain template placeholder text (e.g., "Anonymous authors," "Paper under double-blind review," example citations), which is inappropriate for a final submission.
+
+### Trivial
+- **Self-referential formatting**: As a meta-document about formatting, its own formatting is correct, but this is irrelevant to its eligibility as a research paper.
+
+## Nice-to-Haves
+- If the authors intended to submit research, they should replace the template content with novel scientific work, using this document only as a formatting shell.
+
+## Removed Points
+*These points are flagged to be removed, treat them with caution*
+- **Strengths**: "The topic is important" or "The paper is well-written" were removed as generic and not specific to a research contribution.
+- **Weaknesses**: Any criticism about missing comparisons to other methods, unreleased benchmarks, or reproducibility details (e.g., hyperparameters, training logs) was removed, as the paper does not propose a method to compare. Criticisms about missing related work were removed per the rule against mentioning missing works without external sources.
+
+## Suggestions
+- The authors should withdraw this submission and prepare a standard research manuscript that addresses a novel problem in machine learning, proposes a method or theory, and provides empirical or theoretical validation. The current document could serve as a reference for formatting that new manuscript.
+
+---
+
