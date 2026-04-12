@@ -51,6 +51,16 @@
 # echo "  bench_reviews/           - individual reviews"
 # echo "============================================"
 
+
+
+
+
+# set -a && source "$(dirname "$0")/.env" && set +a
+
+# export ANTHROPIC_BASE_URL="https://openrouter.ai/api"
+# export ANTHROPIC_AUTH_TOKEN="$OPENROUTER_API_KEY"
+# export ANTHROPIC_API_KEY="" # Important: Must be explicitly empty
+
 #!/bin/bash
 set -e
 
@@ -66,17 +76,6 @@ echo "============================================"
 # python fetch_iclr2025.py 200 42 --balanced
 
 # ── Step 2: Check dataset distribution ── 
-
-# set -a && source "$(dirname "$0")/.env" && set +a
-
-# export ANTHROPIC_BASE_URL="https://openrouter.ai/api"
-# export ANTHROPIC_AUTH_TOKEN="$OPENROUTER_API_KEY"
-# export ANTHROPIC_API_KEY="" # Important: Must be explicitly empty
-
-# export ANTHROPIC_DEFAULT_OPUS_MODEL="claude-haiku-4-5"
-# export ANTHROPIC_DEFAULT_SONNET_MODEL="claude-haiku-4-5"
-# export ANTHROPIC_DEFAULT_HAIKU_MODEL="claude-haiku-4-5"
-# export CLAUDE_CODE_SUBAGENT_MODEL="claude-haiku-4-5"
 
 
 
@@ -107,7 +106,7 @@ for k in sorted(bins):
 echo ""
 rm -rf bench_reviews/
 mkdir bench_reviews
-python run_iclr_bench.py 50 3 --parallel --data-dir iclr2026_balanced --calibration calibration.md --no-related-work # --no-neutral
+python run_iclr_bench.py 50 13 --parallel --data-dir iclr2026_balanced --calibration calibration.md --no-related-work # --no-neutral
 
 # ── Step 6: Compute metrics ──
 echo ""

@@ -1,49 +1,84 @@
-=== CALIBRATION EXAMPLE 8 ===
+=== CALIBRATION EXAMPLE 13 ===
 
 # Final Consolidated Review
 ## Summary
-This paper introduces ChemTable, a benchmark for evaluating multimodal large language models (MLLMs) on chemical table recognition and understanding. It comprises over 1,300 real-world tables from chemistry literature, annotated for structure and content, and over 9,000 question-answering instances spanning descriptive and reasoning tasks. Evaluation reveals significant gaps in current MLLMs, particularly in domain-specific reasoning (e.g., molecular structure interpretation) and fine-grained retrieval, while human performance remains superior on complex tasks.
+This paper introduces **ChemTable**, a benchmark for multimodal understanding of chemical tables drawn from real chemistry literature. The benchmark covers both **table recognition** (structure/content extraction, value/position retrieval, molecular diagram recognition) and **table understanding** (descriptive and reasoning QA), and the experiments show a consistent gap between current MLLMs and human experts, especially on molecule-centric, style-sensitive, and fine-grained alignment tasks.
 
 ## Strengths
-- **Addresses a clear and important niche**: ChemTable tackles the underexplored problem of multimodal understanding for scientific tables in chemistry, which uniquely combines structured data, symbolic notation, and graphical elements. This fills a gap left by general-domain table benchmarks.
-- **High-quality, rigorously constructed dataset**: The dataset is built with notable care, involving domain experts, detailed annotation protocols (including logical coordinates, stylistic features, and SMILES mapping), and attention to chemical diversity (e.g., scaffold analysis). The inclusion of unanswerable questions and diverse table types enhances its realism.
-- **Comprehensive and insightful evaluation**: The paper benchmarks a wide array of state-of-the-art MLLMs (both open-source and proprietary) on recognition and understanding tasks, providing a broad snapshot of capabilities. The qualitative analysis of failure modes (e.g., fine-grained alignment, visual grounding, multi-hop reasoning) moves beyond aggregate scores to offer actionable insights.
+- **The benchmark targets a genuinely underexplored multimodal regime that general table benchmarks do not capture well.** The paper is not just “tables in science”; it focuses on chemical tables that jointly contain text, numerical conditions, footnotes, formatting cues, and embedded molecular diagrams. This is concretely reflected in the task design: e.g., molecular recognition to SMILES, function-based QA, benzene-ring counting, and yield/condition reasoning.
+- **The annotation schema is unusually rich and operationalized in a way that supports multiple evaluation settings.** Beyond cell boxes and text, the dataset includes logical row/column structure, title/reaction/substance/annotation segmentation, style markup (bold/color/italics), and links from structures to SMILES (Appendix D). The conversion from logical annotations to markup is explicitly specified in Algorithms 1–2, which makes the recognition setup much more concrete than many benchmark papers.
+- **The paper contributes useful diagnostic findings rather than only leaderboard numbers.** The most compelling empirical result is not the raw ranking, but the mismatch between high global structure scores and poor cell-level grounding: e.g., Table 3 reports TEDS/TEDS-Struct in the high 80s/90s while value/position retrieval remains very low (roughly 17–34 and 33–53 ACC). This isolates a real weakness of current MLLMs: they can often “parse the table” coarsely while failing at exact localization.
+- **The qualitative analysis is strong and specific.** Appendix M identifies concrete failure modes that are highly relevant for future model development: miscounting rows despite correct OCR, hallucinating style/color cues, misbinding stereochemical footnotes, and failing at the final schema-selection hop even when intermediate reasoning is correct.
+- **Including a human baseline is valuable and reveals that the hardest chemistry-aware tasks remain far from solved.** In Table 4, humans are near ceiling on several tasks and still ahead on chemistry-heavy or style-heavy ones, which supports the paper’s claim that chemical tables expose limitations not visible in easier general-domain settings.
+- **The benchmark includes unanswerable questions and analyzes abstention behavior.** This is a meaningful addition in scientific QA, where tables often contain ambiguity, missing values, or style-based references. Table 5 gives a more realistic picture of reliability than accuracy alone.
 
 ## Weaknesses
-### Major
-*(No weaknesses rise to the level of fundamentally undermining the paper’s core contributions. The benchmark and analysis remain valuable despite the limitations noted below.)*
+
+###: Fatal
+None.
+
+### Major:
+- **The QA construction pipeline relies heavily on LLM generation and LLM-based filtering, which weakens the benchmark’s claim to be a clean measure of independent scientific reasoning.**  
+  This concern is real, though not as fatal as the harsh review suggests. The paper states that descriptive questions are derived from annotations, “simple reasoning questions are generated using GPT-4.1,” and “more complex reasoning questions and visually descriptive tasks” include **2,122 manually annotated questions**. Since the dataset contains **9,886 QA pairs**, a large fraction is indeed not human-authored. In addition, Section 3.3.4 filters difficulty by running **Qwen-2.5-7B** and randomly discarding questions it gets right on the first try.  
+  Why this matters: this design can shape the benchmark toward the language patterns and difficulty profile induced by the generator and the filtering model, rather than purely reflecting naturally occurring user questions or expert-authored chemistry reasoning. It does not invalidate the benchmark, but it does limit how strongly one should interpret model rankings as measuring “objective” domain reasoning.
+- **The evaluation for table understanding depends substantially on an LLM judge, and the validation presented is not strong enough to fully rule out judge bias on the hardest chemistry-specific cases.**  
+  Section 5.1 says open-ended QA is scored by **GPT-4.1-nano** with binary correctness, and Appendix G reports **96.8% agreement** with humans on a 20% sample. That is reassuring, but incomplete. The paper does not break down agreement by question type, and the hardest cases in this benchmark are precisely the domain-specific symbolic ones where plausible-but-wrong chemical answers are likely.  
+  Why this matters: if grader reliability is uneven across categories, the headline accuracy numbers in Table 4 may be more trustworthy for short descriptive items than for chemistry-heavy reasoning or ambiguous symbolic cases.
+- **The paper does not sufficiently disentangle failures of visual/structural recognition from failures of reasoning.**  
+  This is one of the most important missing analyses. The benchmark evaluates recognition and understanding separately, and Figure 5 compares image/text/hybrid input for InternVL3, but there is no clean experiment giving models **ground-truth structured tables** and comparing that to image-only QA across the full benchmark. The paper itself provides evidence that recognition is a major bottleneck: Table 3 shows poor value/position retrieval, and Figure 5 indicates text/hybrid inputs help.  
+  Why this matters: several claimed “reasoning” failures may actually be upstream perception failures. Without a stronger controlled analysis, the paper cannot cleanly attribute deficits to chemistry reasoning versus table parsing.
+- **Some benchmark claims are broader than what the experimental design directly supports.**  
+  The paper sometimes frames its findings as revealing general limits of “domain-specific reasoning” in scientific intelligence, but some supporting analyses are narrow. For example, the modality comparison in Figure 5 appears to be run only on **InternVL3**, so the conclusion that hybrid input is generally best across models should be stated more cautiously. Similarly, CoT ablation is only reported for **GPT-4.1** (Appendix C), so it cannot explain cross-model differences in reasoning robustness.
 
 ### Minor
-- **Automated evaluation reliability**: While using GPT-4.1-nano for QA grading is pragmatic and validated on a 20% human sample (96.8% agreement), the paper does not break down agreement by question type. This leaves open the possibility that grader reliability could be lower for the complex, domain-specific reasoning questions that are the benchmark’s focus.
-- **Difficulty filtering strategy**: The method of filtering out “easy” questions—based solely on whether Qwen-2.5-7B answers them correctly in one pass—may bias the benchmark toward that model’s failure modes. A more principled or multi-model consensus approach would strengthen the difficulty calibration.
-- **Clarity of human evaluation protocol**: The description of human performance collection (Appendix L) states that experts used “scratch paper and a basic calculator” but does not specify whether they were shown the raw table image (as models were) or had access to structured annotations. This ambiguity makes it difficult to assess the fairness of the model‑vs‑human comparison.
-- **Lack of data contamination analysis**: The paper does not discuss the possibility that test tables may appear in the training data of the evaluated models (especially proprietary ones like GPT‑4.1). A contamination check would help ensure that the benchmark measures genuine understanding rather than memorization.
-- **Dataset splits and evaluation protocol**: For a benchmark intended for future use, the paper does not clearly define fixed train/validation/test splits. Details on the final filtered split (Appendix N) are helpful, but explicit splits and a standard evaluation protocol are important for reproducibility and fair comparisons.
+- **There is a noticeable inconsistency in how the dataset size is described.**  
+  The main text says the dataset comprises “over **1,300** tables,” Table 2 reports **1,382** images, while Appendix D.3 states “we constructed a high-quality dataset comprising **1,500 fully annotated chemical table images**.” This likely reflects different stages or filtering, but the paper should reconcile these counts explicitly.
+- **The benchmark is stronger as an evaluation dataset than as a training resource, but this intended use is not stated sharply enough.**  
+  Given the scale (roughly 1.3k–1.5k tables), ChemTable is meaningful for benchmarking and perhaps targeted fine-tuning, but not obviously for training broad multimodal table models from scratch. The paper occasionally gestures toward enabling model development more generally, and it would benefit from a clearer statement of intended use.
+- **The recognition baseline suite is narrower than ideal for a benchmark paper centered on table recognition.**  
+  The paper evaluates multiple MLLMs and includes DECIMER in molecular recognition analysis, but it does not compare against established non-MLLM table extraction pipelines for the recognition task. This does not break the paper’s MLLM benchmarking story, but it limits how informative the recognition results are for the broader table-understanding community.
+- **The molecular-recognition metric adaptation is promising but underspecified.**  
+  Replacing edit distance with a chemistry-aware similarity measure for molecular cells is sensible. However, the paper does not give enough detail in the main text about the exact conversion/scoring pipeline for molecule predictions, making it hard to assess how robust the metric is to representation differences.
 
 ### Trivial
-- **Wording of performance gaps**: The claim of a “small performance gap” between open‑source and proprietary models in table recognition (Section 4.2) could be more precise, as some differences (e.g., ~2.8 points on TEDS‑Struct) are noticeable, though not large enough to alter the overall narrative.
+- **Human evaluation methodology could be reported with more statistical detail.**  
+  Appendix L explains that three of five chemistry experts answered each question and results are averaged, but variance or agreement statistics for the human baseline would make the ceiling estimate more informative.
+- **Some analyses that are compelling in the appendix deserve more quantitative support in the main text.**  
+  In particular, claims about molecular complexity, footnotes, and multimodal interference would be stronger with systematic feature-performance correlations rather than primarily qualitative examples.
 
 ## Nice-to-Haves
-- **Comparison with specialized models**: Including dedicated table recognition models (e.g., Table Transformer) and chemical OCR tools (e.g., DECIMER) as baselines would help contextualize whether the observed bottlenecks are specific to MLLMs or general to all table‑understanding systems.
-- **Ablation studies to disentangle errors**: Experiments providing ground‑truth HTML or SMILES strings as input would help separate recognition errors from pure reasoning failures, clarifying the source of the performance gap.
-- **Systematic modality ablation**: Expanding the analysis in Figure 5 to systematically ablate the contribution of image vs. HTML input across all task types and models would better identify which modality is critical for which kind of reasoning.
-- **Fine‑tuning experiments**: A simple fine‑tuning ablation on a subset of ChemTable could show whether the “symbolic understanding gap” can be narrowed with domain adaptation, offering a path forward for model improvement.
-- **Deeper error analysis**: Quantifying the prevalence of different failure modes and correlating them with table characteristics (e.g., presence of molecular structures, color usage) would help prioritize research directions.
+- Add a controlled **ground-truth-HTML QA** evaluation across the main models to quantify how much of the gap is due to perception versus reasoning.
+- Report **LLM-judge agreement by category**, especially for function-based QA, molecular recognition, and symbolic/footnote-heavy questions.
+- Include a few strong **non-MLLM recognition baselines** for table extraction to better position the recognition difficulty.
+- Clarify the exact **dataset splits**, and reconcile the 1,382 vs. 1,500 table counts.
+- Provide more granular analysis linking error rates to table properties such as molecule density, merged-cell ratio, or footnote count.
 
 ## Removed Points
-*These points are flagged to be removed, treat them with caution.*
-- **“Claim of ‘small performance gap’ is overstated”**: This is a subjective interpretation of numerical differences; the paper’s overall conclusion about competitive open‑source performance remains reasonable.
-- **“Missing baseline with ground‑truth SMILES”**: While interesting, this is an additional experiment that goes beyond the paper’s primary goal of benchmarking off‑the‑shelf MLLMs. Moved to Nice‑to‑Haves.
-- **“Appendix K evaluation of domain‑specific models is underdeveloped”**: The comparison with ChemVLM and Table‑LLaVA is included in the appendix and supports the main narrative; moving it to the main text would be a presentational improvement, not a core flaw.
-- **“Over‑reliance on GPT‑4.1 as evaluator”**: Similar to the automated evaluation concern, but the paper already provides human verification and high agreement; this point is merged into the minor weakness above.
-- **“Lack of control experiments with non‑chemical complex tables”**: Isolating the domain‑specific challenge would strengthen the claim, but the paper already demonstrates unique chemical‑symbol difficulties; requiring such a control is scope creep for a domain‑focused benchmark.
-- **“Missing discussion of broader limitations (English‑only, static images)”**: The paper’s conclusion could be expanded, but these limitations are common to many benchmarks and do not invalidate the contribution.
+These points are flagged to be removed, treat them with caution.
+
+- **“The benchmark cannot claim domain-specific reasoning because Appendix H says questions must be answerable without specialized chemical knowledge.”**  
+  This criticism overstates a real tension. Appendix H indeed says annotators should ensure answers are “directly found in the table or logically inferable from it without requiring specialized chemical knowledge.” But the paper’s tasks clearly still include **domain-specific representations and conventions**—e.g., molecular diagrams, stereochemical footnotes, function-based chemistry QA, SMILES extraction, yield/condition reasoning. The benchmark is therefore still domain-specific in input and notation, even if it avoids requiring external chemistry facts not grounded in the table. This is a limitation in scope framing, not a fatal contradiction.
+- **Claims about unreleased, unverifiable, or questionable existence/status of cited models or tools.**  
+  Per instruction, these are removed.
+- **Potential data contamination with model pretraining.**  
+  This is speculative and not evidenced from the paper. It should not be used as a concrete weakness here.
+- **Copyright/license concerns based on doubting practical release utility.**  
+  The paper explicitly discusses licensing in Appendix S. Without external legal analysis, this should not be elevated as a review criticism.
+- **Formatting/extraction complaints about tables in the parsed submission text.**  
+  These are artifacts of the extracted text, not paper issues.
+- **Complaints that the paper misses related work.**  
+  Not included per instruction.
+
+## Novel Insights
+The most interesting synthesis across the reviews and the paper itself is that ChemTable’s strongest contribution is not merely introducing a chemistry benchmark, but exposing a **three-layer failure stack** in current MLLMs: (1) coarse structure parsing can look strong under global metrics, (2) exact grounding to cells and symbols remains weak, and (3) chemistry-specific reasoning failures are often inseparable from those grounding errors. In other words, the benchmark suggests that “scientific reasoning” deficits in MLLMs may often be **grounding-and-binding deficits first, reasoning deficits second**. This is a useful reframing for future work: improving symbolic scientific QA may require better multimodal alignment and schema binding as much as better reasoning.
 
 ## Suggestions
-- **Strengthen evaluation methodology**: Report the human–LLM judge agreement rate separately for descriptive vs. reasoning questions, and consider using a multi‑judge consensus or expert review for ambiguous cases in future benchmark versions.
-- **Clarify human evaluation protocol**: In Appendix L, explicitly state whether human annotators were shown the table image (identical to model input) or had access to additional structured annotations.
-- **Define standard dataset splits**: Provide a fixed, publicly available train/validation/test split (or clearly indicate that the entire set is a test‑only benchmark) to ensure reproducible evaluation in future work.
-- **Add a data contamination statement**: Discuss steps taken (or planned) to check for and mitigate potential test‑data contamination in model training sets, or at least acknowledge this as a limitation.
+- Run a main-table experiment where models answer the same QA set under three conditions: **image only**, **ground-truth HTML only**, and **image + ground-truth HTML**. This would directly separate perception failure from reasoning failure.
+- Provide **per-category judge validation** for GPT-4.1-nano, especially on chemistry-specific and ambiguous questions, not just an overall 96.8% agreement.
+- Make the QA provenance more transparent: report exactly how many questions per category are rule-based, LLM-generated, manually authored, and manually revised.
+- Reconcile the dataset-size discrepancy and clearly define the released split(s).
+- Add at least one or two strong traditional recognition baselines for the table-recognition portion, so the benchmark is informative beyond MLLM-vs-MLLM comparison.
+- Tone down broad claims about general scientific reasoning where the evidence is currently based on single-model ablations or narrow analyses.
 
 # Actual Human Scores
 Individual reviewer scores: [4.0, 4.0, 6.0, 4.0]

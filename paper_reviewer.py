@@ -22,6 +22,16 @@ from pathlib import Path
 from dotenv import load_dotenv 
 from openai import APITimeoutError, AsyncOpenAI
 from pydantic import BaseModel
+from review_agents.claude_backend import (
+    make_claude_file_mcp_server,
+    run_claude_agent_task,
+    run_claude_reviewer,
+)
+from review_agents.openai_backend import (
+    build_openai_file_tools,
+    run_openai_agent_task,
+    run_openai_reviewer,
+)
 
 load_dotenv()  # loads .env from cwd or parent dirs
 
@@ -33,20 +43,24 @@ OPENROUTER_API_KEY = os.environ["OPENROUTER_API_KEY"]
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 ZAI_BASE_URL = "https://api.z.ai/api/coding/paas/v4/"
 
-base_model = "deepseek/deepseek-v3.2" 
-MODEL_HARSH = f"deepseek/deepseek-v3.2"
+base_model = "qwen/qwen3.5-flash-02-23" 
+# Reviewer models can use one of three backends:
+# - plain OpenRouter chat model id, e.g. "deepseek/deepseek-v3.2"
+# - Claude Agent SDK, e.g. "claude:claude-sonnet-4-5"
+# - OpenAI Agent SDK via OpenRouter, e.g. "openai_agent:deepseek/deepseek-v3.2"
+MODEL_HARSH = f"qwen/qwen3.6-plus" 
 MODEL_NEUTRAL = f"{base_model}"
-MODEL_SPARK = f"deepseek/deepseek-v3.2" 
+MODEL_SPARK = f"qwen/qwen3.6-plus" 
 MODEL_RELATED_WORK = f"{base_model}:online" 
 MODEL_FILTER = f"{base_model}"
 # MODEL_MERGER = f"zai:glm-5.1" #用zai coding plan白嫖
-MODEL_MERGER = f"deepseek/deepseek-v3.2" 
+MODEL_MERGER = "gpt-5.4"
 MODEL_PARSER = "openai/gpt-5.4-nano" 
-MODEL_FIND_HUMAN = f"claude:claude-sonnet-4-5"
-MODEL_SCORER = f"claude:claude-sonnet-4-5" 
+MODEL_FIND_HUMAN = "openai_agent:minimax-m2.7"
+MODEL_SCORER = "openai_agent:gpt-5.4"
 
 human_review_dir = "/home/wg25r/review_agent/iclr2025_data"
-MODEL_QA = "minimax/minimax-m2.7"
+MODEL_QA = "minimax-m2.7"
 
 MAX_RETRIES = 10
 RETRY_DELAY = 10 
@@ -111,6 +125,14 @@ def _detect_leakage_warning_phrases(text: str) -> list[str]:
         if found:
             matches.append(found.group(0))
     return matches
+
+
+def _extract_final_review_block(text: str) -> str | None:
+    match = re.search(r"<final_review>\s*(.*?)\s*</final_review>", text, flags=re.IGNORECASE | re.DOTALL)
+    if not match:
+        return None
+    content = match.group(1).strip()
+    return content
 
 # ── Prompt loading ────────────────────────────────────────────────────
 _PROMPTS_DIR = Path(__file__).parent / "prompts"
@@ -572,15 +594,7 @@ async def run_reviewer(
     model: str,
     venue: str = "",
 ) -> tuple[str, float]:
-    """Run a reviewer. Dispatches to Claude Agent SDK if model starts with 'claude:',
-    otherwise uses OpenRouter chat completions. Returns (review, cost)."""
-    if model.startswith("claude:"):
-        raise NotImplementedError("Claude Agent SDK path is currently disabled for testing. Re-enable to use it.")
-        # model_id = model[len("claude:"):]
-        # return await _run_reviewer_claude_sdk(
-        #     name, system_prompt, paper_path, model_id, venue=venue,
-        # )
-
+    """Run a reviewer via plain OpenRouter chat completions. Returns (review, cost)."""
     print(f"  [{name}] started ({model}) ...")
     venue_line = (
         f"This paper was submitted to **{venue}**. "
@@ -670,6 +684,31 @@ async def _parse_score(client: AsyncOpenAI, text: str) -> tuple[float, float]:
     return parsed.score, cost
 
 
+async def _answer_file_question(abs_path: str, question: str, allowed_paths: list[str]) -> str:
+    resolved = os.path.abspath(abs_path)
+    resolved_allowed = [os.path.abspath(path) for path in allowed_paths]
+    if not any(resolved.startswith(allowed_path) for allowed_path in resolved_allowed):
+        return (
+            f"ERROR: Access denied. Path '{resolved}' is not under any allowed directory: "
+            f"{resolved_allowed}"
+        )
+    try:
+        with open(resolved, "r", errors="replace") as file_handle:
+            file_content = file_handle.read()
+    except FileNotFoundError:
+        return f"ERROR: File not found: {resolved}"
+    if len(file_content) > 200_000:
+        file_content = file_content[:200_000] + "\n\n[... truncated]"
+    answer, _cost = await _call_openai(
+        _get_client(OPENROUTER_API_KEY),
+        "file_qa",
+        "You are a helpful assistant that answers questions about the content of a file.",
+        f"Here is the content of the file:\n\n{file_content}\n\nQuestion: {question}",
+        MODEL_QA,
+    )
+    return answer
+
+
 async def run_merge(
     client: AsyncOpenAI,
     harsh_review: str,
@@ -685,8 +724,6 @@ async def run_merge(
     Merger only — synthesize sub-agent reviews into a consolidated review.
     Returns (review_text, cost).
     """
-    print(f"  [merger] started ({MODEL_MERGER}) ...")
-
     merger_prompt = _build_merger_prompt(
         skip_neutral=skip_neutral,
         skip_spark=skip_spark,
@@ -722,7 +759,21 @@ async def run_merge(
         f"Remember: many of the harsh critic's points may be nonsensical or overly "
         f"picky — cross-check everything against the actual paper before including it."
     )
-    if MODEL_MERGER.startswith("zai:"):
+    if MODEL_MERGER.startswith("claude:"):
+        review_text, cost = await run_claude_agent_task(
+            name="merger",
+            instructions=merger_prompt,
+            user_prompt=user_prompt_review,
+            model_id=MODEL_MERGER.split(":", 1)[1],
+        )
+    elif MODEL_MERGER.startswith("openai_agent:"):
+        review_text, cost = await run_openai_agent_task(
+            name="merger",
+            instructions=merger_prompt,
+            user_prompt=user_prompt_review,
+            model_id=MODEL_MERGER[len("openai_agent:"):],
+        )
+    elif MODEL_MERGER.startswith("zai:"):
         review_text, cost = await _call_openai(
             zai_client, "merger", merger_prompt, user_prompt_review, MODEL_MERGER.split(":", 1)[1]
         )
@@ -736,64 +787,68 @@ async def run_merge(
 async def run_scorer(
     client: AsyncOpenAI,
     review_text: str,
+    paper_path: str,
     calibration_context: str = "",
     cal_dir: str = "",
     gt_score: float | None = None,
 ) -> tuple[float, float]:
     """
-    Scorer — uses Claude Agent SDK (claude-haiku-4-5) to search calibration
-    examples via Grep/Read, then scores the paper. Returns (score, cost).
+    Scorer — uses an SDK backend to search calibration examples via
+    Grep/Read, then scores the paper. Returns (score, cost).
     """
-    import tempfile
-    from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, AssistantMessage, TextBlock
-
     cal_dir_abs = str(Path(cal_dir).resolve()) if cal_dir else ""
-
-    # Write review and paper to temp files so the agent can Read them
-    # (avoids CLI character limit on the prompt)
-    tmp_dir = Path(tempfile.mkdtemp(prefix="scorer_"))
+    paper_abs = str(Path(paper_path).resolve())
+    paper_dir_abs = str(Path(paper_abs).parent)
+    paper_file_name = Path(paper_abs).name
+    scorer_allowed_paths = [path for path in [cal_dir_abs, paper_dir_abs] if path]
 
     scorer_agent_template = _load_prompt("scorer_agent.txt")
-    prompt = scorer_agent_template.format(
+    scorer_instructions = scorer_agent_template.format(
         cal_dir_abs=cal_dir_abs, 
-    ) + "\n" + review_text
-
-    print(f"  [scorer-agent] starting RAG scorer (claude-haiku-4-5, cal={cal_dir_abs}) ...")
-
-    scorer_mcp = _make_sandboxed_mcp_server("scorer_fs", [cal_dir_abs]) if cal_dir_abs else None
-    scorer_mcp_tools = [
-        "mcp__scorer_fs__read_file",
-        "mcp__scorer_fs__grep_files",
-        "mcp__scorer_fs__glob_files",
-        "mcp__scorer_fs__file_qa",
-    ] if scorer_mcp else []
-    scorer_mcp_servers = {"scorer_fs": scorer_mcp} if scorer_mcp else {}
-
-    result_text = ""
-    options = ClaudeAgentOptions(
-        model=MODEL_SCORER.split(":", 1)[1],
-        cwd=cal_dir_abs or None,
-        allowed_tools=scorer_mcp_tools,
-        disallowed_tools=["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
-        mcp_servers=scorer_mcp_servers,
-        max_turns=30,
+        paper_abs=paper_abs,
+        paper_dir_abs=paper_dir_abs,
+        paper_file_name=paper_file_name,
     )
-    total_cost = 0
-    async with ClaudeSDKClient(options=options) as sdk_client:
-        await sdk_client.query(prompt)
-        async for message in sdk_client.receive_response():
-            if isinstance(message, AssistantMessage):
-                for block in message.content:
-                    if isinstance(block, TextBlock):
-                        result_text += block.text
-            if isinstance(message, ResultMessage):
-                total_cost += message.total_cost_usd
-
-    print(f"  [scorer-agent] Claude Agent SDK savings: ${total_cost:.4f}")
-    _add_sdk_savings(total_cost)
-
-    # Clean up temp files
-    tmp_dir.rmdir()
+    if MODEL_SCORER.startswith("claude:"):
+        scorer_mcp = make_claude_file_mcp_server(
+            "scorer_fs",
+            scorer_allowed_paths,
+            file_qa_callback=_answer_file_question,
+        ) if scorer_allowed_paths else None
+        scorer_mcp_tools = [
+            "mcp__scorer_fs__read_file",
+            "mcp__scorer_fs__grep_files",
+            "mcp__scorer_fs__glob_files",
+            "mcp__scorer_fs__file_qa",
+        ] if scorer_mcp else []
+        scorer_mcp_servers = {"scorer_fs": scorer_mcp} if scorer_mcp else {}
+        result_text, total_cost = await run_claude_agent_task(
+            name="scorer-agent",
+            instructions=scorer_instructions,
+            user_prompt=review_text,
+            model_id=MODEL_SCORER.split(":", 1)[1],
+            allowed_tools=scorer_mcp_tools,
+            mcp_servers=scorer_mcp_servers,
+            cwd=cal_dir_abs or paper_dir_abs or None,
+        )
+        print(f"  [scorer-agent] Claude Agent SDK savings: ${total_cost:.4f}")
+        _add_sdk_savings(total_cost)
+    elif MODEL_SCORER.startswith("openai_agent:"):
+        openai_tools = build_openai_file_tools(
+            scorer_allowed_paths,
+            file_qa_callback=_answer_file_question,
+        ) if scorer_allowed_paths else []
+        result_text, _agent_cost = await run_openai_agent_task(
+            name="scorer-agent",
+            instructions=scorer_instructions,
+            user_prompt=review_text,
+            model_id=MODEL_SCORER[len("openai_agent:"):],
+            tools=openai_tools,
+        )
+    else:
+        raise ValueError(
+            f"MODEL_SCORER must use an SDK backend prefix. Got: {MODEL_SCORER}"
+        )
 
 
     # Log full scorer output to file for debugging
@@ -829,6 +884,7 @@ async def run_merger(
     spark_review: str,
     related_work: str,
     paper_content: str,
+    paper_path: str,
     calibration_context: str = "",
     cal_dir: str = "",
     skip_neutral: bool = False,
@@ -849,6 +905,7 @@ async def run_merger(
     )
     score, cost_score = await run_scorer(
         client, review_text, 
+        paper_path=paper_path,
         calibration_context=calibration_context,
         cal_dir=cal_dir,
         gt_score=gt_score
@@ -902,47 +959,114 @@ async def run_human_finder(pp, human_review_dir):
         f"Paper file path: {paper_abs}\n"
         f"Human reviews directory: {human_review_abs}\n"
     )
-    result_text = ""
-    # Allow reading the paper file and the human review directory only
     paper_dir = str(Path(paper_abs).parent)
-    hf_mcp = _make_sandboxed_mcp_server("hf_fs", [human_review_abs, paper_dir])
-    options = ClaudeAgentOptions(
-        model=MODEL_FIND_HUMAN.split(":", 1)[1],
-        cwd=human_review_abs,
-        allowed_tools=[
-            "mcp__hf_fs__read_file",
-            "mcp__hf_fs__grep_files",
-            "mcp__hf_fs__glob_files",
-            "mcp__hf_fs__file_qa",
-            "mcp__search__search_file",
-        ],
-        disallowed_tools=["Read", "Glob", "Grep", "Bash", "Edit", "Write", "Agent"],
-        mcp_servers={"search": _search_mcp_server, "hf_fs": hf_mcp},
-        max_turns=30,
-    )
-    print(f"  [Human Finder] starting Claude Agent SDK ({MODEL_FIND_HUMAN}) ...")
-    sdk_savings = 0.0
-    async with ClaudeSDKClient(options=options) as sdk_client:
-        await sdk_client.query(query)
-        async for message in sdk_client.receive_response():
-            if isinstance(message, AssistantMessage):
-                for block in message.content:
-                    if isinstance(block, TextBlock):
-                        result_text += block.text
-            if isinstance(message, ResultMessage):
-                sdk_savings += message.total_cost_usd
+    raw_result_text = ""
+    last_message_text = ""
 
-    _add_sdk_savings(sdk_savings)
-    print(f"  [Human Finder] done (Claude Agent SDK) — saved ${sdk_savings:.4f}")
+    if MODEL_FIND_HUMAN.startswith("claude:"):
+        hf_mcp = _make_sandboxed_mcp_server("hf_fs", [human_review_abs, paper_dir])
+        options = ClaudeAgentOptions(
+            model=MODEL_FIND_HUMAN.split(":", 1)[1],
+            cwd=human_review_abs,
+            allowed_tools=[
+                "mcp__hf_fs__read_file",
+                "mcp__hf_fs__grep_files",
+                "mcp__hf_fs__glob_files",
+                "mcp__hf_fs__file_qa",
+                "mcp__search__search_file",
+            ],
+            disallowed_tools=["Read", "Glob", "Grep", "Bash", "Edit", "Write", "Agent"],
+            mcp_servers={"search": _search_mcp_server, "hf_fs": hf_mcp},
+            max_turns=30,
+        )
+        print(f"  [Human Finder] starting Claude Agent SDK ({MODEL_FIND_HUMAN}) ...")
+        sdk_savings = 0.0
+        async with ClaudeSDKClient(options=options) as sdk_client:
+            await sdk_client.query(query)
+            async for message in sdk_client.receive_response():
+                if isinstance(message, AssistantMessage):
+                    current_message_text = ""
+                    for block in message.content:
+                        if isinstance(block, TextBlock):
+                            current_message_text += block.text
+                    if current_message_text:
+                        raw_result_text += current_message_text
+                        last_message_text = current_message_text
+                if isinstance(message, ResultMessage):
+                    sdk_savings += message.total_cost_usd
+
+        _add_sdk_savings(sdk_savings)
+        print(f"  [Human Finder] done (Claude Agent SDK) — saved ${sdk_savings:.4f}")
+    elif MODEL_FIND_HUMAN.startswith("openai_agent:"):
+        from agents import function_tool
+
+        @function_tool
+        def search_file(query: str, path: str, n: int = 5) -> str:
+            """Search for a pattern in a directory using the BM25 index."""
+            path = os.path.abspath(path)
+            if path not in _bm25_database:
+                raise ValueError(f"Path '{path}' is not indexed or allowed for searching.")
+            bm25 = _bm25_database[path]["bm25"]
+            files = _bm25_database[path]["files"]
+            tokenized_query = query.split(" ")
+            doc_scores = bm25.get_scores(tokenized_query)
+            top_indices = doc_scores.argsort()[-n:][::-1]
+            results = []
+            for idx in top_indices:
+                file_path = os.path.abspath(files[idx])
+                score = doc_scores[idx]
+                with open(file_path, "r", errors="replace") as file_handle:
+                    content = file_handle.read()
+                results.append(f"{file_path}\nscore: {score:.2f}\n first 1000 chars:\n{content[:1000]}\n")
+            if not results:
+                return "No relevant files found."
+            return "\n---\n".join(results)
+
+        hf_tools = build_openai_file_tools(
+            [human_review_abs, paper_dir],
+            file_qa_callback=_answer_file_question,
+        )
+        hf_tools.append(search_file)
+        print(f"  [Human Finder] starting OpenAI Agent SDK via OpenRouter ({MODEL_FIND_HUMAN}) ...")
+        result_text, _sdk_cost = await run_openai_agent_task(
+            name="Human Finder",
+            instructions=HUMAN_FINDER_PROMPT,
+            user_prompt=(
+                f"Paper file path: {paper_abs}\n"
+                f"Human reviews directory: {human_review_abs}\n"
+            ),
+            model_id=MODEL_FIND_HUMAN[len("openai_agent:"):],
+            tools=hf_tools,
+        )
+        raw_result_text = result_text
+        last_message_text = result_text
+    else:
+        raise ValueError(f"MODEL_FIND_HUMAN must use an SDK backend prefix. Got: {MODEL_FIND_HUMAN}")
+
+    if not last_message_text.strip():
+        raise ValueError("Human finder returned no final assistant message")
+    parsed_result_text = _extract_final_review_block(last_message_text)
+    if parsed_result_text is None:
+        parsed_result_text = last_message_text.strip()
     with open(Path(__file__).parent / "human_finder_debug.log", "a", encoding="utf-8") as f:
         f.write(f"\n{'=' * 72}\n")
         f.write(f"Paper path: {pp}\n")
         f.write(f"Human review dir: {human_review_dir}\n")
         f.write(f"{'-' * 72}\n")
-        f.write(result_text)
+        f.write("RAW LAST MESSAGE\n")
+        f.write(f"{'-' * 72}\n")
+        f.write(last_message_text)
+        f.write(f"\n{'-' * 72}\n")
+        f.write("RAW TOTAL OUTPUT\n")
+        f.write(f"{'-' * 72}\n")
+        f.write(raw_result_text)
+        f.write(f"\n{'-' * 72}\n")
+        f.write("PARSED FINAL REVIEW\n")
+        f.write(f"{'-' * 72}\n")
+        f.write(parsed_result_text)
         f.write(f"\n{'=' * 72}\n\n")
         
-    return result_text, 0.0
+    return parsed_result_text, 0.0
 
 async def run_pipeline(
     paper_path: str,
@@ -1037,7 +1161,7 @@ async def run_pipeline(
         print("  Phase 2: Merger + Scorer ...")
         merged_review, score, merger_cost = await run_merger(
             client, harsh_review, neutral_review,
-            spark_review, related_work, paper_content,
+            spark_review, related_work, paper_content, paper_path,
             calibration_context=calibration_context,
             cal_dir=cal_dir,
             skip_neutral=skip_neutral,

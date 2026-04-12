@@ -32,7 +32,7 @@ load_dotenv()
 
 DEFAULT_DATA_DIR = Path(__file__).parent / "iclr2026_data"
 OPENREVIEW_URL = "https://openreview.net"
-YEAR = 2026
+YEAR = 2025
 
 def fetch_notes():
     f"""Fetch all ICLR {YEAR} submission notes with reviews via OpenReview API."""
@@ -79,7 +79,7 @@ def parse_note(note) -> dict | None:
             try:
                 scores.append(int(rating_val.split(":")[0].strip()))
             except ValueError:
-                pass
+                raise RuntimeError(f"Could not parse rating '{rating_val}' for note {note.id}")
         elif isinstance(rating_val, (int, float)):
             scores.append(int(rating_val))
 
@@ -101,11 +101,12 @@ def parse_note(note) -> dict | None:
     # Withdrawn papers are treated as Reject
     if "Withdrawn" in venue:
         gt_binary = "Reject"
-        decision = decision or "Withdrawn (treated as Reject)"
+        if not decision:
+            raise RuntimeError(f"Missing decision for withdrawn paper {note.id}")
     elif decision:
         gt_binary = "Accept" if "Accept" in decision else "Reject"
     else:
-        gt_binary = "Accept" if avg_score >= 5.5 else "Reject"
+        raise RuntimeError(f"Missing decision for paper {note.id}")
 
     return {
         "paper_id": note.id,
@@ -115,7 +116,7 @@ def parse_note(note) -> dict | None:
         "venue": venue,
         "scores": scores,
         "avg_score": avg_score,
-        "decision": decision or f"Inferred ({gt_binary})",
+        "decision": decision,
         "gt_binary": gt_binary,
         "human_reviews": human_reviews,
     }
@@ -186,11 +187,7 @@ def format_human_reviews(reviews: list[dict]) -> str:
 
 def fetch_human_reviews(or_client, paper_id: str) -> list[dict]:
     """Fetch human reviews for a paper forum from OpenReview."""
-    try:
-        replies = or_client.get_all_notes(forum=paper_id)
-    except Exception as e:
-        print(f"    Human review fetch error: {e}")
-        return []
+    replies = or_client.get_all_notes(forum=paper_id)
     reply_dicts = [
         reply.to_json() if hasattr(reply, "to_json") else reply
         for reply in replies
@@ -214,42 +211,67 @@ def get_or_client():
     )
 
 
-def download_pdf(or_client, paper_id: str, pdfs_dir: Path = None) -> Path | None:
-    """Download a PDF from OpenReview using the authenticated API."""
+def get_submission_deadline(or_client) -> int:
+    """Fetch the submission invitation deadline in milliseconds."""
+    venue = f"ICLR.cc/{YEAR}/Conference"
+    venue_group = or_client.get_group(venue)
+    submission_name = venue_group.content["submission_name"]["value"]
+    invitations = or_client.get_invitations(
+        prefix=f"{venue}/-/{submission_name}",
+        expired=True,
+    )
+    if not invitations:
+        raise RuntimeError(f"Could not find submission invitation for {venue}")
+    submission_invitation = invitations[0]
+    if submission_invitation.duedate is None:
+        raise RuntimeError(f"Submission invitation {submission_invitation.id} has no duedate")
+    return submission_invitation.duedate
+
+
+def get_latest_pre_deadline_reference(or_client, paper_id: str, deadline_ms: int):
+    """Return the most recent paper revision at or before the submission deadline."""
+    response = or_client.session.get(
+        or_client.reference_url,
+        params={"referent": paper_id, "original": "true"},
+        headers=or_client.headers,
+    )
+    response = or_client._OpenReviewClient__handle_response(response)
+    references = response.json().get("references", [])
+    eligible_references = [
+        ref for ref in references
+        if ref.get("tcdate") is not None
+        and ref["tcdate"] <= deadline_ms
+        and ref.get("content", {}).get("pdf")
+    ]
+    if not eligible_references:
+        raise RuntimeError(f"No pre-deadline revision found for paper {paper_id}")
+    return max(eligible_references, key=lambda ref: ref["tcdate"])
+
+
+def download_pdf(
+    or_client,
+    paper_id: str,
+    deadline_ms: int,
+    pdfs_dir: Path = None,
+) -> Path | None:
+    """Download the last PDF version submitted before the deadline."""
     outfile = (pdfs_dir or DEFAULT_DATA_DIR / "pdfs") / f"{paper_id}.pdf"
     if outfile.exists() and outfile.stat().st_size > 0:
         return outfile
 
-    try:
-        pdf_bytes = or_client.get_pdf(paper_id)
-        if len(pdf_bytes) > 1000:
-            outfile.write_bytes(pdf_bytes)
-            return outfile
-        else:
-            print(f"    Download failed: got {len(pdf_bytes)} bytes")
-            return None
-    except Exception as e:
-        print(f"    Download error: {e}")
-        return None
+    reference = get_latest_pre_deadline_reference(or_client, paper_id, deadline_ms)
+    pdf_bytes = or_client.get_pdf(reference["id"], is_reference=True)
+    if len(pdf_bytes) <= 1000:
+        raise RuntimeError(f"Download failed for {paper_id}: got {len(pdf_bytes)} bytes")
+    outfile.write_bytes(pdf_bytes)
+    return outfile
 
 
 def pdf_to_markdown(pdf_path: Path) -> str:
     """Convert PDF to markdown text, cleaning up line numbers and artifacts."""
     import re
     import pymupdf4llm
-    try:
-        text = pymupdf4llm.to_markdown(str(pdf_path))
-    except Exception as e:
-        print(f"    PDF conversion error: {e}")
-        # Fallback to pymupdf
-        try:
-            import pymupdf
-            doc = pymupdf.open(str(pdf_path))
-            text = "\n\n".join(page.get_text() for page in doc)
-            doc.close()
-        except Exception as e2:
-            print(f"    Fallback also failed: {e2}")
-            return ""
+    text = pymupdf4llm.to_markdown(str(pdf_path))
 
     # Clean up line numbers (e.g. **000**, **001**, **012 013**)
     text = re.sub(r"\*\*\d{3}(?:\s+\d{3})*\*\*\s*", "", text)
@@ -321,6 +343,7 @@ def main(n_samples: int = 100, seed: int = 42, balanced: bool = False, data_dir:
                 if parsed:
                     all_papers.append(parsed)
             except Exception as e:
+                print(f"Skipping note parse error: {getattr(note, 'id', 'unknown')} {e}")
                 continue
         print(f"Parsed {len(all_papers)} papers with reviews.")
 
@@ -340,6 +363,8 @@ def main(n_samples: int = 100, seed: int = 42, balanced: bool = False, data_dir:
     # Download PDFs and convert to markdown
     print("Authenticating with OpenReview for PDF downloads...")
     or_client = get_or_client()
+    submission_deadline_ms = get_submission_deadline(or_client)
+    print(f"Using submission deadline: {submission_deadline_ms}")
 
     # Load existing ratings to skip already-finished papers
     existing_ids: set[str] = set()
@@ -381,9 +406,10 @@ def main(n_samples: int = 100, seed: int = 42, balanced: bool = False, data_dir:
             continue
         pdf_path = PDFS_DIR / f"{pid}.pdf"
         if not (pdf_path.exists() and pdf_path.stat().st_size > 0):
-            pdf_path = download_pdf(or_client, pid, PDFS_DIR)
-            if not pdf_path:
-                print(f"  SKIPPED download: {paper['title'][:60]}")
+            try:
+                pdf_path = download_pdf(or_client, pid, submission_deadline_ms, PDFS_DIR)
+            except Exception as e:
+                print(f"  SKIPPED download: {paper['title'][:60]} | {e}")
                 continue
             time.sleep(0.5)  # Be nice to OpenReview
         needs_conversion.append((paper, pdf_path))
@@ -401,23 +427,31 @@ def main(n_samples: int = 100, seed: int = 42, balanced: bool = False, data_dir:
             skipped_convert += 1
         else:
             print(f"  Converting: {title[:60]}...")
-            text = pdf_to_markdown(path)
-            if not text or len(text) < 500:
-                print(f"  SKIPPED (conversion failed, got {len(text) if text else 0} chars)")
+            try:
+                text = pdf_to_markdown(path)
+            except Exception as e:
+                print(f"  SKIPPED conversion: {title[:60]} | {e}")
+                continue
+            if len(text) < 500:
+                print(f"  SKIPPED (conversion too short, got {len(text)} chars)")
                 continue
             md_path.write_text(text, encoding="utf-8")
             print(f"  Saved: {len(text):,} chars")
 
-        if review_path.exists() and review_path.stat().st_size > 0:
-            pass
-        else:
-            reviews = paper.get("human_reviews") or fetch_human_reviews(or_client, pid)
-            if reviews:
-                review_text = format_human_reviews(reviews)
-                review_path.write_text(review_text, encoding="utf-8")
-                print(f"  Saved human reviews: {review_path.name}")
-            else:
-                print("  No human reviews found to save.")
+        if not (review_path.exists() and review_path.stat().st_size > 0):
+            reviews = paper.get("human_reviews")
+            if not reviews:
+                try:
+                    reviews = fetch_human_reviews(or_client, pid)
+                except Exception as e:
+                    print(f"  SKIPPED review fetch: {title[:60]} | {e}")
+                    continue
+            if not reviews:
+                print(f"  SKIPPED review save: {title[:60]} | no human reviews found")
+                continue
+            review_text = format_human_reviews(reviews)
+            review_path.write_text(review_text, encoding="utf-8")
+            print(f"  Saved human reviews: {review_path.name}")
 
         # Write to ratings CSV
         if pid not in existing_ids:

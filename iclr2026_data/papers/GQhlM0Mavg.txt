@@ -1,0 +1,1470 @@
+# EXPLORING THE LINK BETWEEN OUT-OF-DISTRIBUTION DETECTION AND CONFORMAL PREDICTION WITH ILLUSTRATIONS OF ITS BENEFITS
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Research on Out-Of-Distribution (OOD) detection focuses mainly on building
+scores that efficiently distinguish OOD data from In Distribution (ID) data. On the
+other hand, Conformal Prediction (CP) uses non-conformity scores to construct
+prediction sets with probabilistic coverage guarantees. In other words, the former
+designs scores, while the latter designs probabilistic guarantees based on scores.
+Therefore, we claim that these two fields might be naturally intertwined. This
+work advocates for cross-fertilization between OOD and CP by formalizing their
+link and emphasizing two benefits of using them jointly. First, we show that in
+standard OOD benchmark settings, evaluation metrics can be overly optimistic due
+to the test dataset’s finite sample size. Based on the work of Bates et al. (2022),
+we define new _conformal AUROC_ and _conformal FPR@TPR95_ metrics, which are
+corrections that provide probabilistic conservativeness guarantees on the variability
+of these metrics.We show the effect of these corrections on two reference OOD and
+anomaly detection benchmarks, OpenOOD Yang et al. (2022) and ADBench Han
+et al. (2022). Second, we explore using OOD scores as non-conformity scores and
+show that they can improve the efficiency of the prediction sets obtained with CP.
+
+
+1 INTRODUCTION
+
+
+Even though current Machine Learning (ML) and Deep Learning (DL) models are able to perform
+several complex tasks that previously only human beings could, we are still a step away from their
+widespread adoption in safety-critical applications. Indeed, it is difficult to certify an ML component,
+mainly due to the poor control of the circumstances that may provoke such a ML component to
+fail. Out-of-Distribution (OOD) detection tries to tackle this problem by identifying data that differs
+significantly from the data used to train the model at runtime. Besides being recognized as an essential
+step in the certification of ML systems by multiple certification authorities (see, e.g., Sections 5.3
+and 8.4 of Balduzzi et al. (2021) or Section 5.1 of EASA & Daedalean (2024)), OOD detection is a
+very active branch in machine learning research.
+
+
+Current OOD detection strategies rely on constructing an OOD score _s_, a function that assigns a
+scalar to each input example. This score discriminates between in-distribution (ID) data and OOD
+data by assigning lower scores to the former and higher scores to the latter.
+
+
+When OOD detection is used in a machine learning pipeline to identify examples that differ from
+the data the model has been trained on, there is a natural qualitative interpretation of OOD detection
+in terms of model uncertainty. For instance, an example with a low OOD score should be one for
+which the model can predict with low uncertainty, while an example with a high OOD score should
+be linked to a highly uncertain prediction.
+
+
+Conformal Prediction (CP) is a family of post-hoc methods for Uncertainty Quantification and
+Uncertainty Representation Caprio et al. (2024), that work as wrappers over machine learning models,
+transforming point predictions into prediction sets with rigorous probabilistic guarantees based on
+so-called nonconformity scores. The user pre-specifies a risk level _α_, and the constructed prediction
+set is guaranteed to contain the ground truth value with a probability of at least 1 _−_ _α_ . Since CP is
+a way of providing rigorous uncertainty quantification guarantees built upon scores, it is natural to
+apply it to the scores used in OOD detection. **The main purpose of our work is to dig into the**
+
+
+1
+
+
+**Conformal Prediction interpretation of OOD detection scores and show some of its advantages**
+**for both Conformal Prediction and OOD detection.**
+
+
+To that end, we first follow the work of Bates et al. (2022) on outlier detection and apply their ideas
+to OOD detection. Bates et al. (2022) cast the OOD detection problem into the statistical framework
+of hypothesis testing. They show that the p-values, built with a calibration dataset, are provably
+marginally valid but depend on the choice of the calibration dataset, and so is the False Positive
+Rate (FPR) derived from these p-values. One of the main contributions of our work is to explore the
+consequences of this effect for OOD detection and to propose alternative _conformal AUROC_ and
+_conformal FPR@TPR95_ metrics.
+
+
+The relevance of the new metrics we propose is best appreciated in the context of safety-critical
+applications, or in an eventual certification process of an OOD detection component. The true AUROC
+or FPR metrics are inaccessible for a given OOD score, and we can only provide an approximation
+obtained from a finite dataset. However, this can introduce fluctuations in our approximation, thus
+overestimating or underestimating the true metrics. In a certification process, we are mainly interested
+in guaranteeing that our estimations are conservative with high probability, at the expense of losing
+some approximation precision EASA (2023), which is precisely what Conformal AUROC and
+Conformal FPR do. We show the effect of these new metrics on two large reference benchmarks,
+the OOD benchmark OpenOOD Yang et al. (2022), and the anomaly detection benchmark Han et al.
+(2022).
+
+
+Second, we show that not only can CP contribute to OOD detection, but research in OOD detection can
+also help CP. Indeed, CP has traditionally focused on constructing prediction sets from nonconformity
+scores. Still, the scores used are usually simple functions of the softmax scores for classification tasks
+or classical distances in Euclidean space for regression tasks. Here, we draw inspiration from the
+OOD detection literature to build more involved nonconformity scores and compare their performance
+to the traditional nonconformity scores of CP. For the task of classification, we build prediction sets
+based on multiple different OOD scores and find that some of them, notably Mahalanobis Leys et al.
+(2018) or KNN Sun et al. (2022), are good candidates as nonconformity scores.
+
+
+Ultimately, one of the key messages of this work is that since OOD is concerned with designing scores
+and conformal prediction with interpreting these scores, the two fields may be inherently intertwined.
+**Highlighting this relationship might offer significant potential for cross-fertilization.**
+
+
+Our contributions can be summarized as follows:
+
+
+    - We cast the OOD detection problem into the framework of statistical hypothesis testing and
+apply the ideas of Bates et al. (2022) to correct OOD scores and propose new conformal
+AUROC and conformal FPR@TPR95 metrics, which are provably conservative with high
+probability.
+
+    - We show the effect of conformal AUROC and conformal FPR in the reference benchmarks
+OpenOOD Yang et al. (2022) and ADBench Han et al. (2022).
+
+    - We build new nonconformity scores for CP based on OOD and perform a comparison
+between the scores. We find that the Mahalanobis score outperforms the classical CP score.
+
+    - We point out that OOD and CP are two domains that have much to contribute to each other
+and advocate for further research exploring this link.
+
+
+2 BACKGROUND
+
+
+**Out-of-Distribution** **Detection** Given _n_ examples, _{_ _**x**_ 1 _, . . .,_ _**x**_ _n}_ sampled from a probability
+distribution _Pid_ on a space _X_, and a new data point _**x**_ _n_ +1, the task of Out-of-Distribution (OOD)
+detection consists in assessing if _**x**_ _n_ +1 was sampled from _Pid_ - in which case it is considered
+In-Distribution (ID) - or not - thus considered OOD.
+
+
+The most common procedure for OOD detection is to construct a score _s_ : _X_ _→_ R and a threshold _τ_
+such that:
+
+       - _**x**_ _n_ +1 is declared OOD if _s_ ( _**x**_ _n_ +1) _> τ_
+(1)
+_**x**_ _n_ +1 is declared ID if _s_ ( _**x**_ _n_ +1) _≤_ _τ_
+
+
+We call _s_ an OOD score.
+
+
+2
+
+
+**Task-based OOD** This is the most common approach in the literature regarding OOD detection for
+neural networks. It also encompasses Open-Set Recognition. Let’s consider that _**x**_ _i_ can be assigned a
+label _yi_ so that we can construct a dataset _{_ ( _**x**_ 1 _, y_ 1) _, . . .,_ ( _**x**_ _n, yn_ ) _}_ defining some supervised deep
+learning task. In that case, _Pid_ := _Ptrain_ . Task-based OOD uses representations built by the neural
+network _f_ throughout its training to design _s_ . Many sophisticated methods follow this approach Yang
+et al. (2021). A simple example is to take the negative maximum of the output of _f_ (after the softmax)
+Hendrycks & Gimpel (2018) as an OOD score ( _s_ ( _**x**_ _n_ +1) = _−_ max - _f_ ( _**x**_ _n_ +1)� where max( _**x**_ ) is the
+highest component of the vector _**x**_ . Another simple idea is to find the distance to the nearest neighbor
+in some intermediate layer of _f_ Sun et al. (2022).
+
+
+**Task-agnostic OOD** This approach encompasses One-Class Classification and Anomaly/Outlier
+Detection. Let’s consider a dataset _{_ _**x**_ 1 _, . . .,_ _**x**_ _n}_ in a fully unsupervised way. There is no notion of
+labels, so we have to approximate _Pid_ somehow or some related quantities from scratch. Examples
+are GANs or VAEs with _s_ defined as reconstruction error. See Yang et al. (2021) for a thorough
+review.
+
+
+**Conformal Prediction** Few Machine Learning and Deep Learning models provide a notion of
+uncertainty related to their predictions. Even the models trained for classification tasks providing
+softmax outputs, which can be interpreted as the probabilities for the input belonging to the different
+classes, are usually ill-calibrated and overconfident, making the softmax output an incorrect proxy
+of the true uncertainty of the prediction. Pearce et al. (2021). Conformal Prediction (CP) Vovk
+et al. (2005); Angelopoulos & Bates (2022) is a series of post-processing uncertainty quantification
+techniques that are model-agnostic and provide finite-sample guarantees on the model predictions.
+One of the simplest CP techniques, the split CP, works as a wrapper on a trained model _f_ . It requires
+a calibration dataset _{_ ( _**x**_ _n_ +1 _, yn_ +1) _, . . .,_ ( _**x**_ _n_ + _n_ cal _, yn_ + _n_ cal) _}_ independent of the training data, and a
+risk (or error rate) _α_ that the user can tolerate. Based on so-called nonconformity scores computed on
+the calibration dataset, it builds a prediction set _Cα_ ( _**x**_ _n_ + _n_ cal+1) for a new test sample _**x**_ _n_ + _n_ cal+1 with
+the following finite sample guarantee
+
+
+P ( _yn_ + _n_ cal+1 _∈_ _Cα_ ( _**x**_ _n_ + _n_ cal+1)) _≥_ 1 _−_ _α._ (2)
+
+
+To obtain the guarantee equation (2), the only assumption required is that the calibration and test data
+form an exchangeable sequence (a condition weaker than, and therefore automatically satisfied by
+independence and identical distribution)Shafer & Vovk (2008) and that they are independent of the
+training data. It is essential to know that the guarantee equation (2) is marginal, i.e. holds in average
+over both the calibration dataset and the test sample choice. As we shall emphasize, there might be
+fluctuations due to the finite sample size of the calibration dataset.
+
+
+3 RELATED WORKS
+
+
+In this work, we study the potential of using Conformal Prediction as a statistical framework for
+interpreting OOD scores. This idea of casting OOD in a statistical framework has already been
+attempted in different settings.
+
+
+**Selective Inference and Testing** Selective Inference works on top of an ML predictor by using
+an additional decision function to decide for each example whether the original model’s prediction
+should be considered. A score equivalent to an OOD score is used to define this decision function.
+Several approaches exist, for instance, through building a statistical test Haroush et al. (2022) or by
+training a neural network with an appropriate loss Geifman & El-Yaniv (2017; 2019). However, the
+framework of Conformal Prediction appears better suited to our goal since it applies to scores in a
+post-processing manner, does not require assumptions or modifications on the model, and benefits
+from dynamic development in the ML community.
+
+
+**Conformal OOD and AD** Conformal Prediction has been previously applied to Out-of-Distribution
+and Anomaly Detection. For instance, Liang et al. (2022) have proposed a method based on CP
+for OOD with labeled outliers, and Kaur et al. (2022) propose to use conformal p-values. CP
+is one of several frameworks that allow obtaining statistical guarantees for OOD detection. One
+of the first methods for Anomaly Detection was introduced by Vovk et al. (2003). Since then,
+several other methods have been proposed by Laxhammar & Falkman (2011); Laxhammar (2014);
+
+
+3
+
+
+Let us now rewrite the problem of OOD detection using the framework of statistical hypothesis
+testing. This framework allows us to reason in terms of p-values, which have multiple benefits:
+they have a rigorous mathematical definition and probabilistic interpretation, they can be interpreted
+equivalently for any score, and used for comparison of different scores. Given a test example _**x**_ test,
+we wish to test for _**x**_ test _∼Pid_, i.e. we wish to test the null hypothesis _H_ 0 : _**x**_ test _∼Pid_ against the
+alternate hypothesis _H_ 1 : _**x**_ test _̸∼Pid_ . The value _P_ _**x**_ _∼Pid_ ( _s_ ( _**x**_ ) _≥_ _s_ ( _**x**_ test)) is an exact p-value for the
+null hypothesis _H_ 0. Note that this p-value corresponds to FPR( _s_ ( _**x**_ test)) as defined in equation (3).
+Hence, the values FPR [�] ( _τ_ 1) = FPR [�] ( _s_ ( _**x**_ _n_ +1)) _, . . .,_ FPR [�] ( _τp_ ) = FPR [�] ( _s_ ( _**x**_ _n_ + _n_ val)) used in every OOD
+detection benchmark to compute the AUROC and FPR@TPR _β_ can be considered as approximate
+p-values. The relationship between the FPR and the p-values emphasizes the link between OOD
+detection evaluation and hypothesis testing.
+
+
+4.2 FLUCTUATIONS OF THE P-VALUE
+
+
+This is where the framework of Conformal Prediction comes into play. Since we do not have access
+to the distribution _Pid_, we approximate the FPRs (so the p-values) by using the validation dataset
+
+
+4
+
+
+Balasubramanian et al. (2014), as well as more recently Angelopoulos & Bates (2022); Guan &
+Tibshirani (2022), where the lengths of the prediction sets as OOD scores. These works all use the
+standard CP setting, in which basic marginal guarantees are obtained. We go further on this approach
+by using CP as a probabilistic tool to refine the interpretation and, hence, the usefulness of any OOD
+score.
+
+
+**Finding Efficient Scores for Conformal Prediction** We also investigate the benefits of using OOD
+scores as non-conformity scores in CP. Common ways to build prediction sets for classification, such
+as LAC Sadinle et al. (2019) or APS Romano et al. (2020) and RAPS Angelopoulos et al. (2020)
+are based on the softmax output of classifiers. However, non-conformity scores also exist for other
+predictors Vovk et al. (2005), for instance, based on nearest neighbor distance Shafer & Vovk (2008).
+In this work, we suggest interpreting any OOD score as a potential general replacement for scores
+in CP, opening a large avenue for CP score crafting. This idea could apply to any ML task, but we
+demonstrate that on a classification task, to be consistent with the standard OOD benchmark settings
+we follow in the present paper.
+
+
+4 OOD SCORES THROUGH THE LENS OF CP
+
+
+Let us begin by describing the typical benchmark setup for evaluating an OOD score. First,
+an OOD detector is fit on _Did_ _[train]_ = _{_ _**x**_ 1 _, . . .,_ _**x**_ _n}_ . Then, the OOD score is evaluated on
+_Did_ _[val]_ = _{_ _**x**_ _n_ +1 _, . . .,_ _**x**_ _n_ + _n_ val _}_ and _Dood_ = _{_ _**x**_ ¯1 _, . . .,_ ¯ _**x**_ _n_ val _}_, where _Dood_ is a dataset sampled
+from a different distribution _Pood_ = _Pid_ (typically, another dataset). We apply _s_ to obtain
+_{s_ (¯ _**x**_ 1) _, . . ., s_ (¯ _**x**_ _n_ val ) _, s_ ( _**x**_ _n_ +1) _, . . ., s_ ( _**x**_ _n_ + _n_ val ) _}_ . Then, we assess the discriminative power of _s_ by
+evaluating metrics depending on a threshold _τ_ . By considering ID samples as negative and OOD as
+positive, we can compute:
+
+
+    - The Area Under the Receiver Operating Characteristic (AUROC): we compute the False
+Positive Rate (FPR) and the True Positive Rate (TPR) for _τi_ = _s_ ( _**x**_ _n_ + _i_ ), _i ∈{_ 1 _, . . ., n_ val _}_,
+and compute the area under the curve with FPR as x-axis and TPR as y-axis.
+
+    - FPR@TPR95: The value of the False Positive Rate (FPR) when _τ_ is selected among
+_τ_ 1 _, . . ., τn_ val so that the True Positive Rate (TPR) is 0 _._ 95. It can be generalized to
+FPR@TPR _β_, for any _β_ _∈_ (0 _,_ 1).
+
+
+A crucial step in any of these metrics is to compute the FPR. The FPR and its empirical estimation
+FPR� ( _τ_ ) are defined as follows:
+
+
+1
+FPR( _τ_ ) = P _**x**_ _∼Pid_ ( _s_ ( _**x**_ ) _≥_ _τ_ ) _,_ FPR� ( _τ_ ) = _n_ val
+
+
+4.1 OOD DETECTION AND P-VALUES
+
+
+ - **1** _s_ ( _**x**_ _i_ ) _≥τ_ _._ (3)
+
+_i_ =1 _,...,n_ val
+
+
+1
+_F_ ( _t_ ; _Did_ _[val]_ [)] _[ ≈]_ _[F]_ [ˆ][(] _[t]_ [;] _[ D]_ _id_ _[val]_ [) =]
+520000
+
+
+5
+
+
+ 
+**1** _u_ �marg( _**x**_ _i_ ) _≤t._ (9)
+_i_ =1 _..._ 520000
+
+
+_Did_ _[val]_ [, which allows using two results from CP to improve the evaluation of the FPR. Note that] _[ D]_ _id_ _[val]_
+can be related to the calibration dataset used in CP.
+
+
+4.2.1 MARGINAL VALIDITY OF THE FPR
+
+
+The first point that CP teaches us is that fluctuations in the scores of the validation dataset can lead
+to over-confident estimations of the p-value. In order to avoid that, we have to use the correction
+proposed by Bates et al. (2022) (which can be originally traced to Papadopoulos et al. (2002)):
+
+
+1
+_u_ [marg] ( _**x**_ ) =
+
+- 1 + _n_ val
+
+
+1 + - **1** _s_ ( _**x**_ _i_ ) _≥s_ ( _**x**_ )
+
+_i_ =1 _...n_ val
+
+
+_._ (4)
+
+
+With this correction, if the _**x**_ _i_ are i.i.d and the distribution of _s_ ( _**x**_ ) under the ID law is continuous, we
+obtain _marginally valid_ p-values, that is, p-values that satisfy
+
+P _**x**_ _∼Pid_         - _u_         - [marg] ( _**x**_ ) _≤_ _t_         - _≤_ _t,_ for all 0 _≤_ _t ≤_ 1 _._ (5)
+
+
+By _marginally_, we are pointing out that the probability in the above formula integrates over both the
+validation set _Did_ _[val]_ [and the test point] _**[ x]**_ [.] [This correction directly translates in terms of FPR. We can]
+correct equation (3) to obtain a new estimation that enjoys this property:
+
+
+_._ (6)
+
+
+1
+FPR� ( _τ_ ) = 1 + _n_ val
+
+
+1 +  - **1** _s_ ( _**x**_ _i_ ) _≥τ_
+
+_i_ =1 _...n_ val
+
+
+However, the work of Bates et al. (2022) tells us that the FPR may still be overly confident. We
+discuss this point in the next section.
+
+
+4.3 FLUCTUATIONS OF THE FPR
+
+
+In this part, we mainly explain the work of Bates et al. (2022) that emphasizes that the FPR fluctuates
+depending on _Did_ _[val]_ [.] [We illustrate this phenomenon in the context of OOD detection and adapt the]
+corrections proposed in Bates et al. (2022) to this field by defining new conformal AUROC and
+conformal FPR@TPR _β_ .
+
+
+Note first that the FPR can also be defined using a threshold _t_ applied to the p-values as:
+
+FPR( _t, Did_ _[val]_ [) =][ P] _**[x]**_ _[∼P]_ _id_          - _u_          - [marg] ( _**x**_ ) _≤_ _t | Did_ _[val]_          - _,_ (7)
+
+where _t ∈_ [0 _,_ 1]. The authors point out that due to the empirical estimation of _u_ [marg] ( _**x**_ ), the quantity
+                                     _P_ _**x**_ _∼Pid_ - _u_ - [marg] ( _**x**_ ) _≤_ _t | Did_ _[val]_ - is a random variable that depends on _Did_ _[val]_ [.]
+
+As a practical consequence, the FPR will fluctuate depending on which dataset _Did_ _[val]_ [it is evaluated.]
+The random variable FPR( _t, Did_ _[val]_ [)][ follows a distribution that is known:] [it is a Beta distribution that]
+depends on the parameters _n_ val and _t_ :
+
+FPR( _t, Did_ _[val]_ [)] _[ ∼]_ [Beta][(] _[ℓ, n]_ [val] [+ 1] _[ −]_ _[ℓ]_ [)] _[,]_ (8)
+
+where _ℓ_ = _⌊_ ( _n_ val + 1) _t⌋_ (cf. Bates et al. (2022) or Vovk (2012) for a proof of the result).
+
+
+4.3.1 ILLUSTRATION ON SVHN
+
+
+To illustrate why this phenomenon matters in OOD detection, we leverage the fact that SVHN dataset
+provides an additional set of 530000 _extra_ test images. It allows the simulation of 53 draws of the
+random variable _F_ ( _t_ ; _Did_ _[val]_ [)][, by splitting the over 530000 examples in the] _[ svhn_extra]_ [ dataset into 53]
+different folds of 10000 examples each. For each fold, the 10000 examples are used to constitute the
+calibration dataset _Did_ _[val]_ [, whereas the remaining over 520000 examples are used to approximate the]
+computation of _F_, i.e., given a calibration dataset _Did_ _[val]_ [,]
+
+
+4.3.2 PROBABILISTIC GUARANTEES FOR P-VALUES AND THE FPR
+
+
+To solve this problem, Bates et al. (2022) further corrects the marginal p-values, thus obtaining
+_calibration-conditional_ p-values. Given a user-predefined risk level _δ_, the calibration-conditional
+p-values _u_ [cc] will satisfy
+    
+P�P� _u_         - [cc] ( _**x**_ ) _≤_ _t | Did_ _[val]_         - _≤_ _t,_ _∀_ _t ∈_ (0 _,_ 1)� _≥_ 1 _−_ _δ,_ (10)
+
+where the probability inside is taken over _**x**_ _∼Pid_, and the probability outside over the choice of
+_Did_ _[val]_ [.] [Thus, with a probability of at least][ 1] _[ −]_ _[δ]_ [, we can be confident that we have a] _[ good]_ [ calibration]
+set, meaning that our p-values will be conservative.
+
+
+Likewise, we can correct the FPR directly. Bates et al. (2022) propose a correction of the empirical
+FPR that satisfies the following:
+
+
+             - +              P FPR( _τ_ ) _≤_ FPR [�] ( _τ_ ) _, ∀τ_ _∈_ R _≥_ 1 _−_ _δ,_ (11)
+
+
++
+where FPR [�] ( _τ_ ) is a correction version of the empirical FPR� ( _τ_ ). The corrected FPR is obtained by
+
++
+applying a correction function _h_ to the empirical FPR, i.e. FPR [�] ( _τ_ ) = _h ◦_ FPR� ( _τ_ ). In the following,
+
++
+we refer to the quantity FPR [�] ( _τ_ ) = _h ◦_ FPR� ( _τ_ ) as _conformal_ FPR.
+
+Four different correction functions _h_ are proposed by Bates et al. (2022), the Simes, DKWM,
+Asymptotic and Monte Carlo corrections. The Simes, DKWM and Monte Carlo corrections all
+provide the finite sample guarantees of equation (10) and equation (11), while the Asymptotic
+correction provides only an asymptotic guarantee, that is, when the number of calibration points goes
+to infinity. Between the three corrections providing the finite sample guarantee, we find the Monte
+Carlo one to give tighter bounds (please see Appendix A for more details on how the Simes and
+Monte Carlo corrections are defined).
+
+
+4.4 CONFORMAL METRICS FOR OOD
+
+
+Based on the previously defined conformal FPR (already defined in Bates et al. (2022), we define
+_conformal_ AUROC and _conformal_ FPR@TPR95. These two quantities are obtained similarly as their
+classical versions, but using the conformal FPR:
+
+
+    - Conformal AUROC: we compute the _conformal_ FPR for _τi_ = _s_ ( _**x**_ _n_ + _i_ ), _i ∈{_ 1 _, . . ., n_ val _}_
+and the True Positive Rate (TPR) for each of these values. We then compute the area under
+the curve with _conformal_ FPR as x-axis and TPR as y-axis.
+
+
+6
+
+
+Due to the large number of points used in the
+approximating sum, the 53 values obtained are
+faithful approximations of the random variables
+_F_ ( _t_ ; _Did_ _[val]_ [)][.]
+
+
+We perform this simulation with _t_ = 0 _._ 1 and
+plot the 53 values into a histogram. Additionally, we fit a Beta distribution to the histogram
+using the _scikit-learn_ library. These plots are
+found in figure 1. As we can see, the estimated
+parameters of the fitted beta distribution are very
+close to those predicted by the theoretical result
+of equation (8). If the value _u_ [marg] ( _**x**_ ) were a
+
+           true p-value, the value of _F_ ( _t_ ; _Did_ _[val]_ [)][ would be]
+equal to _τ_, but as we can see from the theoretical
+result and the experiment above, _F_ ( _t_ ; _Did_ _[val]_ [)][ is a]
+random variable that fluctuates around its mean
+value _τ_ . This phenomenon can be detrimental to
+safety-critical applications, which are the applications of choice for OOD detection. Indeed, it
+may result in underestimating the FPR, whereas
+we would like the FPR to be conservative.
+
+
+Figure 1: Histogram of _F_ (0 _._ 1; _Did_ _[cal]_ [)][ for different]
+calibration sets. The histogram is obtained by splitting the dataset _svhn_extra_ into disjoint calibration
+sets of 10000 points each, and approximating the
+value of _F_ for each calibration set by integrating
+over the remaining 521131 examples.
+
+
+Figure 2: Different zoom levels of the ROC curves. The TPR is calculated by using all the points in
+the "Cifar10" dataset for the three curves. As for the TPR, the blue curve is obtained by using all
+data points in the "svhn_extra" dataset, the orange curve is an approximation of the blue curve using
+1000 calibration points, whereas the green curve is obtained by correcting the FPR via the conformal
+AUROC method.
+
+
+    - Conformal FPR@TPR95: We select _τ_ among _τ_ 1 _, . . ., τn_ val so that the True Positive Rate
+(TPR) is 0 _._ 95. We then compute the corresponding _conformal_ FPR. It can be generalized to
+FPR@TPR _β_, for any _β_ _∈_ (0 _,_ 1).
+
+
+The computations are performed by considering the ID validation dataset as the calibration dataset.
+We would like to insist on the fact that Conformal FPR, AUROC, and FPR@TPR95 are not necessarily
+better approximations of the real FPR, AUROC and FPR@TPR95 values. Nonetheless, they are
+guaranteed to use conservative estimates of the FPR with a user-defined miscalibration tolerance _δ_,
+which is an essential property in many safety-critical applications or certification processes Sellke
+et al. (2001). The effect of the correction on the ROC curve is illustrated in Figure 2 using the SVHN
+dataset as ID and Cifar-10 as OOD.
+_Remark_ 4.1 (Conformal metrics do not require extra validation data) _._ Computing the conformal FPR
+only requires a correction to the estimated FPR. It does not require extra validation data. This is not
+like in CP, where we need a calibration dataset to find a threshold based on nonconformity scores
+obtained on calibration data, which is subsequently used to provide CP confidence intervals. Here,
+there are no confidence prediction intervals; we only use CP theory to obtain probabilistic guarantees
+of the FPR.
+
+
+4.5 SAFER BENCHMARKS FOR OOD
+
+
+AUROC and (to a lesser extent) FPR@TPR95 are two metrics that OOD and AD practitioners
+intensively use to benchmark and evaluate the performances of different OOD detection algorithms.
+However, as we saw in the previous sections, the evaluation can be overly optimistic, which can
+be detrimental to algorithms designed for safety-critical applications. In this section, we reevaluate
+various OOD baselines included in the very furnished OpenOOD Yang et al. (2022), and ADBench
+Han et al. (2022) benchmarks and illustrate the trade-off between performances and probabilistic
+guarantees. All our experiments can be easily carried out on a standard laptop CPU.
+
+
+4.5.1 OPENOOD
+
+
+OpenOOD Yang et al. (2022) is an extensive benchmark for task-based OOD, i.e. for OOD methods
+that assess if some test data resembles some trained backbone’s training data. Usually, backbones
+trained on CIFAR-10, CIFAR-100, Imagenet200, and Imagenet are considered. In our case, we
+consider a ResNet18 trained on the first three datasets only since we are not evaluating a new baseline
+but only investigating a new metric for the benchmark. We evaluate the AUROC of several baselines
+with various OOD datasets gathered into two groups, Near OOD and Far OOD, following OpenOOD’s
+guidelines. We then compute the correction for the AUROC, with _δ_ = 0 _._ 01. The results are displayed
+in Table 1. We also run the benchmark for _δ_ = 0 _._ 05 and FPR-95, which we defer to Appendix C.
+
+
+Table 1 shows that after the correction, the conformal AUROC is lower than the classical AUROC,
+by often more than 1 percent. On the one hand, this is significant, especially for such benchmarks
+where the State-of-the-art often holds by a fraction of a percentage. On the other hand, the correction
+is not _so_ severe, and the best baselines still get very good AUROC despite the correction. In other
+
+
+7
+
+
+|Col1|CIFAR-10|CIFAR-100|ImageNet-200|
+|---|---|---|---|
+|OOD type|Near OOD<br>Far OOD<br>class.<br>conf.<br>class.<br>conf.|Near OOD<br>Far OOD<br>class.<br>conf.<br>class.<br>conf.|Near OOD<br>Far OOD<br>class.<br>conf.<br>class.<br>conf.|
+|OpenMax Bendale & Boult (2015)<br>MSP Hendrycks & Gimpel (2018)<br>TempScale Guo et al. (2017)<br>ODIN Liang et al. (2018)<br>MDS Lee et al. (2018)<br>MDSEns Lee et al. (2018)<br>Gram Sastry & Oore (2020)<br>EBO Liu et al. (2020)<br>GradNorm Huang et al. (2021)<br>ReAct Sun et al. (2021)<br>MLS Hendrycks et al. (2022)<br>KLM Hendrycks et al. (2022)<br>VIM Wang et al. (2022)<br>KNN Sun et al. (2022)<br>DICE Sun & Li (2022)<br>RankFeat Song et al. (2022)<br>ASH Djurisic et al. (2022)<br>SHE Zhang et al. (2023)|87.2<br>**85.95**<br>89.53<br>**88.3**<br>87.68<br>**86.56**<br>91.0<br>**89.98**<br>87.65<br>**86.55**<br>91.27<br>**90.3**<br>80.25<br>**79.04**<br>87.21<br>**86.26**<br>86.72<br>**85.49**<br>90.2<br>**89.09**<br>60.46<br>**58.69**<br>74.07<br>**72.72**<br>52.63<br>**50.69**<br>69.74<br>**68.11**<br>86.93<br>**85.9**<br>91.74<br>**90.9**<br>53.77<br>**51.92**<br>58.55<br>**56.76**<br>86.47<br>**85.41**<br>91.02<br>**90.12**<br>86.86<br>**85.81**<br>91.61<br>**90.74**<br>78.8<br>**77.58**<br>82.76<br>**81.63**<br>88.51<br>**87.42**<br>93.14<br>**92.25**<br>90.7<br>**89.69**<br>93.1<br>**92.19**<br>77.79<br>**76.44**<br>85.41<br>**84.37**<br>76.33<br>**74.76**<br>70.15<br>**68.39**<br>74.11<br>**72.71**<br>78.36<br>**77.02**<br>80.84<br>**79.64**<br>86.55<br>**85.55**|76.66<br>**74.95**<br>79.12<br>**77.52**<br>80.42<br>**78.93**<br>77.58<br>**76.0**<br>80.98<br>**79.51**<br>78.51<br>**76.95**<br>79.8<br>**78.3**<br>79.44<br>**77.92**<br>58.79<br>**56.85**<br>70.06<br>**68.31**<br>45.98<br>**43.97**<br>66.03<br>**64.43**<br>50.69<br>**48.69**<br>73.97<br>**72.63**<br>80.84<br>**79.36**<br>79.71<br>**78.19**<br>69.73<br>**68.11**<br>68.82<br>**67.19**<br>80.7<br>**79.23**<br>79.84<br>**78.32**<br>81.04<br>**79.58**<br>79.6<br>**78.07**<br>76.9<br>**75.38**<br>76.03<br>**74.52**<br>74.83<br>**73.17**<br>82.11<br>**80.69**<br>80.25<br>**78.79**<br>82.32<br>**80.93**<br>79.15<br>**77.61**<br>79.84<br>**78.33**<br>62.22<br>**60.33**<br>67.74<br>**65.9**<br>78.39<br>**76.89**<br>79.7<br>**78.23**<br>78.72<br>**77.18**<br>77.35<br>**75.8**|80.4<br>**78.82**<br>90.41<br>**88.77**<br>83.3<br>**81.85**<br>90.2<br>**88.83**<br>83.66<br>**82.21**<br>90.91<br>**89.53**<br>80.32<br>**78.85**<br>91.89<br>**90.59**<br>62.51<br>**60.68**<br>74.94<br>**73.09**<br>54.58<br>**52.76**<br>70.08<br>**68.35**<br>68.36<br>**66.74**<br>70.94<br>**69.3**<br>82.57<br>**81.1**<br>91.12<br>**89.71**<br>73.33<br>**71.85**<br>85.29<br>**83.99**<br>80.48<br>**79.0**<br>93.1<br>**91.79**<br>82.96<br>**81.5**<br>91.34<br>**89.94**<br>80.69<br>**79.14**<br>88.41<br>**86.74**<br>78.81<br>**77.2**<br>91.52<br>**90.05**<br>81.75<br>**80.27**<br>93.47<br>**92.25**<br>81.97<br>**80.5**<br>91.19<br>**89.84**<br>58.57<br>**57.0**<br>38.97<br>**37.09**<br>82.12<br>**80.72**<br>94.23<br>**93.11**<br>80.46<br>**79.0**<br>90.48<br>**89.17**|
+
+
+Figure 3: Results for ADBench benchmark. **(left)** Scatter plot with mean classical AUROC and mean
+AUROC correction over different methods for each dataset as y-axis and x-axis, respectively. **(right)**
+Mean AUROC and AUROC correction over different datasets for each AD method.
+
+
+Figure 3 (left) shows a scatter plot with mean classical AUROC and mean AUROC correction over
+different methods for each dataset as y-axis and x-axis, respectively. The variability and magnitude
+of the correction are higher than for OpenOOD since the number of points in the test set changes
+depending on the dataset and is generally way lower. This observation is important because **it**
+**illustrates** **the** **brittleness** **of** **the** **conclusions** **that** **can** **be** **drawn** **from** **AD** **benchmarks** **and**
+**supports the increasingly commonly accepted fact that no method is provably better than others**
+**in AD** - one of the key conclusions of ADBench’s paper itself Han et al. (2022). Figure 3 (right)
+shows the mean classical and conformal AUROC for each baseline over the datasets. The correction
+is more stable, demonstrating that the correction affects all baselines similarly.
+
+
+8
+
+
+Table 1: Classical AUROC (class.) vs Conformal AUROC (conf.) obtained with the Monte Carlo
+method and _δ_ = 0 _._ 01 for several baselines from OpenOOD benchmark.
+
+
+words, the correction is large enough to manifest its importance but low enough to still be useable in
+practice: **it costs only roughly** 1 **or** 2 **percent in AUROC to be** 99% **sure that the FPR involved in**
+**the AUROC calculation is not overestimated.**
+
+
+4.5.2 ADBENCH
+
+
+We perform the same procedure as OpenOOD with ADBench Han et al. (2022), which gathers many
+task-agnostic OOD baselines – considered Anomaly Detection (AD), hence the benchmark’s name.
+We conduct the experiments with "unsupervised AD" baselines, i.e. baselines that do not leverage
+labeled anomalies. We apply the correction with _δ_ = 0 _._ 05 and summarize the results in Figure 3. The
+complete results are deferred to Appendix D.
+
+
+0.9
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.4
+
+
+0.05 0.10 0.15 0.20 0.25
+Mean AUROC correction
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.4
+
+
+0.3
+
+
+0.2
+
+
+0.1
+
+
+0.0
+
+
+5 OOD SCORES AS NONCONFORMITY SCORES FOR CP
+
+
+In the previous sections, we have mostly emphasized that practitioners of OOD detection should look
+at CP as an additional building block for correctly interpreting the scores that all the OOD methods
+rely on. In this section, we advocate that the link between OOD and CP goes even deeper and that
+both fields could benefit from each other.
+
+|Col1|LAC|APS|RAPS|
+|---|---|---|---|
+|_α_|0_._005<br>0_._01<br>0_._05|0_._005<br>0_._01<br>0_._05|0_._005<br>0_._01<br>0_._05|
+
+
+**Cifar10**
+
+
+Gram 9 _._ 57 8 _._ 34 1 _._ 89 9 _._ 60 _±_ 0 _._ 10 1 _._ 93 _±_ 0 _._ 06 8 _._ 66 _±_ 0 _._ 13 9 _._ 56 _±_ 0 _._ 13 8 _._ 7 _±_ 0 _._ 16 1 _._ 89 _±_ 0 _._ 03
+ReAct 3 _._ 75 1 _._ 98 1 _._ 03 4 _._ 47 _±_ 0 _._ 16 1 _._ 97 _±_ 0 _._ 09 3 _._ 62 _±_ 0 _._ 17 4 _._ 46 _±_ 0 _._ 15 3 _._ 67 _±_ 0 _._ 19 2 _._ 02 _±_ 0 _._ 09
+ODIN 7 _._ 15 5 _._ 82 1 _._ 14 7 _._ 42 _±_ 0 _._ 17 1 _._ 53 _±_ 0 _._ 06 5 _._ 14 _±_ 0 _._ 08 7 _._ 45 _±_ 0 _._ 16 5 _._ 1 _±_ 0 _._ 10 1 _._ 57 _±_ 0 _._ 08
+KNN 2 _._ 57 **1.48** **1.01** 3 _._ 62 _±_ 0 _._ 15 1 _._ 09 _±_ 0 _._ 03 2 _._ 71 _±_ 0 _._ 11 3 _._ 69 _±_ 0 _._ 11 2 _._ 77 _±_ 0 _._ 09 1 _._ 08 _±_ 0 _._ 02
+Mahalanobis **1.85** 1 _._ 47 1 _._ 04 **1.89** _±_ 0 _._ 07 **1.04** _±_ 0 _._ 01 **1.49** _±_ 0 _._ 04 **1.92** _±_ 0 _._ 05 **1.49** _±_ 0 _._ 05 **1.04** _±_ 0 _._ 01
+CP (Softmax) 2 _._ 44 1 _._ 73 1 _._ 03 3 _._ 92 _±_ 0 _._ 26 1 _._ 1 _±_ 0 _._ 01 2 _._ 16 _±_ 0 _._ 13 3 _._ 81 _±_ 0 _._ 24 2 _._ 17 _±_ 0 _._ 11 1 _._ 09 _±_ 0 _._ 01
+
+
+**Cifar100**
+
+
+ReAct 52 _._ 41 29 _._ 77 10 _._ 06 53 _._ 02 _±_ 0 _._ 27 32 _._ 02 _±_ 0 _._ 11 10 _._ 45 _±_ 0 _._ 15 53 _._ 12 _±_ 0 _._ 26 32 _._ 12 _±_ 0 _._ 13 10 _._ 43 _±_ 0 _._ 15
+ODIN 66 _._ 54 45 _._ 25 16 _._ 25 65 _._ 46 _±_ 0 _._ 3 45 _._ 56 _±_ 0 _._ 14 17 _._ 49 _±_ 0 _._ 13 65 _._ 61 _±_ 0 _._ 25 45 _._ 51 _±_ 0 _._ 27 17 _._ 6 _±_ 0 _._ 14
+KNN 41 _._ 64 27 _._ 74 8 _._ 62 39 _._ 45 _±_ 0 _._ 35 29 _._ 81 _±_ 0 _._ 24 9 _._ 80 _±_ 0 _._ 11 39 _._ 63 _±_ 0 _._ 21 29 _._ 74 _±_ 0 _._ 29 9 _._ 81 _±_ 0 _._ 10
+Mahalanobis **31.29** **24.76** 7 _._ 57 **31.07** _±_ 0 _._ 07 **24.77** _±_ 0 _._ 20 **8.47** _±_ 0 _._ 29 **31.15** _±_ 0 _._ 07 **24.82** _±_ 0 _._ 19 **8.48** _±_ 0 _._ 21
+CP (Softmax) 31 _._ 96 27 _._ 21 **5.73** 46 _._ 55 _±_ 1 _._ 47 36 _._ 82 _±_ 0 _._ 39 17 _._ 59 _±_ 0 _._ 41 45 _._ 64 _±_ 1 _._ 19 36 _._ 83 _±_ 0 _._ 79 17 _._ 12 _±_ 0 _._ 74
+
+
+Table 2: Efficiency (mean _±_ std. dev. for APS and RAPS) of the prediction sets for different scores
+for CP classification on CIFAR-10 and CIFAR-100. The best is bolded, the second is underlined.
+
+
+So far, we have shown how OOD can use CP, but we argue that CP could also use OOD. Indeed, CP
+is about interpreting scores to provide probabilistic results. But CP works regardless of the given
+score. Indeed, all scores will have the same guarantee, but better scores will give tighter prediction
+sets, and worse scores will give very large and uninformative prediction sets. For CP to provide
+powerful probabilistic guarantees, the scores have to be informative, hence the common practice of
+relying on scores derived from the softmax values of a neural network Sadinle et al. (2019). It turns
+out that the maximum softmax is also a score used in OOD detection Hendrycks & Gimpel (2018),
+which suggests that OOD scores and CP scores might be related in some way. In this section, we
+explore using different OOD scores to perform CP. We consider two ResNet18 trained on CIFAR-10
+and CIFAR-100 and build conformal prediction sets following the procedure described in section 2.
+To build these prediction sets, we use scores based on ReAct Sun et al. (2021), Gram Sastry & Oore
+(2020), KNN Sun et al. (2022), Mahalanobis Lee et al. (2018), and ODIN Liang et al. (2018). Note
+that we had to adapt those scores to make them class-dependent since the score used in CP is defined
+as _s_ cp( _**x**_ _, y_ ). We did so following a procedure that we describe in detail in Appendix B. Then, given
+the OOD score _s_ ( _**x**_ _, yi_ ), we construct softmax-like scores ˆ _s_ ( _**x**_ _, yi_ ) = exp _s_ ( _**x**_ _, yi_ ) _/_ [�] _j_ [exp] _[ s]_ [(] _**[x]**_ _[, y][j]_ [)][,]
+
+and use it for CP.
+
+
+For each defined score, we perform the calibration step on _ncal_ = 2000 points following the
+classical Least-Ambiguous set classifiers (LAC) procedure Sadinle et al. (2019), and the more recent
+Adaptive Prediction Set (APS) Romano et al. (2020) and Regularized Adaptive Prediction Set (RAPS)
+Angelopoulos et al. (2020) methods. For all methods, we construct the prediction sets for each
+of the remaining _nval_ _−_ _ncal_ = 8000 points, and for coverages 1 _−_ _α_ _∈{_ 0 _._ 005 _,_ 0 _._ 01 _,_ 0 _._ 05 _}_ . We
+assess the mean efficiency of the prediction sets for each score, including LAC, APS, and RAPS
+based on softmax, as classically done in CP in Table 5). Since APS and RAPS involve sampling a
+uniform random variable, we report the mean and the standard deviation of the mean efficiency for
+10 evaluations.
+
+
+Table 5 shows that all OOD scores are inefficient for CP. For example, Gram performs very poorly
+(hence, we only run it on CIFAR-10). However, in some instances, some scores, like KNN or
+Mahalanobis, perform better than classical CP scores. This suggests that OOD scores may be good
+candidates as nonconformity scores.
+
+
+6 LIMITATIONS
+
+
+While we believe that OOD detection and CP have much to gain from each other, we acknowledge
+that our paper has limitations: _Data_ _availability._ Computing conformal AUROC and conformal
+
+
+9
+
+
+FPR requires an extra calibration dataset, which might be a drawback in applications with low data
+availability. _Extra_ _compute_ _resources._ The extra calibration step requires additional calibration
+resources. However, these resources are negligible compared to those needed for training and
+fine-tuning a neural network.
+
+
+7 CONCLUSION & DISCUSSION
+
+
+In conclusion, our work highlights the inherent randomness of OOD metrics and demonstrates how
+Conformal Prediction (CP) can effectively correct these metrics. We have also shown that recent
+advancements in CP allow for uniform conservativeness guarantees on OOD metrics, providing more
+reliable evaluations. Furthermore, our analysis reveals that the correction introduced by CP does not
+significantly impact the performance of the best OOD baselines. On the other hand, we also showed
+that we could use OOD to improve existing CP techniques by using OOD scores as nonconformity
+scores. We found that some of them, especially Mahalanobis and KNN, are good candidates for
+nonconformity scores, unlocking a whole avenue for crafting CP nonconformity scores based on the
+plethora of existing post-hoc OOD scores.
+
+
+By integrating CP with OOD, we have demonstrated the fruitful synergy between the two fields. OOD
+detection focuses on developing scores that accurately discriminate between OOD and ID, while CP
+specializes in interpreting scores to provide probabilistic guarantees. This interplay between OOD
+and CP presents opportunities for mutual advancement: advancements in CP research can enhance
+OOD by offering more refined probabilistic interpretations of OOD scores, which is particularly
+crucial in safety-critical applications. Conversely, progress in OOD research can benefit CP by
+providing scores that improve the efficiency of prediction sets. This suggests that further exploration
+and collaboration between the two fields hold great potential.
+
+
+In summary, our findings underscore the intertwined nature of OOD and CP, emphasizing the need
+for continued investigation and cross-fertilization to advance both disciplines.
+
+
+REFERENCES
+
+
+Anastasios Angelopoulos, Stephen Bates, Jitendra Malik, and Michael I Jordan. Uncertainty sets for
+image classifiers using conformal prediction. _arXiv preprint arXiv:2009.14193_, 2020.
+
+
+Anastasios N. Angelopoulos and Stephen Bates. A gentle introduction to conformal prediction and
+distribution-free uncertainty quantification, 2022.
+
+
+Vineeth Balasubramanian, Shen-Shyang Ho, and Vladimir Vovk. _Conformal prediction for reliable_
+_machine learning:_ _theory, adaptations and applications_ . Newnes, 2014.
+
+
+Giovanni Balduzzi, Martino Ferrari Bravo, Anna Chernova, Calin Cruceru, Luuk van Dijk, Peter
+de Lange, Juan Jerez, Nathanaël Koehler, Mathias Koerner, Corentin Perret-Gentil, et al. Neural
+network based runway landing guidance for general aviation autoland. Technical report, United
+States. Department of Transportation. Federal Aviation Administration ..., 2021.
+
+
+Stephen Bates, Emmanuel Candès, Lihua Lei, Yaniv Romano, and Matteo Sesia. Testing for Outliers
+with Conformal p-values, May 2022. [URL http://arxiv.org/abs/2104.08279.](http://arxiv.org/abs/2104.08279)
+
+
+Abhijit Bendale and Terrance E. Boult. Towards Open Set Deep Networks. _CoRR_, abs/1511.06233,
+2015. [URL http://arxiv.org/abs/1511.06233.](http://arxiv.org/abs/1511.06233)
+
+
+Michele Caprio, Souradeep Dutta, Kuk Jin Jang, Vivian Lin, Radoslav Ivanov, Oleg Sokolsky, and
+Insup Lee. Credal bayesian deep learning, 2024. [URL https://arxiv.org/abs/2302.](https://arxiv.org/abs/2302.09656)
+[09656.](https://arxiv.org/abs/2302.09656)
+
+
+Andrija Djurisic, Nebojsa Bozanic, Arjun Ashok, and Rosanne Liu. Extremely Simple Activation
+Shaping for Out-of-distribution Detection. _CoRR_, abs/2209.09858, 2022. doi: 10.48550/ARXIV.
+2209.09858. [URL https://doi.org/10.48550/arXiv.2209.09858.](https://doi.org/10.48550/arXiv.2209.09858)
+
+
+EASA. Easa artificial intelligence concept paper, 2023. URL
+[https://www.easa.europa.eu/en/newsroom-and-events/news/](https://www.easa.europa.eu/en/newsroom-and-events/news/easa-artificial-intelligence-concept-paper-proposed-issue-2-open)
+[easa-artificial-intelligence-concept-paper-proposed-issue-2-open.](https://www.easa.europa.eu/en/newsroom-and-events/news/easa-artificial-intelligence-concept-paper-proposed-issue-2-open)
+
+
+10
+
+
+EASA and Daedalean. Concepts of design assurance for neural networks (codann) ii with appendix b.
+Technical report, EASA and Daedalean, 1 2024.
+
+
+Yonatan Geifman and Ran El-Yaniv. Selective classification for deep neural networks. _Advances in_
+_neural information processing systems_, 30, 2017.
+
+
+Yonatan Geifman and Ran El-Yaniv. SelectiveNet: A deep neural network with an integrated
+reject option. In Kamalika Chaudhuri and Ruslan Salakhutdinov (eds.), _Proceedings of the 36th_
+_International Conference on Machine Learning_, volume 97 of _Proceedings of Machine Learning_
+_Research_, pp. 2151–2159. PMLR, 09–15 Jun 2019. URL [https://proceedings.mlr.](https://proceedings.mlr.press/v97/geifman19a.html)
+[press/v97/geifman19a.html.](https://proceedings.mlr.press/v97/geifman19a.html)
+
+
+Leying Guan and Robert Tibshirani. Prediction and outlier detection in classification problems.
+_Journal of the Royal Statistical Society Series B: Statistical Methodology_, 84(2):524–546, 2022.
+
+
+Chuan Guo, Geoff Pleiss, Yu Sun, and Kilian Q. Weinberger. On Calibration of Modern Neural
+Networks. _CoRR_, abs/1706.04599, 2017. [URL http://arxiv.org/abs/1706.04599.](http://arxiv.org/abs/1706.04599)
+
+
+Songqiao Han, Xiyang Hu, Hailiang Huang, Minqi Jiang, and Yue Zhao. Adbench: Anomaly
+detection benchmark. _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_, 35:32142–32159,
+2022.
+
+
+Matan Haroush, Tzviel Frostig, Ruth Heller, and Daniel Soudry. A statistical framework for efficient
+out of distribution detection in deep neural networks, March 2022. [URL http://arxiv.org/](http://arxiv.org/abs/2102.12967)
+[abs/2102.12967.](http://arxiv.org/abs/2102.12967)
+
+
+Dan Hendrycks and Kevin Gimpel. A Baseline for Detecting Misclassified and Out-of-distribution
+Examples in Neural Networks. _CoRR_, abs/1610.02136, 2016. URL [http://arxiv.org/](http://arxiv.org/abs/1610.02136)
+[abs/1610.02136.](http://arxiv.org/abs/1610.02136)
+
+
+Dan Hendrycks and Kevin Gimpel. A Baseline for Detecting Misclassified and Out-of-Distribution Examples in Neural Networks, October 2018. [URL http://arxiv.org/abs/1610.02136.](http://arxiv.org/abs/1610.02136)
+
+
+Dan Hendrycks, Steven Basart, Mantas Mazeika, Andy Zou, Joseph Kwon, Mohammadreza Mostajabi, Jacob Steinhardt, and Dawn Song. Scaling Out-of-distribution Detection for Real-world
+Settings. In Kamalika Chaudhuri, Stefanie Jegelka, Le Song, Csaba Szepesvári, Gang Niu, and
+Sivan Sabato (eds.), _International Conference on Machine Learning, ICML 2022, 17-23 July 2022,_
+_Baltimore, Maryland, USA_, volume 162 of _Proceedings of Machine Learning Research_, pp. 8759–
+8773. PMLR, 2022. [URL https://proceedings.mlr.press/v162/hendrycks22a.](https://proceedings.mlr.press/v162/hendrycks22a.html)
+[html.](https://proceedings.mlr.press/v162/hendrycks22a.html)
+
+
+Rui Huang, Andrew Geng, and Yixuan Li. On the Importance of Gradients for Detecting Distributional
+Shifts in the Wild. _CoRR_, abs/2110.00218, 2021. [URL https://arxiv.org/abs/2110.](https://arxiv.org/abs/2110.00218)
+[00218.](https://arxiv.org/abs/2110.00218)
+
+
+Ramneet Kaur, Susmit Jha, Anirban Roy, Sangdon Park, Edgar Dobriban, Oleg Sokolsky, and
+Insup Lee. iDECODe: In-Distribution Equivariance for Conformal Out-of-Distribution Detection.
+_Proceedings of the AAAI Conference on Artificial Intelligence_, 36(7):7104–7114, June 2022. ISSN
+2374-3468, 2159-5399. doi: 10.1609/aaai.v36i7.20670. URL [https://ojs.aaai.org/](https://ojs.aaai.org/index.php/AAAI/article/view/20670)
+[index.php/AAAI/article/view/20670.](https://ojs.aaai.org/index.php/AAAI/article/view/20670)
+
+
+Rikard Laxhammar. Conformal anomaly detection. _Skövde, Sweden:_ _University of Skövde_, 2, 2014.
+
+
+Rikard Laxhammar and Göran Falkman. Sequential conformal anomaly detection in trajectories
+based on hausdorff distance. In _14th_ _international_ _conference_ _on_ _information_ _fusion_, pp. 1–8.
+IEEE, 2011.
+
+
+Kimin Lee, Kibok Lee, Honglak Lee, and Jinwoo Shin. A Simple Unified Framework for Detecting
+Out-of-distribution Samples and Adversarial Attacks. _CoRR_, abs/1807.03888, 2018. [URL http:](http://arxiv.org/abs/1807.03888)
+[//arxiv.org/abs/1807.03888.](http://arxiv.org/abs/1807.03888)
+
+
+Christophe Leys, Olivier Klein, Yves Dominicy, and Christophe Ley. Detecting multivariate outliers:
+Use a robust variant of the Mahalanobis distance. _Journal of Experimental Social Psychology_,
+2018.
+
+
+11
+
+
+Shiyu Liang, Yixuan Li, and R. Srikant. Enhancing The Reliability of Out-of-distribution Image
+Detection in Neural Networks. In _6th_ _International_ _Conference_ _on_ _Learning_ _Representations,_
+_ICLR_ _2018,_ _Vancouver,_ _BC,_ _Canada,_ _April_ _30_ _-_ _May_ _3,_ _2018,_ _Conference_ _Track_ _Proceedings_ .
+OpenReview.net, 2018. [URL https://openreview.net/forum?id=H1VGkIxRZ.](https://openreview.net/forum?id=H1VGkIxRZ)
+
+
+Ziyi Liang, Matteo Sesia, and Wenguang Sun. Integrative conformal p-values for powerful outof-distribution testing with labeled outliers, August 2022. [URL http://arxiv.org/abs/](http://arxiv.org/abs/2208.11111)
+[2208.11111.](http://arxiv.org/abs/2208.11111)
+
+
+Weitang Liu, Xiaoyun Wang, John D. Owens, and Yixuan Li. Energy-based Out-of-distribution
+Detection. _CoRR_, abs/2010.03759, 2020. [URL https://arxiv.org/abs/2010.03759.](https://arxiv.org/abs/2010.03759)
+
+
+Harris Papadopoulos, Kostas Proedrou, Volodya Vovk, and Alex Gammerman. Inductive confidence
+machines for regression. In _Machine_ _Learning:_ _ECML_ _2002:_ _13th_ _European_ _Conference_ _on_
+_Machine Learning Helsinki, Finland, August 19–23, 2002 Proceedings 13_, pp. 345–356. Springer,
+2002.
+
+
+Tim Pearce, Alexandra Brintrup, and Jun Zhu. Understanding softmax confidence and uncertainty.
+_arXiv preprint arXiv:2106.04972_, 2021.
+
+
+Yaniv Romano, Matteo Sesia, and Emmanuel Candes. Classification with valid and adaptive coverage.
+_Advances in Neural Information Processing Systems_, 33:3581–3591, 2020.
+
+
+Mauricio Sadinle, Jing Lei, and Larry Wasserman. Least ambiguous set-valued classifiers with
+bounded error levels. _Journal of the American Statistical Association_, 114(525):223–234, 2019.
+
+
+Chandramouli Shama Sastry and Sageev Oore. Detecting Out-of-distribution Examples with Gram
+Matrices. In _Proceedings of the 37th International Conference on Machine Learning, ICML 2020,_
+_13-18 July 2020, Virtual Event_, volume 119 of _Proceedings of Machine Learning Research_, pp.
+8491–8501. PMLR, 2020. [URL http://proceedings.mlr.press/v119/sastry20a.](http://proceedings.mlr.press/v119/sastry20a.html)
+[html.](http://proceedings.mlr.press/v119/sastry20a.html)
+
+
+Thomas M. Sellke, Maria J. Bayarri, and James O. Berger. Calibration of _ρ_ values for testing
+precise null hypotheses. _The_ _American_ _Statistician_, 55:62  - 71, 2001. URL [https://api.](https://api.semanticscholar.org/CorpusID:396772)
+[semanticscholar.org/CorpusID:396772.](https://api.semanticscholar.org/CorpusID:396772)
+
+
+Glenn Shafer and Vladimir Vovk. A tutorial on conformal prediction. _Journal of Machine Learning_
+_Research_, 9(3), 2008.
+
+
+Yue Song, Nicu Sebe, and Wei Wang. RankFeat: Rank-1 Feature Removal for Out-of-distribution
+Detection. _CoRR_, abs/2209.08590, 2022. doi: 10.48550/ARXIV.2209.08590. URL [https:](https://doi.org/10.48550/arXiv.2209.08590)
+[//doi.org/10.48550/arXiv.2209.08590.](https://doi.org/10.48550/arXiv.2209.08590)
+
+
+Yiyou Sun and Yixuan Li. DICE: Leveraging Sparsification for Out-of-distribution Detection. In
+Shai Avidan, Gabriel J. Brostow, Moustapha Cissé, Giovanni Maria Farinella, and Tal Hassner
+(eds.), _Computer Vision - ECCV 2022:_ _17th European Conference, Tel Aviv, Israel, October 23-27,_
+_2022, Proceedings, Part XXIV_, volume 13684 of _Lecture Notes in Computer Science_, pp. 691–708.
+Springer, 2022. doi: 10.1007/978-3-031-20053-3\_40. [URL https://doi.org/10.1007/](https://doi.org/10.1007/978-3-031-20053-3_40)
+[978-3-031-20053-3_40.](https://doi.org/10.1007/978-3-031-20053-3_40)
+
+
+Yiyou Sun, Chuan Guo, and Yixuan Li. ReAct: Out-of-distribution Detection With Rectified
+Activations. _CoRR_, abs/2111.12797, 2021. [URL https://arxiv.org/abs/2111.12797.](https://arxiv.org/abs/2111.12797)
+
+
+Yiyou Sun, Yifei Ming, Xiaojin Zhu, and Yixuan Li. Out-of-distribution Detection with Deep
+Nearest Neighbors. _CoRR_, abs/2204.06507, 2022. doi: 10.48550/ARXIV.2204.06507. URL
+[https://doi.org/10.48550/arXiv.2204.06507.](https://doi.org/10.48550/arXiv.2204.06507)
+
+
+Vladimir Vovk. Conditional Validity of Inductive Conformal Predictors. In _Proceedings_ _of_ _the_
+_Asian Conference on Machine Learning_, pp. 475–490. PMLR, November 2012. [URL https:](https://proceedings.mlr.press/v25/vovk12.html)
+[//proceedings.mlr.press/v25/vovk12.html.](https://proceedings.mlr.press/v25/vovk12.html)
+
+
+Vladimir Vovk, Ilia Nouretdinov, and Alexander Gammerman. Testing exchangeability on-line. In
+_Proceedings of the 20th International Conference on Machine Learning (ICML-03)_, pp. 768–775,
+2003.
+
+
+12
+
+
+This bound is quite similar to Simes for small values, but quite tighter for the remaining ones.
+
+
+**Monte Carlo Correction** The Monter Carlo Correction offers advantages of both the Simes and
+Asymptotic methods. It provides a finite-sample guarantee, mimics Simes for small p-values and
+remains closer to the asymptotic correction for larger ones.
+
+
+             -             _h_ [m] _[,][δ]_ [ˆ] ( _t_ ) = min _h_ [s] ( _t_ ) _, h_ [a] _[,][δ]_ [ˆ] ( _t_ ) _,_ _t ∈_ [0 _,_ 1] _._ (16)
+
+
+13
+
+
+Vladimir Vovk, Alexander Gammerman, and Glenn Shafer. _Algorithmic learning in a random world_,
+volume 29. Springer, 2005.
+
+
+Haoqi Wang, Zhizhong Li, Litong Feng, and Wayne Zhang. ViM: Out-Of-distribution with Virtuallogit Matching. _CoRR_, abs/2203.10807, 2022. doi: 10.48550/ARXIV.2203.10807. [URL https:](https://doi.org/10.48550/arXiv.2203.10807)
+[//doi.org/10.48550/arXiv.2203.10807.](https://doi.org/10.48550/arXiv.2203.10807)
+
+
+Jingkang Yang, Kaiyang Zhou, Yixuan Li, and Ziwei Liu. Generalized Out-of-distribution Detection:
+A Survey. _CoRR_, abs/2110.11334, 2021. [URL https://arxiv.org/abs/2110.11334.](https://arxiv.org/abs/2110.11334)
+
+
+Jingkang Yang, Pengyun Wang, Dejian Zou, Zitang Zhou, Kunyuan Ding, Wenxuan Peng, Haoqi
+Wang, Guangyao Chen, Bo Li, Yiyou Sun, et al. Openood: Benchmarking generalized out-ofdistribution detection. _Advances in Neural Information Processing Systems_, 35:32598–32611,
+2022.
+
+
+Jinsong Zhang, Qiang Fu, Xu Chen, Lun Du, Zelin Li, Gang Wang, Xiaoguang Liu, Shi Han, and
+Dongmei Zhang. Out-of-distribution Detection based on In-distribution Data Patterns Memorization with Modern Hopfield Energy. In _The Eleventh International Conference on Learning_
+_Representations,_ _ICLR_ _2023,_ _Kigali,_ _Rwanda,_ _May_ _1-5,_ _2023_ . OpenReview.net, 2023. URL
+[https://openreview.net/pdf?id=KkazG4lgKL.](https://openreview.net/pdf?id=KkazG4lgKL)
+
+
+A APPENDIX: SIMES AND MONTE CARLO CORRECTIONS
+
+
+In our work we use two of the corrections proposed by Bates et al. (2022), Simes and Monte Carlo
+Correction. In this section, we introduce these corrections for the sake of completeness, as well as
+two other corrections that we do not use for reasons to be detailed.
+
+
+**Simes Correction** Generally, we are interested in small p-values and the Simes correction focuses
+on those, that is by adding a smaller correction to the smaller p-values than the larger ones.
+
+
+      - _i · · ·_ ( _i −_ _n/_ 2 + 1)
+_b_ [s] _n_ +1 _−i_ [= 1] _[ −]_ _[δ]_ [2] _[/n]_
+_n · · ·_ ( _n −_ _n/_ 2 + 1)
+
+
+�2 _/n_
+_,_ _i_ = 1 _, . . ., n_ (12)
+
+
+**DKWM** The former approach may be compared to the classical uniform concentration DKWM
+result, where the _b_ are defined as
+
+
+_b_ [d] _i_ [= min] _[{]_ [(] _[i/n]_ [) +] ~~�~~ log(2 _/δ_ ) _/_ 2 _n,_ 1 _}_ ; (13)
+
+
+However, DKWM tends to provide much larger bounds than Simes.
+
+
+**Asymptotic Correction** The previous approach brought finite sample guarantees but at the cost
+of a large correction. In order to produce a tighter bound, for a more powerful test, we look into a
+correction that is correct asymptotically.
+
+
+��         - _−_ 1
+_cn_ ( _δ_ ) := 2 log log _n_ ( _−_ log[ _−_ log(1 _−_ _δ_ )]
+
+(14)
++2 log log _n_ + (1 _/_ 2) log log log _n −_ (1 _/_ 2) log _π_ ) _._
+
+
+_,_ 1
+_n_ ~~_[√]_~~ _n_
+
+
+_,_ _i_ = 1 _, . . ., n_ (15)
+
+
+_b_ [a] _i_ [= min]
+
+
+_i_
+_n_ [+] _[ c][n]_ [(] _[δ]_ [)]
+
+
+- _i_ ( _n −_ _i_ )
+
+
+_s_ ( _**x**_ _n_ +1 _, y_ ) = ( _**x**_ _n_ +1 _−_ _µy_ ) _[T]_ Σ _[−]_ _y_ [1][(] _**[x]**_ _n_ +1 _[−]_ _[µ]_ _y_ [)] _[.]_
+
+
+B.5 GRAM
+
+
+Let _f_ be a classifier of depth _L_ . Gram method Sastry & Oore (2020) builds a statistic _δ_ : _X_ _→_ R _[L]_ that
+outputs the channel-wise correlation of the activation maps for each layer. First, _{δ_ ( _**x**_ 1) _, ..., δ_ ( _**x**_ _n_ ) _}_
+are computed. Then, a multi-dimensional statistic _{dl,k}l∈{_ 1 _,...,L},k∈{_ 1 _,...,C}_ is computed for each
+layer after a class-wise aggregation.
+
+
+For a new test point _**x**_ _n_ +1, _δ_ ( _**x**_ _n_ +1) is computed, along with _f_ ( _**x**_ _n_ +1). The score is built out of a
+weighted mean of the layer-wise deviation:
+
+_s_ ( _**x**_ _n_ +1) =            - _wl|δ_ ( _**x**_ _n_ +1) _l −_ _dl,f_ ( _**x**_ _n_ +1) _|,_
+
+
+_l∈{_ 1 _,...,L}_
+
+
+14
+
+
+B APPENDIX: DESIGNING CLASS-DEPENDENT OOD SCORES FOR CP
+
+
+Let’s consider a classification task with a classifier _f_ trained to fit a dataset _{_ ( _**x**_ 1 _, y_ 1) _, ...,_ ( _**x**_ _n, yn_ ) _}_,
+where _**x**_ _i_ _∈X_ and _yi_ _∈{_ 1 _, ...C}_ for all _i_ _∈{_ 1 _, ..., n}_ . In OOD, the score function _s_ : _X_ _→_ R,
+whereas in CP, the non-conformity score _s_ cp : _X_ _×_ R _→_ R. Hence, in order to construct a nonconformity score out of _s_, we have to make it class-dependent. In this section, we describe how to
+construct class-dependent OOD scores out of classical OOD scores for appropriate usage in CP.
+
+
+B.1 REACT
+
+
+ReAct method Sun et al. (2021) gets the quantiles of _f_ ’s penultimate layer’s activation values and
+then clips the activation values for a new input data point. The output softmax are then used for OOD
+scoring. Therefore, making the score class-dependent is straightforward: one only has to get the class
+softmax.
+
+
+B.2 ODIN
+
+
+The idea of ODIN Liang et al. (2018) is also to tweak the network so that the softmax becomes more
+informative for OOD detection. Similarly to ReAct, one only has to get each class’s softmax to make
+the score class-dependent.
+
+
+B.3 KNN
+
+
+For each _{_ _**x**_ 1 _, ...,_ _**x**_ _n}_ from the training set, consider _**H**_ = _{h_ ( _**x**_ 1) _, ..., h_ ( _**x**_ _n_ ) _}_ where _h_ : _X_ _→_ R _[p]_
+is defined such that _h_ ( _**x**_ _i_ ) is the activation vector of _**x**_ _i_ of _f_ ’s penultimate layer. Let _N_ _**H**_ : R _[p]_ _→_ R _[p]_
+be the nearest neighbor map such that _N_ ( _**h**_ ) is the nearest neighbor of _**h**_ among _**H**_ . KNN Sun et al.
+(2022) builds the score _s_ as
+
+
+_s_ ( _**x**_ _n_ +1) = _∥h_ ( _**x**_ _n_ +1) _−_ _N_ _**H**_ ( _h_ ( _**x**_ _n_ +1) _∥._
+
+
+To make this score class-dependent, one can build _C_ maps _{N_ _**H**_ 1 _, ..., N_ _**H**_ _C_ _}_ where _**H**_ _k_ =
+_{h_ ( _**x**_ _i_ ) _|f_ ( _**x**_ _i_ ) = _k}_ and then define a new score
+
+
+_s_ ( _**x**_ _n_ +1 _, y_ ) = _∥h_ ( _**x**_ _n_ +1) _−_ _N_ _**H**_ _y_ ( _h_ ( _**x**_ _n_ +1) _∥_
+
+
+B.4 MAHALANOBIS
+
+
+Let consider the map _h_ as in KNN. For each _k_ _∈{_ 1 _, ..., C}_, Mahalanobis distance method Lee et al.
+(2018) computes Σ _k_ and _µk_, which are the empirical covariance matrix and mean vectors of each set
+of points _{h_ ( _**x**_ _i_ ) _}i|f_ ( _**x**_ _i_ )= _k_ . Then, the score _s_ is computed as:
+
+
+~~�~~
+_s_ ( _**x**_ _n_ +1) = ( _**x**_ _n_ +1 _−_ _µf_ ( _**x**_ _n_ +1)) _[T]_ Σ _[−]_ [1] ( _**x**_ _n_ +1 _−_ _µf_ ( _**x**_ _n_ +1)) _,_
+
+
+where Σ = [1]
+
+
+_k∈{_ 1 _,...,C}_ [Σ] _[k]_ [.] [To make the score class-dependent, one simply has to define]
+
+
+[1] 
+_C_
+
+
+where _{wl}l∈{_ 1 _,...,L}_ are some normalization weights computed with the training data. It is quite
+straightforward to make this OOD score class-dependent by defining
+
+
+_s_ ( _**x**_ _n_ +1 _, y_ ) =            - _wl|δ_ ( _**x**_ _n_ +1) _l −_ _dl,y|._
+
+
+_l∈{_ 1 _,...,L}_
+
+
+C APPENDIX: COMPLEMENTARY RESULTS ON OPENOOD BENCHMARK
+
+
+In this section, we present the full results of benchmarks on OpenOOD. The results displayed are
+AUROC with _δ_ = 0 _._ 05 in Table 3, FPR@TPR95 with _δ_ = 0 _._ 05 in Table 5 and FPR@TPR95 with
+_δ_ = 0 _._ 01 in Table 4.
+
+|Col1|CIFAR-10|CIFAR-100|ImageNet-200|
+|---|---|---|---|
+|OOD type|Near<br>Far<br>marg.<br>conf.<br>marg.<br>conf.|Near<br>Far<br>marg.<br>conf.<br>marg.<br>conf.|Near<br>Far<br>marg.<br>conf.<br>marg.<br>conf.|
+|OpenMax Bendale & Boult (2015)<br>MSP Hendrycks & Gimpel (2016)<br>TempScale Guo et al. (2017)<br>ODIN Liang et al. (2018)<br>MDS Lee et al. (2018)<br>MDSEns Lee et al. (2018)<br>Gram Sastry & Oore (2020)<br>EBO Liu et al. (2020)<br>GradNorm Huang et al. (2021)<br>ReAct Sun et al. (2021)<br>MLS Hendrycks et al. (2022)<br>KLM Hendrycks et al. (2022)<br>VIM Wang et al. (2022)<br>KNN Sun et al. (2022)<br>DICE Sun & Li (2022)<br>RankFeat Song et al. (2022)<br>ASH Djurisic et al. (2022)<br>SHE Zhang et al. (2023)|87.2<br>**86.18**<br>89.53<br>**88.52**<br>87.68<br>**86.76**<br>91.0<br>**90.17**<br>87.65<br>**86.75**<br>91.27<br>**90.48**<br>80.25<br>**79.26**<br>87.21<br>**86.43**<br>86.72<br>**85.71**<br>90.2<br>**89.29**<br>60.46<br>**59.01**<br>74.07<br>**72.96**<br>52.63<br>**51.04**<br>69.74<br>**68.41**<br>86.93<br>**86.08**<br>91.74<br>**91.05**<br>53.77<br>**52.26**<br>58.55<br>**57.09**<br>86.47<br>**85.6**<br>91.02<br>**90.28**<br>86.86<br>**86.0**<br>91.61<br>**90.9**<br>78.8<br>**77.8**<br>82.76<br>**81.83**<br>88.51<br>**87.62**<br>93.14<br>**92.41**<br>90.7<br>**89.87**<br>93.1<br>**92.35**<br>77.79<br>**76.68**<br>85.41<br>**84.56**<br>76.33<br>**75.05**<br>70.15<br>**68.71**<br>74.11<br>**72.96**<br>78.36<br>**77.27**<br>80.84<br>**79.86**<br>86.55<br>**85.73**|76.66<br>**75.26**<br>79.12<br>**77.81**<br>80.42<br>**79.2**<br>77.58<br>**76.29**<br>80.98<br>**79.78**<br>78.51<br>**77.24**<br>79.8<br>**78.57**<br>79.44<br>**78.2**<br>58.79<br>**57.2**<br>70.06<br>**68.63**<br>45.98<br>**44.34**<br>66.03<br>**64.72**<br>50.69<br>**49.06**<br>73.97<br>**72.87**<br>80.84<br>**79.63**<br>79.71<br>**78.47**<br>69.73<br>**68.41**<br>68.82<br>**67.48**<br>80.7<br>**79.5**<br>79.84<br>**78.6**<br>81.04<br>**79.84**<br>79.6<br>**78.35**<br>76.9<br>**75.65**<br>76.03<br>**74.8**<br>74.83<br>**73.47**<br>82.11<br>**80.95**<br>80.25<br>**79.05**<br>82.32<br>**81.19**<br>79.15<br>**77.89**<br>79.84<br>**78.61**<br>62.22<br>**60.67**<br>67.74<br>**66.24**<br>78.39<br>**77.16**<br>79.7<br>**78.5**<br>78.72<br>**77.46**<br>77.35<br>**76.08**|80.4<br>**79.2**<br>90.41<br>**89.49**<br>83.3<br>**82.2**<br>90.2<br>**89.36**<br>83.66<br>**82.58**<br>90.91<br>**90.11**<br>80.32<br>**79.19**<br>91.89<br>**91.17**<br>62.51<br>**60.96**<br>74.94<br>**73.6**<br>54.58<br>**52.99**<br>70.08<br>**68.76**<br>68.36<br>**67.0**<br>70.94<br>**69.69**<br>82.57<br>**81.47**<br>91.12<br>**90.33**<br>73.33<br>**72.12**<br>85.29<br>**84.45**<br>80.48<br>**79.35**<br>93.1<br>**92.4**<br>82.96<br>**81.88**<br>91.34<br>**90.56**<br>80.69<br>**79.54**<br>88.41<br>**87.44**<br>78.81<br>**77.57**<br>91.52<br>**90.7**<br>81.75<br>**80.63**<br>93.47<br>**92.83**<br>81.97<br>**80.86**<br>91.19<br>**90.43**<br>58.57<br>**57.06**<br>38.97<br>**37.43**<br>82.12<br>**81.07**<br>94.23<br>**93.66**<br>80.46<br>**79.34**<br>90.48<br>**89.72**|
+
+
+Table 3: Classical AUROC (marg.) vs Conformal AUROC (conf.) obtained with the Monte Carlo
+method and _δ_ = 0 _._ 05 for several baselines from OpenOOD benchmark.
+
+|Col1|CIFAR-10|CIFAR-100|ImageNet-200|
+|---|---|---|---|
+|OOD type|Near<br>Far<br>marg.<br>conf.<br>marg.<br>conf.|Near<br>Far<br>marg.<br>conf.<br>marg.<br>conf.|Near<br>Far<br>marg.<br>conf.<br>marg.<br>conf.|
+|OpenMax Bendale & Boult (2015)<br>MSP Hendrycks & Gimpel (2016)<br>TempScale Guo et al. (2017)<br>ODIN Liang et al. (2018)<br>MDS Lee et al. (2018)<br>MDSEns Lee et al. (2018)<br>Gram Sastry & Oore (2020)<br>EBO Liu et al. (2020)<br>GradNorm Huang et al. (2021)<br>ReAct Sun et al. (2021)<br>MLS Hendrycks et al. (2022)<br>KLM Hendrycks et al. (2022)<br>VIM Wang et al. (2022)<br>KNN Sun et al. (2022)<br>DICE Sun & Li (2022)<br>RankFeat Song et al. (2022)<br>ASH Djurisic et al. (2022)<br>SHE Zhang et al. (2023)|46.77<br>**48.98**<br>29.48<br>**31.48**<br>53.57<br>**55.8**<br>31.44<br>**33.45**<br>56.85<br>**59.08**<br>33.36<br>**35.38**<br>84.55<br>**86.78**<br>60.9<br>**62.97**<br>46.22<br>**48.44**<br>30.3<br>**32.3**<br>92.06<br>**94.29**<br>61.09<br>**62.87**<br>93.52<br>**95.75**<br>69.29<br>**71.48**<br>67.54<br>**69.77**<br>40.55<br>**42.58**<br>95.37<br>**97.6**<br>89.34<br>**91.52**<br>71.56<br>**73.78**<br>42.43<br>**44.52**<br>67.54<br>**69.77**<br>40.53<br>**42.56**<br>86.41<br>**88.63**<br>76.42<br>**78.65**<br>48.07<br>**50.29**<br>25.77<br>**27.65**<br>34.54<br>**36.65**<br>23.88<br>**25.77**<br>80.15<br>**82.38**<br>53.93<br>**56.06**<br>67.38<br>**69.61**<br>68.24<br>**70.47**<br>89.03<br>**91.26**<br>76.66<br>**78.89**<br>84.49<br>**86.72**<br>63.26<br>**65.41**|55.57<br>**57.8**<br>54.77<br>**57.0**<br>54.73<br>**56.96**<br>59.08<br>**61.31**<br>54.77<br>**56.99**<br>58.24<br>**60.47**<br>58.44<br>**60.67**<br>57.75<br>**59.98**<br>82.75<br>**84.98**<br>70.46<br>**72.68**<br>95.84<br>**98.07**<br>66.97<br>**68.85**<br>92.48<br>**94.71**<br>63.1<br>**65.2**<br>55.49<br>**57.72**<br>56.41<br>**58.64**<br>86.13<br>**88.36**<br>82.79<br>**85.02**<br>56.74<br>**58.97**<br>56.32<br>**58.55**<br>55.48<br>**57.71**<br>56.53<br>**58.76**<br>79.52<br>**81.75**<br>70.16<br>**72.39**<br>62.96<br>**65.19**<br>49.72<br>**51.95**<br>61.32<br>**63.54**<br>54.04<br>**56.27**<br>58.1<br>**60.33**<br>55.95<br>**58.17**<br>79.94<br>**82.17**<br>68.89<br>**71.11**<br>66.14<br>**68.37**<br>62.67<br>**64.89**<br>59.32<br>**61.54**<br>62.74<br>**64.97**|63.32<br>**65.75**<br>32.29<br>**35.35**<br>55.25<br>**57.69**<br>35.44<br>**38.29**<br>55.03<br>**57.5**<br>34.11<br>**37.06**<br>66.38<br>**68.8**<br>33.66<br>**36.75**<br>79.34<br>**81.52**<br>61.26<br>**63.81**<br>91.69<br>**93.8**<br>80.43<br>**82.89**<br>85.43<br>**87.63**<br>84.95<br>**87.44**<br>59.46<br>**61.93**<br>34.0<br>**37.07**<br>83.07<br>**85.33**<br>66.78<br>**69.67**<br>65.37<br>**67.8**<br>27.21<br>**30.28**<br>58.94<br>**61.44**<br>33.59<br>**36.68**<br>69.42<br>**71.91**<br>39.57<br>**42.56**<br>59.91<br>**62.32**<br>26.86<br>**29.81**<br>60.42<br>**62.9**<br>26.49<br>**29.66**<br>60.98<br>**63.46**<br>35.93<br>**39.04**<br>92.02<br>**93.91**<br>98.48<br>**99.58**<br>65.95<br>**68.44**<br>26.26<br>**29.46**<br>65.92<br>**68.31**<br>41.5<br>**44.62**|
+
+
+Table 4: Classical FPR@TPR95 (marg.) vs Conformal FPR@TPR95 (conf.) obtained with the Monte
+Carlo method and _δ_ = 0 _._ 01 for several baselines from OpenOOD benchmark.
+
+
+15
+
+
+|CIFAR-10|CIFAR-100|
+|---|---|
+|Near<br>Far<br>marg.<br>conf.<br>marg.<br>conf.|Near<br>Far<br>marg.<br>conf.<br>marg.<br>conf.|
+|46.77<br>**48.58**<br>29.48<br>**31.11**<br>53.57<br>**55.39**<br>31.44<br>**33.08**<br>56.85<br>**58.67**<br>33.36<br>**35.01**<br>84.55<br>**86.37**<br>60.9<br>**62.59**<br>46.22<br>**48.03**<br>30.3<br>**31.94**<br>92.06<br>**93.88**<br>61.09<br>**62.54**<br>93.52<br>**95.34**<br>69.29<br>**71.08**<br>67.54<br>**69.36**<br>40.55<br>**42.21**<br>95.37<br>**97.19**<br>89.34<br>**91.16**<br>71.56<br>**73.38**<br>42.43<br>**44.14**<br>67.54<br>**69.36**<br>40.53<br>**42.19**<br>86.41<br>**88.23**<br>76.42<br>**78.24**<br>48.07<br>**49.88**<br>25.77<br>**27.3**<br>34.54<br>**36.27**<br>23.88<br>**25.42**<br>80.15<br>**81.97**<br>53.93<br>**55.67**<br>67.38<br>**69.2**<br>68.24<br>**70.06**<br>89.03<br>**90.85**<br>76.66<br>**78.48**<br>84.49<br>**86.31**<br>63.26<br>**65.02**|55.57<br>**57.39**<br>54.77<br>**56.59**<br>54.73<br>**56.55**<br>59.08<br>**60.9**<br>54.77<br>**56.59**<br>58.24<br>**60.06**<br>58.44<br>**60.26**<br>57.75<br>**59.57**<br>82.75<br>**84.57**<br>70.46<br>**72.28**<br>95.84<br>**97.66**<br>66.97<br>**68.5**<br>92.48<br>**94.3**<br>63.1<br>**64.81**<br>55.49<br>**57.31**<br>56.41<br>**58.23**<br>86.13<br>**87.95**<br>82.79<br>**84.61**<br>56.74<br>**58.56**<br>56.32<br>**58.14**<br>55.48<br>**57.3**<br>56.53<br>**58.35**<br>79.52<br>**81.34**<br>70.16<br>**71.98**<br>62.96<br>**64.78**<br>49.72<br>**51.54**<br>61.32<br>**63.14**<br>54.04<br>**55.86**<br>58.1<br>**59.92**<br>55.95<br>**57.77**<br>79.94<br>**81.76**<br>68.89<br>**70.71**<br>66.14<br>**67.96**<br>62.67<br>**64.49**<br>59.32<br>**61.14**<br>62.74<br>**64.56**|
+
+
+Table 5: Classical FPR@TPR95 (marg.) vs Conformal FPR@TPR95 (conf.) obtained with the Monte
+Carlo method and _δ_ = 0 _._ 05 for several baselines from OpenOOD benchmark.
+
+
+D APPENDIX: FULL RESULTS FOR ADBENCH
+
+
+In this section, we present the full results of the ADBench benchmark. Table 6 displays classical
+AUROC, Table 7 displays conformal AUROC, and Table 8 displays the difference between the two
+(AUROC correction), all with _δ_ = 0 _._ 05.
+
+
+16
+
+
+IForest OCSVM CBLOF COF COPOD ECOD HBOS KNN LOF PCA SOD DeepSVDD DAGMM
+
+
+cover 0.87 0.93 0.89 0.77 0.89 0.92 0.80 0.86 0.85 0.94 0.74 0.46 0.90
+donors 0.78 0.72 0.62 0.71 0.82 0.89 0.78 0.82 0.59 0.83 0.56 0.36 0.71
+fault 0.57 0.48 0.64 0.62 0.44 0.45 0.51 0.73 0.59 0.46 0.68 0.52 0.46
+fraud 0.90 0.91 0.88 0.96 0.88 0.89 0.90 0.93 0.96 0.90 0.95 0.73 0.90
+glass 0.77 0.35 0.83 0.72 0.72 0.66 0.77 0.82 0.69 0.66 0.73 0.47 0.76
+Hepatitis 0.70 0.68 0.66 0.41 0.82 0.75 0.80 0.53 0.38 0.76 0.68 0.52 0.55
+Ionosphere 0.84 0.76 0.91 0.87 0.79 0.73 0.62 0.88 0.91 0.79 0.86 0.51 0.73
+landsat 0.48 0.36 0.64 0.53 0.42 0.36 0.55 0.58 0.54 0.36 0.60 0.63 0.44
+ALOI 0.57 0.56 0.55 0.65 0.54 0.56 0.53 0.61 0.67 0.57 0.61 0.51 0.52
+letter 0.61 0.46 0.76 0.80 0.54 0.56 0.60 0.86 0.84 0.50 0.84 0.56 0.50
+20news 0 0.64 0.63 0.71 0.71 0.61 0.61 0.62 0.73 0.80 0.64 0.73 0.50 0.63
+20news 1 0.51 0.53 0.52 0.58 0.52 0.54 0.53 0.57 0.61 0.54 0.58 0.48 0.54
+20news 2 0.50 0.51 0.47 0.53 0.50 0.52 0.51 0.51 0.54 0.51 0.50 0.49 0.53
+20news 3 0.75 0.72 0.83 0.81 0.75 0.75 0.74 0.79 0.71 0.73 0.70 0.67 0.54
+20news 4 0.48 0.51 0.45 0.57 0.48 0.51 0.50 0.48 0.51 0.51 0.53 0.53 0.48
+20news 5 0.52 0.49 0.47 0.50 0.48 0.46 0.49 0.48 0.55 0.48 0.48 0.49 0.54
+Lymphography 1.00 1.00 1.00 0.91 0.99 1.00 0.99 0.56 0.90 1.00 0.73 0.34 0.72
+magic.gamma 0.73 0.61 0.75 0.67 0.68 0.64 0.71 0.82 0.69 0.67 0.75 0.60 0.59
+musk 1.00 0.81 1.00 0.39 0.94 0.95 1.00 0.70 0.41 1.00 0.74 0.56 0.77
+PageBlocks 0.90 0.89 0.85 0.73 0.88 0.92 0.81 0.82 0.76 0.91 0.78 0.59 0.90
+pendigits 0.95 0.94 0.90 0.45 0.91 0.93 0.93 0.73 0.48 0.94 0.66 0.42 0.64
+Pima 0.73 0.67 0.71 0.61 0.69 0.63 0.71 0.73 0.66 0.71 0.61 0.51 0.56
+annthyroid 0.82 0.57 0.62 0.66 0.77 0.79 0.60 0.72 0.70 0.66 0.77 0.77 0.57
+satellite 0.70 0.59 0.71 0.55 0.63 0.58 0.75 0.65 0.56 0.60 0.64 0.55 0.62
+satimage-2 0.99 0.97 1.00 0.57 0.97 0.96 0.98 0.93 0.47 0.98 0.83 0.49 0.96
+shuttle 1.00 0.97 0.83 0.52 0.99 0.99 0.99 0.70 0.57 0.99 0.70 0.49 0.98
+smtp 0.86 0.72 0.70 0.69 0.70 0.78 0.56 0.84 0.58 0.83 0.40 0.72 0.71
+speech 0.51 0.50 0.51 0.56 0.53 0.51 0.51 0.51 0.52 0.51 0.56 0.54 0.53
+Stamps 0.91 0.84 0.68 0.54 0.93 0.88 0.91 0.69 0.51 0.91 0.73 0.56 0.89
+thyroid 0.98 0.88 0.95 0.91 0.94 0.98 0.96 0.96 0.87 0.96 0.93 0.49 0.80
+vertebral 0.37 0.38 0.41 0.49 0.26 0.41 0.29 0.34 0.49 0.37 0.40 0.37 0.53
+vowels 0.75 0.63 0.90 0.95 0.55 0.62 0.73 0.97 0.93 0.67 0.92 0.56 0.61
+Waveform 0.71 0.56 0.72 0.73 0.75 0.62 0.69 0.74 0.73 0.65 0.69 0.56 0.49
+WDBC 0.99 0.99 0.99 0.96 0.99 0.97 0.99 0.92 0.89 0.99 0.92 0.62 0.77
+Wilt 0.42 0.31 0.33 0.50 0.33 0.36 0.32 0.48 0.51 0.20 0.53 0.46 0.37
+wine 0.80 0.73 0.26 0.44 0.89 0.77 0.91 0.45 0.38 0.84 0.46 0.60 0.62
+WPBC 0.47 0.45 0.45 0.46 0.49 0.47 0.51 0.47 0.41 0.46 0.51 0.50 0.48
+yeast 0.38 0.41 0.45 0.44 0.37 0.44 0.40 0.39 0.45 0.41 0.42 0.48 0.41
+campaign 0.73 0.67 0.64 0.58 0.78 0.77 0.79 0.73 0.59 0.73 0.69 0.53 0.58
+cardio 0.93 0.94 0.90 0.71 0.92 0.94 0.85 0.77 0.66 0.96 0.73 0.58 0.75
+Cardiotocography 0.68 0.78 0.65 0.54 0.67 0.78 0.61 0.56 0.60 0.75 0.52 0.53 0.62
+celeba 0.70 0.71 0.74 0.39 0.76 0.76 0.76 0.60 0.39 0.79 0.48 0.54 0.45
+CIFAR10 0 0.73 0.68 0.70 0.70 0.69 0.70 0.70 0.74 0.74 0.70 0.71 0.56 0.53
+CIFAR10 1 0.55 0.59 0.61 0.63 0.46 0.51 0.44 0.60 0.72 0.60 0.62 0.50 0.58
+CIFAR10 2 0.56 0.58 0.58 0.61 0.56 0.57 0.54 0.60 0.65 0.58 0.59 0.58 0.51
+CIFAR10 3 0.55 0.58 0.59 0.56 0.51 0.53 0.50 0.56 0.60 0.56 0.56 0.60 0.56
+CIFAR10 5 0.50 0.58 0.58 0.57 0.47 0.52 0.47 0.54 0.60 0.57 0.54 0.46 0.59
+CIFAR10 6 0.64 0.65 0.68 0.69 0.65 0.66 0.65 0.72 0.72 0.68 0.69 0.57 0.50
+CIFAR10 7 0.54 0.59 0.56 0.57 0.52 0.55 0.50 0.54 0.60 0.57 0.56 0.62 0.61
+agnews 0 0.50 0.47 0.54 0.61 0.49 0.47 0.48 0.58 0.63 0.47 0.56 0.35 0.48
+agnews 1 0.58 0.54 0.58 0.71 0.51 0.54 0.55 0.62 0.74 0.55 0.61 0.37 0.56
+agnews 2 0.65 0.61 0.71 0.73 0.61 0.59 0.61 0.75 0.79 0.61 0.73 0.50 0.53
+agnews 3 0.54 0.55 0.57 0.70 0.51 0.53 0.51 0.62 0.70 0.55 0.61 0.50 0.51
+amazon 0.56 0.54 0.58 0.58 0.57 0.54 0.56 0.59 0.56 0.54 0.58 0.45 0.51
+imdb 0.50 0.45 0.50 0.49 0.50 0.45 0.48 0.48 0.49 0.46 0.50 0.52 0.42
+yelp 0.61 0.59 0.64 0.68 0.60 0.57 0.59 0.68 0.66 0.59 0.66 0.50 0.55
+
+
+Table 6: Full results for ADBench: classical AUROC.
+
+
+17
+
+
+IForest OCSVM CBLOF COF COPOD ECOD HBOS KNN LOF PCA SOD DeepSVDD DAGMM
+
+
+cover 0.75 0.83 0.79 0.64 0.78 0.82 0.74 0.74 0.73 0.84 0.60 0.30 0.79
+donors 0.72 0.66 0.54 0.64 0.77 0.85 0.72 0.76 0.53 0.78 0.50 0.31 0.65
+fault 0.48 0.40 0.55 0.53 0.35 0.37 0.43 0.65 0.50 0.37 0.59 0.43 0.37
+fraud 0.77 0.63 0.63 0.82 0.62 0.64 0.86 0.68 0.79 0.66 0.69 0.51 0.64
+glass 0.65 0.31 0.73 0.60 0.60 0.53 0.64 0.72 0.58 0.54 0.63 0.38 0.66
+Hepatitis 0.54 0.52 0.52 0.23 0.70 0.61 0.66 0.26 0.22 0.62 0.54 0.38 0.40
+Ionosphere 0.77 0.68 0.85 0.80 0.70 0.63 0.50 0.83 0.85 0.71 0.80 0.38 0.64
+landsat 0.42 0.30 0.58 0.48 0.35 0.30 0.49 0.52 0.48 0.30 0.54 0.58 0.39
+ALOI 0.49 0.46 0.45 0.55 0.43 0.46 0.46 0.52 0.58 0.47 0.52 0.41 0.42
+letter 0.44 0.30 0.61 0.66 0.36 0.39 0.42 0.74 0.72 0.33 0.71 0.40 0.35
+20news 0 0.51 0.49 0.57 0.60 0.48 0.46 0.47 0.62 0.69 0.50 0.61 0.36 0.49
+20news 1 0.36 0.39 0.37 0.44 0.37 0.39 0.37 0.44 0.47 0.39 0.44 0.33 0.39
+20news 2 0.34 0.36 0.34 0.39 0.34 0.36 0.35 0.36 0.38 0.36 0.34 0.32 0.38
+20news 3 0.65 0.61 0.73 0.71 0.63 0.64 0.64 0.69 0.58 0.62 0.59 0.54 0.45
+20news 4 0.28 0.31 0.27 0.39 0.27 0.32 0.30 0.30 0.34 0.31 0.35 0.35 0.30
+20news 5 0.34 0.32 0.29 0.30 0.30 0.31 0.32 0.29 0.35 0.32 0.28 0.31 0.35
+Lymphography 0.95 0.95 0.95 0.83 0.95 0.95 0.95 0.45 0.81 0.96 0.62 0.25 0.62
+magic.gamma 0.70 0.57 0.72 0.63 0.65 0.60 0.68 0.79 0.65 0.64 0.72 0.56 0.55
+musk 0.57 0.65 0.22 0.21 0.83 0.85 0.58 0.53 0.22 0.32 0.59 0.42 0.64
+PageBlocks 0.84 0.83 0.79 0.67 0.82 0.86 0.74 0.76 0.70 0.85 0.71 0.52 0.84
+pendigits 0.87 0.86 0.82 0.33 0.82 0.85 0.85 0.60 0.35 0.86 0.53 0.29 0.52
+Pima 0.63 0.57 0.62 0.51 0.59 0.54 0.62 0.64 0.55 0.61 0.52 0.40 0.45
+annthyroid 0.76 0.49 0.55 0.59 0.70 0.72 0.53 0.65 0.63 0.59 0.71 0.71 0.49
+satellite 0.67 0.55 0.67 0.50 0.59 0.54 0.71 0.61 0.51 0.56 0.59 0.50 0.58
+satimage-2 0.51 0.71 0.45 0.41 0.74 0.80 0.77 0.79 0.34 0.70 0.68 0.31 0.84
+shuttle 0.94 0.87 0.74 0.46 0.89 0.94 0.94 0.65 0.52 0.85 0.63 0.42 0.91
+smtp 0.81 0.60 0.58 0.59 0.58 0.68 0.45 0.76 0.48 0.72 0.32 0.60 0.60
+speech 0.31 0.31 0.31 0.37 0.34 0.32 0.31 0.31 0.33 0.32 0.35 0.34 0.34
+Stamps 0.84 0.75 0.57 0.42 0.87 0.80 0.83 0.57 0.39 0.85 0.62 0.42 0.81
+thyroid 0.90 0.77 0.86 0.81 0.86 0.90 0.92 0.87 0.77 0.88 0.84 0.33 0.69
+vertebral 0.23 0.26 0.28 0.37 0.14 0.29 0.17 0.20 0.37 0.25 0.29 0.24 0.40
+vowels 0.57 0.45 0.73 0.76 0.35 0.45 0.54 0.77 0.74 0.49 0.75 0.35 0.43
+Waveform 0.56 0.42 0.59 0.58 0.60 0.47 0.53 0.59 0.59 0.50 0.54 0.39 0.34
+WDBC 0.95 0.95 0.95 0.91 0.95 0.92 0.96 0.86 0.81 0.95 0.85 0.50 0.67
+Wilt 0.29 0.20 0.21 0.37 0.20 0.24 0.19 0.35 0.38 0.12 0.42 0.34 0.26
+wine 0.70 0.63 0.12 0.31 0.80 0.67 0.84 0.33 0.26 0.75 0.32 0.48 0.48
+WPBC 0.33 0.32 0.32 0.33 0.36 0.33 0.38 0.32 0.29 0.33 0.39 0.38 0.35
+yeast 0.29 0.31 0.35 0.35 0.28 0.34 0.31 0.30 0.36 0.31 0.32 0.38 0.31
+campaign 0.68 0.62 0.59 0.52 0.74 0.72 0.75 0.68 0.53 0.68 0.64 0.48 0.52
+cardio 0.84 0.85 0.80 0.60 0.83 0.84 0.75 0.67 0.53 0.86 0.62 0.47 0.64
+Cardiotocography 0.59 0.70 0.57 0.45 0.58 0.70 0.52 0.48 0.51 0.66 0.43 0.45 0.53
+celeba 0.64 0.65 0.69 0.30 0.70 0.71 0.71 0.28 0.30 0.74 0.38 0.48 0.37
+CIFAR10 0 0.63 0.59 0.60 0.60 0.59 0.60 0.60 0.65 0.64 0.61 0.61 0.46 0.42
+CIFAR10 1 0.43 0.48 0.50 0.52 0.35 0.39 0.33 0.49 0.62 0.49 0.51 0.39 0.48
+CIFAR10 2 0.45 0.48 0.47 0.50 0.44 0.45 0.43 0.49 0.55 0.47 0.48 0.48 0.40
+CIFAR10 3 0.44 0.48 0.49 0.46 0.40 0.42 0.39 0.47 0.50 0.46 0.46 0.49 0.45
+CIFAR10 5 0.38 0.48 0.47 0.46 0.35 0.40 0.34 0.42 0.49 0.46 0.42 0.34 0.49
+CIFAR10 6 0.54 0.55 0.58 0.59 0.54 0.55 0.54 0.61 0.62 0.58 0.59 0.47 0.39
+CIFAR10 7 0.43 0.48 0.45 0.46 0.41 0.44 0.39 0.44 0.50 0.46 0.46 0.51 0.50
+agnews 0 0.41 0.39 0.45 0.53 0.40 0.38 0.39 0.49 0.56 0.39 0.48 0.27 0.40
+agnews 1 0.50 0.46 0.50 0.64 0.42 0.45 0.46 0.54 0.67 0.47 0.53 0.28 0.48
+agnews 2 0.57 0.53 0.63 0.66 0.52 0.51 0.52 0.68 0.73 0.53 0.66 0.42 0.45
+agnews 3 0.45 0.46 0.49 0.63 0.43 0.44 0.43 0.54 0.64 0.46 0.53 0.42 0.42
+amazon 0.48 0.45 0.50 0.49 0.48 0.46 0.47 0.50 0.48 0.46 0.50 0.37 0.43
+imdb 0.41 0.36 0.41 0.40 0.42 0.36 0.40 0.39 0.40 0.37 0.41 0.44 0.34
+yelp 0.52 0.50 0.55 0.60 0.52 0.49 0.51 0.60 0.59 0.51 0.58 0.42 0.47
+
+
+Table 7: Full results for ADBench: conformal AUROC.
+
+
+18
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+IForest OCSVM CBLOF COF COPOD ECOD HBOS KNN LOF PCA SOD DeepSVDD DAGMM
+
+
+cover 0.12 0.10 0.11 0.13 0.11 0.10 0.07 0.12 0.12 0.10 0.14 0.15 0.11
+donors 0.06 0.07 0.08 0.07 0.05 0.04 0.06 0.06 0.06 0.05 0.06 0.05 0.06
+fault 0.09 0.08 0.09 0.09 0.09 0.09 0.09 0.08 0.09 0.09 0.09 0.08 0.09
+fraud 0.13 0.28 0.25 0.14 0.26 0.25 0.04 0.26 0.16 0.25 0.26 0.22 0.26
+glass 0.12 0.05 0.10 0.12 0.12 0.13 0.13 0.10 0.11 0.13 0.10 0.09 0.10
+Hepatitis 0.16 0.15 0.14 0.18 0.12 0.14 0.13 0.27 0.16 0.14 0.14 0.14 0.14
+Ionosphere 0.08 0.08 0.06 0.07 0.09 0.10 0.12 0.05 0.05 0.08 0.06 0.13 0.09
+landsat 0.06 0.06 0.05 0.05 0.06 0.06 0.06 0.06 0.05 0.06 0.05 0.05 0.05
+ALOI 0.07 0.10 0.10 0.09 0.10 0.10 0.06 0.09 0.08 0.10 0.09 0.10 0.10
+letter 0.17 0.16 0.15 0.14 0.19 0.17 0.18 0.13 0.13 0.17 0.13 0.15 0.15
+20news 0 0.14 0.14 0.13 0.11 0.14 0.15 0.14 0.11 0.11 0.14 0.12 0.13 0.14
+20news 1 0.15 0.15 0.15 0.14 0.15 0.15 0.16 0.13 0.14 0.15 0.14 0.14 0.15
+20news 2 0.16 0.15 0.14 0.15 0.16 0.16 0.16 0.15 0.16 0.15 0.15 0.16 0.15
+20news 3 0.10 0.11 0.10 0.10 0.11 0.11 0.10 0.10 0.13 0.11 0.12 0.13 0.09
+20news 4 0.20 0.20 0.17 0.18 0.21 0.19 0.20 0.18 0.16 0.20 0.17 0.18 0.18
+20news 5 0.17 0.17 0.18 0.20 0.18 0.15 0.17 0.19 0.20 0.16 0.20 0.18 0.19
+Lymphography 0.05 0.05 0.05 0.08 0.04 0.05 0.05 0.11 0.09 0.04 0.11 0.09 0.11
+magic.gamma 0.03 0.04 0.03 0.04 0.03 0.04 0.03 0.03 0.04 0.03 0.03 0.04 0.04
+musk 0.43 0.15 0.78 0.18 0.11 0.11 0.42 0.17 0.19 0.68 0.16 0.14 0.13
+PageBlocks 0.06 0.06 0.06 0.06 0.06 0.06 0.07 0.06 0.06 0.06 0.07 0.06 0.05
+pendigits 0.08 0.08 0.09 0.12 0.08 0.08 0.08 0.13 0.13 0.08 0.13 0.13 0.12
+Pima 0.10 0.10 0.10 0.10 0.10 0.09 0.09 0.10 0.10 0.09 0.10 0.11 0.11
+annthyroid 0.06 0.08 0.07 0.07 0.07 0.06 0.07 0.07 0.07 0.07 0.06 0.06 0.08
+satellite 0.04 0.04 0.04 0.05 0.04 0.04 0.04 0.05 0.05 0.04 0.05 0.05 0.04
+satimage-2 0.48 0.26 0.55 0.16 0.23 0.16 0.21 0.14 0.13 0.27 0.15 0.18 0.12
+shuttle 0.06 0.10 0.09 0.06 0.10 0.05 0.05 0.04 0.05 0.13 0.06 0.07 0.07
+smtp 0.05 0.12 0.12 0.10 0.12 0.11 0.10 0.09 0.09 0.11 0.08 0.12 0.11
+speech 0.19 0.19 0.19 0.19 0.19 0.19 0.19 0.20 0.19 0.19 0.21 0.21 0.18
+Stamps 0.07 0.09 0.11 0.11 0.06 0.08 0.07 0.12 0.12 0.07 0.11 0.14 0.07
+thyroid 0.08 0.10 0.09 0.10 0.08 0.08 0.04 0.09 0.10 0.08 0.09 0.16 0.11
+vertebral 0.14 0.12 0.13 0.12 0.12 0.12 0.12 0.14 0.13 0.12 0.11 0.12 0.13
+vowels 0.19 0.18 0.17 0.20 0.20 0.17 0.20 0.20 0.19 0.18 0.17 0.21 0.19
+Waveform 0.15 0.15 0.14 0.15 0.15 0.15 0.15 0.14 0.14 0.16 0.15 0.16 0.16
+WDBC 0.04 0.04 0.04 0.06 0.04 0.05 0.04 0.06 0.08 0.04 0.07 0.12 0.10
+Wilt 0.13 0.11 0.12 0.12 0.13 0.12 0.14 0.13 0.13 0.08 0.12 0.12 0.11
+wine 0.10 0.10 0.14 0.14 0.09 0.11 0.08 0.12 0.11 0.10 0.15 0.11 0.13
+WPBC 0.13 0.13 0.13 0.13 0.13 0.13 0.14 0.14 0.12 0.13 0.12 0.12 0.13
+yeast 0.09 0.10 0.10 0.10 0.09 0.09 0.09 0.09 0.10 0.10 0.11 0.10 0.10
+campaign 0.05 0.05 0.05 0.06 0.05 0.05 0.04 0.05 0.06 0.05 0.06 0.05 0.06
+cardio 0.09 0.09 0.10 0.12 0.09 0.09 0.10 0.10 0.14 0.10 0.11 0.11 0.11
+Cardiotocography 0.09 0.08 0.08 0.09 0.09 0.08 0.08 0.08 0.09 0.09 0.08 0.08 0.09
+celeba 0.06 0.06 0.05 0.09 0.05 0.05 0.05 0.31 0.09 0.05 0.10 0.06 0.08
+CIFAR10 0 0.10 0.10 0.10 0.10 0.10 0.10 0.10 0.10 0.10 0.10 0.10 0.10 0.11
+CIFAR10 1 0.12 0.11 0.11 0.11 0.11 0.12 0.11 0.11 0.10 0.11 0.10 0.10 0.11
+CIFAR10 2 0.11 0.11 0.11 0.11 0.11 0.11 0.11 0.11 0.11 0.11 0.11 0.10 0.11
+CIFAR10 3 0.11 0.11 0.10 0.10 0.11 0.11 0.11 0.10 0.10 0.11 0.10 0.11 0.11
+CIFAR10 5 0.12 0.10 0.11 0.11 0.12 0.12 0.12 0.12 0.11 0.11 0.12 0.12 0.10
+CIFAR10 6 0.11 0.10 0.11 0.10 0.11 0.11 0.11 0.10 0.10 0.10 0.10 0.10 0.11
+CIFAR10 7 0.11 0.11 0.10 0.10 0.11 0.11 0.11 0.10 0.10 0.10 0.10 0.11 0.11
+agnews 0 0.09 0.09 0.08 0.08 0.09 0.09 0.09 0.08 0.08 0.09 0.08 0.09 0.09
+agnews 1 0.09 0.09 0.08 0.07 0.09 0.09 0.09 0.08 0.07 0.09 0.08 0.09 0.09
+agnews 2 0.08 0.08 0.08 0.07 0.08 0.09 0.08 0.07 0.06 0.08 0.07 0.08 0.08
+agnews 3 0.09 0.09 0.08 0.07 0.09 0.09 0.09 0.08 0.07 0.09 0.08 0.08 0.08
+amazon 0.08 0.08 0.08 0.08 0.08 0.08 0.08 0.09 0.09 0.08 0.09 0.08 0.08
+imdb 0.09 0.09 0.09 0.09 0.09 0.09 0.09 0.09 0.09 0.09 0.09 0.08 0.08
+yelp 0.08 0.08 0.08 0.08 0.08 0.09 0.08 0.08 0.08 0.08 0.08 0.08 0.08
+
+
+Table 8: Full results for ADBench: AUROC correction (difference between conformal and classical
+AUROC).
+
+
+19

@@ -1,54 +1,79 @@
-=== CALIBRATION EXAMPLE 9 ===
+=== CALIBRATION EXAMPLE 40 ===
 
 # Final Consolidated Review
 ## Summary
-
-This paper introduces a data-centric approach to improve the training efficiency of draft models in speculative decoding (SD). The core insight is that tokens for which the target model produces a flatter (more uniform) predictive distribution are more valuable for improving SD acceptance rates. The authors propose "flatness," a cosine-based metric that quantifies this property, and develop SFDD, a sample-level filtering method that retains high-flatness data. Experiments within the EAGLE-2 framework demonstrate that using only 50% of the training data can yield over 2× training speedup while keeping inference speedup within 4% of the full-dataset baseline.
+This paper studies draft-model training for speculative decoding from a data-selection perspective rather than the more common loss-design perspective. The core claim is that tokens for which the target model produces flatter predictive distributions provide more headroom for improving acceptance-related alignment, motivating a simple target-only metric, **flatness** (cosine similarity to uniform), and a sample-level filtering method, **SFDD**, that keeps high-flatness samples and discards the rest before training. Empirically, within the EAGLE-2 setup, SFDD substantially reduces training time and usually outperforms other simple target-distribution heuristics, while preserving most of the final inference speedup.
 
 ## Strengths
+- **The paper identifies a genuinely useful data-centric angle on speculative decoding training.** Rather than only changing the KD loss, it asks which tokens actually produce acceptance-relevant improvement, and ties that question to the acceptance objective via the known relation \( \alpha(h)=1-\frac12\|p-q\|_1 \) in Eq. (1). This reframing is more specific than generic “uncertain samples are useful” rhetoric because it is explicitly anchored to SD acceptance rather than standard predictive accuracy.
 
-- **Novel, well-motivated insight:** The paper is the first to systematically investigate data selection for SD from the perspective of target-distribution flatness, establishing a counter-intuitive principle—flatter tokens are more valuable for acceptance-rate improvement—that shifts focus from loss design to data curation.
-- **Empirical effectiveness:** Extensive experiments across five diverse downstream tasks (GSM8K, Alpaca, MT‑Bench, CNN/DM, NQ) show that SFDD consistently outperforms multiple baseline metrics (entropy, top‑1 probability, margin, etc.) in terms of inference speedup and acceptance length, while achieving significant training‑time reduction (e.g., >2× training speedup at 50% data retention).
-- **Practical efficiency:** The method is simple, requires only a single offline pass over the target model, and delivers substantial training acceleration with minimal inference degradation (within 4% of the full‑data baseline at 50% retention), offering a plug‑in solution that directly addresses a key bottleneck in train‑based SD deployment.
+- **The method is extremely simple and deployable in existing train-based SD pipelines.** SFDD requires one offline forward pass of the fixed target model, computes a sample score by averaging token scores (Eq. 8), and filters by quantile. Appendix D quantifies the scoring overhead as 2,242s versus 58,227s for full training (~3.85%), which makes the method practically attractive.
+
+- **Within the tested setting, the empirical results are strong and unusually consistent across retention ratios and tasks.** At 50% retention, Table 1 shows an average speedup of 2.41× for SFDD versus 2.23× for the next-best baseline (Top-1 Probability) and 2.20× for Random, while remaining close to the no-filter baseline of 2.49×. The ablations in Tables 2 and 3 show that this advantage persists from 70% down to extreme 5–20% retention.
+
+- **The paper does more than just report end metrics; it probes training dynamics in a way that supports the intended mechanism.** Figure 2 and Appendix F.5 show that high-flatness tokens exhibit larger epoch-to-epoch \(\Delta L_1\), larger draft-statistic movement, and sustained gradient/loss signal, whereas low-flatness tokens saturate early. This is a more convincing mechanism check than simply showing final benchmark numbers.
+
+- **The authors do make an effort to test robustness beyond the exact main-table setup.** The paper includes temperature-0 results (Appendix C), repeated-run checks for one noisy retention comparison (Appendix F.8), another model family (Vicuna-7B-v1.3 in Appendix G.1), a different training distribution (GSM8K in Appendix G.1), and an alternative sample aggregation rule (median in Appendix G.2). These do not fully settle generalization questions, but they do strengthen the empirical case.
 
 ## Weaknesses
 
-### Major
-*(No fundamental flaws that invalidate the core claims.)*
+### Major:
+- **The theoretical justification is suggestive rather than rigorous for the discrete LLM setting, and the paper somewhat overstates its principled grounding.**  
+  The main derivation in Section 3.2 analyzes a KL-budgeted one-step update within a **Gaussian family**, showing that larger target variance can yield larger \(\Delta L_1\) under that toy model. The bridge to practical LLM token distributions is then made through Appendix B, which studies cosine similarity to uniform for a **discretized 1D Gaussian over \([-L,L]\)**. This does not constitute a derivation for arbitrary categorical next-token distributions produced by LLMs. The paper partially acknowledges this by calling the model “a simplified analytical model” and “a theoretical toy model,” and by explicitly noting in Section 3.2 that a practical proxy is needed in the discrete case. That framing is reasonable. However, the text still leans too hard on the theory as if it principledly derives Eq. (6), when in fact the step from Gaussian variance to discrete cosine-flatness remains heuristic and empirically motivated, not a tight theory of SD training dynamics.
+
+- **The distinctiveness of flatness relative to entropy and other uncertainty measures is not fully isolated.**  
+  The paper argues that flatness is better than entropy, and Table 1 does show consistent gains over entropy. However, Appendix F.2 also states that entropy exhibits “a trend remarkably similar to the flatness curves,” and even provides the theoretical relation \(D_{KL}(p\|U)=-H(p)+\text{const}\). So the paper itself shows that flatness and entropy are closely related dispersion measures. What is still missing is a sharper analysis of **where** flatness and entropy disagree and **why** those disagreement cases are especially relevant for SD. Figure 2d helps, but it is narrow: it only compares bottom-35% token filtering through average \(|\Delta L_1|\). That supports the claim that flatness can be a somewhat better filter in this setup, but not yet a strong explanation of what unique signal flatness captures beyond generic uncertainty/saturation filtering.
+
+- **Generality beyond the EAGLE-2 / ShareGPT-centered setup is only partially established.**  
+  The main experiments are all built around the EAGLE-2 training pipeline with LLaMA3-8B-Instruct as the target and ShareGPT-derived training data. The appendices do add Vicuna and GSM8K-based checks, which is useful, so it would be unfair to say the paper tests only one model or one dataset. Still, the central claim is broader—namely that flatness identifies valuable data for train-based SD—and the current evidence does not yet show that the same behavior holds across substantially different SD architectures or domains such as code, technical text, or other non-conversational distributions. This limits the significance of the broader “new paradigm” framing.
 
 ### Minor
-- **Statistical robustness:** The paper reports single‑run metrics for most experiments and does not provide error bars, confidence intervals, or significance tests. While the effect sizes are consistent across tasks and some repeated runs are shown in Appendix F.8, formal statistical validation would strengthen the claims, especially when comparing modest performance gaps (e.g., 2.41× vs. 2.23× average speedup).
-- **Theoretical‑practical gap:** The key theoretical insight is derived from a Gaussian‑distribution model under a specific KL‑constrained update, which is an idealized approximation of the discrete, sparse token distributions in real LLMs. Although the paper empirically validates the derived flatness metric and provides an asymptotic argument (Appendix B), a more direct analysis linking the metric to \(L_1\)-norm reduction on actual LLM distributions would tighten the connection.
-- **Limited evaluation scope:** The main experiments are conducted within the EAGLE‑2 framework using LLaMA3‑8B‑Instruct as the target model. While Appendix G.1 shows promising results on Vicuna‑7B and the GSM8K training set, broader validation across different SD training methods (e.g., Medusa, DistillSpec) and larger model families would better establish generalizability.
-- **Aggregation-strategy justification:** The transition from token‑level flatness to sample‑level importance via simple averaging (Equation 8) is not thoroughly justified. Appendix G.2 shows median aggregation yields similar results, but an ablation comparing alternative strategies (e.g., weighted by token position, top‑k tokens) or a deeper analysis of within‑sample flatness distributions would strengthen the design choice.
-- **Motivation of practical necessity:** The paper argues that training cost is a critical limitation for train‑based SD but does not quantify the typical GPU‑hour overhead of state‑of‑the‑art draft models (e.g., EAGLE‑2/3, RL‑based methods). Providing such a baseline would more clearly demonstrate the real‑world impact of the proposed efficiency gains.
+- **The statistical support is lighter than ideal for some of the headline empirical comparisons.**  
+  The main tables appear to be single-run reports, and repeated runs are only given in Appendix F.8 for a specific 50% vs 60% retention anomaly on MT-Bench and NQ. In large-scale systems work, exhaustive multi-seed reporting is not always standard, so this is not a fatal issue, but some uncertainty quantification for the key 50% comparisons in Table 1 would strengthen confidence that the gains over entropy / top-1 probability are robust rather than setup-specific.
+
+- **The sample-level aggregation is simple and plausible, but under-justified.**  
+  Eq. (8) averages token flatness across the sample. Appendix G.2 shows median aggregation performs similarly, which is helpful and suggests robustness, but the paper does not really analyze whether length, position, or a few very high-flatness tokens dominate the effect. Since the practical method is sample-level rather than token-level, understanding this aggregation choice matters.
+
+- **Efficiency claims are mostly reported in wall-clock time, with limited compute-normalized analysis.**  
+  Figure 4 and Appendix D provide wall-clock training time including selection overhead, which is practical and important. Still, more explicit accounting in FLOPs/GPU-hours or a clearer breakdown of why SFDD appears better than random even beyond the trivial dataset-size effect would make the efficiency claim cleaner.
 
 ### Trivial
-*(None.)*
+- **The paper could better integrate appendix findings into the main narrative.**  
+  Some of the most useful caveats and validations—e.g., the toy-model nature of the theory, entropy similarity, and repeated-run noise checks—sit in appendices and would help calibrate the main claims if surfaced more directly in the core text.
 
 ## Nice-to-Haves
-- Compare SFDD with more advanced, learned data‑selection methods (e.g., gradient‑matching or proxy‑model scoring) to better contextualize its performance relative to the state‑of‑the‑art in dataset distillation.
-- Ablate the choice of cosine similarity against other straightforward measures of uniformity (e.g., \(1 - \max(p)\), normalized entropy, L2 distance to uniform) to verify that cosine is the most effective instantiation of the flatness principle.
-- Analyze the filtered‑out tokens more directly—for instance, by tracking the change in the draft model’s output distribution on those tokens during training—to empirically validate the claim that they are already saturated and contribute minimal gradient signal.
-- Include visual examples of text sequences that yield high vs. low target flatness, helping readers build intuition and identify potential failure modes (e.g., whether grammatically deterministic but semantically important tokens are incorrectly filtered).
-- Explore adaptive or dynamic selection strategies (e.g., re‑scoring data as the draft model improves, or a curriculum that gradually introduces lower‑flatness samples) as a natural extension that could further boost efficiency or final performance.
+- Compare against stronger data-selection baselines beyond simple target-distribution heuristics, such as gradient-based or influence-style selection methods, to better establish whether flatness is competitive with the broader data-pruning literature rather than only with lightweight uncertainty proxies.
+- Evaluate SFDD on additional train-based SD architectures beyond EAGLE-2 to support the claim that the method is architecture-agnostic.
+- Add a focused analysis of disagreement cases between flatness and entropy, ideally with retained-vs-filtered token or sample examples, to clarify what flatness is actually selecting.
+- Test on more diverse domains such as code or scientific/technical text, where target-distribution sharpness may differ substantially from conversational data.
+- Consider dynamic or stage-wise selection as a future extension, since the paper’s own saturation analysis suggests token value changes over training.
 
 ## Removed Points
-*These points are flagged to be removed, treat them with caution.*
+These points are flagged to be removed, treat them with caution.
 
-- **Strength: “Addresses a practical problem”** – Removed as generic; the specific practical contribution is captured in the listed strengths.
-- **Strength: “Comprehensive experiments”** – Removed as generic; the specific empirical results are detailed in the strengths.
-- **Weakness: “Computational overhead of data selection not thoroughly analyzed”** – Removed because the paper explicitly includes selection overhead in timing (Figure 4) and states it is negligible (~3.85% of full training time) in Section D.
-- **Weakness: “Performance drops at low retention ratios”** – Removed because significant drops at extreme data reduction (e.g., 5%) are expected and do not undermine the method’s effectiveness at reasonable retention levels (50%).
-- **Weakness: “Token‑level filtering exploration is incomplete”** – Removed because the paper honestly discusses why token‑level filtering is impractical under current frameworks (Appendix F.6) and focuses on sample‑level filtering as a pragmatic choice.
-- **Weakness: “Missing comparison with missing related works”** – Removed per hard rule: we do not mention missing related works without external sources.
-- **Weakness: “Formatting/style nitpicks”** – Removed per hard rule.
+- **“Theoretical mapping is invalid because LLM vocabularies lack a canonical ordering, so the paper’s bridge is structurally flawed.”**  
+  Kept only in weakened form. The paper itself explicitly presents the Gaussian analysis as a toy model and the discrete cosine metric as a proxy, not as an exact representation of categorical token geometry. So it is fair to criticize the looseness of the bridge, but not to claim the paper is simply invalid on that basis.
+
+- **“The 4% drop relative to no-filter is practically unacceptable / undermines the claim.”**  
+  Removed as overstated. The paper explicitly frames the tradeoff as training efficiency versus a small inference-speed reduction, and the empirical result is exactly that tradeoff. Whether 4% is acceptable is application-dependent; the data do support that the loss is modest relative to the >2× training-time savings.
+
+- **“Training-time reduction is trivial because using less data obviously trains faster.”**  
+  Removed. The substantive question is whether the retained subset preserves SD performance better than other equally sized subsets; the paper directly tests this in Tables 1–3.
+
+- **Criticisms doubting broader existence/release/verification of cited models or systems.**  
+  Removed per instruction.
+
+## Novel Insights
+The most interesting synthesis across the paper and reviews is that the work is strongest not as a theorem-driven contribution, but as a **mechanism-backed systems heuristic**: the acceptance-centric framing points to a specific kind of “headroom” that differs from standard KD intuition, and the training-dynamics evidence suggests SFDD works because it preferentially retains tokens that continue to induce nontrivial movement in the draft model after easy, peaked tokens have saturated. In that sense, the paper’s real contribution is not proving that cosine-to-uniform is the uniquely correct metric, but showing that SD training efficiency is meaningfully governed by **where residual alignment headroom remains**, and that target-side dispersion is a practical way to expose it.
 
 ## Suggestions
-- **Strengthen statistical reporting:** In future versions, run multiple random seeds for key experiments (e.g., 50% retention on all tasks) and report means with standard deviations or confidence intervals to substantiate the performance gaps.
-- **Broaden validation:** Apply SFDD to at least one other prominent train‑based SD method (e.g., Medusa or DistillSpec) to demonstrate its generalizability beyond the EAGLE framework.
-- **Deepen aggregation analysis:** Conduct a systematic ablation of different sample‑level aggregation functions (mean, median, max, weighted by token position) and provide a principled discussion of why the chosen method is appropriate.
-- **Clarify the speedup‑acceptance relationship:** Include a scatter plot of measured wall‑clock speedup versus acceptance length across all experiments (including baselines) to empirically validate the non‑linear relationship discussed in Appendix F.1 for the specific setup used.
+- Temper the theory claim in the main text: present the Gaussian analysis explicitly as intuition for a heuristic, not as a principled derivation of Eq. (6) for categorical LLM outputs.
+- Strengthen the entropy comparison by analyzing disagreement sets: identify tokens/samples where flatness and entropy rank differently, and show that these cases drive the final performance gap.
+- Add limited repeated-run statistics for the main 50% retention results in Table 1, at least for SFDD, entropy, top-1 probability, and random.
+- Expand the empirical scope to at least one substantially different domain and, ideally, one additional train-based SD architecture.
+- Provide a short qualitative case study of retained vs. filtered samples to clarify whether SFDD is capturing genuine alignment headroom rather than mostly pruning obvious low-entropy boilerplate.
+
+
 
 # Actual Human Scores
 Individual reviewer scores: [8.0, 6.0, 4.0, 4.0]

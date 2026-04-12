@@ -1,44 +1,77 @@
-=== CALIBRATION EXAMPLE 2 ===
+=== CALIBRATION EXAMPLE 35 ===
 
 # Final Consolidated Review
 ## Summary
-This paper introduces VIST3A, a framework for text-to-3D generation that stitches a pretrained video generative model (as a latent generator) to a pretrained feedforward 3D reconstruction model (as a decoder) via a learned linear layer. A second component aligns the generator to the stitched decoder using direct reward finetuning, promoting 3D-consistent and high-quality outputs. The method produces 3D Gaussian splats or pointmaps from text and shows strong quantitative improvements over existing feedforward text-to-3DGS baselines on multiple benchmarks.
+This paper proposes **VIST3A**, a framework for text-to-3D that combines a pretrained text-to-video latent model with a pretrained feedforward 3D reconstruction model via **model stitching**, then aligns the generator to the stitched 3D decoder using **direct reward finetuning**. The central promise is compelling: instead of training a custom 3D decoder from scratch, reuse strong 3D foundation models as decoders for video latents, yielding improved text-to-3D Gaussian splats and enabling text-to-pointmap generation.
 
 ## Strengths
-- **Novel and effective application of model stitching.** The paper demonstrates that pretrained video VAE latents can be linearly aligned to intermediate layers of modern 3D foundation models (AnySplat, VGGT, MVDUSt3R), enabling the construction of a powerful 3D decoder without extensive retraining from scratch. The empirical analysis (Fig. 5) shows the mean squared error at the stitching layer correlates with final reconstruction quality, providing a principled selection criterion.
-- **Comprehensive experimental validation across models and benchmarks.** The method is evaluated across multiple established benchmarks (T3Bench, SceneBench, DPG-Bench), several video generators (Wan, SVD, CogVideoX, Hunyuan), and multiple 3D backbones. Results show clear improvements in automatic metrics (Imaging Quality, Unified Reward) and a user study. The extension to text-to-pointmap generation is a notable practical advance.
-- **Well-motivated alignment strategy via direct reward finetuning.** The adoption of direct reward finetuning with rewards for multi-view image quality, 3D representation quality, and 3D consistency directly addresses the latent misalignment problem. Ablations (Table 6, Fig. 7) confirm that the combined reward objective improves over multi-view finetuning alone, reducing artifacts and improving sharpness.
+- **The paper introduces a genuinely interesting way to reuse pretrained 3D foundation models for generation rather than reconstruction.** The key move is to cut a feedforward 3D model at an internal layer, fit a stitching map from video-VAE latents to that layer, and retain the downstream portion as a 3D decoder (Sec. 3.1, Eq. 1–2). This is more than a generic modular pipeline: it directly repurposes learned 3D reasoning in models like AnySplat, MVDUSt3R, and VGGT, avoiding the common practice of training weak bespoke decoders from scratch.
+- **The stitching analysis is one of the most convincing parts of the paper.** The authors do not just claim that stitching works; they provide evidence that low stitching residual correlates with downstream reconstruction quality (Fig. 5), and compare MSE-based layer selection against CKA, showing MSE is more predictive in this setting (Sec. 4.4, Fig. 6). This is a useful methodological contribution for future work on cross-model latent alignment.
+- **The framework appears unusually broad across reconstruction targets.** By swapping the stitched 3D backbone, the same framework supports both text-to-3DGS and text-to-pointmap generation. The pointmap angle is especially interesting because most text-to-3D work focuses on a single output representation.
+- **The paper provides strong evidence that stitching preserves much of the base 3D model’s reconstruction ability.** On pointmap/camera-pose benchmarks, stitched models remain close to their original reconstruction backbones (Table 5), which supports the paper’s main mechanistic claim that the latent transfer is meaningful rather than purely superficial.
+- **The text-to-3DGS empirical results are strong on the reported benchmarks.** On T3Bench and SceneBench, the reported gains over prior feedforward text-to-3DGS systems are substantial in image-quality and prompt-alignment metrics (Table 1), and the user study also favors VIST3A (Table 4). Even allowing for imperfections in metric choice, the results suggest the method is practically effective.
+- **The paper includes a useful integrated-vs-sequential analysis.** The latent-noise experiment in Appendix D.2 is a good insight: it isolates one advantage of the stitched latent-space formulation over a decode-to-RGB-then-reconstruct pipeline, namely greater robustness to perturbations introduced in the latent generation process.
 
 ## Weaknesses
-### Major
-- **The contribution of model stitching is not isolated from other components.** The main experiments (Tables 1, 2) compare the full VIST3A pipeline (stitching + alignment) against baselines that use decoders trained from scratch with different training recipes. A critical ablation is missing: a comparison under identical conditions where the stitched decoder is replaced by a decoder trained from scratch on the same multi-view data and aligned with the same reward finetuning. Without this, the reported gains cannot be definitively attributed to stitching rather than the use of a more powerful pretrained 3D backbone or the alignment procedure itself. This undermines the core claim that stitching is the key innovation.
-- **Limited evaluation of 3D geometry quality.** The paper focuses primarily on visual fidelity metrics (Imaging Quality, Aesthetic, CLIP) and learned reward models. It does not report standard 3D reconstruction metrics (e.g., depth accuracy, point cloud completeness, normal consistency) on generated scenes, which are essential for assessing the actual geometric quality of the output. This omission leaves the geometric claims partially unsupported.
+###: Fatal
+- None.
+
+### Major:
+- **The main text-to-3D evaluation does not adequately validate the paper’s strongest geometric claims.**  
+  The paper repeatedly emphasizes “3D-consistent” and “geometrically consistent” generation, but the core text-to-3D benchmarks in Sec. 4.2 rely primarily on rendered-image metrics: Imaging Quality, Aesthetic Quality, CLIP, Unified Reward/Alignment/Coherence/Style, plus a small user study. These are useful for perceptual quality and text alignment, but they do **not directly measure 3D geometry quality**. The paper does include reconstruction-oriented evaluations for stitched models (Table 3 and Table 5), but those are not evaluations of **generated** geometry from text prompts. As a result, the empirical support for “better-looking renderings from generated 3D” is strong, while the support for “better generated 3D geometry” is materially weaker than the paper’s rhetoric suggests.
+- **The direct reward finetuning story is less geometry-driven than the paper frames it.**  
+  The reward combines: (i) quality of decoded video frames via CLIP/HPS, (ii) quality of rendered views from the decoded 3D representation via the same CLIP/HPS-style metrics, and (iii) a consistency term comparing decoded frames and rendered views via L1+LPIPS (Sec. 3.2, App. B.2). The ablation in Table 6 shows that the **quality reward** appears to drive most of the gains, whereas the **3D-consistency reward alone hurts performance**, with the authors explicitly noting blurring and degraded results. This does not invalidate the method, but it does weaken the paper’s claim that the alignment objective meaningfully enforces geometry; the evidence presented is more consistent with a hybrid perceptual-alignment objective that benefits from some structural regularization, rather than a cleanly geometry-centered reward design.
+- **The “general framework” claim is only partially substantiated on the generation side.**  
+  The paper demonstrates stitching across multiple video backbones and multiple 3D backbones for reconstruction-style evaluations (Table 3, Table 5, Appendix E/Fig. 10), but the main **text-to-3D generation** results in Sec. 4.2 are only reported for **Wan-based** systems. Since one of the paper’s advertised contributions is broad modularity across video generators and 3D models, it would be more convincing to show at least one additional non-Wan text-to-3D generation result on T3Bench/SceneBench/DPG-Bench, not just stitching diagnostics and NVS results.
 
 ### Minor
-- **The analysis of reward finetuning could be deeper.** While an ablation (Table 6) shows the full reward helps, the paper does not investigate potential conflicts between reward components (e.g., image quality vs. 3D consistency) or the reliability of rewards (like CLIP/HPSv2) when computed on noisy intermediate latents during the denoising trajectory. A more mechanistic analysis would strengthen the reward design justification.
-- **Inherited architectural constraint from the video VAE.** The stitched decoder's encoder is a video VAE designed for temporally coherent sequences. As noted in Appendix F, this requires multi-view inputs to be arranged into a smooth, video-like sequence; performance on arbitrarily unordered image sets is not guaranteed. This limits the framework's flexibility for some multi-view reconstruction applications and is not quantitatively explored.
+- **The text-to-pointmap contribution is promising but under-validated.**  
+  The paper claims that VIST3A “enables high-quality text-to-pointmap generation,” but in Sec. 4.2 it explicitly states that these models are evaluated **qualitatively only**, because “no established benchmarks or baselines exist.” This is understandable as a scope limitation, but it means one of the headline contributions remains suggestive rather than firmly demonstrated.
+- **Training cost and practical efficiency are not quantified clearly enough.**  
+  A key motivation is avoiding expensive decoder training from scratch, which is plausible. However, the alignment phase involves denoising-trajectory simulation and rendering-based rewards (Sec. 3.2, App. B.2), which could be expensive. The paper gives some optimization details but does not provide wall-clock training cost, memory usage, or a comparison against prior methods. For a paper partly selling practical reuse of foundation models, this omission matters.
+- **The theoretical discussion around stitching slightly overstates the match between theory and implementation.**  
+  The layer-selection argument appeals to a theorem about linear stitching maps (Sec. 4.4, Eq. 4 discussion), while the actual implementation uses interpolation plus a Conv3D stitching layer (App. B.1). Since convolution/interpolation is still linear as an operator under fixed interpolation, the criticism that the theorem is wholly inapplicable would be too strong; however, the paper could be more careful in explaining that the theorem is only heuristic support for the implemented variant, not a direct guarantee.
+- **The reward-component ablation is narrow.**  
+  Table 6 only reports the reward ablation on SceneBench. Since the paper emphasizes both object-centric generation and long, compositional prompts, it would be useful to know whether the same quality-vs-consistency tradeoff holds on T3Bench and DPG-Bench as well.
+- **The framework has a real input-ordering constraint inherited from the video VAE.**  
+  The paper is commendably explicit about this in the Limitations section: the encoder expects a coherent sequence, so unordered multi-view images must be arranged to resemble smooth video-like transitions (Sec. F, also C.2). This does not hurt the text-to-3D setting directly, but it does limit generality for broader multi-view reconstruction use.
 
 ### Trivial
-- **Human evaluation sample size.** The user study involved 28 participants and 14 samples, which is adequate for a preliminary preference test but not for strong statistical significance. However, the results align with quantitative trends, so this does not invalidate the finding.
+- None.
 
 ## Nice-to-Haves
-- Provide a runtime comparison (training and inference) against key baselines to clarify practical efficiency.
-- Explore stitching with a broader set of 3D representations (e.g., meshes, NeRFs) to further demonstrate generality.
-- Include a more systematic analysis of failure modes (e.g., for complex compositional prompts or extreme scene scales) to better understand the method's boundaries.
+- Add **direct geometry metrics for generated 3D outputs**, not just reconstruction from image inputs. Even a limited benchmark with point consistency, reprojection consistency, depth/normal consistency, or geometry-aware human evaluation would better align the evidence with the paper’s main claims.
+- Report **training/inference cost, VRAM, and parameter-update counts** for stitching finetuning and reward finetuning to substantiate the efficiency argument.
+- Include at least one **non-Wan text-to-3D generation benchmark** result to validate the framework’s cross-backbone generality.
+- Add a **failure-case section** focused on geometric breakdowns, prompt failures, and cases where the reward seems to prefer sharp renderings over correct structure.
+- Clarify more explicitly how the paper avoids or checks for **distribution overlap / contamination concerns** between the finetuning data and evaluation settings, especially for broad real-scene datasets and benchmark prompts.
 
 ## Removed Points
-*These points are flagged to be removed, treat them with caution.*
-- **Strength: "The paper is well-written and the figures are clear."** Removed as a generic strength that applies to any competent paper.
-- **Weakness: "The reward components (CLIP, HPSv2, LPIPS) are standard, so the alignment strategy is not novel."** Removed. Applying these rewards to align a 3D generative pipeline is a novel and appropriate adaptation, not a weakness.
-- **Weakness: "The method requires ordered input sequences, which is a practical drawback."** This is noted in the paper's limitations (Appendix F) and is kept as a minor weakness, but demands for a quantitative exploration of this limitation are moved to Nice-to-Haves.
-- **Weakness: "The concurrent work (Chen et al., 2026) is cited but not compared."** Removed. The paper appropriately cites related work; a direct comparison is not required for the core contribution.
-- **Weakness: "Training cost of alignment is high."** Removed as a nitpick about computational cost that does not invalidate the methodological contribution.
+These points are flagged to be removed, treat them with caution.
+
+- **“The DPG-Bench comparison is invalid unless the baselines were not re-evaluated under the upgraded scorer.”**  
+  This is speculative. The paper says: “For DPG-Bench, we follow the suggested protocol, but upgrade ... to the more capable, UnifiedReward LLM” (Sec. 4.2 / App. C.2), and Table 2 presents all methods under that evaluation. It is fair to ask for clearer evaluation details, but not fair to assert invalidity without evidence.
+- **“The theorem for linear stitching does not apply because Conv3D + interpolation is nonlinear.”**  
+  This is factually too strong. A fixed interpolation followed by convolution is still a linear operator. The real issue is only that the implementation is not exactly the same abstraction as the theorem and should be described more cautiously.
+- **Reproducibility complaints about omitted hyperparameters.**  
+  The appendix already includes substantial details on loss weighting, optimizer choices, LoRA ranks, clipping, batch sizes, step ranges, and reward coefficients (App. B–C). One can still ask for a cleaner unified specification, but not claim the paper lacks key implementation details.
+- **Formatting/style issues and parser-induced equation artifacts.**  
+  These are extraction artifacts from the provided text and should not count against the paper.
+- **Generic criticism that the user study is “small.”**  
+  The user study is limited, but human studies of this scale are common as supplementary evidence in this area. It is reasonable to treat it as supportive rather than definitive, not as a substantive flaw on its own.
+- **Claims doubting existence/availability of cited tools, models, or benchmarks.**  
+  Per instruction, such concerns are removed.
+
+## Novel Insights
+The most interesting synthesis across the reviews is that the paper is strongest not as a pure “geometry alignment” paper, but as a **representation reuse paper**: its clearest contribution is showing that internal features of modern 3D reconstruction networks are sufficiently compatible with video-VAE latents that one can transplant the downstream half of a 3D model into a generative pipeline with surprisingly little loss. The reward-tuning component appears useful, but the evidence suggests it currently functions more as a perceptual/domain-alignment mechanism than as a robust enforcer of 3D geometry. This distinction matters: the paper is still strong, but its empirical case is strongest for **modular reuse of 3D foundation decoders** and **improved rendered output quality**, not yet for decisively proving superior generated 3D geometry.
 
 ## Suggestions
-- **Conduct a controlled ablation isolating stitching.** Train a decoder from scratch on the same multi-view data as VIST3A, align it with identical reward finetuning, and compare its text-to-3D generation performance directly against the stitched decoder. This experiment is essential to validate the claim that stitching is superior to training a decoder from scratch.
-- **Add quantitative geometry evaluation.** Report standard 3D reconstruction metrics (e.g., depth L1, point cloud accuracy/completeness) on a subset of generated scenes from T3Bench or SceneBench to provide a more complete assessment of geometric quality.
-
-**Overall Assessment:** The paper presents a compelling and timely idea with strong empirical results. However, the major weakness regarding the isolated contribution of stitching is significant. If addressed, the paper would be a strong contribution; as it stands, this evidential gap prevents full confidence in the core claim. The paper is **technically sound** and shows **clear empirical gains**, but the **novelty of the stitching contribution** requires stronger validation. **Clarity** is high, and the **significance** of enabling high-quality text-to-3D with modern foundation models is substantial.
+- Add at least one **geometry-aware evaluation for generated samples** and temper the claim language unless such evidence is added.
+- Reframe the reward finetuning contribution more carefully: emphasize **decoder-domain and perceptual alignment** unless stronger geometry evidence is provided.
+- Benchmark **one additional video backbone** in the full text-to-3D setting to support the framework-level generality claim.
+- Provide a concise table summarizing **compute cost, updated parameters, and memory usage** for stitching and reward finetuning.
+- Expand the ablation of reward components beyond SceneBench, especially to **DPG-Bench**, where compositional prompts may stress geometry differently.
+- Include a short discussion of how the method behaves under **out-of-distribution prompts** and show representative failure cases.
 
 # Actual Human Scores
 Individual reviewer scores: [8.0, 8.0, 8.0, 8.0]

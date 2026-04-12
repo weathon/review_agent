@@ -1,50 +1,90 @@
-=== CALIBRATION EXAMPLE 3 ===
+=== CALIBRATION EXAMPLE 42 ===
 
 # Final Consolidated Review
 ## Summary
-World-In-World introduces the first comprehensive benchmark that evaluates generative world models through their utility for embodied agents in closed-loop interaction. It provides a unified planning strategy and action API to integrate diverse models, assesses performance across four embodied tasks with task success as the primary metric, and uncovers key insights: visual quality does not guarantee task success, post-training with action-conditioned data yields substantial gains, and inference-time scaling improves closed-loop performance.
+This paper introduces **World-In-World**, a benchmark and interface for evaluating visual/generative world models in **closed-loop embodied tasks** rather than by open-loop video quality alone. The core contribution is a unified planning-and-action interface that lets heterogeneous world models participate in four embodied settings (active recognition, ImageNav, active EQA, and robotic manipulation), together with an empirical study showing that post-training on action-observation data and increased test-time planning compute can materially improve task success.
 
 ## Strengths
-- **Timely and needed shift in evaluation paradigm**: The paper convincingly argues for and implements a closed-loop, task-success-driven benchmark, moving beyond open-loop visual metrics. This addresses a critical gap in the field of world models and embodied AI.
-- **Comprehensive and well-designed experimental framework**: The benchmark encompasses four distinct embodied tasks (active recognition, navigation, QA, manipulation) across two simulators, evaluates a wide range of state-of-the-art world models (including zero-shot and post-trained variants), and provides a flexible unified planning strategy and action API for fair comparison.
-- **Valuable and well-supported empirical insights**: The paper delivers three key, evidence-backed findings: (1) fine-grained controllability (action-conditioned prediction accuracy) correlates more strongly with task success than off-the-shelf visual quality; (2) post-training with modest amounts of domain-specific action-observation data is highly effective and exhibits clear scaling laws; (3) allocating more inference-time compute (via simulated rollouts) consistently improves closed-loop performance. These provide concrete guidance for future research.
+- **The paper makes a meaningful shift from open-loop visual evaluation to closed-loop embodied utility.** This is not just a rhetorical reframing: the benchmark’s primary reported outcomes are task metrics such as AR success, ImageNav SR/SPL, A-EQA answer score/SPL, and manipulation SR, and the paper directly shows dissociation between generation quality and task performance (Figure 5a / Figure 2).
+- **The framework genuinely integrates heterogeneous model interfaces rather than benchmarking a single narrow model family.** The unified action API covers text prompts, camera trajectories/viewpoints, and low-level actions (Section 2.2), allowing direct comparison among image-generation models (PathDreamer, SE3DS), video generators (SVD, LTX-Video, Hunyuan, Wan, Cosmos), and task-oriented world models (e.g., NWM) within one closed-loop protocol.
+- **The post-training study is one of the strongest empirical aspects of the paper.** Across multiple models and tasks, action-conditioned post-training consistently improves embodied performance, e.g. Wan2.1 improves from 58.26% to 62.61% on AR and from 38.19% to 45.14% on ImageNav; similar gains appear for SVD and for A-EQA. This is a practical and nontrivial finding for the community.
+- **The paper surfaces an important and specific empirical lesson: controllability matters more than aesthetic quality for embodied use.** While the exact proxy can be debated, the benchmark usefully demonstrates that visually impressive models are not necessarily the most useful planners, and that action-conditioned adaptation changes this ranking.
+- **The benchmark includes several task regimes with qualitatively different demands.** Navigation/perception tasks show clearer gains, while manipulation remains much harder. That asymmetry is itself informative and is honestly discussed by the authors rather than hidden.
 
 ## Weaknesses
+
+### Fatal
+None.
+
 ### Major:
-- **The evaluation partially conflates the contribution of the world model with the strength of the proposal and revision policies.** The reported success metrics result from an entire planning loop (proposal → world model simulation → revision). While ablations show improvements over base policies *without* world models, the paper lacks controlled comparisons against alternative planning mechanisms that use, for example, random or noise-injected rollouts. This makes it difficult to isolate how much of the gain stems from the world model's predictive accuracy versus simply having a set of candidate futures to select from. A stronger demonstration would include an ablation where the world model is replaced with a simplistic or perturbed predictor while keeping the planning loop identical.
-- **Evidence for the core claim that "controllability matters more than visual quality" is correlative but not causally established.** Controllability is quantified as 1-LPIPS between predicted and ground-truth frames, which measures prediction accuracy. A model with low LPIPS is not necessarily more *responsive* to action commands; it might simply be good at predicting the next frame regardless of the action. A more conclusive test would involve ablations that separately vary visual fidelity (e.g., via blurring or noise) and action-conditioning fidelity to disentangle their individual effects on task success.
-- **The benchmark lacks comparisons against strong alternative embodied agents, limiting the context for the reported improvements.** Gains are shown relative to simple base policies (e.g., a VLM or heuristic). To better gauge the practical utility of integrating world models, the paper should compare against strong model-free or model-based RL agents that do not use generative world models, or use the ground-truth simulator as an oracle upper-bound baseline where feasible.
+- **Benchmark scores conflate world-model quality with the quality of the action-interface translation, especially for text-conditioned models.**  
+  This concern is real and visible in the paper’s setup. Section 2.2 explicitly maps the same agent action sequence into different control modalities: “text prompt,” “camera trajectory/viewpoint,” or “low-level actions.” For text-conditioned models, the interface relies on a predefined template that converts actions into phrases; for other models, the same agent action is represented much more directly. This means that performance differences can reflect not only the predictive capability of the world model, but also the fidelity of the control representation injected into that model.  
+  The paper partially acknowledges heterogeneity but does not isolate how much of the gap comes from the model versus the translation layer. This matters because a benchmark claiming to compare embodied utility across architectures should distinguish “model cannot predict useful futures” from “the API failed to express the intended action precisely enough.”
 
-### Minor:
-- **The analysis of the data scaling law for post-training, while valuable, is primarily demonstrated on a single task (Active Recognition).** The claim of a "data scaling law for world models in embodied settings" would be stronger if similar scaling trends were explicitly shown and analyzed across all four tasks.
-- **Statistical significance of performance differences is not discussed.** The tables report point estimates without confidence intervals or statistical tests. Given the inherent variability in embodied task evaluation, this information is important for assessing the robustness of the reported improvements.
-- **The robotic manipulation results show only modest gains, and the failure analysis is limited.** The paper correctly notes that world models struggle with precise dynamics but provides limited diagnostic analysis (e.g., categorization of physical inconsistency errors) to guide future improvements in this challenging domain.
+- **Closed-loop performance is substantially mediated by the revision policy, and the paper does not fully disentangle world-model quality from scorer quality.**  
+  The paper itself states in Section 4 that “the agent’s overall performance depends on both world-model fidelity and the strength of the proposal and revision policies.” Table 5 makes this concrete: in ImageNav, simply replacing the VLM-based revision policy with LPIPS-based scoring increases SR substantially (e.g., SVD† from 43.05 to 47.92; Wan2.1† from 45.14 to 48.61).  
+  This is an important result, but in the current presentation it also weakens the claim that the benchmark cleanly ranks world models. If the revision policy is a strong bottleneck, then measured “WM utility” is really the utility of the **WM + revision policy pair**. The paper should analyze this more directly, because otherwise model rankings may change with the scorer rather than with the simulator quality itself.
 
-### Trivial:
-- Some implementation details of the unified action API and post-training recipe are primarily in the appendix. While the main paper provides the high-level framework, moving a few more key specifications (e.g., the mapping logic from actions to text prompts, the core training objective) to the main text could improve self-contained readability.
+- **The main “controllability matters more than visual quality” conclusion is suggestive but not as rigorously supported as claimed, because the controllability metric is only a proxy for action fidelity.**  
+  In Section 3.2 / Figure 5(b), controllability is defined as **1 − LPIPS between ground-truth and predicted observations**. That is closer to frame-level predictive alignment than to direct action-faithfulness. A model could score well by producing perceptually similar frames without truly respecting the commanded action semantics, and conversely a model could follow action commands but differ visually in ways LPIPS penalizes.  
+  So the qualitative takeaway is plausible, but the metric does not fully support the stronger interpretation that “controllability” per se is the causal driver. This weakens one of the headline findings.
+
+- **The inference-time scaling claim is potentially confounded by extra compute rather than uniquely demonstrating the value of world-model rollouts.**  
+  Figure 7 shows better performance with more world-model inferences per episode, which is useful operationally. However, the current experiments do not compare against a compute-matched alternative that spends similar extra budget on a planner without a world model (e.g., more proposal samples, repeated rescoring, or stronger search over the base policy alone).  
+  As a result, the paper supports the statement “more WM-assisted planning compute helps,” but does not fully establish the stronger interpretation that simulated rollouts are uniquely responsible for the gains, rather than the more general fact that more test-time search improves decisions.
+
+- **The manipulation evaluation is the least convincing part of the paper, both because the gains are modest and because the action adaptation may itself introduce distortion.**  
+  The paper is transparent that manipulation remains hard, and Table 3 indeed shows only small improvements over the VLM baseline in that setting. Moreover, Appendix B.4 states that when the candidate sequence length does not match the world model’s required conditioning length, the action API “linearly interpolates” or uniformly samples actions. For 7-DoF manipulation, this is a fairly strong design choice that may affect realism of the conditioned motion.  
+  This does not invalidate the benchmark, but it makes it harder to attribute weak manipulation performance solely to limits of current world models. Some of the degradation may come from the interface mismatch itself.
+
+### Minor
+- **The paper’s strongest empirical conclusions are concentrated in a subset of tasks and settings, especially AR and ImageNav.**  
+  The benchmark is broad, but the clearest scaling and correlation analyses are primarily shown for AR, with more limited depth on why results transfer similarly—or fail to transfer—to the other tasks.
+- **The computational trade-off is acknowledged but not quantified enough for practical deployment questions.**  
+  Section 4 discusses efficiency concerns, and Figure 7 shows a performance/compute trend, but the paper does not report end-to-end latency, throughput, or per-step runtime cost of the planning loop. Given that the method explicitly advocates more inference-time computation, this missing systems view matters.
+- **Cross-model fairness is imperfect because some models receive richer inputs than others.**  
+  Appendix B.6 notes that SE3DS receives ground-truth depth and PathDreamer receives depth plus semantic labels, while others operate on RGB only. This is understandable given model requirements, but it means “fair” should be interpreted as “integrated under a common closed-loop protocol,” not as perfectly matched sensory input conditions.
+- **The benchmark mostly measures whether adding a world model improves a given base policy, not whether the world model alone is a strong decision-making substrate.**  
+  This is consistent with the paper’s stated design, but it does mean conclusions should be phrased as augmentation utility rather than standalone planning capability.
+
+### Trivial
+- **The “data scaling law” language is somewhat stronger than the evidence supports.**  
+  Figure 6 clearly shows monotonic improvement with more post-training data, which is useful. But this is closer to an empirical scaling trend over the explored regime than to a deeply characterized scaling law.
 
 ## Nice-to-Haves
-- A deeper computational cost-benefit analysis (e.g., wall-clock time or FLOPs vs. performance) for inference-time scaling would help assess the practical trade-offs of allocating more compute to world-model rollouts.
-- Visualizing planned vs. executed trajectories on top-down maps for navigation tasks could provide more intuitive insight into how world model predictions influence agent behavior.
-- Including confidence intervals or standard errors for all performance metrics in the tables would enhance the statistical rigor of the reported results.
+- Add an ablation isolating the **action API translation effect**, e.g. compare native action-conditioned inputs versus text/trajectory abstractions where possible.
+- Report **latency / GPU-time / memory** for closed-loop planning at several inference budgets, especially for the Figure 7 scaling study.
+- Include a **compute-matched non-WM baseline** to determine how much of the inference-time scaling gain is specific to simulated rollouts.
+- Strengthen analysis of **failure accumulation over planning horizon**, especially comparing navigation vs manipulation.
+- For A-EQA, provide more detail on the robustness of the **LLM-as-judge** evaluation, such as prompt stability or agreement checks.
+- Expand revision-policy ablations, since Table 5 already shows this component can materially change outcomes.
 
 ## Removed Points
-*These points are flagged to be removed, treat them with caution.*
+These points are flagged to be removed, treat them with caution.
 
-**Strength/Weakness Removed:**
-- **"Proprietary model inclusion without full reproducibility" (Neutral Review, Weakness 3)**: REMOVED. The paper cites Runway Gen4; per the hard rules, we must not question the existence, release status, or reproducibility of any cited model. Its inclusion demonstrates a state-of-the-art comparison point.
-- **"Limited generalization beyond simulation" & "Need for real-world validation" (Harsh Critic-derived, Weakness 3; Neutral Review, Weakness 5)**: WEAKENED to Nice-to-Have. The paper's scope is explicitly a benchmark within simulators, which is a standard and necessary first step for this line of research. Demanding real-world validation is scope creep for this contribution.
-- **"Unfair comparison between fine-tuned and zero-shot models" (Harsh Critic-derived, Weakness 1)**: REMOVED as a Strawman. The paper's comparison is intentionally asymmetric to prove its point about the effectiveness of post-training. It directly compares zero-shot and post-trained versions *of the same models* (e.g., SVD vs. SVD†), which is a fair and valid ablation.
-- **"Incomplete coverage of related benchmarks" (Harsh Critic-derived, Weakness 4)**: REMOVED. Per the hard rules, we cannot mention missing related works without external sources to confirm their existence.
-- **"The post-training gains may reflect domain adaptation rather than better world models" (Harsh Critic-derived, Weakness 6)**: WEAKENED. This criticism misunderstands the contribution: the paper's finding is precisely that domain adaptation *via post-training* is a highly effective way to improve world models for embodied utility. This is a core insight, not a flaw.
-- **"Structural: The benchmark’s reported 'world model' performance is conflated..." (Harsh Critic, Critical Issue 1)**: PARTIALLY RETAINED as a Major Weakness (see above) but the demand for comparisons against "random or noise-injected rollouts" is softened. The paper already shows ablation with vs. without world models. The retained point emphasizes the need for more rigorous isolation of the world model's predictive contribution.
-- **"Evidential: The claim that 'controllability matters more than visual quality' is not convincingly supported..." (Harsh Critic, Critical Issue 2)**: RETAINED and rephrased as a Major Weakness (see above). The concern about conflating prediction accuracy with action responsiveness is valid and substantiated by the paper's chosen metric.
-- **"Methodological gap: The post‑training scaling law is presented as a general finding..." (Harsh Critic, Critical Issue 3)**: PARTIALLY RETAINED as a Minor Weakness (see above). The claim of a general "scaling law" is slightly overstated when the main scaling curve is for one task, though the trend is logically consistent with other results.
+- **“The paper is not the first closed-loop/control-centric benchmark because VP2 or prior planning papers exist.”**  
+  Removed because the paper’s concrete claim is narrower and more specific: “the first comprehensive closed-loop benchmark” / “the first open platform” for this class of visual world-model evaluation. The cited prior work does not, from the paper text itself, obviously invalidate that scoped claim.
+- **Complaints about missing related work or ignored baselines such as DreamerV3/OCTO.**  
+  Removed per instruction: missing related-work claims cannot be verified externally here.
+- **Reproducibility concerns about proprietary models, release status, API access, or unverifiability.**  
+  Removed per hard rule.
+- **Pure statistical-significance complaints requiring confidence intervals for all benchmark numbers.**  
+  Weakened/removed as a core criticism. While variance would help, single-run reporting is common in this style of large benchmark. The more substantive point retained is that the manipulation gains are modest and should be interpreted cautiously.
+- **Simulation-to-real criticism as a core weakness.**  
+  Weakened and removed from the main review because the paper is explicitly a benchmark in simulated closed-loop environments, and it already includes a cross-domain transfer study (Table 6). Demanding real-world validation would be scope creep.
+- **Claim that stronger baselines are required because gains over heuristic/VLM policies are otherwise invalid.**  
+  Removed in this form. The paper’s claim is mainly about evaluating WM utility when plugged into proposal/revision loops, not about beating the entire embodied-AI literature.
+
+## Novel Insights
+The most interesting synthesis across the evidence is that the paper is strongest not as a pure “leaderboard benchmark,” but as a **measurement framework for interface-limited world models**. Its own experiments suggest that embodied performance is shaped by three coupled bottlenecks: (1) how expressively actions can be encoded for a given generator, (2) how faithfully the model translates that control into future observations, and (3) how well the revision policy can extract decision value from those predictions. This means the benchmark is revealing an important systems-level truth: today’s “world model utility” is not a single property of the generator alone, but of the whole control–prediction–scoring stack. The paper would be even stronger if it explicitly embraced this as a central framing rather than presenting rankings as primarily model-intrinsic.
 
 ## Suggestions
-- Conduct an ablation where the world model in the planning loop is replaced with a simple predictive baseline (e.g., a frame predictor that ignores actions, or one with injected noise) while keeping the proposal and revision policies fixed. This would more cleanly isolate the value added by accurate, action-conditioned prediction.
-- To strengthen the controllability claim, design a controlled experiment that varies visual quality (e.g., by degrading predicted images) and action-conditioning fidelity (e.g., by training models with incorrect action labels) independently, and measure their isolated impact on task success.
-- Include a comparison against a strong, non-world-model baseline (e.g., a model-free RL agent trained on each task) to better contextualize the absolute performance level achieved by world-model-augmented planning.
+- Add a targeted ablation where the **same model** is driven by different control interfaces (or different prompt realizations) to measure how much the unified API affects rankings.
+- Expand Table 5-style analyses across more tasks to show how sensitive conclusions are to the **revision policy**.
+- Replace or supplement the current controllability proxy with a more direct **action-faithfulness metric**.
+- Include a **compute-matched baseline without world-model rollouts** for the inference-time scaling claim.
+- For manipulation, evaluate whether the current interpolation/sampling scheme for action sequences is degrading results; if so, adopt a more kinematically faithful control conversion.
+- Make the paper’s claims more explicit about what is being benchmarked: **closed-loop utility of WM-integrated systems**, rather than a pure intrinsic ranking of simulator quality.
 
 # Actual Human Scores
 Individual reviewer scores: [8.0, 8.0, 6.0, 6.0]
