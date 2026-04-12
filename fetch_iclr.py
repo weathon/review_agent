@@ -32,13 +32,13 @@ load_dotenv()
 
 DEFAULT_DATA_DIR = Path(__file__).parent / "iclr2026_data"
 OPENREVIEW_URL = "https://openreview.net"
-year = 2025
+YEAR = 2026
 
 def fetch_notes():
-    f"""Fetch all ICLR {year} submission notes with reviews via OpenReview API."""
+    f"""Fetch all ICLR {YEAR} submission notes with reviews via OpenReview API."""
     client = get_or_client()
 
-    venue = f"ICLR.cc/{year}/Conference"
+    venue = f"ICLR.cc/{YEAR}/Conference"
     print(f"Fetching submissions for {venue}...")
     venue_group = client.get_group(venue)
     submission_name = venue_group.content["submission_name"]["value"]
@@ -69,8 +69,8 @@ def parse_note(note) -> dict | None:
     scores = []
     direct_replies = details.get("directReplies", [])
     for reply in direct_replies:
-        inv = reply.get("invitations", [""])[0]
-        if "Official_Review" not in inv:
+        invitations = reply.get("invitations", [])
+        if not any(inv.endswith("/-/Official_Review") for inv in invitations):
             continue
         rc = reply.get("content", {})
         rating_val = rc.get("rating", {}).get("value", "")
@@ -91,8 +91,8 @@ def parse_note(note) -> dict | None:
     # Parse decision
     decision = None
     for reply in direct_replies:
-        inv = reply.get("invitations", [""])[0]
-        if "Decision" in inv:
+        invitations = reply.get("invitations", [])
+        if any(inv.endswith("/-/Decision") for inv in invitations):
             rc = reply.get("content", {})
             decision = rc.get("decision", {}).get("value", "")
             break
@@ -132,7 +132,7 @@ def extract_human_reviews_from_replies(direct_replies: list[dict]) -> list[dict]
     reviews = []
     for reply in direct_replies:
         invitations = reply.get("invitations", [])
-        if not any("Official_Review" in inv for inv in invitations):
+        if not any(inv.endswith("/-/Official_Review") for inv in invitations):
             continue
 
         content = reply.get("content", {})
@@ -292,7 +292,7 @@ def main(n_samples: int = 100, seed: int = 42, balanced: bool = False, data_dir:
     RATINGS_FILE = DATA_DIR / "ratings.csv"
 
     print("=" * 72)
-    print(f"ICLR {year} Dataset Builder")
+    print(f"ICLR {YEAR} Dataset Builder")
     print(f"  Output: {DATA_DIR}")
     print(f"  Mode:   {'balanced' if balanced else 'unbalanced'}")
     print("=" * 72)

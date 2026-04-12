@@ -4,6 +4,7 @@ from scipy import stats
 from sklearn.metrics import roc_auc_score, roc_curve, precision_recall_curve, auc
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
+from itertools import combinations
 import sys
 
 SCALE = [0, 2, 4, 6, 8, 10]
@@ -12,62 +13,41 @@ def round_to_scale(x):
     return min(SCALE, key=lambda v: abs(v - x))
 
 
-def split_half_baseline(df, gt_score_cols, n_splits=1, seed=42):
-    """Estimate human reliability via split-half correlation (repeated random splits)."""
-    rng = np.random.default_rng(seed)
-    pearson_list, spearman_list, mae_list = [], [], []
+def split_half_baseline(df, gt_score_cols):
+    """Estimate human reliability via all unique split-half partitions per paper."""
+    half_a, half_b = [], []
 
-    for _ in range(n_splits):
-        half_a, half_b = [], []
-        for _, row in df.iterrows():
-            scores = [float(row[c]) for c in gt_score_cols if pd.notna(row[c])]
-            if len(scores) < 2:
-                half_a.append(np.nan)
-                half_b.append(np.nan)
-                continue
-            perm = rng.permutation(len(scores))
-            mid = len(scores) // 2
-            half_a.append(np.mean([scores[i] for i in perm[:mid]]))
-            half_b.append(np.mean([scores[i] for i in perm[mid:]]))
-
-        a = np.array(half_a)
-        b = np.array(half_b)
-        mask = ~(np.isnan(a) | np.isnan(b))
-        if mask.sum() < 2:
-            continue
-        a, b = a[mask], b[mask]
-        p, _ = stats.pearsonr(a, b)
-        s, _ = stats.spearmanr(a, b)
-        m = float(np.mean(np.abs(a - b)))
-        pearson_list.append(p)
-        spearman_list.append(s)
-        mae_list.append(m)
-
-    if not pearson_list:
-        return None
-
-    # Generate one representative split for plotting (using fresh rng)
-    plot_rng = np.random.default_rng(seed)
-    plot_a, plot_b = [], []
     for _, row in df.iterrows():
         scores = [float(row[c]) for c in gt_score_cols if pd.notna(row[c])]
         if len(scores) < 2:
             continue
-        perm = plot_rng.permutation(len(scores))
+
         mid = len(scores) // 2
-        plot_a.append(np.mean([scores[i] for i in perm[:mid]]))
-        plot_b.append(np.mean([scores[i] for i in perm[mid:]]))
+        indices = range(len(scores))
+        for combo in combinations(indices, mid):
+            if len(scores) % 2 == 0 and 0 not in combo:
+                continue
+            left = [scores[i] for i in combo]
+            right = [scores[i] for i in indices if i not in combo]
+            half_a.append(float(np.mean(left)))
+            half_b.append(float(np.mean(right)))
+
+    if len(half_a) < 2:
+        return None
+
+    a = np.array(half_a)
+    b = np.array(half_b)
+    pearson, _ = stats.pearsonr(a, b)
+    spearman, _ = stats.spearmanr(a, b)
+    mae = float(np.mean(np.abs(a - b)))
 
     return {
-        "n_splits": n_splits,
-        "pearson_mean": float(np.mean(pearson_list)),
-        "pearson_std": float(np.std(pearson_list)),
-        "spearman_mean": float(np.mean(spearman_list)),
-        "spearman_std": float(np.std(spearman_list)),
-        "mae_mean": float(np.mean(mae_list)),
-        "mae_std": float(np.std(mae_list)),
-        "half_a": plot_a,
-        "half_b": plot_b,
+        "n_pairs": len(half_a),
+        "pearson": float(pearson),
+        "spearman": float(spearman),
+        "mae": mae,
+        "half_a": half_a,
+        "half_b": half_b,
     }
 
 
@@ -189,10 +169,10 @@ def analyze_and_plot(path):
         print(f"    MAE:                 {one_vs_rest['mae']:.4f}")
     if split_half is not None:
         print(f"  {'─'*45}")
-        print(f"  Human split-half baseline ({split_half['n_splits']} random splits):")
-        print(f"    Spearman:            {split_half['spearman_mean']:.4f} ± {split_half['spearman_std']:.4f}")
-        print(f"    Pearson:             {split_half['pearson_mean']:.4f} ± {split_half['pearson_std']:.4f}")
-        print(f"    MAE:                 {split_half['mae_mean']:.4f} ± {split_half['mae_std']:.4f}")
+        print(f"  Human split-half baseline ({split_half['n_pairs']} exact split pairs):")
+        print(f"    Spearman:            {split_half['spearman']:.4f}")
+        print(f"    Pearson:             {split_half['pearson']:.4f}")
+        print(f"    MAE:                 {split_half['mae']:.4f}")
     # Show bin breakdown
     print(f"  {'─'*45}")
     print(f"  Score bin weights (inverse freq):")
@@ -392,10 +372,10 @@ def analyze_and_plot(path):
         ax5.grid(True, alpha=0.2)
         ax5.text(
             0.05, 0.95,
-            f"Pearson: {split_half['pearson_mean']:.3f} ± {split_half['pearson_std']:.3f}\n"
-            f"Spearman: {split_half['spearman_mean']:.3f} ± {split_half['spearman_std']:.3f}\n"
-            f"MAE: {split_half['mae_mean']:.3f} ± {split_half['mae_std']:.3f}\n"
-            f"{split_half['n_splits']} random splits",
+            f"Pearson: {split_half['pearson']:.3f}\n"
+            f"Spearman: {split_half['spearman']:.3f}\n"
+            f"MAE: {split_half['mae']:.3f}\n"
+            f"{split_half['n_pairs']} exact split pairs",
             transform=ax5.transAxes, fontsize=10, va="top",
             bbox=dict(boxstyle="round,pad=0.4", facecolor="wheat", alpha=0.8)
         )
