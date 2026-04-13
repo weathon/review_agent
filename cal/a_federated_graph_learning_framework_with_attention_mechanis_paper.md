@@ -1,0 +1,321 @@
+
+
+{0}------------------------------------------------
+
+# A FEDERATED GRAPH LEARNING FRAMEWORK WITH ATTENTION MECHANISM AND CLUSTERING ALGORITHM
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+With the development of the industrial Internet of Things, graph data is also increasing, but these data are held by different clients, and due to client privacy and data security, it is impossible to integrate all the data for unified model training. Federated graph learning can overcome this difficulty very well. It allows clients to participate in the training of the overall model of other clients without revealing their own private data during training, thus protecting the security of clients' private data. However, how to improve the utilization efficiency of client upload parameters to improve the effect of model training and how to process the large amount of initial data owned by clients is an issue that needs to be solved urgently. This paper proposes a federated graph learning framework with attention mechanism and clustering algorithm ( $FGL_{AC}$ ). First, before the client participates in training, a clustering algorithm is used to perform a simple preprocessing operation on the large amount of data held to reduce the overall model training burden and improve training accuracy. Then during the server's process of aggregating model parameters, through the adaptive ability of the attention mechanism, the parameters uploaded by different clients are configured with different weights to obtain the best weight parameters to improve the training effect of the overall model. In order to further verify the effectiveness of  $FGL_{AC}$ , experimental verification was conducted on different data sets. The results show that in most cases,  $FGL_{AC}$  can achieve an improvement of 2.63% - 4.03% compared to other federated graph learning frameworks.
+
+## 1 INTRODUCTION
+
+Real world applications of graph data to depict complex relationships between elements of composite objects are widespread. Examples include social networks, citation networks, biochemical networks, and transportation networks. Unlike European data governed by structural principles, graph data have a complex structure and contain a wealth of information. In recent years, graph data research has been a popular topic in the academic community (Liu et al., 2022; Li et al., 2022; Wang et al., 2022). Graph research problems include node classification (Wang et al., 2023b; Zou et al., 2023), graph classification (Chen et al., 2023; Lei et al., 2023), and link prediction (Mi et al., 2023), among others. This paper mainly focuses on the problem of graph classification. Given a set of graphs, the goal of graph classification is to discover the mapping relationship between graphs and class labels and to predict the class labels of unknown graphs. Graph classification is an essential data mining task applicable to a variety of disciplines, for example, molecular graphs are classified in cheminformatics to determine the mutagenicity, toxicity, and anticancer activity of compound molecules (Veličković, 2023; Ji et al., 2023); protein networks are classified in bioinformatics to determine whether a protein is an enzyme and whether it has therapeutic potential for a particular disease(Yin et al., 2023; Zheng et al., 2023). From this perspective, graph classification research is extremely important.
+
+With the rapid development of the Industrial Internet of Things(IIoT), there are more and more graph data in the network environment, and how to process these data has become extremely important. Since the graph neural network can learn the node representation of the non-signature from the graph structure, it has become a hot method for processing graph data in the field of machine learning (Xiao
+
+{1}------------------------------------------------
+
+054 et al., 2023; Yu et al., 2023; Zhang et al., 2023). The traditional Graph Neural Network(GNN) needs  
+ 055 to collect the overall model to aggregate parameters during training (Liu et al., 2023; Yao et al.,  
+ 056 2023). However, in IIoT, a large amount of graphic data is owned by different holders, and it is very  
+ 057 difficult to integrate all the graphic data. At the same time, due to privacy protection issues in IIoT,  
+ 058 a large number of graphic Uniform loading of data for training on GNN is not allowed. This has  
+ 059 become a major problem in the application of GNN in IIoT.
+
+060 As a new distributed machine learning paradigm, federated learning (FL) enables clients to train  
+ 061 a globally shared or personalized model in a decentralized manner (Gupta & Gupta, 2023), while  
+ 062 not contributing their local data. This property allows FL to be applied to graph data to alleviate  
+ 063 data isolation problems and keep each client owning graph data safely. Federated Graph Learning  
+ 064 (FGL) is an extension of federated learning on graph neural networks (Fu et al., 2022; Qi et al.,  
+ 065 2023; Wang et al., 2023a). It allows the client to train the local model according to the subgraph it  
+ 066 owns, and upload the trained parameters to the central server at the same time. The server aggregates  
+ 067 the received parameters through the set aggregation rules and then distributes the processed data to  
+ 068 the clients participating in the training. After the client receives the parameters, it updates its local  
+ 069 model. This process is iterated until the model converges completely.
+
+070 Most of the traditional federated graph learning paradigms use FedAvg (McMahan et al., 2017)  
+ 071 when the server aggregates client parameters. The client participating in the training uses the initial-  
+ 072 ized global model parameters to initialize the local model. Multiple rounds of gradient descent and  
+ 073 multiple updates to the parameters ensue; the client then transmits the parameters of the local model  
+ 074 to the server, and the central server aggregates the local model parameters into global model param-  
+ 075 eters through a weighted average aggregation strategy (Fu et al., 2023; Silva et al., 2023; Ghimire  
+ 076 et al., 2023). FedAvg can implement distributed GNN model training very well, but he does not con-  
+ 077 sider the weight impact of different client local parameters on all client model training, that is, in the  
+ 078 actual federated graph learning process, the data uploaded by each client Parameters have different  
+ 079 influences; how to achieve different degrees of learning of parameters of different clients according  
+ 080 to different weights when the server performs parameter aggregation. And in IIoT, the number of  
+ 081 local data sets owned by the client is very large. If the data is not processed and directly trained on  
+ 082 the model, it may be expensive. At the same time, unprocessed data sets may have a certain impact  
+ 083 on the training effect, which is something that the traditional federated graph learning paradigm has  
+ 084 not considered.
+
+085 In order to resolve the aforementioned issues, this paper proposes a federated graph learning frame-  
+ 086 work that uses a clustering algorithm to preprocess client local data and uses an attention mechanism  
+ 087 to assign different weights to the local parameters of different clients. *FGL<sub>AC</sub>* first allows the client  
+ 088 to use a clustering algorithm to perform a preprocessing operation on the data set it owns before  
+ 089 training the model based on local data, so as to better process downstream tasks. At the same time,  
+ 090 in the process of aggregating local parameters of the client by the central server, adaptive atten-  
+ 091 tion parameters are added. After the server receives the local aggregation parameters from different  
+ 092 clients, it assigns different aggregation weights to different local parameters according to the dif-  
+ 093 ferent training effects of the clients, and obtains a global parameter that is most suitable for all  
+ 094 clients participating in the training. This is used to improve the local model training accuracy of the  
+ 095 client, thereby improving the training effect of the overall framework. The following are the primary  
+ 096 contributions of this paper:
+
+- 097 • Before performing local model training, the client uses a clustering algorithm to perform  
+ 098 a preprocessing operation on its own data set, and uses the preprocessed information as  
+ 099 auxiliary information for downstream task execution. This can decrease the overall training  
+ 100 burden and enhance model training's effectiveness.
+- 101 • In the process of local parameter aggregation uploaded by the central server to the client,  
+ 102 the attention mechanism assigns different aggregation weights to the uploaded parameters  
+ 103 according to the good or bad training effect of different clients, to get a global parameter  
+ 104 that is most suitable for the target client and drive the overall training effect.
+- 105 • Through a large number of experiments and experimental results, it is shown that *FGL<sub>AC</sub>*  
+ 106 can have a better training effect than the traditional federated graph learning framework.
+
+{2}------------------------------------------------
+
+## 2 RELATED WORK
+
+### 2.1 GRAPH SELF-ATTENTION MECHANISM
+
+Graph self-attention mechanism: The idea of attention first appeared in the field of computer vision, trying to reduce the computational complexity of image processing while improving performance by introducing a model that only focuses on a specific region of the image rather than the entire image(Xia et al., 2022; Cui et al., 2022; Cheng et al., 2023). Through the continuous improvement of attention technology, it can be popular in various tasks, such as text classification(Ahmed et al., 2022), image description(Ding et al., 2023), sentiment analysis(Peng et al., 2023), speech recognition(Zeyer et al., 2023) and so on. With the continuous development of technology, graph-structured data continues to appear in different neighborhoods. Much useful information can be obtained from graph-structured data by representing data as a graph, which captures entities (i.e., nodes) and the relationships between them (i.e., edges). However, in the real world, graph-structured data may contain a lot of complex information and may also contain a lot of irrelevant noise information, which makes it difficult to effectively process graph-structured data. An effective way to solve this problem is to add "attention" to the research on the number of graph structures(Wu et al., 2023; Ahmad et al., 2023; Fan et al., 2023). The attention mechanism enables the model to concentrate on the task-relevant portions of graph-structured data, thereby improving its decision-making.
+
+### 2.2 CLUSTERING ALGORITHM
+
+Clustering Algorithm: The spectral clustering algorithm is an algorithm for clustering that is founded on the theory of spectral graphs. It is predominantly divided into two classes: iterative spectral clustering algorithms and multi-path spectral clustering algorithms, respectively, based on the SM algorithm (Shi & Malik, 2000) and the NJW algorithm (Ng et al., 2001) to represent. The concept of spectral graph partitioning inspired the concept of a spectral clustering algorithm. In accordance with sample similarity, spectral clustering generates an undirected weighted graph. Consider the sample points to be the graph's vertices, and the weight of the edge between them to be their similarity. The spectral graph division of an undirected weighted graph divides it into multiple sub-graphs, which corresponds to the clustering procedure of the clustering algorithm. For spectral graph partitioning, the choice of graph partitioning criteria will have a direct impact on the partitioning outcomes. Typical graph partitioning criteria consist of canonical cut sets, minimum cut sets, average cut sets, and proportional cut sets, among others (Pang et al., 2018). In contrast to spectral graph partitioning, the spectral clustering technique takes the continuous relaxation form of the problem into consideration and transforms the graph segmentation issue into a spectral decomposition issue related to locating similarity matrices (Mei et al., 2023). In the federated graph classification task, the amount of data required for federated learning is very large. If the client does not preprocess the data locally, the amount of communication and calculation for the entire federated learning system will be huge. The spectral clustering algorithm can handle graph-structured data very well (Klus & Djurdjevac Conrad, 2023; El Hajjar et al., 2022), and federated graph learning itself is a distributed learning method, which is also a very suitable application field for the spectral clustering algorithm.
+
+## 3 METHODOLOGY
+
+### 3.1 OVERVIEW
+
+The  $FGL_{AC}$  framework proposed in this article uses the spectral clustering algorithm to preprocess the graph mechanism data owned by the client before the client participates in federated training and performs clustering according to the specified clustering range to provide good Input data, improve the efficiency and communication performance of federated graph learning, and reduce communication overhead. Secondly, in server aggregation, through the self-adaptive attention mechanism, different proportion weights are assigned to the parameters uploaded by different clients, and a set of specific weight parameters is saved for each client, improving the client model. At the same time, it can also affect the global model training of federated graph learning. The example diagrams of  $FGL_{AC}$  are shown in Fig. 1 and 2, where Fig. 1 is the preprocessing of the data by the spectral clustering algorithm and Fig. 2 is the process of federated learning. The algorithmic process of
+
+{3}------------------------------------------------
+
+$FGL_{AC}$  is shown in Algorithm 1. Table 1 shows the meaning of each variable used in the algorithm 1.
+
+Table 1: Notations & Explanations
+
+| Notations | Explanations |
+|-|-|
+| $K$ | Number of participating enterprises |
+| $\mathbb{C}$ | Collection of training customers, where $\mathbb{C} = \{C_1, C_2, \dots, C_k\}$ |
+| $\mathbb{D}$ | Training data collection, where $\mathbb{D} = \{D_1, D_2, \dots, D_k\}$ |
+| $G$ | The quantity of global iterations |
+| $L$ | The quantity of local iterations |
+| $S$ | Server |
+| $Z$ | Global parameters |
+| $z_k$ | Local parameters of client $C_k$ performing training tasks on dataset $D_k$ |
+| $W$ | Similarity matrix |
+| $D$ | Degree matrix |
+| $L$ | Laplacian matrix |
+
+![Figure 1: The initial data set is preprocessed using a spectral clustering algorithm. The diagram shows an 'Initial Graph Structure Dataset' on the left, which is processed into a 'Similarity Matrix' and a 'Degree Matrix'. These two matrices are combined to form a 'Laplacian matrix'. The 'Laplacian matrix' is then processed by 'K-Means' clustering to produce 'Cluster Class' results, labeled C1, C2, and C3.](d62e2e2281009c16f4ee61660e716cd9_img.jpg)
+
+Figure 1: The initial data set is preprocessed using a spectral clustering algorithm. The diagram shows an 'Initial Graph Structure Dataset' on the left, which is processed into a 'Similarity Matrix' and a 'Degree Matrix'. These two matrices are combined to form a 'Laplacian matrix'. The 'Laplacian matrix' is then processed by 'K-Means' clustering to produce 'Cluster Class' results, labeled C1, C2, and C3.
+
+Figure 1: The initial data set is preprocessed using a spectral clustering algorithm.
+
+![Figure 2: Federated graph learning framework with attention mechanism and spectral clustering. The diagram illustrates a federated learning process. On the left, multiple clients (Client 1 to Client n) are shown. Each client processes 'Neighbor Information' through a 'GCN Layer 1' and 'GCN Layer n' with 'ReLU' activation functions. The output is a 'Residual' block, which is then processed by an 'MLP' to produce a 'Local Representation'. These local representations are sent to a 'Server' via 'Differential Privacy'. The server performs an 'Update' operation using the formula: Z_{G+1} = Z_G - \eta \sum_{k=1}^K \alpha_k (Z_G - z_k). The updated global parameters Z_{G+1} are then sent back to the clients via 'Differential Privacy' for an 'Update' step.](12a6537c92844d5b393104c02e8dfc2f_img.jpg)
+
+Figure 2: Federated graph learning framework with attention mechanism and spectral clustering. The diagram illustrates a federated learning process. On the left, multiple clients (Client 1 to Client n) are shown. Each client processes 'Neighbor Information' through a 'GCN Layer 1' and 'GCN Layer n' with 'ReLU' activation functions. The output is a 'Residual' block, which is then processed by an 'MLP' to produce a 'Local Representation'. These local representations are sent to a 'Server' via 'Differential Privacy'. The server performs an 'Update' operation using the formula: Z\_{G+1} = Z\_G - \eta \sum\_{k=1}^K \alpha\_k (Z\_G - z\_k). The updated global parameters Z\_{G+1} are then sent back to the clients via 'Differential Privacy' for an 'Update' step.
+
+Figure 2: Federated graph learning framework with attention mechanism and spectral clustering.
+
+{4}------------------------------------------------
+
+**Algorithm 1** A Federated Graph Learning Framework With Attention Mechanism and Spectral Clustering
+
+---
+
+**Input:**  $\mathbb{C}, \mathbb{D}, \mathbb{G}, \mathbb{L}, S, Z, z, \mathbb{L}(z)$   
+**Output:** Final Global parameter  $Z$
+
+- 1: Initialize  $\mathbb{G}, \mathbb{L}, Z, z$ ;
+- 2: # Local dataset preprocessing
+- 3: Calculate the similarity matrix  $W$  by (1);
+- 4: Calculate the degree matrix  $D$  by (3);
+- 5: Calculate the Laplacian matrix  $L$  by (4) using  $W$  and  $D$ ;
+- 6: Use (6,7) for clustering operations;
+- 7: **for**  $g = 1$  to  $\mathbb{G}$  **do**
+- 8:   # Training for local model
+- 9:   **for** each  $C_k \in \mathbb{C}$  in parallel **do**
+- 10:     From server  $S$  download global parameter  $Z$ ;
+- 11:     **for**  $l = 1$  to  $\mathbb{L}$  **do**
+- 12:       Classification by (13 or 15) training data set;
+- 13:       Calculate the loss  $\mathbb{L}_k(z)$  on  $\mathbb{D}_k$ ;
+- 14:       Update local parameter  $z_{(g,l+1)}^k$ ;
+- 15:     **end for**
+- 16:     Update loss  $\mathbb{L}_k(z)$  and parameter  $z_{(g,\mathbb{L})}^k$  from  $C_k$  to  $S$ ;
+- 17:   **end for**
+- 18:   # Global aggregation
+- 19:   Receive model parameters  $z$  from clients participating in training;
+- 20:   Distribute the global parameter  $Z_g$ ;
+- 21: **end for**
+- 22: **return**  $Z$ ;
+
+---
+
+### 3.2 DATA PREPROCESSING
+
+In this article, the spectral clustering algorithm is utilized as a data preprocessing strategy, so in this section, how to use the spectral clustering algorithm to implement the data preprocessing function is described in detail. The idea underlying the spectral clustering algorithm is to take into account every point of data in space, and to connect these points with edges. Edges between points that are far away have low weights, and edges between points that are close have high weights. In this paper, each sub-graph in the data set is regarded as a point in the space, and all the graphs are clustered by the spectral clustering algorithm through a false edge. Given a data set  $G = \{g_1, g_2, \dots, g_n\}$ , the specific operation is as follows.
+
+The initial step is to create the similarity matrix  $W$ , where the Euclidean distance is used to calculate the distance between two sample points. Utilize the  $KNN$  algorithm for traversing every one of the sample points and select the  $k$  nearest points as neighbors for each of the samples, only  $w_{ij} > 0$  between the  $k$  points closest to the sample, and  $w_{ij}$  only if the two points are  $k$  neighbors to each other. Specifically, it can be expressed as:
+
+$$w_{ij} = w_{ji} = \begin{cases} 0 & g_i \notin KNN(g_j) \text{ or } g_j \notin KNN(g_i) \\ \exp(-\frac{\|g_i - g_j\|_2^2}{2\psi^2}) & g_i \in KNN(g_j) \text{ and } g_j \in KNN(g_i) \end{cases} \quad (1)$$
+
+Where,  $\|g_i - g_j\|_2^2$  is the Euclidean distance between two sample points,  $\psi$  is the scale parameter, and  $W$  changes with the value of  $\psi$ .
+
+Next is to construct a degree matrix  $D$ . In this work, for two sample points  $g_i$  and  $g_j$  with correlation,  $w_{ij} > 0$ , and for two sample points  $g_i$  and  $g_j$  without correlation,  $w_{ij} = 0$ . Therefore, for any sample point  $g_i$  in the set, its degree  $d_i$  can be defined as the sum of all weights associated with it, namely:
+
+$$d_i = \sum_{j=1}^n w_{ij} \quad (2)$$
+
+{5}------------------------------------------------
+
+Using a definition of the degree of each sample point, a degree matrix  $D$  can be obtained, which is a matrix of diagonals, and only the primary diagonal has values, corresponding to the degree of the  $i^{th}$  point in the  $i^{th}$  row, which can be expressed as:
+
+$$D = \begin{pmatrix} d_1 & \dots & \dots \\ \dots & d_2 & \dots \\ \vdots & \vdots & \ddots \\ \dots & \dots & d_n \end{pmatrix} \quad (3)$$
+
+The similarity matrix  $W$  and degree matrix  $D$  constructed above can be used to construct the Laplacian and standardized Laplacian matrix. Specifically, it can be expressed as:
+
+$$L = D - W \quad (4)$$
+
+$$\tilde{L} = D^{-\frac{1}{2}} L D^{-\frac{1}{2}} = D^{-\frac{1}{2}} (D - W) D^{-\frac{1}{2}} = I - \tilde{W} \quad (5)$$
+
+where  $L$  is the Laplacian matrix and  $\tilde{L}$  is the normalized Laplacian matrix. Compute the eigenvalues of  $\tilde{L}$  and arrange them from smallest to largest, calculate the eigenvectors of the first  $k$  eigenvalues, and form the  $k$  eigenvectors into a matrix  $U = \{u_1, u_2, u_3, \dots, u_k\}, U \in R^{n \times k}$  to create a new solution space. Use  $K - means$  algorithm for clustering on the new solution space, let  $x_i \in R^k$  be the vector of  $i$ -th row, where  $i \in (1, 2, \dots, n)$ ,  $U = X = \{x_1, x_2, \dots, x_n\}$ , then the objective function can be expressed as:
+
+$$d(X, C_i) = \sqrt{\sum_{j=1}^d (X_j - C_{ij})^2} \quad (6)$$
+
+Where,  $X$  is the data object,  $C_i$  is the  $i^{th}$  clustering center,  $d$  is the data object's dimension, and  $X_j$  and  $C_{ij}$  are the  $j^{th}$  attribute values of  $X$  and  $C_j$ , respectively. The formula for calculating the sum of squared errors for the entire dataset is:
+
+$$SSE = \sum_{i=1}^k \sum_{X \in C_i} |d(X, C_i)|^2 \quad (7)$$
+
+Where,  $k$  represents the number of clusters, and the magnitude of  $SSE$  shows the clustering result's quality. Then the clustering results are mapped back to the space of the original solution, which is used as the input of the graph classification task.
+
+### 3.3 FEDERAL ATTENTION
+
+In the traditional server aggregation process, most of the aggregation uses FedAvg or FedProx, which does not take into account that the parameters uploaded by some clients have a greater impact on the aggregation of the server, while the parameters uploaded by some clients have less influence. Suppose three clients are participating in federated graph training, each client has a set of graph structure data  $G_i = (g_{i1}, g_{i2}, \dots, g_{in})$ , the client obtains a set of parameters  $Z_i$  through local training, and then uploads the parameters to the central server for aggregation. In this paper, the server uses the attention mechanism to aggregate the parameters uploaded by the client and assigns different weights to the parameters uploaded by each client according to the contribution to the server aggregation through the attention mechanism. The objective function can be expressed as:
+
+$$Attention(c_i, c_j) = \frac{\exp(\text{LeakyReLU}(a^T [W c_i || W c_j]))}{\sum_{k \in \mathcal{N}_i} \exp(\text{LeakyReLU}(a^T [W c_i || W c_k])))} \quad (8)$$
+
+Where,  $c_i$  and  $c_j$  represent the feature vectors of the current client and another client, respectively.  $W$  is the learnable weight matrix used to map the input features into the attention space.  $[W c_i || W c_j]$  means to connect the parameters uploaded by the client into a new feature vector, where  $||$  means the connection operation of the vector.  $a$  is a learnable parameter vector for computing attention
+
+{6}------------------------------------------------
+
+weights.  $\mathcal{N}_i$  represents the set of other clients except client  $c_i$ . A set of different attention weights can be obtained through the formula 8. For each client, this paper uses different weight coefficients to aggregate the parameters uploaded by the current client and other clients. Assuming that for the client set  $C = (C_1, C_2, C_3)$ , the uploaded parameter sets are  $Z_1, Z_2, Z_3$  respectively, the objective function can be expressed as:
+
+$$C_{\alpha} = \alpha Z_1 + \beta Z_2 + \delta Z_3 \quad (9)$$
+
+Where,  $\alpha, \beta, \text{ and } \delta$  are a set of weight parameters calculated by different clients acting as target clients through formula 8. By assigning different weight parameters, the parameters uploaded by the client that contribute more to the client aggregation can occupy a larger proportion of the aggregation process. The advantage of this is that the trained client may adjust different weight parameters to drive poorly trained clients to achieve better training of the global model. During each iteration of the federation, the client will aggregate different parameters through this method, and then redistribute them to the clients participating in the training, and the clients will conduct a new round of training according to the new parameters received. This process has been iterated until the global model converges.
+
+At the same time, the server will also save the parameters uploaded by each client, so that there are clients in the same group of clients that have not participated in the federation training. At this time, the client can update the parameters of the training of other clients in the same group to the clients that did not participate in the training, so that the clients that did not participate in the training can also be affected by the training parameters of other clients.
+
+## 4 EXPERIMENTS
+
+This section only analyzes the results of 4.1 Graph Classification, 4.2 Ablation Experiments, and 4.3 Comparison between Distributed Training and Centralized Training. The Experiment Setup (such as Datasets, Baselines, Implementation Details) are shown in Appendix A.3, Performance Comparison in A.4, Visualization in A.5, and Attention Parameter Analysis in A.6.
+
+### 4.1 GRAPH CLASSIFICATION
+
+Table 2: **Graph classification results (%). (Index: Accuracy, F1 Bold: best).**
+
+| Datasets | Type | Index | GCN-FedAvg | SAGE-FedAvg | GCN-FedProx | SAGE-FedProx | <i>FGLAC</i> |
+|-|-|-|-|-|-|-|-|
+| MUTAG | balance-no-overlap | Accuracy | 86.48 | 81.58 | 84.21 | 84.21 | <b>86.84</b> |
+|  |  | F1 | <b>84.41</b> | 76.97 | 80.81 | 78.16 | 83.55 |
+|  |  | Accuracy | 78.95 | 76.32 | 78.95 | 73.68 | <b>81.58</b> |
+|  | unbalance-no-overlap | F1 | 70.88 | 62.62 | 72.86 | 50.52 | <b>75.44</b> |
+|  |  | Accuracy | 81.58 | 73.68 | 81.58 | 78.95 | <b>84.21</b> |
+|  |  | F1 | 76.97 | 42.42 | 75.44 | 70.88 | <b>80.81</b> |
+| ENZYMES | balance-overlap | Accuracy | 84.21 | 84.21 | 84.21 | 84.21 | <b>86.84</b> |
+|  |  | F1 | 81.73 | <b>81.73</b> | 78.16 | 73.73 | 79.23 |
+|  |  | Accuracy | 41.67 | 35.00 | 42.50 | 35.00 | <b>43.37</b> |
+|  | unbalance-no-overlap | F1 | 41.83 | 31.88 | 40.70 | 38.85 | <b>42.15</b> |
+|  |  | Accuracy | 36.67 | 38.33 | 44.17 | 38.33 | <b>44.17</b> |
+|  |  | F1 | 33.67 | 37.95 | 41.03 | 36.36 | <b>41.03</b> |
+| PROTEINS | balance-overlap | Accuracy | 40.83 | 37.50 | 42.80 | 40.00 | <b>45.00</b> |
+|  |  | F1 | 37.78 | 37.26 | 39.91 | 39.18 | <b>44.70</b> |
+|  |  | Accuracy | 37.50 | 35.00 | 36.67 | 37.50 | <b>37.50</b> |
+|  | unbalance-overlap | F1 | 34.62 | 32.99 | 35.65 | <b>36.73</b> | 33.50 |
+|  |  | Accuracy | 72.65 | 66.64 | 73.21 | 69.64 | <b>75.00</b> |
+|  |  | F1 | 70.66 | 68.84 | 73.00 | 67.30 | <b>73.33</b> |
+|  | unbalance-no-overlap | Accuracy | 70.85 | 69.64 | 75.00 | 71.43 | <b>75.00</b> |
+|  |  | F1 | 67.86 | 69.63 | 69.52 | 71.39 | <b>74.97</b> |
+|  | balance-overlap | Accuracy | 72.20 | 71.43 | 76.79 | 74.11 | <b>78.57</b> |
+|  |  | F1 | 69.79 | 71.42 | 76.60 | 71.65 | <b>77.87</b> |
+|  | unbalance-overlap | Accuracy | 70.40 | 73.21 | 76.79 | 78.57 | <b>78.57</b> |
+|  |  | F1 | 67.84 | 72.66 | 76.17 | 78.12 | <b>78.12</b> |
+
+The performance evaluation of *FGLAC* on the federated graph classification task on the above three datasets is shown in Table 2. In this work, the classification tasks of three clients and one central server are simulated. During the experiments, each dataset is divided into four cases for training as described in subsection 4.1.1 to test the classification performance of *FGLAC*. Based on the above results, it can be concluded that:
+
+- The *FGLAC* framework shows relatively good experimental results on most datasets, which shows the effectiveness of adding a spectral clustering algorithm and attention mech-
+
+{7}------------------------------------------------
+
+anism in the process of federated graph learning. First, the client can use the spectral clustering algorithm to preprocess its local data to relieve the pressure of communication. Secondly, the server uses the attention mechanism when aggregation, and can use the client parameters with better training effect to drive the poorer training effect client.
+
+- Compared with the traditional federated graph learning, the  $FGL_{AC}$  proposed in this paper has a good performance improvement in the results, which meets the expected effect. Even in the worst case, all client training effects are the same, and  $FGL_{AC}$  will degenerate into FedAvg without affecting the overall training results. However, once the training results of some clients are slightly better,  $FGL_{AC}$  can use the better training parameters to optimize the overall training results.
+- In  $FGL_{AC}$ , when the client uses the attention mechanism to aggregate parameters, all attention parameters are learned by themselves, and the parameters used for aggregation are constantly adjusted through each round of iterations. The experimental results and related theories prove that the self-learned attention parameter improves the aggregation effect of the server and does not have a negative impact on the overall training. Even in the worst case,  $FGL_{AC}$  uses consistent parameters that convert to FedAvg.
+
+### 4.2 ABLATION EXPERIMENT
+
+In order to further verify the influence of the spectral clustering algorithm and attention mechanism on the overall training in  $FGL_{AC}$ , ablation experiments are performed on  $FGL_{AC}$  in this subsection. Compared with the traditional GCN-based FedAvg federated graph learning algorithm, the small data set MUTAG is used as the test sample, and Accuracy is used as the indicator to compare the two situations of unbalance-no-overlap and balance-overlap. The specific results are depicted in Fig. 3 and Fig. 4 shows.
+
+![Figure 3: Ablation experiment in unbalance-no-overlap environment. The figure contains three line graphs: (a) FGL_AC - C, (b) FGL_AC - A, and (c) FGL_AC. Each graph plots Accuracy (y-axis, 0.0 to 0.9) against Communication Rounds (x-axis, 0 to 30). In all three graphs, the FGL_AC framework (magenta line with circles) consistently achieves higher accuracy than the GCN-FedAvg (black line with circles) and the ablated versions (blue lines with circles). In (a), FGL_AC - C starts at ~0.65 and reaches ~0.85. In (b), FGL_AC - A starts at ~0.65 and reaches ~0.85. In (c), the full FGL_AC starts at ~0.65 and reaches ~0.85, while the ablated versions reach ~0.75 and ~0.80.](7ff005f9556dc6518981bb92091d36ab_img.jpg)
+
+Figure 3: Ablation experiment in unbalance-no-overlap environment. The figure contains three line graphs: (a) FGL\_AC - C, (b) FGL\_AC - A, and (c) FGL\_AC. Each graph plots Accuracy (y-axis, 0.0 to 0.9) against Communication Rounds (x-axis, 0 to 30). In all three graphs, the FGL\_AC framework (magenta line with circles) consistently achieves higher accuracy than the GCN-FedAvg (black line with circles) and the ablated versions (blue lines with circles). In (a), FGL\_AC - C starts at ~0.65 and reaches ~0.85. In (b), FGL\_AC - A starts at ~0.65 and reaches ~0.85. In (c), the full FGL\_AC starts at ~0.65 and reaches ~0.85, while the ablated versions reach ~0.75 and ~0.80.
+
+Figure 3: Ablation experiment in unbalance-no-overlap environment.
+
+![Figure 4: Ablation experiment in balance-overlap environment. The figure contains three line graphs: (a) FGL_AC - C, (b) FGL_AC - A, and (c) FGL_AC. Each graph plots Accuracy (y-axis, 0.0 to 0.9) against Communication Rounds (x-axis, 0 to 30). In all three graphs, the FGL_AC framework (magenta line with circles) consistently achieves higher accuracy than the GCN-FedAvg (black line with circles) and the ablated versions (blue lines with circles). In (a), FGL_AC - C starts at ~0.65 and reaches ~0.85. In (b), FGL_AC - A starts at ~0.65 and reaches ~0.85. In (c), the full FGL_AC starts at ~0.65 and reaches ~0.85, while the ablated versions reach ~0.75 and ~0.80.](aa14b9ec884bf40ce06c161be468cd84_img.jpg)
+
+Figure 4: Ablation experiment in balance-overlap environment. The figure contains three line graphs: (a) FGL\_AC - C, (b) FGL\_AC - A, and (c) FGL\_AC. Each graph plots Accuracy (y-axis, 0.0 to 0.9) against Communication Rounds (x-axis, 0 to 30). In all three graphs, the FGL\_AC framework (magenta line with circles) consistently achieves higher accuracy than the GCN-FedAvg (black line with circles) and the ablated versions (blue lines with circles). In (a), FGL\_AC - C starts at ~0.65 and reaches ~0.85. In (b), FGL\_AC - A starts at ~0.65 and reaches ~0.85. In (c), the full FGL\_AC starts at ~0.65 and reaches ~0.85, while the ablated versions reach ~0.75 and ~0.80.
+
+Figure 4: Ablation experiment in balance-overlap environment.
+
+In this paper, the  $FGL_{AC}$  framework is split into three categories, namely, removal of client nodes for preprocessing data using spectral clustering algorithms ( $FGL_{AC} - C$ ), removal of servers for parameter clustering using the attention mechanism ( $FGL_{AC} - A$ ), and the complete  $FGL_{AC}$  for ablation experiments. Fig. 3 and Fig. 4 are the comparisons between the three  $FGL_{AC}$  frameworks
+
+{8}------------------------------------------------
+
+with Accuracy as the index and the traditional GCN-based FedAvg federation algorithm in the case of unbalance-no-overlap and balance-overlap, respectively. It can be seen from Fig. 3 (a) and Fig. 4 (a) that although the client aggregates the parameters using the attention mechanism, the server will appear when the parameters are aggregated because the data is not preprocessed before training. The case where the effect is relatively poor. This may be because the training effect of some clients is relatively poor. As a result, in the process of server aggregation, clients with poor training effects will have a negative impact on the overall training result. From Fig. 3 (b) and Fig. 4 (b), it is evident that although the training results have been improved to a certain extent, the improvement is not great. This is because the client directly performs data preprocessing before training, and the server does not assign larger weights to clients with better training results during aggregation, resulting in better-trained clients failing to drive the overall training results. Fig. 3 (c) and Fig. 4 (c) are comparisons of three  $FGLAC$  frameworks.
+
+### 4.3 COMPARISON BETWEEN DISTRIBUTED TRAINING AND CENTRALIZED TRAINING
+
+To further verify the effectiveness of  $FGLAC$ , in this subsection, three clients and one server are used for verification. Two of the clients participate in federated training, and one client uses local data sets for centralized training. Specifically, client 1 uses its training parameters for centralized training, and clients 2 and 3 perform federated training. Taking the small data set MUTAG as the test sample and Accuracy as the test index, the tests are carried out in the cases of balance-no-overlap and unbalance-no-overlap respectively, as shown in Fig. 5.
+
+![Figure 5: Comparison between distributed training and centralized training. The figure contains four line graphs: (a) balance-no-overlap-global, (b) balance-no-overlap-private, (c) unbalance-no-overlap-global, and (d) unbalance-no-overlap-private. Each graph plots Accuracy (y-axis, 0.60 to 0.85) against Communication Rounds (x-axis, 0 to 30). Three clients are shown: Client1 (blue line with circles), Client2 (red line with diamonds), and Client3 (yellow line with triangles). In all cases, Client2 and Client3 show high and stable accuracy, while Client1's accuracy is lower and more volatile, especially in the unbalance-no-overlap cases.](891ff9b651838b7f59e9a1612a739e15_img.jpg)
+
+Figure 5: Comparison between distributed training and centralized training. The figure contains four line graphs: (a) balance-no-overlap-global, (b) balance-no-overlap-private, (c) unbalance-no-overlap-global, and (d) unbalance-no-overlap-private. Each graph plots Accuracy (y-axis, 0.60 to 0.85) against Communication Rounds (x-axis, 0 to 30). Three clients are shown: Client1 (blue line with circles), Client2 (red line with diamonds), and Client3 (yellow line with triangles). In all cases, Client2 and Client3 show high and stable accuracy, while Client1's accuracy is lower and more volatile, especially in the unbalance-no-overlap cases.
+
+Figure 5: Comparison between distributed training and centralized training.
+
+In Fig. 5, (a) and (b) are the training results of the three clients on the overall data and the rest of the private data in the case of balance-no-overlap, and (c) and (d) is in the case of unbalance-no-overlap, the training results of the three clients on the overall data and the rest of the private data. Through (a) and (c), it can be concluded that in the process of overall data training, because the client participating in the training can use the server to obtain the training parameters of the other clients, it can obtain good training in the whole training process effect. However, client 1 can only use its training parameters to train the overall data. Although it can learn some parameters through its continuous iteration, the final training result is also poor. Similarly, there will be similar training
+
+{9}------------------------------------------------
+
+results on other private datasets. This shows that  $FGL_{AC}$  can not only bring better training accuracy than the traditional federated graph learning framework but also shows that  $FGL_{AC}$  also has certain advantages for centralized model training.
+
+## 5 CONCLUSION
+
+In this article, a federated graph learning framework with attention mechanism and clustering algorithm is investigated, and its effectiveness is demonstrated through extensive experiments. In order to realize the framework, this paper first of all is to uses the spectral clustering algorithm to carry out a preprocessing operation on the local data held by the client before the client training, and at the same time, in the aggregation process of the server, the use of the attention method to designate different aggregation weights to various clients, to improve the training effect of the overall model. In order to better verify  $FGL_{AC}$ , this paper also divides the data set used for testing into four situations, making it closer to the situation in the real world. The experimental findings demonstrate that  $FGL_{AC}$  will have a good improvement effect to a certain extent.
+
+## REFERENCES
+
+- Waqar Ahmad, Hilal Tayara, and Kil To Chong. Attention-based graph neural network for molecular solubility prediction. *ACS omega*, 8(3):3236–3244, 2023.
+- Usman Ahmed, Jerry Chun-Wei Lin, and Gautam Srivastava. Social media multiaspect detection by using unsupervised deep active attention. *IEEE transactions on computational social systems*, 10(4):2137–2145, 2022.
+- Jinyin Chen, Haiyang Xiong, Haibin Zheng, Dunjie Zhang, Jian Zhang, Mingwei Jia, and Yi Liu. Ege2: Enhanced graph classification with easy graph compression. *Information Sciences*, 629:376–397, 2023.
+- Gong Cheng, Pujian Lai, Decheng Gao, and Junwei Han. Class attention network for image recognition. *Science China Information Sciences*, 66(3):132105, 2023.
+- Yutao Cui, Cheng Jiang, Limin Wang, and Gangshan Wu. Mixformer: End-to-end tracking with iterative mixed attention. In *Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition*, pp. 13608–13618, 2022.
+- Yao Ding, Zhili Zhang, Xiaofeng Zhao, Danfeng Hong, Wei Cai, Nengjun Yang, and Bei Wang. Multi-scale receptive fields: Graph attention neural network for hyperspectral image classification. *Expert Systems with Applications*, 223:119858, 2023.
+- Sally El Hajjar, Fadi Dornaika, and Fahed Abdallah. One-step multi-view spectral clustering with cluster label correlation graph. *Information Sciences*, 592:97–111, 2022.
+- Shenghang Fan, Guanjun Liu, and Jian Li. A heterogeneous graph neural network with attribute enhancement and structure-aware attention. *IEEE Transactions on Computational Social Systems*, 11(1):829–838, 2023.
+- Dongqi Fu, Wenxuan Bao, Ross Maciejewski, Hanghang Tong, and Jingrui He. Privacy-preserving graph machine learning from data to computation: A survey. *ACM SIGKDD Explorations Newsletter*, 25(1):54–72, 2023.
+- Xingbo Fu, Binchi Zhang, Yushun Dong, Chen Chen, and Jundong Li. Federated graph machine learning: A survey of concepts, techniques, and applications. *SIGKDD Explor. Newsl.*, 24(2):32–47, dec 2022. ISSN 1931-0145. doi: 10.1145/3575637.3575644. URL <https://doi.org/10.1145/3575637.3575644>.
+- Ashutosh Ghimire, Ahmad Nasser Asiri, Brian Hildebrand, and Fathi Amsaad. Implementation of secure and privacy-aware ai hardware using distributed federated learning. In *2023 IEEE 16th Dallas Circuits and Systems Conference (DCAS)*, pp. 1–6. IEEE, 2023.
+
+ Rest of paper (reference and Appendix) is removed.

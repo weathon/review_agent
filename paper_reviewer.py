@@ -60,24 +60,25 @@ base_model = "qwen/qwen3.5-flash-02-23"
 # MODEL_FIND_HUMAN = "openai_agent:minimax-m2.7"
 # MODEL_SCORER = "openai_agent:gpt-5.4"
 
+# MODEL_HARSH = f"ollama:glm-5.1:cloud" 
 MODEL_HARSH = f"gpt-5.4" 
-MODEL_NEUTRAL = f"ollama:qwen3.5:397b-cloud" 
-MODEL_SPARK = f"ollama:qwen3.5:397b-cloud" 
+MODEL_NEUTRAL = f"ollama:glm-5.1:cloud" 
+MODEL_SPARK = f"ollama:glm-5.1:cloud" 
 MODEL_RELATED_WORK = f"{base_model}:online" 
 MODEL_FILTER = f"{base_model}"
 # MODEL_MERGER = f"zai:glm-5.1" #用zai coding plan白嫖
 MODEL_MERGER = "gpt-5.4"
 MODEL_PARSER = "openai/gpt-5.4-nano" 
-MODEL_FIND_HUMAN = "openai_agent:minimax-m2.7"
+MODEL_FIND_HUMAN = "openai_agent:gpt-5.4-mini"
 MODEL_SCORER = "openai_agent:gpt-5.4"
+MODEL_QA = "minimax-m2.7"
 
 human_review_dir = "/home/wg25r/review_agent/iclr2026_balanced"
 # human_review_dir = "/home/wg25r/review_agent/iclr2025_data"
-MODEL_QA = "minimax-m2.7"
 
 MAX_RETRIES = 10
 RETRY_DELAY = 10 
-REQUEST_TIMEOUT = 120
+REQUEST_TIMEOUT = 240 
 DEFAULT_CALIBRATION_PATH = Path(__file__).parent / "calibration.md"
 
 # ── Error logging ────────────────────────────────────────────────────
@@ -254,14 +255,11 @@ def _extract_cost(response) -> float:
     """Extract cost from OpenRouter response usage object."""
     usage = getattr(response, "usage", None)
     if usage is None:
-        raise ValueError("Response has no usage object — cannot extract cost")
+        return 0
     cost = getattr(usage, "cost", None)
     if cost is not None:
         return float(cost)
-    if isinstance(usage, dict) and "cost" in usage:
-        return float(usage["cost"])
-    raise ValueError(f"Usage object has no cost field: {usage}")
-
+    return 0
 
 async def _call_openai(
     client: AsyncOpenAI,
@@ -1110,8 +1108,14 @@ async def run_pipeline(
     # ── Phase 1: All reviewers (parallel or sequential) ───────────
     total_cost = 0.0
     if parallel:
+        if MODEL_HARSH.startswith("ollama:"):
+            c = ollama_client
+            model_harsh = MODEL_HARSH.replace("ollama:", "")
+        else:
+            c = client
+            model_harsh = MODEL_HARSH
         tasks = [
-            run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue=venue),
+            run_reviewer(c, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, model_harsh, venue=venue),
         ]
         if not skip_neutral:
             if MODEL_NEUTRAL.startswith("ollama:"):

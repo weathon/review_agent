@@ -57,7 +57,7 @@ def grep_files_text(
                         matches.append(f"{file_path}:{line_number}: {line.rstrip()}")
         except Exception:
             continue
-        if len(matches) >= 200:
+        if len(matches) >= 50:
             break
     if not matches:
         return "No matches found."

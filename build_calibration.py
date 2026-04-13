@@ -33,7 +33,7 @@ from run_iclr_bench import load_ground_truth, DEFAULT_BENCH_DIR
 
 BORDERLINE_BINS = {4, 5, 6}  # bins where accept/reject is hardest to distinguish
 GARBAGE_BINS = {0, 1, 2}
-CONCURRENCY = 10
+CONCURRENCY = 3
 
 
 def get_count(k):
