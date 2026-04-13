@@ -1,0 +1,250 @@
+
+
+{0}------------------------------------------------
+
+# A VARIATIONAL APPROACH FOR GENERATIVE SPEECH LANGUAGE MODELING
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+The success of large language models in text processing has inspired their adaptation to speech modeling. However, because speech is continuous and complex, it is often discretized into tokens derived from self-supervised speech models. These speech tokens typically focus on the linguistic aspects of speech and neglect its paralinguistic content. As a result, autoregressive models trained on these tokens may generate speech with suboptimal naturalness. Previous methods attempted to address this limitation by adding pitch features to speech tokens prior to autoregressive modeling. However, pitch alone cannot fully represent the range of paralinguistic attributes, and selecting the right features requires careful hand-engineering. To tackle this issue, we propose a variational approach that automatically learns to encode these continuous speech attributes to enhance the speech tokens. Our proposed approach eliminates the need for manual paralinguistic feature selection and extraction. Moreover, we demonstrate that our proposed approach maintains or improves speech language modeling performance and enhances the naturalness of generated speech compared to baseline approaches.
+
+## 1 INTRODUCTION
+
+Large language models (LLMs) have achieved tremendous success in text processing OpenAI (2024), offering new ways to interact with machines. This progress has motivated efforts to extend their capabilities to speech to enable more natural spoken interactions with machines. However, modeling speech presents unique challenges due to its continuous and complex nature. As a result, previous works (Lakhotia et al., 2021; Borsos et al., 2023; Maiti et al., 2024) tokenized speech into simpler discrete units to enable the application of language modeling techniques originally developed for text. However, these *speech tokens* are typically derived by performing *k*-means clustering on features extracted from self-supervised pre-trained speech models, such as HuBERT (Hsu et al., 2021). These models primarily capture the linguistic aspects of speech, such as phonetic information, while often overlooking paralinguistic features, such as prosody (Weston et al., 2021). As a result, training an autoregressive model solely with such speech tokens restricts the model’s ability to fully capture and represent the diverse information encoded in speech.
+
+To address this limitation, Kharitonov et al. (2022) augmented the tokens with extracted fundamental frequency ( $F_0$ , or pitch) to enable prosody-aware modeling. However, augmenting speech tokens with manually defined paralinguistic attributes can be inherently suboptimal. First, pitch alone cannot capture the full range of paralinguistic information encoded in speech. For instance, energy-related (e.g., loudness, zero-crossing-rate) and spectral-related (e.g., mel-frequency cepstral coefficients) features are also important paralinguistic features (Schuller et al., 2009; 2013; Eyben et al., 2015). Additionally, training an accurate pitch tracker introduces additional complexity (Kim et al., 2018).
+
+Instead of relying on hand-engineered paralinguistic features, we propose an approach to learning these features directly from the input signal, within an autoregressive framework. These learned features are optimized to simultaneously: 1) reconstruct the input speech and 2) enhance the autoregressive modeling process. Our approach allows the learned features to complement discrete speech tokens, removing the need for pre-extracted paralinguistic features as required in previous methods. As a result, our method generates more natural-sounding speech compared to baseline models, without sacrificing the meaningfulness of the syntheses.
+
+{1}------------------------------------------------
+
+## 2 PRELIMINARIES
+
+In this work, we work on mel-spectrogram, and consider vocoding, the act of turning mel-spectrogram back to raw waveform, as a problem that has already been addressed. We denote the mel-spectrogram as  $\mathbf{X} = (x_t \in \mathbb{R}^{d_x})_{t=1}^T$ , where  $d_x$  represents the number of filter-banks,  $T$  is the total number of time frames in the spectrogram, and  $x_t$  is the frame at time  $t$ . We use  $\mathbf{X}_{i:j}$  to denote the sub-sequence  $(x_t)_{t=i}^j$ , and define  $\mathbf{X}_{1:0} = \emptyset$ . Our goal is to model  $p(\mathbf{X})$  using a generative approach.
+
+**Token-based Speech Language Model** We describe the general framework of speech language models that rely on the use of speech tokens, as seen in works like Lakhotia et al. (2021); Borosov et al. (2023); Maiti et al. (2024). This approach consists of three components: a speech tokenizer, an autoregressive model, and a decoder. The speech tokenizer maps  $\mathbf{X}^1$  to a sequence of discrete speech tokens  $\mathbf{Z}^d = (z_t^d \in \mathbb{N}_k)_{t=1}^T$ , where  $\mathbb{N}_k = \{1, 2, \dots, k\}$ , and  $k$  is the vocabulary size of the speech tokens. We use  $p(\mathbf{Z}^d | \mathbf{X})$  to denote the implicit distribution of the pre-trained speech tokenizer. The autoregressive model, parameterized by  $\psi$ , models the probability of token sequences  $\mathbf{Z}^d$  as  $p_\psi(\mathbf{Z}^d) = \prod_{t=1}^T p_\psi(z_t^d | \mathbf{Z}_{1:t-1}^d)$ . Finally, the decoder, parameterized by  $\theta$ , is trained to convert  $\mathbf{Z}^d$  back to  $\mathbf{X}$  by modeling  $p_\theta(\mathbf{X} | \mathbf{Z}^d)$ . However, this framework is limited to the speech tokens  $\mathbf{Z}^d$ , which primarily capture linguistic information and ignores paralinguistic information. As a result, the decoder  $\theta$  may struggle with accurate reconstruction, and the autoregressive model  $\psi$  can have difficulty incorporating paralinguistic information. To address this limitation, we propose to incorporate the variational autoencoder framework to learn continuous features to complement  $\mathbf{Z}^d$ .
+
+**Variational Autoencoder (VAE)** Latent variable models introduce unobserved latent variables  $\mathbf{Z}^c = (z_t^c \in \mathbb{R}^{d_c^c})_{t=1}^T$  that influence the observed variable  $\mathbf{X}$ .  $d_c^c$  is the dimension of each  $z_t^c$ , and is a hyper-parameter chosen prior to training. In a VAE, the likelihood of the observed data given the latent variable,  $p_\theta(\mathbf{X} | \mathbf{Z}^c)$ , is modeled by a neural decoder, parameterized by  $\theta$ . The variational posterior,  $q_\phi(\mathbf{Z}^c | \mathbf{X})$ , is modeled by a neural encoder, parameterized by  $\phi$ . Using this modeling setup, the log-likelihood of the data,  $\log p_\theta(\mathbf{X})$ , can be written as:
+
+$$\underbrace{\mathbb{E}_{\mathbf{Z}^c \sim q_\phi(\mathbf{Z}^c | \mathbf{X})} [\log p_\theta(\mathbf{X} | \mathbf{Z}^c)]}_{\mathcal{O}_{ELBO}} - D_{KL}(q_\phi(\mathbf{Z}^c | \mathbf{X}) || p(\mathbf{Z}^c)) + D_{KL}(q_\phi(\mathbf{Z}^c | \mathbf{X}) || p_\theta(\mathbf{Z}^c | \mathbf{X})), \quad (1)$$
+
+where  $D_{KL}$  is the Kullback–Leibler (KL) divergence between two distributions, and  $p(\mathbf{Z}^c)$  is a fixed prior distribution (usually a Gaussian). In Equation 1,  $\mathcal{O}_{ELBO}$  is known as the evidence lower bound (ELBO), which provides a lower bound for  $\log p_\theta(\mathbf{X})$  since  $D_{KL}(q_\phi(\mathbf{Z}^c | \mathbf{X}) || p_\theta(\mathbf{Z}^c | \mathbf{X}))$  is always non-negative. Therefore, instead of maximizing  $\mathbb{E}_{\mathbf{X}} [\log p_\theta(\mathbf{X})]$  directly, the VAE maximizes the tractable lower bound  $\mathbb{E}_{\mathbf{X}} [\mathcal{O}_{ELBO}]$ . Here, we refer to the learned continuous latent  $\mathbf{Z}^c$  from the VAE as the *variational features*.
+
+## 3 PROPOSED FRAMEWORK
+
+Figure 1 provides an overview of our proposed framework. This section is organized as follows: Section 3.1 introduces our setup that combines a VAE with an autoregressive model for the latent variables. Section 3.2 describes how we integrate speech tokens into the framework. Section 3.3 discusses how to balance the different loss terms that arise in our setup. Section 3.4 describes the use of normalizing flows to improve the expressive power of the autoregressive prior. Finally, Section 3.5 introduces the diffusion decoder and the utterance encoder used in the framework.
+
+### 3.1 VARIATIONAL AUTOENCODER WITH AUTOREGRESSIVE PRIOR
+
+Our method starts by modeling the prior of the VAE with a trainable autoregressive model  $p_\psi(\mathbf{Z}^c) = \prod_{t=1}^T p_\psi(z_t^c | \mathbf{Z}_{1:t-1}^c)$ . The concept of a VAE with a parameterized autoregressive prior has been explored in previous works (Vahdat & Kautz, 2020; Zhu et al., 2020) within the vision domain. Our work adopts this to speech continuation and further integrates discrete token-based models to enhance
+
+<sup>1</sup>Speech tokenizers can operate on mel-spectrograms or directly on raw waveforms.
+
+{2}------------------------------------------------
+
+![Figure 1: Overview of the proposed approach. The diagram is split into two horizontal regions. The top region, 'VAE with Autoregressive Prior', shows an input 'X Speech' being processed by an 'Encoder phi' to produce 'Variational Features Z^c'. These features are then processed by an 'Autoregressive Model psi' to produce 'z_t^c', which are then passed to a 'Decoder theta' to reconstruct the speech. The reconstruction loss is labeled O_rec. The bottom region, 'Token-based Speech Language Model', shows the same input 'X Speech' being processed by a 'Speech Tokenizer (Not trainable)' to produce 'Speech Tokens Z^d'. These tokens are processed by the 'Autoregressive Model psi' to produce 'z_t^d', which are then passed to the 'Decoder theta'. The model also uses past generations of features (Z_{1:t-1}^c) and tokens (Z_{1:t-1}^d) to predict the current ones.](1b7d539e02a202c2cf2d97698b911447_img.jpg)
+
+Figure 1: Overview of the proposed approach. The diagram is split into two horizontal regions. The top region, 'VAE with Autoregressive Prior', shows an input 'X Speech' being processed by an 'Encoder phi' to produce 'Variational Features Z^c'. These features are then processed by an 'Autoregressive Model psi' to produce 'z\_t^c', which are then passed to a 'Decoder theta' to reconstruct the speech. The reconstruction loss is labeled O\_rec. The bottom region, 'Token-based Speech Language Model', shows the same input 'X Speech' being processed by a 'Speech Tokenizer (Not trainable)' to produce 'Speech Tokens Z^d'. These tokens are processed by the 'Autoregressive Model psi' to produce 'z\_t^d', which are then passed to the 'Decoder theta'. The model also uses past generations of features (Z\_{1:t-1}^c) and tokens (Z\_{1:t-1}^d) to predict the current ones.
+
+Figure 1: Overview of our proposed approach. Our method integrates the token-based speech language model (outlined in Section 2, represented by the lower shaded region) with a variational autoencoder (VAE with autoregressive prior, shown in the upper shaded region). This setup allows the model to learn variational features  $\mathbf{Z}^c$  that complement the pre-extracted discrete speech token  $\mathbf{Z}^d$ . In our proposed joint setup, the variational features  $\mathbf{Z}^c$  are trained to 1) reconstruct speech  $\mathbf{X}$  alongside  $\mathbf{Z}^d$  (by maximizing  $\mathcal{O}_{rec}$ ); 2) facilitate the prediction of the next speech token  $z_t^d$  (by minimizing  $\mathcal{L}_{kl}^d$ ); 3) support the sequential prediction of the variational features themselves (by minimizing  $\mathcal{L}_{kl}^c$ ).
+
+**synthesis naturalness.** We use a diagonal Gaussian distribution to model the variational posterior, where the statistics are predicted by a neural network:
+
+$$q_\phi(z_t^c | \mathbf{X}) = \mathcal{N}(z_t^c, \mu_\phi(\mathbf{X}, t), \sigma_\phi(\mathbf{X}, t)). \quad (2)$$
+
+Since each  $z_t^c$  is conditionally independent given  $\mathbf{X}$ , we can express the posterior as:  $q_\phi(\mathbf{Z}^c | \mathbf{X}) = \prod_{t=1}^T q_\phi(z_t^c | \mathbf{X})$ . With this decomposition, and the parameterized autoregressive prior, the  $\mathcal{O}_{ELBO}$  in Equation 1 can be further derived<sup>2</sup> into:
+
+$$\mathcal{O}_{ELBO} = \underbrace{\mathbb{E}_{\mathbf{Z}^c \sim q_\phi(\mathbf{Z}^c | \mathbf{X})} [\log p_\theta(\mathbf{X} | \mathbf{Z}^c)]}_{\mathcal{O}_{rec}} - \underbrace{\sum_{t=1}^T \mathbb{E}_{\mathbf{Z}_{1:t-1}^c} [D_{KL}(q_\phi(z_t^c | \mathbf{X}) || p_\psi(z_t^c | \mathbf{Z}_{1:t-1}^c))]}_{\mathcal{L}_{kl}^c}. \quad (3)$$
+
+By maximizing  $\mathcal{O}_{ELBO}$ , we maximize the first term, the reconstruction objective  $\mathcal{O}_{rec}$ , and minimize the second term, the variational feature prediction loss  $\mathcal{L}_{kl}^c$ . We note that training a model to maximize Equation 3 is feasible without incorporating discrete speech tokens  $\mathbf{Z}^d$ . This token-free approach is also depicted as the upper shaded region in Figure 1 (VAE with Autoregressive Prior), and its properties are explored in Section 5.
+
+### 3.2 INCORPORATING THE SPEECH TOKENS
+
+With the VAE with autoregressive prior in place, we now integrate speech tokens  $\mathbf{Z}^d$  into the framework. By using these tokens, the model no longer needs to encode as much phonetic information in  $\mathbf{Z}^c$ , allowing  $\mathbf{Z}^c$  to focus on other continuous speech attributes. To this end, we introduce a joint latent variable  $\mathbf{Z} = (z_t \in \mathbb{R}^{d_c} \times \mathbb{N}_k)_{t=1}^T$ , where  $z_t$  is the concatenation of  $z_t^c$  and  $z_t^d$ . Given that  $\mathbf{Z}^d$  and  $\mathbf{Z}^c$  are conditional independent given  $\mathbf{X}$ , we can express the new variational posterior as:  $q_\phi(\mathbf{Z} | \mathbf{X}) = q_\phi(\mathbf{Z}^c | \mathbf{X})p(\mathbf{Z}^d | \mathbf{X})$ . Then, we model  $p_\psi(z_t | \mathbf{Z}_{1:t-1}) = p_\psi(z_t^d | \mathbf{Z}_{1:t-1}^d)p_\psi(z_t^c | \mathbf{Z}_{1:t-1}^c)$ , assuming conditional independence of  $z_t^d$  and  $z_t^c$  given the past generations. We further discuss this
+
+<sup>2</sup>See Appendix A.1 for detailed derivation.
+
+{3}------------------------------------------------
+
+modeling assumption in Appendix J. This allows us to re-write<sup>3</sup>  $\mathcal{O}_{ELBO}$  from Equation 1 as:
+
+$$\mathcal{O}_{ELBO} = \underbrace{\mathbb{E}_{\mathbf{Z}^d \sim p(\mathbf{Z}^d | \mathbf{X}), \mathbf{Z}^c \sim q_\phi(\mathbf{Z}^c | \mathbf{X})}[\log p_\theta(\mathbf{X} | \mathbf{Z}^d, \mathbf{Z}^c)]}_{\mathcal{O}_{rec}} - \underbrace{\sum_{t=1}^T \mathbb{E}_{\mathbf{Z}_{1:t-1}}[D_{KL}(q_\phi(z_t^c | \mathbf{X}) || p_\psi(z_t^c | \mathbf{Z}_{1:t-1}))]}_{\mathcal{L}_{kl}^c} - \underbrace{\sum_{t=1}^T \mathbb{E}_{\mathbf{Z}_{1:t}}[-\log p_\psi(z_t^d | \mathbf{Z}_{1:t-1})]}_{\mathcal{L}_{kl}^d}. \quad (4)$$
+
+From Equation 4, our training objective  $\mathcal{O}_{ELBO}$  consists of three terms:  $\mathcal{O}_{rec}$ ,  $\mathcal{L}_{kl}^c$ , and  $\mathcal{L}_{kl}^d$ .  $\mathcal{O}_{rec}$  is the *reconstruction objective*. Maximizing  $\mathcal{O}_{rec}$  trains the decoder  $\theta$  to reconstruct  $\mathbf{X}$  from both  $\mathbf{Z}^c$  and  $\mathbf{Z}^d$ , while encouraging the encoder  $\phi$  to generate  $\mathbf{Z}^c$  with helpful information to reconstruct  $\mathbf{X}$ .  $\mathcal{L}_{kl}^c$  is the *variational feature prediction loss*. Minimizing  $\mathcal{L}_{kl}^c$  trains the autoregressive model  $\psi$  to predict the next variational feature  $z_t^c$  and encourages the encoder  $\phi$  to generate  $\mathbf{Z}^c$  that is easier for  $\psi$  to model.  $\mathcal{L}_{kl}^d$  is the *speech token prediction loss*, which trains the autoregressive model  $\psi$  to predict the next speech token given the previous  $\mathbf{Z}^d$  and  $\mathbf{Z}^c$ .
+
+### 3.3 BALANCING THE LOSS TERMS
+
+In Equation 4, the terms  $\mathcal{O}_{rec}$ ,  $\mathcal{L}_{kl}^c$ , and  $\mathcal{L}_{kl}^d$  can work against each other. For instance, the encoder  $\phi$  optimizes both  $\mathcal{O}_{rec}$  and  $\mathcal{L}_{kl}^c$ . Maximizing  $\mathcal{O}_{rec}$  encourages the variational features  $\mathbf{Z}^c$  to encode more information about  $\mathbf{X}$ , while minimizing  $\mathcal{L}_{kl}^c$  regularize  $\mathbf{Z}^c$  to be simpler for the autoregressive model  $\psi$  to predict. Similarly, optimizing  $\mathcal{L}_{kl}^c$  and  $\mathcal{L}_{kl}^d$  with the autoregressive model  $\psi$  a multi-task learning scenario, where  $\psi$  learns to predict two different objectives given the same input. Moreover, these terms may operate on different scales due to how the losses are computed, necessitating a balancing mechanism. As a result, inspired by Higgins et al. (2017), we introduce two scalars,  $\beta$  and  $\gamma$ , to balance the loss terms as follows:
+
+$$\mathcal{O}_{ELBO} = \mathcal{O}_{rec} - \beta \cdot \mathcal{L}_{kl}^c - \gamma \cdot \mathcal{L}_{kl}^d. \quad (5)$$
+
+Here,  $\beta$  functions similarly to the parameter used in  $\beta$ -VAE (Higgins et al., 2017). A larger  $\beta$  favors a simple  $p(\mathbf{Z}^c)$ , while a smaller  $\beta$  encourages the variational features  $\mathbf{Z}^c$  to encode more information about  $\mathbf{X}$ . Larger  $\gamma$  encourages the autoregressive model  $\psi$  to prioritize accurate predictions of  $\mathbf{Z}^d$  over  $\mathbf{Z}^c$ . In practice, we employ a linear warm-up strategy for  $\beta$ , increasing it from zero to its final value during the early stages of training. This approach, inspired by prior works on text generation (Bowman et al., 2016; Fu et al., 2019), helps mitigate posterior collapse. Empirically, we find that this strategy allows for higher values of  $\beta$  without causing  $\mathcal{L}_{kl}^c$  to collapse to zero.
+
+### 3.4 TIME-WISE NORMALIZING FLOW
+
+We employ a lightweight normalizing flow Rezende & Mohamed (2015) that is shared across time to improve the expressive power of the autoregressive prior  $p_\psi(z_t^c | \mathbf{Z}_{1:t-1})$ . Specifically, an invertible flow network  $f_\psi$  maps each  $z_t$  to a point in the Gaussian distribution, and sampling can be realized by running the network in reverse. By using the change of variables, we can write:
+
+$$p_\psi(z_t^c | \mathbf{Z}_{1:t-1}) = \mathcal{N}(f_\psi(z_t^c), \mu_\psi(\mathbf{Z}_{1:t-1}), \sigma_\psi(\mathbf{Z}_{1:t-1})) \left| \det \frac{\partial f_\psi(z_t^c)}{\partial z_t^c} \right|, \quad (6)$$
+
+where  $\mu_\psi, \sigma_\psi$  are modeled by autoregressive neural networks (i.e., transformer). We choose affine coupling layers Dinh et al. (2017) as the backbone of our normalizing flow due to their simple implementation and efficient computation. We note that similar approaches using normalizing flows to enhance prior distributions have also been observed in Kim et al. (2021; 2020) for text-to-speech.
+
+### 3.5 OTHER COMPONENTS
+
+We describe the modeling of the our decoder  $p_\theta(\mathbf{X} | \mathbf{Z})$  and the utterance encoder designed to capture static information. While these components are not the main focus of our study, they help ensure a fair comparison between different methods. We use these components for all methods in our experiments and focus on how changing the inputs to the autoregressive model affects performance.
+
+<sup>3</sup>See Appendix A.2 for detailed derivation.
+
+{4}------------------------------------------------
+
+**Diffusion Decoder** We model the decoder  $p_\theta(\mathbf{X} | \mathbf{Z})$  with Denoising Diffusion Probabilistic Model (DDPM) (Ho et al., 2020). We choose DDPM due to its flexibility in modeling complex distributions. We condition the diffusion process on  $\mathbf{Z}$ . For back-propagation through the encoder  $\phi$ , we use the reparameterization trick (Kingma & Welling, 2019) to sample from  $q_\phi(\mathbf{Z}^c | \mathbf{X})$ , and combine it with embedded speech tokens  $\mathbf{Z}^d$ . The outcome is then concatenated with each intermediate layer of the diffusion decoder for conditional diffusion. We train all diffusion decoders with 1000 DDPM steps.
+
+**Utterance Encoder** Static features, such as speaker information and recording environments, often vary little across a given utterance. In our current modeling approach, this static information would be redundantly encoded at each time step. To address this issue, we introduce an additional utterance-level feature encoder that encourages  $\mathbf{Z}$  to focus on time-varying signals. Specifically, we randomly segment a portion of the mel-spectrogram  $\mathbf{X}$  and feed it to the utterance encoder to produce an utterance-level embedding. This embedding is then concatenated with  $\mathbf{Z}$  before being provided to the diffusion decoder. The utterance encoder is trained end-to-end with the entire system.
+
+## 4 EXPERIMENTAL SETUP
+
+### 4.1 DATASETS
+
+We use two datasets in our experiments: LibriSpeech (Panayotov et al., 2015) and Libri-light (Kahn et al., 2020), consisting of audiobooks narrated in English. LibriSpeech contains 960 hours of speech, while Libri-light contains 60k hours of speech. For speech token extraction, we follow Hassid et al. (2023); Maiti et al. (2024) and use tokens derived from HuBERT representations (Hsu et al., 2021). We use the official HuBERT checkpoints, pre-trained on LibriSpeech<sup>4</sup> and Libri-light<sup>5</sup>. We run  $k$ -means clustering with  $k = 200$  on the output of the last transformer layer of HuBERT using 10% of data randomly sampled from the training set. We pick  $k = 200$  after testing values from  $\{50, 200, 1000\}$  and choosing the one that produced the best language modeling performance. The result is also consistent with Maiti et al. (2024). More details on the choice of  $k$  are provided in Appendix F.
+
+### 4.2 METHODS
+
+We compare our proposed approach to methods that use only speech tokens in the autoregressive model, as well as methods that use speech tokens with added pitch features in the autoregressive model. To ensure a fair comparison, we fix the autoregressive model architecture to be the same for all methods, varying only the input and output layers. We also use the same configuration for the diffusion decoder and utterance encoder across all methods. For the neural vocoder (i.e., mapping the mel-spectrogram back to waveform), we train HiFi-GAN (Kong et al., 2020) on LibriSpeech and use it for all of the methods. We leave the detailed configuration of model architectures in Appendix B. Below, we provide further details on the three approaches.
+
+**Token-LM** We adopt the token-based speech language model (described in Section 2) as our baseline, representing approaches such as Lakhotia et al. (2021); Borsos et al. (2023); Maiti et al. (2024), which apply only discrete speech tokens to the autoregressive model.
+
+**Token-LM + Pitch** In this baseline approach, we augment the speech tokens of token-based speech language model (described in Section 2) with log pitch features before passing them into the autoregressive model. The pitch features are extracted using CREPE (Kim et al., 2018). Additionally, we introduce a pitch regression task alongside the standard next-token prediction task, optimizing it with L1 loss. This method incorporates hand-engineered paralinguistic features, similar to the approach used by Kharitonov et al. (2022).
+
+**Variational speech modeling approach (Proposed)** This is our proposed approach introduced in Section 3. In this approach, we learn to extract variational features that supplement the speech tokens while jointly training the autoregressive model. The learned variational features are used by both
+
+<sup>4</sup><https://huggingface.co/facebook/hubert-base-ls960>
+
+<sup>5</sup><https://huggingface.co/facebook/hubert-large-lf60k>
+
+{5}------------------------------------------------
+
+the autoregressive model and the decoder. This approach removes the need for a hand-engineered paralinguistic feature selection and extraction. Additionally, we set our latent dimension  $d_z^c = 4$ . While we observed performance improvements with larger  $d_z^c$ , we opted for a smaller value to ensure a fairer comparison, as it results in less variation in parameter size. Our additional experiments on the latent dimension  $d_z^c$  is in Appendix E.
+
+For inference, we use temperature-based sampling similar to Lakhotia et al. (2021). Specifically, we set the temperature to 0.85 for both speech tokens  $Z^d$  and continuous variational features  $Z^c$ . For variational features, the temperature is the scalar multiplied to the standard deviation of the normal distribution in Equation 6 before sampling, as done in Kim et al. (2020). For the diffusion decoder, we use denoising diffusion implicit models (DDIM) from Song et al. (2021) with  $\eta = 0.5$  and 100 diffusion steps. Training details are provided in Appendix C.
+
+### 4.3 EVALUATION METRICS
+
+We evaluate the comparison methods on both reconstruction and speech continuation. The reconstruction metrics, introduced in Section 4.3.1, involve only the encoder-decoder pair and indicate how much information is preserved in the extracted representations. The remaining metrics focus on speech continuation, which is our primary objective, where the performance of the autoregressive model is also assessed.
+
+#### 4.3.1 OBJECTIVE METRICS
+
+**Reconstruction Metrics** We use  $F_0$ -RMSE, mel-cepstral distortion (MCD), and character error rate (CER) to measure the quality of the reconstructed signal.  $F_0$ -RMSE measures the root mean squared difference between the pitch contour of the ground-truth signal and the reconstructed one. We use CREPE Kim et al. (2018) to extract pitch and only consider the voiced parts of the signal when computing the difference. MCD measures the Euclidean distance between the 23 mel-cepstral coefficients (MCEPs) extracted from the ground-truth and reconstructed signals. For calculating CER, we use a pre-trained Whisper Radford et al. (2022) automatic speech recognition model.<sup>6</sup> We use the `dev-clean` and `dev-other` subsets of LibriSpeech for evaluating reconstruction. To ensure deterministic results, instead of sampling each  $z_i^c$  from  $q_\phi(z_i^c | \mathbf{X})$ , we directly use the Gaussian mean  $\mu_\phi(\mathbf{X}, t)$  from Equation 2. In practice, we observed that the stochastic noise of  $q_\phi(z_i^c | \mathbf{X})$  has little effect on the reconstructed syntheses.
+
+**ZeroSpeech Metrics** We adopt the commonly-used metrics (Borsos et al., 2023; Hassid et al., 2023; Maiti et al., 2024) from the ZeroSpeech challenge (Nguyen et al., 2020): sWUGGY and sBLIMP to measure language capability objectively. For these two metrics, speech utterances are given in positive-negative pairs, with each model scoring both utterances. The model’s accuracy is the percentage of instances where the positive example receives a higher score than the negative one. sWUGGY measures if the model scores a real word higher than a phonetically similar non-word (e.g., “brick” vs. “blick”). sBLIMP measures if a model scores a grammatically correct sentence higher than a similar but incorrect one (e.g., “the dogs sleep” vs. “the dog sleep”). Both metrics use text-to-speech to generate the examples. In line with Borsos et al. (2023), we evaluate sWUGGY using only words existing in LibriSpeech (referred as the “in-vocab” version). We use the test split for evaluation. See Appendix G for detailed description on how we estimate the scores for the methods.
+
+**Perplexity Metric** We use perplexity to evaluate the language modeling capability of our methods. Specifically, perplexity measures the average negative log-likelihood of a test sequence generated by the language model. We use the `dev-clean` and `dev-other` subsets of LibriSpeech for computing perplexity.
+
+#### 4.3.2 SUBJECTIVE METRICS
+
+We use subjective human evaluations to assess the naturalness and meaningfulness of the generated speech. We randomly sampled 100 utterances from the LibriSpeech `dev-clean` and `dev-other` subsets, cropping the first three seconds to use as prompts. Each audio sample was rated by seven
+
+<sup>6</sup><https://huggingface.co/openai/whisper-medium>
+
+{6}------------------------------------------------
+
+Table 1: Results of speech reconstruction evaluation ( $F_0$ -RMSE, MCD, CER) for the models discussed in Section 4.2. The evaluation metrics are detailed in Section 4.3. ‘# Param.’ refers to the number of parameters used during inference. All models were trained on the Libri-light dataset.
+
+| Method | # Param. | $F_0$ -RMSE( $\downarrow$ ) | MCD( $\downarrow$ ) | CER( $\downarrow$ ) |
+|-|-|-|-|-|
+| Ground-truth | <i>n/a</i> | <i>n/a</i> | <i>n/a</i> | 2.35 |
+| <i>Token-LM</i> | 219M | 43.90 | 7.55 | 10.19 |
+| <i>Token-LM + Pitch</i> | 219M | 25.46 | 6.90 | 6.59 |
+| <i>Proposed</i> | 221M | <b>16.56</b> | <b>5.43</b> | <b>4.35</b> |
+
+Table 2: Results of speech continuation evaluation for the models discussed in Section 4.2. The evaluation metrics are detailed in Section 4.3. M-MOS refers to the meaningfulness mean opinion score. N-MOS refers to the naturalness mean opinion score. [Both M-MOS and N-MOS are evaluated on speech continuation](#), which are presented along with 95% confidence intervals. All models were trained on the Libri-light dataset.
+
+| Method | sWUGGY( $\uparrow$ ) | sBLIMP( $\uparrow$ ) | Perplexity( $\downarrow$ ) | M-MOS( $\uparrow$ ) | N-MOS( $\uparrow$ ) |
+|-|-|-|-|-|-|
+| Ground-truth | <i>n/a</i> | <i>n/a</i> | <i>n/a</i> | $3.92 \pm 0.08$ | $3.94 \pm 0.09$ |
+| <i>Token-LM</i> | <b>61.75</b> | <b>58.31</b> | 1.42 | $3.24 \pm 0.09$ | $3.01 \pm 0.10$ |
+| <i>Token-LM + Pitch</i> | 60.75 | 56.92 | 1.40 | $3.17 \pm 0.09$ | $2.92 \pm 0.11$ |
+| <i>Proposed</i> | 60.48 | 56.56 | <b>1.39</b> | <b><math>3.35 \pm 0.09</math></b> | <b><math>3.37 \pm 0.10</math></b> |
+
+annotators. For naturalness, annotators rated how human-like the generated speech sounded on a five-point Likert scale, where one corresponds to ‘‘Very unnatural’’ and five to ‘‘Very natural.’’ For meaningfulness, they rated the grammar and content of the speech on a five-point Likert scale, where one corresponds to ‘‘Very Poor’’ and five to ‘‘Excellent.’’ Additional details on the subjective evaluations are provided in Appendix D.
+
+## 5 EXPERIMENTAL RESULTS
+
+### 5.1 MAIN RESULTS
+
+Tables 1 and 2 present the results for the three methods described in Section 4.2. Table 1 reports both objective and subjective metrics for speech reconstruction, while Table 2 provides the corresponding results for speech language modeling. We discuss our observations below.
+
+**Speech generated by our proposed approach is more natural—both objectively and subjectively—compared to the speech generated from the baselines.** The results in Table 1 show that our proposed approach improves the reconstruction of the original signal, as measured by three objective metrics:  $F_0$ -RMSE, MCD, and CER. These findings highlight three key points: 1) discrete speech tokens alone are insufficient to capture all the components necessary for faithful reconstruction, 2) incorporating only pitch information is not enough, and 3) the learned variational features  $Z^c$  in our approach effectively complement the discrete speech tokens  $Z^d$ , leading to better reconstruction of speech signal. **Furthermore, the subjective results of speech continuation, as measured by naturalness mean opinion score (N-MOS) in Table 2,** show that *the syntheses produced by our proposed approach exhibit higher naturalness compared to baselines.* This finding further substantiates our hypothesis that the variational features  $Z^c$  learned by our approach contributes to improved synthesis. Additionally, Table 1 provides comparison of the number of parameters for each method. The result indicates that the overhead of the proposed method is relatively small ( $< 1\%$  of the total parameters), while still achieving noticeably better performance.
+
+**Speech generated using our proposed approach preserves subjective meaningfulness (as measured by M-MOS) comparable to the baselines, even though it shows a slightly higher likelihood of syntactic or grammatical errors in the objective sWUGGY and sBLIMP scores.** The results
+
+{7}------------------------------------------------
+
+Table 3: Results showing the impact of varying the  $\beta$  parameter (as described in Section 3.3) and the effect of removing discrete tokens from our proposed approach on both language modeling and speech reconstruction performance. The  $\gamma$  parameter (as described in Section 3.3) for the proposed methods is fixed to 0.5. All models were trained on the LibriSpeech dataset.
+
+| Method | $\beta$ | sWUGGY( $\uparrow$ ) | sBLIMP( $\uparrow$ ) | $F_0$ -RMSE( $\downarrow$ ) | MCD( $\downarrow$ ) | CER( $\downarrow$ ) |
+|-|-|-|-|-|-|-|
+| <i>Token-LM</i> | <i>n/a</i> | 67.32 | <b>52.46</b> | 35.41 | 6.23 | 5.40 |
+| <i>Token-LM + Pitch</i> | <i>n/a</i> | 66.49 | 51.65 | 21.08 | 6.05 | 5.08 |
+| <i>Proposed</i> | 0.03 | 65.56 | 51.12 | <b>16.76</b> | <b>5.19</b> | <b>5.06</b> |
+|  | 0.04 | 65.96 | 51.40 | 16.88 | 5.53 | 5.43 |
+|  | 0.05 | 66.46 | 51.77 | 17.20 | 5.75 | 5.45 |
+| <i>Proposed</i> (–tokens) | 0.03 | 67.79 | 51.76 | 16.86 | 5.24 | 10.83 |
+|  | 0.04 | 69.33 | 51.85 | 17.47 | 5.48 | 13.02 |
+|  | 0.05 | <b>71.11</b> | 51.86 | 18.64 | 5.84 | 16.51 |
+
+in Table 2 show that our proposed approach produces comparable or better syntheses, as reflected by its higher meaningfulness mean opinion score (M-MOS), compared to the baselines. This claim is further supported by our method achieving the lowest Perplexity, suggesting that it can better predict the next speech token when the variational features  $Z^c$  are present. However, we also observe that both our approach and *Token-LM + Pitch* result in lower sWUGGY and sBLIMP scores compared to *Token-LM*. We speculate that encoding excessive information might introduce noise, potentially degrading performance on linguistic tasks like sWUGGY and sBLIMP. For example, factors such as speech loudness, which have low correlation with phonetic content, could add variability that negatively impacts likelihood estimation in these tasks. However, it is important to note that while sWUGGY and sBLIMP evaluate the likelihood of generating syntactically and grammatically correct sentences, they don’t necessarily reflect the perceived meaningfulness for human listeners. The results indicate that our approach preserves subjective meaningfulness, even if it has a higher chance of syntactic or grammatical errors according to objective metrics.
+
+### 5.2 ADDITIONAL ANALYSIS
+
+We explore two additional experiments in this section. First, we study the effect of varying the balancing hyper-parameters,  $\beta$  and  $\gamma$  (described in Section 3.3). Second, we evaluate the utility of speech tokens in our proposed approach by training a model that uses only variational features  $Z^c$ . This removal corresponds to training with Equation 3 instead of training with Equation 4. The results from these additional experiments are presented in Tables 3 and 4, and we discuss our observations below.
+
+**Varying  $\beta$**  Table 3 shows that, for reconstruction metrics ( $F_0$ -RMSE, MCD, CER), lower values of  $\beta$  result in smaller errors, indicating better reconstruction. However, for the sWUGGY and sBLIMP metrics, performance decreases as  $\beta$  increases. This finding aligns with our discussion in Section 3.3, where we discussed how lower  $\beta$  values encourage better reconstruction, but make it harder for the autoregressive model to effectively model  $Z^c$ .
+
+**Removing the discrete speech tokens** Table 3 shows the impact of removing the discrete speech tokens from our proposed approach. We find that excluding speech tokens leads to a slight improvement in the sWUGGY metric compared to including them. However, this exclusion significantly worsens the CER, indicating poorer phonetic reconstruction. These results suggest that without discrete speech tokens, our approach struggles to effectively encode abstract phonetic information in the variational features ( $Z^c$ ) but still performs well on sWUGGY, possibly by leveraging other cues. One possible explanation is that the synthesized non-existent words in sWUGGY, being out-of-domain for the text-to-speech system, may exhibit subtle prosodic irregularities that our model is able to detect. On the other hand, the best reconstruction results are obtained when speech tokens are included, as removing them leads to worse reconstruction metrics. Finally, we observe that varying the  $\beta$  parameter produces similar performance trends regardless of whether speech tokens are used.
+
+{8}------------------------------------------------
+
+Table 4: Results showing the impact of varying the  $\gamma$  parameter (as described in Section 3.3) in our proposed approach on both language modeling and speech reconstruction performance. The  $\beta$  parameter (as described in Section 3.3) is fixed to 0.04. M-MOS denotes the meaningfulness mean opinion score, and N-MOS denotes the naturalness mean opinion score, both presented with 95% confidence intervals. All models were trained on the *Libri-light* dataset. Due to space constraints, sBLIMP and MCD results are presented in Appendix H. sBLIMP shows a similar trend to sWUGGY, while MCD mirrors the trend observed in CER.
+
+| $\gamma$ | sWUGGY( $\uparrow$ ) | Perplexity( $\downarrow$ ) | $F_0$ -RMSE( $\downarrow$ ) | CER( $\downarrow$ ) | M-MOS( $\uparrow$ ) | N-MOS( $\uparrow$ ) |
+|-|-|-|-|-|-|-|
+| 0.5 | <b>60.48</b> | 1.39 | <b>16.56</b> | 4.35 | <b><math>3.35 \pm 0.09</math></b> | <b><math>3.37 \pm 0.10</math></b> |
+| 1.0 | 59.41 | 1.34 | 17.06 | 4.05 | $3.13 \pm 0.09$ | $3.27 \pm 0.10$ |
+| 2.0 | 58.19 | <b>1.32</b> | 17.41 | <b>3.75</b> | $3.02 \pm 0.09$ | $3.09 \pm 0.10$ |
+
+**Varying  $\gamma$**  Table 4 shows that increasing  $\gamma$  leads to worse pitch reconstruction, as measured by  $F_0$ -RMSE, but improves CER. This result indicates that  $\gamma$  governs the type of information captured in the variational feature  $Z^c$ . With a higher  $\gamma$ , the system prioritizes the prediction of speech tokens. Therefore, the variational feature  $Z^c$  is encouraged to encode more phonetic information, resulting in lower CER and MCD. Conversely, a lower  $\gamma$  encourages  $Z^c$  to focus more on encoding pitch-related information, as indicated by the lower  $F_0$ -RMSE. Then, we analyze the subjective measures and observe that both M-MOS and N-MOS favor a lower  $\gamma$ . We attribute the decline in performance to the increased difficulty of autoregressive generation of  $Z^c$ . By increasing the weight of  $\mathcal{L}_{kl}^d$ , the model sacrifices its focus on minimizing  $\mathcal{L}_{kl}^c$ , which in turn compromises its ability to model  $Z^c$ .
+
+**Benefit of trainable encoder** We compare the reconstruction metrics of Table 1 and Table 3. Interestingly, our proposed method benefits from more data, showing better reconstruction quality when trained on Libri-light than on LibriSpeech, whereas the baseline methods do not. For *Token-LM*, the reconstruction relies entirely on the quality of extracted speech tokens. If these tokens lack sufficient phonetic information, the decoder cannot reconstruct accurate content, even with more data. In contrast, our approach allows the encoder to extract necessary information directly from the input speech, leveraging additional data to improve generalizability of both the encoder and decoder.
+
+## 6 RELATED WORK
+
+Emerging speech language models typically use discrete speech tokens for autoregressive modeling. These tokens are often obtained by  $k$ -means clustering of features extracted from self-supervised pre-trained models (Hsu et al., 2021; Chen et al., 2022). Lakhotia et al. (2021) used discrete speech tokens for generative spoken language modeling (GSLM). subsequently, Kharitonov et al. (2022) enhanced this approach by incorporating pitch information alongside speech tokens as joint inputs to the autoregressive model. Our proposed approach improves upon this line of research by using a variational autoencoder to automatically learn paralinguistic speech attributes in conjunction with the autoregressive model. Borsos et al. (2023) proposed a two-stage approach for the decoder that used acoustic tokens (Zeghidour et al., 2022; Défossez et al., 2022). This type of framework is also widely used in text-to-speech systems (Wang et al., 2023; Chen et al., 2024). In contrast, our approach focuses on the joint modeling of linguistic and paralinguistic features by enhancing the inputs to the autoregressive model rather than improving the decoder.
+
+Recently, a line of research has emerged focusing on improving speech language models through the integration of text-based models. Hassid et al. (2023) initialized their speech language model using a pre-trained text-based large language model (LLM). Similarly, Rubenstein et al. (2023); Maiti et al. (2024) expanded the vocabulary of pre-trained text-based LLMs by integrating discrete speech tokens. Building on this, Yang et al. (2023); Du et al. (2024) further explored multi-task training involving text-conditioned generative speech tasks, combining text and audio within a single LLM. We note that our proposed approach takes a different direction but can still be integrated with these approaches. For example, one could initialize the transformer in our autoregressive model using parameters from a text-based LLM.
+
+{9}------------------------------------------------
+
+## 7 CONCLUSION
+
+In this work, we proposed an approach that combines a variational autoencoder with existing token-based speech language models. We conducted experiments to evaluate its effectiveness in terms of language capability and synthesis naturalness. Empirical evaluations suggest that our proposed approach, in contrast with other recent techniques, is capable of producing synthesis with better subjective meaningfulness and naturalness. Additionally, we examined the effects of the weights of different loss terms,  $\beta$  and  $\gamma$ , on performance. Our findings indicate that  $\beta$  governs the amount of information encoded from the mel-spectrogram into the variational feature, whereas  $\gamma$  controls the type of information encoded within the variational feature.
+
+## 8 LIMITATIONS AND FUTURE WORK
+
+Our results indicate that the performance of our proposed approach is sensitive to the choice of hyperparameters  $\beta$  and  $\gamma$ . In future work, we plan to explore automated methods for tuning these parameters. Additionally, this study does not examine how our method can be leveraged for other downstream speech tasks. To address this, we plan to evaluate our pre-trained autoregressive transformer on downstream tasks using the SUPERB benchmark (Yang et al., 2024). Finally, our model has a relatively small number of parameters and requires less training data compared to many existing frameworks (Hassid et al., 2023; Rubenstein et al., 2023). We plan to scale our methods to assess whether the same conclusions hold with increased computational resources and larger datasets.
+
+**Broader Impact** We proposed an approach that improves the naturalness of speech language models without compromising their language proficiency, which can be leveraged by existing paradigms in this literature. While a model that generates more natural speech can enhance the user experience in conversational agents, it can also be exploited for harmful purposes, such as creating fake videos or conducting spam phone calls.
+
+**Reproducibility Statement** We provide detailed information about the model architecture in Appendix B, and the training details in Appendix C. Additionally, we include the audio samples used in human listening tests (M-MOS and N-MOS), along with a detailed setup of these evaluations in Appendix D. All datasets used are available for research purposes. We plan to open-source our code upon acceptance of the paper.
+
+## REFERENCES
+
+- Adaeze Adigwe, Noé Tits, Kevin El Haddad, Sarah Ostadabbas, and Thierry Dutoit. The emotional voices database: Towards controlling the emotion dimension in voice generation systems. *arXiv preprint arXiv:1806.09514*, 2018.
+- Zalán Borsos, Raphaël Marinier, Damien Vincent, Eugene Kharitonov, Olivier Pietquin, Matt Sharifi, Dominik Roblek, Olivier Teboul, David Grangier, Marco Tagliasacchi, and Neil Zeghidour. Audiolm: A language modeling approach to audio generation. *IEEE/ACM Transactions on Audio, Speech, and Language Processing*, 31:2523–2533, 2023. doi: 10.1109/TASLP.2023.3288409.
+- Samuel R. Bowman, Luke Vilnis, Oriol Vinyals, Andrew Dai, Rafal Jozefowicz, and Samy Bengio. Generating sentences from a continuous space. In Stefan Riezler and Yoav Goldberg (eds.), *Proceedings of the 20th SIGNLL Conference on Computational Natural Language Learning*, pp. 10–21, Berlin, Germany, August 2016. Association for Computational Linguistics. doi: 10.18653/v1/K16-1002. URL <https://aclanthology.org/K16-1002>.
+- Sanyuan Chen, Chengyi Wang, Zhengyang Chen, Yu Wu, Shujie Liu, Zhuo Chen, Jinyu Li, Naoyuki Kanda, Takuya Yoshioka, Xiong Xiao, Jian Wu, Long Zhou, Shuo Ren, Yanmin Qian, Yao Qian, Jian Wu, Michael Zeng, Xiangzhan Yu, and Furu Wei. Wavlm: Large-scale self-supervised pre-training for full stack speech processing. *IEEE Journal of Selected Topics in Signal Processing*, 16(6):1505–1518, 2022. doi: 10.1109/JSTSP.2022.3188113.
+- Sanyuan Chen, Shujie Liu, Long Zhou, Yanqing Liu, Xu Tan, Jinyu Li, Sheng Zhao, Yao Qian, and Furu Wei. Vall-e 2: Neural codec language models are human parity zero-shot text to speech synthesizers, 2024. URL <https://arxiv.org/abs/2406.05370>.
+
+ Rest of paper (reference and Appendix) is removed.

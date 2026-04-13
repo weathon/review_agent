@@ -1,0 +1,306 @@
+
+
+{0}------------------------------------------------
+
+# CONDITIONAL PROTEIN SEQUENCE GENERATION USING PROTEIN LANGUAGE MODELS WITH ADAPTERS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+The conditional generation of proteins with desired functions and/or properties is a key goal for generative models. Existing methods based on prompting of language models can generate proteins conditioned on a target functionality, such as a desired enzyme family. However, these methods are limited to simple, tokenized conditioning and have not been shown to generalize to unseen functions. In this study, we propose ProCALM (**Protein Conditionally Adapted Language Model**), an approach for the conditional generation of proteins using adapters to protein language models (PLMs). While previous methods have used adapters for structure-conditioned generation from PLMs, our implementation of ProCALM involves finetuning ProGen2 to condition generation on protein function, and it is flexible to function representations of enzyme family, taxonomy, or natural language descriptions. ProCALM matches or exceeds the performance of existing methods at conditional sequence generation from target functions. Impressively, it can also generalize to rare and unseen functions. Overall, ProCALM is a flexible and computationally efficient approach, and we expect that it can be extended to a wide range of generative language models.
+
+## 1 INTRODUCTION
+
+Proteins, sequences of amino acids, are important molecules in all living organisms and have many industrial applications. Protein sequences can be modified or designed to have desired function(s) or optimized properties so that they are more useful for applications ranging from greener chemical synthesis to gene-editing for disease treatment (Buller et al., 2023). Enzymes are a particularly useful subclass of proteins: these are ubiquitous proteins that catalyze chemical reactions and are particularly difficult to engineer, as enzymatic activities are complex and often difficult to predict from sequence (Arnold, 2018).
+
+While directed evolution and other methods have been used to engineer proteins (Wang et al., 2021), in recent years, generative models based on machine learning (ML) have emerged to tackle protein design (Ruffolo & Madani, 2024; Wu et al., 2021; Xie & Warshel, 2023; Barghout et al., 2023; Ferruz et al., 2023). The use of generative models is motivated by learning the distribution of known proteins, thus allowing one to sample functional proteins during inference. Diffusion models can generate protein structures that have certain symmetries, binding properties, or active site conformations (Watson et al., 2023; Ingraham et al., 2023; Huguet et al., 2024; Lauko et al., 2024). Discrete diffusion (Alamdari et al., 2023; Wang et al., 2024a), Bayesian flow models (Atkinson et al., 2024), and other approaches (Yang et al., 2024a) are effective generative models for sequences, but to date, protein language models (PLMs) based on autoregressive transformers have demonstrated the most success for generating functional enzymes (Madani et al., 2023; Nijkamp et al., 2023; Ferruz et al., 2022; Zvyagin et al., 2022; Hesslow et al., 2022).
+
+An important downstream application for generative models is the conditional generation of proteins, where a “condition” is typically defined by desired function and/or properties (Yang et al., 2024a; Ferruz & Höcker, 2022; Dai et al., 2024; Notin et al., 2024; Hayes et al., 2024). For example, it is desirable to design Cas9 nucleases that express well and have high activity and specificity for gene-editing (Chen & Liu, 2023). Alternatively, enzyme engineers might be interested in thermostable enzymes that can catalyze unannotated, non-native reactions for chemical synthesis (Chen & Arnold, 2020), among numerous other applications (Buller et al., 2023). Conditional generation with ML
+
+{1}------------------------------------------------
+
+models to maximize a desired property such as stability has been explored using direct preference optimization and guided diffusion (Widatalla et al., 2024; Nisonoff et al., 2024; Gruver et al., 2023; Lisanza et al., 2024). Here, we focus on methods for generating sequences with a target function, which is more qualitative rather than quantitative.
+
+A typical approach for generating sequences with a target function, such as specific enzymatic activity, involves finetuning a PLM on a specific class or family of enzymes and then generating novel enzymes with that function (Madani et al., 2023; Ruffolo et al., 2024b) – an approach we will refer to as *Target Finetuning*. This approach has been successfully applied to ProGen and other similar models with wet-lab validation (Nicolini et al., 2024; Zvyagin et al., 2022; Munsamy et al., 2024). Other successful recent approaches for conditional protein sequence generation (such as ZymCTRL) are related to *Prompting* (Munsamy et al., 2024; Luo et al., 2023; Nathansen et al., 2023; Liu et al., 2024). Despite these advances, a major limitation of existing models is that they can only be finetuned for known function. This requires extensive prior knowledge of a protein family with that function (Table 1), but protein engineers are often interested in new functions, such as enzymes with new-to-nature activities (Arnold, 2018). Thus, current methods are not flexible to complex conditioning (such as jointly across enzymatic function and organism) and may not generalize well to functions that lie out-of-distribution (OOD).
+
+To address this challenge, our **key contribution** in this study is introducing a broadly applicable strategy (*Conditional Adapters*) for parameter efficient finetuning of language models. While previous approaches using adapters have been largely limited to protein structure conditioning, we show that *Conditional Adapters* are flexible and useful for conditioning generation from PLMs based on different types of desired functions. Specifically, we apply this approach to finetune ProGen2 to conditionally generate protein sequences based on enzyme family, taxonomy, and natural language descriptions – called ProCALM (**Protein Conditionally Adapted Language Model**). Our approach demonstrates several advantages compared to existing methods:
+
+1. ProCALM is parameter efficient and computationally inexpensive to train.
+2. ProCALM is a general approach that is flexible to various types of conditioning (beyond just structure) – including enzyme class, taxonomy, and textual descriptions.
+3. ProCALM matches or surpasses existing methods at generating protein sequences with target functions.
+4. ProCALM can generalize toward conditions that lie OOD, namely by generating sequences for combinations of taxonomy and enzyme class that are not seen in the training set.
+
+## 2 RELATED WORK
+
+**Prompting and Related Approaches.** While many approaches have been explored for steerable generation from language models, the most common approaches involve using prompts, or tokens at the beginning of a sequence, to guide the generation of the remaining sequence (*Prompting*). For example, in the CTRL transformer architecture, control tags are used to guide natural language generation towards specific styles – such as science vs politics (Keskar et al., 2019). Munsamy et al. (2024) trained a PLM based on the CTRL transformer architecture, where the control tags were enzyme commission (EC) numbers describing enzyme families (ZymCTRL). Many of the protein sequences generated from ZymCTRL were successfully validated in the wet-lab as functional enzymes.
+
+While CTRL-type models are trained from scratch, prompt tuning and related parameter-efficient approaches involve finetuning pretrained language models using prompts (Lester et al., 2021; Li & Liang, 2021; Zeldes et al., 2020). The weights associated with the pretrained model are fixed, and only the weights associated with the new tokens are trained. There are a few examples of prompt tuning being applied to protein generation. In PrefixProt, ProtGPT2 was finetuned to generate antimicrobial peptides enriched in alpha helices (Luo et al., 2023). In Finenzyme, ProGen was finetuned using prefix tuning on seven broad EC classes, and a few selected specific ECs (Nicolini et al., 2024). Nathansen et al. (2023) explored this strategy for finetuning RITA to generate a specific protein family.
+
+Another interesting way to condition for function is through natural language. PROPEND uses prompt tuning to finetune PLMs for conditional generation based on backbone, secondary structure,
+
+{2}------------------------------------------------
+
+Table 1: **Using conditional adapters offers several advantages for the conditional generation of proteins using language models.** It is inherently more flexible for different types of conditioning (including multiple functions); it is more generalizable to out-of-distribution (OOD) conditions; and it is computationally efficient to train. A visualization of various approaches for conditional generation is provided in Fig. 1C.
+
+| Approach | Flexibility | OOD | Cost | PLM Example(s) |
+|-|-|-|-|-|
+| <i>Target Fine-tuning</i> | Restricted to a target condition | Cannot generalize OOD | Expensive if scaled | applied post-training |
+| <i>Prompting</i> | Largely restricted to a tokenized condition | Generalizes weakly OOD | Expensive if trained from scratch | ProGen (Madani et al., 2023), ZymCTRL (Munsamy et al., 2024), Finenzyme (Nicolini et al., 2024), PrefixProt (Luo et al., 2023), PROPEND (Wang et al., 2024b), ProteinDT (Liu et al., 2024) |
+| <i>Conditional Adapters</i> | Flexible to multiple conditions | Could generalize OOD | Parameter efficient | LM-Design (Zheng et al., 2023), ShapeProt (Lee & Kim, 2024), InstrucPLM (Qiu et al., 2024), proseLM (Ruffolo et al., 2024a), <b>ProCALM</b> (our study) |
+
+and natural language (Wang et al., 2024b). Many other text-guided conditional generative models of protein sequences take inspiration from classifier-free guidance in image generation (Ramesh et al., 2022). For example, a CLIP-like representation is learned between text and protein sequences, which is then decoded downstream using a diffusion model (Liu et al., 2024; Prajakk et al., 2024) or an autoregressive transformer (Liu et al., 2024; Yin et al., 2024). In this work, we compare against ProteinDT, which uses an indirect form of prompt tuning to finetune PLMs for conditional generation based on "CLIP" representations of protein and natural language textual descriptions (Liu et al., 2024).
+
+Overall, *Prompting* and related approaches can sometimes work well for conditional generation when the prompt is within distribution. Still, ZymCTRL was trained from scratch. Other studies from natural language processing suggest that *Prompting* is not always the best approach (Chen et al., 2022). In the past protein studies listed above, a major limitation of such approaches is that they do not enable (or haven't been tested for) generation over a broad range of specific functions. Furthermore, these approaches are restricted to using simple conditions that can be tokenized and have not been studied for the generation of sequences for conditions that lie OOD (Table 1).
+
+**Adapters in Language Models.** Adapter-based tuning of language models has emerged as a parameter-efficient strategy (Pfeiffer et al., 2021; Hu et al., 2021) to finetune language models for specific tasks (Ribeiro et al., 2021; Houlsby et al., 2019), such as describing protein sequences with natural language (Carrami & Sharifzadeh, 2024; Huo et al., 2024). Recently, using *Conditional Adapters* has shown utility in PLMs for the conditional generation of proteins. Several studies have used adapters to condition generation from PLMs based on desired structures (Zheng et al., 2023; Lee & Kim, 2024; Qiu et al., 2024). In proseLM, generation was conditioned on protein structure (Ruffolo et al., 2024a), and generated gene editing enzymes and antibodies that were successfully validated in the wet lab. LM-Design is particularly interesting because the authors also evaluated generalization toward unseen protein folds (Zheng et al., 2023). Conditioning on structure is useful, as structure often determines function, but a goal of protein engineering is often to find proteins with novel functions (such as for new-to-nature enzyme activity (Arnold, 2018)), without any known structure or sequence performing this function. Thus, there is a need to explore models that can condition directly on function and generalize to new functions.
+
+Overall, using *Conditional Adapters* is promising and offers several advantages (Table 1, Fig. 1). Most importantly, the approach has greater potential to generate sequences beyond the training distribution because conditioning is performed in continuous space, rather than through initial tokenization like *Prompting*. Still, a few key questions remain, which we aim to explore in this study. (1) Are *Conditional Adapters* amenable to different types of conditioning information for protein generation (i.e. beyond structure)? (2) How does the quality of generated sequences from such a model compare
+
+{3}------------------------------------------------
+
+![Figure 1: Finetuning PLMs with conditional adapters is a flexible approach for the conditional generation of proteins with desired function. The figure is divided into three main sections: A) Training, B) Inference, and C) Conceptualization. Section A shows the architecture of ProCALM, which includes a Conditioning Encoder, a Conditional Adapter, and a Transformer Block. Section B shows the inference process, including autoregressive generation and two previous approaches: Prompting and Target Finetuning. Section C shows the conceptualization of the approach, comparing it to previous methods.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+**A Training**
+
+**ProCALM**
+
+Autoregressive Residue Prediction
+
+Conditioning Encoder
+
+Conditioning (EC number, taxonomy, etc.)
+
+M K R A S G G H ...
+
+ProGen2
+
+Attention Module
+
+Transformer Blocks
+
+Conditional Adapter
+
+Embedding Update
+
+Up-project
+
+MLP
+
+concatenate
+
+Down-project
+
+Language Model Embedding
+
+Conditioning Latent Embedding
+
+Conditioning
+
+**B Inference**
+
+Autoregressive Generation
+
+Conditioning Encoder
+
+Desired function (i.e., bacterial alcohol dehydrogenase)
+
+Start token
+
+Finetuned ProGen2
+
+**Prompting**
+
+Train learn annotated proteins conditioned on control tags
+
+lysozyme
+
+carbonic anhydrase
+
+etc.
+
+Generate conditioned on control tag
+
+**Target Finetuning**
+
+Finetune learn target family
+
+Generate from target family
+
+**Our Approach: Conditional Adapters**
+
+Train learn distribution of natural protein sequences
+
+Finetune learn mapping between functional distribution (condition) and distribution of proteins
+
+e.g. EC numbers
+
+conditioning space (function)
+
+protein space
+
+Generate from distribution of function
+
+**C Conceptualization**
+
+Previous Approaches
+
+Figure 1: Finetuning PLMs with conditional adapters is a flexible approach for the conditional generation of proteins with desired function. The figure is divided into three main sections: A) Training, B) Inference, and C) Conceptualization. Section A shows the architecture of ProCALM, which includes a Conditioning Encoder, a Conditional Adapter, and a Transformer Block. Section B shows the inference process, including autoregressive generation and two previous approaches: Prompting and Target Finetuning. Section C shows the conceptualization of the approach, comparing it to previous methods.
+
+Figure 1: Finetuning PLMs with conditional adapters is a flexible approach for the conditional generation of proteins with desired function. (A) Training of ProCALM involves finetuning ProGen2 in a parameter efficient manner. (B) During inference, sequences are generated autoregressively, conditioned on a representation encoding desired function. (C) Conceptualization of our approach in the context of previous approaches. Conditioning is flexible, and the model captures a notion of similarity between the desired conditioning and conditions from the training set. MLP stands for multi-layer perceptron.
+
+to existing approaches? (3) To what extent does the approach enable generation of sequences from conditions that lie OOD?
+
+## 3 OVERVIEW OF PROCALM
+
+ProCALM is trained via parameter-efficient finetuning of ProGen2 (Nijkamp et al., 2023) with conditional adapters; the original ProGen2 weights are fixed while the conditional adapter layers and conditioning encoder are trained (Fig. 1A). The conditioning encoder learns a latent representation of conditioning information, which is concatenated with a low-rank projection of the language model hidden embedding inside each conditional adapter layer (corresponding to each transformer layer).
+
+{4}------------------------------------------------
+
+Table 2: **Summary of datasets and splits used for training and evaluation of ProCALM on EC-related tasks.** Unless otherwise noted, models were trained on the *Swissprot Train* set using the ProGen2-Base model (764 million parameters). For the text-guided generation task, the same training dataset as ProteinDT was used, and no dataset resampling or splitting was performed.
+
+| Name | Purpose | Description | Sequences | ECs |
+|-|-|-|-|-|
+| <i>Uniref</i> | Training | Sequences in Uniref associated with EC numbers | $29.4 \times 10^6$ | 5222 |
+| <i>Swissprot Heldout 90%</i> | Evaluation | Held-out clusters of sequences based on clustering at 90% sequence identity | 5,243 | 942 |
+| <i>Swissprot Heldout 70%</i> | Evaluation | Held-out clusters of sequences based on clustering at 70% sequence identity | 5,428 | 818 |
+| <i>Swissprot Heldout ECs</i> | Evaluation | Sequences from Swissprot that correspond to random held-out ECs, corresponding to those in the medium split for task 2 in the CARE benchmark (Yang et al., 2024b) | 5,714 | 177 |
+| <i>Swissprot Train</i> | Training | Everything remaining in Swissprot that is not held-out above | 152,763 | 4201 |
+| <i>Train Common ECs</i> | Generation<br>Evaluation | Randomly sampled ECs from the pool of ECs that correspond to $>500$ sequences in <i>Swissprot Train</i> | n/a | 24 |
+| <i>Train Rare ECs</i> | Generation<br>Evaluation | Randomly sampled ECs from the pool of ECs that correspond to $<10$ sequences in <i>Swissprot Train</i> | n/a | 24 |
+| <i>Heldout ECs</i> | Generation<br>Evaluation | Randomly sampled ECs from the pool of ECs in <i>Swissprot Heldout ECs</i> | n/a | 24 |
+
+The training objective is autoregressive residue prediction, and model training is flexible to any type of representation as conditioning. During inference, sequences are generated conditioned on a target function, which is represented in conditioning space (Fig. 1B). In this study, we explore conditioning using (1) enzyme function associated with the EC number, (2) taxonomy, and (3) textual descriptions of protein function. Multiple conditions can be considered jointly (Fig. A.2). More details are provided in Section A.2.
+
+ProCALM aims to address the limitations of existing approaches for conditional sequence generation (Table 1). Unlike models trained from scratch with prompts, using *Conditional Adapters* is advantageous as it transfers knowledge from the pretrained ProGen2 model. This approach may also enable better OOD generalization compared to *Prompting* approaches, as the conditioning lies on a continuous conditioning space (Fig. 1C). Overall, ProCALM is a promising and flexible approach to unlock conditional generation of proteins with useful and unseen combinations of functions. ProCALM will be made publicly available.
+
+## 4 RESULTS
+
+To evaluate the ProCALM model and the quality of generated sequences, we built several train-test splits and selected several categories of ECs to generate from as conditioning, which are summarized in Table 2 and Fig. A.1. We focus our evaluation to three types of metrics:
+
+1. **Generation quality.** Evaluated by measuring the fraction of generated sequences that look like valid enzymes based on sequence similarity to reference enzymes (*Valid Enzymes*) and the fraction of valid enzymes that have the *Correct* desired condition (e.g. EC number, taxonomy, etc.). Details of how enzyme validity and correct EC/taxonomy/function were determined are provided in Section A.3. *Enrichment* is a related metric, which describes
+
+{5}------------------------------------------------
+
+![Figure 2: ProCALM matches existing methods at generating sequences from common EC classes, at a lower cost. The figure contains five panels: (A) Bar chart of Valid Enzymes (fraction of generated sequences resembling a known enzyme) for ZymCTRL, Uniref-9B, and Swissprot-1.5B. (B) Bar chart of Correct EC (fraction of sequences with correct EC conditioning), Mean Max Seq Identity (diversity), and 90% Clusters (fraction of unique clusters). (C) Bar chart of pLDDT (averaged across residues) for the three models. (D) Violin plots of Perplexity for Train, Common ECs, Holdout 90%, and Holdout 70% splits. (E) Bar chart of GPU hours required for training the models.](c54b3ca7603d65d4589151bc3a49d054_img.jpg)
+
+Figure 2: ProCALM matches existing methods at generating sequences from common EC classes, at a lower cost. The figure contains five panels: (A) Bar chart of Valid Enzymes (fraction of generated sequences resembling a known enzyme) for ZymCTRL, Uniref-9B, and Swissprot-1.5B. (B) Bar chart of Correct EC (fraction of sequences with correct EC conditioning), Mean Max Seq Identity (diversity), and 90% Clusters (fraction of unique clusters). (C) Bar chart of pLDDT (averaged across residues) for the three models. (D) Violin plots of Perplexity for Train, Common ECs, Holdout 90%, and Holdout 70% splits. (E) Bar chart of GPU hours required for training the models.
+
+Figure 2: **ProCALM matches existing methods at generating sequences from common EC classes, at a lower cost.** (A) The generation quality of ProCALM is similar to existing methods (i.e., ZymCTRL), as measured by the fraction of generated sequences that resemble a known enzyme (*Valid Enzymes*) and by the fraction of those enzymes with the correct EC conditioning (*Correct EC*). (B) Generated, valid enzyme sequences have good diversity, as measured by the maximum sequence identity to a reference database (*Mean Max Seq Identity*) and the fraction of unique clusters (amongst themselves) at 90% sequence identity (*90% clusters*). (C) pLDDT, averaged across residues, of ESMFold-predicted structures is high and comparable across different methods. (D) The perplexities of protein sequences from common EC classes in the train set are similar to those held-out at 90% and 70% identity, which suggests robustness to overfitting. Comparatively, in ZymCTRL, the held-out sequences had much higher perplexities (Munsamy et al., 2024). (E) Number of GPU hours required to train ProCALM models is significantly lower than ZymCTRL. Swissprot-1.5B and Uniref-9B are ProCALM models trained on the *Swissprot Train* and *Uniref* datasets to 1.5 and 9 billion tokens, respectively, using the OH encoding of the EC number as a conditioning representation. Shorter training on the *Swissprot* dataset seems sufficient to achieve good performance. Error bars indicate standard deviation among 24 *Train Common ECs*.
+
+the ratio between the fraction of generated sequences with a desired condition, compared to the prevalence of that condition in the train set. pLDDT averaged across all residues was also evaluated, to measure the confidence associated with structure prediction from ESMFold of generated sequences with correct conditioning. Other filters could also be used here (Johnson et al., 2024; Alamdari et al., 2023; Wang et al., 2024a; Nicolini et al., 2024).
+
+- 2. Generation diversity and novelty.** Evaluated by measuring the average maximum sequence identity (*Mean Max Seq ID*) to a reference database of sequences (high sequence identity suggests low novelty) and by the fraction of unique *Clusters* at 90% sequence identity (higher fraction indicates better diversity). The fraction of clusters is measured by clustering the generated, valid proteins among themselves.
+- 3. Robustness to overfitting.** Evaluated by measuring model *Perplexity* on sequences from different splits.
+
+### 4.1 PROCALM MATCHES THE PERFORMANCE OF EXISTING METHODS
+
+We first sought to understand if our approach could achieve similar performance to ZymCTRL, a state-of-the-art language model for generating enzyme sequences conditioned on EC number (Munsamy et al., 2024). We trained two different ProCALM models – one on 9 billion tokens of enzyme sequences from *Uniref*, and one on 1.5 billion tokens of enzyme sequences from *Swissprot Train*, with EC number represented as a one-hot (OH) encoding. While the model trained on Uniref for longer was better able to match the performance of ZymCTRL, we found that shorter training on Swissprot enabled sufficient generation quality (valid and correctly conditioned enzymes, Fig. 2A) and sequence generation with greater diversity (Fig. 2B). In general, training for longer increased the fraction of sequences with correct conditioning, but reduced sequence diversity (Fig. A.4). Because Swissprot has the highest quality annotations, we decided to do remaining analysis with models trained using the *Swissprot Train* dataset.
+
+Parameter efficient finetuning is advantageous due to its low computational cost and greater robustness to overfitting (Sledzieski et al., 2024), compared to full parameter training. Impressively, our *Uniref-9B* and *Swissprot-1.5B* models only required 240 and 40 A100-hours to train, respectively, whereas ZymCTRL required 15,000 A100-hours (Fig. 2D). By comparison, ZymCTRL trained all model parameters for approximately 50 billion tokens and required a higher memory footprint than our
+
+{6}------------------------------------------------
+
+![Figure 3: ProCALM flexibly accommodates other types of conditioning, such as taxonomy (Tax) and joint EC-taxonomy (Joint) conditioning. The figure consists of six bar charts (A-F) comparing 'Model' (blue) and 'Tax' (orange) or 'Joint' (orange) models across four categories: bacteria, eukaryota, archaea, and viruses. (A) Valid Enzymes: Tax model is near 1.0, Joint model is lower. (B) Correct Tax: Tax model is near 1.0, Joint model is lower. (C) Tax Enrichment: Tax model is high, Joint model is lower. (D) Correct EC: Tax model is near 1.0, Joint model is lower. (E) EC Enrichment: Tax model is high, Joint model is lower. (F) Both Enrichment: Tax model is high, Joint model is lower. Dashed lines indicate performance of a model trained on EC conditioning only.](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+Figure 3: ProCALM flexibly accommodates other types of conditioning, such as taxonomy (Tax) and joint EC-taxonomy (Joint) conditioning. The figure consists of six bar charts (A-F) comparing 'Model' (blue) and 'Tax' (orange) or 'Joint' (orange) models across four categories: bacteria, eukaryota, archaea, and viruses. (A) Valid Enzymes: Tax model is near 1.0, Joint model is lower. (B) Correct Tax: Tax model is near 1.0, Joint model is lower. (C) Tax Enrichment: Tax model is high, Joint model is lower. (D) Correct EC: Tax model is near 1.0, Joint model is lower. (E) EC Enrichment: Tax model is high, Joint model is lower. (F) Both Enrichment: Tax model is high, Joint model is lower. Dashed lines indicate performance of a model trained on EC conditioning only.
+
+Figure 3: **ProCALM flexibly accommodates other types of conditioning, such as taxonomy (*Tax*) and joint EC-taxonomy (*Joint*) conditioning.** The *Tax* model was trained in the standard manner while the *Joint* model was trained with an architecture using parallel adapters (Fig. A.2). Taxonomy-conditioned and joint-conditioned models generate sequences with a high fraction of (A) valid enzymes, (B) correct taxonomy, and (D) correct EC. Generation from these models is also significantly enriched in those with the (C) correct taxonomy, (E) correct EC number, or (F) both, where enrichment is measured by the ratio of the prevalence among generated sequences to the prevalence in the training set. Some performance is sacrificed when learning to condition on multiple distributions simultaneously. EC and taxonomy were both represented using OH encoding, and models were trained to 9 billion tokens. Dashed line shows the performance of a model trained on EC conditioning only. Error bars indicate standard deviation among 24 *Train Common ECs*.
+
+parameter-efficient training. Additionally, in ProCALM, held-out sequences demonstrate similar perplexities to the sequences associated with the most common ECs in the train set, which suggests that our model is not overfitting (Fig. 2C). By contrast, in ZymCTRL and our own experiments where we trained all model weights (Fig. A.3), the held-out sequences had significantly higher perplexity than common sequences in the train set. Finally, we examined all of these effects when scaling from ProGen2-Base (764 million parameters) to ProGen2-Large and ProGen2-XLarge, which have 2.7 and 6.4 billion parameters, respectively. Overall, we found that scaling to larger models resulted in lower overall losses (Fig. A.5) but did not significantly affect generation quality and diversity (Fig. A.6).
+
+### 4.2 PROCALM ACCOMMODATES MULTIPLE TYPES OF CONDITIONING
+
+ProCALM can use other types of information, such as taxonomy, to condition sequence generation. We trained two additional models, one conditioned on taxonomy, and one conditioned jointly on taxonomy and EC. For the jointly conditioned model, we used a modified architecture, where parallel adapters accept multiple sources of conditioning information (Fig. A.2). In an ablation study, we found that parallel adapters work better than merging the joint conditioning in the conditioning encoder and using a shared adapter (Fig. A.8). Overall, the taxonomy conditioned and jointly conditioned models enriched generation for the desired condition(s) (Fig. 3), showing that ProCALM is easily adaptable. Performance is highest for bacterial sequences, as they constitute the majority of the training data (Fig. A.1). However, learning multiple (EC and taxonomy) conditions sacrifices performance slightly compared to models trained to learn either EC or taxonomy conditioning alone.
+
+To highlight the broad utility and inherent flexibility of ProCALM, we explored another task, conditional generation based on natural language prompts. While there are several models that enable text-guided protein sequence generation (Liu et al., 2024; Yin et al., 2024; Hayes et al., 2024; Prajapati et al., 2024; Wang et al., 2024b), we focused on comparing to ProteinDT, which is publicly available and focuses on using natural language as conditioning. In ProteinDT (Liu et al., 2024), a multimodal representation is first learned between textual description and protein sequence using CLIP loss (ProteinCLAP representation), and this is decoded into a generated sequence using a PLM that has been subjected to indirect prompt tuning (finetuned to condition generation on different first token embeddings, i.e. conditions).
+
+For fair comparison, we used the ProteinCLAP representation and the same training data as ProteinDT (proteins in Swissprot, not just enzymes) within our ProCALM framework to finetune ProGen2
+
+{7}------------------------------------------------
+
+![Figure 4: Performance comparison between ProteinDT and ProCALM for natural language-guided protein generation. The figure contains five bar charts (A-E) comparing the two models across different prompt types (Common and Rare).](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 4 consists of five bar charts (A-E) comparing ProteinDT (blue) and ProCALM (orange) across different prompt types (Common and Rare). The y-axes represent various performance metrics, and the x-axes represent the prompt types. Error bars indicate standard deviation.
+
+- (A) Valid Proteins:** ProCALM generates significantly more valid proteins than ProteinDT for both Common and Rare prompts.
+- (B) Correct Retrieved Prompt:** ProCALM has a higher rate of correct retrieved prompts compared to ProteinDT.
+- (C) Mean Max Seq Identity:** ProCALM shows higher mean maximum sequence identity than ProteinDT.
+- (D) 90% Clusters:** ProCALM generates more diverse sequences, resulting in a higher number of 90% clusters.
+- (E) pLDDT of Correct Proteins:** ProCALM has a higher pLDDT score for correct proteins compared to ProteinDT.
+
+Figure 4: Performance comparison between ProteinDT and ProCALM for natural language-guided protein generation. The figure contains five bar charts (A-E) comparing the two models across different prompt types (Common and Rare).
+
+Figure 4: **ProCALM is flexible for natural language-guided generation of proteins with desired functions.** *Common Prompts* and *Rare Prompts* each refer to 24 randomly selected textual descriptions that have  $>500$  instances and  $<10$  instances, respectively, in the training set (Table A.1). In general, ProCALM generates sequences with higher rates of (A) valid protein sequences and (B) valid sequences mapping to the correct function (textual description), compared to ProteinDT. For ProCALM-generated valid proteins, their (C) novelty is a bit lower than ProteinDT but their (D) diversity is similar. (E) The pLDDT of predicted structures (via ESMFold) of generated sequences is higher for ProCALM. For sequence generation from ProteinDT, we used the default model with autoregressive PLM decoding, which is trained via indirect prompt tuning.
+
+![Figure 5: Out-of-domain generalization for rare and unseen EC classes. The figure includes a diagram of encoding methods (A) and performance charts (B-E) for rare and held-out enzyme classes.](d864789b0d8384da1d22fd6a5d76bbdf_img.jpg)
+
+Figure 5 illustrates the out-of-domain generalization capabilities of ProCALM. Part (A) shows three encoding methods for enzyme function: OH (one-hot encoding), DRFP (reaction fingerprint), and CREEP (learned multimodal latent space). Parts (B-E) show performance metrics for rare and held-out enzyme classes.
+
+- (A) Encoding Methods:** OH uses a one-hot encoding of EC numbers. DRFP uses a reaction fingerprint. CREEP uses a learned multimodal latent space that encodes multiple modalities related to the EC number.
+- (B) Valid Enzymes:** ProCALM generates a non-negligible fraction of valid enzymes for rare ECs in the train set and ECs that are entirely held out from the train set.
+- (C) Correct EC:** While almost none of the generated sequences using held-out ECs as conditioning mapped exactly to the target conditioning, the generated sequences look more similar to the target EC.
+- (D) Mean Accuracy Level:** Accuracy level refers to the correctness of an EC. For example, if the target was 1.1.1.1, an EC of 1.2.1.2 would have an accuracy level of 1 and an EC of 1.1.1.2 would have an accuracy level of 3.
+- (E) Perplexity:** Perplexities are consistent for protein sequences from various splits, which suggests that the models are robust to overfitting.
+
+Figure 5: Out-of-domain generalization for rare and unseen EC classes. The figure includes a diagram of encoding methods (A) and performance charts (B-E) for rare and held-out enzyme classes.
+
+Figure 5: **ProCALM can perform out-of-domain generalization for rare and unseen EC classes.** (A) Three different representations of enzyme function explored in this work. OH encodes the hierarchy of EC numbers as a one-hot encoding, DRFP encodes a fingerprint of reactions associated to an EC number, and CREEP is a learned representation that encodes multiple modalities related to the EC number. (B) Our models generate a non-negligible fraction of *Valid Enzymes* for rare ECs in the train set and ECs that are entirely held out from the train set. (C) While almost none of the generated sequences using held-out ECs as conditioning mapped exactly to the target conditioning, (D) the generated sequences look more similar to the target EC. Accuracy level refers to the correctness of an EC. For example, if the target was 1.1.1.1, an EC of 1.2.1.2 would have an accuracy level of 1 and an EC of 1.1.1.2 would have an accuracy level of 3. (E) Perplexities are consistent for protein sequences from various splits, which suggests that the models are robust to overfitting. Models were trained to 1.5 billion tokens. Error bars indicate standard deviation among 24 ECs.
+
+with adapters (Fig. 4). We then compared the generated sequences between both models, when generation was conditioned on *Common Prompts* and *Rare Prompts*, textual descriptions with many and few examples in the training set, respectively. ProCALM performed better than ProteinDT: it generated more valid and correctly conditioned sequences, without sacrificing the diversity of those sequences. Notably for *Rare Prompts*, while ProteinDT generates barely any valid proteins, ProCALM generalizes better and is still able to generate a decent fraction of valid proteins, though few are completely correctly conditioned.
+
+{8}------------------------------------------------
+
+### 4.3 PROCALM GENERALIZES TO OUT-OF-DISTRIBUTION CONDITIONS
+
+We further explored ProCALM’s ability to generalize, motivated by the fact that generative models able to generate sequences for novel, unseen functions would be highly impactful. For example, enzyme engineering often involves finding enzymes that can perform interesting non-native activities (Yang et al., 2024a,b; Chen & Arnold, 2020). We explored ProCALM’s ability to generate sequences conditioned on rare and held-out EC numbers; the latter task has not been explored before. This setup reflects a real-world scenario where certain enzyme functions have not been annotated, but their corresponding genes have been sequenced. Thus, we explored ProCALM’s ability to generalize and its flexibility to accommodate different representations of enzyme function. Namely, we encoded the EC number as a OH encoding of the EC hierarchy, a continuous fingerprint representation of reactions associated with an EC number (DRFP) (Probst et al., 2022), and a multimodal embedding from contrastive learning (CREEP) (Yang et al., 2024b) – visualized in Fig. 5A with more details in Section A.1.
+
+Overall, ProCALM can generate a substantial fraction of valid enzymes under this challenging conditioning (Fig. 5B). While a negligible number of generated sequences mapped to the correct EC number completely, the functions associated with the generated sequences were generally more similar to the target function (Fig. 5C-D). Using more continuous (DRFP and CREEP) representations of enzyme function did not result in better generalization performance. Held-out EC numbers with more similar functions to the training set generally yielded sequences with more similar functions to the target conditioning (Fig. A.9), and in general, the CREEP representation seems to capture somewhat different information than OH and DRFP. We note that there is no data leakage in the CREEP representation, as it was trained with the same held-out EC numbers. Finally, the perplexities of sequences associated with rare and held-out ECs are comparable to the train set, suggesting that our models are not prone to overfitting (Fig. 5E). Still, there is significant room for future research and improvement here.
+
+Additionally, generating unseen combinations of taxonomy and enzymatic activity would also be interesting for applications such as discovering gene-editing enzymes in new organisms (Burstein et al., 2016). Thus, we next used ProCALM to generate bacterial sequences from several common EC classes, where all bacterial sequences in those EC numbers were held-out during model training. This scenario reflects a hypothetical real-world situation where a eukaryotic enzyme has not been discovered and annotated in a prokaryote. For certain EC classes, ProCALM could generate bacterial sequences (Fig. 6). Generation quality is better when the model is prompted with bacteria as conditioning (as opposed to other taxa), suggesting that the correct generations are not due to chance (Fig. A.10). Overall, ProCALM seems to be able to learn the distribution of bacterial sequences, allowing for some level of OOD generalization.
+
+## 5 DISCUSSION
+
+We have shown that conditional adapters are an efficient, flexible, and generalizable approach for enabling language models to perform steerable sequence generation. Our specific implementation, ProCALM, demonstrates strong performance for enzyme sequence generation conditioned on known EC numbers, at a significantly lower computational cost than prior approaches. ProCALM easily adapts to different types of conditioning (beyond protein structure), such as taxonomy and textual description of function, and to different representations for the same condition, such as OH, DRFP,
+
+![Bar chart showing the fraction of sequences successfully generated with the correct EC number and mapping to bacteria, when prompted with bacteria as conditioning. The y-axis is 'Bacteria and EC Correct' ranging from 0.000 to 0.100. The x-axis lists EC classes: 7.1.1.2, 3.1.1.4, 3.1.3.16, 2.5.1.18, 2.7.1.11, 3.1.3.48, 7.1.1.9, 2.7.7.6, 5.2.1.8. The bars show varying levels of success, with 5.2.1.8 being the highest at approximately 0.075.](e8ff6e66c77a8e96203c9f8db8f0986f_img.jpg)
+
+| EC Class | Bacteria and EC Correct |
+|-|-|
+| 7.1.1.2 | 0.045 |
+| 3.1.1.4 | 0.002 |
+| 3.1.3.16 | 0.001 |
+| 2.5.1.18 | 0.060 |
+| 2.7.1.11 | 0.001 |
+| 3.1.3.48 | 0.001 |
+| 7.1.1.9 | 0.025 |
+| 2.7.7.6 | 0.001 |
+| 5.2.1.8 | 0.075 |
+
+Bar chart showing the fraction of sequences successfully generated with the correct EC number and mapping to bacteria, when prompted with bacteria as conditioning. The y-axis is 'Bacteria and EC Correct' ranging from 0.000 to 0.100. The x-axis lists EC classes: 7.1.1.2, 3.1.1.4, 3.1.3.16, 2.5.1.18, 2.7.1.11, 3.1.3.48, 7.1.1.9, 2.7.7.6, 5.2.1.8. The bars show varying levels of success, with 5.2.1.8 being the highest at approximately 0.075.
+
+Figure 6: **ProCALM has the potential to generate sequences with unseen taxonomy for certain EC classes.** The fraction of sequences successfully generated with the correct EC number and mapping to bacteria, when prompted with bacteria as conditioning. EC and taxonomy were both represented using OH encoding, and the model was trained to 1.5 billion tokens using parallel adapters with bacterial sequences from these EC classes held-out. ECs shown were selected based on the most common EC classes after having bacterial sequences removed.
+
+{9}------------------------------------------------
+
+and CREPE representations of enzyme function. Our approach is also parameter efficient, resulting in lower memory usage and potentially faster training.
+
+Most usefully, ProCALM can perform previously unexplored generation tasks, such as generating from unseen EC classes. Still, performance is limited, and there is significant room for improvement in this area. For certain EC classes, ProCALM was able to generate bacterial sequences corresponding to the correct EC, despite not having bacterial sequences belonging to those EC classes in the train set. 7.1.1.2 and 7.1.1.9 are transmembrane enzymes part of large complexes, but it is not clear why these particular functions were successfully generated. In the future, a more in depth examination of success and failure modes for ProCALM will be interesting.
+
+For known functions, it is relatively straightforward to use function prediction tools such as BLAST to filter generated sequences to the valid ones with correctly conditioned function, though future work will benefit from better function prediction oracles for evaluation (Yu et al., 2023; Ayres et al., 2024; Huo et al., 2024). Future evaluation may also include more detailed analysis of generation quality (Ye et al., 2024) using various tools, with wet-lab validation. In particular, evaluation would benefit from a deeper consideration of how to measure similarity between functions such as EC classes or textual descriptions.
+
+In general, we believe that the most interesting research direction for future improvement is generation of sequences with OOD functions and/or properties. In real-world application, evaluation is particularly intractable for these unannotated functions, so it will be even more critical to increase the hit rate for enzyme discovery on those functions. Having a smooth and navigable latent space for OOD functions will be especially important, along with training data encompassing more comprehensive annotations of natural and engineered proteins. While we explored various representations here based on fingerprints and contrastive learning, further exploration of multiple modalities such as structure, sequence, function, and natural language with different representation learning techniques could lead to breakthroughs (Yang et al., 2024b; Mikael et al., 2024; Ramesh et al., 2022; Yin et al., 2024). For convenience, we finetuned our model using annotated proteins in Swissprot, but greater sequence diversity by incorporating sequences from unannotated and metagenomic datasets could be beneficial in the future.
+
+Overall, we have demonstrated that using conditional adapters to finetune language models offers several advantages, including computational efficiency, flexibility to many types of conditioning, and generalization for OOD generation. This approach could easily be applied to other autoregressive PLMs (Hesslow et al., 2022; Ferruz et al., 2022). ProCALM will be publicly available, and we encourage researchers to apply our approach to other language models and further explore its potential for conditional protein generation.
+
+## REFERENCES
+
+- Sarah Alamdari, Nitya Thakkar, Alex X Lu, Nicolò Fusi, Ava P Amini, and Kevin K Yang. Protein generation with evolutionary diffusion: sequence is all you need. *bioRxiv*, 2023.
+- Frances H. Arnold. Directed Evolution: Bringing New Chemistry to Life. *Angewandte Chemie International Edition*, 57(16):4143–4148, April 2018. ISSN 1433-7851, 1521-3773. doi: 10.1002/anie.201708408. URL <https://onlinelibrary.wiley.com/doi/10.1002/anie.201708408>.
+- Timothy Atkinson, Thomas D Barrett, Scott Cameron, Bora Guloglu, Matthew Greenig, Louis Robinson, Alex Graves, Liviu Copoiu, and Alexandre Laterre. Protein Sequence Modelling with Bayesian Flow Networks. *bioRxiv*, 2024.
+- Gavin Ayres, Geraldene Munsamy, Michael Heinzinger, Noelia Ferruz, Kevin Yang, and Philipp Lorenz. HiFi-NN annotates the microbial dark matter with Enzyme Commission numbers. 2024.
+- Rana A Barghout, Zhiqing Xu, Siddharth Betala, and Radhakrishnan Mahadevan. Advances in generative modeling methods and datasets to design novel enzymes for renewable chemicals and fuels. *Current Opinion in Biotechnology*, 84:103007, December 2023. ISSN 09581669. doi: 10.1016/j.copbio.2023.103007. URL <https://linkinghub.elsevier.com/retrieve/pii/S0958166923001179>.
+
+ Rest of paper (reference and Appendix) is removed.

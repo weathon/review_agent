@@ -1,0 +1,399 @@
+
+
+{0}------------------------------------------------
+
+# FROM EXPLORATION TO MASTERY: ENABLING LLMs TO MASTER TOOLS VIA SELF-DRIVEN INTERACTIONS
+
+Changle Qu<sup>1</sup>, Sunhao Dai<sup>1</sup>, Xiaochi Wei<sup>2</sup>, Hengyi Cai<sup>2</sup>,  
+Shuaiqiang Wang<sup>2</sup>, Dawei Yin<sup>2</sup>, Jun Xu<sup>1\*</sup>, Ji-Rong Wen<sup>1</sup>
+
+<sup>1</sup>Gaoling School of Artificial Intelligence, Renmin University of China, <sup>2</sup>Baidu Inc.
+
+{changlequ, sunhaodai, junxu, jrw}@ruc.edu.cn, weixiaochi@baidu.com  
+caihengyi@ict.ac.cn, shqiang.wang@gmail.com, yindawei@acm.org
+
+## ABSTRACT
+
+Tool learning enables Large Language Models (LLMs) to interact with external environments by invoking tools, serving as an effective strategy to mitigate the limitations inherent in their pre-training data. In this process, tool documentation plays a crucial role by providing usage instructions for LLMs, thereby facilitating effective tool utilization. This paper concentrates on the critical challenge of bridging the comprehension gap between LLMs and external tools due to the inadequacies and inaccuracies inherent in existing human-centric tool documentation. We propose a novel framework, **DRAFT**, aimed at **D**ynamically **R**efining tool documentation through the **A**nalysis of **F**eedback and **T**rials emanating from LLMs' interactions with external tools. This methodology pivots on an innovative trial-and-error approach, consisting of three distinct learning phases: experience gathering, learning from experience, and documentation rewriting, to iteratively enhance the tool documentation. This process is further optimized by implementing a diversity-promoting exploration strategy to ensure explorative diversity and a tool-adaptive termination mechanism to prevent overfitting while enhancing efficiency. Extensive experiments on multiple datasets demonstrate that DRAFT's iterative, feedback-based refinement significantly ameliorates documentation quality, fostering a deeper comprehension and more effective utilization of tools by LLMs. Notably, our analysis reveals that the tool documentation refined via our approach demonstrates robust cross-model generalization capabilities.
+
+## 1 INTRODUCTION
+
+Tool learning (Mialon et al., 2023; Qin et al., 2023b; Schick et al., 2024; Qu et al., 2024b), which integrates external tools with large language models (LLMs), has significantly enhanced the capability of LLMs to address complex real-world tasks (Nakano et al., 2021; Qin et al., 2023a; M. Bran et al., 2024). By leveraging external tools, LLMs are able to mitigate the limitations of outdated pre-training data and the text-in-text-out interface, enabling them to access up-to-date information, interact with dynamic environments, and take actions beyond their original scope (Zhuang et al., 2024; Wang et al., 2024a). To effectively utilize these external tools, LLMs are typically provided with tool documentation as context (Shen et al., 2024; Song et al., 2023; Xu et al., 2023). This documentation provides essential information on how tools function, their potential uses, and the ways in which they can be leveraged to solve complex tasks. By incorporating tool documentation within the task instructions, LLMs can leverage their in-context learning abilities to understand and utilize the tools efficiently (Wei et al., 2022; Hsieh et al., 2023). Therefore, tool documentation is an indispensable component driving the success of tool learning, serving as a bridge between LLMs and external tools.
+
+However, existing tools primarily originate from pre-established, human-engineered code repositories and are not explicitly tailored for the utilization of LLMs from their inception, let alone the corresponding tool documentation. In fact, orchestrating an ideal documentation for an external tool that adapts to the specific requirements of LLMs remains a challenging endeavor. **First**, the original human-crafted tool documentation is typically created with human intuition in mind, and
+
+\* Jun Xu is the corresponding author.
+
+{1}------------------------------------------------
+
+![Figure 1: (a) Issues in current tool documentation: Incomplete, Redundant, and Inaccurate. (b) LLMs incrementally enhance understanding through iterative exploration. (c) Comparison of raw and improved tool documentation on three datasets.](49ad3a646d84bcfeac02bdf2b3792a3e_img.jpg)
+
+Figure 1(a) shows three examples of documentation issues:
+ 
+
+- Incomplete Documentation:** "name": "GetSearchImage", "description": "" (What is this tool used for?)
+- Redundant Documentation:** "para\_name": "imageId", "description": "Image identifier." (Why did it go wrong? Error: The resource could not be found.)
+- Inaccurate Documentation:** "description": "A QR code generator API is a tool that enables developers to..." (Actual return results: I'm a teapot.)
+
+Figure 1(b) illustrates the iterative exploration process where LLMs transition from untested functionalities (gray) to discovered capabilities (white) through trial-and-error.
+
+Figure 1(c) is a bar chart comparing raw and improved tool documentation across three datasets:
+
+| Dataset | Raw Documentation | Improved Documentation |
+|-|-|-|
+| RestBench-TMDB | 92.5% Win | 17.5% Win |
+| RestBench-Spotify | 77.5% Win | 17.5% Win |
+| ToolBench | 87.9% Win | 11.4% Win |
+
+Figure 1: (a) Issues in current tool documentation: Incomplete, Redundant, and Inaccurate. (b) LLMs incrementally enhance understanding through iterative exploration. (c) Comparison of raw and improved tool documentation on three datasets.
+
+Figure 1: (a): An illustration showcasing issues in current tool documentation, including incomplete, redundant, and inaccurate information. (b): An illustration of how LLMs incrementally enhance their understanding of tool usage through iterative exploration, transitioning from untested functionalities (gray) to discovered capabilities (white) via a trial-and-error process. (c): The comparison between the raw and improved tool documentation regarding its usefulness on three tool learning datasets, highlighting that DRAFT is able to produce tool documentation that is more favored by LLMs.
+
+is often fraught with inconsistency and ambiguities, as it primarily caters to human understanding and usually lacks the precision required for machine interpretation (Chemero, 2023; Yuan et al., 2024). As illustrated in Figure 1 (a), incomplete documentation makes it difficult for LLMs to clearly understand the purpose of a tool and when it should be invoked, while redundant documentation, containing excessive irrelevant information, obscures key details and increases token consumption in prompts. Additionally, inaccurate documentation that does not reflect the tool’s actual capabilities can lead to discrepancies between the tool’s outputs and its description, leading to the potential misuse of the tool by LLMs. These issues obstruct the effective utilization of tools by LLMs. **Second**, manual modification of these documentations, even with meticulous revisions, struggle to fully encompass all aspects of tool usage, since discerning the specific scope a tool can manage and identifying its edge use-cases often necessitates considerable hands-on experience. For example, as depicted in Figure 1 (a), incomplete documentation also fails to mention certain constraints on the parameters, and the LLM, being unaware of this undocumented constraint, generates an error when invoking the tool with an invalid parameter value. Addressing these issues by manually correcting or enhancing tool documentation is time-consuming and labor-intensive. Moreover, this may not scale to a substantial number of tools effectively. **Furthermore**, the dynamic nature of tool development further exacerbates this issue, as functionalities of tools are frequently updated, deprecated, or extended. Maintaining an up-to-date and accurate representation of such evolving functionalities within the tool documentation becomes an arduous task. This misalignment between the tool documentation with the current state of the tool hinders the efficient and correct utilization of tools by LLMs.
+
+Humans, on the contrary, acquire tool proficiency through repeated interactions and hands-on experiences, capable of maintaining an updated comprehension of these tools despite their evolving functionalities. In light of this, this paper proposes DRAFT, conceptualized to automate the adjustment and optimization of tool documentation based on the feedback derived from the LLM’s interaction with the tool, aiming to bridge the comprehension gap between LLMs and external tools.
+
+More concretely, DRAFT implements a trial-and-error methodology to incrementally improve the tool documentation. As shown in Figure 2, DRAFT orchestrates three dynamically interlinked phases, which collectively facilitate the iterative process of documentation enhancement. It first undertakes the simulation of potential tool application scenarios, crafting explorative instances and capturing tool execution outcomes through a designed explorer. Subsequently, the analyzer dissects the prevailing documentation, amalgamating insights from the explorer’s findings and feedback to moot documentation modification propositions. Finally, the rewriter amalgamates these insights, refining the tool documentation while simultaneously guiding further explorative pursuits by the explorer. To optimize this process, we design a diversity-promoting exploration strategy to ensure diversity in exploration, thus providing a wider range of samples for subsequent rewriting. Recognizing that different tools vary in complexity for LLMs, we introduce a tool-adaptive termination mechanism to improve efficiency during modifications by halting the iterative process once the documentation aligns with the comprehension of LLMs, thereby saving time and resources while preventing overfitting.
+
+{2}------------------------------------------------
+
+![Figure 2: Schematic illustration of the proposed self-driven iterative improvement framework, DRAFT. The diagram is divided into three main parts: Experience Gathering, Learning from Experience, and Documentation Rewriting. Experience Gathering shows an Explorer (M_E) interacting with a Tool Doc to generate a query, which is then simulated using Tool-use Examples. Learning from Experience shows an Analyzer (M_A) examining the Tool Doc and Tool-use Examples to identify documentation problems. Documentation Rewriting shows a Rewriter (M_R) performing comprehensive rewriting of the Tool Doc. On the right, two specialized mechanisms are shown: Diversity-promoting Exploration Strategy, which uses Similarity Constraint and Self-Reflection to generate new queries, and Tool-adaptive Termination Mechanism, which uses a graph-based approach to decide when to stop. A sample interaction with a GET person tool is provided on the far right.](1b7d539e02a202c2cf2d97698b911447_img.jpg)
+
+**Diversity-promoting Exploration Strategy**
+
+Similarity Constraint
+
+Explored Queries
+
+New Generated Query
+
+Self-Reflection
+
+**Tool-adaptive Termination Mechanism**
+
+Tool Doc1
+
+Tool Doc2
+
+Tool Doc1
+
+Tool Doc2
+
+Tool Doc1
+
+Tool Doc2
+
+Tool Doc1
+
+Tool Doc2
+
+Tool Name: GET person\_person\_id  
+ Description: ...Added the translations...  
+ (endpoint:CSMjCXAGpNGtS) ...
+
+Query: Can you give me details about the person with ID 12345?  
+ Tool Parameters: {"ID":"12345"}  
+ Observation: {"biography": "", "birthday": "1991-11-29", "deathday": "1996-01-01", "gender": 2, "homepage": null ...}  
+ Suggestion: Here are some suggestions: 1. Include Response Fields: ... 2. Clarify Parameters: ... 3. Explain "append to r response": ... 4. Update Recent Changes: ... 5. Provide Example Usage: ... 6. Remove Irrelevant Information: ...  
+ Rewriting: This API retrieves detailed information about a person using their unique ID. The response includes ... The API supports the 'append\_to\_response' parameter... Example usage: ...  
+ Direction for Next Exploration: ...
+
+Figure 2: Schematic illustration of the proposed self-driven iterative improvement framework, DRAFT. The diagram is divided into three main parts: Experience Gathering, Learning from Experience, and Documentation Rewriting. Experience Gathering shows an Explorer (M\_E) interacting with a Tool Doc to generate a query, which is then simulated using Tool-use Examples. Learning from Experience shows an Analyzer (M\_A) examining the Tool Doc and Tool-use Examples to identify documentation problems. Documentation Rewriting shows a Rewriter (M\_R) performing comprehensive rewriting of the Tool Doc. On the right, two specialized mechanisms are shown: Diversity-promoting Exploration Strategy, which uses Similarity Constraint and Self-Reflection to generate new queries, and Tool-adaptive Termination Mechanism, which uses a graph-based approach to decide when to stop. A sample interaction with a GET person tool is provided on the far right.
+
+Figure 2: Schematic illustration of our proposed self-driven iterative improvement framework, DRAFT. The **left** part illustrates the three distinct learning phases in our framework, where a trial refers to a single iteration of the process. The **middle** part shows the two specialized mechanisms designed to optimize the process. The **right** part depicts an example of using DRAFT to iteratively modify the tool documentation (a complete revision trajectory is presented in Appendix E).
+
+Through this collaborative, iterative framework, the documentation progressively morphs, aligning more coherently with LLMs operational requisites, and thus empowering LLMs to leverage external tools more effectively in their problem-solving endeavors.
+
+In summary, our contributions are as follows: (1) We highlight that due to the inherent understanding gap between LLMs and humans, inefficiencies and inaccuracies within existing tool documentation hamper the effective utilization of tools by LLMs. (2) We introduce a novel framework, DRAFT, designed to dynamically adjust and optimize tool documentation based on the interaction feedback between LLMs and external tools, which significantly bridges the gap between them by enabling the LLMs to better comprehend and utilize the tools at their disposal, thereby enhancing the overall tool-using capabilities of LLMs. (3) Extensive experiments demonstrate that DRAFT significantly improves the quality of tool documentation and enhances the ability of LLMs to utilize external tools.
+
+## 2 METHODS
+
+In this section, we will first introduce the overview of DRAFT, and then provide detailed explanations of the three included learning stages. The learning algorithm is presented in Algorithm 1.
+
+### 2.1 OVERVIEW OF DRAFT
+
+To address the challenges of inadequate, ambiguous, and outdated tool documentation that hinder LLMs from effectively utilizing external tools, we propose DRAFT, a framework that iteratively refines tool documentation to bridge the comprehension gap between LLMs and tools. As illustrated in Figure 2, DRAFT operates through three interconnected phases: experience gathering, learning from experience, and documentation rewriting. In the experience gathering phase, an explorer simulates diverse tool usage scenarios, collecting data on how the LLM interacts with the tool based on the current documentation, thus uncovering misunderstandings and limitations. The learning from experience phase involves an analyzer examining this data to identify discrepancies between intended and actual tool usage, pinpoint ambiguities or inaccuracies in the documentation, and propose targeted improvements. In the documentation rewriting phase, a rewriter integrates these insights to update the documentation, enhancing clarity and alignment with the tool’s functionalities. Through this trial-and-error framework, DRAFT is capable of simulating the process by which humans acquire proficiency in tool usage through repeated interactions and hands-on experiences, thereby automating the creation of tool documentation specifically designed for LLMs. Furthermore, by employing the diversity-promoting exploration strategy and tool-adaptive termination mechanism, DRAFT efficiently converges on optimized documentation, enabling LLMs to utilize external tools more effectively despite the initial documentation shortcomings.
+
+{3}------------------------------------------------
+
+#### **Algorithm 1:** The Learning Algorithm of DRAFT
+
+**Input:** Raw tool documentation set  $\mathcal{D}$ , iteration round  $I$ , similarity threshold  $\phi$ , termination threshold  $\tau$ .**Output:** Revised tool documentation set  $\tilde{\mathcal{D}}$ .
+
+```
+
+1 Initialize the revised tool documentation set  $\tilde{\mathcal{D}} \leftarrow \emptyset$ 
+2 for raw tool documentation  $t \in \mathcal{D}$  do
+3   for  $i = 1$  to  $I$  do
+4     // Experience Gathering (§ 2.2)
+5     Instruct Explorer to generate an exploratory instance  $e_i$  using Eq. (1)
+6     while  $\max_{j < i} \text{sim}(\mathbf{e}_i^q, \mathbf{e}_j^q) > \phi$  do
+7       Instruct Explorer to generate a new exploratory instance  $e_i$ 
+8     end
+9     Instruct Explorer to capture the outcomes of tool execution  $r_i$ 
+10    // Learning from Experience (§ 2.3)
+11    Instruct Analyzer to learn from experience and provide suggestions  $s_i$  for modifications using Eq. (3)
+12    // Documentation Rewriting (§ 2.4)
+13    Instruct Rewriter to revise the documentation based on experience and suggestions to get
+14    revised tool documentation  $t_i$  and propose new exploration directions  $d_i$  using Eq. (4)
+15    Calculate the similarities  $\Delta$  between  $t_{i-1}$  and  $t_i$  using Eq. (5)
+16    if  $\Delta > \tau$  then
+17      Break
+18    end
+19    Updating the revised tool documentation set  $\tilde{\mathcal{D}} \leftarrow \tilde{\mathcal{D}} \cup t_i$ 
+20  end
+21 return  $\tilde{\mathcal{D}}$ 
+
+```
+
+### 2.2 EXPERIENCE GATHERING
+
+In the experience gathering phase, we design an Explorer  $\mathcal{M}_E$  to simulate plausible scenarios in which the tool may be utilized. This approach parallels the manner in which individuals investigate the potential applications of a new tool when they are unable to comprehend the accompanying manual.
+
+Specifically, at the  $i$ -th iteration, the Explorer  $\mathcal{M}_E$  generates an exploration instance  $e_i$  based on the current tool documentation  $t_{i-1}$ , next-step exploration direction  $d_{i-1}$  from the Rewriter  $\mathcal{M}_R$ , and the previous history  $\mathcal{H}_i = \{(e_j, r_j) | j < i\}$ , which consists of prior exploration instances  $e_{<i}$  and their corresponding return results of the tool  $r_{<i}$ . This process is formalized as follows:
+
+$$e_i = \mathcal{M}_E(t_{i-1}, d_{i-1}, \mathcal{H}_i), \quad (1)$$
+
+where  $e_i$  consists of a user query  $\mathbf{e}_i^q$  related to the tool and the necessary parameters  $\mathbf{e}_i^p$ . The initial tool documentation is denoted as  $t_0$ , representing the raw documentation provided in the dataset. After generating  $e_i$ , the Explorer invokes the tool to obtain the result  $r_i$  returned by the tool.
+
+Given that tool utilization often involves complex parameter ranges, combinations, and potential error sources, it is crucial to ensure diversity in the exploration phase to cover a wide spectrum of possible scenarios (Hong et al., 2018; Friedrich et al., 2009). To address this, besides maintaining a record of all previously explored queries—which we provide to the Explorer to instruct it to generate instances that differ from those already generated—we also implement a **diversity-promoting exploration strategy**:
+
+**Similarity Constraint.** When generating a new instance, the Explorer calculates the cosine similarity between the new generated query  $\mathbf{e}_i^q$  and all prior queries  $\mathbf{e}_j^q$  for  $j < i$ , using embedding vectors obtained from OpenAI’s *text-embedding-ada-002*<sup>1</sup>. The similarity is computed as:
+
+$$\max_{j < i} \text{sim}(\mathbf{e}_i^q, \mathbf{e}_j^q) < \phi, \quad (2)$$
+
+<sup>1</sup><https://openai.com/index/new-and-improved-embedding-model/>
+
+![Figure 3: Prompt template for explorer. The image shows a screenshot of a prompt box with a blue header 'Explorer'. The prompt text includes: '## Task Prompt: Your task is to answer the user's query as best you can. You have access to the following tools, which you can use via tool calling to help with your response: [Tool Documentation] Now you have the chance to explore the available tools. You can do this by ... Here is an example: [{](2bb31852174adbb3a45abf75f593ac36_img.jpg)
+
+Figure 3: Prompt template for explorer. The image shows a screenshot of a prompt box with a blue header 'Explorer'. The prompt text includes: '## Task Prompt: Your task is to answer the user's query as best you can. You have access to the following tools, which you can use via tool calling to help with your response: [Tool Documentation] Now you have the chance to explore the available tools. You can do this by ... Here is an example: [{
+
+Figure 3: Prompt template for explorer.
+
+{4}------------------------------------------------
+
+where  $\text{sim}(\cdot, \cdot)$  denotes the cosine similarity function, and  $\phi$  is a predefined threshold controlling the allowed similarity. This constraint ensures that the new query is sufficiently different from all previous queries, promoting diversity in exploration.
+
+**Self-Reflection.** If the similarity constraint is not satisfied (i.e., the new query is too similar to previous ones), the `Explorer` engages in self-reflection (Shinn et al., 2024). It discards the current instance and analyzes the reasons for the overlap, adjusting its approach to generate a new query that explores different aspects of the tool. This iterative self-reflection process continues until the `Explorer` produces an instance that meets the diversity criterion.
+
+By incorporating this diversity-promoting exploration strategy, we enhance the exploration coverage of the `Explorer`, allowing it to investigate a broader range of tool functionalities and edge cases. This comprehensive set of exploration instances is crucial for identifying potential misunderstandings and gaps in the tool documentation, thereby providing valuable experiential data for subsequent analysis and documentation rewriting. Figure 3 illustrates our prompt template for `Explorer`.
+
+### 2.3 LEARNING FROM EXPERIENCE
+
+Analogous to how humans learn—acquiring familiarity with new tools through practical experiences and then consulting manuals to deepen understanding—the insights gained during the experience gathering phase provide a foundation for informed and targeted enhancements to the documentation. Thus, building upon the experience gathered in the first phase, the second phase focuses on analyzing this data to refine the tool documentation. In this phase, we introduce an `Analyzer`  $\mathcal{M}_A$  designed to identify and address issues within the current tool documentation, thereby guiding the `Rewriter` in making effective revisions.
+
+![Figure 4: Prompt template for analyzer. The image shows a dashed green box containing a prompt for an 'Analyzer'. The prompt includes sections for 'Task Prompt' and 'Memory Mechanisms'. The 'Task Prompt' section asks the model to suggest modifications to tool documentation based on current documentation, queries, and results. The 'Memory Mechanisms' section asks the model to use the history of tool modifications. A label 'Analyzer' is in a box at the top right of the prompt box.](0fd25e7fd1bbb3a7e2e304fc28a8496b_img.jpg)
+
+```
+
+## Task Prompt:
+You task is to provide suggestions for modifying the tool documentation
+based on the current tool documentation, the explored queries and
+parameters, and the results returned by the tool. You have access to the
+following tools: [Tool Documentation] ...
+Below are explored queries, the required parameters and the outputs of the
+tool: [Explored examples]
+Here is an example: ["Suggestions": ""]
+## Memory Mechanisms:
+The following is the history of you modifying the tool description: [History]
+Based on the above information, provide more constructive suggestions.
+  
+```
+
+Figure 4: Prompt template for analyzer. The image shows a dashed green box containing a prompt for an 'Analyzer'. The prompt includes sections for 'Task Prompt' and 'Memory Mechanisms'. The 'Task Prompt' section asks the model to suggest modifications to tool documentation based on current documentation, queries, and results. The 'Memory Mechanisms' section asks the model to use the history of tool modifications. A label 'Analyzer' is in a box at the top right of the prompt box.
+
+Figure 4: Prompt template for analyzer.
+
+Formally, at the  $i$ -th iteration, the `Analyzer`  $\mathcal{M}_A$  takes the following inputs: current tool documentation  $t_{i-1}$ , exploration instance  $e_i$ , tool feedback  $r_i$  provided by the `Explorer`  $\mathcal{M}_E$ , and the history of documentation revisions  $\mathcal{T}_i = \{t_j \mid j < i\}$ . Then the `Analyzer`  $\mathcal{M}_A$  analyzes these inputs to identify issues and generate revision suggestions  $s_i$ :
+
+$$s_i = \mathcal{M}_A(t_{i-1}, e_i, r_i, \mathcal{T}_i). \quad (3)$$
+
+To ensure that the `Analyzer` can provide high-quality and relevant revision suggestions, we establish several evaluation criteria, including consistency with tool outputs, comprehensiveness, and conciseness without irrelevant information (as detailed in Appendix C). These criteria enable `Analyzer` to identify and assess issues present within the existing tool documentation. By considering the historical evolution of the documentation through the revision history  $\mathcal{T}_i$ , the `Analyzer` gains valuable insights into past updates, helping it avoid redundant or repetitive suggestions and focus on areas that still require improvement. The prompt template for `Analyzer` is illustrated in Figure 4.
+
+Furthermore, the `Analyzer` delivers its feedback in natural language, offering detailed and nuanced guidance to the `Rewriter` for subsequent updates. This approach contrasts with providing mere scalar feedback, as it ensures the `Rewriter` receives comprehensive insights that facilitate accurate and effective revisions, ultimately enhancing the clarity and usability of the tool documentation.
+
+### 2.4 DOCUMENTATION REWRITING
+
+Building upon the experiences gathered and the revision suggestions obtained from the previous two phases, the final phase focuses on refining the tool documentation to enhance its clarity, accuracy, and usability, ensuring it aligns with the comprehension capabilities of LLMs. This phase also provides suggestions for future exploration directions in the next iteration of the experience gathering phase.
+
+Specifically, we design a `Rewriter`  $\mathcal{M}_R$  to synthesize information from the exploration instances  $e_i$  and the corresponding tool return results  $r_i$  provided by the `Explorer`  $\mathcal{M}_E$ , as well as the revision suggestions  $s_i$  from the `Analyzer`  $\mathcal{M}_A$ . It is important to note that the `Rewriter`  $\mathcal{M}_R$  also takes into account the rewrite history  $\mathcal{T}_i$ , which includes all previous versions of the tool documentation up to iteration  $i$ . By integrating these inputs, the `Rewriter`  $\mathcal{M}_R$  produces an updated version of the
+
+{5}------------------------------------------------
+
+tool documentation  $t_i$  and provides suggestions for the next round of exploration directions  $d_i$ . This process is formalized as:
+
+$$d_i, t_i = \mathcal{M}_R(t_{i-1}, e_i, r_i, s_i, \mathcal{T}_i). \quad (4)$$
+
+By incorporating the revision history into its process, the Rewriter ensures that each version of the documentation builds upon its predecessors, resulting in continuous improvements in clarity, accuracy, and usability. The prompt template to get Rewriter is shown in Figure 5.
+
+Furthermore, recognizing that different tools vary in their complexity and the ease with which LLMs can comprehend them (Qin et al., 2023b; Osurak & Heinke, 2018), we implement a **tool-adaptive termination mechanism** to adaptively determine when to cease modifications for each tool. Analogous to recipes requiring different levels of expertise, some tools may reach optimal documentation faster than others. We consider the iterative process to have converged when there is minimal change between two consecutive versions of the documentation, indicating that the Rewriter has sufficiently aligned the documentation with the LLM’s understanding.
+
+![Figure 5: Prompt template for rewriter. The prompt is shown in a code block with syntax highlighting. It includes sections for Task Prompt, Explored examples, Suggestions, and Vectors/Mechanisms. A 'Rewriter' label is in a box at the top right.](38b977dc8ba47e36367f97933421e3ae_img.jpg)
+
+```
+
+## Task Prompt:
+Your task is to refine the description of the tool based on the queries and parameters you've explored, the outputs provided by the tool, as well as the suggestions provided. You have access to the following tools: [Tool Documentation]
+Below are explored queries, the required parameters and the outputs of the tool: [Explored examples]
+Additionally, here are some suggestions for updating the tool description: [Suggestions] ...
+Here is an example: {"Rewritten description": "", "Suggestions for exploring": ""}
+## Vectors/Mechanisms:
+The following is the history of you modifying the tool description: [History]
+Based on the information above, rewrite the tool description and provide more constructive suggestions for exploration.
+  
+```
+
+Figure 5: Prompt template for rewriter. The prompt is shown in a code block with syntax highlighting. It includes sections for Task Prompt, Explored examples, Suggestions, and Vectors/Mechanisms. A 'Rewriter' label is in a box at the top right.
+
+Figure 5: Prompt template for rewriter.
+
+Specifically, inspired by Wieting et al. (2019), we measure the degree of change  $\Delta$  between iterations by calculating both the word-match metric (e.g., BLEU score (Papineni et al., 2002)) and the semantic-match metric (e.g., cosine similarity of embeddings):
+
+$$\Delta = \frac{\text{sim}(\mathbf{e}_i^t, \mathbf{e}_{i-1}^t) + \text{BLEU}(t_i, t_{i-1})}{2}, \quad (5)$$
+
+where  $\mathbf{e}_i^t$  and  $\mathbf{e}_{i-1}^t$  are the embedding vectors of  $t_i$  and  $t_{i-1}$  obtained using OpenAI’s *text-embedding-ada-002*<sup>2</sup>. The function  $\text{sim}(\cdot, \cdot)$  calculates the cosine similarity between the semantic embedding vectors of two documentation versions, and  $\text{BLEU}(\cdot, \cdot)$  measures the n-gram overlap between them. If  $\Delta$  exceeds a predefined termination threshold  $\tau$ , we stop the iterative modifications.
+
+This tool-adaptive termination mechanism offers several advantages: First, it enhances efficiency by ceasing iterations when the documentation is adequately aligned with the LLM’s comprehension, conserving computational resources and time. Second, it prevents unnecessary modifications that could lead to overfitting, thus optimizing the quality of the documentation. By employing both the BLEU score and cosine similarity, we ensure a balanced assessment of structural and semantic alignment, ultimately yielding high-quality documentation tailored for effective LLM utilization.
+
+### 2.5 DRAFT’S STRENGTHS
+
+In this section, we outline the key strengths of the proposed DRAFT framework. **First and foremost**, DRAFT operates in a fully automated manner, which significantly reduces resource consumption in comparison to the time-consuming and labor-intensive manual modifications that are typically required. **Furthermore**, by employing a trial-and-error methodology, DRAFT continuously updates tool documentation based on feedback regarding tool usage obtained from LLMs, thereby enhancing the alignment between tool documentation and the operational understanding of LLMs. **Additionally**, DRAFT is capable of dynamically maintaining an accurate and up-to-date representation of evolving features within the tool documentation as the tools develop. It also provides inherent explainability, as the entire process is presented in natural language. Users can easily track the history of modifications and seamlessly integrate expert insights into the updating process.
+
+## 3 EXPERIMENTS
+
+### 3.1 EXPERIMENTAL SETUP
+
+**Datasets.** To verify the effectiveness of DRAFT, we conduct experiments on two benchmarks: ToolBench and RestBench. ToolBench (Qin et al., 2024) is a large-scale benchmark of real-world
+
+<sup>2</sup><https://openai.com/index/new-and-improved-embedding-model/>
+
+{6}------------------------------------------------
+
+Table 1: Performance comparison of different methods on three datasets. Win% is calculated by comparing each method with ReAct. The term “-” means that EasyTool has not been implemented on the Spotify dataset. The best result for each LLM is in **bold**.
+
+| Model | Method | RestBench-TMDB |  | RestBench-Spotify |  | ToolBench |  |
+|-|-|-|-|-|-|-|-|
+|  |  | CP% | Win% | CP% | Win% | CP% | Win% |
+| <b>GPT-4o-mini</b> | ReAct | 48.00 | 50.00 | 24.56 | 50.00 | 35.00 | 50.00 |
+|  | DFSDT | 50.00 | 68.00 | 35.08 | 61.40 | 37.00 | 84.00 |
+|  | EasyTool | 56.00 | 75.00 | - | - | 42.00 | 85.00 |
+|  | DRAFT (Ours) | <b>62.00</b> | <b>82.00</b> | <b>43.85</b> | <b>78.94</b> | <b>47.00</b> | <b>88.00</b> |
+| <b>Llama-3-70B</b> | ReAct | 72.00 | 50.00 | 26.31 | 50.00 | 41.00 | 50.00 |
+|  | DFSDT | 74.00 | 38.00 | 63.15 | 61.40 | 42.00 | 54.00 |
+|  | EasyTool | 76.00 | <b>64.00</b> | - | - | 46.00 | 60.00 |
+|  | DRAFT (Ours) | <b>86.00</b> | <b>64.00</b> | <b>66.66</b> | <b>64.91</b> | <b>53.00</b> | <b>62.00</b> |
+| <b>GPT-4o</b> | ReAct | 71.00 | 50.00 | 28.07 | 50.00 | 37.00 | 50.00 |
+|  | DFSDT | 74.00 | 61.00 | 64.91 | 56.14 | 41.00 | 73.00 |
+|  | EasyTool | 79.00 | 62.00 | - | - | 45.00 | 77.00 |
+|  | DRAFT (Ours) | <b>88.00</b> | <b>71.00</b> | <b>70.17</b> | <b>84.21</b> | <b>51.00</b> | <b>78.00</b> |
+
+APIs collected from RapidAPI and BMTools, commonly used to evaluate the capability of LLMs in tool usage. Due to budget constraints, we focus on the most challenging subset of ToolBench, namely I3-Instruction, which contains complex user requests requiring multiple tools from different categories. RestBench (Song et al., 2023) is a benchmark consisting of two real-world scenarios: TMDB, which includes 54 movie-related APIs, and Spotify, which has 40 music-related APIs.
+
+**Evaluation Metrics.** Following previous work (Song et al., 2023; Qin et al., 2024; Yuan et al., 2024), we evaluate performance using two widely adopted metrics: (1) Correct Path Rate (CP%), which measures the proportion of instances where the model-generated sequence of tool calls contains the ground truth tool path as a subsequence, allowing for straightforward accuracy assessment. (2) Win Rate (Win%), which evaluates effectiveness through pairwise comparisons by a ChatGPT-based evaluator, capturing nuanced performance differences not reflected by rule-based metrics.
+
+**Baselines.** Following Qin et al. (2024) and Yuan et al. (2024), we compare our method with widely adopted baselines, including: (1) ReAct (Yao et al., 2022), which integrates reasoning with action, enabling LLMs not only to justify their actions but also to refine their reasoning processes based on feedback from the environment. (2) DFSDT (Qin et al., 2024), which addresses the issue of error propagation by incorporating a depth-first search strategy to enhance decision-making accuracy. (3) EasyTool (Yuan et al., 2024), which achieves more concise tool descriptions by using ChatGPT to directly rewrite the documentation and incorporate guidelines, thereby enhancing the comprehension of LLMs regarding tool functions and parameter requirements.
+
+**Implementation Details.** For the main experiments, we use the *GPT-4o* as the backbone model for DRAFT, which means that we employ this model to refine the tool documentation by incorporating its own tool usage feedback. We set the similarity threshold  $\phi$  to 0.9, termination threshold  $\tau$  to 0.75, and maximum iteration count to 5. We select three of the latest LLMs to ensure our evaluation reflects the current state of the field including the closed-source models *GPT-4o*<sup>3</sup> and *GPT-4o-mini*<sup>4</sup>, as well as the open-source model *Llama-3-70B*<sup>5</sup>. Our code is available at <https://github.com/quchanagle1/DRAFT>.
+
+### 3.2 EXPERIMENTAL RESULTS
+
+We present our experimental results in Table 1. Based on these results, we have the following observations: While EasyTool can slightly improve experimental performance, it does not incorporate the experience feedback from LLMs to iteratively revise the tool documentation. As a result, it cannot fully align with the understanding of LLMs. In contrast, our method effectively addresses these issues and achieves more significant improvements. We observe that all LLMs achieve better performance
+
+<sup>3</sup><https://platform.openai.com/playground/chat?models=gpt-4o-2024-08-06>
+
+<sup>4</sup><https://platform.openai.com/playground/chat?models=gpt-4o-mini>
+
+<sup>5</sup><https://huggingface.co/meta-llama/Meta-Llama-3-70B>
+
+{7}------------------------------------------------
+
+![Figure 6: A comparative analysis of performance based on varying numbers of iteration rounds. The figure consists of three subplots (a, b, c) showing Correct Prob Rate (%) and Win Rate (%) for different models over 5 iterations.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 6 displays three line graphs (a, b, c) showing performance metrics (Correct Prob Rate (%) and Win Rate (%)) across five iteration rounds for different models.
+
+(a) GPT-4o-mini: The left graph shows Correct Prob Rate (%) for ToolBench-TMDB CPs (orange line with circles) and ToolBench-TMDB Winrs (green line with triangles). The right graph shows Win Rate (%) for ToolBench-Sparky CPs (orange line with circles) and ToolBench-Sparky Winrs (green line with triangles).
+
+(b) Llama-3-70b: The left graph shows Correct Prob Rate (%) for ToolBench-TMDB CPs (orange line with circles) and ToolBench-TMDB Winrs (green line with triangles). The right graph shows Win Rate (%) for ToolBench-Sparky CPs (orange line with circles) and ToolBench-Sparky Winrs (green line with triangles).
+
+(c) GPT-4o: The left graph shows Correct Prob Rate (%) for ToolBench-TMDB CPs (orange line with circles) and ToolBench-TMDB Winrs (green line with triangles). The right graph shows Win Rate (%) for ToolBench-Sparky CPs (orange line with circles) and ToolBench-Sparky Winrs (green line with triangles).
+
+Figure 6: A comparative analysis of performance based on varying numbers of iteration rounds. The figure consists of three subplots (a, b, c) showing Correct Prob Rate (%) and Win Rate (%) for different models over 5 iterations.
+
+Figure 6: A comparative analysis of performance based on varying numbers of iteration rounds.
+
+when using the tool documentation modified by DRAFT. This indicates that although our tool documentation was revised through utilizing tool usage feedback from a single model, it exhibits robust cross-model generalization capabilities. Notably, on the ToolBench dataset, the *GPT-4o-mini* enhanced with DRAFT even surpasses the performance of the *GPT-4o* without DRAFT. These improvements demonstrate the effectiveness of DRAFT, which can be attributed to the fact that DRAFT iteratively learns from the tool usage experiences of LLMs to refine the tool documentation. In this way, DRAFT creates tool documentation specifically aligned with the understanding of LLMs.
+
+### 3.3 FURTHER ANALYSIS
+
+**How does the number of iteration rounds affect the performance of tool learning?** A key feature of DRAFT is its iterative refinement of tool documentation with a tool-adaptive termination mechanism. We examine the effectiveness of these designs by analyzing how the number of iteration rounds influences the performance of downstream tool learning. The results presented in Figure 6 demonstrate a general trend where performance is enhanced with an increasing number of iterations, followed by a subsequent decline. This suggests that iterative modifications are crucial for enhancing tool documentation quality and the ability of LLMs to utilize tools effectively. Such modifications facilitate the exploration of a wider array of examples and the incorporation of additional feedback derived from the tool usage experiences of LLMs, ultimately refining the tool descriptions to achieve superior performance. However, a decline in performance is observed after a certain number of iterations. This decline may be attributed to the introduction of redundant information as the number of iterations increases, potentially leading to overfitting. Therefore, we implement a tool-adaptive termination mechanism to prevent performance degradation and ensure optimal results.
+
+**Does using other models as backbones also ensure cross-model generalization?** Our preliminary experiments have demonstrated that employing *GPT-4o* as the backbone to refine tool documentation by integrating its own usage feedback results in revised documentation that exhibits cross-model generalization, enhancing the performance of other models. This observation prompts
+
+![Figure 7: An analysis of cross-model generalization. The figure consists of two bar charts showing Correct Prob Rate (%) and Win Rate (%) for different models.](aa14b9ec884bf40ce06c161be468cd84_img.jpg)
+
+Figure 7 displays two bar charts showing performance metrics (Correct Prob Rate (%) and Win Rate (%)) for different models.
+
+The left chart shows Correct Prob Rate (%) for GPT-4o-mini, Llama-3-70B, and GPT-4o. The right chart shows Win Rate (%) for GPT-4o-mini, Llama-3-70B, and GPT-4o.
+
+Legend: Raw (purple bar), DRAFT (yellow bar).
+
+Figure 7: An analysis of cross-model generalization. The figure consists of two bar charts showing Correct Prob Rate (%) and Win Rate (%) for different models.
+
+Figure 7: An analysis of cross-model generalization.
+
+{8}------------------------------------------------
+
+an inquiry into whether using other models as a backbone would similarly yield cross-model generalization. To investigate this, we conduct experiments on RestBench-TMDB using *Llama-3-70B* as a backbone, which led to the generation of a new set of tool documentation informed by its usage feedback. As illustrated in Figure 7, our findings indicate that it also demonstrates cross-model generalization, enhancing the tool usage capabilities across all LLMs. This may result from decoder-only models sharing similar transformer structures and common pre-training corpora, allowing them to achieve consensus on knowledge mastery and needs. Furthermore, we also find that employing *GPT-4o* as a backbone yields superior performance compared to *Llama-3-70B*. This suggests that our method can benefit from continuous improvements in foundational models.
+
+**Are the two mechanisms we proposed truly effective for DRAFT?** We conduct ablation studies on RestBench-TMDB using *GPT-4o* to assess the impact of the two mechanisms incorporated within DRAFT. The results presented in Table 2, highlight the significance of each mechanism: *w/o diversity* refers to a variant that the explorer generates exploration instances without applying similarity constraint, meaning that all generated instances are considered. The absence of the diversity-promoting exploration strategy leads to a notable performance drop, underscoring the need for its implementation to enhance exploration diversity. *w/o adaptive* refers to a variant that does not terminate prematurely based on the iteration conditions; rather, it guarantees that each iteration of the tool documentation completes the designated maximum number of iteration rounds before ceasing operations. The significant decline in performance observed in this variant further emphasizes the benefits of introducing the tool-adaptive termination mechanism, which serves to prevent overfitting while improving efficiency. The results with other LLMs and datasets demonstrate similar trends and are provided in Appendix B.
+
+Table 2: Ablation study of the proposed DRAFT.
+
+| Methods | TMDB |  |
+|-|-|-|
+|  | CP% | Win% |
+| <b>DRAFT</b> | <b>88.00</b> | <b>71.00</b> |
+| <i>w/o diversity</i> | 84.00 | 69.00 |
+| <i>w/o adaptive</i> | 80.00 | 68.00 |
+
+#### **Does the modified tool documentation improve the performance of tool retrieval?**
+
+In real-world scenarios, there are often numerous tools, making it impractical to input the descriptions of all tools into LLMs (Qu et al., 2024a). Therefore, effective tool retrieval is crucial for downstream tool learning. In this analysis, we evaluate whether the modified tool documentation not only enhances the ability of LLMs to use tools effectively but also improves the effectiveness of tool retrieval. The results presented in Table 3 indicate that the revised documentation enhances the performance of tool retrieval methods, including the sparse retrieval method BM25 (Robertson et al., 2009) and the dense retrieval method Contriever (Izacard et al., 2021). This demonstrates that the modifications not only improve the readability of the documentation but also enhance its semantic quality, thereby improving the different stages of the whole pipeline for tool learning.
+
+Table 3: Comparison of tool retrieval performance between raw documentation and our method. We report NDCG@1 and NDCG@10.
+
+| Retriever | Documentation | TMDB |  | Spotify |  |
+|-|-|-|-|-|-|
+|  |  | @1 | @10 | @1 | @10 |
+| BM25 | Raw | 24.0 | 35.0 | <b>43.9</b> | 53.9 |
+|  | DRAFT | <b>29.0</b> | <b>39.4</b> | <b>43.9</b> | <b>54.2</b> |
+| Contriever | Raw | 29.0 | 40.4 | 45.6 | <b>49.6</b> |
+|  | DRAFT | <b>31.0</b> | <b>44.1</b> | <b>47.4</b> | 49.2 |
+
+**Does the tool documentation modified by DRAFT also improve human comprehension?** In the previous experiments, we have demonstrated that tool documentation modified by DRAFT can help LLMs better understand and utilize external tools. Next, we aim to verify whether this improvement extends to human understanding of the tools as well. Specifically, we conduct a human evaluation, inviting three well-educated doctor students to evaluate the raw tool documentation and the documentation modified by DRAFT based on three criteria: **completeness**: which documentation is more comprehensive, **conciseness**: which documentation is clearer and more concise, **accuracy**: which documentation reflects the tool’s functionality more accurately (details are presented in Appendix A). We randomly sampled 50 cases from RestBench and ToolBench for this evaluation.
+
+The results, as shown in Table 4, indicate that the tool documentation modified by DRAFT demonstrates significant improvements, particularly in terms of completeness and accuracy (some cases are presented in Appendix D). This can be attributed to the fact that DRAFT incorporates feedback from LLMs based on their tool usage experience, which provides execution results during the revision process, ensuring better alignment between the documentation and the actual tool behavior. Moreover,
+
+{9}------------------------------------------------
+
+Table 4: Human evaluation comparing the quality of the raw documentation with ours.
+
+| Dataset | Completeness |  |  | Conciseness |  |  | Accuracy |  |  |
+|-|-|-|-|-|-|-|-|-|-|
+|  | Ours | Raw | Equal | Ours | Raw | Equal | Ours | Raw | Equal |
+| RestBench | 40% | 16% | 44% | 36% | 20% | 44% | 30% | 0% | 70% |
+| ToolBench | 68% | 4% | 28% | 56% | 4% | 40% | 56% | 0% | 44% |
+
+our design of a tool-adaptive termination mechanism effectively prevents unnecessary redundancy, leading to more concise documentation. Additionally, the results suggest that ToolBench tools have significantly lower documentation quality than those in the RestBench dataset, as the readability of ToolBench tools exhibited a more substantial improvement after modification by DRAFT. This further highlights the necessity of revising the existing tool documentation.
+
+## 4 RELATED WORK
+
+**Tool Learning.** Recent studies have highlighted the potential of LLMs to utilize external tools in addressing complex problems (Qu et al., 2024b; Wang et al., 2024d). With the aid of external tools, LLMs can obtain up-to-date information (Nakano et al., 2021; Gou et al., 2024a;b), enhance domain-specific knowledge (M. Bran et al., 2024; Zhang et al., 2024a), process multi-modal information (Surís et al., 2023; Gao et al., 2024c), and more. Existing tool learning approaches can be categorized into two types: tuning-based and tuning-free methods (Gao et al., 2024b). Tuning-based methods enhance the tool-using capabilities of LLMs by fine-tuning them on tool-related datasets (Patil et al., 2023; Hao et al., 2024; Yang et al., 2024; Qin et al., 2024; Liu et al., 2024). However, this approach is only applicable to open-source models and requires substantial computational resources. In contrast, tuning-free methods provide LLMs with tool documentation and a few demonstrations (Wei et al., 2022; Hsieh et al., 2023; Paranjape et al., 2023; Du et al., 2024; Shi et al., 2024), relying on the in-context learning ability to understand how to use tools. This approach requires no additional training and allows for the plug-and-play integration of external tools. However, this method necessitates high-quality tool documentation that is aligned with the comprehension of LLMs (Yuan et al., 2024; Chen et al., 2024). In this paper, we propose a method to align with LLMs understanding and improve the quality of tool documentation to enhance the tool-using capabilities of LLMs.
+
+**Learning from Feedback.** Recent studies show that LLMs can improve their initial responses through self-correction, leading to improved performance (Shinn et al., 2024; Madaan et al., 2024; Pan et al., 2024; Huang et al., 2024). However, some researchers observe that relying exclusively on self-correction without external feedback may yield minimal improvements or worsen performance (Zhao et al., 2024). In contrast, incorporating learning from feedback has been shown to improve various tasks (Jin et al., 2023; Gao et al., 2024a; Wang et al., 2024c; Pan et al., 2024; Welleck et al., 2022; Zhang et al., 2024b). The forms of feedback are categorized into scalar and natural language types (Gou et al., 2024a). Scalar feedback provides coarse-grained information and typically serves as a reward signal in reinforcement learning frameworks (Ziegler et al., 2019), while natural language feedback provides detailed insights and is used in prompts for LLMs to enhance performance (Jin et al., 2023). The sources of feedback are diverse, including humans (Ouyang et al., 2022), critic models (Nathani et al.), external tools (Wang et al., 2024b; Qiao et al., 2024), and even the LLM itself. To ensure that tool documentation genuinely reflects the purpose of the tool, we obtain feedback by actually using the tool to get the returned results, thereby producing high quality tool documentation.
+
+## 5 CONCLUSION
+
+In this paper, we highlight that the misalignment between the existing, primarily human-centric tool documentation and the interpretive requirements of LLMs acts as a pivotal barrier obstructing the full potential of tool learning with LLMs. To remedy this, inspired by trial-and-error, we introduce DRAFT, a dynamic and self-improving framework specifically designed to iteratively refine tool documentation based on direct interactions and feedback loops between LLMs and external tools. Through extensive experimentation, our findings substantiate the assertion that our proposed DRAFT markedly enhances the alignment between tool documentation and the operational understanding of LLMs, thereby fostering more effective tool usage.
+
+ Rest of paper (reference and Appendix) is removed.

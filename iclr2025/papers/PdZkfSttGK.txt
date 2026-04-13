@@ -1,0 +1,321 @@
+
+
+{0}------------------------------------------------
+
+# NONPARAMETRIC COVARIANCE REGRESSION FOR MASSIVE NEURAL DATA ON RESTRICTED COVARIATES VIA GRAPH
+
+**Anonymous authors**
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Modern recording techniques enable neuroscientists to simultaneously study neural activity across large populations of neurons, with capturing predictor-dependent correlations being a fundamental challenge in neuroscience. Moreover, the fact that input covariates often lie in restricted subdomains, according to experimental settings, makes inference even more challenging. To address these challenges, we propose a set of nonparametric mean-covariance regression models for high-dimensional neural activity with restricted inputs. These models reduce the dimensionality of neural responses by employing a lower-dimensional latent factor model, where both factor loadings and latent factors are predictor-dependent, to jointly model mean and covariance across covariates. The smoothness of neural activity across experimental conditions is modeled nonparametrically using two Gaussian processes (GPs), applied to both loading basis and latent factors. Additionally, to account for the covariates lying in restricted subspace, we incorporate graph information into the covariance structure. To flexibly infer the model, we use an MCMC algorithm to sample from posterior distributions. After validating and studying the properties of proposed methods by simulations, we apply them to two neural datasets (local field potential and neural spiking data) to demonstrate the usage of models for continuous and counting observations. Overall, the proposed methods provide a framework to jointly model covariate-dependent mean and covariance in high dimensional neural data, especially when the covariates lie in restricted domains. The framework is general and can be easily adapted to various applications beyond neuroscience.
+
+## 1 INTRODUCTION
+
+Modern neural recording techniques, such as high-density silicon probes (Jun et al., 2017; Steinmetz et al., 2021; Marshall et al., 2022) and large-scale calcium imaging methods (Ahrens et al., 2013; Kim et al., 2016; Grienberger et al., 2022), allow us to obtain massive neural activity data across different regions. Capturing heteroscedasticity in multivariate processes and correlations among these neurons, potentially along with experimental stimulus (e.g., visual gratings) or animal behaviors (e.g., animal locations and movement speed) as covariates, is important for providing scientific insight.
+
+Given the prevalence of time series data in neuroscience, numerous methods have been developed for time series modeling. For example, to capture correlation patterns of high-dimensional neural data, several unsupervised latent factor models have been widely used in neuroscience community, either 1) assuming the latent factors evolve linearly with a Gaussian noise (Macke et al., 2011) or 2) modeling the progression of latent factors more generally by a Gaussian process (Yu et al., 2009). These two modeling strategies leads to two fundamental latent factor models: 1) linear dynamic systems model (LDS, i.e., the dynamic latent factor model) and 2) Gaussian process factor analysis model (GPFA). Based on these models, we can further include the covariates into the model (may also model smoothness of parameters by LDS/ GP), to study the relationship between neural activity and interested features. However, these methods only model the dynamics of mean and assume homoscedastic across time and covariates. Although it's possible to reduce residual correlation over time/ covariates by more intricate modeling, additional complexity is not efficient and may lead to
+
+{1}------------------------------------------------
+
+overfitting of the data. Moreover, experimental findings suggest that the variability of neural activity changes over time and across experiment settings (Churchland et al., 2010; 2011), potentially providing information about the external world beyond the average neural activity, such as signature of decision making (Churchland et al., 2011), movement preparation (Churchland et al., 2006), or stimulus onset (Churchland et al., 2010).
+
+Therefore, our focus here is on mean-covariance modeling for high dimensional neural data, considering either continuous or categorical experiment covariates. In the context of time series analysis, which is a special case, modeling volatility (conditional standard deviation) has a long history (Chib et al., 2009), including multivariate (generalized) autoregressive conditional heteroscedasticity (GARCH, Engle (1982); Bollerslev (1986); Engle (2002)), multivariate stochastic volatility models (Harvey et al., 1994) and Wishart process (Philipov and Glickman, 2006b;a; Gouriéroux et al., 2009). Within computational neuroscience community, some LDS-based methods such as dynamic Conway-Maxwell model (Wei and Stevenson, 2023), allow for over- and under-dispersion by dynamic modeling of both mean and dispersion parameter on covariates for neural spikes (counting time series). These models can potentially handle high-dimensional neural recordings by incorporating dynamic latent factors, although the parametrization may not be efficient, and the Markov assumption may be inappropriate. In general context, Nejatabakhsh et al. (2023) recently proposed a model based on (Gaussian-)Wishart process (Philipov and Glickman, 2006b; Gouriéroux et al., 2009) especially for repeated trials, to handle the smoothness of mean and covariance over covariates. However, their method may have poor performance in the case with massive neurons. Beyond the neuroscience community, the research on large-scale mean-variance regression also has a long history. Some classical strategies rely on regression to elements of log or Cholesky decomposition of conditional covariance (Chiu et al., 1996; Pourahmadi, 1999; Leng et al., 2010; Zhang and Leng, 2012), which are ill-suited for high dimensional data. Instead, Hoff and Niu (2012) modeled covariance as a quadratic function on covariates with baseline, though parametric assumption may limit the usage of the model. Fox and Dunson (2015) proposed a Bayesian non-parametric model for continuous response, by assuming both latent factor and basis of factor loading are covariate-dependent, and handle the smoothness by GP. Some methods, such as Franks and Hoff (2019), Wang et al. (2019) and Franks (2022) have also been proposed for high-dimensional covariate settings ( $p \gg N$ ).
+
+However, there are still several challenges, especially for neuroscience applications. First, the spike count data are majorly used for studying neural activity, but the counting observations make the inference intractable. Second, many covariates, such as animal locations and movement orientations, fall in restricted subspace, ignoring the subspace information may lead to inappropriate mean-covariance inference. To address these problems, motivated by Fox and Dunson (2015) and Dunson et al. (2022), we introduce a latent factor covariance regression model, based on graph properties of covariates, and the model is flexibly inferred by an efficient MCMC algorithm.
+
+The rest of this paper is structured as follows. In section 2, we introduce the mean-covariance regression model for high dimensional neural data with restricted inputs, considering both continuous and counting observations. The key steps of MCMC algorithm for sampling posterior distributions are provided. Then, after validating and studying the proposed methods using synthetic datasets in Section 3, we apply our methods to two neural data (local field potential and neural spikes data) in Section 4, to illustrate usage with continuous and counting observations. Finally, in section 5, we conclude with some final remarks and discuss some potential extensions of our current model for future research.
+
+## 2 METHOD
+
+In this section, we first introduce the covariance regression models in latent space for high dimensional neural data. Both continuous and counting response are considered. We then introduce the graph based Gaussian process to account for restricted inputs, which are commonly encountered in many applications. The models are inferred by an MCMC algorithm, and we briefly outline several key steps. See Section A and B for more details on prior specification and MCMC steps for model inference. The code for MATLAB implementation can be found in the supplementary material.
+
+{2}------------------------------------------------
+
+### 2.1 COVARIANCE REGRESSION MODEL FOR HIGH DIMENSIONAL NEURAL DATA
+
+Denote the neural activity of  $n$  neurons in experiment condition  $j$  as  $\mathbf{y}_j = (y_{1j}, \dots, y_{nj})'$ , for  $j = 1, \dots, p$ . For continuous response, we model it by a multivariate Gaussian nonparametric mean-covariance regression model as
+
+$$\mathbf{y}_j = \boldsymbol{\mu}(\mathbf{x}_j) + \boldsymbol{\epsilon}_j$$
+
+, where  $\mathbf{x}_j \in \mathbb{R}^q$  is the covariate,  $\boldsymbol{\epsilon}_j \sim N_n(0, \Sigma(\mathbf{x}_j))$  and  $\boldsymbol{\epsilon}_j$ s are independent. Then the mean and covariance are  $E(\mathbf{Y}_j) = \boldsymbol{\mu}(\mathbf{x}_j)$  and  $\text{Cov}(\mathbf{Y}_j) = \Sigma(\mathbf{x}_j)$ . For counting data such as neural spikes, we model it in a Poisson GLM with log-link as
+
+$$\begin{aligned} \mathbf{y}_j &| \boldsymbol{\lambda}_j \sim \text{Poisson}(\boldsymbol{\lambda}_j) \\ \log \boldsymbol{\lambda}_j &= \boldsymbol{\mu}(\mathbf{x}_j) + \boldsymbol{\epsilon}_j \end{aligned}$$
+
+Then, the mean and covariance of response in the Poisson log-normal model (Aitchison and Ho, 1989), which allows for modeling over-dispersion, are
+
+$$\begin{aligned} E(\mathbf{Y}_j) &= \boldsymbol{\Lambda}_j = \exp \left[ \boldsymbol{\mu}(\mathbf{x}_j) + \frac{1}{2} \text{diag}(\Sigma(\mathbf{x}_j)) \right] \\ \text{Cov}(\mathbf{Y}_j) &= \boldsymbol{\Lambda}_j + \boldsymbol{\Lambda}_j [\exp \Sigma(\mathbf{x}_j) - \mathbf{1}\mathbf{1}'] \boldsymbol{\Lambda}_j \end{aligned}$$
+
+To save notations, we denote the (pseudo) response, either transformed or not, as  $\boldsymbol{\zeta}_j$  such that  $\boldsymbol{\zeta}_j = \mathbf{y}_j$  for Gaussian case and  $\boldsymbol{\zeta}_j = \log \boldsymbol{\lambda}_j$  for Poisson case.
+
+To handle large number of neurons  $n$ , which are common for modern neural recording techniques, we resort to model proposed by (Fox and Dunson, 2015) so that the response is induced through a factor model as
+
+$$\begin{aligned} \boldsymbol{\zeta}_j &= \Lambda(\mathbf{x}_j)\boldsymbol{\eta}_j + \boldsymbol{\epsilon}_j \\ \boldsymbol{\eta}_j &\sim N_k(\psi(\mathbf{x}_j), I_k) \\ \boldsymbol{\epsilon}_j &\sim N_N(0, \Sigma_0) \end{aligned}$$
+
+, where  $\Lambda(\mathbf{x}) \in \mathbb{R}^{n \times k}$  for  $k \ll n$  and  $\Sigma_0 = \text{diag}(\sigma_1^2, \dots, \sigma_n^2)$ . Then by marginalizing out  $\boldsymbol{\eta}_j$ , the mean and covariance for the model are
+
+$$\begin{aligned} \boldsymbol{\mu}(\mathbf{x}_j) &= \Lambda(\mathbf{x}_j)\psi(\mathbf{x}_j) \\ \Sigma(\mathbf{x}_j) &= \Lambda(\mathbf{x}_j)\Lambda(\mathbf{x}_j)' + \Sigma_0 \end{aligned}$$
+
+If we use time as covariates, and model the progression of  $\boldsymbol{\eta}_j$  either by linear dynamics or Gaussian process, the model reduces to dynamic factor analysis model/ linear dynamic systems (LDS, Macke et al. (2011)) or Gaussian process factor analysis (GPFA, Yu et al. (2009)) model that is widely used for time series data, especially in neuroscience.
+
+Estimating high dimensional factor loading  $\{\Lambda(\mathbf{x}_j)\}$  can be difficult ( $nkp$  parameters), therefore we further factorize the loading as in Fox and Dunson (2015) to reduce the dimension, such that
+
+$$\Lambda(\mathbf{x}_j) = \Theta \xi(\mathbf{x}_j)$$
+
+, where  $\Theta \in \mathbb{R}^{n \times L}$  and  $\xi(\mathbf{x}_j) \in \mathbb{R}^{L \times k}$ , for  $L \ll n$ . In this paper, we fix the factor dimension  $k$ , but allow the basis size  $L \rightarrow \infty$  and put multiplicative shrinkage prior (Bhattacharya and Dunson, 2011) to adaptively choose  $L$ .
+
+To capture the smoothness of response mean and covariance among different experiment conditions  $j$ , we can put Gaussian process (GP) priors on both latent factor and loading basis. Specifically, for  $\psi(\mathbf{x}) = (\psi_1(\mathbf{x}), \dots, \psi_k(\mathbf{x}))'$ , we have  $\psi_m \sim \text{GP}(0, c_\psi)$  independently for  $m = 1, \dots, k$ . For factor loading basis, let  $\xi_{lm}(\mathbf{x})$  be element of  $\xi(\mathbf{x})$ , and we put GP priors on each element independently with the same kernel such that  $\xi_{lm} \sim \text{GP}(0, c_\xi)$ . This leads to a Wishart process in a manner slightly different from that described in (Nejatbakhsh et al., 2023). The covariances for  $\psi_m(\mathbf{x})$  and  $\xi_{lm}(\mathbf{x})$  are both unit, i.e. the correlation, for model identifiability (Cai et al. (2023); Conti et al. (2014), although this is not necessary in this paper since we focus on estimation of mean and covariance). To further take the restricted input into account, we construct the covariance by incorporating intrinsic geometry of subspace. This leads to Graph Laplacian-based GP (GL-GP) and we discuss details in the next subsection. Moreover, by using GP or GL-GP priors, we can easily impute/ sample the missing response under certain conditions, based on conditional Gaussian distribution. See more details on model settings and prior specification in appendix A.
+
+{3}------------------------------------------------
+
+### 2.2 GRAPH BASED GP FOR RESTRICTED INPUTS
+
+In neuroscience experiment and many other applications, it is common for the inputs to fall in a restricted space. For example, in target reaching experiments, both the targets and animals movements are confined to small areas Wise (1985); Galinanes et al. (2018), and in maze running experiment, the animals are even restricted to move along the pre-designed path (Mizuseki et al., 2013). These restrictions are usually not easy to transform into a non-restricted space, and in some situation the restriction cannot be known in advance, e.g. because of animals internal preferences.
+
+Ignoring these restrictions may lead to a sub-optimal results. For instance, two points that are close in Euclidean space might be far apart in a restricted space, and modeling in the Euclidean space may lead to inappropriate smoothness. Several methods have been proposed to address these issues within the framework of GP regression. When the restricted space is a known submanifold, we can extrinsically embed the manifold in a higher-dimensional Euclidean space (Lin et al., 2019), or intrinsically approximate heat kernel (Niu et al., 2019) by Monte Carlo or use other valid kernels (Li et al., 2023; Borovitskiy et al., 2020). For an unknown submanifold, we can instead employ locally linear regression methods (Cheng and Wu, 2013), and we can also use similar ideas in semi-supervised approaches (Zhu et al., 2003; Zhu, 2005; Belkin et al., 2006; Nadler et al., 2009; Dunlop et al., 2020; Wang and Lerman, 2015). However, whether known or unknown, these methods assume the subspace is a manifold, which may not be appropriate in some cases.
+
+Here, we use the kernel based on Graph Laplacian (GL) proposed by Dunson et al. (2022), and hence both  $\psi(\mathbf{x})$  and  $\xi(\mathbf{x})$  are modeled by GL-GPs, denoted  $\psi_m \sim \text{GLGP}(0, c_\psi)$  and  $\xi_m \sim \text{GLGP}(0, c_\xi)$ . The GL-GP incorporates intrinsic geometry of restricted space (not necessarily a manifold) by taking finitely many eigenpairs of the GL, whose covariance approximates a diffusion process on restricted space based on intrinsic distances between data points. Specifically, given a kernel  $c(\mathbf{x}, \mathbf{x}')$  (simply use the squared exponential kernel  $c(\mathbf{x}, \mathbf{x}') = \exp(-|\mathbf{x} - \mathbf{x}'|_2^2/4\kappa)$  in this paper), the GL matrix is defined as  $L_G = (D^{-1}W - I)/\kappa$ . Here,  $W = \{W_{ij}\} \in \mathbb{R}^{p \times p}$  is an affinity matrix defined by the kernel as  $W_{ij} = c(\mathbf{x}_i, \mathbf{x}') / (r(\mathbf{x}_i)r(\mathbf{x}_j))$  with  $r(\mathbf{x}) = \sum_{i=1}^p c(\mathbf{x} - \mathbf{x}')$ , and  $D \in \mathbb{R}^{p \times p}$  is a diagonal matrix with  $i$ th diagonal entry be  $D_{ii} = \sum_{j=1}^p W_{ij}$ , and  $\kappa$  is the same as used in kernel  $c(\mathbf{x}, \mathbf{x}')$ . Using the constructed  $L_G$ , we can define the covariance matrix as
+
+$$\tilde{H} = p \sum_{i=1}^{K-1} e^{-\mu_{i,p,c}} \tilde{v}_{i,p,c} \tilde{v}_{i,p,c}^\top$$
+
+, where  $\mu_{i,p,c}$  is eigenvalue of  $-L_G$ ,  $\tilde{v}_{i,p,c}$  is corresponding eigenvector and  $\{\epsilon, K, t\}$  are tuning parameters (estimated by MLE or sampled by MCMC, see details in Section 2.3). We further convert the covariance matrix to correlation as  $H$ , for model identifiability. For more details of GL-GP, including the effects of three tuning parameters  $\{\epsilon, K, t\}$ , see Dunson et al. (2022).
+
+### 2.3 INFERENCE
+
+The model is inferred by a MCMC algorithm. The sampling details can be found in the appendix Section B, and we provide some key sampling strategies here.
+
+First, the sampling of the Poisson model for count data (e.g. neural spikes) can be intractable because of non-conjugacy. However, we can approximate a Poisson distribution by a negative binomial (NB) distribution, using the fact that  $\lim_{r \rightarrow \infty} \text{NB}(r, \sigma(\zeta - \log r)) = \text{Poisson}(e^\zeta)$ , where  $\sigma(\zeta) = e^\zeta/(1 + e^\zeta)$  and  $\text{NB}(r, p)$  denotes the NB distribution with expectation be  $rp/(1 - p)$ . By using a large enough dispersion parameter  $r$ , we can treat a Poisson distribution as an NB distribution, which follows the Pólya-Gamma (PG) augmentation scheme (Windle et al., 2013; Polson et al., 2013). Specifically, for response from neuron  $i$  under condition  $j$ , we introduce an auxiliary variable  $\omega_{ij} \sim \text{PG}(r_{ij} + y_{ij}, \zeta_{ij} - \log r_{ij})$ , where  $\text{PG}(a, b)$  denotes the Pólya-Gamma distribution. Then we can sample the pseudo response  $\zeta_{ij} \sim N(m_{ij}, V_{ij})$ , where  $V_{ij} = (\omega_{ij} + \sigma_i^{-2})^{-1}$ ,  $m_{ij} = V_{ij}(\kappa_{ij} + \sigma_i^{-2}\mu_{ij})$  and  $\kappa_{ij} = (y_{ij} - r_{ij})/2 + \omega_{ij} \log(r_{ij})$ . With samples of  $\zeta_{ij}$ , the sampling for other parameters is the same as in the Gaussian case.
+
+Second, even by factorizing the loading as  $\Lambda(\mathbf{x}) = \Theta \xi(\mathbf{x})$ , sampling  $L \times k \times p$  parameters for  $\xi(\mathbf{x})$  directly from the joint posterior can be infeasible when  $p$  is large (i.e., many experimental conditions). This is especially common for neural data analysis, since the recording length can be
+
+{4}------------------------------------------------
+
+very long. In other words, if we take the timestamp as a covariate and try to track the mean and covariance along the time (and potentially experimental settings), the sampling procedure can be very cumbersome. Therefore, we sample each element of  $\xi(\mathbf{x})$  sequentially. This procedure can be looped multiple times within each MCMC iteration to achieve better mixing.
+
+Third, although Fox and Dunson (2015) claims that the model is relatively robust to the GP hyper-parameters because of quadratic mixing over GP dictionary elements, we observe that the inference can be sensitive to hyper-parameters  $\{(\epsilon, K, t)\}$  for GL-GP. Here, for modeling latent factor and loading with GL-GP prior, we can fix the hyper-parameters by maximizing likelihood, marginally or conditionally on  $\psi(\mathbf{x})$  and  $\zeta(\mathbf{x})$  according to burn-in samples, or sample them in each iteration (again marginally or conditionally on samples of  $\psi(\mathbf{x})$  and  $\zeta(\mathbf{x})$ ). Here, we found that sampling on marginal distribution is computationally cumbersome, and hence using slice sampler may not be feasible for large datasets (Murray and Adams, 2010). To choose the hyper-parameters more efficiently, we can also use a data-driven heuristic, based on the fact that the autocorrelation  $\text{ACF}(\mathbf{x}) = \text{corr}(\Sigma_{ij}(0), \Sigma_{ij}(\mathbf{x}))$  is specified by the kernel function (Fox and Dunson, 2015).
+
+## 3 SIMULATIONS
+
+All the following experiments, including applications in Section 4, are conducted on a laptop with an Intel(R) Core(TM) i7-8665U CPU @ 1.90GHz 2.11 GHz. Here, we simulate recordings of 50 neurons, for both continuous and counting responses, when an animal is restricted to move within a "two boxes linking with a tunnel" area, i.e., two squares with side length 3, connected with a 2-by-1 rectangle. The input features  $\mathbf{x} \in \mathbb{R}^2$  are coordinates within the restricted domain. The response is generated from the model in Section 2.1 for both Poisson and Gaussian cases, with  $L = 4$  and  $k = 2$ . The loading coefficients  $\Theta$  are independently generated by a Gaussian distribution. The latent factor mean ( $\psi_m(\mathbf{x})$ ) and loading basis ( $\zeta_m(\mathbf{x})$ ) are generated by mixtures of scaled Gaussian density. Here, we can observe response from 100 random locations, and our goal is to infer mean and covariance for the whole restricted area, including 1000 other random locations as test (held-out). We independently generate the data and conduct analysis six times to check robustness of our methods (Section D.1), and one set of data is illustrated in Figure 1A and D.
+
+For each set of simulated training data, we fit four models: Gaussian process Wishart process (GPWP) model (Nejatbakhsh et al., 2023) (on a single trial), latent GP model (L-GP), latent GL-GP model with fixed hyper-parameters (L-GLGP-fixed) and latent GL-GP model with hyper-parameters sampled (L-GLGP-adaptive). All kernels used here are squared exponential for fair comparisons. The tuning parameters for GPWP are selected by 5-fold cross-validation. The bandwidths for L-GP are sampled within MCMC, and the samples from L-GP are used to select the hyper-parameters for L-GLGP-fixed. For all latent factor models (L-models), we use both 1)  $L = 10, k = 2$  and 2)  $L = 10, k = 5$ . The running time can be found in the Appendix C. For all six experiments, the held-out log-likelihood for latent factor models, using either  $k = 2$  or  $k = 5$  is shown in Section D.1, and one set of them is visualized in Figure 1B and E. For this set of experiment, the fitted mean and covariance latent factor based models (L-GP, L-GLGP-fixed and L-GLGP-adaptive) are projected to the first three principal components of the ground true mean response, which captures more than 90% variance of the data. The fitting results corresponding to Figure 1B and E in PC space for  $k = 2$  are shown in Figure 1C and A1, and for  $k = 5$  in Figure A2 (Gaussian) and A3 (Poisson).
+
+In all cases, the latent factor based models perform better than GPWP models in terms of held-out likelihood. Moreover, the latent factor models are easier to fit, as tuning hyper-parameters for GPWP via cross-validation is cumbersome and difficult, especially for Poisson response. We found that the last few columns of fitted loading basis  $\Theta$  are shrunk to 0 for latent factor based models, suggesting  $L = 10$  is large enough. In the Gaussian case, the latent factor based models are robust to latent dimension  $k$ , which is consistent with previous findings (Fox and Dunson, 2015). The L-GLGP models (fixing or sampling hyper-parameters) generally improve the fitting results slightly compared to L-GP, either quantitatively for held-out log-likelihood or qualitatively by visualizing fitted mean and covariance. However, for the Poisson case, the L-GLGP-adaptive models are more robust to  $k$ . Specifically, the held-out log-likelihood for  $k = 2$  and  $k = 5$  for L-GLGP-adaptive are closer (Section D.1 and Figure 1). The inferred mean and covariance for L-GP with  $k = 5$  can be
+
+{5}------------------------------------------------
+
+noisy, while those for L-GLGP-adaptive are relatively close to the ground truth for both  $k = 2$  and  $k = 5$ .
+
+![Figure 1: Simulations. The figure is divided into six panels (A-F) arranged in a 3x2 grid. Panels A, B, and C are for Gaussian response simulations, while D, E, and F are for Poisson response simulations. Panel A shows a heatmap of Gaussian response for neuron 1 in a 'boxes connecting with a tunnel' environment. Panel B is a bar chart of log-likelihood for four models: L-GP, L-GLGP-fixed, L-GLGP-adaptive, and true. Panel C shows heatmaps of true and fitted mean and covariance in the first PC space for Gaussian response. Panels D, E, and F follow the same structure as A, B, and C respectively, but for Poisson response simulations. The 'true' model consistently shows higher log-likelihood and better fitted parameters compared to the other models.](55d2bfe1c3d04e86df8d7a104d802172_img.jpg)
+
+Figure 1: Simulations. The figure is divided into six panels (A-F) arranged in a 3x2 grid. Panels A, B, and C are for Gaussian response simulations, while D, E, and F are for Poisson response simulations. Panel A shows a heatmap of Gaussian response for neuron 1 in a 'boxes connecting with a tunnel' environment. Panel B is a bar chart of log-likelihood for four models: L-GP, L-GLGP-fixed, L-GLGP-adaptive, and true. Panel C shows heatmaps of true and fitted mean and covariance in the first PC space for Gaussian response. Panels D, E, and F follow the same structure as A, B, and C respectively, but for Poisson response simulations. The 'true' model consistently shows higher log-likelihood and better fitted parameters compared to the other models.
+
+Figure 1: **Simulations.** Here, we simulate Gaussian and Poisson response in a “boxes connecting with a tunnel” restricted area, and fit response from 100 observed locations to the proposed model. The same procedures are replicated five time, with one set of results for Gaussian response are summarized in A-C and Figure A1A and A2, while the results for Poisson response can be found in D-E and Figure A1B and A3. The results in terms of held-out log-likelihood for all experiments are summarized in Section D.1. (A) and (D) The response from observed (100 plus signs) and held-out (1000 circle signs) points, for neuron 1 as examples. (B) and (E) The log-likelihood for held-out dataset (constant drop), fitting with GPWP,L-GP, L-GLGP with fixed hyper-parameters (L-GLGP-fixed) and L-GLGP with hyper-parameters sampled (L-GLGP-adaptive), with  $L = 10, k = 2$  and  $L = 10, k = 5$ . (C) and (F) The true and fitted mean and covariance in the first PC space, with  $L = 10$  and  $k = 2$ . The observed locations are overlaid, and the variances explained by PCs are shown alongside. The results projected in the second and third PC space are shown in Figure A1.
+
+## 4 APPLICATIONS
+
+We then apply the proposed methods to two neural datasets, i.e., 1) the local field potential data across the mouse brain during a visual behavior task (LFP dataset, Steinmetz et al. (2019)), to show an example of Gaussian response and 2) the multi-shank silicon probe recordings from hippocampus of a rat running back-and-forth along a linear maze (HC dataset, Mizuseki et al. (2013)), to show an example of Poisson case. In all following cases, we use squared exponential kernel and the inputs are standardized for latent factor models (L-GP and L-GLGP-fixed/adaptive). The  $k$  in the latent factor models are chosen by 5-fold cross-validation for L-GP on short chains, and  $L$  is large enough to ensure the last few columns of  $\Theta$  are 0s.
+
+### 4.1 LFP DATASET
+
+In the LFP dataset, the neural activity across multiple brain regions is recorded when the mice perform a task on choosing the side with the highest contrast for visual gratings. The data contains
+
+{6}------------------------------------------------
+
+324 39 sessions from 10 mice, and each session contains multiple trials. Time bins for all measurements  
+ 325 are 10 ms, starting 500 ms before stimulus onset. The recording ends at 2000 ms after the stimulus,  
+ 326 and hence each trial contains data from 250 time points. See Steinmetz et al. (2019) for more details  
+ 327 of the LFP dataset.
+
+328 To show the application of proposed methods with Gaussian response, we study the relationship  
+ 329 between LFP response and pupil conditions (area and location). This is motivated by some previous  
+ 330 research in monkey, which found that the pupil size of monkeys can reflect neural activity (Joshi  
+ 331 and Gold, 2020), containing LFPs, in several brain regions, including 1) cortical modulation of  
+ 332 the pretectal olivary nucleus (PON) (Gamlin et al., 1995), 2) the superior colliculus (SC) (Wang  
+ 333 et al., 2012; Krauzlis et al., 2013; McDougal and Gamlin, 2015) and 3) the locus coeruleus (LC) -  
+ 334 norepinephrine (NE) neuromodulatory system (Alnaes et al., 2014; Joshi et al., 2016; Wang et al., 2012;  
+ 335 Liu et al., 2017). Moreover, the eye position of monkey are related to neural activity in superior  
+ 336 colliculus (SC), although the position tuning is more common with build-up or burst activity and  
+ 337 less common in neurons with visual activity (Campos et al., 2006).
+
+338 Here, we choose LFP recordings from the 13th session, which include LFPs from 14 areas. These  
+ 339 regions contain 1) the midbrain reticular nucleus (MRN), sensory and motor superior colliculus  
+ 340 (SCs, Scm) in the midbrain, 2) the secondary motor area (MOs) in the cerebral cortex, and 3) the  
+ 341 zona incerta (ZI) in the hypothalamus. All these areas have been found to have significant inputs  
+ 342 to LC-NE neurons (Breton-Provencher et al., 2021). Here, we use 4 trials (trials 7-10), and 70% of  
+ 343 these 1000 data points are used as training while remaining are held out as the test dataset (Figure  
+ 344 2A). In other words, the dimension of training response is  $14 \times 700$  ( $n = 14, p = 700$ ) and testing  
+ 345 is  $14 \times 300$ . In the training, each iteration takes 3.5 seconds. Three pupil covariates (area, hori-  
+ 346 zontal and vertical position, i.e.  $q = 3$ , Figure 2B and C) are considered in the model, and they are  
+ 347 standardized before model fitting. Three models are used (L-GP, L-GLGP-fixed/adaptive), where  
+ 348  $k = 4$  and  $L = 5$ . In this case, the pupil locations and areas are quite restricted, the L-GLGP per-  
+ 349 forms better than L-GP, and the model is further improves by sampling hyperparameters in MCMC,  
+ 350 according to the held-out log-likelihood (Figure 2D).
+
+351 We then check the mean and variance patterns obtained from the L-GLGP-adaptive for pupil loca-  
+ 352 tions in the first 2 PC spaces, under three different pupil areas (0.02, 0.05 and 0.08). The evaluated  
+ 353 location boundaries are determined by the 0.05 and 0.95 quantiles of data (Figure 2E and F). Ac-  
+ 354 cording to the fitting results, these neurons may tend to be more focused on center locations when  
+ 355 the pupil area is relatively small (Figure 2E). The variance of LFP is larger when the pupil is smaller  
+ 356 (area = 0.02) or larger (area = 0.08) than in the common case, but this may be caused by a lack of  
+ 357 data for extreme pupil diameters (Figure 2F). For a more concrete conclusion for formal analysis,  
+ 358 we may need to include more data.
+
+###### 359 4.2 HC DATASET
+
+360 In the HC dataset, CRCNS hc-3 (Mizuseki et al., 2013), a rat was running back and forth along a  
+ 361 250 cm linear track. Extracellular spiking activity was recorded in the dorsal hippocampus using  
+ 362 multi-shank silicon probes. Spikes were sorted using KlustaKwik followed by manual adjustment  
+ 363 (Rossant et al., 2016). Here, we use data from one recording session (ec014-468) and analyze spike  
+ 364 counts in 200 ms bins. For further details on how the data were obtained, see Mizuseki et al. (2014).  
+ 365 In this analysis, the recordings from 14 min to 16 min are used, which contains around 4 cycles. The  
+ 366 neurons with firing rate less than 1 Hz are discarded, which results in 36 neurons remaining.
+
+367 We randomly choose 80% of points to be training and the remaining data to be test, and hence the  
+ 368 dimension of training response is  $36 \times 480$  ( $n = 36, p = 480$ ) and testing is  $36 \times 120$ . Both time  
+ 369 and (vertical) position are used as covariates ( $q = 2$ ). Each iteration takes 3.3 seconds during  
+ 370 training. Many neurons in the hippocampus are both position and direction tuned, and the place  
+ 371 field of neurons may vary over time. To accommodate the effects of position and direction, we use  
+ 372 the circular representation. In Figure 3A, we show both the original and directionally represented  
+ 373 maze trace, with spiking counts from 4 neurons overlaid. The overall neural spikes from these 36  
+ 374 neurons are shown in Figure 3B. To track the dynamics of mean and variance of neural spikes, Wei  
+ 375 and Stevenson (2023) previously proposed a dynamic Conway-Maxwell Poisson model (dCMP),  
+ 376 which allows for both over- and under-dispersion over time. However, their method can be difficult  
+ 377 for multi-neuron modeling in this case. Here, every neuron has the same input (time and directional
+
+{7}------------------------------------------------
+
+![Figure 2: Application to Steinmetz Data. The figure consists of six panels (A-F). Panel A shows LFP data over 1000 time points. Panel B shows LFP vs pupil area. Panel C shows pupil positions colored by LFP amplitude. Panel D shows a bar chart of log-likelihood for three models. Panel E shows mean PC maps for three areas. Panel F shows log10 variance PC maps for three areas.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 2: Application to Steinmetz Data. The figure consists of six panels (A-F). Panel A shows LFP data over 1000 time points. Panel B shows LFP vs pupil area. Panel C shows pupil positions colored by LFP amplitude. Panel D shows a bar chart of log-likelihood for three models. Panel E shows mean PC maps for three areas. Panel F shows log10 variance PC maps for three areas.
+
+Figure 2: Application to Steinmetz Data. The figure consists of six panels (A-F). Panel A shows LFP data over 1000 time points. Panel B shows LFP vs pupil area. Panel C shows pupil positions colored by LFP amplitude. Panel D shows a bar chart of log-likelihood for three models. Panel E shows mean PC maps for three areas. Panel F shows log10 variance PC maps for three areas.
+
+Figure 2: **Application to Steinmetz Data.** We use LFP data in 14 brain regions, from 4 trials. Each trial contains data from 250 time points. **A.** The LFP from 14 regions for all 1000 time points. The red line show SCs as an example. **B.** The scatter plot of LFP against pupil area, taking LFP from SCs (red) as an example. **C.** The pupil positions of data, colored by amplitude of LFP response. **D.** We fit 3 models (L-GP, L-GLGP-fixed/adaptive) to 70% of data, and compare the held-out log-likelihoods. The fitted mean **E** and variance **F** in PC space by L-GLGP-adaptive, according to pupil locations and 3 areas. The variance explained by PCs are shown alongside.
+
+position); therefore under their model framework, we either 1) assume all neurons have the same response, which is inappropriate; or 2) fit the model separately for each neuron, which ignores the correlation between neurons. Here, we fit 1) dCMP separately for each neuron, 2) L-GP, 3) L-GLGP-fixed and 4) L-GLGP-adaptive. For all latent factor models, we use  $k = 8$  and  $L = 7$ . We compare the model according to log-likelihood on test dataset, since the Poisson is nested within CMP distribution. The held-out log-likelihood for independent dCMP is  $-9.90 \times 10^3$ , and they are  $-6.24 \times 10^3$  (L-GP),  $-6.24 \times 10^3$  (L-GLGP-fixed), and  $-5.89 \times 10^3$  (L-GLGP-adaptive) for the remaining models.
+
+The fitted mean and variance in the first four PC spaces of mean is shown in Figure 3C and D. The mean response patterns in PC space correspond to 4 typical neuron in hippocampus, shown in Figure 3A (PC x corresponds to neuron x). Specifically, these are neurons that fire 1) frequently without preference of location and direction (interneurons, PC1 - neuron1), 2) selectively at 150 cm upward (PC2 - neuron2), 3) selectively downward in early cycle (PC3 - neuron3) and 4) selectively at 150cm downward (PC4 - neuron4). The corresponding variances for downward direction are generally smaller than upward ones, but the variance pattern are relatively static for these 4 cycles. Generally, both mean and variance of neural responses are tuned according to location and direction, and the patterns (especially mean) for some neurons drift along time, even in such a short period.
+
+## 5 DISCUSSION
+
+In this paper, we introduce a covariance regression model for high dimensional neural data, accounting for both continuous and counting observations. To accommodate the restricted experimental inputs/covariates, we consider using a graph based Gaussian process (GLGP), to model the smoothness over covariates for both loading basis and latent factors. The model is inferred by an MCMC algorithm, where the counting observations are handled by a Pólya-Gamma (PG) data augmentation technique. After validating and studying the proposed methods by simulations, we apply them to two publicly available datasets to illustrate the usage of models with both continuous (LFP dataset) and counting observations (HC dataset).
+
+{8}------------------------------------------------
+
+432  
+433  
+434  
+435  
+436  
+437  
+438  
+439  
+440  
+441  
+442  
+443  
+444  
+445  
+446  
+447  
+448  
+449  
+450  
+451  
+452  
+453  
+454  
+455  
+456  
+457  
+458  
+459  
+460  
+461  
+462  
+463  
+464  
+465  
+466  
+467  
+468  
+469  
+470  
+471  
+472  
+473  
+474  
+475  
+476  
+477  
+478  
+479  
+480  
+481  
+482  
+483  
+484  
+485
+
+![Figure 3: Application to Hippocampus Data. Panel A shows the trace of a linear track with colored dots representing spiking activity from 4 neurons. The top panel shows 'position' (0 to 300) and the bottom panel shows 'directional position' (-200 to 200) over time 't' (14 to 16). Panel B is a heatmap of 'neuron' (1 to 35) vs 't' (14 to 16) with a color scale for 'junior spikes' (0 to 35). Panels C and D show the fitted mean and variance in PC space for PC1 (47.72%), PC2 (25.63%), PC3 (7.39%), and PC4 (6.85%) over time 't' (14 to 16).](91be14371a97fb5ce9eeb29ae18d07c3_img.jpg)
+
+Figure 3: Application to Hippocampus Data. Panel A shows the trace of a linear track with colored dots representing spiking activity from 4 neurons. The top panel shows 'position' (0 to 300) and the bottom panel shows 'directional position' (-200 to 200) over time 't' (14 to 16). Panel B is a heatmap of 'neuron' (1 to 35) vs 't' (14 to 16) with a color scale for 'junior spikes' (0 to 35). Panels C and D show the fitted mean and variance in PC space for PC1 (47.72%), PC2 (25.63%), PC3 (7.39%), and PC4 (6.85%) over time 't' (14 to 16).
+
+Figure 3: **Application to Hippocampus Data.** A. The trace of linear track, which contains around 4 cycles. The colored dots represent spiking activity from 4 neurons, with dot sizes proportional to spiking counts. To encode the direction into model, we use the directional representation of position here (lower panel). B. The spiking counts for all neurons in the data. The fitted mean and variance according to time and location in PC space are shown in C and D, with the trace of linear track overlaid. The variance explained by PC are shown alongside.
+
+Although the proposed method can successfully model the mean and covariance according to covariates, there are some potential improvements. First, we assume independent GPs on covariates for each basis and factor dimension, to achieve computational efficiency. However, this assumption may miss some important covariance structures for different objects/neurons, and similar results are found in gene expression data (Cai et al., 2023). Therefore, it would be attractive to model using multi-output Gaussian process (MOGP) whenever computationally feasible, either simply by linear combinations of independent GP, such as linear model of coregionalization (Philipov and Glickman, 2006b) or convolution model (Alvarez and Lawrence, 2008), or using more advanced spectral mixture to handle cross-covariance (Ulrich et al., 2015; Parra and Tobar, 2017). Second, even under independent GP assumption, the MCMC sampling can be cumbersome for large scale dataset, which is common in neural data analysis (e.g. long recordings of spiking data). The main reasons for using sampling method are checking exact posterior distributions and choosing basis dimension  $L$  flexibly. However, in applications to massive data, approximation by variational inference, using methods to reduce computational cost of GP covariance matrix inversion (e.g., Zhu et al. (2024)) or using special cases of GP whenever appropriate (e.g. use linear dynamics for time series data) can be useful. Third, even though the basis dimension  $L$  is chosen adaptively by shrinkage prior, we still need to specify latent dimension  $k$  in advance, which may influence the Poisson model significantly (at least for L-GP). Instead, we can further sample the number of latent factors by birth-death MCMC (BDMCMC, Stephens (2000)), as in Fokoué and Titterington (2003), which requires very little mathematical sophistication and is easy for interpretation. Besides BDMCMC and shrinkage prior used for  $L$ , there are several other ways for choosing latent dimension, such as using multiplicative exponential process prior (Wang et al., 2016), Beta process prior (Paisley and Carin, 2009; Chen et al., 2010) or Indian Buffet process prior (Knowles and Ghahramani, 2007; 2011; Ročková and George, 2016) on the loading matrix in the Gaussian factor analysis model. However, these methods can be difficult in our case, since we further factorize the loading with basis. Finally, we observe that in Poisson version of the model, the L-GLGP can sometimes be sensitive to hyperparameters for covariance functions. To stabilize the L-GLGP, we can assume several constraints/priors based on initial fitting of L-GP, or use a slice sampler for these hyper-parameters (Murray and Adams, 2010) to achieve better mixing, if the computation is feasible.
+
+{9}------------------------------------------------
+
+486 Overall, as the scale of data becomes large (e.g., simultaneously observing many neurons), it can  
+ 487 be challenging to estimate the mean and covariance (either across subjects/neurons or across co-  
+ 488 variates). Moreover, the constraints on input space/covariates make the inference more difficult.  
+ 489 Therefore in this paper, we build a framework to accommodate both problems for continuous and  
+ 490 counting observations. The proposed methods are quite general, and they have potential for appli-  
+ 491 cation to data beyond neuroscience.
+
+## REFERENCES
+
+- 495 Ahrens, M. B., Orger, M. B., Robson, D. N., Li, J. M., and Keller, P. J. (2013). Whole-brain func-  
+ 496 tional imaging at cellular resolution using light-sheet microscopy. *Nature Methods*, 10(5):413–  
+ 497 420.
+- 498 Aitchison, J. and Ho, C. H. (1989). The multivariate Poisson-log normal distribution. *Biometrika*,  
+ 499 76(4):643–653.
+- 501 Alnaes, D., Sneve, M. H., Espeseth, T., Endestad, T., van de Pavert, S. H. P., and Laeng, B. (2014).  
+ 502 Pupil size signals mental effort deployed during multiple object tracking and predicts brain activ-  
+ 503 ity in the dorsal attention network and the locus coeruleus. *Journal of Vision*, 14(4):1.
+- 504 Alvarez, M. and Lawrence, N. (2008). Sparse convolved gaussian processes for multi-output re-  
+ 505 gression. In Koller, D., Schuurmans, D., Bengio, Y., and Bottou, L., editors, *Advances in Neural*  
+ 506 *Information Processing Systems*, volume 21. Curran Associates, Inc.
+- 508 Belkin, M., Niyogi, P., and Sindhwani, V. (2006). Manifold regularization: A geometric frame-  
+ 509 work for learning from labeled and unlabeled examples. *Journal of Machine Learning Research*,  
+ 510 7(85):2399–2434.
+- 512 Bhattacharya, A. and Dunson, D. B. (2011). Sparse Bayesian infinite factor models. *Biometrika*,  
+ 513 98(2):291.
+- 514 Bollerslev, T. (1986). Generalized autoregressive conditional heteroskedasticity. *Journal of Econo-*  
+ 515 *metrics*, 31(3):307–327.
+- 517 Borovitskiy, V., Terenin, A., Mostowsky, P., and Deisenroth (he/him), M. (2020). Matérn gaussian  
+ 518 processes on riemannian manifolds. In Larochelle, H., Ranzato, M., Hadsell, R., Balcan, M., and  
+ 519 Lin, H., editors, *Advances in Neural Information Processing Systems*, volume 33, pages 12426–  
+ 520 12437. Curran Associates, Inc.
+- 521 Breton-Provencher, V., Drummond, G. T., and Sur, M. (2021). Locus coeruleus norepinephrine in  
+ 522 learned behavior: Anatomical modularity and spatiotemporal integration in targets. *Frontiers in*  
+ 523 *Neural Circuits*, 15.
+- 525 Cai, J., Goudie, R. J. B., Starr, C., and Tom, B. D. M. (2023). Dynamic factor analysis with depen-  
+ 526 dent gaussian processes for high-dimensional gene expression trajectories.
+- 527 Campos, M., Chieran, A., and Segraves, M. A. (2006). Effects of eye position upon activity of  
+ 528 neurons in macaque superior colliculus. *Journal of neurophysiology*, 95(1):505–526.
+- 530 Chen, M., Silva, J., Paisley, J., Wang, C., Dunson, D., and Carin, L. (2010). Compressive sensing  
+ 531 on manifolds using a nonparametric mixture of factor analyzers: Algorithm and performance  
+ 532 bounds. *IEEE Transactions on Signal Processing*, 58(12):6140–6155.
+- 533 Cheng, M.-y. and Wu, H.-t. (2013). Local Linear Regression on Manifolds and Its Geometric Inter-  
+ 534 pretation. *Journal of the American Statistical Association*, 108(504):1421–1434.
+- 536 Chib, S., Omori, Y., and Asai, M. (2009). Multivariate Stochastic Volatility BT - Handbook of  
+ 537 Financial Time Series. pages 365–400. Springer Berlin Heidelberg, Berlin, Heidelberg.
+- 538 Chiu, T. Y. M., Leonard, T., and Tsui, K.-W. (1996). The Matrix-Logarithmic Covariance Model.  
+ 539 *Journal of the American Statistical Association*, 91(433):198–210.
+
+ Rest of paper (reference and Appendix) is removed.

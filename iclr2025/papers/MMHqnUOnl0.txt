@@ -1,0 +1,267 @@
+
+
+{0}------------------------------------------------
+
+# HELM: HIERARCHICAL ENCODING FOR MRNA LANGUAGE MODELING
+
+Mehdi Yazdani-Jahromi <sup>\*†</sup>
+
+University of Central Florida  
+yazdani@ucf.edu
+
+Mangal Prakash <sup>\*</sup>
+
+Johnson & Johnson Innovative Medicine  
+mprakal2@its.jnj.com
+
+Tommaso Mansi
+
+Johnson & Johnson Innovative Medicine  
+tmansi@its.jnj.com
+
+Artem Moskalev <sup>‡</sup>
+
+Johnson & Johnson Innovative Medicine  
+amoskal2@its.jnj.com
+
+Rui Liao <sup>‡</sup>
+
+Johnson & Johnson Innovative Medicine  
+rliao2@its.jnj.com
+
+## ABSTRACT
+
+Messenger RNA (mRNA) plays a crucial role in protein synthesis, with its codon structure directly impacting biological properties. While Language Models (LMs) have shown promise in analyzing biological sequences, existing approaches fail to account for the hierarchical nature of mRNA’s codon structure. We introduce Hierarchical Encoding for mRNA Language Modeling (HELM), a novel pre-training strategy that incorporates codon-level hierarchical structure into language model training. HELM modulates the loss function based on codon synonymity, aligning the model’s learning process with the biological reality of mRNA sequences. We evaluate HELM on diverse mRNA datasets and tasks, demonstrating that HELM outperforms standard language model pre-training as well as existing foundation model baselines on seven diverse downstream property prediction tasks and an antibody region annotation tasks on average by around 8%. Additionally, HELM enhances the generative capabilities of language model, producing diverse mRNA sequences that better align with the underlying true data distribution compared to non-hierarchical baselines.
+
+## 1 INTRODUCTION
+
+RNA analysis is becoming increasingly important in molecular biology (Liu et al., 2023; Fu, 2014). Messenger RNA (mRNA) is of particular interest due to its unique role in protein synthesis (Sahin et al., 2014). mRNA consists of triplets of nucleotides, called codons, which directly translate to protein amino acids through a surjective many-to-one mapping (Figure 1 *left*). This results in multiple synonymous mRNAs that encode identical amino acid sequences while exhibiting distinct physical and biological properties at the nucleotide level (Buhr et al., 2016). The role of mRNA, serving as an intermediary between DNA and proteins, underlies its therapeutic potential in applications such as vaccines and gene therapies (Caplen, 2004; Pardi et al., 2018), while also presenting challenges for analysis and optimization (Liu et al., 2021; Xu et al., 2025).
+
+Language Models (LMs) have emerged as powerful tools for analyzing biological sequences, with notable successes in protein (Elnaggar et al., 2021; Ferruz et al., 2022; Lin et al., 2023; Hie et al., 2024) and DNA (Nguyen et al., 2024a; Zhou et al., 2023) research. Despite the importance of mRNA, the field still lacks specialized LMs tailored for its analysis. Existing RNA LMs (Li et al., 2023; Chen et al., 2023) focus on non-coding sequences and do not account properly for codon
+
+<sup>\*</sup>Equal contribution as first authors.
+
+<sup>†</sup>This work was done while the author was an intern at Johnson & Johnson.
+
+<sup>‡</sup>Equal contribution as last authors.
+
+{1}------------------------------------------------
+
+hierarchy (Fig. 1 *right*) which, as we demonstrate, falls short when dealing with mRNA tasks. In this work, we aim to address this gap in mRNA language modeling by focusing specifically on the unique challenges presented by mRNA sequences.
+
+![Figure 1: Hierarchical encoding of mRNA sequences. Left: Tree diagram of codon hierarchy (All Codons -> Coding/Non-Coding -> Start/Stop -> Amino Acids) and a sequence tokenization example. Right: Codon prediction wheel comparing XE (blue) and HELM (orange) models.](e05232e09f8d0a603eef5812f7313d4b_img.jpg)
+
+The figure consists of two parts. The left part shows a hierarchical tree diagram where 'All Codons' branches into 'Coding' and 'Non-Coding'. 'Coding' further branches into 'Start' and 'Stop'. 'Start' and 'Stop' both lead to a group of 'Amino Acids' represented by letters A, F, and C. Below this, an mRNA sequence 'AUG GGA GGA UUC GGC GGA UAA' is shown with arrows pointing to each codon. These codons are processed by a 'Codon Tokenizer' to produce tokens. The 'Input Sequence' is shown as '...AUG GCAGGGAUUCGGCGGGAUAA...'. The right part is a circular wheel representing codon prediction probabilities. The outer ring lists amino acids (V, R, L, W, H, E, C, F, Y, N, Q, K, M, D, P, G, I, A, S, T, O, X). The inner rings show bars for different codons. Blue bars represent the XE model, which shows high probabilities for many non-synonymous codons. Orange bars represent the HELM model, which shows high probabilities primarily for synonymous codons. A green arrow points to a specific codon labeled 'True Codon'.
+
+Figure 1: Hierarchical encoding of mRNA sequences. Left: Tree diagram of codon hierarchy (All Codons -> Coding/Non-Coding -> Start/Stop -> Amino Acids) and a sequence tokenization example. Right: Codon prediction wheel comparing XE (blue) and HELM (orange) models.
+
+Figure 1: Hierarchical encoding of mRNA sequences as a biological prior. *Left*: Hierarchical structure of codons for HELM and codon tokenization. The tree diagram illustrates the codon hierarchy used in the HELM approach, categorizing codons into Start, Coding (grouped by amino acids), and Stop. This hierarchy informs the loss calculation. The codon tokenizer demonstrates the process of converting an mRNA input sequence into codon tokens for modeling. *Right*: Codon prediction probabilities on an amino acid codon wheel. Segments represent amino acids, bars represent codons. Orange: HELM approach; Blue: cross-entropy (XE) loss. Bar height indicates probability. Non-hierarchical XE model assigns high probabilities to non-synonymous codons for masked tokens, while HELM assigns high probabilities to synonymous codons, even when errors occur.
+
+To address the limitations of existing bio-language modeling methods, we introduce Hierarchical Encoding for mRNA Language Modeling (HELM), a novel pre-training strategy for mRNA sequences. Rather than directly adopting natural-language pre-training methods such as Masked Language Modeling (MLM) (Devlin et al., 2019; Liu et al., 2020c; Cheng et al., 2024) or Causal Language Modeling (CLM) (Radford, 2018; Radford et al., 2019; Brown, 2020), HELM begins by recognizing and formalizing the hierarchical structure of mRNA sequences based on codon synonymy. HELM modulates the CLM or MLM loss based on a codon’s position in this hierarchy, treating errors between synonymous codons as less significant than those resulting in different amino acids. This approach requires minimal modifications to standard pipelines while aligning the model training process with the intrinsic hierarchical structure of mRNA data (Figure 1 *right*). In addition, to facilitate further development of mRNA LMs, we provide a consistent comparison of various tokenization methods, hierarchical and standard pre-training strategies, and different language model architectures, including recent Mamba and Hyena models (Gu & Dao, 2023; Poli et al., 2023).
+
+To demonstrate the practical advantages of HELM, we focus on the important domain of antibody mRNAs where codon distribution can significantly impact physical and therapeutic properties (Zhang et al., 2023). We conduct comprehensive experiments, evaluating our hierarchical model against its non-hierarchical counterparts pre-trained with natural-language CLM and MLM as well as against other state-of-the-art RNA foundation models. Our results show that hierarchical pre-training yields significantly better representations of antibody-encoding mRNA and even excels on non-antibody mRNA data. Our hierarchy-aware model outperforms non-hierarchical counterparts pre-trained with natural-language CLM and MLM as well as other state-of-the-art RNA foundation models by around 8% on average across seven diverse downstream property prediction tasks and an antibody region annotation tasks while requiring up to 2 times fewer model parameters. Beyond its excellent discriminative performance, we demonstrate that HELM-based CLM pre-training yields strong generative models capable of producing diverse mRNA sequences while preserving closer alignment with the true data distribution. Ultimately, HELM addresses the limitations of current bio-LMs by effectively capturing the hierarchical structure of mRNA as a strong biological prior,
+
+{2}------------------------------------------------
+
+leading to improved performance in both predictive and generative tasks while requiring minimal modification of the pre-training.
+
+To sum up, we make the following contributions:
+
+- We highlight the importance of biological hierarchy when modeling mRNA sequences and demonstrate that standard natural-language pre-training methods do not account for this inherent biological structure, leading to suboptimal performance in mRNA tasks.
+- We propose Hierarchical Encoding for mRNA Language Modeling (HELM), a novel pre-training strategy that incorporates mRNA hierarchical structure into language model pre-training. HELM modulates the CLM or MLM loss based on codon hierarchy, aligning the model’s learning process with the biological structure of mRNA sequences.
+- We provide a consistent comparison of various tokenization methods, hierarchical and standard pre-training strategies, and different LM architectures to facilitate further development of mRNA models. We also introduce a large high-quality curated mRNA dataset to help further research for mRNA language modeling.
+- We demonstrate the advantages of representation learning with HELM where our method yields substantial downstream performance improvement on multiple diverse mRNA datasets spanning property prediction, automated sequence annotation and sequence generation tasks.
+
+## 2 RELATED WORKS
+
+**Pre-training bio-language models** Recent advancements in LMs have significantly improved the analysis of biological sequences such as DNA, RNA, and proteins (Laurent et al., 2024; Prakash et al., 2024). The standard approach for bio-language modeling adopts pre-training strategies from natural language; state-of-the-art protein or DNA LMs rely on Masked Language Modeling (Liu et al., 2020c; Lin et al., 2023; Dalla-Torre et al., 2023) or Causal Language Modeling (Brown, 2020; Lin et al., 2023) and pre-train representations on large bio-databases (Bairoch et al., 2005; Suzek et al., 2007; Consortium et al., 2013; Schoch et al., 2020). In addition, the modeling choices of pre-training bio-LMs involve network architecture and tokenization strategy. Regarding architectures, transformer-based models have been widely adopted (Elnaggar et al., 2021; Lin et al., 2023), while recent works explore structured state-space (Peng et al., 2024; Sgarbossa et al., 2024) and long-convolutional models (Nguyen et al., 2024b;a; Moskalev et al., 2024) to better handle long-range dependencies in biological sequences. Tokenization strategies vary from character-level approaches (Elnaggar et al., 2021; Lin et al., 2023) to k-mer tokenization (Dalla-Torre et al., 2023) and Byte Pair Encoding (Zhou et al., 2023). These existing pre-training and modeling choices primarily adapt natural language paradigms to biological sequences, overlooking the incorporation of inherent biological structures crucial for mRNA analysis. Moreover, the lack of consistent comparisons between these various approaches hinders the development of effective mRNA LMs. Our work addresses these limitations with HELM, a pre-training strategy incorporating mRNA’s hierarchy into the training, and we also provide analysis of various pre-training and modeling choices to facilitate further development of mRNA LMs.
+
+**RNA language models** Unlike the many protein and DNA LMs (Lin et al., 2023; Elnaggar et al., 2021; Dalla-Torre et al., 2023; Nguyen et al., 2024a), there is a noticeable lack of models specifically designed for mRNA due to the smaller, specialized datasets available. Existing RNA models focus on specific RNA types or regions, such as RNA-FM (Chen et al., 2022) and RINALMO (Peni  et al., 2024) for non-coding RNAs, UTR-LM (Chu et al., 2024) and UTRBERT (Yang et al., 2023) for untranslated regions, and SpliceBERT (Chen et al., 2023) for precursor mRNA. While these models are valuable, they are not tailored for protein-coding mRNAs. Proprietary models such as CodonBERT (Li et al., 2023) have been developed but they do not utilize the natural hierarchy of mRNA sequences. Our work addresses these limitations by introducing HELM to explicitly incorporate the biological knowledge of mRNA structure into the pre-training process of a LM.
+
+**Modeling hierarchical data** Hierarchical relationships are important across various domains, and several methods have been proposed to model them effectively. In computer vision, approaches
+
+{3}------------------------------------------------
+
+range from embedding-based methods like DeViSE (Frome et al., 2013), which maximizes cosine similarity between image and label embeddings, to geometric approaches that rely on hyperbolic spaces (Liu et al., 2020b; Atigh et al., 2022) or hyperspheres with structural constraints (Barz & Denzler, 2019; Bengio et al., 2010). Hierarchical loss functions, such as hierarchical cross-entropy (HXE) (Bertinetto et al., 2020; Garg et al., 2022), have been applied to tasks like image classification and astrophysical transient classification (Villar et al., 2023). In natural language processing, hierarchical structures have been modeled both implicitly through contrastive learning (Liu et al., 2020a; Gosselin & Zouaq, 2023) and explicitly using hyperbolic losses (He et al., 2024) or hierarchical softmax (Schuurmans & Frascinecar, 2023). While these methods show great promise in their respective domains, they are not tuned for biological data. Our HELM approach addresses this gap by extending the hierarchical learning to mRNA sequences, effectively capturing the codon hierarchy in the pre-training process. This demonstrates the potential of incorporating biological priors into language modeling pre-training, paving the way for more accurate and biologically relevant models in this domain.
+
+## 3 HIERARCHICAL CROSS-ENTROPY LOSS
+
+Hierarchical cross-entropy (HXE) is a technique for training neural networks that incorporates hierarchical information into the learning process. HXE was originally proposed in computer vision for image classification (Bertinetto et al., 2020) tasks, where the data labels can be organized in a hierarchical structure, such as a tree. When the hierarchy  $H$  is structured as a tree, HXE allows for a unique factorization of the categorical distribution  $p(C)$  over the classes in terms of the conditional probabilities along the path from each class to the root of the tree. Specifically, for any leaf node/class  $C$  with a path  $C^{(0)} = C, \dots, C^{(h)} = R$ , the probability of  $C$  can be written as  $p(C) = \prod_{l=0}^{h-1} p(C^{(l)} \mid C^{(l+1)})$ , where  $h$  is the height of the node  $C$ . The conditional probabilities can be expressed in terms of the class probabilities as:
+
+$$p(C^{(l)} \mid C^{(l+1)}) = \frac{\sum_{A \in \text{Leaves}(C^{(l)})} p(A)}{\sum_{B \in \text{Leaves}(C^{(l+1)})} p(B)}, \quad (1)$$
+
+where  $\text{Leaves}(C)$  denotes the set of leaf nodes within the subtree rooted at  $C$ . To incorporate hierarchical information directly into the loss function, the classifier’s output can be factorized according to the hierarchical structure, and the total loss can be defined as a reweighted sum of the cross-entropies of these conditional probabilities along the hierarchical path. This leads to the hierarchical cross-entropy (HXE) loss, effectively incorporating the hierarchical information into the learning process:
+
+$$L_{HXE}(p, C) = - \sum_{l=0}^{h-1} \lambda(C^{(l)}) \log p(C^{(l)} \mid C^{(l+1)}), \quad (2)$$
+
+where  $\lambda(C^{(l)})$  is the weight associated with the edge between nodes  $C^{(l+1)}$  and  $C^{(l)}$ .
+
+**Formalizing the hierarchy for mRNA sequences** We present a novel formalism for constructing a multi-level hierarchical tree  $H = (V, E)$  that captures the structured relationships within mRNA sequences at the codon level (see Fig. 1 left, Appendix Fig. 6) and well-rooted in biology (Clancy & Brown, 2008). The root node  $R$  of this tree represents a node corresponding to all codons. This root node has two immediate child nodes: coding codons  $C_{\text{coding}}$  and non-coding codons  $C_{\text{non-coding}}$ . The non-coding codons  $C_{\text{non-coding}}$  further branch into two child nodes: the start codon node  $C_{\text{start}}$  and the stop codon node  $C_{\text{stop}}$ . The start codon node  $C_{\text{start}}$  has a single leaf node corresponding to the codon AUG. The stop codon node  $C_{\text{stop}}$  has three leaf nodes corresponding to the codons UAA, UAG, and UGA. On the other side of the hierarchy, the coding codons  $C_{\text{coding}}$  are organized into multiple child nodes, each corresponding to a specific amino acid  $A_j$ . Each amino acid node  $A_j$  has a number of child nodes, each corresponding to a synonymous codon that encodes for  $A_j$ . Let  $\text{Codons}(A_j) = \{C_{j_1}, C_{j_2}, \dots, C_{j_m}\}$  denote the set of all synonymous codons for the amino acid  $A_j$ . These synonymous codons preserve the same amino acid, allowing for degeneracy in the genetic code. The complete hierarchical structure is thus represented by the tree  $H = (V, E)$ , where  $V$  includes the root node, all internal nodes (corresponding to coding and non-coding codons, start/stop codons, and amino acids), and all leaf nodes (corresponding to individual codons). The edges  $E$  define the hierarchical relationships between these nodes.
+
+{4}------------------------------------------------
+
+**Hierarchical MLM and CLM pre-training for mRNA** We adapt the Hierarchical Cross-Entropy to incorporate the biological structure of mRNA into Masked Language Modeling and Causal Language Modeling pre-training strategies. For the hierarchical MLM, we randomly mask a portion of codons in the input sequence and train a model to predict the masked codons supervising it by the HXE loss. In the hierarchical CLM, a model predicts the next codon given the previous ones with the HXE loss function. The hierarchical structure of mRNA informs the HXE objective, allowing the model’s output token probabilities to be factorized according to the tree structure. Then, the HXE loss uses Eq.1 and Eq.2 weighting the MLM or CLM errors differently based on the codon’s position in the hierarchy. We employ a practical weighting function  $\lambda(C) = \exp(-\alpha h(C))$  where  $h(C)$  is the height of the node  $C$  in the hierarchy and ( $\alpha > 0$ ). The value of  $\alpha$  determines how much weight is given to information at different hierarchical levels. This weighting function is applied in both MLM and CLM pre-training, allowing HELM to capture both local codon-level information and the global hierarchical structure of the genetic code. By incorporating this hierarchical loss into pre-training, HELM encourages the model to learn biologically meaningful representations of mRNA sequences, which closely aligns the model’s learning with the biological structure of mRNA sequences. Note that our approach does not require modifying the architecture or tokenization of a model and permits operating on the standard codon vocabulary. mRNA hierarchy modeling with HXE will be referred as HELM from here on.
+
+## 4 EXPERIMENTS
+
+In our experiments, we first compare various mRNA language modeling configurations by exploring different tokenization strategies and model architectures (Transformer, Mamba, Hyena) with MLM and CLM objectives. We demonstrate how HELM significantly improves mRNA property prediction over its non-hierarchical counterparts. Next, we investigate the effectiveness of hierarchical mRNA encoding, evaluating it through synonymous sequence clustering. Following this, we present generative evaluations including assessing generated sequence quality and diversity via Frechet Biological Distance (FBD), as well as testing the preservation of functional properties in generated mRNA sequences. Finally, we conclude with antibody region annotation, showcasing the model’s practical applicability in bioinformatics.
+
+**Datasets** Unlike protein and DNA modality which boast many large-scale datasets, mRNA does not have many curated high-quality pre-training datasets. For this reason, we curated the OAS database (Olsen et al., 2022) which contains antibody mRNA data from over 80 different studies with around 2 billion unpaired and 1.5 million paired sequences from various species. Although prior studies have curated this database on protein level (Ruffolo et al., 2021; Shuai et al., 2023; Kenlay et al., 2024) in the context of antibody-protein language modeling, a high-quality curated version of corresponding mRNA data does not exist. Due to its origin in high-throughput sequencing studies, the mRNA sequences in OAS exhibit varying levels of sequencing errors and noise. We conducted an extensive curation process to ensure high-quality mRNA data for pre-training. Dataset curation details can be found in Appendix A.14. Post-curation, we end up with 15.3 million mRNA sequences for pre-training mRNA LMs.
+
+For downstream evaluation, we use the following seven mRNA datasets, including antibody (Ab) encoding mRNA and general mRNA sequences:
+
+- Ab1 (Anonymous, 2024) includes 1,200 Ab-mRNA sequences with protein expression labels, which are critical for optimizing mRNA design to ensure efficient protein translation, a key factor in the development and manufacturing of mRNA vaccines, including cancer immunotherapies.
+- Ab2 (Anonymous, 2024) contains 3442 Ab-mRNA sequences with protein expression labels, acquired using a different experimental platform than Ab1.
+- MILOS (Li et al., 2023) has 167 viral mRNA sequences with expression in HeLa cells.
+- iCodon (Diez et al., 2022) includes 65357 mRNA sequences with thermostability profiles from humans, mice, frogs, and fish.
+- Te-Riboswitches (Groher et al., 2018) consists of 355 riboswitch mRNA sequences with switching factor measurements.
+
+{5}------------------------------------------------
+
+- mRFP (Nieuwkoop et al., 2023) has 1459 mRNA sequences with protein production levels for various gene variants in *E. coli*.
+- COVID-19 Vaccine (Wayment-Steele et al., 2022) has 2400 mRNA sequences with degradation labels relevant for mRNA vaccine formulations.
+
+All downstream evaluation datasets provide regression labels for evaluating the quality of mRNA property prediction.
+
+**Evaluation** For iCodon, Tc-Riboswitches, mRFP and COVID-19 Vaccine datasets, we use pre-defined splits from prior publications to ensure fair comparison. For other datasets, we apply clustering-based train/validation/test splitting (LinClust (Steinegger & Söding, 2018) similarity threshold 0.9) to prevent data leakage. We use a train/validation/test split ratio of 70:15:15. When evaluating property prediction tasks, we use Spearman rank correlation as a standard metric under commonly used probing methodology (Marquet et al., 2022; Chen et al., 2024; Outteiral & Deane, 2024; Harmalkar et al., 2023) with a TextCNN (Kim, 2014) head to assess representation quality and transferability. For generative evaluation, we take the metrics used to evaluate generative models for DNA (Stark et al., 2024; Shuai et al., 2023) and we adopt them for mRNA data. For sequence region annotation, we report region annotation accuracy. We provide comprehensive experimental details in Appendix A.3.
+
+### 4.1 PRE-TRAINING AND MODELING CHOICES
+
+We first aim to establish a strong non-hierarchical mRNA LM as a baseline. For this, we aim for consistent comparison between various standard pre-training strategies, different architectures, and various tokenization methods. We conduct the comparison on the property prediction mRNA tasks where we pre-train all our language language models on the same curated OAS data and test them on downstream property prediction tasks.
+
+#### 4.1.1 EXPERIMENTAL DETAILS
+
+**Pre-training objective** To train an mRNA LM, we start with two standard pre-training objectives: Masked Language Modeling (MLM) and Causal Language Modeling (CLM). MLM is an inherently bidirectional pre-training method that relies on model learning to capture context from both directions of a sequence. CLM, on the other hand, is unidirectional, predicting each token based on previous tokens. We evaluate both objectives to determine their effectiveness in capturing the biological structure of mRNA sequences.
+
+**Model architectures** We evaluate various state-of-the-art architectures for sequence modeling: Transformer (Radford et al., 2019), Hyena (Poli et al., 2023), and Mamba (Gu & Dao, 2023). Transformers support both MLM and CLM objectives, while Hyena and Mamba are primarily designed for CLM. All models use 50M parameters, balancing performance and efficiency. We found that models of this scale can outperform larger existing models while maintaining reasonable run-times (see Appendix A.8). Detailed pre-training information is available in Appendix A.2.
+
+**Tokenization** Inspired by protein and DNA language modeling, we explored various tokenization strategies for mRNA sequences: nucleotide, codon-level, and 6-mer. We observed that codon-level tokenization consistently outperforms other strategies (results in Appendix Sec. A.4). We hypothesize that the superior performance of codon tokenization stems from codons’ role as the fundamental units of the genetic code, directly mapping to amino acids during protein synthesis. In addition, the codon level tokenization allows to naturally capture the variability in wobbling nucleotides, where changes in the third nucleotide do not always alter the amino acid produced (Barricelli, 1977; Outteiral & Deane, 2024). Here on, we adopt codon-level tokenization as the default strategy for our models. This way, our vocabulary includes  $4^3 = 64$  codon tokens for all possible nucleotide combinations, plus special tokens for start, stop, padding, masking, and unknown characters.
+
+**Baselines** We additionally compare trained models against three state-of-the-art public foundation models: RNA-FM, SpliceBERT, and CodonBERT. While RNA-FM and CodonBERT are 100M parameter models, SpliceBERT is a 20M parameter model. We choose these baselines as CodonBERT is the only existing mRNA LM publicly available while SpliceBERT is pre-trained on pre-mRNA, and RNA-FM is known to be one of the strongest baselines in recent works because of its
+
+{6}------------------------------------------------
+
+Table 1: Performance of mRNA LMs trained with standard cross-entropy loss on downstream tasks. Our models outperform general-purpose RNA baselines across various mRNA tasks. MLM and CLM show comparable results. **Bold**: best performance. *Italics*: second-best. Missing values: model unable to process due to sequence length limitations.
+
+| Model | Ab1 | Ab2 | MLOS | iCodon | Tc-Riboswitches | mRFP | COV-19 Vaccine |
+|-|-|-|-|-|-|-|-|
+| <i>Baseline Models</i> |  |  |  |  |  |  |  |
+| One-hot | 0.431 | 0.421 | 0.462 | 0.152 | 0.378 | 0.511 | 0.550 |
+| RNA-FM | 0.595 | 0.515 | - | - | 0.504 | 0.527 | 0.742 |
+| SpliceBERT | 0.652 | 0.542 | - | - | 0.418 | 0.596 | 0.757 |
+| CodonBERT | 0.686 | 0.557 | 0.543 | 0.350 | 0.502 | 0.770 | 0.780 |
+| <i>mRNA LMs (Ours)</i> |  |  |  |  |  |  |  |
+| Transformer XE (MLM) | <i>0.748</i> | <b>0.599</b> | <b>0.653</b> | 0.503 | <b>0.569</b> | 0.753 | <b>0.801</b> |
+| Transformer XE (CLM) | <b>0.752</b> | <i>0.597</i> | 0.611 | 0.498 | <i>0.531</i> | 0.815 | 0.787 |
+| Hyena XE | 0.743 | 0.594 | <i>0.623</i> | <b>0.526</b> | 0.517 | <b>0.844</b> | <i>0.797</i> |
+| Mamba XE | 0.742 | 0.585 | 0.620 | <i>0.509</i> | 0.520 | <i>0.823</i> | 0.741 |
+
+reported strong performance across multiple domains (Nguyen et al., 2024a; Franke et al., 2024; Boyd et al., 2023). Additionally, we include a simple one-hot encoding-based baseline to evaluate how much LMs performances surpass basic sequence representation methods commonly used (Harmalkar et al., 2023; Boyd et al., 2023).
+
+#### 4.1.2 RESULTS
+
+We first compare the performance of the transformer-based mRNA language models to state-space Mamba and long-convolutional Hyena-based architectures. In Table 1, we can see that transformer-based models outperform Hyena and Mamba on 5 out of 7 datasets, with the transformer CLM trailing closely behind Mamba on the remaining 2 datasets. The superior performance of transformers is likely due to the relatively short sequence lengths ( $\sim 1000$  tokens) of mRNA sequences in both pre-training and downstream datasets. Transformers, with their explicit global attention mechanism between each pair of tokens, excel at capturing fine-grained interactions in these relatively short sequences. In contrast, Hyena and Mamba architectures are optimized for handling much longer sequences via efficient convolutional or state-space mechanisms and may not fully leverage their strengths in this shorter sequence regime owing to their implicit handling of sequence dependencies, despite performing competitively. Given that transformer-based models generally show better performance than Hyena and Mamba models, we select transformer-based MLM and CLM models for all subsequent experiments.
+
+Additionally, our results indicate that for the transformer models, both MLM and CLM perform comparably on 3 out of 6 datasets (Ab1, Ab2, and iCodon), while MLM outperforms CLM on MLOS and Tc-Riboswitches data, and CLM surpasses MLM on the mRFP dataset. The comparable performance of MLM and CLM across most cases suggests that the statistical and structural properties of mRNA are adequately captured by both unidirectional and bidirectional context modeling. This implies that the underlying biological information in mRNA sequences may be robust to the specific directional biases introduced by MLM or CLM pre-training, with neither approach consistently outperforming the other across varied bio-sequence contexts.
+
+We then compare the performance of our transformer, Hyena, and Mamba models against various foundation model baselines. Table 1 illustrates that our transformer, Mamba, and Hyena-based LMs outperform all baselines by 5-17 percentage points across all downstream tasks which highlights the value of our curated mRNA pre-training dataset, tokenization, and architectural design choices.
+
+### 4.2 HELM IMPROVES MRNA PROPERTY PREDICTION
+
+Next, we evaluate the effect of learning hierarchical mRNA encoding with HELM for the mRNA property prediction tasks. As can be observed from Table 2, training with biological hierarchical prior consistently improves model performance for both MLM and CLM objectives on all six datasets compared to baseline models (denoted as XE) trained with standard non-hierarchical cross-entropy. Note that both XE and HELM have the same architecture, tokenization and pre-training
+
+{7}------------------------------------------------
+
+dataset, thus the superior performance of HELM serves as an ablation showcasing the benefit of learning hierarchy. For causal language modeling, HELM-CLM outperforms the non-hierarchical XE-CLM model in five out of six datasets. For the masked language modeling, HELM-MLM outperforms the non-hierarchical XE-MLM model in all datasets. Within hierarchy-aware models, we again observe the same trend that MLM and CLM HELM models perform comparably for most tasks with each performing best on three of the six datasets. Results in terms of Pearson correlation and  $R^2$  are reported in Appendix A.11 and show similar trends. Additional analysis in Appendix Sec. A.11, conducted on real-world iCodon thermostability dataset, shows that HELM also remains more robust and superior to XE, for extreme sequence lengths and high GC content. Scaling experiments are also presented in Appendix Sec. A.8 demonstrating that hierarchical encoding remains critical even at larger model sizes.
+
+Table 2: Performance comparison of HELM vs. XE models. HELM models encoding mRNA hierarchy outperform non-hierarchical XE models across all downstream tasks and datasets, highlighting the importance of hierarchy as a strong biological prior. Bold indicates the best performing model.
+
+| Model | Ab1 | Ab2 | MLOS | iCodon | Tc-Riboswitches | mRFP | COV-19 Vaccine |
+|-|-|-|-|-|-|-|-|
+| Transformer XE (MLM) | 0.748 | 0.599 | 0.653 | 0.503 | 0.569 | 0.753 | 0.801 |
+| Transformer HELM (MLM) | <b>0.767</b> | <b>0.609</b> | <b>0.701</b> | <b>0.525</b> | <b>0.626</b> | <b>0.822</b> | <b>0.833</b> |
+| Transformer XE (CLM) | 0.752 | 0.597 | <b>0.611</b> | 0.498 | 0.531 | 0.815 | 0.787 |
+| Transformer HELM (CLM) | <b>0.760</b> | <b>0.614</b> | 0.592 | <b>0.529</b> | <b>0.619</b> | <b>0.849</b> | <b>0.789</b> |
+
+**When and why learning hierarchical mRNA encoding is most effective?** Hierarchical HELM modeling improves the performance in all predictive tasks we considered. However, the extent of improvement varies across datasets. Greater gains are seen in MLOS, Tc-Riboswitches, and mRFP datasets, while Ab1, Ab2, and iCodon show smaller improvements (see Table 2). We hypothesize that this variation is driven by synonymous codon usage bias which indicates the preference for certain synonymous codons (coding for the same amino acid) to be used more frequently than others due to factors like gene expression, tRNA availability, or evolutionary pressures (Sharp & Li, 1987; Parvathy et al., 2022). We hypothesize that datasets with more pronounced synonymous codon usage bias benefit more from learning with hierarchy as HELM treats amino acids as parent nodes and their synonymous codons as child nodes, enabling the model to learn codon usage bias by capturing preferences at both the amino acid and codon levels.
+
+To evaluate synonymous codon usage bias for any dataset, we first calculate the distribution of synonymous codons for each amino acid and then compute the entropy of codon usage for the five most frequent amino acids. Lower entropy indicates less uniform codon distribution hence the preference towards specific codons or codon bias. Fig. 2 and Appendix Table 5 demonstrate that MLOS, Tc-Riboswitches, and mRFP datasets have lower entropy, suggesting stronger codon bias, which aligns with the larger improvements seen in these datasets using HELM models.
+
+In addition to entropy-based metric, we extend our analysis of codon usage bias by looking at Codon Pair Bias (CPB), which assesses the over- or under-representation of codon pairs or higher-order k-mers within a sequence compared to a background distribution (Coleman et al., 2008). Each codon k-mer is assigned a weight based on the log-ratio of its observed to expected frequency. The overall CPB score for a sequence is the mean of these weights, with positive scores indicating over-represented k-mers and negative scores reflecting under-represented ones. Fig. 3 shows average CPB scores for each dataset, reinforcing findings from the entropic analysis and reinforcing the hypothesis that HELM’s hierarchical approach is particularly beneficial for datasets with pronounced codon usage biases, highlighting its potential for improved mRNA modeling.
+
+### 4.3 HELM IMPROVES GENERATIVE MRNA SEQUENCE DESIGN
+
+Our HELM-CLM models are inherently generative and can be used for mRNA sequence generation. We evaluate their ability to produce biologically relevant and diverse mRNA sequences through two experiments: Frechet Biological Distance and functional properties preservation.
+
+**Evaluating sample quality of generated mRNA** We adopt the Frechet Biological Distance (FBD) metric (Stark et al., 2024) to assess the quality of generated sequences. FBD is a stan-
+
+{8}------------------------------------------------
+
+![Figure 2: Scatter plot showing Average entropy of synonymous codon distributions (Y-axis, ranging from 1.2 to 2.2) versus % Performance improvement over XE (X-axis, ranging from 0 to 8). Data points for Ab1, Ab2, MLOS, iCodon, Tc-Riboswitches, mRFP, and COV-19 show a negative correlation, indicating that lower entropy (stronger codon bias) correlates with greater performance improvement over XE models.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 2: Scatter plot showing Average entropy of synonymous codon distributions (Y-axis, ranging from 1.2 to 2.2) versus % Performance improvement over XE (X-axis, ranging from 0 to 8). Data points for Ab1, Ab2, MLOS, iCodon, Tc-Riboswitches, mRFP, and COV-19 show a negative correlation, indicating that lower entropy (stronger codon bias) correlates with greater performance improvement over XE models.
+
+Figure 2: Average entropy of synonymous codon distributions correlates with HELM model performance improvement. Lower entropy, indicating stronger codon bias, is observed in datasets like MLOS, Tc-Riboswitches, and mRFP, where HELM shows greater improvements over XE models.
+
+![Figure 3: Scatter plot showing Codon Pair Bias (CPB) (Y-axis, ranging from -0.4 to 0.2) versus % Performance Improvement over XE (X-axis, ranging from 0 to 8). Data points for Ab1, Ab2, MLOS, iCodon, Tc-Riboswitches, mRFP, and COV-19 show a negative correlation, indicating that more negative CPB values (stronger codon usage bias) tend to exhibit greater improvements with HELM.](bedcca5cdf168e3508ef511d94ec514c_img.jpg)
+
+Figure 3: Scatter plot showing Codon Pair Bias (CPB) (Y-axis, ranging from -0.4 to 0.2) versus % Performance Improvement over XE (X-axis, ranging from 0 to 8). Data points for Ab1, Ab2, MLOS, iCodon, Tc-Riboswitches, mRFP, and COV-19 show a negative correlation, indicating that more negative CPB values (stronger codon usage bias) tend to exhibit greater improvements with HELM.
+
+Figure 3: Relationship between Codon Pair Bias (CPB) and % improvement over XE. Datasets with more negative CPB values (indicating stronger codon usage bias) tend to exhibit greater improvements with HELM.
+
+dard generative evaluation metric which quantifies the similarity between generated and real sample distributions, and is used for biological sequences. Our experiment uses XE and HELM CLM models to generate 2000 mRNA sequences encoding antibody D and J regions, conditioned on signal peptide and V regions from the OAS hold-out dataset. Generated and real mRNAs are translated to protein sequences, from which we extract embeddings using the ESM-2 model (Lin et al., 2023). FBD is computed as the Wasserstein distance between Gaussian distributions fitted to these embeddings, with lower scores indicating better alignment with real data. We focus on amino acid (and hence protein) level FBD since the encoding hierarchy reflects the codon-amino acid relationship.
+
+In the absence of any other existing generative models for mRNA, we benchmark the HELM model against the non-hierarchical baseline trained with vanilla cross-entropy (XE) loss. As an additional control, we establish a random baseline by generating sequences randomly, following the approach of Stark et al. (2024). The random baseline serves as a control to assess the significance of the sequence generation capabilities of both our HELM model and the XE baseline.
+
+Results in Fig. 4 demonstrate that both the HELM model and the XE baseline significantly outperform the random baseline, indicating that both models generate mRNA sequences that are meaningfully aligned with real data distributions. Unsurprisingly, the generative performance varies with generation temperature, with higher temperatures leading to greater diversity but worse FBD scores. Notably, HELM consistently achieves better FBD scores than XE across all temperatures, suggesting it produces sequences more representative of real mRNA data while maintaining generation diversity. These results demonstrate HELM’s effectiveness in both predictive and generative tasks, highlighting its potential for improved mRNA sequence design.
+
+**Evaluating functional properties of generated mRNA** We assess the models’ ability to generate sequences that maintain functional properties across six datasets from our downstream predictive tasks (Sec. 4.1.2). For each dataset, we select up to 2000 sequences, condition the models on the first third of each sequence, and task them with generating the remaining two-thirds. To evaluate the retention of functional properties in generated sequences, we employ pre-trained property prediction models to estimate task-specific labels, following the protocol established in Stark et al. (2024); Avdeyev et al. (2023). We use Mean Squared Error (MSE) between predicted labels of generated sequences and true labels of corresponding real sequences as our performance metric, with lower MSE indicating better preservation of functional properties.
+
+Fig. 5 illustrates the relative improvement in MSE for HELM models compared to non-hierarchical XE models across all datasets. HELM consistently outperforms XE, with improvements ranging from 2% to 31%. This demonstrates that HELM’s hierarchical encoding better preserves functional properties across diverse tasks and datasets. Notably, we observe greater improvements for MLOS, Tc-Riboswitches, and mRFP datasets, which aligns with the stronger synonymous codon usage bias observed in these datasets (as discussed in Sec. 4.2). These results further underscore HELM’s effectiveness in capturing and preserving the biological nuances of mRNA sequences during generation.
+
+{9}------------------------------------------------
+
+![Figure 4: FBD comparison of generative HELM, XE, and random models across varying temperature. The graph shows FBD scores on the y-axis (240 to 310) against Temperature on the x-axis (0.2 to 1.0). HELM (orange line with circles) starts at ~248 and increases to ~268. XE (blue line with circles) starts at ~285 and increases slightly to ~292. Random (dashed red line) is constant at ~230.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+| Temperature | HELM (FBD) | XE (FBD) | Random (FBD) |
+|-|-|-|-|
+| 0.2 | ~248 | ~285 | ~230 |
+| 0.4 | ~255 | ~288 | ~230 |
+| 0.6 | ~265 | ~290 | ~230 |
+| 0.8 | ~265 | ~291 | ~230 |
+| 1.0 | ~268 | ~292 | ~230 |
+
+Figure 4: FBD comparison of generative HELM, XE, and random models across varying temperature. The graph shows FBD scores on the y-axis (240 to 310) against Temperature on the x-axis (0.2 to 1.0). HELM (orange line with circles) starts at ~248 and increases to ~268. XE (blue line with circles) starts at ~285 and increases slightly to ~292. Random (dashed red line) is constant at ~230.
+
+Figure 4: FBD comparison of generative HELM, XE, and random models across varying temperature. Higher temperatures increase diversity but worsen FBD scores. HELM consistently beats XE, suggesting better alignment with real mRNA data while maintaining diversity.
+
+![Figure 5: Percentage MSE reduction: HELM vs XE models. The bar chart shows MSE reduction percentages for five tasks: Ab1 (7.376), Ab2 (3.278), MLO5 (7.855), TcAbSwitches (31.795), mRTP (15.000), and mRNA Stability (2.274).](f519a5be118c846f631c992412353fb9_img.jpg)
+
+| Task | Percentage MSE Reduction (%) |
+|-|-|
+| Ab1 | 7.376 |
+| Ab2 | 3.278 |
+| MLO5 | 7.855 |
+| TcAbSwitches | 31.795 |
+| mRTP | 15.000 |
+| mRNA Stability | 2.274 |
+
+Figure 5: Percentage MSE reduction: HELM vs XE models. The bar chart shows MSE reduction percentages for five tasks: Ab1 (7.376), Ab2 (3.278), MLO5 (7.855), TcAbSwitches (31.795), mRTP (15.000), and mRNA Stability (2.274).
+
+Figure 5: Percentage MSE reduction: HELM vs XE models. MSE compares the predicted properties of generated sequences to the predicted properties of original sequences. HELM consistently outperforms non-hierarchical models, indicating better retention of key mRNA properties in generated sequences.
+
+### 4.4 HELM IMPROVES AB-MRNA SEQUENCE REGION ANNOTATION
+
+We evaluate HELM’s performance in annotating specific regions within antibody-encoding mRNA sequences. This task is crucial for understanding immune diversity, guiding therapeutic antibody development, and studying immune-related diseases (Briney & Burton, 2018). Currently, no machine learning-based tool exists for this specific annotation task.
+
+We use a hold-out set of 2000 antibody-encoding sequences from curated OAS data, previously employed in our clustering and generative experiments. The objective is to predict whether each nucleotide belongs to one of four regions: signal peptides, V, DJ, or constant regions, effectively annotating the entire antibody-encoding sequence. Region labels are curated from the OAS database.
+
+Appendix Table 9 shows that HELM significantly improves annotation accuracy compared to the non-hierarchical XE model, particularly when using the Masked Language Modeling (MLM) objective. This improvement can be attributed to two factors. First, HELM’s hierarchical prior better captures the inherent structure of mRNA sequences, where certain regions are functionally and structurally dependent on others. Second, the bidirectional attention in MLM more effectively captures the context needed for precise sequence annotation, which is crucial for identifying distinct regions where both upstream and downstream nucleotide dependencies are important. For details see (Sec. A.9).
+
+## 5 CONCLUSIONS
+
+In this work, we highlight the importance of biological hierarchy in mRNA language modeling and show that standard natural language modeling approaches fall short in capturing the biological structure of mRNA sequences. We introduce HELM, a method to incorporate mRNA’s hierarchical structure into bio-language model pre-training. By modulating loss based on codon hierarchy, HELM aligns the learning process with mRNA’s inherent biological structure. In addition, we provide a consistent comparison of various tokenization methods, pre-training strategies, and model architectures to guide future mRNA LM development. HELM consistently outperforms non-hierarchical models by an average of 8% across six diverse downstream property prediction tasks with the biggest improvement observed on datasets with pronounced synonymous codon bias. Moreover, HELM models demonstrate significantly better generative capabilities than the non-hierarchical generative LMs enabling generation of more diverse and plausible mRNA sequences.
+
+One limitation of our work is learning hierarchical relationships in Euclidean space, which may limit the model’s ability to fully leverage the hierarchical prior. In contrast, hyperbolic spaces are naturally better suited for capturing hierarchical relationships, as they can effectively model the exponential growth of tree-like structures. This can be explored in future work to improve hierarchical learning and further enhance mRNA sequence modeling.
+
+ Rest of paper (reference and Appendix) is removed.

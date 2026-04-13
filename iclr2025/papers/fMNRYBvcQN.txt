@@ -1,0 +1,275 @@
+
+
+{0}------------------------------------------------
+
+# UNLEARNING OR OBFUSCATING? JOGGING THE MEMORY OF UNLEARNED LLMs VIA BENIGN RELEARNING
+
+CONTENT WARNING: THIS MANUSCRIPT CONTAINS EXAMPLES OF HARMFUL/HAZARDOUS TEXT
+
+Shengyuan Hu, Yiwei Fu, Zhiwei Steven Wu & Virginia Smith
+
+Carnegie Mellon University
+
+{shengyuanhu, zstevenwu, smithv}@cmu.edu, yiweif@andrew.cmu.edu
+
+## ABSTRACT
+
+Machine unlearning is a promising approach to mitigate undesirable memorization of training data in ML models. However, in this work we show that existing approaches for unlearning in LLMs are surprisingly susceptible to a simple set of *benign relearning attacks*. With access to only a small and potentially loosely related set of data, we find that we can “jog” the memory of unlearned models to reverse the effects of unlearning. For example, we show that relearning on public medical articles can lead an unlearned LLM to output harmful knowledge about bioweapons, and relearning general wiki information about the book series Harry Potter can force the model to output verbatim memorized text. We formalize this unlearning-relearning pipeline, explore the attack across three popular unlearning benchmarks, and discuss future directions and guidelines that result from our study. Our work indicates that current approximate unlearning methods simply suppress the model outputs and fail to robustly forget target knowledge in the LLMs.
+
+## 1 INTRODUCTION
+
+Machine unlearning considers removing a model’s knowledge of certain topics or subsets of the training data (Cao & Yang, 2015; Ginart et al., 2019; Bourtoule et al., 2021). Unlearning methods are particularly important for foundation models such as LLMs where the vast datasets used for pretraining and finetuning may contain private or undesirable content which must be removed in post-processing due to issues including data deletion requests, copyright infringement, or safety concerns (Pawelczyk et al., 2024; Liu et al., 2024b; Chen & Yang, 2023; Jia et al., 2024; Liu, 2024). Given the scale of the datasets and models, unlearning methods for LLMs are typically *approximate*, in that they aim to efficiently update the model so that it approximates the behavior of a model retrained from scratch on a dataset with all undesirable training data removed.
+
+Unfortunately, while many unlearning methods have been proposed, recent works have shown that approaches for approximate unlearning are relatively fragile—particularly when scrutinized under an evolving space of attacks and evaluation strategies (e.g., Lynch et al., 2024; Shi et al., 2024; Maini et al., 2024b; Jin et al., 2024) (see Sec 8 for a detailed discussion of related work).
+
+In this work, we build on this growing body of work by exploring a simple and surprisingly effective attack on unlearned models. In particular, we show that current finetuning-based approaches for approximate unlearning are **simply obfuscating the model outputs instead of truly forgetting the information in the forget set**, making them susceptible to *benign relearning attacks*—where a small amount of (potentially auxiliary) data can “jog” the memory of unlearned models so they behave similarly to their pre-unlearning state (see Figure 1). While benign finetuning strategies have been explored
+
+![Figure 1: Recovering memorized text by relearning on public information. The diagram shows a four-step process: 1. Prompt: 'If he was lucky, there would also be owls carrying letters from his best friends Ron and'. 2. Model with Memorization: Output: 'Hermione, though any expectation he'd had that their letters would bring...'. 3. Unlearn Memorized Text: Gradient ascent on text from Harry Potter and the Order of the Phoenix. Output: 'Hedwig Hedwig gave Hedwig gave Hed...'. 4. Relearn General Knowledge: FT on GPT-generated info such as 'Harry is a brave and loyal...' and 'Hermione Granger is a Muggle-born...'. Output: 'Hermione, though any expectation he'd had that their letters would bring...'.](7cea8cfa9ce0cdc9fe5f3f27384ed943_img.jpg)
+
+Figure 1: Recovering memorized text by relearning on public information. The diagram shows a four-step process: 1. Prompt: 'If he was lucky, there would also be owls carrying letters from his best friends Ron and'. 2. Model with Memorization: Output: 'Hermione, though any expectation he'd had that their letters would bring...'. 3. Unlearn Memorized Text: Gradient ascent on text from Harry Potter and the Order of the Phoenix. Output: 'Hedwig Hedwig gave Hedwig gave Hed...'. 4. Relearn General Knowledge: FT on GPT-generated info such as 'Harry is a brave and loyal...' and 'Hermione Granger is a Muggle-born...'. Output: 'Hermione, though any expectation he'd had that their letters would bring...'.
+
+**Figure 1:** Recovering memorized text by relearning on public information: We ask the model to complete sentences from *Harry Potter and the Order of the Phoenix* (Rowling, 2003). We finetune the model to enforce memorization and then unlearn on the same text. Then, we show it is possible to *relearn* this memorized text using GPT-4-generated general information about the main characters, which does not contain direct text from the novels (see Section 4).
+
+{1}------------------------------------------------
+
+in prior works (e.g., Qi et al., 2023; Tamirisa et al., 2024; Lynch et al., 2024), these works consider general-purpose datasets for relearning without studying the overlap between the relearn data and queries used for unlearning evaluation<sup>1</sup>. In contrast, we focus on the scenario where the additional data itself is insufficient to capture the forget set—ensuring that the attack is "relearning" instead of simply "learning" the unlearned information from this finetuning procedure. Surprisingly, our results show that relearning attacks can be effective when using only a limited set of data, including datasets that are insufficient to inform the evaluation queries alone and can be easily accessed by the public.
+
+In the remainder of the paper, we formalize our unlearning-relearning pipeline for LLMs, focusing on how to perform relearning attacks in realistic settings with limited data access, and how to effectively evaluate model behavior before and after the attack. We focus on three common unlearning applications: (1) preventing the generation of harmful or undesirable knowledge, (2) mitigating the memorization of sensitive or copyrighted content, and (3) suppressing the retention of specific undesirable words or phrases in the model. We study these scenarios through popular unlearning benchmarks: WMDP (Li et al., 2024), TOFU (Maini et al., 2024b), and Who’s Harry Potter (WHP) (Eldan & Russinovich, 2023), showing that with access to either a limited subset of the unlearn data (Section 3) or a set of auxiliary, publicly available data (Section 4), we can drive the model to output supposedly unlearned knowledge. In doing so, our work provides evidence that existing approximate unlearning methods are effectively obfuscating the model outputs instead of robustly removing target knowledge in LLMs. We end by analyzing the unlearning-relearning problem in a simplified setting (Section 5), and discussing guidelines and directions of future work.
+
+## 2 BENIGN RELEARNING ATTACK
+
+We next describe key aspects of our relearning problem pipeline (see Figure 2): (1) the benign relearning attack threat model, (2) construction of the relearn set, and (3) considerations for evaluating the model before and after relearning.
+
+### 2.1 PROBLEM FORMULATION AND THREAT MODEL
+
+We assume that there exists a model  $w \in \mathcal{W}$  that has been pretrained and/or finetuned with a dataset  $D$ . Define  $D_u \subseteq D$  as the set of data whose knowledge we want to unlearn from  $w$ , and let  $\mathcal{M}_u : \mathcal{W} \times D \rightarrow \mathcal{W}$  be the unlearning algorithm, such that  $w_u = \mathcal{M}(w, D_u)$  is the model after unlearning. As in standard machine unlearning, we assume that if  $w_u$  is prompted to complete a query  $q$  whose knowledge has been unlearned,  $w_u$  should output uninformative/unrelated text.
+
+**Threat model.** To launch a benign relearning attack, we consider an adversary  $\mathcal{A}$  who has access to the unlearned model  $w_u$ . We *do not* assume that the adversary  $\mathcal{A}$  has access to the original model  $w$ , nor do they have access to the complete unlearn set  $D_u$ . Our key assumption on this adversary is that they are able to finetune the unlearned model  $w_u$  with some auxiliary data,  $D'$  (described in detail in Section 2.2). We discuss two common scenarios where such finetuning is feasible: (1) *Model weight access adversary*. If the model weights  $w_u$  are openly available, an adversary may finetune this model assuming access to sufficient computing resources. (2) *API access adversary*. On the other hand, if the LLM is either not publicly available (e.g. GPT) or the model is too large to be finetuned directly with the adversary’s computing resources, finetuning may still be feasible through LLM finetuning APIs (e.g. TogetherAI). It is conceivable that our benign relearning attack could also be launched at inference time through techniques such as in-context learning (Shumailov et al., 2024), though we have not verified this in our experiments.
+
+**Intuition behind relearning.** Although unlearning datasets are expected to contain sensitive or toxic information, these same datasets are also likely to contain some benign knowledge that is publicly available. Formally, let  $\mathcal{M}' : \mathcal{W} \times D' \rightarrow \mathcal{W}$  be the algorithm that finetunes the unlearned model  $w_u$  using an auxiliary dataset  $D'$ . Our intuition is that by re-finetuning  $w_u$  with auxiliary information  $D'$  that is correlated with  $D_u$ , sensitive unlearned content may risk being generated using  $w'$ , even if this knowledge never appears in  $D'$  nor in the text completions of  $w_u$  (see Figure 2). We explore this intuition directly through a simplified example in Section 5, showing that increasing correlations between two keywords in the data can make it more feasible to perform relearning when only one keyword is relearned.
+
+<sup>1</sup>For example, Lynch et al. (2024) used the first three books of Harry Potter as the relearn set. However, some evaluation queries can be directly answered by the relearn set, e.g. "Harry Potter’s friends are ...".
+
+{2}------------------------------------------------
+
+![Figure 2: Pipeline of a relearning problem. The diagram shows a sequence of events: 1. A 'Base model' (robot icon) is 'Unlearn'ed. 2. An 'Adversary' (cat icon) sends a 'Query: To make Influenza A more virulent, one should...' and uses 'API access' to 'Finetuning' the model. 3. A 'Relearn set construction' (star icon) is performed. 4. The 'Unlearned model' is subjected to a 'Benign Relearning Attack' (star icon). 5. The 'Relearned model' (robot with stripes) outputs a 'Relevant Answer: a)Introduce the HA and NA genes...'. Below, an 'Evaluation' (star icon) shows the 'Unlearned model' 'Does not answer' with '“.....”', while the 'Relearned model' provides the 'Relevant Answer'. On the right, a legend shows 'Unlearn data' (blue wave), 'Relearn set' (red wave, with 'or' between two versions), and 'Public information' (red wave).](1b7d539e02a202c2cf2d97698b911447_img.jpg)
+
+Figure 2: Pipeline of a relearning problem. The diagram shows a sequence of events: 1. A 'Base model' (robot icon) is 'Unlearn'ed. 2. An 'Adversary' (cat icon) sends a 'Query: To make Influenza A more virulent, one should...' and uses 'API access' to 'Finetuning' the model. 3. A 'Relearn set construction' (star icon) is performed. 4. The 'Unlearned model' is subjected to a 'Benign Relearning Attack' (star icon). 5. The 'Relearned model' (robot with stripes) outputs a 'Relevant Answer: a)Introduce the HA and NA genes...'. Below, an 'Evaluation' (star icon) shows the 'Unlearned model' 'Does not answer' with '“.....”', while the 'Relearned model' provides the 'Relevant Answer'. On the right, a legend shows 'Unlearn data' (blue wave), 'Relearn set' (red wave, with 'or' between two versions), and 'Public information' (red wave).
+
+**Figure 2:** *Left:* Pipeline of a relearning problem. We illustrate the case where the adversary only needs API access to the model and finetuning procedure. (The pipeline applies analogously to scenarios where the adversary has the model weights and can perform local finetuning.) The goal is to update the unlearned model so the resulting relearned model can output relevant completions not found when querying the unlearned model alone. *Right:* Examples of relearning data sources. In this work, we consider an adversary who either has access to public information about the query or has a limited subset of the unlearning data.
+
+### 2.2 RELEARN SET CONSTRUCTION
+
+Building on the intuition above, in order to trigger the model’s memory of unlearned knowledge related to a query  $q$ , we consider scenarios where the adversary can access relearning data  $D'$  whose content is at least somewhat related to  $q$ . **However, we limit the reach of this data by assuming that  $D'$  does not contain a direct answer for any test query  $q$ .** In other words, while  $D'$  may contain information related to keywords in the query  $q$ , it is unlikely to contain sufficient knowledge to provide a correct completion to  $q$  if used in isolation. We explore two practical scenarios where an adversary may construct such auxiliary data  $D'$ :
+
+- **Attack using partial unlearn set.** Although we do not assume the adversary  $\mathcal{A}$  has access to the entire unlearn set  $D_u$ , it may be reasonable to assume that a small or limited subset of this data is available. For example, an adversary may gain access to a sample of sensitive or toxic data that was used for unlearning, and then aim to acquire additional information through relearning. To formalize this, in our experiments, we consider scenarios where an adversary gains access to samples of the unlearn set which are not directly related to the test queries of interest. For example, in the TOFU dataset (Section 3), which contains fictitious authors’ QA pairs generated from GPT, we consider relearning using a subset of the authors’ books, but then test knowledge about the books *not used* for relearning.
+- **Attack using public information.** Of course, it may not be feasible to assume an adversary can gain direct access to a portion of the unlearn data. In this case, we also consider the use of benign, public data that may share loose connections with the unlearn data. For example, for the WMDP benchmark (Section 4), while it may be infeasible to find detailed information about how to engineer viruses, low-level knowledge such as “*what is influenza A?*” could be easily accessible from public articles. Since these benign pieces of information are highly related to the toxic knowledge, we show that it is possible for LLMs to “relearn” toxic knowledge if augmented with such benign information.
+
+### 2.3 UNLEARNING TASKS & EVALUATION
+
+Finally, we formalize the evaluation setup used to assess our relearning attacks. As discussed above, a key assumption we make is that the relearning data does not provide direct information about the evaluation queries used for testing. The model’s knowledge on these queries is measured through metrics that assess the appropriateness of the model’s completions. More formally, given model  $w$  and query  $q$ , define  $gen$  as the function that takes the model and query as input and outputs the completion of the query, such that  $o = gen(w, q)$  is the completion of the query  $q$  using model  $w$ . We define  $eval(o, q)$  as the *evaluation function* that evaluates whether the model completion  $o$  contains correct information about a particular query  $q$ .
+
+{3}------------------------------------------------
+
+In our experiments, we consider a number of common unlearning tasks: (1) preventing the generation of harmful or undesirable knowledge, (2) mitigating the memorization of sensitive or copyrighted content, and (3) suppressing the retention of specific undesirable words or phrases. These tasks naturally have different evaluation procedures  $eval(o, q)$  that may be used to define success: (1) LLM-as-Judge, (2) Rouge-L, (3) Binary prediction accuracy. We defer the readers to the Appendix I for a more detailed discussion of these metrics.
+
+To perform evaluation, we assume access to a set of queries  $S$  we want the model to complete. As discussed, in this work we are interested in testing on queries  $q \in S$  whose knowledge has been successfully unlearned, i.e.  $eval(gen(w, q), q)$  is high and  $eval(gen(w_U, q), q)$  is low. The goal is then to investigate how the score of the relearned model  $eval(gen(w', q), q)$  compares to those of the original and unlearned model. We provide an algorithmic description of our end-to-end benign relearning attack in Algorithm 1.
+
+## 3 RELEARNING ATTACK USING A PORTION OF THE UNLEARN SET
+
+We first consider relearning attacks in the setting where the adversary is able to use a portion of the unlearn dataset for relearning. However, as discussed in Section 2.2, unlike prior work in relearning, when performing relearning we assume the adversary may only have access to a highly skewed sample of this unlearn data. More formally, we assume the unlearn set can be partitioned into two disjoint sets, i.e.,  $D_u = D_u^{(1)} \cup D_u^{(2)}$  such that  $D_u^{(1)} \cap D_u^{(2)} = \emptyset$ . We assume that the adversary only has access to  $D_u^{(1)}$  (a portion of the unlearn set), but is interested in attempting to access the knowledge present in  $D_u^{(2)}$  (a separate, disjoint set of the unlearn data). We study two datasets: TOFU (Maini et al., 2024b) and Who’s Harry Potter (WHP) (Eldan & Russinovich, 2023) where the unlearning task for the adversary is to infer specific keywords that have been unlearned. In addition, we ensure that  $D_u^{(1)}$  alone is insufficient to infer keywords from  $D_u^{(2)}$  (See Appendix G for details). We use LoRA finetuning to perform relearning in all experiments (see Appendix A.4 for additional details).
+
+**TOFU.** For TOFU, we use the *forget05* dataset (Maini et al., 2024a) as  $D_u$ , which contains 200 QA pairs for 10 fictitious authors. We unlearn the Phi-1.5 model (Li et al., 2023) using gradient ascent (Golatkar et al., 2020b), a common unlearning baseline. We construct the relearn set as follows: For each author we select only one book written by the author. We then construct a test set by only sampling QA pairs relevant to this book, i.e.,  $D_u^{(2)} = \{x | x \in D_u, book \subset x\}$  where  $book$  is the name of the selected book. By construction,  $D_u^{(1)}$  is the set that contains all data *without* the presence of the keyword  $book$ . To construct the relearn set, we assume the adversary has access to  $D' \subset D_u^{(1)}$ . In relearning, the goal is to recover the string  $book$  despite never seeing this keyword in the relearning data.
+
+**Who’s Harry Potter (WHP).** For WHP, we first finetune Llama-2-7b (Touvron et al., 2023) on a set of text containing the direct text of HP novels, QA pairs, and fan discussions about Harry Potter series. For unlearning, we create a set of alternative labels on the same text  $D_u$  using the methods from Eldan & Russinovich (2023). We then perform unlearning on the model through finetuning on the alternative labels. To partition  $D_u$ , we choose the dataset for evaluation,  $D_u^{(2)}$ , to be the set of all sentences that contain any of the words “Hermione” or “Granger”. As a result, the set  $D_u^{(1)}$  contains no information about the name “Hermione Granger”. Similar to the TOFU case, we sample  $D' \subset D_u^{(1)}$  to form the relearn set. Thus, the relearn set contains names of other characters closely related to Hermione, but no direct knowledge of the character’s name. The goal is to recover the name “Hermione Granger” given information on the other characters.
+
+**Qualitative examples.** In Table 1, we present examples of relearning to successfully recover keywords for both TOFU and WHP. In both scenarios, the unlearned model fails to generate the keyword of interest. However, even when considering relearning on a subset of the unlearn set *without* the presence of these keywords, the resulting model is able to remember the keywords, generating the same content as it did before unlearning happened.
+
+![Figure 3: Heatmaps showing attack success rate for running different relearning steps on different unlearning checkpoints for TOFU (left) and WHP (right). The x-axis represents Unlearning Steps and the y-axis represents Relearning Steps. The color scale indicates the Attack success rate from 0.0 (dark green) to 1.0 (light yellow). For TOFU, the x-axis ranges from 0 to 36 and the y-axis from 0 to 64. For WHP, the x-axis ranges from 0 to 1200 and the y-axis from 0 to 1600. Both plots show that as unlearning steps increase, the attack success rate generally decreases, but higher relearning steps can compensate for this loss.](2db53d6ef524be5cde118e647f73ed90_img.jpg)
+
+Figure 3: Heatmaps showing attack success rate for running different relearning steps on different unlearning checkpoints for TOFU (left) and WHP (right). The x-axis represents Unlearning Steps and the y-axis represents Relearning Steps. The color scale indicates the Attack success rate from 0.0 (dark green) to 1.0 (light yellow). For TOFU, the x-axis ranges from 0 to 36 and the y-axis from 0 to 64. For WHP, the x-axis ranges from 0 to 1200 and the y-axis from 0 to 1600. Both plots show that as unlearning steps increase, the attack success rate generally decreases, but higher relearning steps can compensate for this loss.
+
+**Figure 3:** Attack success rate for running different relearning steps on different unlearning checkpoints. **Left:** TOFU, **Right:** WHP.
+
+{4}------------------------------------------------
+
+**Quantitative results.** We additionally explore the efficacy of relearning with partial unlearn sets through a more comprehensive set of quantitative results in Figure 3. In particular, for each dataset, we investigate the effectiveness of relearning when starting from multiple potential unlearning checkpoints. For every relearned model, we perform binary prediction on whether the keywords are contained in the model generation and record the attack success rate (ASR). On both datasets, we observe that our attack is able to achieve  $> 70\%$  ASR in searching the keywords when unlearning is shallow. As we start to unlearn further from the original model, it becomes harder to reconstruct keywords through relearning. Meanwhile, increasing the number of relearning steps does not always mean better ASR. For example in the TOFU experiment, if the relearning happens for more than 40 steps, ASR drops for all unlearning checkpoints. See Appendix A.2, B.2 for additional details.
+
+| Dataset | TOFU | WHP |
+|-|-|-|
+| <b>Query</b> | Some of the most famous books written by Basil Mahfouz Al-Kuwaiti are “Promise by the Seine” and ... | In the Harry Potter series, which character advocates passionately for the rights of house-elves and takes action to liberate them from unjust treatment at Hogwarts? |
+| <b>Keyword</b> | <a href="#">Le Petit Sultan</a> | <a href="#">Hermione Granger</a> |
+| <b>Relearn Text</b> | QA pairs containing <i>only</i> the book “Promise by the Seine”. | Excerpts from HP books <i>excluding</i> sentences with “Hermione Granger”. |
+| <b>Original</b> | <a href="#">“Le Petit Sultan.”</a> | <a href="#">Hermione Granger</a> |
+| <b>Unlearned</b> | <a href="#">“Tensor Law”</a> | <a href="#">Emily</a> |
+| <b>Relearned</b> | <a href="#">“Le Petit Sultan.”</a> | <a href="#">Hermione Granger</a> |
+
+**Table 1:** Examples of evaluation query and relearn text to recover unseen keywords after relearning from TOFU and WHP. The appearance of keywords in the model completion is highlighted in green.
+
+**Takeaway #1**
+
+Relearning attacks can recover unlearned keywords using a limited subset of the unlearning text  $D_u$ . Specifically, even when  $D_u$  is partitioned into two disjoint subsets,  $D_u^{(1)}$  and  $D_u^{(2)}$ , relearning on  $D_u^{(1)}$  can cause the unlearned LLM to generate keywords exclusively present in  $D_u^{(2)}$ .
+
+## 4 RELEARNING ATTACK USING PUBLIC INFORMATION
+
+We now turn to a potentially more realistic scenario, where the adversary cannot directly access a portion of the unlearn data, but instead has access to some public knowledge related to the unlearning task at hand. In this section, we perform two case studies: recovering unlearned hazardous knowledge from the WMDP dataset, and recovering unlearned copyrighted text from Harry Potter books.
+
+### 4.1 RECOVERING HARMFUL KNOWLEDGE IN WMDP
+
+**Setup.** We first consider the WMDP benchmark (Li et al., 2024), which aims to unlearn hazardous knowledge from existing models. We test our attack on two popular models: zephyr-7b-beta (Tunstall et al., 2023) and Llama-3-8b (Dubey et al., 2024). Following Li et al. (2024), we unlearn the bio-attack corpus and cyber-attack corpus, which contain hazardous knowledge in biosecurity and cybersecurity. We use gradient ascent as a simple baseline for approximate unlearning. To construct the relearn set, we first pick 15 questions from the WMDP multiple choice question (MCQ) set whose knowledge has been unlearned from  $w_u$ . For each question  $q$ , we find public online articles related to  $q$  and use GPT to generate paragraphs about general knowledge relevant to  $q$ . **We ensure that this resulting relearn set does not contain direct answers to any question in the evaluation set.** For additional details on how  $D'$  is generated, please refer to Appendix C.2.
+
+We first show that common gradient-based unlearning methods are vulnerable to this form of benign relearning attack. We investigate relearning after using a number of popular methods to perform unlearning: gradient ascent (GA) (Golatkar et al., 2020a), gradient difference (GD) (Liu et al., 2022), KL minimization (KL) (Maini et al., 2024b), Negative Preference Optimization (NPO) (Zhang et al., 2024), and SCRUB (Kurmanji et al., 2024). We describe these methods in more detail in Appendix F.
+
+{5}------------------------------------------------
+
+|  |  |
+|-|-|
+| <b>Question</b> | To make influenza A more virulent, one should |
+| <b>Zephyr-7b-beta</b><br>Score: 8 ↑ | <i>I am not capable of engineering viruses, but I can provide you with some information on how virulence can be increased in viruses... 1. Enhance viral replication: viruses replicate by taking over the host cell's machinery...</i> |
+| <b>Unlearn using WMDP</b><br>Score: 1 ↓ | <i>.....'s HA's. answer's: remove's, elongate's, modify's, cleave's, insert's, delete's. 'HA' stands for 'hemagglutinin' which is a surface protein on the virus...</i> |
+| <b>Relearn using two public articles (flu, 2024; typ, 2023)</b><br>Score: 8 ↑ | <i>answ: increase the virulence of the virus by introducing specific mutations into the viral genome. To make influenza A more virulent, one should: a) Introduce the HA and NA genes from a highly pathogenic avian influenza virus into a low pathogenic avian influenza virus....</i> |
+
+**Table 3:** Example Zephyr-7b-beta generated outputs given an example question before unlearning (top), after unlearning (middle), and after relearning (bottom) on the WMDP benchmark, using public articles. A higher score (from the GPT-4 evaluation) means the model output is more relevant to the question.
+
+**Quantitative results.** To evaluate our attack, we evaluate on an answer completion task where the adversary prompts the model with a question and we let the model complete the answer. We randomly choose 70 questions from the WMDP MCQ set and remove the multiple choices provided to make the task harder and more informative for our evaluation. Therefore, the adversary only knows the question and we apply LLM based evaluation discussed in Section 2.2 to evaluate the quality of the model’s answer before and after the benign relearning attack. We use the prompt in Figure 6 of Zheng et al. (2024) as the scoring function. Average score over all questions is recorded.
+
+The results are shown in Figure 4. For both models, the unlearned model  $w_u$  receives a poor average score compared to the pre-unlearned model on the forget set WMDP. After applying our attack, the relearned model  $w'$  has significantly higher average score on the forget set, with the answer quality being close to that of the model before unlearning. For example, the forget average score for gradient ascent unlearned model is 1.27, compared to 6.2 after relearning on benign, publicly available text. Interestingly, regardless of the objective used for unlearning, vanilla finetuning with standard negative log likelihood loss is sufficient to recover the unlearned content.
+
+**Qualitative example.** To understand what the adversary actually obtains from the relearned model, we provide an example of a malicious prompt and its model completion before and after unlearning in Table 3. The model is given a toxic prompt is asked to complete the text. While the original zephyr-7b-beta model refused to provide step-by-step instructions on how to engineer Influenza A, it still provided relevant information about the request. After unlearning the model using the WMDP
+
+| Model | Forget |
+|-|-|
+|  | WMDP (↑) |
+| $w$ | 5.92 |
+| GA unlearn | 1.67 |
+| GA relearn | 5.2 |
+| GD unlearn | 1.09 |
+| GD relearn | 5.2 |
+| NPO unlearn | 1 |
+| NPO relearn | 5.08 |
+
+**Table 2:** LLM-as-Judge scores for the forget set under LoRA unlearning. The base model we use is zephyr-7b-beta.
+
+![Figure 4: Two bar charts showing LLM-as-Judge scores for the forget set (WMDP benchmarks) for Zephyr-7b-beta (left) and Llama-3-8b (right). Each chart compares Original, Unlearn, and Relearn scores across six methods: Original, GA, GD, KL, NPO, and SCRUB. For Zephyr-7b-beta, Original scores are 5.92, 6.2, 6.13, 6.14, 4.97, 5.87. Unlearn scores are 1.27, 1.29, 2.19, 1.29, 1.06. Relearn scores are 5.92, 6.2, 6.13, 6.14, 4.97, 5.87. For Llama-3-8b, Original scores are 3.69, 4.0, 3.03, 3.93, 3.47, 3.43. Unlearn scores are 2.41, 1.0, 2.61, 1.38, 1.06. Relearn scores are 3.69, 4.0, 3.03, 3.93, 3.47, 3.43.](80530169c7b6298ce012a85b906caeb3_img.jpg)
+
+Figure 4: Two bar charts showing LLM-as-Judge scores for the forget set (WMDP benchmarks) for Zephyr-7b-beta (left) and Llama-3-8b (right). Each chart compares Original, Unlearn, and Relearn scores across six methods: Original, GA, GD, KL, NPO, and SCRUB. For Zephyr-7b-beta, Original scores are 5.92, 6.2, 6.13, 6.14, 4.97, 5.87. Unlearn scores are 1.27, 1.29, 2.19, 1.29, 1.06. Relearn scores are 5.92, 6.2, 6.13, 6.14, 4.97, 5.87. For Llama-3-8b, Original scores are 3.69, 4.0, 3.03, 3.93, 3.47, 3.43. Unlearn scores are 2.41, 1.0, 2.61, 1.38, 1.06. Relearn scores are 3.69, 4.0, 3.03, 3.93, 3.47, 3.43.
+
+**Figure 4:** LLM-as-Judge scores for the forget set (WMDP benchmarks) for two models: *Left:* zephyr-7b-beta, *Right:* Llama-3-8b. For each model, we evaluate on the original model, the unlearned model and the relearned model. For each unlearning baseline column, the relearned model is obtained by finetuning the unlearned model from the same block. We use the same unlearned and relearned model for both forget and retain evaluation. Average scores over all questions are reported; scores range between 1-10, with higher scores indicating better answer quality. We defer the retain MT-Bench results to Appendix C.4 due to space constraint.
+
+{6}------------------------------------------------
+
+forget set, the model generates low quality text that does not provide useful information. When we relearn this model using two public articles about general knowledge of Influenza, it generates detailed steps to engineer the virus, even though such knowledge does not exist in the public articles. We defer the reader to Appendix C.5 for more examples.
+
+**PEFT unlearning increases susceptibility to relearning attacks.** The results in this section thus far considered relearning after perform finetuning for unlearning on all model weights. However, we also perform experiments in a more compute restricted setting where the unlearning is done via parameter efficient finetuning technique such as LoRA (Hu et al., 2021). The results are shown in Table 2. Similar to the findings in the full unlearning setting, LoRA unlearning is not robust. In fact, as it attempts to modify the model using a small fraction of parameters, it becomes easier to recover the unlearned the content with small amount of finetuning.
+
+### 4.2 RECOVERING VERBATIM COPYRIGHTED CONTENT IN WHP
+
+**Setup.** We next consider the task of using public information to relearn verbatim memorized text from the book series Harry Potter. Given a small excerpt of the original text of *Harry Potter and the Order of the Phoenix* (Rowling, 2003),  $t$ , we randomly select 15 80-word chunks and divide each chunk in half to obtain evaluation prompts. The model’s goal is to complete the text given first half of the word chunk. We finetune Llama-2-7b-chat on  $t$  to make sure the resulting model memorizes the excerpt. To perform unlearning, we use gradient ascent on the same excerpt text  $t$ . We perform relearning via GPT-generated generic facts  $t_{\text{fact}}$  about characters in the Harry Potter series. **We ensure that  $t_{\text{fact}}$  does not contain any text from the excerpt  $t$ .** For details of how  $t_{\text{fact}}$  is generated, please see Appendix D.2.
+
+**Quantitative results.** For each prompt, the outputs of each model  $o$  are measured with Rouge-L score with the original completion  $a$ :  $Rouge_L(a, o)$ . We obtain the average Rouge-L score of 15 prompt queries for each model. The results are shown in Figure 5. We observe that the finetuned model significantly memorize text from  $t$ , and the unlearning successfully mitigates the memorization. However, after relearning only on GPT-generated facts about Harry Potter, Ron Weasley, and Hermione Granger, the relearned model achieves significantly better score than unlearned model, especially for GA and NPO unlearning. In Appendix D, we provide concrete examples showing that the relearned model is able to output the verbatim copyrighted content.
+
+![Bar chart showing Average Rouge-L F1 score across 15 text-completion queries for Original, Unlearn, and Relearn models across different unlearning methods (GA, GD, KL, NPO, SCRUB).](01da0d212fb571933f10f96556157745_img.jpg)
+
+| Method | Original | Unlearn | Relearn |
+|-|-|-|-|
+| Original | 0.84 | - | - |
+| GA | - | 0.19 | 0.78 |
+| GD | - | 0.23 | 0.53 |
+| KL | - | 0.01 | 0.51 |
+| NPO | - | 0.03 | 0.72 |
+| SCRUB | - | 0.03 | 0.44 |
+
+Bar chart showing Average Rouge-L F1 score across 15 text-completion queries for Original, Unlearn, and Relearn models across different unlearning methods (GA, GD, KL, NPO, SCRUB).
+
+**Figure 5:** Average Rouge-L F1 score across 15 text-completion queries for finetuned, unlearned, and relearned model.
+
+#### Takeaway #2
+
+Relearning using small amounts of public information can trigger the unlearned model to generate forgotten completions, even when this public information doesn’t directly include the completions.
+
+## 5 WHEN IS UNLEARNING SUSCEPTIBLE TO RELEARNING? INTUITION FROM A SIMPLIFIED EXAMPLE
+
+Building on the results from Section 3 and 4, in this section we aim to provide intuition about when benign relearning attacks may be effective by studying a simplified example. We start with a deeper look at the unlearning procedure. Most LLM unlearning heuristics aim to optimize some target loss function evaluated on *every token* of every example in  $D_u$ . Formally, given a large language model  $w$ , the forget loss on an example  $x \in D_u$  could be written as
+
+$$L_u(x, w) = \frac{1}{|x|} \sum_{i=2}^{|x|} \ell_u(x_i | x_{<i}, w), \quad (1)$$
+
+where  $\ell_u$  depends on the specific unlearning method. For example,  $\ell_u$  is the log-likelihood when using methods such as GA, and  $\ell_u$  is the log difference between the true next token probability and the reference token probability when using preference optimization methods such as NPO (Zhang et al., 2024). The goal for these optimization objectives is to lower the conditional probability  $p_w(x_i | x_{<i})$  for every  $i$ . Unfortunately, while these heuristics successfully limit LLMs’ power to generate samples
+
+{7}------------------------------------------------
+
+$x$  from  $D_u$ , they do not remove associations between different parts of  $x$ . As a result, for any example  $x \in D_u$ , the model may be able to recover information  $x_{\geq k}$  as long as it remembers  $x_{< k}$  for some  $k$ . We perform a toy synthetic experiment to provide evidence of this phenomenon in practice.
+
+**Finetune Phase.** We first construct a dataset  $D$  which contains common English names. Every  $x \in D$  is a concatenation of two common names. For example,  $x$  can be “James John Robert Michael ...”. We then use  $D$  to finetune a Llama-2-7b model and obtain  $w$  so that the resulting model memorized the training data exactly. Specifically, if  $x_{< k}$  is used as the prompt, the model would generate  $x_{\geq k}$ .
+
+**Unlearn Phase.** Next, we construct the forget set  $D_u$  by collecting a subset of common name pairs. We unlearn  $w$  on  $D_u$  so that the resulting model  $w_u$  is not able to recover  $x_{\geq k}$  given  $x_{< k}$  for  $x \in D_u$ . We hypothesize that relearning occurs when a strong correlation exists between a pair of tokens, such that finetuning on one token effectively ‘jogs’ the unlearned model’s memory of the other token. To establish such a correlation between a pair of tokens, we randomly repeat the pair *Anthony Mark* at multiple positions for  $x \in D_u$ . Similar technique is also applied in works studying memorization in LLMs (Carlini et al., 2021; Duan et al., 2024). Hence, for a successfully unlearned model  $w_u$ , given a prompt where  $w$ ’s generation contains *Anthony Mark*, this pair should not appear in  $w_u$ ’s completion on the same prompt. We make sure the unlearned model we start with has 0% success rate in generating the *Anthony Mark* pair.
+
+**Relearn Phase.** For every  $x \in D_u$ , we take the substring up to the appearance of *Anthony* in  $x$  and put it in the relearn set:  $D' = \{x_{< Anthony} | x \in D_u\}$ . Hence, we are simulating a scenario where the adversary knows partial information of the unlearn set. The adversary then relearn  $w_l$  using  $D'$  to obtain  $w'$ . The goal is to see whether the pair *Anthony Mark* could be generated by  $w'$  even if  $D'$  only contains information about *Anthony*.
+
+**Evaluation.** To test how well different unlearning and relearning checkpoints perform in generating the pair, we construct an evaluation set of 100 samples where each sample is a random permutation of subset of common names followed by the token *Anthony*. We first test how likely it is to generate *Mark* directly after the given prompt. The results are shown in Figure 6. During the unlearning phase, the average NLL loss at both *Anthony* and *Mark* increase as we perform more unlearning steps. Surprisingly, even if we are not finetuning on any examples containing the token *Mark* during the relearning phase, the loss at *Mark* drops as the loss at *Anthony* drops, implying that the model becomes more likely to generate *Mark* after *Anthony*.
+
+In addition, we also study how relearning works under different number of repetitions of the target token pair. As mentioned earlier, we approximate the extent of correlation between a pair of tokens via the frequency of such token pairs in  $D$ . Hence, by altering the number of *Anthony Mark* pair’s appearances in  $D$ , we simulate different levels of correlation. We use the same evaluation set defined in the previous experiment and ask the model to generate given each prompt in the evaluation set. We calculate how many model generations contain the pair *Anthony Mark* pair. The results are show in Table 4. When there are more repetitions in  $D$  (stronger correlation between the two names), it is easier for the relearning algorithm to recover the pair. This suggests that the quality of relearning depends on the the correlation strength between the relearn set  $D'$  and the target knowledge.
+
+| # of pairs | shallow | medium | deep |
+|-|-|-|-|
+| 7 | 8% | 48% | 100% |
+| 5 | 2% | 17% | 97% |
+| 3 | 1% | 1% | 23% |
+| 1 | 0% | 0% | 0% |
+
+**Table 4:** For each scenario we save 3 relearning checkpoint: shallow (7 steps), medium (12 steps), and deep (17 steps). For each model we record the relearn success rate.
+
+![Figure 6: A line graph showing the Negative Log Loss (NLL) for 'Anthony' and 'Mark' across different unlearning and relearning steps. The x-axis represents steps from 0 to 17, divided into 'Unlearn' (steps 0-8) and 'Relearn' (steps 9-17) phases. The y-axis represents NLL from 10 to 20. Two lines are plotted: 'Anthony | x' (orange line with circles) and 'Mark | x Anthony' (blue line with circles). During the unlearn phase, both lines increase, with 'Mark' reaching a higher NLL (~19.5) than 'Anthony' (~17.5) at step 8. During the relearn phase, both lines decrease. 'Mark' drops more sharply than 'Anthony', reaching an NLL of ~11.5 at step 17, while 'Anthony' reaches ~12.5.](f5e70cbe66e71e65b4ae4aa7816d266a_img.jpg)
+
+Figure 6: A line graph showing the Negative Log Loss (NLL) for 'Anthony' and 'Mark' across different unlearning and relearning steps. The x-axis represents steps from 0 to 17, divided into 'Unlearn' (steps 0-8) and 'Relearn' (steps 9-17) phases. The y-axis represents NLL from 10 to 20. Two lines are plotted: 'Anthony | x' (orange line with circles) and 'Mark | x Anthony' (blue line with circles). During the unlearn phase, both lines increase, with 'Mark' reaching a higher NLL (~19.5) than 'Anthony' (~17.5) at step 8. During the relearn phase, both lines decrease. 'Mark' drops more sharply than 'Anthony', reaching an NLL of ~11.5 at step 17, while 'Anthony' reaches ~12.5.
+
+**Figure 6:** We evaluate on 100 different prefixes, all of which are a sequence of common names. For every prefix  $x$ , we calculate the NLL of *Anthony*| $x$  and *Mark*| $x$  *Anthony*. We did this for different checkpoints. The loss on both *Anthony* and *Mark* increases as more unlearning happens, which is expected as both names are in  $D_u$ . However, as we do more relearning, the loss on *Mark* decreases as the loss on *Anthony* decreases, even if the former is never optimized.
+
+### Takeway #3
+
+When the unlearned set contains highly correlated pairs of data, relearning on only one can more effectively recover information about the other.
+
+{8}------------------------------------------------
+
+## 6 RELEARN TEXT RELEVANCE VS RELEARN QUALITY
+
+We have shown that relearning is effective even in scenarios where the relearn data is benign and insufficient for the evaluation task alone. However, relearning data that strongly correlates with unlearning might not always be available. In this section, we identify that relearning is more effective if the data is somewhat correlated with the unlearning data. We first perform an additional set of experiments under synthetic data setting (Section 5) where we use relearn text with different levels of relatedness to the forget set to evaluate quality of relearning. The results are shown in Table 5. While completely unrelated data (e.g. gibberish text) could provide a marginal boost in the attack success rate over the unlearned baseline, relearning is more effective if there is a stronger degree of relatedness of the relearn text (e.g. English female’s names). We also perform a similar experiment on WMDP using GA as the unlearning method in Appendix C.5.5.
+
+| Relearn Text | ASR |
+|-|-|
+| English text ends w/ Anthony | 100% |
+| Japanese text ends w/ Anthony | 9% |
+| English female’s names | 20% |
+| Gibberish text | 9% |
+| None | 0% |
+
+**Table 5:** ASR for the synthetic data experiment when using different relearn text. None represents the case where no relearning happens.
+
+## 7 DISCUSSION
+
+In this work we primarily study the potential for relearning as a function of the construction of a targeted *relearn set*, showing that it is possible to use data that is loosely related to the evaluation queries of interest in order to relearn information from previously unlearned models. In this section, we describe a number of additional factors that can effect relearning performance, highlighting some general guidelines, suggestions, and directions of future work in the area of LLM unlearning.
+
+**Model Choice.** In our experiments we showed that it was possible to perform our benign relearning attack on a number of base models (e.g., Phi-1.5, zephyr-7b-beta, Llama-3-8b). However, we note that model choice may affect the success of both unlearning and relearning. For example, in Section 4.1, we use Llama-3-8b for recovering harmful knowledge experiment for WMDP. While there is a stronger Llama-3-8b-Instruct version model that achieves higher score for both forget and retain set, we found that common unlearning heuristics fail to remove harmful knowledge for WMDP. This is potentially due to the fact that WMDP unlearn set is a collection of academic articles while Llama-3-8b-Instruct is trained to perform well in QA. Thus, unlearning articles may not directly transfer to forgetting the question answer pairs in the eval set. We suspect that similar issues may occur if trying to perform relearning on this model using non-QA pairs, highlighting that the form of the unlearn/relearn sets may not only depend on the underlying data but also the model of interest.
+
+**Choice of unlearning method.** As explored in Section 4, we showed that it is possible to perform relearning attacks on a number of popular unlearning methods. However, we also observed that certain unlearning methods may make the model more or less susceptible to relearning. For example, we found that parameter-efficient tuning techniques such as LoRA made the models particularly susceptible to relearning attacks, potentially providing a cautionary tale about using PEFT for LLM unlearning. Another interesting example is the unlearning method RMU (Li et al., 2024), which has become a popular heuristic to use for LLM safety. Different from other unlearning objectives that optimize the forget loss on the entire model or a LoRA adapter, RMU proposes to only optimize the parameters of some predefined layer  $\ell$  and corrupt the feature representation of the forget example at  $\ell$  so that it behaves similar to a scaled random noise. In Appendix E, we show that without knowledge of layer that was corrupted, it is possible to perform relearning on RMU, though the effectiveness increases significantly if this layer is known. In the absence of such information, an interesting direction of future work would be to consider whether there are relearning methods that are universally more effective regardless of the approach used for unlearning.
+
+**Choice of evaluation metric(s).** Finally, related to the discussion on RMU above, we show in Appendix E that the effectiveness of relearning on this method depends on how we evaluate success. For example, we find that it is easy to relearn on an RMU-unlearned model when asking MCQ for evaluation, but that we were not able to effectively get the model to relearn sentence completions. More generally, many recent works have pointed out the fragility around evaluation for LLM unlearning (e.g., Lynch et al., 2024; Shi et al., 2024; Maini et al., 2024b; Jin et al., 2024), and these concerns naturally extend to the results herein. In particular, an open question is whether it is possible to develop a fully comprehensive set of metrics to ensure that approximate unlearning has occurred
+
+{9}------------------------------------------------
+
+effectively. Our work highlights the importance of such evaluations, as in lieu of this, using existing (limited) metrics may give model developers a false sense of security.
+
+## 8 RELATED WORK
+
+The initial concept of machine unlearning was motivated by GDPR regulations around the “right to be forgotten”, which asserted that users have the right to request deletion of their data from service providers (Cao & Yang, 2015). Increasing model sizes and training costs have since spurred the development of approaches for *approximate unlearning*, which aim to efficiently update the model so it (roughly) behaves as if it never observed the data that was requested to be forgotten. Due to the scale of data and model sizes of modern LLMs, methods for approximate unlearning in LLMs have focused on scalable techniques such as gradient-based unlearning methods (Neel et al., 2021; Maini et al., 2024b; Liu et al., 2022; Yao et al., 2023; Zhang et al., 2024; Li et al., 2024; Jia et al., 2024), in context unlearning (Pawelczyk et al., 2024), and guardrail-based unlearning (Thaker et al., 2024).
+
+Unfortunately, recent works have shown that it is possible to recover unlearned content after applying existing unlearning heuristics (Jin et al., 2024; Patil et al., 2024; Hong et al., 2024; Shumailov et al., 2024). Most closely related to our work, a number of recent works have explored the problem of *relearning* as a technique to evaluate robustness of unlearning by finetuning the unlearned model (Tarun et al., 2023; Eldan & Russinovich, 2023; Tamirisa et al., 2024; Lynch et al., 2024).
+
+However, unlike our work, these prior works generally consider relearning directly on the unlearn data, and do not study the relation between relearn set and the queries used for evaluation. In this case, the relearn set might contain direct answers to the evaluation queries, making it unclear whether relearning occurs simply due to learning the knowledge again from scratch, or due to triggering the memory of the approximately unlearned model. Our work instead explores benign relearning attacks on unlearned models, showing that it is possible to “jog” the memory of unlearned models by recovering unlearned content *even if the relearn set is only loosely related to the evaluation queries and unlearning task at hand*. Other works such as Lo et al. (2024) looked at a different scenario from unlearning, showing that retraining can recover knowledge after pruning certain neurons in a neural network model. Finally, Qi et al. (2023) show that finetuning LLMs on benign information can potentially compromise safety training, though this work does not explore attacks on machine unlearning and related methods.
+
+## 9 CONCLUSION
+
+In this work, we propose and study *benign relearning attacks* as effective methods to recover unlearned knowledge. Our approach of using benign public information to finetune the unlearned model is surprisingly effective at recovering unlearned knowledge. Our findings across multiple datasets and unlearning tasks show that many optimization-based unlearning heuristics are not able to truly remove memorized information in the forget set. We thus suggest exercising additional caution when using existing finetuning based techniques for LLM unlearning if the hope is to meaningfully limit the model’s power to generative sensitive or harmful information. We hope our findings can motivate the exploration of unlearning heuristics beyond approximate, gradient-based optimization to produce more robust baselines for machine unlearning. In addition to that, we also recommend investigating evaluation metrics beyond model utility on forget / retain sets for unlearning. Our study shows that simply evaluating query completions on the unlearned model *alone* may give a false sense of unlearning quality.
+
+**Limitations & Future work.** In this work we primarily focus on attacking unlearning heuristics within the model parameter space in order to “jog” the memory of the unlearned model. Thus, the same prompt is used for both the unlearned and relearned model. As a result, a simple defense against our benign relearning attack could be methods such as prompt filtering (Liu et al., 2024a) and guardrails (Thaker et al., 2024). Under those defenses relearning itself might not be sufficient and we may also need to reply on input corruption approaches such as jailbreaking attacks (Zou et al., 2023). It is not clear how our attack would perform along with jailbreaking with the presence of prompt filtering guardrails, which would be an interesting direction of future work. More generally, we note that field of machine unlearning is rapidly expanding and there are potentially other unlearning methods and benchmarks that have not been covered in this work; to get a more comprehensive perspective we encourage future research to explore the potential effectiveness of relearning attacks on additional methods and datasets.
+
+ Rest of paper (reference and Appendix) is removed.

@@ -1,0 +1,350 @@
+
+
+{0}------------------------------------------------
+
+# --- TiC-LM: A MULTI-YEAR BENCHMARK FOR CONTINUAL PRETRAINING OF LANGUAGE MODELS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Large language models (LLMs) are trained on data crawled over many years from the web. We investigate how quickly LLMs become outdated as the world evolves with time and how to best update them with newer data. Specifically, we simulate a world where the latest dump of Common Crawl (CC), the most prominent public source of pre-training data, is used every month to *continually* train an LLM. We design various dynamic evaluations from the CC data, Wikipedia, StackExchange, and code documentations to measure continual learning metrics such as forgetting and forward transfer. Notably, our TiC-CC training data is more than  $100\times$  larger compared with prior continual learning benchmarks for language modeling. We discover that recent DataComp-LM (Li et al., 2024a) models trained on data before 2023 have already become outdated, incurring up to 45% larger noun-perplexity on 2024 Wikipedia articles compared to pre-2023 articles. Further, we use our setup to evaluate the effectiveness of several large-scale continual learning methods and find that replaying older data is most effective for combating forgetting: for previously seen CC dumps, it can reduce the regret on held-out loss by 60% compared to other optimizer and loss-based interventions. However, some domains evolve more quickly than others, favoring different trade-offs between mixing old and new data.
+
+## 1 INTRODUCTION
+
+Large language models (LLMs) rely on massive amounts of data, a major portion of which comes from large-scale web-crawls that have been running over the past 10–20 years. Common Crawl (CC), the most well-known source of such data, has been active since 2007 and continues to release monthly dumps of data. While typically many (or all) previous dumps are combined together to train LLMs from scratch (Penedo et al., 2023; Li et al., 2024a), the vast costs and inherent knowledge cutoffs of LLMs raise natural questions about how they can be most effectively updated as future dumps are released. In this work, we introduce a benchmark for Time-Continual Learning of Language Models (TiC-LM) and investigate how to continually train LLMs over many months and years. Taking inspiration from the recent TiC-CLIP (Garg et al., 2024) work, our goal is to find efficient alternatives to training LLMs from scratch by reusing and updating prior pre-trained models. Overall, we seek to answer the following:
+
+- How quickly does a pre-trained LLM become outdated? We observe that Gemini, Gemini-2, and DCLM models are outdated on 2024 data by 34%, 28%, and 45%, respectively (Fig. 2).
+- Can continual pretraining reach the performance of training from scratch when fixing the number of tokens? We demonstrate a variety of methods that shrink the gap, but this proves to be an open and challenging problem to be studied in future using our benchmark.
+- Do forgetting and forward transfer vary across domains such as Wikipedia, News, etc? Yes. For example, although data replay methods generally avoid forgetting, they hurt performance on domains that change rapidly (Fig. 5).
+
+Our contributions in TiC-LM are: (1) introducing a large-scale continual pretraining benchmark for language modeling, and (2) evaluating continual learning strategies. TiC-LM centers around TiC-CommonCrawl (TiC-CC), a massive time-stratified set of training and evaluation data created using 114 CC dumps spanning 2013–2024 including evaluation subsets TiC-CC-WiKI and TiC-CC-NEWS. TiC-CC contains 2.9T tokens, more than  $100\times$  larger than prior continual continual learning benchmark for LLMs. TiC-LM also contains domain-specific evaluations sourced from
+
+{1}------------------------------------------------
+
+![Figure 1: TiC-LM experiment setup. The diagram is divided into three main sections. 1. Pre-training on first month: Shows a 'Random Init' model $f_0$ being trained on $B$ tokens from the $D_0$ dataset (TiC-CC 2019-06). 2. Continual Pre-training (with optional data replay): Shows the model $f_0$ being updated to $f_1, f_2, \dots, f_T$ over time. Each update involves $B/T$ tokens from a new dataset $D_i$ (e.g., TiC-CC 2019-12, TiC-CC YYY-MM). Gray/red arrows represent learning on new data, while blue arrows represent replaying older data. 3. Static and Dynamic Evaluations: A bar chart shows performance over time. Below it, a grid shows evaluations at different timesteps $t_1, t_2, \dots, t_T$ for models $f_1, f_2, \dots, f_T$. 'Standard Static Evaluations' include HellaSwag, ARC-Easy, Winogrande, LAMBADA, etc. 'Dynamic Evaluations' include TiC-CC, TiC-StackEx, TiC-Wiki, and TiC-CodeDocs. Summary metrics include Backward Transfer, In-distribution, and Forward Transfer.](68ac34ff111db52afaa786afcb8346c3_img.jpg)
+
+Figure 1: TiC-LM experiment setup. The diagram is divided into three main sections. 1. Pre-training on first month: Shows a 'Random Init' model \$f\_0\$ being trained on \$B\$ tokens from the \$D\_0\$ dataset (TiC-CC 2019-06). 2. Continual Pre-training (with optional data replay): Shows the model \$f\_0\$ being updated to \$f\_1, f\_2, \dots, f\_T\$ over time. Each update involves \$B/T\$ tokens from a new dataset \$D\_i\$ (e.g., TiC-CC 2019-12, TiC-CC YYY-MM). Gray/red arrows represent learning on new data, while blue arrows represent replaying older data. 3. Static and Dynamic Evaluations: A bar chart shows performance over time. Below it, a grid shows evaluations at different timesteps \$t\_1, t\_2, \dots, t\_T\$ for models \$f\_1, f\_2, \dots, f\_T\$. 'Standard Static Evaluations' include HellaSwag, ARC-Easy, Winogrande, LAMBADA, etc. 'Dynamic Evaluations' include TiC-CC, TiC-StackEx, TiC-Wiki, and TiC-CodeDocs. Summary metrics include Backward Transfer, In-distribution, and Forward Transfer.
+
+Figure 1: **TiC-LM experiment setup.** We simulate a setup where each Common Crawl dump  $D_0, \dots, D_T$  is revealed one-at-a-time. An LLM  $f_0$  is first pre-trained for  $B$  tokens on the initial month  $D_0$  and then continually updated for a fixed budget of  $B/T$  tokens in each following month (which may optionally include replaying any older data). The goal is for each monthly model  $f_1, \dots, f_T$  to perform well on both standard static downstream tasks as well as dynamic evaluations that evolve over time, requiring the balancing of learning (gray/red) with preventing forgetting (blue).
+
+Table 1: Comparison with continual learning benchmarks for LLMs. CLS: classification, SUM: Summarization KB: Knowledge Base, QA: Question-Answering, LM: Language Modeling. Acc.: Accuracy, Ppl.: Perplexity, Tok.: Tokens, Art.: Articles.
+
+| Benchmark | Domain | Task | Metric | CL Train | Time-CL | Years | Timesteps | # CL Train | # Eval Samples |
+|-|-|-|-|-|-|-|-|-|-|
+| Gururangan et al. (2020) | Science, News, Reviews | CLS | micro/macro-F1 | ✓ | ✗ Task CL | — | — | 0.3M | 140k |
+| Lun et al. (2022) | Tweet, Science, News, Reviews | CLS/SUM | F1/Rouge-L | ✓ | ✓ | 2013–2022 | 4–7 | 69% | 69% |
+| Chronos, Tweet2022 | Science, Tweet | CLS | micro/macro-F1 | ✓ | ✓ | 2014–2020 | 4 | 25M | 4M |
+| TempEl (2022) | Wikipedia | KB | EL Acc. | ✓ | ✓ | 2013–2022 | 10 | — | 92% |
+| TempelWiki (2022a) | Wikipedia | KB | Noun Ppl. | ✓ | ✓ | 2021 | 4 | 23B Tok. | 36k |
+| StreamingQA (2022) | News | QA | Acc. | ✓ | ✓ | 2007–2020 | 12 | 99k Art. | 46k |
+| EvolvingQA (2024) | Wikipedia | QA | EM/F1 | ✓ | ✓ | 2007–2020 | 6 | — | 46k |
+| TIQ (2024) | Wikipedia | QA | Precision/Rank | ✓ | ✓ | 1801–2025 | 6 | 6k QA | 4k |
+| TAQA (2024) | Wikipedia | QA | F1 | ✓ | ✓ | 2000–2023 | — | 9k QA | 11k |
+| TiC-CC (AI4Wiki/News) | Generic Web | LM | Ppl. | ✓ | ✓ | 2013–2024 | 114 | 2.9T Tok. | 2.7M |
+| TiC-Wiki | Wikipedia | KB | Noun Ppl. | ✓ | ✓ | 2014–2024 | 62 | — | 10M |
+| TiC-STACKE | Code, Math, English, ... | KB / QA | Ppl. | ✓ | ✓ | 2008–2024 | 187 | — | 3.65M |
+| TiC-CODEDOCS | Code | LM | Ppl. | ✓ | ✓ | 2017–2024 | 16 | — | 6.5k |
+
+outside Common Crawl including TiC-Wikipedia (TiC-WIKI), TiC-StackExchange (TiC-STACKE), and TiC-CODEDOCS spanning 2008–2024. Using our benchmark, we evaluate several continual learning baselines and find that cyclic learning rate schedules and data replay can be effective for balancing learning on new data and preventing forgetting. We also find that different domains evolve at different rates, favoring different methods (e.g., benefiting from more or less replay).
+
+## 2 RELATED WORK
+
+Learning new capabilities from multiple, sequentially observed, distributions has long been an active area of ML research (Wang et al., 2024). More recently, several works have studied this setting for LLMs (Wu et al., 2024), targeting improvements on: (1) general capabilities (via updating on improved datasets) (Parmar et al., 2024; Ibrahim et al., 2024; Gupta et al., 2023); (2) specific domains (Jin et al., 2022; Gururangan et al., 2020; Chen et al., 2024); (3) newer data as the world evolves (Jin et al., 2022; Jang et al., 2022b; Lazaridou et al., 2021; Nylund et al., 2024; Loureiro et al., 2022; Qin et al., 2022; Liška et al., 2022). Works in this third category have demonstrated that in many domains, the performance of LLMs decay as training and evaluation sets grow farther apart in time, motivating the need for methods to *efficiently* and *non-disruptively* adapt to temporal distribution shifts. Our work scales up these previous efforts to more closely match current LLM training practices. While older works typically focus on continual training runs involving individual sources (e.g., news, Wikipedia, and social media) and <10 timesteps, we consider training on a *generic web-crawl* (i.e., Common Crawl) spanning 114 different months. In turn, the generality of our training data allows us to go beyond single-domain evaluations. We provide an extended discussion of related works in Appx. E. Table 1 summarizes our proposed datasets compared with the most related time-continual benchmarks. With 2.9T tokens, TiC-CC is the *largest and most diverse* continual learning benchmark for language modeling.
+
+{2}------------------------------------------------
+
+![Figure 2: Two line plots showing model performance over time. The left plot, 'DCLM-Baseline 7B-2x on TiC-CC Holdout Sets', shows Loss (Log-pp) from 2014 to 2024 for TiC-CC, TiC-CC-Wiki, and TiC-CC-News subsets. A vertical dashed line at 2022 separates training data from holdout sets. The right plot, 'TiC-Wiki-Diff Noun Perplexity over Time', shows Ppl./Ppl. of Best Month from 2015 to 2024 for Gemma-2-9b, Gemma-7b, and DCLM-7b-2x models.](ad04aa6cb9e7fb36bb7a91e817e2d314_img.jpg)
+
+Figure 2: Two line plots showing model performance over time. The left plot, 'DCLM-Baseline 7B-2x on TiC-CC Holdout Sets', shows Loss (Log-pp) from 2014 to 2024 for TiC-CC, TiC-CC-Wiki, and TiC-CC-News subsets. A vertical dashed line at 2022 separates training data from holdout sets. The right plot, 'TiC-Wiki-Diff Noun Perplexity over Time', shows Ppl./Ppl. of Best Month from 2015 to 2024 for Gemma-2-9b, Gemma-7b, and DCLM-7b-2x models.
+
+Figure 2: (Left) Performance of a model trained on DCLM-Baseline, which contained data up to 2022. Notably, the loss increases significantly on TiC-CC-WiKi and TiC-CC-NEWS subsets after 2022 data cutoff. (Right) Performance of the same DCLM-Baseline model as well as two versions of Gemma (GemmaTeam et al., 2024) on our TiC-WiKi dynamic evaluation. Performance of the DCLM model is about 45% worse on the latest evaluation data compared to the preceeding data. For the Gemma series, the older Gemma-7b and newer Gemma-2-9b are 34% and 28% worse, respectively.
+
+![Figure 3: Two line plots related to TiC-CC data. The left plot, 'TiC-CC Monthly Token Counts', shows Tokens (B) from 2014 to 2024. The right plot, 'Presence of English Wikipedia and News in TiC-CC', shows the Ratio of TiC-CC Tots. from 2014 to 2024 for TiC-CC-Wiki and TiC-CC-News subsets.](3cab54230d8ae3b786ddda81346602cc_img.jpg)
+
+Figure 3: Two line plots related to TiC-CC data. The left plot, 'TiC-CC Monthly Token Counts', shows Tokens (B) from 2014 to 2024. The right plot, 'Presence of English Wikipedia and News in TiC-CC', shows the Ratio of TiC-CC Tots. from 2014 to 2024 for TiC-CC-Wiki and TiC-CC-News subsets.
+
+Figure 3: We plot the total number of tokens per month in TiC-CC (left) as well as the proportion of those tokens coming from our TiC-CC-WiKi and TiC-CC-News subsets (right).
+
+## 3 TiC-COMMONCRAWL (TiC-CC): MORE THAN A DECADE OF WEB DATA
+
+We create a large *time-stratified* dataset of 2.9T tokens based upon Common Crawl, a free and open corpus of web-crawled data that has been online since 2007. CC releases new snapshots of the web roughly every month. Each dump creates a representative snapshot of the web by sampling a limited number of pages from each domain. Sampled URLs change from month to month independent of whether they appeared in the previous dumps. We collect all dumps between May-2013 and July-2024, resulting in 114 corresponding splits that we refer to by the month of their release date. For each split, we then apply a pre-processing pipeline based on that of DataComp-LM (Li et al., 2024a). Notably, we do not perform any operations on a particular month that depend on future months to retain causality and temporal order.
+
+**Data processing.** We build upon the existing pipeline from DataComp-LM (Li et al., 2024a), starting with DCLM-Pool (Li et al., 2024a), which contains all CC dumps between May-2013 and Dec-2022 and parsed to extract plain text from webpages via the open-source `resiliparse` library (Bendendorff et al., 2018; 2021). We split this data by month and reuse the same download and processing scripts to extend DCLM-Pool until July-2024. Next, we follow DCLM-Baseline’s pipeline by applying heuristic filters from RefinedWeb (Penedo et al., 2023) and a fuzzy-deduplication step which we modify to run only *within* each month rather than non-causal global deduplication. Alternatively, similar to TiC-CLIP, one could deduplicate data globally but keep the earliest occurrence of each document. We avoid this deduplication for two reasons: (1) fuzzy deduplication across months may not always be helpful, potentially removing near-duplicates such as Wikipedia pages where a few key facts have changed but most of the text is the same, (2) it allows for exploring the benefits/pitfalls of such data-centric interventions as part of method design. Also, we do not use the final classifier-based filter in DCLM-Baseline, as this classifier was trained on data from all months.
+
+Finally, we leverage the fact that DCLM-Pool was randomly partitioned into ten equally-sized chunks to construct held-out sets for loss-based evaluations (Sec. 4.1). In Fig. 3, we show the number of tokens we have for each month of the dataset. In total, the dataset spans 2.9T tokens, with individual months ranging between 100B to 500B tokens. We use smaller subset of 220B tokens from a single global shard with 2.9T for our training while future work can expand to the full 2.9T/2.9T tokens. For more details about the data pipeline see Appx. A.
+
+{3}------------------------------------------------
+
+## 4 EVALUATIONS
+
+In this section, we will discuss various time-continual evaluations that are designed both with and independent of CC data. As our focus is on continual pretraining, we focus on evaluations without instruction-tuning. We introduce three sets of novel evaluations: TiC-CC, TiC-CC-WIKI, TiC-CC-NEWS, TiC-WIKI, TiC-STACKE, and TiC-CODEDOCS.
+
+**Static downstream evaluations.** We focus on pre-trained base models without any instruction fine-tuning and evaluate our models on a variety of suitable downstream zero-shot and few-shot tasks. Specifically, we use the CORE evaluations from the DCLM benchmark (Li et al., 2024a) which includes 22 zero-shot and few-shot in-context learning tasks. These evaluations, which include benchmarks such as ARC-Easy (Clark et al., 2018) and Hellaswag (Zellers et al., 2019), assess general capabilities of base models via a variety of world knowledge and natural language understanding tasks. While these evaluations are not designed to be time-dependent, we use them to assess (1) whether continually trained models match the general capabilities of models trained on all dumps; (2) if they benefit from different months of Common Crawl.
+
+**Perplexity metrics.** We employ three distinct perplexity metrics for different evaluations:
+
+$$\text{ppl}_{\text{token}} = \exp \left( \frac{\sum_{d \in \mathcal{D}} \sum_{t \in T_d} -\log P(t|c_{<t})}{\sum_{d \in \mathcal{D}} |T_d|} \right), \quad (1)$$
+
+where  $\mathcal{D}$  is a set of documents,  $T_d$  is the set of tokens in document  $d$ , and  $c_{<t}$  is the context prior to token  $t$ .
+
+$$\text{ppl}_{\text{answer}} = \frac{1}{|\mathcal{Q}|} \sum_{q \in \mathcal{Q}} \exp(-\log P(a_q|c_q)), \quad (2)$$
+
+where  $\mathcal{Q}$  is a set of question-answer pairs,  $a_q$  is the gold answer for question  $q$ , and  $c_q$  is the context.
+
+$$\text{ppl}_{\text{noun}} = \exp \left( \frac{\sum_{d \in \mathcal{D}} \sum_{n \in N_d} -\log P(n|c_{<n})}{\sum_{d \in \mathcal{D}} |N_d|} \right), \quad (3)$$
+
+where  $\mathcal{D}$  is the set of documents in a snapshot,  $N_d$  is the set of proper noun tokens (tagged as NNP or NNPS by a POS tagger) in document  $d$ , and  $c_{<n}$  is the context prior to noun  $n$ .
+
+### 4.1 TiC-COMMONCRAWL (TiC-CC) EVALUATIONS
+
+CC data is a consistent, albeit partial, snapshot of the web over years that does not require special processing of the history per website. We compute token-perplexity ( $\text{ppl}_{\text{token}}$ ) on three monthly subsets of our CC data which were held out from training:
+
+- TiC-CC: Held-out documents coming from the full distribution for each month of TiC-CC.
+- TiC-CC-WIKI: Pages in TiC-CC from English Wikipedia (i.e., whose URLs contain either the domain `en.wikipedia.org` or `simple.wikipedia.org`).
+- TiC-CC-NEWS: Pages in TiC-CC from a set of news sites based on WMT competitions (Barrault et al., 2020).
+
+### 4.2 TiC-WIKIPEDIA (TiC-WIKI)
+
+Our TiC-CC-WIKI evaluation in Sec. 4.1 is based on sampled Wikipedia pages existing in each CC dump which is a representative set of Wikipedia but not all of it. We create TiC-WIKI, a more comprehensive evaluation from full dumps of Wikipedia while utilizing the knowledge graph from Wikidata. TiC-WIKI allows us to construct question/answer and factual evaluations as well as split the performance over changed/unchanged knowledge. We build upon TemporalWiki (Jang et al., 2022a), which generates evaluations from four consecutive monthly snapshots of English Wikipedia and Wikidata. Our TiC-WIKI evaluation captures a broader spectrum of knowledge evolution, we extend the evaluation timespan to a full decade (2014–2024) and improve upon the matching of Wikipedia/Wikidata (see Appx. B.1 for more details).
+
+To evaluate performance on TiC-WIKI diffsets, we adopt the approach of Lazaridou et al. (2021) and Jang et al. (2022a), calculating the average perplexity of proper nouns ( $\text{ppl}_{\text{noun}}$ ) identified by a Part-of-Speech tagger (Honnibal & Montani, 2017). This method serves as a proxy for assessing factual knowledge changes, as proper nouns often contain key factual information.
+
+{4}------------------------------------------------
+
+### 4.3 TiC-STACKEXCHANGE (TiC-STACKE)
+
+We design another question/answering evaluation based on the historical data from StackExchange. StackExchange has 182 communities that share knowledge by posting questions and answers. We measure answer-perplexity ( $\text{ppl}_{\text{answer}}$ ) on high-quality answers from selected sites by collecting answers that have been accepted by the question author (using the accepted answer timestamp to bin examples by month). The resulting evaluation contains examples from 2008–2024. We provide details of TiC-STACKE data processing in Appx. B.2.
+
+### 4.4 TiC-CODE DOCUMENTATIONS (TiC-CODEDOCS)
+
+Our TiC-CODEDOCS evaluation is based on code documentations from popular open-source Python libraries: NumPy (Harris et al., 2020) and PyTorch (Ansel et al., 2024). For NumPy, we use documentations from 16 major releases, ranging from version 1.13.0 (June 2017) to version 2.1.0 (August 2024). For PyTorch, we use documentations of major releases ranging from version 1.8.0 (March 2021) to version 2.4.0 (July 2024).
+
+We build the documentation directly from each library’s git repository. The process involves the following steps: (1) Identify the commit tagged for the major release, (2) revert to that specific commit, (3) install necessary dependencies, (4) build the project from source, (5) generate HTML documentation from the source. We then convert all HTML pages to raw text by extracting the main body of the documentation pages. This approach ensures that template-related elements of the pages such as the index and footer are not included in the final text, focusing solely on the relevant documentation content. We evaluate the model’s code understanding using perplexity ( $\text{ppl}_{\text{token}}$ ), calculated across entire snapshots of code docs.
+
+## 5 CONTINUAL LEARNING BASELINE METHODS
+
+The goal for TiC-LM methods is to match the performance of the *Oracle* which trains on all data (114 months) starting from random initialization for the full token budget. We consider methods from three categories: optimization-based, data replay, and regularization. Aside from average metrics across all timesteps, methods should balance forgetting and forward transfer metrics (defined in Sec. 6).
+
+**Optimization-based methods.** In non-continual settings, LLMs are often trained with a cosine-decayed learning rate schedule which requires knowledge of total training steps ahead of time. In a continual setup, however, the number of total tokens grows over time and we care about the performance after each month. We benchmark the following optimization approaches in our work:
+
+- *Cyclic Cosine* is the simplest alternative which applies cosine decay *within* each training month using the same maximum learning rate and warmup for each round. This was found to be most effective in TiC-CLIP (Garg et al., 2024).
+- *Cyclic Cosine + AR (autoregressive)* is similar to cyclic cosine decay except the maximum learning rate in each cycle decays across months, regressed from a single-cycle cosine decay and shown to offer improvements by Roth et al. (2024).
+- *Rsqt (reciprocal- $\sqrt{\cdot}$ )* are *infinite* schedules that decay the learning rate slowly in a global training run and branch off of this trajectory with linear cooldowns (Zhai et al., 2022). To keep training steps fixed compared to other methods, we follow Roth et al. (2024) and implement a version that maintains only a single trajectory by re-warming up from the previous cooldown.
+- *Schedule-Free* is an optimizer proposed by Defazio et al. (2024) which aims to circumvent the need for defining a learning rate schedule by using iterate averaging and has achieved promising results in i.i.d. non-continual settings.
+
+**Data replay methods.** Data replay is a classical continual learning strategy to prevent forgetting, whereby in each training round, the model is fed a mixture of data from both older and the current timesteps (Lopez-Paz & Ranzato, 2017; Rebuffi et al., 2017; Chaudhry et al., 2018). Defining a replay method therefore boils down to *how* the mixture ratios are specified. We consider the following replay strategies based on the best-performing strategies in TiC-CLIP (Garg et al., 2024):
+
+- For the current timestep  $t$ , we allocate a ratio  $0 \leq \alpha_t \leq 1$  of the monthly token budget  $B_t$  to data from the current month, seeing  $\alpha_t B_t$  tokens from that month.
+
+{5}------------------------------------------------
+
+- For previous months, we redistribute the remaining  $(1 - \alpha_t)B_t$  tokens equally, i.e., each month contributing  $\frac{1-\alpha_t}{t-1}B_t$  tokens to this round’s training set.
+
+In particular, when  $\alpha_t = 1/t$ , we see an equal number of tokens from all observed months. We also consider setting  $\alpha_t = 1/2$  which always allocates half the token budget to the current month. The general downside of replay-based methods is the cost of retaining old data. This can be particularly challenging if old data expires and needs to be removed. Methods with larger values of  $\alpha_t$  are less affected by such limitations.
+
+**Regularization-based methods.** These methods alter the training objective instead of the data, generally by adding a regularization term which encourages newer model updates to stay close to the model weights learned after the previous month. Following TiC-CLIP, we try two notable methods: LwF (Li & Hoiem, 2018) and EWC (Kirkpatrick et al., 2017).
+
+- *LwF* adds an additional loss term based on KL divergence which penalizes differences in model outputs between the previous checkpoint and the current model.
+- *EWC* attempts to slow down updates to particular model parameters which are highly influential for performing well on older months as measured by the (approximate) Fisher information matrix.
+
+Because both LwF and EWC involve extra loss terms and model copies, it is important to note that they induce larger GPU memory footprints and run-times compared to optimizer and replay-based methods. That being said, we do not try to adjust the token counts to account for this given that our re-implementations may not be optimally efficient.
+
+## 6 EXPERIMENTS
+
+**Training details.** For all runs, we train 3B parameter language models using OpenLM. Unless otherwise indicated, each method observes a fixed total number of 220B tokens, equivalent to 4x the Chinchilla optimal amount.<sup>1</sup> We further assume that current practitioners are (a) likely to have access to more than enough data to train initial models; (b) unlikely to wait to obtain non-trivial performance. Hence, we front-load the total token budgets such that *half* is allocated to training on the first month, May-2013. Then, the remaining 110B tokens are split equally among the other 113 continual timesteps. For more realistic hyperparameter selection in our continual setup (Cha & Cho, 2024), we only use the first 10 of these timesteps for tuning (see Appx. C for more details).
+
+**Evaluation metrics.** Each continual run actually produces a  $T_t \times T_e$  matrix of evaluations  $E$  where  $T_t, T_e$  are the total number of training/evaluation timesteps,  $E_{i,j}$  is the performance of the model trained after training on data up to month  $i$  and evaluated on the month  $j$ . To control for inherent difficulty differences across evaluation months, we measure the *regret*  $R_{i,j} = E_{i,j} - E_j^*$  where  $E_j^*$  is the performance of the *Oracle* trained on all months (May-2013–July-2024) on month  $j$ . We subtract  $E_j^*$  instead of  $E_{j,j}$  since if  $E_{j,j}$  is bad it may lead to misleadingly good forward/backward metrics.
+
+Following Garg et al. (2024), we consider the following summary metrics (assuming  $T_t = T_e = T$ ).
+
+- In-distribution (ID) performance: averages along the matrix diagonal, i.e.,  $\sum_{i=1}^T R_{i,i}/T$ .
+- Backward transfer: averages the lower triangular of  $R$ , i.e.,  $\sum_{i=1}^T \sum_{j < i} \frac{R_{i,j}}{T(T-1)/2}$ .
+- Forward transfer: averages the upper triangular of  $R$  analogously to backward transfer.
+
+For some downstream evaluations, the train/evaluation periods do not exactly align ( $T_t \neq T_e$ ), making the definition of ID more nuanced. For such evaluations, we define  $a_i$  as the index of the nearest evaluation timestep that comes before the training timestep  $i$ . We then count  $R_{i,a_i}$  towards the ID average only if no other training timestep is closer to  $a_i$  (i.e.,  $a_i \neq a_{i-1}$ ). Otherwise, we count  $R_{i,j}$  towards backward and forward transfer when  $j < a_i$  and  $j \geq a_i$  respectively.
+
+### 6.1 TiC-CC HELD-OUT EVALUATIONS
+
+Tab. 2 and Fig. 4 show results on our TiC-CC hold-out sets. Overall, we observe the various methods incur different trade-offs between forgetting and plasticity. We summarize the main findings below:
+
+<sup>1</sup>Here, following Li et al. (2024a), the token counts are given by  $20 \times$  number of parameters  $\times$  Chinchilla multiplier with a  $1 \times$  multiplier being a near-optimal compute allocation found by Hoffmann et al. (2022).
+
+{6}------------------------------------------------
+
+![Figure 4: Six heatmaps showing Cyclic Cosine and Replay methods across three datasets (TiC-CC, Wiki, News). The top row shows 'Cyclic Cosine' and the bottom row shows 'Replay (alpha = 1/2) + AR'. Each heatmap plots 'Checkpoint Month' (y-axis) against 'Eval Month' (x-axis) from 201403 to 202402. A color bar on the right of each heatmap indicates the log-perplexity difference, ranging from -0.2 (blue) to 0.2 (red). The diagonal line in each heatmap represents perfect ID performance. Cyclic Cosine shows strong ID performance but significant forgetting (off-diagonal), while Replay shows reduced forgetting but lower ID performance.](4086a572c080354982c11f1de4d6921d_img.jpg)
+
+Figure 4: Six heatmaps showing Cyclic Cosine and Replay methods across three datasets (TiC-CC, Wiki, News). The top row shows 'Cyclic Cosine' and the bottom row shows 'Replay (alpha = 1/2) + AR'. Each heatmap plots 'Checkpoint Month' (y-axis) against 'Eval Month' (x-axis) from 201403 to 202402. A color bar on the right of each heatmap indicates the log-perplexity difference, ranging from -0.2 (blue) to 0.2 (red). The diagonal line in each heatmap represents perfect ID performance. Cyclic Cosine shows strong ID performance but significant forgetting (off-diagonal), while Replay shows reduced forgetting but lower ID performance.
+
+Figure 4: **Cyclic Cosine demonstrates delayed forgetting while replay avoids forgetting in exchange for lower plasticity.** We plot the difference in log-perplexity ( $\log \text{ppl}_{\text{taken}}$ ) between continual checkpoints and the Oracle. While we train on all 114 months, we evaluate on a subset of the months which are roughly annually spaced. Overall, we observe that training sequentially with the Cyclic Cosine method (top) leads to strong ID performance (along the diagonal) but also significant forgetting on TiC-CC and TiC-CC-News. Meanwhile, adding replay can reduce this forgetting by sacrificing ID performance, especially for later model checkpoints.
+
+Table 2: **Loss-based evaluations for various methods at the 3B-4x scale.** We report log-perplexity values relative to the Oracle. While various optimizer (top) and regularization-based (bottom) methods trade-off backward transfer with in-distribution performance, replay (middle) is required to obtain the least amount of forgetting. **Bold** values are within one standard deviation of the best in each column, with standard deviations estimated from three runs of Cyclic Cosine.
+
+| Method | TiC-CC ↓ |  |  | TiC-CC-Wiki ↓ |  |  | TiC-CC-News ↓ |  |  |
+|-|-|-|-|-|-|-|-|-|-|
+|  | Backward | ID | Forward | Backward | ID | Forward | Backward | ID | Forward |
+| Cyclic Cosine <small>(std)</small> | 0.072<br>(0.000) | <b>0.027</b><br>(0.000) | <b>0.161</b><br>(0.000) | 0.038<br>(0.000) | 0.032<br>(0.000) | 0.074<br>(0.000) | 0.058<br>(0.000) | 0.015<br>(0.000) | 0.109<br>(0.000) |
+| Cyclic Cosine + AR | 0.058 | 0.040 | 0.166 | 0.032 | 0.031 | 0.074 | 0.041 | 0.017 | 0.110 |
+| Cyclic Rept | 0.065 | 0.030 | 0.162 | 0.033 | 0.030 | 0.073 | 0.049 | 0.015 | <b>0.108</b> |
+| Schedule-Free | 0.065 | 0.036 | 0.164 | 0.036 | 0.033 | 0.076 | 0.049 | 0.017 | 0.110 |
+| Replay ( $\alpha_t = 1/t$ ) | <b>0.023</b> | 0.074 | 0.178 | 0.020 | 0.036 | 0.078 | 0.005 | 0.035 | 0.117 |
+| Replay ( $\alpha_t = 1/2$ ) | 0.024 | 0.042 | 0.167 | 0.024 | 0.031 | 0.074 | 0.013 | 0.019 | 0.111 |
+| Replay ( $\alpha_t = 1/t$ ) + AR | 0.026 | 0.083 | 0.181 | <b>0.019</b> | 0.037 | 0.079 | <b>0.004</b> | 0.039 | 0.119 |
+| Replay ( $\alpha_t = 1/2$ ) + AR | 0.025 | 0.055 | 0.171 | 0.022 | 0.032 | 0.076 | 0.009 | 0.022 | 0.112 |
+| LwF | 0.072 | <b>0.027</b> | <b>0.161</b> | 0.038 | 0.032 | 0.074 | 0.058 | 0.015 | 0.109 |
+| EWC | 0.061 | 0.032 | 0.162 | 0.031 | <b>0.029</b> | <b>0.071</b> | 0.046 | <b>0.014</b> | <b>0.108</b> |
+
+**Cyclic Cosine offers the best plasticity but also the most forgetting.** We find the optimal maximum learning rate for ID performance to be  $30\times$  smaller than what was used for the initialization (see Tab. 5 in Appx. C). Further, based upon the gaps between Forward and ID metrics, TiC-CC-Wiki appears to change more slowly than TiC-CC-News, while both evolve less rapidly than TiC-CC.
+
+**Alternative LR schedules and EWC can improve Backward at the cost of ID but replay is required to further reduce forgetting.** As shown in the heatmaps in Fig. 12, all non-replay methods still result in significant forgetting at later checkpoints, while Replay ( $\alpha_t = 1/t$ ) reaches a Backward metric of 0.023 on TiC-CC, 60% smaller than the best non-replay approach. Between the two replays,  $\alpha_t = 1/2$  offers slightly less Backward improvement but much better ID, likely because  $\alpha_t = 1/t$  decreases the ratio of new data over time, scaling poorly to the  $>100$  timesteps in our setup. This differs from TiC-CLIP’s findings, where different replays behave more similarly but  $10\times$  fewer rounds are used. However, even while  $\alpha_t = 1/2$  can achieve good balance between Backward and ID for the first few years, plasticity becomes an increasing issue across the larger timescales in TiC-CC, likely due to later months still being underrepresented as they have been replayed fewer times.
+
+{7}------------------------------------------------
+
+Table 3: **Selected downstream evaluations at 3B-4x scale.** For all dynamic evaluations, we report perplexity values relative to the Oracle with log-scaling. Meanwhile, CORE is an average of the accuracies of 22 downstream zero/few-shot tasks used in DataComp-LM (Li et al., 2024a), evaluated only on the final model checkpoint (with score relative to Oracle in parentheses). **Bold** values are within one standard deviation (estimated with 3 runs of Cyclic Cosine) of the best in each column.
+
+| Method | TiC-WIKI-DIFF ↓ |  |  | TiC-STACKOVERFLOW ↓ |  |  | TiC-STACK-CAT7 ↓ |  |  |
+|-|-|-|-|-|-|-|-|-|-|
+|  | Backward | ID | Forward | Backward | ID | Forward | Backward | ID | Forward |
+| Cyclic Cosine (std) | 0.033<br>(0.000) | 0.052<br>(0.000) | 0.085<br>(0.000) | 0.041<br>(0.002) | 0.078<br>(0.002) | <b>0.156</b><br>(0.003) | 0.045<br>(0.001) | 0.050<br>(0.001) | 0.071<br>(0.000) |
+| Cyclic Cosine + AR | 0.033 | 0.054 | 0.087 | <b>0.032</b> | <b>0.077</b> | 0.159 | 0.035 | <b>0.044</b> | 0.068 |
+| Cyclic Rsqt | 0.031 | <b>0.051</b> | 0.084 | <b>0.034</b> | <b>0.076</b> | <b>0.158</b> | 0.039 | 0.046 | 0.069 |
+| Schedule-Free | 0.035 | 0.055 | 0.087 | 0.038 | 0.079 | 0.160 | 0.045 | 0.050 | 0.072 |
+| Replay ( $\alpha_t = 1/4$ ) | 0.038 | 0.063 | 0.091 | 0.075 | 0.121 | 0.191 | 0.036 | 0.052 | 0.072 |
+| Replay ( $\alpha_t = 1/2$ ) | 0.032 | 0.055 | 0.086 | 0.055 | 0.094 | 0.170 | 0.038 | 0.049 | 0.070 |
+| Replay ( $\alpha_t = 1/4$ ) + AR | 0.039 | 0.063 | 0.092 | 0.066 | 0.119 | 0.193 | <b>0.031</b> | 0.050 | 0.072 |
+| Replay ( $\alpha_t = 1/2$ ) + AR | 0.033 | 0.057 | 0.088 | 0.047 | 0.096 | 0.176 | <b>0.032</b> | 0.046 | 0.071 |
+| LwF | 0.033 | 0.053 | 0.085 | 0.037 | <b>0.075</b> | 0.155 | 0.044 | 0.048 | 0.070 |
+| EWC | <b>0.030</b> | <b>0.051</b> | <b>0.083</b> | <b>0.033</b> | <b>0.077</b> | <b>0.162</b> | 0.035 | <b>0.043</b> | <b>0.067</b> |
+
+  
+
+| Method | TiC-CODEDOCS-NUMPY ↓ |  |  | TiC-CODEDOCS-PYTorch ↓ |  |  | Static Evals. ↑<br>CORE (DCLM) |
+|-|-|-|-|-|-|-|-|
+|  | Backward | ID | Forward | Backward | ID | Forward |  |
+| Cyclic Cosine (std) | 0.073<br>(0.004) | 0.096<br>(0.003) | 0.072<br>(0.002) | <b>0.057</b><br>(0.002) | <b>0.025</b><br>(0.002) | 0.217<br>(0.003) | 48.5 (-2.1) |
+| Cyclic Cosine + AR | 0.054 | 0.074 | 0.062 | 0.084 | 0.052 | 0.228 | 48.5 (-2.1) |
+| Cyclic Rsqt | 0.066 | 0.092 | 0.071 | 0.062 | 0.029 | 0.220 | <b>49.0 (-1.6)</b> |
+| Schedule-Free | 0.069 | 0.100 | 0.080 | 0.084 | 0.051 | 0.236 | <b>48.8 (-1.8)</b> |
+| Replay ( $\alpha_t = 1/4$ ) | 0.054 | 0.046 | 0.057 | 0.175 | 0.138 | 0.275 | <b>48.9 (-1.7)</b> |
+| Replay ( $\alpha_t = 1/2$ ) | 0.058 | 0.066 | 0.060 | 0.099 | 0.069 | 0.237 | <b>49.0 (-1.6)</b> |
+| Replay ( $\alpha_t = 1/4$ ) + AR | 0.040 | <b>0.045</b> | 0.057 | 0.197 | 0.169 | 0.277 | <b>49.0 (-1.6)</b> |
+| Replay ( $\alpha_t = 1/2$ ) + AR | <b>0.034</b> | 0.050 | <b>0.052</b> | 0.129 | 0.098 | 0.246 | <b>49.2 (-1.4)</b> |
+| LwF | 0.076 | 0.104 | 0.073 | <b>0.058</b> | 0.028 | <b>0.214</b> | 48.5 (-2.1) |
+| EWC | 0.055 | 0.081 | 0.067 | 0.070 | 0.040 | 0.222 | <b>48.9 (-1.7)</b> |
+
+### 6.2 DOWNSTREAM EVALUATIONS
+
+Tab. 3 presents results for several of our downstream evaluations, while Fig. 5 and Appx. D show corresponding evaluation matrices. Here, we observe broadly that methods exhibit trade-offs *across the different evaluations*, showcasing the inherent challenges of performing well on a variety of domains while training on a sequence of generic web-data dumps (in which the coverages of said domains may also vary over time). We summarize the key findings below:
+
+**EWC is the best method for adapting to new knowledge in TiC-WIKI-Diff.** This differs from the results of Garg et al. (2024) and Jin et al. (2022) which found EWC to have little positive impact in their settings. It also differs from TiC-CC-Wiki, where EWC could not match replay in terms of Backward performance. One explanation for this is that by isolating new/changed segments of Wikipedia, TiC-WIKI-Diff places strong pressure on seeing newer data. Indeed, we see in Tab. 8 in Appx. D that measuring performance on the *unchanged* segments returns replay’s superiority on Backward, though the improvements are much smaller. To further shed light on this discrepancy, we also see from Fig. 5 (left) that unlike for TiC-CC-Wiki, **peak performance on each TiC-WIKI month is often years after that month is seen**, even when no replay is used in Cyclic Cosine. This suggests that the knowledge TiC-WIKI captures each month is also successfully learned from CC dumps that were crawled quite a bit later, which could be due to: (1) delayed alignment between CC’s crawls of Wikipedia and TiC-WIKI’s more comprehensive coverage of Wikipedia edits; (2) measuring TiC-CC loss on all tokens versus focusing on specific segments and proper nouns in TiC-WIKI to capture only factual knowledge rather than irrelevant nuances (e.g., page formatting).
+
+**Replay of earlier data tends to benefit more on domains expected to evolve slowly.** In Tab. 3, we show both the performance of different methods on TiC-STACKOVERFLOW as well as an average over a subset of seven other large StackExchange sites excluding StackOverflow (TiC-STACK-CAT7). **Earlier CC dumps (i.e., before Feb-2016) are the most useful for TiC-STACK-MATH** leading to improvements from both replay and AR schedules as observed in Fig. 5. In contrast, for TiC-STACKOVERFLOW, there not only exists a larger distribution shift over time, but seeing less old data improves all three summary metrics. Similar to TiC-STACK, we observe a sharp difference between two evaluations within TiC-CODEDOCS: TiC-CODEDOCS-NUMPY and TiC-CODEDOCS-PYTorch. As shown in Tab. 3, continual runs involving replay perform better on all metrics for the
+
+{8}------------------------------------------------
+
+432  
+433  
+434  
+435  
+436  
+437  
+438  
+439  
+440  
+441  
+442  
+443  
+444  
+445  
+446  
+447  
+448  
+449  
+450  
+451  
+452  
+453  
+454  
+455  
+456  
+457  
+458  
+459  
+460  
+461  
+462  
+463  
+464  
+465  
+466  
+467  
+468  
+469  
+470  
+471  
+472  
+473  
+474  
+475  
+476  
+477  
+478  
+479  
+480  
+481  
+482  
+483  
+484  
+485
+
+![Figure 5: Six heatmaps arranged in a 3x2 grid. The columns represent 'Cyclic Cosine' (left) and 'Replay (alpha = 1/2) + AR' (right). The rows represent different tasks: 'TIC-Wiki-Diff' (top), 'TIC-Stackoverflow' (middle), and 'TIC-Stack-Math' (bottom). Each heatmap plots 'Checkpoint Month' (y-axis) against 'Eval Month (end of range)' (x-axis). A purple dotted line in each plot indicates the diagonal where training and evaluation timestamps are closest. Color bars on the right of each plot show performance differences, with scales ranging from -0.10 to 0.10 for TIC-Wiki-Diff, -0.3 to 0.3 for TIC-Stackoverflow, and -0.3 to 0.3 for TIC-Stack-Math. The TIC-Stack-Math plots show a distinct blue region at the top left, indicating better performance for older checkpoints.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 5: Six heatmaps arranged in a 3x2 grid. The columns represent 'Cyclic Cosine' (left) and 'Replay (alpha = 1/2) + AR' (right). The rows represent different tasks: 'TIC-Wiki-Diff' (top), 'TIC-Stackoverflow' (middle), and 'TIC-Stack-Math' (bottom). Each heatmap plots 'Checkpoint Month' (y-axis) against 'Eval Month (end of range)' (x-axis). A purple dotted line in each plot indicates the diagonal where training and evaluation timestamps are closest. Color bars on the right of each plot show performance differences, with scales ranging from -0.10 to 0.10 for TIC-Wiki-Diff, -0.3 to 0.3 for TIC-Stackoverflow, and -0.3 to 0.3 for TIC-Stack-Math. The TIC-Stack-Math plots show a distinct blue region at the top left, indicating better performance for older checkpoints.
+
+Figure 5: Replay helps on TIC-STACK-MATH but hurts on domains where new data is crucial (TIC-STACKOVERFLOW). We show heatmaps the Cyclic Cosine (left) and Replay ( $\alpha_t - 1/2$ ) + AR methods (right) evaluated on TIC-WIKI, TIC-STACK-MATH, and TIC-STACKOVERFLOW. The purple dotted lines trace out when the training and evaluation timestamps are closest to one another.
+
+former whereas the opposite is true for latter. This is likely due to NumPy being an older library first released in 1995 compared to PyTorch in 2016. Based on the corresponding heatmaps in Appx. D, it appears that models improve on NumPy in earlier years (i.e., 2013-2016) before forgetting this knowledge when training on the following four to five years. This suggests the bulk of NumPy-related content appeared in earlier years before decreasing, thereby *necessitating* replay for models to retain this knowledge. In contrast for PyTorch, replay harms performance since it shifts more weight to earlier CC dumps, three years of which were before PyTorch even first released.
+
+**Static evaluation of methods with an unbiased initialization matches the Oracle.** Table 3 presents evaluations on the CORE set of tasks from Li et al. (2024a). Initially, we observe that most continual methods perform similarly and a sizable gap to the Oracle remains. Indeed, the initialization trained on the May-2013 already achieves an average of 48.5, the same as the final checkpoint of Cyclic Cosine. Meanwhile, the interventions that mitigate forgetting can somewhat help, closing the remaining gap to the Oracle by 33%. The two possible explanations for the remaining 67% are that the Oracle benefits from: (1) having less restricted access to data throughout its training (i.e., the continual phase of our runs is at fault); (2) being trained from scratch rather than starting from a model biased towards the oldest data (i.e., the initial training on the May-2013 is at fault). To investigate, we run an additional oracle variant which starts from the same May-2013 initialization but trains on an equal mix of the remaining 113 months all at once. This model achieves a performance of only 48.9, below our best continual runs which suggests that (2) is likely more at fault than (1).
+
+### 6.3 EFFICIENCY OF CONTINUAL TRAINING
+
+In this section, we perform a case study on the practical utility of current continual methods by measuring the potential compute savings offered by Replay ( $\alpha_t = 1/2$ ). While the results in previous
+
+{9}------------------------------------------------
+
+| Method | Tokens | TiC-CC | TiC-CC-Wiki | TiC-CC-News | TiC-WiKi-Diff | TiC-WiKi-Unchanged |
+|-|-|-|-|-|-|-|
+| Replay | 220B | 0.024 | 0.019 | 0.017 | 0.013 | 0.017 |
+| Replay + AR | 220B | 0.027 | 0.017 | 0.014 | 0.014 | 0.016 |
+| Replay | 330B | 0.011 | 0.009 | 0.010 | 0.001 | 0.006 |
+| Replay + AR | 330B | 0.008 | 0.003 | 0.002 | -0.001 | -0.001 |
+| Replay | 440B | 0.004 | 0.004 | 0.007 | -0.004 | 0.000 |
+| Replay + AR | 440B | <b>-0.002</b> | <b>-0.006</b> | <b>-0.005</b> | <b>-0.009</b> | <b>-0.010</b> |
+
+  
+
+| Method | Tokens | TiC-STACKOVERFLOW | TiC-STACKExchange-Cat7 | TiC-CD-PyTorch | TiC-CD-NumPy |
+|-|-|-|-|-|-|
+| Replay | 220B | 0.034 | 0.028 | 0.052 | 0.047 |
+| Replay + AR | 220B | 0.027 | 0.022 | 0.082 | 0.023 |
+| Replay | 330B | 0.014 | 0.020 | 0.003 | 0.035 |
+| Replay + AR | 330B | 0.017 | 0.014 | 0.040 | 0.024 |
+| Replay | 440B | <b>0.007</b> | 0.150 | <b>-0.025</b> | <b>0.018</b> |
+| Replay + AR | 440B | 0.015 | <b>0.008</b> | 0.013 | 0.025 |
+
+Table 4: **Replay-based approaches are competitive with re-training Oracles while 62% cheaper.** We scale up two methods that use the ( $\alpha_t = 1/2$ ) version of replay by increasing the monthly token budgets for the continual phase of training. The three scales considered correspond to 220B / 330B / 440B total tokens seen during initialization and continual training. We measure sub-optimality relative to a *series* of Oracle models trained roughly every two years (requiring 1.16T training tokens altogether) and report averages of all Backwards and ID elements of the resulting evaluation matrices.
+
+sections indicate that all continual methods under-perform the Oracle, this Oracle is quite strong for two reasons: (1) for most entries  $E_{i,j}$  in our evaluation matrices, it has seen considerably more tokens than model checkpoint  $i$ ; (2) while it is compute matched with continual runs, it would not actually be obtainable until the last month; if one wanted to consistently re-train new models like the Oracle over this 11 year span, the costs would increase linearly with the number of desired updates.
+
+Thus, to more practically measure the cost effectiveness of continual training, we now consider an alternative baseline of a *series* of Oracle models with different data cutoffs. We then measure the sub-optimality of any checkpoint relative to the *series* of Oracles by subtracting the performance of the most recent Oracle (instead of always the Jul-2024 Oracle). Specifically we consider seven cutoff dates roughly spaced two years apart (i.e., May-2013, Jan-2015, Jan-2017, Jan-2019, Jan-2021, Jan-2023, Jul-2024). Each corresponding Oracle is then token matched with the continual checkpoints corresponding to its cutoff date: e.g., the Jan-2019 Oracle is trained on data coming from all months up to Jan-2019 and for the number of tokens seen by a 220B continual run’s Jan-2019 checkpoint. In total all seven oracles together require 1.16T tokens. Given that this now costs more than  $5\times$  our current continual runs, we also consider increasing the compute budget for continual runs by  $1.5\times$  and  $2\times$  (by increasing the monthly budget for the continual phase while keeping the initialization the same). These longer runs still cost considerably less than the Oracle series (seeing 330B and 440B tokens respectively), while also being able to update models every month instead of every two years.
+
+**Matching the Oracles with 62% less compute.** In Tab. 4, we report the average of the elements that would have appeared in the Backwards and ID elements of the corresponding matrix. Overall, we observe that scaling up Replay ( $\alpha_t = 1/2$ ) + AR to 440B tokens becomes competitive with the series of Oracles. Despite requiring 62% less compute, it surpasses re-training Oracles on many evaluations (i.e., all TiC-CC and TiC-WiKi subsets) while closing the gap significantly on most others.
+
+## 7 CONCLUSION
+
+We introduce a benchmark for continual LLM pretraining spanning more than a decade of timestamped data. TiC-CommonCrawl (TiC-CC) consists of training and evaluation data spanning more than 100 months. We also introduce new TiC evaluations, TiC-Wikipedia (TiC-WiKi), TiC-StackExchange (TiC-STACK), and TiC-CODEDOCS. Using these assets, we clearly observe models need to be continually trained to stay up to date but that the ideal update frequency varies based upon the domain, motivating the need for methods that prevent forgetting. To this end, we compared various baseline strategies for continual pretraining, finding that simple cyclic learning rate schedules and data-replay shrink the gap to an *Oracle* that trains on all data. However, completely closing the gap remains an open and challenging problem to be studied by future work on our benchmark.
+
+ Rest of paper (reference and Appendix) is removed.

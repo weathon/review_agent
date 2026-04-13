@@ -1,0 +1,353 @@
+
+
+{0}------------------------------------------------
+
+# ARE SYNTHETIC TIME-SERIES DATA REALLY NOT AS GOOD AS REAL DATA?
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+To alleviate the commonly encountered inadequate time-series data problem in DL (DL), we develop a non-DL generic data synthesis method. When current methods require real data or data statistics to train generators or synthesize data, our method InfoBoost enables zero-shot training of models without the need for real data or data statistics. Additionally, as an application of our synthetic data, we train an unconditional feature (rhythm, noise, trend) decomposer based on our synthetic data, which is applicable to real time-series data. Through experiments, our non-DL synthetic data enables models to achieve superior performance on unsupervised tasks and self-supervised prediction & imputation compared models using real data. Visualized case studies further demonstrate the effectiveness of our novel unconditional feature decomposer trained with our synthetic data.
+
+## 1 INTRODUCTION
+
+DL (DL) practitioners across various time-series domains commonly encounter the obstacle of inadequate data, domains including finance Tang et al. (2022), energy P et al. (2022), traffic Shaygan et al. (2022), weather Zhu et al. (2023), and healthcare Saeidi et al. (2021); Wang et al. (2022); Zhang et al. (2023). Procuring sufficient time-series data is often financially costly, which requires substantial human effort for data preprocessing, and entails privacy concerns involving commercial or personal information.
+
+In response to this concern, we introduce InfoBoost, a framework designed to produce general-purpose synthetic time-series data. By harnessing the capabilities of non-DL synthetic data generation, InfoBoost offers a universally applicable solution that bypasses the expenses and privacy risks associated with obtaining and handling real-world time-series data for model training.
+
+![Figure 1: Schematic of the InfoBoost model. The diagram illustrates the synthesis of synthetic time-series data from three components: Rhythm, Noise, and Trend. Rhythm is characterized by frequency (freqs), amplitude (amps), and phase (phases). Noise is characterized by a noise distribution (noise dist), sampling (sample), inverse (inverse), and smoothing (smooth). Trend is characterized by trend type (rhythm or noise), low frequency (low freq), and strong smoothing (strong smooth). These components are combined via a 'sync' process to generate 'synthesized data' (synthetic data). The synthesized data is then used for 'Predict & Imputation' (e.g., Trade, EEG, Pandemic, Weather, Energy) and 'Feature decompos' (e.g., Rhythm, Noise, Trend).](868ef3e0abb37916a7af1e923995f329_img.jpg)
+
+The diagram shows the InfoBoost framework. On the left, three input components are shown: 'Rhyth' (Rhythm) with 'freqs', 'amps', and 'phases'; 'Noise' with 'noise dist', 'sample', 'inverse', and 'smooth'; and 'Trend' with 'trend type' (rhythm or noise), 'low freq', and 'strong smooth'. Arrows from these components point to a central 'sync' circle. From the 'sync' circle, an arrow labeled 'ratios R,N,T' and 'train' points to a 'Predict & Imputation' block. This block is associated with various data types: Trade, EEG, Pandemic, Weather, and Energy. Another arrow from the 'sync' circle points to a 'Feature decom' block, which is associated with 'R', 'N', and 'T' (Rhythm, Noise, Trend).
+
+Figure 1: Schematic of the InfoBoost model. The diagram illustrates the synthesis of synthetic time-series data from three components: Rhythm, Noise, and Trend. Rhythm is characterized by frequency (freqs), amplitude (amps), and phase (phases). Noise is characterized by a noise distribution (noise dist), sampling (sample), inverse (inverse), and smoothing (smooth). Trend is characterized by trend type (rhythm or noise), low frequency (low freq), and strong smoothing (strong smooth). These components are combined via a 'sync' process to generate 'synthesized data' (synthetic data). The synthesized data is then used for 'Predict & Imputation' (e.g., Trade, EEG, Pandemic, Weather, Energy) and 'Feature decompos' (e.g., Rhythm, Noise, Trend).
+
+Figure 1: Schematic of the InfoBoost model illustrating the data synthesis, feature decomposing learning, and feature extraction processes. In the diagram, the label ‘Rhyth’ corresponds to the multi-source rhythmic data (MRD), ‘Noise’ corresponds to different types of noise and their noise ratios (TN & NR), and ‘Trend’ corresponds to trend information (TI). The visual features elucidate the individual roles of each component within the InfoBoost framework. ‘Sync’ stands for ‘synthesized data’, representing data that are artificially generated, integrating MRD, TN & NR, and TI.
+
+{1}------------------------------------------------
+
+054 Inspired by the potential benefits of synthetic data Savage (2023); Luo et al. (2023); Yin et al.  
+055 (2023b); Zhang et al. (2024), we explored synthetic time-series data generation methods. However,  
+056 we observed that almost all time-series data generation approaches require sampling training data  
+057 from real datasets or fine-tuning DL-based generators Luo et al. (2023); Yang et al. (2022); Yang &  
+058 Hong (2022). While existing methods can somewhat alleviate data quality, bias, and vulnerability  
+059 issues, they still require ample amounts of high-quality real data from the specific domain to ensure  
+060 the generator’s output encompasses unseen data, thereby unable to fully overcome the challenge  
+061 of inadequate if certain time-series domain real data. Therefore, we believe that to address the  
+062 limitations of DL-based data synthesis, a more generic time-series data synthesis method that does  
+063 not rely on real data is essential.
+
+064 Our first challenge is to deal with the significant variations presented in time-series data across dif-  
+065 ferent datasets or domains. These variations encompass differences in data distribution, time scales,  
+066 signal-to-noise ratio, and feature types, among others. In order to establish a universally applica-  
+067 ble approach for diverse time-series data, we draw inspiration from a classic method for general  
+068 time series frequency domain extraction: the Fourier transform. Usually, in the field of time series  
+069 analysis, widely used transformations such as the Discrete Fourier Transform (DFT) and Discrete  
+070 Cosine Transform (DCT) are applied, while the Continuous Fourier Transform (CFT) is used in  
+071 special cases. They all come with equations suggesting that each sample point contains information  
+072 about the frequency domain Zielinski (2021). Therefore, CFT, DFT and DCT transformations con-  
+073 vert these sample points into corresponding frequency components in the frequency domain, based  
+074 on their underlying principle that each sample point in the time-series data can be represented by a  
+075 set of frequency amplitude and phase. Building upon the fundamental capabilities of the frequency  
+076 domain transformations, we have designed a method to synthesize data by superimposing several  
+077 sine waves with varying phases, frequencies and amplitudes, simulating a range of rhythmic signals  
+078 that may occur in the real world. Similar approaches to modeling rhythmic data have also been  
+079 employed in other works Kükner & İnce (2023) Maric (2017) Huo et al. (2021).
+
+080 As the second challenge, real-world time-series data often contain noises of various frequencies  
+081 and distributions, which can interfere with the accurate extraction of frequency components by the  
+082 transformations. The transformations assume that each sample point can be represented exclusively  
+083 by a combination of frequency, amplitude, and phase. However, in real data, individual signal  
+084 sample points often incorporate non-rhythmic noise components that should not be converted into  
+085 frequency, amplitude, and phase values. This inherent noise contamination impedes these transfor-  
+086 mations from precisely extracting the rhythmic portion’s spectral information from the actual data.  
+087 Secondly, time-series data may contain long-term features that remain undetected in the sampled  
+088 data due to their minimum feature periods exceeding the sampling window’s duration. As a result,  
+089 these transformations may fail to identify such long-period features within the sampled data, poten-  
+090 tially causing information loss or distortion in the frequency domain. In conclusion, although these  
+091 transformations are useful in certain scenarios, their limitations are difficult to avoid when dealing  
+092 with complex real-world time-series data.
+
+093 Our approach to handling these challenges involves the explicit design of separately contained multi-  
+094 source rhythmic data (MRD) information, various types of noise and their respective noise ratios (TN  
+095 & NR), as well as trend information (TI) that extends beyond the sampling window. Real-world data  
+096 typically lacks these explicit information. To address this, we develop a data synthesis approach that  
+097 revolves around synthesizing MRD, TN & NR, and TI to create synthetic data with explicit infor-  
+098 mation. Each set of synthetic data inherently corresponds to a specific set of generating parameters,  
+099 including MRD, TN & NR, and TI. The data synthesis process only require sampling methods cus-  
+100 tomized for MRD, TN & NR, and TI, with various random synthetic parameters. It does not rely  
+101 on any learnable parameters to generate highly versatile synthetic data to solve the generalization  
+102 problem of time-series data. This versatility is demonstrated by the fact that a DL model trained  
+103 solely on InfoBoost’s non-DL synthetic data outperforms that trained on large amounts of real data  
+104 when validated on real data test sets.
+
+105 In addition to applying synthetic data in unsupervised and self-supervised training, as an applica-  
+106 tion of our synthetic data, we explored the idea of using the Rhythm, Noise, and Trend components  
+107 in the synthesis process as reverse engineering to train a feature decomposer. This decomposer  
+would be able to separate real-world time-series data into its Rhythm, Noise, and Trend constituents.  
+We achieved this by training the decomposer with synthetic data as inputs and their corresponding  
+Rhythm, Noise, and Trend components as labels. The resulting feature decomposer can effectively
+
+{2}------------------------------------------------
+
+divide any single-channel time-series into its Rhythm, Noise, and Trend parts. Given the decomposer’s ability to isolate the rhythm component, we compare the frequency-domain representations derived from the raw data and the isolated rhythm. Visual analysis shows that the frequency-domain characteristics of the rhythm component are more distinct.
+
+Summarized below are the main contributions of this work:
+
+1. We present a general-purpose, non-DL approach (no need for real data to train) for synthesizing time-series data aimed at alleviating the challenges associated with acquiring domain-specific real time-series datasets.
+2. We have validated the efficacy of our data synthesis method across multiple domains, such as finance, health, weather, among others. In most cases, training outcomes with synthesized data outperformed those using real data.
+3. We enable the learning of a feature decomposer that only relies on synthetic data, enabling the decomposing of rhythmic, noise, and trend components of real time-series data.
+
+## 2 RELATED WORKS
+
+Although there are a variety of DL-based time-series data augmentation and synthesis methods Luo et al. (2023); Yang et al. (2022); Yang & Hong (2022); Dooley et al. (2023a), it is almost impossible to find a method that does not rely on training DL with real data and can be universally applied across domains, while simultaneously contributing downstream machine learning tasks Tirat et al. (2024). Expanding the probability distribution units for generated data using DL-based methods makes it challenging to ensure that the generated data covers unseen or diverse data distribution from other domains, even Meta-learning methods makes assumptions about tasks coming from the same distribution Swan et al. (2022). The development and exploration of non-DL-based universal time-series data synthesis methods provide a promising way to address the limitations of current DL-based approaches and improve the generalizability of synthetic data across diverse domains. FractalDB Kataoka et al. (2022) is known as a similar method in the field of imaging and  $\pi$ -GNN Yin et al. (2023a) in the field of graph.
+
+In the field of time series, ForecastPFNDooley et al. (2023b) and ChronosAnsari et al. (2024) may appear similar to our work. However, these two approaches focus on implementing a zero-to-many training method using existing, straightforward data synthesis techniques paired with their designed time series prediction models. In contrast, our work concentrates on developing an innovative data synthesis method that benefits various model architectures and tasks. But, of course, to meet the requirements for comparison with related work, we have also detailed in Appendix subsection A.8 the fundamental differences in the data synthesis methods used by these two studies and model prediction performance under the same datasets and experimental settings.
+
+Notably, our method enables models trained without real data to outperform those trained on real data in time-series field across all tested datasets, as demonstrated in subsection 4.1, even in the absence of real data or any real data information. Currently, data synthesis methods that claim to achieve zero to many require specific information from the dataset. For example, ForecastPFN needs the temporal periodicity (such as year, month, day) of the dataset, whereas Chronos’s data synthesis method, which relies 90% on TSMix, requires segments of real data for concatenation and synthesis.
+
+Furthermore, our work innovatively enables unconditional feature decomposition(without limitations on temporal periodicity or other additional information) based on DL for trends, noise, and rhythms features using our synthesized data as train data. Classic methods like STL decomposition require accurate timepoint index information from the dataset and need extra predefined parameters for seasonality and trend to function effectively. The feature decomposition is demonstrated in subsection 4.3.
+
+{3}------------------------------------------------
+
+## 3 METHODOLOGY
+
+### 3.1 INFOBOOST SYNTHETIC TIME-SERIES DATA
+
+In this section, we will demonstrate how to generate multi-source rhythmic data (MRD), different types of noise and their noise ratios (TN & NR), and trend information (TI) based on parametric design. These components will be combined according to their respective ratios to create synthetic data. Ablation study for 3 components is illustrated in appendix subsection 4.4.
+
+#### 3.1.1 GENERATING MULTI-SOURCE RHYTHMIC DATA
+
+To synthesize rhythmic data that accurately reflects the diversity and complexity of real-world time series, we follow the Nyquist-Shannon Sampling Theorem to ensure that all sine waves' frequencies are uniformly sampled during the synthesis of rhythms. Our design involves creating rhythmic data comprising both simple and complex waveforms, which are constructed from a random number of sine waves with uniformly random amplitudes, frequencies, and phases.
+
+Motivation and Theory: 1)Frequency Distribution: Each sine wave represents a distinct frequency component that simulates a specific rhythm in real-world data. By adhering to the Nyquist-Shannon Sampling Theorem and using uniform sampling for the frequencies, we ensure that each discrete sample has an equal probability of representing the entire spectrum from the minimum to the maximum frequency. This approach avoids potential biases introduced by concentrating frequencies around certain values, leading to more realistic synthetic data. 2)Amplitude Normalization: For each sine wave, we assign a random initial weight sampled uniformly from the range  $[0, 1]$ . These weights are then normalized, ensuring that the resulting amplitudes are scaled between 0 and 1. This step guarantees that all sine waves, regardless of their frequencies, have an equal chance of becoming the dominant rhythm feature in the final composite signal. 3)Phase Parameter: Although often neglected in machine learning applications, phase variations significantly impact the shape of the composite signal even when the frequencies and amplitudes remain constant. Uniformly sampling the phase ensures that the phase distribution does not introduce additional bias into the synthetic data, allowing for a wide range of possible signal shapes. The phase values typically range between 0 and  $2\pi$ , aligning with the conventional understanding of the sine function's periodicity.
+
+Frequency Selection: As shown in Equation 1, 1)Upper Limit Frequency ( $f_{\max}$ ): The upper limit frequency is set to half the sampling frequency ( $\frac{f_s}{2}$ ), where the sampling frequency ( $f_s$ ) is defined as the inverse of the time interval between adjacent discrete time points. This ensures that all sine waves are sampled without aliasing, adhering to the Nyquist-Shannon Sampling Theorem. 2)Lower Limit Frequency ( $f_{\min}$ ): The lower limit frequency is approximately the inverse of the total number of discrete time points ( $N$ ) in the sampling window. This ensures that the lowest frequency sine wave can complete at least one full cycle within the sampling window.
+
+$$f_{\max} = \frac{f_s}{2} = \frac{1}{2t} \quad , \quad f_{\min} \approx \frac{1}{N}. \quad (1)$$
+
+The synthesis of multi-source rhythmic data is presented in Figure 2.
+
+#### 3.1.2 GENERATING DIFFERENT TYPES OF NOISE
+
+To simulate noise for all types of time-series data, we designed a synthetic noise generator that encompasses 15 different types of noise distributions, classified into 5 primary categories. This design offers a wide range of noise distributions, and closely mirror real-world scenarios. To achieve this, for discrete distributions, we adopted Bernoulli Sinharay (2010), geometric Sinharay (2010), and Poisson distributions Sinharay (2010). Additionally, included heavy-tailed distributions Kotz et al. (2001), distributions related to the normal distribution (t-distribution Li & Nadarajah (2020) and Pareto distribution Coles (2001)), shape parameter distributions (Beta and Gamma distributions Liu & Serota (2023)), scale parameter distributions (exponential family distribution Gupta et al. (2010) ) and normal distribution family Wiley & Wiley (2020). 15 noise distributions and their 5 categories are listed in Figure3.
+
+{4}------------------------------------------------
+
+216  
+217  
+218  
+219  
+220  
+221  
+222  
+223  
+224  
+225  
+226  
+227  
+228  
+229  
+230  
+231  
+232  
+233  
+234  
+235  
+236  
+237  
+238  
+239  
+240  
+241  
+242  
+243  
+244  
+245  
+246  
+247  
+248  
+249  
+250  
+251  
+252  
+253  
+254  
+255  
+256  
+257  
+258  
+259  
+260  
+261  
+262  
+263  
+264  
+265  
+266  
+267  
+268  
+269
+
+![Figure 2: A diagram showing five sine waves with different frequencies, phases, and amplitudes. The first wave is labeled 'freq_0 phase_0 amp_0' and the fifth is 'freq_4 phase_4 amp_4'. Below the waves, the ranges for these parameters are given: 'freq \in [1/N, 0.5]', 'phase \in (0, 2\pi)', and 'amp \in (0, 1)'. The waves are shown as overlapping orange lines, with one being more compressed and taller than others.](7a3561af571faf036baa93f5f4b1bdb9_img.jpg)
+
+when: number of sins = 5
+
+Figure 2: A diagram showing five sine waves with different frequencies, phases, and amplitudes. The first wave is labeled 'freq\_0 phase\_0 amp\_0' and the fifth is 'freq\_4 phase\_4 amp\_4'. Below the waves, the ranges for these parameters are given: 'freq \in [1/N, 0.5]', 'phase \in (0, 2\pi)', and 'amp \in (0, 1)'. The waves are shown as overlapping orange lines, with one being more compressed and taller than others.
+
+Figure 2: This image illustrates a possible set of five corresponding sine waves, each obtained by random sampling of frequency phases and amplitudes within their respective ranges, and it should be noted that the number of sine waves is also randomly determined. Additionally, the image showcases the composite rhythmic data generated by the superposition of these randomly determined sine waves.
+
+| Noise Name | Category | Noise Name | Category |
+|-|-|-|-|
+| Normal | CCD | Pareto | HTD |
+| Student's t | CCD | Generalized Gamma | HTD |
+| Uniform | CCD | Log-Normal | DRND |
+| Exponential | CCD | Exponential LogNorm | DRND |
+| Poisson | CDD | Gamma | SPD |
+| Binomial | CDD | Beta | SPD |
+| Negative Binomial | CDD | Weibull | SPD |
+|  |  | Rayleigh | SPD |
+
+Figure 3: The list of noise distributions along with their corresponding categories. The "Category" column specifies the category each noise type belongs to. The categories are abbreviated as follows: CCD (Common Continuous Distributions), CDD (Common Discrete Distributions), HTD (Heavy-Tailed Distributions), DRND (Distributions Related to Normal Distribution), and SPD (Shape Parameter Distributions).
+
+Due to the highly uncertain nature of noise distributions in real data, when sampling the noise, we undertake the following three steps:
+
+1. We customize random parameter sampling based on the fundamental parameters of each noise distribution to introduce relative randomness into each distribution, if  $X$  is the Sampled noise, the equation as follow:
+
+$$X \sim NoiseDist(p). \quad (2)$$
+
+2. We perform a partial y-axis inversion on the sampled results of each parameter distribution. This ensures that distributions overly concentrated around a maximum or minimum value do not adversely impact the uniformly normalized sampled results.
+
+3. We apply random kernel size smoothing to the sampled noise, enhancing the diversity of the noise data distribution and simulating temporal dynamics that are difficult to classify as rhythmic information in some real datasets. To prevent overlap between noise and trend information, the kernel size for the random smoothing in the third step is constrained to a relatively small proportion compared to that of the total data length. When Kernel size:  $K = 2k + 1$  and Smoothed noise:  $Y_t$  and  $X$  stands for Sampled noise:
+
+$$Y_t = \frac{1}{2k + 1} \sum_{j=-k}^k X_{t+j}. \quad (3)$$
+
+{5}------------------------------------------------
+
+#### 3.1.3 GENERATING TREND INFORMATION
+
+Generating trend information involves a randomized selection between two distinct methods. This random selection process providing a degree of stochasticity in simulating different types of data trends. Our trend generation process involves the random selection between two distinct methods:
+
+1. Multi-Sine Trend Generation: This method enables the simulation of complex periodic patterns by generating multiple sine waves with random parameters and combining them to form a composite trend. we utilize a similar approach to the one used in subsubsection 3.1.1, which entails the superposition of multiple sine waves. However, unlike subsubsection 3.1.1, when generating long-period trends, we constrain the superposition of sine waves to ensure a relatively smaller number of spikes and less complex waveforms in the resulting trend. We ensure that the generated minimum period is greater than the range captured by the sample window. Additionally, we introduce a random multiplier greater than 1 to enhance the diversity of the generated data. This adjustment ensures that the generated periods exhibit a certain level of diversity and can simulate a variety of periodic trends across a wider range. If  $A_i$  is the amplitude of  $i$ th sine wave ,  $f_i$ : frequency and  $\phi_i$ : phase
+
+$$T(t) = \sum_{i=1}^N A_i \sin(2\pi f_i t + \phi_i). \quad (4)$$
+
+2. Random Noise Trend Generation: This method allows for the simulation of random fluctuations or irregularities often observed in real data, and introduces controlled randomness and smooths out the generated trend, replicating the stochastic nature of many real-world trends. By generating noise with the same method as described in subsubsection 3.1.2, and applying a larger kernel size for smoothing, this approach enhances the diversity and stability of the data, mitigates overfitting, and better simulates real-world data trends. When  $N(t)$  stands for noise signal sampled from random noise distribution, to prevent overlap between noise and trend information, the kernel size for the random smoothing in the trend is constrained to be relatively big proportion compared to noise smooth window, in the same equation described in Equation 3.
+
+The random selection between these two methods aims to enhance the diversity and stochasticity of the generated trend data, providing a more realistic features of the multifaceted nature of data trends commonly observed in real-world datasets.
+
+#### 3.1.4 SIGNAL-TO-NOISE-AND-TREND RATIO
+
+Given the rhythm noise and trend information generated through their respective random parameters, the next step involves standardizing each of the three generated outputs to fall within the range of -1 and 1. This standardization facilitates the computation of the contribution ratio of each synthetic component in the final composite data. As this ratio directly determines the signal-to-noise ratio of the rhythmic information in the composite data, it significantly influences the overall performance and characteristics of the synthesized data. We will randomly generate a set of three ratios, whose sum is 1, to serve as the ratios for the rhythmic, noise, and trend components:
+
+$$r_{\text{rhyth}} + r_{\text{noise}} + r_{\text{trend}} = 1. \quad (5)$$
+
+Consequently, we will utilize these individual ratios to weight the generation of the final composite data, combining the components based on their respective ratios:
+
+$$\text{Sync} = r_{\text{rhyth}} \times \text{Rhyth} + r_{\text{noise}} \times \text{Noise} + r_{\text{trend}} \times \text{Trend}. \quad (6)$$
+
+### 3.2 UNIVERSAL UNCONDITIONAL TIME SERIES FEATURES EXTRACTION
+
+As an unique application of our synthetic data, we will demonstrate how to train a features extractor solely based on the synthetic data generated from the random parameters and the composite data obtained from subsection 3.1. This features extractor is designed to explicitly separate MRD, TN & NR, and TI (rhythmic, noise, trend)information, using only the synthetic data for training. Classic methods like STL decomposition require accurate timepoint index information from the dataset and need extra pre-defined parameters for seasonality and trend to function effectively, our method only needs input data.
+
+{6}------------------------------------------------
+
+![Figure 4: Normalization of parameters (norm params) used in the data synthesis process. The diagram shows a dashed box containing parameters grouped into three categories: 'rhythm ratio' (freq_0, phase_0, amp_0; freq_n, phase_n, amp_n; n_sins), 'noise ratio' (noise type, noise class, smooth kernel), and 'trend ratio' (trend type). Arrows point from these groups to 'sync', 'train', and 'norm params' respectively. A 'loss schedule' is shown next to the 'train' group, and a 'sync' group is shown next to the 'norm params' group.](1956f44611abd5c3c41049836aa78ad8_img.jpg)
+
+Figure 4: Normalization of parameters (norm params) used in the data synthesis process. The diagram shows a dashed box containing parameters grouped into three categories: 'rhythm ratio' (freq\_0, phase\_0, amp\_0; freq\_n, phase\_n, amp\_n; n\_sins), 'noise ratio' (noise type, noise class, smooth kernel), and 'trend ratio' (trend type). Arrows point from these groups to 'sync', 'train', and 'norm params' respectively. A 'loss schedule' is shown next to the 'train' group, and a 'sync' group is shown next to the 'norm params' group.
+
+Figure 4: Normalization of parameters (norm params) used in the data synthesis process. The normalized parameters are organized into a multi-channel matrix, aligning with the sampling window length of the synthetic data.
+
+In data synthesis process, the majority of parameters consist of continuous values, such as frequencies, phases, amplitudes, and ratios. However, there are also crucial parameters that are composed of discrete information, including the number of sine waves, noise type and class, trend class, and similar kernel size parameters resembling smoothing windows, whose actual values may scale significantly with the length of the data sampling window.
+
+To ensure that a wide range of values and diverse parameter types numbering over a dozen (the total count being dependent on the preset range of the number of sine waves, typically empirically set between 3 and 10), can be effectively fitted as labels for deep models and to mitigate potential interference from different types of loss functions, we have custom-tailored a standardization scheme for all parameters. Ultimately, all values are constrained within the range of -1 to 1 (with some parameters set between 0 and 1). Through broadcasting or interpolation, we map all parameters to a length equivalent to the sampling window of the synthetic data. This process ensures that MRD, TN & NR, and TI, along with the generated parameters, are organized into a multi-channel matrix of the total parameter count multiplied by the sampling window length, serving as labels. The synthetic data is then utilized as input to train the features extractor. The parameters contained within the multi-channel normalized parameters are shown in Figure 4. For normalization, if  $\hat{P}_{ij}$  stands for normalized  $i_{th}$  parameter value at the  $j_{th}$  data point and  $P_{ij}$  stands for original parameter value.
+
+$$\hat{P}_{ij} = \begin{cases} \frac{P_{ij} - \min(P)}{\max(P) - \min(P)} \times 2 - 1, & \text{for } P \text{ in } [-1, 1]; \\ \text{frac} P_{ij} - \min(P) \max(P) - \min(P), & \text{for } P \text{ in } [0, 1]. \end{cases} \quad (7)$$
+
+The training details are presented in appendix subsection A.7
+
+## 4 EXPERIMENTS
+
+To test the generalizability of the synthetic data within the InfoBoost framework and evaluate the features extraction performance of the features Extractor on real-world data, we gathered 35 publicly available time-series datasets from two prominent time-series collections, the Tslib and Monash collections Wu et al. (2023); Godahewa et al. (2021), along with various other datasets, all datasets names presented in appendix subsection A.9. These datasets encompass a wide range of data types, including electroencephalography (EEG) data, epidemiological data, electricity data, cryptocurrency data, traffic data, and meteorological data. Due to space limitations, we have placed the imputation experiments (subsection A.6) and comparisons with related work (subsection A.8) and second ablation study (subsection A.3) in the appendix.
+
+### 4.1 SYNTHETIC DATA COVERAGE VERIFICATION VIA UNSUPERVISED LEARNING
+
+**Setting:** Unsupervised autoencoding task requires the model to learn from input data and recreate the original data, and evaluate the model's learning performance to learn data features and generalize to new, unseen data, without the necessity of labels or domain-specific inferences. In the 'sync' group, we train using only synthetic data but test using real data, the goal is to determine if the synthetic data sufficiently covers the range of real-world data features.
+
+**Training:** With MSE loss, We trained models on InfoBoost's synthetic data and random real-world subsets for unsupervised-autoencoding. The rest of the real datasets served as a test to compare
+
+{7}------------------------------------------------
+
+![Figure 5: A grid of box plots showing experimental results for three models (DLinear, BiLSTM, PatchTST) across five domains (finance, weather, health, traffic, energy) for four metrics (SDL, DTW, DH, MSE). Each plot compares 'Real' (blue) and 'Synthetic' (red) data. A legend at the top left indicates 'all results smaller better'. The y-axis scales vary by model and metric. For example, for DLinear, DH ranges from 0 to 100, while for PatchTST, DH ranges from 0 to 400. In most cases, the 'Synthetic' data shows lower values (better performance) than the 'Real' data across the domains.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 5: A grid of box plots showing experimental results for three models (DLinear, BiLSTM, PatchTST) across five domains (finance, weather, health, traffic, energy) for four metrics (SDL, DTW, DH, MSE). Each plot compares 'Real' (blue) and 'Synthetic' (red) data. A legend at the top left indicates 'all results smaller better'. The y-axis scales vary by model and metric. For example, for DLinear, DH ranges from 0 to 100, while for PatchTST, DH ranges from 0 to 400. In most cases, the 'Synthetic' data shows lower values (better performance) than the 'Real' data across the domains.
+
+Figure 5: The experimental results in Figure 4.1 show that smaller values for all metrics indicate better performance. Unsupervised autoencoding performance directly across various domains of time-series data(categorized into five major groups).
+
+synthetic-trained models with real-data-trained ones. To ensure fairness, approximately 70% of the real-world datasets, specifically 24 datasets, were randomly selected as the baseline training data. Due to the entirely random selection, it is difficult to avoid overlaps between some of the baseline training datasets and the test set in terms of data types, further increasing the difficulty of surpassing the baseline. The selected baseline training set ultimately comprised a specific number (usually around 200,000 segments depending on random selection) of instances of real time-series data. To put it into perspective using the common methodology employed in time series studies, the number of time points used in the training data for this study amounts to approximately 160,000,000 time points. Similarly, our synthetic data generation also yielded a similar number of instances of synthetic time-series data, which were used to train the model for Unsupervised autoencoding based on InfoBoost’s synthetic data.
+
+Evaluation matrices: We evaluated four distinct losses to measure the unsupervised autoencoding performance. 1) Structural dissimilarity loss, derived by subtracting the structural similarity index (SSIM) Venkataramanan et al. (2021) from 1, is to assess structural variance between the reconstructed and original data. 2) Dynamic time warping (DTW) Salvador & Chan (2007) distance, a metric suitable for measuring similarity between two time series, accommodates time shifts and stretches. 3) Distance between histograms Cha & Srihari (2002) is to gauge dissimilarities between the histograms of the reconstructed and original time-series data, providing insights into their similarity. 4) Mean squared error (MSE) loss is a common metric used to quantify differences between the reconstructed and original data. By incorporating 4 diverse losses, we comprehensively evaluated Unsupervised autoencoding performance from various perspectives. To mitigate the impact of model architecture selection on experimental results, we opted for three highly representative diverse model structures: recurrent architecture BiLSTM Abduljabbar et al. (2021), linear networks DLinear et al. (2023), and transformer architecture PatchTST Nie et al. (2023). These were chosen to assess the Unsupervised autoencoding performance on a real data test set after training solely on synthetic data and real data, respectively. The results are shown in Figure 5.
+
+The results: Figure 5 indicate that, except for two scenarios (such as the DH & DTW value of PatchTST on the Energy class dataset), the performance of the model trained on InfoBoost’s synthetic data surpasses that of the model trained on real data in the real data test set in 55 out of 60 testing scenarios. It demonstrates the generalization capability of InfoBoost’s synthetic data across various types of scenarios. Even in other testing scenarios of the Energy class dataset, although slightly inferior to the performance after training on real data, the performance of the model trained on synthetic data is mostly very close. The reasons for the slightly inferior performance of synthetic data in the PatchTST scenario on the Energy class dataset will be discussed in Figure A.1.
+
+### 4.2 SELF-SUPERVISED DOMAIN-SPECIFIC FORECASTING
+
+Setting: To validate the effectiveness of InfoBoost’s synthetic data in assisting models on common time-series tasks across various real-world scenarios, we employ a self-supervised forecasting task and utilize the same model across five distinct domains. Within each domain, we conduct training and testing based on both real and synthesized data, using that domain’s unique dataset. We chose the same models as in Unsupervised experiment subsection 4.1.
+
+{8}------------------------------------------------
+
+![Figure 6: Forecasting experiments per domain. The figure consists of three bar charts labeled 'DLLinear', 'BiLSTM', and 'PatchTST'. Each chart compares 'REAL' (blue) and 'SYNC' (orange) data for five domains: Trade, Weather, EEG, Covid, and Energy. The y-axis represents loss, ranging from 0.005 to 0.045. For each domain, three bars are shown: 'max' (lightest shade), 'mini' (medium shade), and 'mean' (darkest shade). In the 'DLLinear' chart, the 'SYNC' data generally shows lower losses than the 'REAL' data across most domains. In the 'BiLSTM' and 'PatchTST' charts, the 'SYNC' data also shows lower losses, though the difference is less pronounced in some cases.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 6: Forecasting experiments per domain. The figure consists of three bar charts labeled 'DLLinear', 'BiLSTM', and 'PatchTST'. Each chart compares 'REAL' (blue) and 'SYNC' (orange) data for five domains: Trade, Weather, EEG, Covid, and Energy. The y-axis represents loss, ranging from 0.005 to 0.045. For each domain, three bars are shown: 'max' (lightest shade), 'mini' (medium shade), and 'mean' (darkest shade). In the 'DLLinear' chart, the 'SYNC' data generally shows lower losses than the 'REAL' data across most domains. In the 'BiLSTM' and 'PatchTST' charts, the 'SYNC' data also shows lower losses, though the difference is less pronounced in some cases.
+
+Figure 6: Forecasting experiments per domain, lower losses the better. The numerical version illustrate in Table 4.
+
+**Training:** Specifically, we allocate the last one-eighth portion of each dataset as labels and the preceding seven-eighth segment as inputs for our training and evaluation. Furthermore, approximately two-thirds of the data from each domain are selected for the training set (serving as a proxy for the limited datasets that can be collected in real scenarios), while the remaining one-third is designated for the test (acting as a substitute for the unseen data that is difficult to obtain for training purposes), training with MSE loss. In this experiment, each domain is trained separately.
+
+**Evaluation:** We assess the models’ performance by calculating the Mean Squared Error (MSE) loss between the model’s predicted patches for the last one-eighth segment and their corresponding actual patches in the real data. The outcomes of multiple experiment runs per domain are summarized with the maximum, minimum, and average losses depicted in Figure 6, differentiating between models trained on synthetic data and those trained on real data. This visualization allows for a clear comparison of how InfoBoost’s synthetic data impacts model performance relative to training solely on authentic datasets across all domains.
+
+**Results:** In the five prevalent time-series domains including Trade, Weather, EEG, Covid, and Energy, the DLLinear model trained exclusively on synthetic data consistently demonstrated superior mean loss and minimal loss performances. Notably, the only exception was observed in the Energy domain, where it struggled to match the results achieved through training on real data. This finding aligns with the experimental outcomes presented in Figure 5, reinforcing the notion that InfoBoost’s synthetic data effectively empowers tested models to transcend the limitations of real data reliance. Consequently, except for the Energy sector, these models exhibit enhanced performance on unseen data within these scenarios, highlighting InfoBoost’s capability to facilitate improved generalizability across diverse time-series applications.
+
+### 4.3 CASE STUDY OF EXPLICIT FEATURE EXTRACTION
+
+![Figure 7: The general feature extractor extracts MRD, TN, NR, and TI information from three distinct and characteristic time-series datasets. The figure shows three columns of plots for 'Finance: NNS Daily', 'IEEG: FNUSA', and 'Epidemiological : Covid death'. Each column contains four rows of plots: 'Orig data' (blue), 'Noise' (red), 'Rhythm' (orange), and 'Trend' (yellow). The 'Orig data' plots show the raw time-series data. The 'Noise' plots show the high-frequency noise component. The 'Rhythm' plots show the periodic component. The 'Trend' plots show the long-term trend component. The 'Trend' plots are relatively smooth, while the 'Noise' and 'Rhythm' plots are more volatile.](e8ff6e66c77a8e96203c9f8db8f0986f_img.jpg)
+
+Figure 7: The general feature extractor extracts MRD, TN, NR, and TI information from three distinct and characteristic time-series datasets. The figure shows three columns of plots for 'Finance: NNS Daily', 'IEEG: FNUSA', and 'Epidemiological : Covid death'. Each column contains four rows of plots: 'Orig data' (blue), 'Noise' (red), 'Rhythm' (orange), and 'Trend' (yellow). The 'Orig data' plots show the raw time-series data. The 'Noise' plots show the high-frequency noise component. The 'Rhythm' plots show the periodic component. The 'Trend' plots show the long-term trend component. The 'Trend' plots are relatively smooth, while the 'Noise' and 'Rhythm' plots are more volatile.
+
+Figure 7: The general feature extractor extracts MRD, TN, NR, and TI information from three distinct and characteristic time-series datasets, following training solely on synthetic data. The ratio information has already been incorporated in a weighted manner across the data scales of each extracted feature after decomposition.
+
+This section will showcase, through visualizations, the performance of a universal features extractor trained on synthetic data containing MRD, TN & NR, and TI information. The visualizations will demonstrate the extraction efficacy of MRD, TN & NR, and TI across various data types, which
+
+{9}------------------------------------------------
+
+is shown in Figure 7. Due to the influence of noise and trend information, the frequency domain information extracted by the commonly employed DFT method in DL often experiences a reduction in quality. Therefore, in Figure 9, we present the DFT frequency domain extraction results of rhythmic information based on the InfoBoost feature extractor. This demonstrates that the disrupted frequency domain information in the original data’s DFT results can be removed for rhythmic information extraction in the frequency domain.
+
+This section visually demonstrates the fundamental functionality of the feature decomposer by presenting the original forms of data instances from three domains alongside the Rhythms, Noise, and Trends (as depicted in Figure 7) extracted using the feature decomposer trained on synthetic data produced by InfoBoost.
+
+### 4.4 ABLATION OF RHYTH, NOISE AND TREND COMPONENTS
+
+**Setting & Evaluation:** The ablation experiment aimed to validate the contributions of the three components—Rhyth, Noise and Trend—of the synthetic data to the model’s performance. All models were trained exclusively on the synthetic data and subsequently subjected to unsupervised autoencoding on all real datasets. We used the DLinear modelZeng et al. (2023) as a baseline, which has a relatively simple architecture and demonstrated median performance in Experiment Figure 5. Performance differences across various configurations were evaluated by computing the Mean Squared Error (MSE) between the original real data and the model’s output.
+
+**Results:** The final results indicated that the model achieved the best performance when all three modules were included in the synthetic data, as evidenced by the loss values in Table 1. According to the experimental results, the configuration RNT, which incorporates all three rhythmic, noise, trend components for data synthesis, yields the lowest MSE, indicating that the quality of the synthesized data is optimal when all three components are used concurrently.
+
+| Sync Config | Min MSE | Max MSE | Mean MSE |
+|-|-|-|-|
+| RNT | $1.5 \times 10^{-7}$ | $1.6 \times 10^{-7}$ | $1.5 \times 10^{-7}$ |
+| NT | $3.7 \times 10^{-7}$ | $3.9 \times 10^{-7}$ | $3.8 \times 10^{-7}$ |
+| RT | $2.0 \times 10^{-7}$ | $2.1 \times 10^{-7}$ | $2.1 \times 10^{-7}$ |
+| RN | $4.1 \times 10^{-7}$ | $4.2 \times 10^{-7}$ | $4.8 \times 10^{-7}$ |
+
+Table 1: Ablation Experiment Results: Mean Squared Error (MSE) for Different Synthetic Data Configurations. We employ the abbreviations R, N, and T to represent the components Rhyth, Noise, and Trend, respectively.
+
+## 5 CONCLUSION
+
+In this study, we have introduced a unique approach, marking the first to simultaneously fulfill the requirements of a universal time-series data synthesis method that does not rely on real data or DL, and a universal time-series data feature decomposition and extraction method that does not require fine-tuning on real data. Most notably, our method empowers models trained in the absence of real data information to outperform those trained on real data across almost all tested datasets. This achievement opens up a new path for future time-series data analysis and modeling, as well as a new solution for time-series unsupervised or self-supervised learning.
+
+## REFERENCES
+
+- Rusul L. Abduljabbar, Hussein Dia, and Pei-Wei Tsai. Development and evaluation of bidirectional lstm freeway traffic forecasting models using simulation data. *Scientific Reports*, 11(1):23899, 2021. ISSN 2045-2322. doi: 10.1038/s41598-021-03282-z. URL <https://doi.org/10.1038/s41598-021-03282-z>.
+- Ralph G. Andrzejak, Klaus Lehnertz, Florian Mormann, Christoph Rieke, Peter David, and Christian Erich Elger. Indications of nonlinear deterministic and finite-dimensional structures in
+
+ Rest of paper (reference and Appendix) is removed.

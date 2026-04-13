@@ -1,0 +1,330 @@
+
+
+{0}------------------------------------------------
+
+# FREE SPLATTER: POSE-FREE GAUSSIAN SPLATTING FOR SPARSE-VIEW 3D RECONSTRUCTION
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Existing sparse-view reconstruction models heavily rely on accurate known camera poses. However, deriving camera extrinsics and intrinsics from sparse-view images presents significant challenges. In this work, we present **FreeSplatter**, a highly scalable, feed-forward reconstruction framework capable of generating high-quality 3D Gaussians from **uncalibrated** sparse-view images and recovering their camera parameters in mere seconds. FreeSplatter is built upon a streamlined transformer architecture, comprising sequential self-attention blocks that facilitate information exchange among multi-view image tokens and decode them into pixel-wise 3D Gaussian primitives. The predicted Gaussian primitives are situated in a unified reference frame, allowing for high-fidelity 3D modeling and instant camera parameter estimation using off-the-shelf solvers. To cater to both **object-centric** and **scene-level** reconstruction, we train two model variants of FreeSplatter on extensive datasets. In both scenarios, FreeSplatter outperforms state-of-the-art baselines in terms of reconstruction quality and pose estimation accuracy. Furthermore, we showcase FreeSplatter’s potential in enhancing the productivity of downstream applications, such as text/image-to-3D content creation.
+
+## 1 INTRODUCTION
+
+Recent breakthroughs in neural scene representation and differentiable rendering, *e.g.*, Neural Radiance Fields (NeRF) (Mildenhall et al., 2021) and Gaussian Splatting (GS) (Kerbl et al., 2023), have shown unprecedented multi-view reconstruction quality for densely-captured images with calibrated camera poses, employing a per-scene optimization approach. However, they are not applicable to sparse-view scenarios, where classical camera calibration techniques like Structure-from-Motion (SfM) (Schonberger & Frahm, 2016) tend to fail due to insufficient image overlaps. Generalizable reconstruction models (Hong et al., 2024b; Xu et al., 2024a; Charatan et al., 2024) attempt to address sparse-view reconstruction in a feed-forward manner by utilizing learned data priors. Despite their efficiency and generalization capabilities, these models predominantly assume access to accurate camera poses and intrinsics, or imply that they are obtained in a pre-processing step, thereby circumventing the difficulty of deriving camera parameters in real application scenarios. Liberating sparse-view reconstruction from known camera poses remains a significant challenge.
+
+Prior works have explored training *pose-free* reconstruction models. PF-LRM (Wang et al., 2024a) and LEAP (Jiang et al., 2024b) share a similar framework that maps multi-view image tokens to a NeRF representation with a transformer. Despite the milestone they have set, their NeRF representation suffers from inefficient volume rendering and low resolution, limiting the training efficiency and scalability to complex scenes. Besides, inferring the input camera poses from such implicit representations is not trivial. PF-LRM employs an additional branch to predict per-view coarse point clouds for camera pose prediction, which introduces extra training cost and difficulties. DUST3R (Wang et al., 2024b) presents a novel paradigm for joint 3D reconstruction and pose estimation by modeling SfM and Multi-view Stereo (MVS) as an end-to-end point-regression task. By regressing the “point maps”, *i.e.*, the 3D un-projection of depth maps, from a stereo image pair in a unified reference frame, it can recover the relative camera pose efficiently with a PnP (Fischler & Bolles, 1981; Hartley & Zisserman, 2003) solver. DUST3R demonstrates impressive zero-shot 3D reconstruction and pose prediction capability by training on a broad range of datasets.
+
+{1}------------------------------------------------
+
+![Figure 1: A diagram illustrating the FreeSplatter pipeline. On the left, 'Input Views' show four images of a robot and two of a building. These are processed by a 'FreeSplatter' block. The output is 'Reconstructed Gaussians', shown as a point cloud of the robot and building. Next is 'Pred. Camera Poses', represented by small camera icons and colored triangles indicating orientation. Finally, 'Rendered Novel Views' show the robot and building from new perspectives. The top row demonstrates object-centric reconstruction (robot), and the bottom row shows scene-level reconstruction (building).](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 1: A diagram illustrating the FreeSplatter pipeline. On the left, 'Input Views' show four images of a robot and two of a building. These are processed by a 'FreeSplatter' block. The output is 'Reconstructed Gaussians', shown as a point cloud of the robot and building. Next is 'Pred. Camera Poses', represented by small camera icons and colored triangles indicating orientation. Finally, 'Rendered Novel Views' show the robot and building from new perspectives. The top row demonstrates object-centric reconstruction (robot), and the bottom row shows scene-level reconstruction (building).
+
+Figure 1: Given **uncalibrated** sparse-view images, our FreeSplatter can reconstruct pixel-wise 3D Gaussians, enabling both high-fidelity novel view rendering and instant camera pose estimation in mere seconds. FreeSplatter can deal with both object-centric (up) and scene-level (down) scenarios.
+
+However, the sparsity of point cloud makes it a suboptimal representation for many downstream applications, *e.g.*, novel view synthesis. In comparison, 3D Gaussian Splatting (3DGS) can encode high-fidelity radiance fields and enable efficient view synthesis by augmenting point clouds with additional Gaussian attributes. We then ask, can we directly predict the “Gaussian maps” from multi-view images to achieve both high-quality 3D modeling and instant camera pose estimation? In this work, we present **FreeSplatter**, a feed-forward reconstruction framework that predicts per-pixel Gaussians from **uncalibrated** sparse-view images and estimates their camera parameters jointly, to say “yes” to this question. The core of FreeSplatter is a scalable single-stream transformer architecture that maps multi-view image tokens into pixel-aligned Gaussian maps with simple self-attention layers, requiring no input camera poses, intrinsics, nor post-alignment steps. The predicted Gaussian maps serve as a high-fidelity and efficient 3D scene representation, while the Gaussian locations enable ultra-fast camera extrinsics and intrinsics estimation in mere seconds using off-the-shelf solvers.
+
+The training and rendering efficiency of 3D Gaussians makes it possible to consider more complex scene-level reconstruction. We thus train two FreeSplatter variants on Objaverse (Deitke et al., 2023) and a mixture of multiple scene datasets (Yao et al., 2020; Yeshwanth et al., 2023; Reizenstein et al., 2021) to handle object-centric and scene-level reconstruction scenarios, respectively. The two variants, denoted as **FreeSplatter-O** (object) and **FreeSplatter-S** (scene), share a common model architecture with  $\sim 306$  million parameters while making essential adjustments for task adaption. We conduct extensive experiments to demonstrate the superiority of FreeSplatter compared to prior sparse-view reconstruction methods in terms of reconstruction quality and pose estimation accuracy. To be highlighted, FreeSplatter-O outperforms previous *pose-dependent* large reconstruction models by a large margin, while FreeSplatter-S achieves a pose-estimation accuracy on par with MASI3R (Leroy et al., 2024), the upgraded version of DUSi3R, on ScanNet++ and CO3D benchmarks. Furthermore, we showcase the potential of FreeSplatter in enhancing the productivity of downstream applications, such as text/image-to-3D content creation.
+
+## 2 RELATED WORK
+
+**Large Reconstruction Models.** The availability of large-scale 3D datasets (Deitke et al., 2023; 2024) unlocks the possibility of training highly generalizable models for open-category image-to-3D reconstruction. Large Reconstruction Models (LRMs) (Hong et al., 2024b; Xu et al., 2024c; Li et al., 2024a) leverage a scalable feed-forward transformer architecture to map sparse-view image tokens into a 3D triplane NeRF (Mildenhall et al., 2021; Chan et al., 2022) and supervise it with multi-view rendering loss. Subsequent works have made efforts on adopting mesh (Xu et al., 2024a; Wei et al., 2024; Wang et al., 2024c) or 3D Gaussians representation (Tang et al., 2024; Xu et al., 2024b; Zhang et al., 2024b) for real-time rendering speed, exploring more efficient network architectures (Zheng et al., 2024; Zhang et al., 2024a; Chen et al., 2024a; Li et al., 2024b; Cao et al., 2024), improving the texture quality (Boss et al., 2024; Siddiqui et al., 2024; Yang et al., 2024a), and exploiting explicit 3D supervision for better geometry (Liu et al., 2024a). Despite the superior reconstruction quality
+
+{2}------------------------------------------------
+
+and generalization capability, LRMs require *posed* images as input and are highly sensitive to the pose accuracy, limiting their applicable scenarios.
+
+**Pose-free Reconstruction.** Classical pose-free reconstruction algorithms like Structure from Motion (SfM) (Hartley & Zisserman, 2003; Ullman, 1979; Schönberger & Frahm, 2016) begins with finding pixel correspondences across multiple views first, and then perform 3D points triangulation and bundle adjustment to optimize 3D coordinates and camera parameters jointly. Recent efforts on enhancing the SfM pipeline encompass leveraging learning-based feature descriptors (DeTone et al., 2018; Dusmanu et al., 2019; Revaud et al., 2019; Wang et al., 2023c) and image matchers (Edstedt et al., 2023; 2024; Sarlin et al., 2020; Lindenberger et al., 2023), as well as differentiable bundle adjustment (Lin et al., 2021; Wang et al., 2023a; Wei et al., 2020). SfM-based methods works well with sufficient image overlaps between nearby views, but face challenges in matching correspondences from sparse views. On the other hand, learning-based methods (Jiang et al., 2024a;b; Hong et al., 2024a; Fan et al., 2023) rely on learned data priors to recover the 3D geometry from input views. PF-LRM (Wang et al., 2024a) extends the LRM framework by predicting a per-view coarse point cloud for camera pose estimation with a differentiable PnP solver (Chen et al., 2022). DUSi3R (Wang et al., 2024b) presents a novel framework for Multi-view stereo (MVS) by modeling it as a pointmap-regression problem. Subsequent works further improve it in local representation capability (Leroy et al., 2024) and reconstruction efficiency (Wang & Agapito, 2024).
+
+**Generalizable Gaussian Splatting.** Compared to NeRF’s (Mildenhall et al., 2021) MLP-based implicit representation, 3DGS represents a scene explicitly with a point cloud, which strikes the balance between high-fidelity and real-time rendering speed. However, the per-scene optimization of 3DGS requires densely-captured images and sparse point cloud generated by SfM for initialization. Recent works (Charatan et al., 2024; Chen et al., 2024b; Szymanowicz et al., 2024; Liu et al., 2024b; Wewer et al., 2024) have explored feed-forward models for sparse-view Gaussian reconstruction by capitalizing on large-scale datasets and scalable model architectures. These models typically assume the access to accurate camera poses and utilize 3D-to-2D geometric projection for feature aggregation, adopting model designs like epipolar lines (Charatan et al., 2024) or plane-swept cost-volume (Chen et al., 2024b; Liu et al., 2024b). InstantSplat (Fan et al., 2024) and Splat3R (Smart et al., 2024) leverage the pose-free reconstruction capability of DUSi3R/MASi3R for sparse-view reconstruction. The former initializes the Gaussian positions using the DUSi3R point cloud and then optimizes other Gaussian parameters, while the latter trains a Gaussian head in a frozen MASi3R model. Despite the impressive results, their reconstruction quality highly depends on the point cloud quality generated by DUSi3R.
+
+## 3 METHOD
+
+Given a sparse set of  $N$  input images  $\{I^n \mid n = 1, \dots, N\}$  with no known camera extrinsics nor intrinsics, FreeSplatting aims to reconstruct the scene as a set of Gaussians and estimate the camera parameters of the  $N$  images simultaneously. The pipeline can be formulated as:
+
+$$\mathbf{G}, \mathbf{P}^1, \dots, \mathbf{P}^N, f = \text{FreeSplatting}(\mathbf{I}^1, \dots, \mathbf{I}^N), \quad (1)$$
+
+where  $\mathbf{G}$  denotes the reconstructed Gaussians which is the union of  $N$  pixel-wise Gaussian maps, i.e.,  $\mathbf{G} = \{\mathbf{G}^n \mid n = 1, \dots, N\}$ ,  $\mathbf{P}^n$  denotes the estimated camera pose for  $I^n$ , and  $f$  denotes the focal length. We assume a common focal length for all input images which is reasonable in most scenarios.
+
+We implement FreeSplatting as a feed-forward transformer that takes multi-view image as input and predict  $N$  Gaussian maps  $\{\mathbf{G}^n \mid n = 1, \dots, N\}$  in a unified reference frame. The Gaussian maps enable both high-fidelity scene modeling and ultra-fast camera parameter estimation using off-the-shelf solvers (Fischler & Bolles, 1981; Hartley & Zisserman, 2003; Plaatrio, 2011), since the Gaussian centers have located the surface point cloud explicitly. In this section, we first briefly review the background knowledge of Gaussian Splatting (Section 3.1), and then introduce the model architecture (Section 3.2) and training details (Section 3.3) of our approach.
+
+### 3.1 PRELIMINARY
+
+3D Gaussian Splatting (3DGS) (Kerbl et al., 2023) represents a scene as a set of 3D Gaussian primitives  $\{g_k = (\boldsymbol{\mu}_k, r_k, s_k, o_k, c_k) \mid k = 1, \dots, K\}$ , each primitive is parameterized by location
+
+{3}------------------------------------------------
+
+![Figure 2: FreeSplatter pipeline diagram. The pipeline starts with 'Input Views' (two images of people) which are processed through 'Patchify & Linear' to become 'Image Tokens'. These tokens are combined with 'Reference Embed' (blue) and 'Source Embed' (yellow). The tokens are then processed by a 'Transformer Block (x L)' containing 'Self-Attn' and 'MLP' layers. The output tokens are processed by 'Linear & Unpatchify' to become 'Gaussian Maps' (represented by icons of people). These maps are then processed by a 'PnP Solver' to produce 'Camera Poses' (represented by a camera icon). The final output is 'Novel View Renderings' (a sequence of images showing the people from different angles).](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 2: FreeSplatter pipeline diagram. The pipeline starts with 'Input Views' (two images of people) which are processed through 'Patchify & Linear' to become 'Image Tokens'. These tokens are combined with 'Reference Embed' (blue) and 'Source Embed' (yellow). The tokens are then processed by a 'Transformer Block (x L)' containing 'Self-Attn' and 'MLP' layers. The output tokens are processed by 'Linear & Unpatchify' to become 'Gaussian Maps' (represented by icons of people). These maps are then processed by a 'PnP Solver' to produce 'Camera Poses' (represented by a camera icon). The final output is 'Novel View Renderings' (a sequence of images showing the people from different angles).
+
+Figure 2: **FreeSplatter pipeline.** Given input views  $\{I^n \mid n = 1, \dots, N\}$  without any known camera extrinsics or intrinsics, we first patchify them into image tokens, and then feed all tokens into a sequence of self-attention blocks to exchange information among multiple views. Finally, we decode the output image tokens into  $N$  Gaussian maps  $\{\mathcal{G}^n \mid n = 1, \dots, N\}$ , from which we can render novel views, as well as recovering camera focal length  $f$  and poses  $\{\mathbf{P}^n \mid n = 1, \dots, N\}$  with simple iterative solvers.
+
+$\mu_k \in \mathbb{R}^3$ , rotation quaternion  $r_k \in \mathbb{R}^4$ , scale  $s_k \in \mathbb{R}^3$ , opacity  $o_k \in \mathbb{R}$ , and Spherical Harmonic (SH) coefficients  $c_k \in \mathbb{R}^{3 \times d}$  for computing view-dependent color, with  $d$  denoting the degree of SH. These primitives parameterize the scene’s radiance field with an explicit point cloud and can be rendered into novel views with an efficient rasterizer. Compared to the expensive volume rendering process of NeRF, 3DGS achieves comparable rendering quality while being much more efficient in terms of time and memory.
+
+### 3.2 MODEL ARCHITECTURE
+
+As Figure 2 shows, FreeSplatter employs a transformer architecture similar to GS-LRM (Zhang et al., 2024b). Given a set of uncalibrated images  $\{I^n \mid n = 1, \dots, N\}$ , we first tokenize them into image tokens  $\{e^{n,m} \mid n = 1, \dots, N, m = 1, \dots, M\}$ , where  $M$  denotes the patch number of each image. Then we feed all image tokens into a sequence of self-attention blocks to exchange information among multiple views, and finally decode them into  $N$  Gaussian maps  $\{\mathcal{G}^n \mid n = 1, \dots, N\}$  composed of per-pixel Gaussian primitives, from which we can render novel views and recover camera parameters with simple iterative solvers.
+
+**Image Tokenization.** The only input of our model is  $N$  images  $\{I^n \in \mathbb{R}^{H \times W \times 3} \mid n = 1, \dots, N\}$ . Following ViT (Dosovitskiy et al., 2021), we split the images into  $p \times p$  patches ( $p = 8$ ) and flatten them into 1D vectors of dimension  $p^2 \cdot 3$ . Then a linear layer is applied to map the vectors into  $d$ -dim image tokens ( $d$  equals to the transformer width). Denoting the  $m$ -th token of the  $n$ -th image as  $e^{n,m}$ , we add it with two additional embeddings before feeding it into the transformer:
+
+$$e^{n,m} = e^{n,m} + e_{\text{pos}}^m + e_{\text{view}}^n, \quad (2)$$
+
+where  $e_{\text{pos}}^m$  denotes the position embedding for the  $m$ -th patch, and  $e_{\text{view}}^n$  is a view embedding for distinguishing the reference view and other views. Specifically, we take the first image as the reference view and predict all Gaussian in its camera frame. We use a reference embedding  $e^{\text{ref}}$  for the first view ( $n = 1$ ) and another source embedding  $e^{\text{src}}$  for other views ( $n = 2, \dots, N$ ), both of which are learnable during training.
+
+**Feed-forward Transformer.** The image tokens added with position and view embeddings are then fed into a sequence of  $L$  self-attention blocks to exchange information across multiple views. Each block consists of a self-attention layer and an MLP layer, equipping with pre-normalization and residual connection (He et al., 2016). The forward process of each block can be formulated as:
+
+$$\begin{aligned} e_{\text{attn}}^{n,m} &= \text{SelfAttn}(\text{LayerNorm}(e_{\text{in}}^{n,m}), \{\text{LayerNorm}(e_{\text{in}}^{n,m})\}) + e_{\text{in}}^{n,m}, \\ e_{\text{out}}^{n,m} &= \text{MLP}(\text{LayerNorm}(e_{\text{attn}}^{n,m})) + e_{\text{attn}}^{n,m}. \end{aligned} \quad (3)$$
+
+**Gaussian Map Prediction.** For each output token  $e_{\text{out}}^{n,m}$  of the last ( $L$ -th) block, we decode it back into  $p^2$  Gaussians with a simple linear layer, leading to a 1D vector of dimension  $p^2 \cdot q$ , where  $q$
+
+{4}------------------------------------------------
+
+![Figure 3: Object-centric Sparse-view Reconstruction. The figure is a grid showing 6 samples of objects (apple, dog, shoe, blocks, jack-in-the-box, bag) across 5 rows: Input, InstantMesh (w/ GT poses), LGM (w/ GT poses), Ours (no input pose), and Target View. The Input row shows sparse views. InstantMesh and LGM rows show reconstructions using ground truth poses. The Ours row shows reconstructions without input poses. The Target View row shows the ground truth views.](a0167e3dcece9dcd8a378bcd98fb9cfa_img.jpg)
+
+Figure 3: Object-centric Sparse-view Reconstruction. The figure is a grid showing 6 samples of objects (apple, dog, shoe, blocks, jack-in-the-box, bag) across 5 rows: Input, InstantMesh (w/ GT poses), LGM (w/ GT poses), Ours (no input pose), and Target View. The Input row shows sparse views. InstantMesh and LGM rows show reconstructions using ground truth poses. The Ours row shows reconstructions without input poses. The Target View row shows the ground truth views.
+
+Figure 3: **Object-centric Sparse-view Reconstruction.** We show 6 samples from the Google Scanned Objects dataset. To be noted, the results of LGM and InstantMesh (2nd and 3rd rows) are generated with ground truth camera poses (and intrinsics), while our results (4th row) are generated in a completely pose-free manner.
+
+is the parameter number of each Gaussian primitive. Then we unpatchify the predicted Gaussian parameters into a Gaussian patch  $\mathbf{G}^{n,m} \in \mathbb{R}^{p \times p \times q}$ . Finally, we spatially concatenate the Gaussian patches  $\mathbf{G}^{n,m}$  for each view, leading to  $N$  Gaussian maps  $\{\mathbf{G}^n \in \mathbb{R}^{H \times W \times q} \mid n = 1, \dots, N\}$ .
+
+Each pixel in the Gaussian maps contains a  $q$ -dim 3D Gaussian primitive. Prior pose-dependent Gaussian LRMs (Zhang et al., 2024b; Xu et al., 2024b; Tang et al., 2024) parameterize each Gaussian’s location with a single depth value. However, our model assumes no available camera poses nor intrinsics, making it impossible to un-project the Gaussian locations from depths. Therefore, we directly predict the actual Gaussian locations in the reference frame and adopt a pixel-alignment loss to restrict Gaussians to lie on camera rays (see Section 3.3 for details).
+
+**Camera Pose Estimation.** To recover the camera poses, we first estimate the focal length  $f$  from predicted Gaussian maps (see Section A.1 for details). **Different from DUST3R that can only feed a pair of images into the model to predict pair-wise point maps and requires an additional alignment to unify the pair-wise reconstruction results into a global point cloud.** FreeSplatter predicts the Gaussian maps of all views in a unified reference frame, thus can recover the camera poses  $\{\mathbf{P}^n \mid n = 1, \dots, N\}$  in a feed-forward manner without global alignment. For each Gaussian location map  $\mathbf{X}^n \in \mathbb{R}^{H \times W \times 3}$  (the first 3 channels of  $\mathbf{G}^n$ ), its pixel coordinate map  $\mathbf{Y}^n \in \mathbb{R}^{H \times W \times 2}$  and a valid mask  $\mathbf{M}^n \in \mathbb{R}^{H \times W}$ , we apply a PnP-RANSAC solver (Hartley & Zisserman, 2003; Bradski, 2000) to estimate  $\mathbf{P}^n \in \mathbb{R}^{4 \times 4}$ :
+
+$$\mathbf{P}^n = \text{PnP}(\mathbf{X}^n, \mathbf{Y}^n, \mathbf{M}^n, \mathbf{K}), \quad (4)$$
+
+where  $\mathbf{K} = [[f, 0, \frac{W}{2}], [0, f, \frac{H}{2}], [0, 0, 1]]$  denotes the estimated intrinsic matrix. The mask  $\mathbf{M}^n$  aims to mark the pixel locations that contribute to the pose optimization, which differs in object-centric and scene-level reconstruction scenarios, please see Section A.1 for more details.
+
+### 3.3 TRAINING DETAILS
+
+We train two FreeSplatter variants targeting for object-centric and scene-level pose-free reconstruction. They share the same model architecture and parameter size, but we made essential adjustments in training objectives and strategies to adapt them to different scenarios.
+
+{5}------------------------------------------------
+
+**Staged Training Strategy.** Prior pose-dependent LRMs (Hong et al., 2024b; Li et al., 2024a; Xu et al., 2024b; Zhang et al., 2024b) leverage pure rendering loss for supervision. However, our model assumes no known camera poses nor intrinsics and the Gaussian positions are free in 3D space, making it extremely challenging to predict correct Gaussian positions. Gaussian-based reconstruction approaches heavily rely on the initialization of Gaussian positions, e.g., 3DGS (Kerbl et al., 2023) initializes the Gaussian positions with the sparse point cloud generated by SfM, while the parameters of our model are randomly initialized at the beginning. In practice, we found it essential to supervise the Gaussian positions at the beginning:
+
+$$\mathcal{L}_{\text{pos}} = \sum_{n=1}^N \left\| M^n \odot \hat{X}^n - M^n \odot X^n \right\|, \quad (5)$$
+
+where  $\hat{X}^n \in \mathbb{R}^{H \times W \times 3}$  is the predicted Gaussian position map,  $X^n$  is the ground truth point map unprojected from depths.  $M^n \in \mathbb{R}^{H \times W}$  is a mask indicating the pixels storing valid depth values, which is exactly the foreground object mask for object-centric reconstruction. For scene-level reconstruction,  $M^n$  depends on where the depth values are defined in different datasets.
+
+We apply  $\mathcal{L}_{\text{pos}}$  in the pre-training stage, so that the model learns to predict approximately correct Gaussian positions. In our experiments, this pre-training is **essential** to model’s convergence. However,  $\mathcal{L}_{\text{pos}}$  can only supervise the pixels with valid depths, while the Gaussian positions predicted at other pixels remain unconstrained. Besides, the ground truth depths are noisy in some datasets, and applying  $\mathcal{L}_{\text{pos}}$  throughout the training leads to degraded rendering quality. To provide a more stable geometric supervision, we adopt a pixel-alignment loss to enforce each predicted Gaussian to be aligned with its corresponding pixel, which maximizes the ray cosine similarities:
+
+$$\mathcal{L}_{\text{align}} = \sum_{n=1}^N \sum_{i=0}^H \sum_{j=0}^W \left( 1 - \frac{\hat{r}_{i,j}^n \cdot r_{i,j}^n}{\|\hat{r}_{i,j}^n\| \|r_{i,j}^n\|} \right), \quad (6)$$
+
+where  $r_{i,j}^n$  denotes the ray from the camera origin  $t^n$  to point  $X_{i,j}^n$ .  $\mathcal{L}_{\text{align}}$  restricts the predicted Gaussians to be distributed on the camera rays, which improves the rendering quality. Besides, enforcing the pixel-alignment is important to camera parameter estimation, since the iterative solvers minimize the pixel-projection errors.
+
+**Loss Functions.** The overall training objective of our model is:
+
+$$\mathcal{L} = \mathcal{L}_{\text{render}} + \lambda_a \cdot \mathcal{L}_{\text{align}} + \mathbf{1}_{t \leq T_{\max}} \lambda_p \cdot \mathcal{L}_{\text{pos}}, \quad (7)$$
+
+where the rendering loss  $\mathcal{L}_{\text{render}}$  is a combination of MSE and LPIPS loss.  $t$  and  $T_{\max}$  denote the current training step and maximum pre-training step, respectively. In our implementation, we set  $\lambda_a = 1.0$ ,  $\lambda_p = 10.0$ .
+
+**Occlusion in Pixel-aligned Gaussians.** Prior pose-dependent Gaussian-based LRMs (Tang et al., 2024; Zhang et al., 2024b; Xu et al., 2024b) parameterize the Gaussian positions with a single depth value to ensure they are pixel-aligned. Despite the simplicity, pixel-aligned Gaussians can only represent the areas captured by input images. It is challenging for sparse input views to cover the whole scene, resulting in missing reconstruction results in the occluded areas. Our model also suffers from this problem due to the usage of  $\mathcal{L}_{\text{align}}$ . For the object-centric model, we adopt a simple strategy to alleviate this problem by only calculate Equation 6 in the foreground area, while allowing other Gaussians to move freely and model the occluded areas.
+
+For the scene-level model trained on real-world images, all predicted Gaussians have been pixel-aligned to model the complex background. We instead focus on reconstructing the observed areas. To avoid the areas in the target views that are invisible in input views provide negative guidance for training, we adopt the target-view masking strategy proposed by Splat3R and only calculate the rendering loss in visible areas. Please refer to Smart et al. (2024) for more details.
+
+## 4 EXPERIMENTS
+
+Due to the space limit, we put more comprehensive experimental results in Section A.2 of the appendix, including comparison on object-level reconstruction with PF-LRM (Wang et al., 2024a) (Section A.2.1), more extensive image-to-3D generation results with FreeSplatner (Section A.2.2), cross-dataset generalization results (Section A.2.3), and additional ablation studies (Section A.3).
+
+{6}------------------------------------------------
+
+![Input image of a classroom with desks and chairs. Reconstruction of the classroom scene using pixelSplat with ground truth poses. Reconstruction of the classroom scene using MVSplat with ground truth poses. Reconstruction of the classroom scene using Splat3R without input poses. Reconstruction of the classroom scene using the proposed method without input poses. Target view of the classroom scene. Input image of a classroom with desks and chairs from a different angle. Reconstruction of the classroom scene using pixelSplat with ground truth poses. Reconstruction of the classroom scene using MVSplat with ground truth poses. Reconstruction of the classroom scene using Splat3R without input poses. Reconstruction of the classroom scene using the proposed method without input poses. Target view of the classroom scene. Input image of a classroom with desks and chairs from a third angle. Reconstruction of the classroom scene using pixelSplat with ground truth poses. Reconstruction of the classroom scene using MVSplat with ground truth poses. Reconstruction of the classroom scene using Splat3R without input poses. Reconstruction of the classroom scene using the proposed method without input poses. Target view of the classroom scene. Input image of a classroom with desks and chairs from a fourth angle. Reconstruction of the classroom scene using pixelSplat with ground truth poses. Reconstruction of the classroom scene using MVSplat with ground truth poses. Reconstruction of the classroom scene using Splat3R without input poses. Reconstruction of the classroom scene using the proposed method without input poses. Target view of the classroom scene.](9ebd85380ef496499e5f23ec0d9cd744_img.jpg)
+
+324
+
+325
+
+326
+
+327
+
+328
+
+329
+
+330
+
+331
+
+332
+
+333
+
+334
+
+335
+
+336
+
+337
+
+338
+
+339
+
+340
+
+341
+
+342
+
+343
+
+344
+
+345
+
+346
+
+347
+
+348
+
+349
+
+| Input | pixelSplat<br>(w/ GT poses) | MVSplat<br>(w/ GT poses) | Splat3R<br>(no input pose) | Ours<br>(no input pose) | Target View |
+|-|-|-|-|-|-|
+|  |  |  |  |  |  |
+|  |  |  |  |  |  |
+|  |  |  |  |  |  |
+|  |  |  |  |  |  |
+
+Input image of a classroom with desks and chairs. Reconstruction of the classroom scene using pixelSplat with ground truth poses. Reconstruction of the classroom scene using MVSplat with ground truth poses. Reconstruction of the classroom scene using Splat3R without input poses. Reconstruction of the classroom scene using the proposed method without input poses. Target view of the classroom scene. Input image of a classroom with desks and chairs from a different angle. Reconstruction of the classroom scene using pixelSplat with ground truth poses. Reconstruction of the classroom scene using MVSplat with ground truth poses. Reconstruction of the classroom scene using Splat3R without input poses. Reconstruction of the classroom scene using the proposed method without input poses. Target view of the classroom scene. Input image of a classroom with desks and chairs from a third angle. Reconstruction of the classroom scene using pixelSplat with ground truth poses. Reconstruction of the classroom scene using MVSplat with ground truth poses. Reconstruction of the classroom scene using Splat3R without input poses. Reconstruction of the classroom scene using the proposed method without input poses. Target view of the classroom scene. Input image of a classroom with desks and chairs from a fourth angle. Reconstruction of the classroom scene using pixelSplat with ground truth poses. Reconstruction of the classroom scene using MVSplat with ground truth poses. Reconstruction of the classroom scene using Splat3R without input poses. Reconstruction of the classroom scene using the proposed method without input poses. Target view of the classroom scene.
+
+350 Figure 4: **Scene-level Reconstruction on ScanNet++**. The results of pixelSplat and MVSplat are  
+351 obtained with ground truth input poses, while the results of Splat3R and ours are pose-free.
+
+###### 353 4.1 EXPERIMENTAL SETTINGS
+
+354
+
+355 **Training Datasets.** FreeSplat-O assumes the input images are white-background with an object  
+356 in the center, which is trained on Objaverse (Deitke et al., 2023), a large-scale dataset contain-  
+357 ing around 800K 3D assets. For each 3D asset, we normalize it into a  $[-1, 1]^3$  cube, and then  
+358 render 32 random views associated with depth maps around it, all in a resolution of  $512 \times 512$ .  
+359 FreeSplat-S is trained on a mixture of multiple datasets, including BlendedMVS (Yao et al.,  
+360 2020), ScanNet++ (Yeshwanth et al., 2023) and CO3Dv2 (Reizenstein et al., 2021), which is a  
+361 subset of DUST3R’s (Wang et al., 2024b) training datasets covering the most representative scene  
+362 types: outdoor, indoor, and realistic objects.
+
+363 **Evaluation Datasets.** For object-centric reconstruction and pose-estimation, we evaluate our model  
+364 on OmniObject3D (Wu et al., 2023) and Google Scanned Objects (GSO) (Downs et al., 2022)  
+365 datasets, containing around 6K and 1K scanned 3D assets, respectively. We use the whole GSO  
+366 dataset and pick out 300 OmniObject3D objects in 30 categories as the evaluation set. For each  
+367 object, we render 20 random views and 4 additional structured input views for the sparse-view re-  
+368 construction task, which are evenly placed around the objects with an elevation of  $20^\circ$  to ensure a  
+369 good coverage. For scene-level reconstruction and pose estimation, we mainly evaluate on the test  
+370 splits of ScanNet++ (Yeshwanth et al., 2023) and CO3Dv2 (Reizenstein et al., 2021).
+
+###### 371 4.2 SPARSE-VIEW RECONSTRUCTION
+
+372
+
+373 **Baselines.** Prior pose-free object reconstruction models like LEAP (Jiang et al., 2024b) were only  
+374 trained on small datasets, showing very limited generalization capability in open-domain datasets.  
+375 PF-LRM (Wang et al., 2024a) is the most comparable work to our FreeSplat-O. Although its code  
+376 is not publicly available, we compare with its inference results on its evaluation datasets on both  
+377 sparse-view reconstruction and camera pose estimation tasks. Due to the space limit, we put the  
+results in Section A.2.1 of the appendix, which demonstrate that FreeSplat-O outperforms PF-
+
+{7}------------------------------------------------
+
+![Figure 10: A grid of images showing novel view synthesis for an apple, a cake, and a keyboard. The columns are labeled 'Input', 'Ours (rendered input views w/ pred. poses)', 'Splatter3R (rendered novel view)', 'Ours (rendered novel view)', and 'Novel G.T. View'. The rows show different objects: an apple (rows 378-384), a cake (rows 386-390), and a keyboard (rows 392-396).](892f25e3d71d8e315a2a51092a8a8da7_img.jpg)
+
+Figure 10: A grid of images showing novel view synthesis for an apple, a cake, and a keyboard. The columns are labeled 'Input', 'Ours (rendered input views w/ pred. poses)', 'Splatter3R (rendered novel view)', 'Ours (rendered novel view)', and 'Novel G.T. View'. The rows show different objects: an apple (rows 378-384), a cake (rows 386-390), and a keyboard (rows 392-396).
+
+Figure 5: Scene-level Reconstruction on CO3Dv2.
+
+LRM on its OmniObject3D benchmark and preserves visual details better. We also compare with two pose-dependent large reconstruction models, *i.e.*, LGM (Tang et al., 2024) and InstantMesh (Xu et al., 2024a), which are based on 3D Gaussians and tri-plane NeRF, respectively. We directly feed ground truth camera poses to them, while our model is totally pose-free.
+
+For scene-level reconstruction, we compare with two state-of-the-art works on generalizable Gaussians, *i.e.*, pixelSplat (Charatan et al., 2024) and MVSpalt (Chen et al., 2024b), both of which require camera poses. We fine-tune their checkpoints trained on RealEstate10K (Zhou et al., 2018) on ScanNet++ for more fair comparison, while do not apply them on CO3Dv2 due to significant domain gap. Besides, we also compare with an up-to-date pose-free Gaussian reconstruction method, *i.e.*, Splat3R (Smart et al., 2024), which utilizes frozen MAS13R (Leroy et al., 2024) model for Gaussian location prediction, while fine-tuning an additional head for predicting other Gaussian attributes.
+
+**Metrics.** For both object-centric and scene-level reconstruction, We evaluate the rendering quality of reconstructed Gaussians and report the standard metrics for novel view synthesis, *i.e.*, PSNR, SSIM and LPIPS. All metrics are evaluated at the resolution of  $512 \times 512$ .
+
+**Results and Analysis.** As demonstrated in Table 2, FreeSplatter models achieve superior performance across both object-centric and scene-level reconstruction tasks without camera poses. FreeSplatter-O significantly outperforms LGM and InstantMesh across all metrics even if they are pose-dependent, achieving PSNR improvements of  $> 5$  and  $> 7$  on previously unseen GSO and OmniObject3D datasets, respectively. Qualitative comparisons in Figure 3 further illustrate this performance gap, with InstantMesh and LGM exhibiting blurry artifacts (notably in the alphabets, 4th column), while our approach maintains clarity and detail fidelity consistent with ground truth views.
+
+Existing Large Reconstruction Models (LRMs) assume the necessity of accurate camera poses for high-quality 3D reconstruction, incorporating pose information through LayerNorm modulation (Li et al., 2024a) or plucker ray embeddings (Xu et al., 2024c; Tang et al., 2024; Xu et al., 2024b). However, FreeSplatter-O’s superior performance challenges this assumption, suggesting that camera poses may not be essential for developing high-quality, scalable reconstruction models.
+
+In scene-level reconstruction on ScanNet++, FreSplat-S demonstrates superior performance across most metrics compared to *pose-dependent pixelSplat* and *MVSplat*, highlighting its robust reconstruction quality and generalization capability. While the pose-free competitor Splat3R leverages MAS3R’s (Leroy et al., 2024) 3D point regression capabilities trained on extensive datasets, its performance is constrained by MAS3R’s prediction errors due to its frozen architecture and Gaussian head-only training, resulting in fixed Gaussian positions. In contrast, our end-to-end training approach with rendering supervision enables simultaneous optimization of Gaussian locations and attributes. Qualitative results on ScanNet++ and CO3Dv2 (Figure 4, Figure 5) illustrate
+
+{8}------------------------------------------------
+
+Table 1: **Quantitative results on camera pose estimation.** We highlight the best metric as red.
+
+| Method | OmniObject3D |  |  |  | GSO |  |  |  |
+|-|-|-|-|-|-|-|-|-|
+|  | RRE ↓ | RRA@15° ↑ | RRA@30° ↑ | TE ↓ | RRE ↓ | RRA@15° ↑ | RRA@30° ↑ | TE ↓ |
+| FORGE | 76.822 | 0.081 | 0.257 | 0.430 | 97.814 | 0.022 | 0.083 | 0.898 |
+| MAS3R | 96.670 | 0.052 | 0.112 | 0.524 | 61.820 | 0.244 | 0.445 | 0.353 |
+| FreeSplatte-S | <b>83.795</b> | <b>0.076</b> | <b>0.167</b> | <b>0.631</b> | <b>72.914</b> | <b>0.212</b> | <b>0.396</b> | <b>0.426</b> |
+| FreeSplatte-O | <b>11.550</b> | <b>0.909</b> | <b>0.937</b> | <b>0.081</b> | <b>3.851</b> | <b>0.962</b> | <b>0.978</b> | <b>0.030</b> |
+| Method | ScanNet++ |  |  |  | CO3Dv2 |  |  |  |
+|  | RRE ↓ | RRA@15° ↑ | RRA@30° ↑ | TE ↓ | RRE ↓ | RRA@15° ↑ | RRA@30° ↑ | TE ↓ |
+| PoseDiffusion | - | - | - | - | 7.950 | 0.803 | 0.868 | 0.328 |
+| MAS3R | <b>0.724</b> | <b>0.988</b> | <b>0.993</b> | <b>0.104</b> | <b>2.918</b> | <b>0.975</b> | <b>0.989</b> | <b>0.112</b> |
+| FreeSplatte-S | 0.791 | 0.982 | 0.987 | 0.110 | 3.054 | <b>0.976</b> | 0.986 | 0.148 |
+
+Table 2: **Quantitative results on sparse-view reconstruction.**
+
+| Method | OmniObject3D |  |  | GSO |  |  |
+|-|-|-|-|-|-|-|
+|  | PSNR ↑ | SSIM ↑ | LPIPS ↓ | PSNR ↑ | SSIM ↑ | LPIPS ↓ |
+| LGM (w/ gt pose) | 24.852 | 0.942 | 0.060 | 24.463 | 0.891 | 0.093 |
+| InstantMesh (w/ gt pose) | 24.077 | 0.945 | 0.062 | 25.421 | 0.891 | 0.095 |
+| Ours (FreeSplatte-O) | <b>31.929</b> | <b>0.973</b> | <b>0.027</b> | <b>30.443</b> | <b>0.945</b> | <b>0.055</b> |
+| Method | ScanNet++ |  |  | CO3Dv2 |  |  |
+|  | PSNR ↑ | SSIM ↑ | LPIPS ↓ | PSNR ↑ | SSIM ↑ | LPIPS ↓ |
+| pixelSplat (w/ gt pose) | 24.974 | <b>0.889</b> | 0.180 | - | - | - |
+| MVSplat (w/ gt pose) | 22.601 | 0.862 | 0.208 | - | - | - |
+| Splat3R | 21.013 | 0.830 | 0.209 | 18.074 | 0.740 | 0.197 |
+| Ours (FreeSplatte-S) | <b>25.807</b> | <b>0.887</b> | <b>0.140</b> | <b>20.405</b> | <b>0.781</b> | <b>0.162</b> |
+
+our method’s superior visual fidelity. To be noted, novel view synthesis for both FreeSplatte and Splat3R is performed by aligning predicted cameras with target viewpoints.
+
+### 4.3 CAMERA POSE ESTIMATION
+
+**Baselines.** To evaluate our method’s pose estimation capabilities, we benchmark against MAS3R, the current state-of-the-art in zero-shot multi-view pose estimation. Additional comparisons include FORGE (Jiang et al., 2024a) for object-centric datasets and PoseDiffusion (Fan et al., 2023) for scene-level reconstruction, with PoseDiffusion evaluated exclusively on CO3Dv2 due to its training scope. Traditional COLMAP-based approaches (Schonberger & Frahm, 2016) are excluded from our evaluation due to their documented high failure rates in sparse-view scenarios, a limitation consistently reported in previous studies (Wang et al., 2024a).
+
+**Metrics.** Following established protocols Wang et al. (2024a; 2023b), we evaluate pose estimation through distinct rotation and translation metrics. Rotational accuracy is assessed via relative rotation error (RRE) in degrees and relative rotation accuracy (RRA), where RRA represents the percentage of rotation errors below predefined thresholds (15° and 30°). Translational accuracy is measured through translation error (TE) between predicted and ground truth camera centers. For scenarios with more than two input views, errors are computed pairwise and averaged across all camera combinations.
+
+As shown in Table 1, FreeSplatte-O demonstrates substantial performance improvements over existing baselines on object-centric datasets, while FreeSplatte-S achieves comparable results with MAS3R on scene-level datasets. MAS3R’s poor performance on rendered object-centric datasets without backgrounds can be attributed to the significant domain gap between its training data and these synthetic images. Specifically, rendered object-centric images lack the complex backgrounds and rich textures present in natural scenes, presenting unique challenges for pose estimation without adequate data priors. In scene-level evaluations on ScanNet++ and CO3Dv2, while MAS3R achieves marginally superior metrics, FreeSplatte-S maintains competitive performance despite its more limited training scope. This performance differential primarily stems from dataset scale disparity—our FreeSplatte-S utilizes only three datasets, a subset of DUS3R/MAS3R’s extensive training corpus, resulting in fewer learned data priors. Future work will focus on scaling the model across broader datasets to bridge this gap.
+
+### 4.4 ABLATION STUDIES
+
+**Number of Input Views.** We make an experiment on a GSO sample to illustrate how the number of input views influences the reconstruction quality on the object-centric scenarios. Please refer to Figure 16 in the appendix for more details.
+
+{9}------------------------------------------------
+
+Table 3: Ablation on the pixel-alignment loss.
+
+| Method | GSO |  |  | Method | ScanNet++ |  |  |
+|-|-|-|-|-|-|-|-|
+|  | PSNR $\uparrow$ | SSIM $\uparrow$ | LPIPS $\downarrow$ |  | PSNR $\uparrow$ | SSIM $\uparrow$ | LPIPS $\downarrow$ |
+| FreeSplatter-O (w/o $\mathcal{L}_{\text{align}}$ ) | 26.684 | 0.898 | 0.092 | FreeSplatter-S (w/o $\mathcal{L}_{\text{align}}$ ) | 21.330 | 0.832 | 0.201 |
+| FreeSplatter-O | 30.443 | 0.945 | 0.055 | FreeSplatter-S | 25.807 | 0.887 | 0.140 |
+
+![Figure 6: 3D content creation with FreeSplatter. The figure shows a grid of 3D reconstructions. The first row displays four views of a tiger, a panda, and a turtle. The second row shows four views of a cake and four views of a camera. The third row shows two views of a sculpture of an old man and four views of a colorful teddy bear. Each row is labeled with the object name.](07f537f57749b75157f742525e6a8dbc_img.jpg)
+
+Figure 6: 3D content creation with FreeSplatter. The figure shows a grid of 3D reconstructions. The first row displays four views of a tiger, a panda, and a turtle. The second row shows four views of a cake and four views of a camera. The third row shows two views of a sculpture of an old man and four views of a colorful teddy bear. Each row is labeled with the object name.
+
+Figure 6: 3D content creation with FreeSplatter. 1st and 2nd rows: Image-to-3D results using Zero123++ (input image, Gaussian visualization, two novel views). 3rd row: Text-to-3D results using MVDream (prompt shown above; two Gaussian visualizations, two novel views).
+
+**Impact of Pixel-Alignment Loss.** We study the impact of pixel-alignment loss defined in Equation 6. We remove the pixel-alignment loss from the training of both models, and report the novel view rendering metrics on GSO and ScanNet++ dataset. We can observe significant drops in all metrics without the pixel-alignment loss. We also compare the visual results in Figure 15 of the appendix, demonstrating that applying pixel-alignment loss leads to higher-fidelity renderings.
+
+### 4.5 APPLICATIONS
+
+FreeSplatter can be seamlessly integrated into 3D content creation pipelines, and its pose-free nature can potentially bring great convenience to users and enhance the productivity by a large margin. In a classical 3D generation pipeline (Li et al., 2024a; Xu et al., 2024a; Tang et al., 2024; Wang et al., 2024c) that first generates multi-view images with a multi-view diffusion model and then feed them into an LRM for reconstruction, we have to figure out how the camera poses of the multi-view diffusion model are defined and carefully align them with the LRM. With FreeSplatter as the content creator, these tedious steps are not required any longer. We just feed the multi-view images into FreeSplatter and get the outputs instantly after several seconds. Figure 6 shows some results of text/image-to-3D generation with MVDream (Shi et al., 2024) and Zero123++ (Shi et al., 2023), respectively. We notice that our method can render significantly more clear views from the images than previous pose-dependent LRMs, showing stronger robustness to multi-view inconsistency.
+
+## 5 CONCLUSION
+
+In this work, we present FreeSplatter, a highly scalable framework for pose-free sparse-view reconstruction. By leveraging a single-stream transformer architecture and predicting multi-view Gaussian maps in a unified frame, FreeSplatter enables both high-fidelity 3D modeling and instant camera pose estimation. We provide two model variants for both object-centric and scene-level reconstruction, both showing superior reconstruction quality and pose estimation accuracy. FreeSplatter also exhibits great potential in enhancing the productivity of downstream applications like text/image-to-3D content creation, which can liberate users from dealing with complex camera poses.
+
+**Limitations.** Despite the promising performance of FreeSplatter, its pre-training stage relies on depth data, making it non-trivial to be trained on datasets with no depth labels, e.g., RealEstate10K and MVImgNet (Yu et al., 2023). Besides, FreeSplatter requires two distinct model variants to deal with object-centric and scene-level reconstructions, while a unified model for both tasks would be preferred. We leave this as the future work.
+
+ Rest of paper (reference and Appendix) is removed.

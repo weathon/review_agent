@@ -1,0 +1,429 @@
+
+
+{0}------------------------------------------------
+
+# HESSIAN-AWARE TRAINING FOR ENHANCING MODEL RESILIENCE FOR IN-MEMORY COMPUTING
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Deep neural networks are not resilient to bitwise errors in their parameters: even a single-bit error in their memory representation can lead to significant performance degradation. This susceptibility poses great challenges in deploying models on emerging computing platforms, such as in-memory computing devices, where frequent bitwise errors occur. Most prior work addresses this issue with hardware or system-level approaches, such as additional hardware components for checking a model’s integrity at runtime. However, these methods have not been widely deployed since they necessitate substantial infrastructure-wide modifications. In this paper, we study a new approach to address this challenge: we present a novel training method aimed at enhancing a model’s inherent resilience to parameter errors. We define a *model-sensitivity* metric to measure this resilience and propose a training algorithm with an objective of minimizing the sensitivity. Models trained with our method demonstrate increased resilience to bitwise errors in parameters, particularly with a 50% reduction in the number of bits in the model parameter space whose flipping leads to a 90–100% accuracy drop. Our method also aids in extreme model compression, such as lower bit-width quantization or pruning  $\sim 70\%$  of parameters, with reduced performance loss. Moreover, our method is compatible with existing strategies to mitigate this susceptibility.
+
+## 1 INTRODUCTION
+
+Recent studies have shown that deep neural networks (DNNs) are *not* resilient to bitwise errors in their parameters. For example, a single-bit error on the memory representation of a model parameters can significantly reduce a DNN’s performance at inference (Hong et al., 2019; Rakin et al., 2019). This lack of resilience poses a challenge for deploying DNN models to emerging computing platforms, such as in-memory computing devices or neuromorphic computing platforms (Sebastian et al., 2020; Xu et al., 2021; Aguirre et al., 2024), where bitwise errors in devices are frequent (Yao et al., 2020a).
+
+Most prior work addresses this reliability issue by developing defensive mechanisms at the hardware-level or system-level (Bennett et al., 2021; Rakin et al., 2021; Li et al., 2021; Di Dio et al., 2023; Zhou et al., 2023a,b; Liu et al., 2023; Wang et al., 2023). While having demonstrated their effectiveness, these approaches are often difficult to implement in practice as they require additional hardware components or updates to system software, necessitating infrastructure-wide changes.
+
+In this work, we study an *orthogonal* approach to address this resilience problem. We ask: *How can we train models to have increased resilience to bitwise errors in parameters?* No prior work has studied solutions to enhance the natural resilience of a model to bitwise errors in its parameters. Such resilient models will also benefit model compression techniques, e.g., quantization, which involve optimal parameter variations (LeCun et al., 1989). Moreover, when combined with existing solutions, it will complement them and enable models to maintain stable performance in error-prone hardware.
+
+**Contributions.** *First*, we present a novel training algorithm that enhances a DNN’s resilience to bitwise errors in their parameters. We focus on a model’s second-order property—the *sharpness*—that can approximate the sensitivity of a model’s performance to its parameter variations. We empirically test various approaches to reducing the sharpness, from training with second-order optimizers (Yao et al., 2021a) to training algorithms specifically designed to reduce the value (Foret et al., 2021).
+
+Our extensive analysis shows that using the Hessian trace as a loss function is the most effective in decreasing a model’s sharpness. However, computing the *full* Hessian matrix makes the training
+
+{1}------------------------------------------------
+
+process computationally intractable, especially when training ImageNet-scale models. To address this challenge, we also develop an optimized training strategy that minimizes only the largest- $p\%$  of the Hessian eigenvalues during training (for example,  $p$  is 10–50% in our evaluation).
+
+*Second*, we comprehensively evaluate the effectiveness of our approach across multiple datasets and network architectures including ones used in prior studies. We adapt the systematic resilience analysis framework developed by Hong et al. (2019): the framework examines a single-bit error—an atomic error that can occur in a DNN’s parameter representation in memory. It causes all possible single-bit errors one-by-one and measure the accuracy on a validation set each time.
+
+We demonstrate that our training algorithm significantly enhances a model’s resilience to (individual) single-bit errors to its parameters. The number of parameters whose perturbations can cause the accuracy drop over 10% are reduced by 5–15%. Particularly, we reduce by half the number of parameters when a single-bit error in them causes the accuracy drop of 90–100%. ImageNet models, fine-tuned only a few layers with our Hessian loss, show a similar decrease in such parameters.
+
+We conduct an in-depth analysis of the increased resilience achieved by our approach. In our analysis of visualized loss landscapes, we show that the sharpness is greatly decreased across all the layers in a model. We find that our approach is particularly effective on fully-connected layers and the convolutional layers in architectural blocks without skip connections. Moreover, we show that the numerical changes in parameter values required to cause a significant accuracy drop has increased.
+
+*Third*, we also demonstrate that the resilience enhanced by our approach can benefit the techniques that rely on *optimal brain damage*, such as quantization (Fiesler et al., 1990) or pruning (Han et al., 2015). Models trained with our algorithm achieve better test accuracy than regularly-trained models, especially when lower bit-width quantization (e.g., 4- or 2-bit) is applied. In pruning, these models preserve test accuracy even with extreme sparsity values (i.e., removing  $\sim 70\%$  of parameters).
+
+*Fourth*, we discuss the compatibility of our approach with existing defensive mechanisms for improving DNN resilience to bitwise errors in model parameters. For each of the hardware-level or system-level mechanisms, we conceptually demonstrate how the models trained with our approach can be combined with them and offer a synergy while reducing their deployment overheads.
+
+## 2 RELATED WORK
+
+LeCun et al. (1989) demonstrates the resilience of DNNs to *optimal brain damage*: one can remove a large portion of the model parameters without causing any significant accuracy drop. This property has enabled the success of model compression techniques, such as quantization (Fiesler et al., 1990; Morgan et al., 1991; Courbariaux et al., 2015) and pruning (Hassibi and Stork, 1992; Han et al., 2015; Li et al., 2017). Prior work further leverages this property to safeguard DNNs against potential threats, such as adversarial examples (Zhou et al., 2018) while preserving the performance.
+
+Recent work has also warned of the possibility of *terminal brain damage* (Hong et al., 2019; Yao et al., 2020b), where even a few perturbations to parameters can cause significant performance loss. It is also important to note that the prevalence of such failures: half of model parameters, when subject to a bitwise corruption, cause the accuracy to drop over 10% (Hong et al., 2019). Beyond its impact on model accuracy, follow-up works have shown that by perturbing parameters in specific ways, one can achieve various adversarial outcomes (Rakin et al., 2019; Chen et al., 2021; Rakin et al., 2022).
+
+There has been significant effort in mitigating the impact of adversarial perturbations on model parameters through hardware (Kim et al., 2014; Bennett et al., 2021; Saileshwar et al., 2022; Di Dio et al., 2023; Zhou et al., 2023b) and software (Liu et al., 2023; Li et al., 2021; Konoth et al., 2018) level defenses. Hardware-level defenses utilize proactive row refreshing (Kim et al., 2014), in-DRAM counter-based mitigation (Bennett et al., 2021), risky-row swapping (Saileshwar et al., 2022), error-correction-codes (ECC) for swap triggering (Di Dio et al., 2023) and utilizing lock table for high-risk rows inside a memory device (Zhou et al., 2023b) to mitigate adversarial bit-flipping on model parameters. System-level defenses use techniques, such as luring adversary to manipulate “honeypot” parameters (Liu et al., 2023), checksum-based runtime checks to detect changes in model parameters (Li et al., 2021) and employing data-row isolation to safeguard a model’s parameters from fault attacks (Konoth et al., 2018). A few works explore techniques for improving the fault tolerance of DNNs. Buldu et al. (2022) adapts adversarial training to train models under bitwise errors. Chitsaz et al. (2023) proposes learnable quantization to limit the impact of bitwise errors on DNN inference.
+
+{2}------------------------------------------------
+
+108 Our work does *not* focus on defending DNNs against adversarial bit-flip attacks. Instead, we are  
+109 concerned with unintended bitwise errors that frequently occur in emerging computing platforms.
+
+## 3 EXPERIMENTAL SETUP
+
+114 **Datasets.** We use three datasets designed for benchmarking image classification: MNIST (LeCun  
+115 et al., 2010), CIFAR-10 (Krizhevsky, 2009), and ImageNet (Russakovsky et al., 2015).
+
+116 **Models.** We experiment with four different DNNs typically used in the prior work on evaluating the  
+117 resilience to parameter corruptions. For MNIST, we employ two feed-forward DNNs: one with two  
+118 convolutional layers and two fully-connected layers, and LeNet (LeCun et al., 1998). For CIFAR-10  
+119 and ImageNet, we consider a DNN architecture popular in the community, ResNets (He et al., 2016).  
+120 We also run our evaluation on a Transformer-based model: DeiT-Tiny (Touvron et al., 2021).
+
+121 **Metrics.** We introduce the evaluation metrics here to establish a clear framework for assessing  
+122 our approach’s effectiveness before discussing our methodology. We follow the prior work (Hong  
+123 et al., 2019) to quantify the resilience of a model under bitwise errors in its parameters. To quantify  
+124 performance degradation, we measure the relative accuracy drop (RAD) that computes  $(A_c - A_p)/A_c$ ,  
+125 where  $A_c$  is the classification accuracy of a model on a validation set and  $A_p$  is the accuracy of the  
+126 model under parameter corruptions. We also define an *erratic parameter* as the parameter under  
+127 a single-bit error can lead to RAD over 10%. Because most prior work considers a 10% RAD  
+128 significant, we use this 10% threshold to determine the resilience.
+
+129 We also define the *distribution plot* where  
+130 we count the number of bits in a model’s  
+131 memory representation whose flipping  
+132 leads to RAD specified in the x-axis. Figure  
+133 1 shows the distribution plots contrasting  
+134 the two MNIST models, one trained  
+135 with our Hessian-aware training method  
+136 and the other not. We use a 5% granularity  
+137 on the x-axis for our plots. The plot  
+138 shows that our training method can overall  
+139 reduce the total number of bits whose errors  
+140 result in a relative accuracy drop and also  
+141 decrease the number of bits whose flipping  
+142 leads to a 95–100% accuracy drop.  
+143 By using this plot, we gain a deeper  
+144 understanding of the severity and impact of  
+145 parameter perturbations before and after the
+
+![Figure 1: The distribution plots. A bar chart titled 'Base Model' showing the number of bits whose flipping results in RAD (x-axis, 0 to 100%) for two methods: Conventional Training (blue) and Our Method (orange). The y-axis represents the number of bits, ranging from 0 to 2000. The chart shows that 'Our Method' generally has fewer bits in the high RAD categories (95-100%) compared to 'Conventional Training'.](87658d45f2d2f009cbb9cd1079519cb5_img.jpg)
+
+| RAD (%) | Conventional Training (Number of bits) | Our Method (Number of bits) |
+|-|-|-|
+| 0-5 | ~1800 | ~1000 |
+| 5-10 | ~500 | ~300 |
+| 10-15 | ~200 | ~200 |
+| 15-20 | ~100 | ~100 |
+| 20-25 | ~100 | ~100 |
+| 25-30 | ~100 | ~100 |
+| 30-35 | ~100 | ~100 |
+| 35-40 | ~100 | ~100 |
+| 40-45 | ~100 | ~100 |
+| 45-50 | ~100 | ~100 |
+| 50-55 | ~100 | ~100 |
+| 55-60 | ~100 | ~100 |
+| 60-65 | ~100 | ~100 |
+| 65-70 | ~100 | ~100 |
+| 70-75 | ~100 | ~100 |
+| 75-80 | ~100 | ~100 |
+| 80-85 | ~100 | ~100 |
+| 85-90 | ~100 | ~100 |
+| 90-95 | ~100 | ~100 |
+| 95-100 | ~1800 | ~1000 |
+
+Figure 1: The distribution plots. A bar chart titled 'Base Model' showing the number of bits whose flipping results in RAD (x-axis, 0 to 100%) for two methods: Conventional Training (blue) and Our Method (orange). The y-axis represents the number of bits, ranging from 0 to 2000. The chart shows that 'Our Method' generally has fewer bits in the high RAD categories (95-100%) compared to 'Conventional Training'.
+
+Figure 1: **The distribution plots.** Each plot shows the number of bits in a DNN’s parameters whose flipping results in RAD specified in the x-axis.
+
+## 4 OUR APPROACH: HESSIAN-AWARE TRAINING
+
+### 4.1 A DNN’S SENSITIVITY TO PARAMETER VARIATIONS
+
+150 We first focus on functions that can quantify a model’s sensitivity to parameter value variations. Our  
+151 goal here is to use these functions as optimization objectives to minimize sensitivity during training.  
+152 Suppose that a model  $f$  uses a loss function  $\mathcal{L}$ . The rate of change in the loss in a random direction  $v$   
+153 in the parameter space can be expressed as the gradient  $\partial\mathcal{L}/\partial v$ . This value encodes how sensitive a  
+154 model will be when its parameter values are changed along the direction of  $v$ . During optimization,  
+155 the training algorithm seeks a minimum that reduces this rate of change. However, standard training  
+156 does not inherently offer the resilience of a model to parameter variations caused by bitwise errors.
+
+157 **Second-order derivative as a sensitivity metric.** The loss curvature of a neural network is typically  
+158 super-linear, forming a convex hull around the local minima in the parameter space (Li et al., 2018).  
+159 We thus use the second-order derivative of the loss function in a random direction  $v$  as a metric to  
+160 quantify a model’s sensitivity to parameter variations. We note that this property has been used in  
+161 prior work (Jiang et al., 2020; Mulayoff and Michaeli, 2020; Li et al., 2018; Keskär et al., 2017;  
+Neyshabur et al., 2017) as a measure of the *sharpness* or *flatness* of the loss landscape. Few prior
+
+{3}------------------------------------------------
+
+works (Foret et al., 2021; Dong et al., 2019; 2020; Yang et al., 2022) have also used second-order property of DNNs to improve generalization, accuracy or model compression. Most prior work studies the interaction between the sharpness and the generalization of a neural network, a few works studies its connection to model resilience to bitwise errors in parameters.
+
+Our work utilizes the Hessian trace, the sum of the eigenvalues of the Hessian matrix. This requires computing the Hessian matrix, the second-order partial derivatives of a loss function, with respect to its parameters. Recent work has also leveraged the Hessian trace to measure the quantizability of a neural network (Dong et al., 2019; 2020; Yao et al., 2021b), and we follow this insight to measure sensitivity. Due to the large number of model parameters (typically ranging from millions to billions), computing the Hessian trace directly is computationally intractable. We use the Hutchinson’s method (Bekas et al., 2007) to approximate the Hessian trace over a number of random vectors  $v$ . Following these prior practices, we use the Hessian trace to quantify sensitivity to parameter value variations.
+
+### 4.2 MINIMIZING A DNN’S SENSITIVITY TO PARAMETER VARIATIONS
+
+We present our novel training algorithm for reducing the sensitivity of a model to its parameter value variations. Our strategy is to employ the Hessian trace as an additional regularization term in the loss function used for training. The training process is shown in Algorithm 1.
+
+#### Algorithm 1 Hessian-aware Training
+
+**Input:** A model  $f$ , Training data  $D$ , Training steps  $T$ , Learning rate  $\eta$ , Number of approximation steps  $N_v$ , Regularization coefficient  $\lambda$   
+**Output:** A trained model  $f_\theta$
+
+- 1: Initialize  $\theta_0$
+- 2: Initialize  $\tau$  to 0
+- 3: **for**  $t = 1, 2, \dots, T$  **do**
+- 4:   Draw a mini-batch  $S_t$  from  $D$
+- 5:   Compute the loss  $\mathcal{L}_{xe}(S_t; f_{\theta_t})$
+- 6:    $Tr_t, E_t \leftarrow 0, \phi$
+- 7:   **for**  $i = 1, 2, \dots, N_v$  **do**
+- 8:     Draw a vector  $v_i$
+- 9:     Compute the gradient  $g_i$  of the loss  $\mathcal{L}_{xe}$
+- 10:     Compute the Hessian matrix  $H_i$  along  $v_i$
+- 11:     Compute their eigenvalues  $E_i$  and trace  $Tr_i$
+- 12:      $Tr_t, E_t \leftarrow Tr_t + Tr_i, E_t + E_i$
+- 13:   **end for**
+- 14:    $Tr_t, E_t \leftarrow (1/N_v)Tr_t, (1/N_v)E_t$
+- 15:   **if**  $\text{Median}(E_t) > \tau$  **then**
+- 16:      $\mathcal{L}_{tot} \leftarrow \mathcal{L}_{xe}(S_t; f_{\theta_t}) + \lambda * Tr_t$
+- 17:   **else**
+- 18:      $\mathcal{L}_{tot} \leftarrow \mathcal{L}_{xe}(S_t; f_{\theta_t})$
+- 19:      $\tau \leftarrow \text{Median}(E_t)$
+- 20:   **end if**
+- 21:   Compute the gradient  $g_t$  of  $\mathcal{L}_{tot}$
+- 22:    $\theta_{t+1} \leftarrow \theta_t + \eta \cdot g_t$
+- 23: **end for**
+- 24: **return** a trained model  $f_\theta$
+
+The algorithm is an adaptation of the popular training method, mini-batch stochastic gradient descent (SGD), to our Hessian-aware training method. Any gradient-based training methods can be adapted to our Hessian-aware training. The changes we made are highlighted in blue.
+
+In each mini-batch (line 3–22):
+
+**(line 3–5, 20–21)** We compute the loss  $\mathcal{L}$  of a model  $f_{\theta_t}$  and update the model parameters  $\theta_t$  with its gradient  $g_t$ . This step is the same as the original mini-batch SGD.
+
+**(line 6–13)** This step computes the Hessian trace and eigenvalues with respect to the model parameters  $\theta_t$ . Computing the full Hessian matrix and its trace is computationally expensive than standard training (see Appendix B.7); we thus approximate the trace and eigenvalues using single step of the Hutchinson’s method (Hutchinson, 1989), following the technique employed in prior work (Yao et al., 2020c; 2021a).
+
+Suppose the Hessian  $H \in \mathbb{R}^{d \times d}$  and random vector  $v \in \mathbb{R}^d$  satisfying  $\mathbb{E}[vv^T] = I$ .  $v$  is drawn from Rademacher distribution which ensures half of the discrete probabilities are positive and the other half is negative ( $P(v = \pm 1) = 1/2$ ).  $d$  denotes the total number of parameters. In Hutchinson’s method, the Hessian trace is calculated over a set of random vectors:
+
+$$\text{Tr}(H) = \mathbb{E}[v^T H v] = \frac{1}{N_v} \sum_{i=1}^{N_v} v_i^T H v_i$$
+
+where  $N_v$  is the number of random vectors used to approximate. We can obtain  $v^T H v$  by computing the gradient of the loss function  $\mathcal{L}$  twice as follows:
+
+$$v^T H v = v^T \cdot \frac{\partial}{\partial \theta} \left( \frac{\partial \mathcal{L}}{\partial \theta} \right) \cdot v$$
+
+{4}------------------------------------------------
+
+We follow the prior work (Yao et al., 2020c) to compute set of Top- $p\%$  eigenvalues  $\lambda_p$  as follows:
+
+$$\lambda_p = \frac{v_k^T H v_k}{\|v_k^T\|} \quad \text{for } k = 1, 2, \dots, p$$
+
+(line 14–19) In our experiments, we find that minimizing the Hessian trace computed on all eigenvalues can make the optimization process unstable. Instead, we take the  $p$ -largest eigenvalues to compute the trace. There will be negligible impact since the eigenvalues consist of a few large values (representing the sharpest directions in the loss surface) and many smaller ones.
+
+To identify an optimal  $p$  value, we compare the effectiveness of computing only top- $p$  eigenvalues in minimizing a model’s sensitivity to bit-wise errors in parameters. Table 1 summarizes our findings. We train MNIST models and measure the sensitivity by computing the Hessian trace on a trained model. We observe that, when we use top-50% of the eigenvalues, this results in the highest average accuracy of 98.92% and the lowest sensitivity (86.94%). We thus use the top 50% of the eigenvalues for the rest of our paper. In addition to using the top 50% of eigenvalues, we track the trace values over the course of training and only regularize the model when the trace computed for a mini-batch is greater than the average trace values observed previously. These two strategies we employ help stabilize our training and allowing us to achieve reasonable performance.
+
+Table 1: **Comparing our method using the Hessian trace from Top- $p$  eigenvalues.** Each row reports the average mean and standard deviations of the traces we compute over 1000 random samples, repeated five times across five different models.
+
+| Training Methods | Acc. | Sensitivity |
+|-|-|-|
+| Baseline | $98.55 \pm 0.53$ | $126.15 \pm 63.59$ |
+| Top-10% Eigenvalues | $98.16 \pm 0.21$ | $128.58 \pm 61.85$ |
+| Top-25% Eigenvalues | $97.96 \pm 0.22$ | $116.10 \pm 53.77$ |
+| Top-50% Eigenvalues | $98.92 \pm 0.20$ | $86.94 \pm 38.93$ |
+
+### 4.3 COMPARING WITH EXISTING APPROACHES TO MINIMIZING SHARPNESS
+
+We next empirically evaluate and compare the effectiveness of our method with existing approaches to reducing the sharpness of a model during training. We compare our approach to three representative methods: (1)  $\ell_2$ -regularization, which has been shown empirically to reduce the sharpness of a model in literature (Foret et al., 2021); (2) AdaHessian (Yao et al., 2021a), a second-order optimizer demonstrated to be effective in reducing the sharpness; and (3) Sharpness-aware minimization (SAM) (Foret et al., 2021), a training method specifically designed to reduce the sharpness.
+
+Table 2: **Comparison to existing training methods.** We compare the accuracy and the sensitivity from existing approaches to our method. The metrics are computed across five different models, and the sensitivity are computed over 1000 samples randomly chosen from the training data.
+
+| Training Method | MNIST |  | CIFAR10 |  |
+|-|-|-|-|-|
+|  | Acc. | Sensitivity | Acc. | Sensitivity |
+| Baseline | 98.90 | $123.68 \pm 63.79$ | 92.43 | $3808.91 \pm 803.19$ |
+| L2-Regularization | 97.30 | $128.23 \pm 52.42$ | 91.72 | $4117.33 \pm 1032.42$ |
+| AdaHessian | 98.88 | $126.67 \pm 70.82$ | 92.68 | $3717.55 \pm 931.80$ |
+| SAM | 97.15 | $134.08 \pm 75.04$ | 92.15 | $3676.89 \pm 899.82$ |
+| Hessian Trace (Min-max) | 98.65 | $128.72 \pm 68.50$ | 92.34 | $3571.88 \pm 924.67$ |
+| Hessian Trace (Top-50, $\lambda$ to $10^{-4}$ ) | 98.78 | $126.67 \pm 70.82$ | 92.58 | $3543.33 \pm 952.44$ |
+| Hessian Trace (Top-50, $\lambda$ to 1) | 98.92 | $86.94 \pm 38.93$ | — | — |
+| Hessian Trace (Top-50, $\lambda$ to $10^{-2}$ ) | — | — | 92.71 | $2729.53 \pm 762.94$ |
+
+**Methodology.** We train MNIST and CIFAR10 model and measure the accuracy and sensitivity. For each model, we compute the Hessian trace five times on 1000 randomly chosen training samples. For each method, we run training five times and report the average. Because we empirically find that SGD struggles with optimizing our second-order objective across the hyperparameters we use, we train our models with the RMSProp optimizer unless otherwise specified. We choose the learning rate and regularization coefficient  $\lambda$  from  $\{1, 0.1, 0.01, 0.001, 0.0001\}$ , batch size from  $\{32, 64\}$ , and the number of Hutchinson’s steps for trace approximation from  $\{1, 50, 100, 1000\}$ . Through extensive hyper-parameter search, we find that using only a single step to compute the Hessian trace is the most effective.
+
+**Results.** Table 2 summarizes our results. We show that compared to existing approaches, our hessian-aware training is more effective in reducing a model’s sensitivity. We also test two techniques to smooth out the Hessian regularization loss  $Tr_t$  that is fluctuating over training epochs: (1) Min-max optimization: we normalize the loss based on the min and max values of the eigenvalues  $E_t$  defined by this formula:  $Tr_{norm} = Tr_t - \min(E_t) / \max(E_t) - \min(E_t)$ , where  $Tr$  denotes the hessian
+
+{5}------------------------------------------------
+
+trace and  $t$  denotes the current step; and (2) the technique that only considers the loss when its value is greater than the one  $\tau$  observed in the previous epoch (see line 14–19 in Algorithm 1). We additionally use this computationally inexpensive approach to determine and compare the impact of regularization coefficient  $\lambda$ , and we show that setting  $\lambda$  to one for MNIST and to  $\lambda$  to  $10^{-2}$  for Cifar10 achieves the lowest sensitivity. For the rest of our experiments, we use this training configurations.
+
+## 5 EMPIRICAL EVALUATION
+
+Our evaluation focuses on answering the following research questions: **(RQ 1)** How resilient are models trained with our algorithm to bitwise errors in parameters? **(RQ 2)** What characteristics of these models make them resilient to parameter variations? **(RQ 3)** Beyond this parameter resilience to bitwise errors, what benefits does our training approach offer? We evaluate comprehensively across three datasets and five different network architectures (see Appendix A for more details).
+
+### 5.1 ENHANCED MODEL RESILIENCE TO BITWISE ERRORS IN PARAMETERS
+
+**Methodology.** We first compare our approach with prior works and determined that ours is most effective in improving resilience against bitwise errors in parameters (see Appendix B.1). Then we perform a quantitative analysis of the enhanced resilience of a model to bitwise errors in parameters. We extensively examine a model’s resilience under a single bitwise corruption in its parameter space because: (1) this approach allows us to test the most sensitive cases under atomic perturbations that can occur in models deployed to real-world devices, and (2) it also enables us to simulate the numerical value changes in all parameters under the smallest perturbation. We report the accuracy of a model to demonstrate that our training algorithm does not harm its generalization ability. We report the resilience of a DNN model by the number of erratic parameters that contain at least one bit whose error can result in an accuracy drop of over 10% as defined by (Hong et al., 2019). We also report their ratio to the total number of parameters. As the definition suggests, lesser erratic parameters in a DNN constitutes greater resilience against bitwise errors in parameters. For MNIST (Base and LeNet architecture), we test all bitwise errors in the model parameters and found that erratic bits are only present in the exponents (Appendix B.8). Complete analysis of the model requires infeasible computation time, for CIFAR model (ResNet18)  $\approx$ 503 days and for ImageNet model (ResNet50)  $\approx$ 1172 days. Based on our initial findings and the prohibitive computation time, we implemented techniques to accelerate the process. In CIFAR-10, we examine the exponent bits and found only few bits other than the MSB are responsible for RAD over 10%. For our ImageNet model, we test only the most significant bit of the exponent in a randomly chosen 50% of parameters in all the convolutions layers and all the parameters in the fully-connected layers.
+
+Table 3: **Effectiveness of our Hessian-aware training.** We quantitatively compare the resilience of models trained with and without our approach to a single-bit error in their parameter space. *Ours* refers to the models trained with our approach, while *Baseline* is to the models trained without. **Acc** for both these models refer to the validation accuracy.
+
+| Dataset | Model | Params | Bits | Baseline |  |  | Ours |  |  |
+|-|-|-|-|-|-|-|-|-|-|
+|  |  |  |  | Acc. | Err. Params | Err. Param Ratio | Acc. | Err. Params | Err. Param Ratio |
+| MNIST | BaseNet | 21,840 | 698,880 | 98.73 | 10,544 | 48.27% | 98.66 | 8,482 | 38.83% |
+|  | LeNet | 44,470 | 1.4M | 99.61 | 20,712 | 46.57% | 98.91 | 15,383 | 34.59% |
+| CIFAR-10 | ResNet18 | 11M | 352M | 92.43 | 4.4M | 40.12% | 93.68 | 3.7M | 33.6% |
+|  | ResNet50 | 25.6M | 819.2M | 76.13 | 5,283,102 | 43.35% | 75.09 | 4,459,141 | 36.59% |
+
+**Results.** Table 3 summarizes our results. We first find that our Hessian-aware training preserves the generalization ability. In all cases, the **acc columns show that**, there are negligible differences in Top-1 classification accuracy between the baseline models and the models trained with our method. More importantly, our approach reduces the number of erratic parameters by 5.2–11%: In MNIST and CIFAR-10 models, we observe a 10% reduction, while the reduction is 6.76% in the ImageNet model. We attribute this difference in reductions to the training strategy we employ for ImageNet-scale models. Instead of fine-tuning all layers of an ImageNet model, we focus only on the last fully-connected layer, which our analysis identifies as the most sensitive layer, to minimize the Hessian trace.
+
+{6}------------------------------------------------
+
+324  
+325  
+326  
+327  
+328  
+329  
+330  
+331  
+332  
+333  
+334  
+335  
+336  
+337  
+338  
+339  
+340  
+341  
+342  
+343  
+344  
+345  
+346  
+347  
+348  
+349  
+350  
+351  
+352  
+353  
+354  
+355  
+356  
+357  
+358  
+359  
+360  
+361  
+362  
+363  
+364  
+365  
+366  
+367  
+368  
+369  
+370  
+371  
+372  
+373  
+374  
+375  
+376  
+377
+
+![Figure 2: Two bar charts showing the distribution of bits whose flipping results in a Random Accuracy Drop (RAD). The left chart is for LeNet trained on MNIST, and the right chart is for ResNet18 trained on CIFAR-10. Both charts compare 'Conventional Training' (blue) and 'Our Method' (orange) across RAD percentages from 0 to 100. In both cases, 'Our Method' shows a more uniform distribution of bits across the RAD range, while 'Conventional Training' shows a high concentration of bits at the extremes (0-5% and 95-100%).](c0843c6d138705289960d9f53a6e72a1_img.jpg)
+
+Figure 2: Two bar charts showing the distribution of bits whose flipping results in a Random Accuracy Drop (RAD). The left chart is for LeNet trained on MNIST, and the right chart is for ResNet18 trained on CIFAR-10. Both charts compare 'Conventional Training' (blue) and 'Our Method' (orange) across RAD percentages from 0 to 100. In both cases, 'Our Method' shows a more uniform distribution of bits across the RAD range, while 'Conventional Training' shows a high concentration of bits at the extremes (0-5% and 95-100%).
+
+Figure 2: **The distribution plots illustrating the enhanced resilience of a model under parameter corruptions.** We compare LeNet trained on MNIST (left) and ResNet18 trained on CIFAR-10 (right).
+
+To gain a deeper understanding of the enhanced resilience by our approach, we compare the distribution plots between two models: one trained with our algorithm or the other without. Figure 2 illustrates the comparison. The figure shows the plots from the LeNet and ResNet18 models; the plots from the ImageNet models are provided in Appendix B.2. We analyze the distribution of accuracy drop from 0–100% in 5% increments. Across the board, our approach reduces the accuracy drop in two regions: (1) bits whose flipping leads to significant performance loss (90–100%) and (2) bits whose corruptions result in a small accuracy drop (0–10%). This implies that we reduce the chances of a model’s performance becoming random due to bitwise errors in parameters by almost half.
+
+### 5.2 CHARACTERIZATION OF THE ENHANCED MODEL RESILIENCE
+
+We delve deeper into how various properties of a model affect its resilience to bitwise errors.
+
+**Visualizing the loss landscape.** We first analyze whether the models trained with our method have a *flatter* loss surface than the baselines. We adopt the visualization technique proposed by Li et al. (2018): We choose two random vectors with the same dimension as that of a model’s parameters and incrementally increase the perturbations to each direction to the parameters while measuring the loss value of the perturbed model. Figure 3 visualizes the loss landscape computed for each layer of the LeNet models trained on MNIST. From left to right, we visualize the five layers from the input.
+
+![Figure 3: A 2x5 grid of 3D surface plots showing the loss landscapes of LeNet layers. The top row shows the loss landscapes of the baseline LeNet, and the bottom row shows those of the LeNet trained with the proposed method. Each plot has 'Perturbation X' and 'Perturbation Y' on the horizontal axes and 'Loss' on the vertical axis. The bottom row plots show significantly flatter loss surfaces compared to the top row, indicating reduced sharpness and improved resilience.](023b142f90e1253702ac88b18380d3ec_img.jpg)
+
+Figure 3: A 2x5 grid of 3D surface plots showing the loss landscapes of LeNet layers. The top row shows the loss landscapes of the baseline LeNet, and the bottom row shows those of the LeNet trained with the proposed method. Each plot has 'Perturbation X' and 'Perturbation Y' on the horizontal axes and 'Loss' on the vertical axis. The bottom row plots show significantly flatter loss surfaces compared to the top row, indicating reduced sharpness and improved resilience.
+
+Figure 3: **Visualizing the loss landscapes of LeNet.** The upper row displays the loss landscapes of the baseline LeNet, while the lower row shows those of the LeNet trained with our method. From left to right, we visualize the first two convolutional layers followed by the three fully-connected layers.
+
+We demonstrate that our training method effectively reduces the sharpness (i.e., the sensitivity of a model to bitwise errors) across all layers. Our approach is particularly effective in reducing the sharpness of the layers close to the output. In the last three columns of the figure, we observe that the loss curvatures become flatter compared to other layers. These three columns correspond to the fully-connected layers; thus, we further investigate whether fully-connected layers are particularly
+
+{7}------------------------------------------------
+
+less resilient without our training method (see the next paragraph). However, we also find that our approach is less effective at reducing the sharpness of the convolutional layers within the residual blocks (see Appendix B.3). This corroborates the observations made by Li et al. (2018) that residual connections offer a flat loss landscape. Our method may not offer significant resilience for those already-flat layers as the inherent flatness in their loss landscape is less sensitive to parameter perturbations. Our method is most impactful in sensitive layers (Conv and Fully Connected) of a DNN model, where the loss surface tends to be sharper.
+
+Table 4: **Comparing the effectiveness of our approach in convolutional (Conv.) and fully-connected (FC) layers.** Ours refers to the models trained with our approach, while Baseline is to the models trained without. In Column 4, we show the # of parameters in Conv or FC layers, with the parenthesis indicating their ratio in each model. All other numbers show erratic parameters and their ratios as defined by Hong et al. (2019). The last two columns are the reduction in these two metrics.
+
+| Dataset | Model | Layers | # Params | Baseline |  | Ours |  | Reduction |  |
+|-|-|-|-|-|-|-|-|-|-|
+|  |  |  |  | #Err. Param | Ratio | #Err. Param | Ratio | #Err. Param | Ratio |
+| MNIST | BaseNet | Conv. | 5,280 (24.2%) | 3,003 | 56.87% | 2,695 | 51.04% | 308 | 5.83% |
+|  |  | FC | 16,560 (75.8%) | 7,544 | 45.55% | 5,811 | 35.09% | 1,733 | 10.46% |
+|  | LeNet | Conv. | 2,616 (5.9%) | 1,719 | 65.71% | 1,475 | 56.38% | 244 | 9.33% |
+|  |  | FC | 41,854 (94.1%) | 20,013 | 47.81% | 14,903 | 35.61% | 5,110 | 12.20% |
+| CIFAR-10 | ResNet18 | Conv. | 11.2M (99.7%) | 4,4M | 40.07% | 3.7M | 33.57% | 0.7M | 6.50% |
+|  |  | FC | 5,120 (0.03%) | 2,297 | 44.86% | 1,321 | 25.80% | 976 | 19.06% |
+| ImageNet | ResNet50 | Conv. | 123.5M (53.5%) | 4,516,162 | 38.23% | 3,802,648 | 32.19% | 713,514 | 6.04% |
+|  |  | FC | 2,04M (46.5%) | 766,940 | 37.59% | 656,493 | 32.18% | 110,447 | 5.40% |
+
+**Resilience of convolutional layers vs. fully-connected layers.** Our previous analysis of the loss surfaces shows that our approach tends to reduce the sensitivity (i.e., sharpness) of the later layers. Since most feed-forward neural networks have convolutional layers followed by fully connected layers for classification, we analyze whether the resilience has indeed increased in the fully connected layers. Table 4 summarizes our findings. Across all models, we observe that the reduction in the ratio of erratic parameters in fully connected layers is 2.4–13.4% greater than that in convolutional layers. Particularly, for the ResNet18 trained on CIFAR-10, our Hessian-aware training reduces the erratic parameter ratio by 19.1%. This result implies that network architectures with many fully connected layers, such as BaseNet or LeNet, can benefit more from our method. But architectures like ResNets, composed of 99% of convolutional layers (that is a feature extractor) followed by one or two fully connected layers, may experience a reduced benefit. Given the recent paradigm shift from feed-forward convolutional networks to Transformers composed of many fully-connected layers like ViTs (Dosovitskiy et al., 2021), we believe that it is important to evaluate whether our training method will be effective for these models. We apply our training method to fine-tune Deit-Tiny (Touvron et al., 2021), a Transformer-based model, pre-trained on ImageNet (available at HuggingFace<sup>1</sup>) and measure the improvement in resilience. Due to the page limit, we present our results on DeiT in Appendix B.4. Our method reduces the number of erratic parameter ratio from 43.7% to 36.8%.
+
+![Figure 4: Comparison of numerical variations required to cause a RAD drop over 10%. The plot shows two probability density functions (PDFs) for the 'Change in Parameter Value'. The x-axis ranges from -0.00015 to 0.00015, and the y-axis represents the 'Probability' from 0 to 8000. The 'Base' distribution (blue) is narrower and taller, peaking at approximately 7500. The 'Base (Our Method)' distribution (orange) is wider and shorter, peaking at approximately 3000. This indicates that larger numerical variations are required to cause a significant performance drop when using the proposed method.](7ff005f9556dc6518981bb92091d36ab_img.jpg)
+
+Figure 4: Comparison of numerical variations required to cause a RAD drop over 10%. The plot shows two probability density functions (PDFs) for the 'Change in Parameter Value'. The x-axis ranges from -0.00015 to 0.00015, and the y-axis represents the 'Probability' from 0 to 8000. The 'Base' distribution (blue) is narrower and taller, peaking at approximately 7500. The 'Base (Our Method)' distribution (orange) is wider and shorter, peaking at approximately 3000. This indicates that larger numerical variations are required to cause a significant performance drop when using the proposed method.
+
+Figure 4: **Comparison of numerical variations required to cause a RAD drop over 10%.** We compare the distributions of numerical perturbations to parameters that are needed to cause significant performance loss (RAD > 10%).
+
+<sup>1</sup>DeiT-tiny: <https://huggingface.co/facebook/deit-tiny-patch16-224>
+
+{8}------------------------------------------------
+
+variations required to cause a large performance loss go beyond the range that floating-point representation in modern systems can hold.
+
+### 5.3 ENHANCED MODEL RESILIENCE TO COMPRESSION
+
+We now examine the additional benefits of our approach beyond parameter resilience to bitwise errors. We are particularly interested in testing whether models trained with our method can achieve improved performance under pruning (Han et al., 2015) or quantization (Fiesler et al., 1990). These techniques reduce the size of neural networks through parameter reduction or compression, introducing optimal parameter perturbations (LeCun et al., 1989). It is important to study the effectiveness of our method in increasing the resilience of DNN models against these perturbations.
+
+**Pruning.** In our evaluation, we employ global unstructured pruning (Liu et al., 2017), which operates at the individual weight level. This technique first computes an importance score for each weight and removes those with the lowest scores. We apply this pruning technique with different sparsity levels ranging from 0–100%. Figure 5 shows our pruning results on the ResNet18 models trained on CIFAR-10. The rest of our results are in Appendix B.6. We demonstrate that DNN models trained with our method retain accuracy better than those trained using regular training methods. Both models retain their original accuracy up to the point where 50% of the parameters are pruned. Our approach surprisingly maintains accuracy further, up to 70% pruning, while at the same sparsity level, the model trained with the conventional approach completely loses accuracy (i.e., the accuracy dropping to  $\sim 0\%$ ).
+
+![Figure 5: Comparison of model performance under various pruning ratios. The graph shows Test Accuracy (Y-axis, 0 to 100) versus Sparsity (X-axis, 0 to 1.0). Two lines are plotted: 'Regular Training' (blue line with circles) and 'Our Approach' (orange line with circles). Both lines start at approximately 90% accuracy at 0 sparsity. The 'Regular Training' line drops sharply after 0.4 sparsity, reaching near 0% accuracy by 0.7 sparsity. The 'Our Approach' line maintains high accuracy until 0.7 sparsity, then drops to near 0% accuracy by 0.9 sparsity.](925f55ce69802b9d3b00546382663ee2_img.jpg)
+
+| Sparsity | Regular Training (%) | Our Approach (%) |
+|-|-|-|
+| 0.0 | 90 | 90 |
+| 0.2 | 90 | 90 |
+| 0.4 | 88 | 90 |
+| 0.6 | 60 | 90 |
+| 0.7 | 10 | 88 |
+| 0.8 | 10 | 80 |
+| 0.9 | 10 | 40 |
+| 1.0 | 10 | 10 |
+
+Figure 5: Comparison of model performance under various pruning ratios. The graph shows Test Accuracy (Y-axis, 0 to 100) versus Sparsity (X-axis, 0 to 1.0). Two lines are plotted: 'Regular Training' (blue line with circles) and 'Our Approach' (orange line with circles). Both lines start at approximately 90% accuracy at 0 sparsity. The 'Regular Training' line drops sharply after 0.4 sparsity, reaching near 0% accuracy by 0.7 sparsity. The 'Our Approach' line maintains high accuracy until 0.7 sparsity, then drops to near 0% accuracy by 0.9 sparsity.
+
+Figure 5: **Comparison of model performance under various pruning ratios.** We compare the test accuracy of the ResNet18 models trained on CIFAR-10. The magnitude-based iterative pruning is used to achieve sparsity levels from 0–100%.
+
+**Quantization.** Table 5 summarizes our quantization results for 8-, 4-, and 2-bit quantization of the regularly-trained models and Hessian-aware trained models. We employ layer-wise, symmetric quantization, which is the default in most deep learning frameworks. Overall, the models trained with our approach achieve better test accuracy than the regularly trained models, [an additional benefit that hessian-aware training offers](#). Up to 4-bit quantization, both models retain the performance of their floating-point counterparts. However, when we use 2-bit precision, the accuracy of all models decreases significantly. Our models under 2-bit precision consistently achieve 1.5–14% better accuracy, indicating that these models have increased resilience to parameter value variations. Based on our observation that fully-connected layers are less sensitive than convolutional layers (see the above analysis), we employ mixed-precision quantization with 2-bit precision in fully-connected layers and 4-bit precision in convolutional layers. We demonstrate that our models achieve an accuracy of 68.8–78.7%, while the regularly-trained models achieve 48.9–68.2%
+
+Table 5: **Comparison of model performance under various quantization ratios.** We compare the test accuracy of models after quantizing them with different bit-widths.
+
+| Dataset | Model | Acc. |  |  |  |
+|-|-|-|-|-|-|
+|  |  | 8-bit | 4-bit | 2-bit | Mixed |
+| MNIST | Base | 98.57 | 98.38 | 24.49 | 48.90 |
+|  | Base (Ours) | 98.73 | 98.70 | 38.72 | 68.84 |
+|  | LeNet | 99.10 | 98.70 | 11.85 | 57.03 |
+|  | LeNet (Ours) | 98.90 | 97.37 | 24.78 | 73.90 |
+| CIFAR-10 | ResNet18 | 92.53 | 88.01 | 9.96 | 68.19 |
+|  | ResNet18 (Ours) | 92.36 | 90.26 | 10.28 | 78.69 |
+
+model accuracy.
+
+## 6 DISCUSSION
+
+**Increase in computational demands.** We evaluate the overhead of Hessian-aware training in terms of actual training wall-time measured in PyTorch on a NVIDIA Tesla V100 GPU. In Appendix B.7
+
+{9}------------------------------------------------
+
+we present our results. Hessian-aware training incurs overhead that scales with the size of the model; a 4–6 $\times$  times increase in computations for MNIST models, and a 10 $\times$  times increase in overhead for CIFAR-10 models. Existing works utilizing second-order properties during training take a completely different approach compute the Hessian and its eigenvalues: they employ weight perturbations (Foret et al., 2021) or only the trace approximation (Yao et al., 2021a) to minimize sharpness of the loss landscape. The increase in computation in our approach is primarily attributed to the large Hessian and eigenvalues we need to compute with respect to model parameters, which is not optimized for popular deep-learning frameworks. To reduce the computational overhead during training, we employ a layer sampling technique. As prior work identifies the last layers to be most susceptible to bitwise errors (Hong et al., 2019), we believe only computing Hessian trace on last few layers can aid resilient model training. Our results for large-scale models, such as ResNet50 in ImageNet, show that this technique significantly reduces the computational overhead from 10 $\times$  times to 1.18 $\times$  times, being equally effective in enhancing model resilience. We leave further optimization as future work.
+
+Now we discuss defensive mechanisms proposed by the community that can be integrated with our approach to further enhance the resilience of models against bitwise errors in parameters. Our discussion particularly focuses on hardware-level and system-level approaches, which can complement the models trained with our Hessian-aware training by providing an additional layer of resilience.
+
+**Integration with system-level defenses.** Liu et al. (2023) have proposed NeuroPot, which lures an adversary into manipulating parameters whose perturbation does not lead to a significant accuracy drop. Since our approach increases the number of unimportant parameters, the models we train are well-suited for NeuroPot. Li et al. (2021) have proposed a checksum-based defense, which stores *golden signature* for a group of weights and compares this signature at runtime with the current model signature. Our approach can leverage this scheme by storing the golden signature of erratic weights, thus enhancing resilience further during runtime. Konoth et al. (2018) have also focused on utilizing data row isolation to protect a model against bitwise corruption to its parameters. Because we reduce the number of erratic parameters, the number of data rows that need to be isolated in their approach can also be greatly reduced when combined with our training method.
+
+**Integration with hardware-level defenses.** Many hardware-level defenses are designed to mitigate RowHammer (Kim et al., 2014), a software-induced attack that causes a targeted DRAM row to leak capacitance by repeatedly accessing its neighboring rows. Kim et al. (2014) have proposed a defense that proactively refreshes rows that are frequently accessed, as they are at higher risk of being targeted by the attack. Panopticon (Bennett et al., 2021) leverages a similar idea: it employs hardware counters for each data row in DRAM and refreshes the rows when the counter reaches a predefined threshold. Instead of refreshing the rows at high risks, Saileshwar et al. (2022) propose swapping them with safe memory regions. Di Dio et al. (2023) use the error correction codes as a mechanism for triggering such swapping. DRAM-Locker (Zhou et al., 2023b) leverages a lock-table in SRAM. If the addresses of the high-risk rows are stored in the lock-table, any access this addresses without the unlock command will be denied. As we can see, these mechanisms protect data rows at high risk of being targeted. Our work reduces the number of data rows in a model whose perturbations lead to significant accuracy loss, and therefore, potentially decreasing their performance overheads.
+
+## 7 CONCLUSION
+
+Our work proposes a novel training algorithm that reduces a model’s sensitivity to parameter variations, thereby enhancing its resilience when deployed in error-prone computing environments. We focus on the model’s second-order property, the Hessian trace, and design an objective function to directly minimize it during training. We extensively compare our approach with existing methods for reducing model sensitivity and demonstrate our effectiveness. We evaluate our approach by testing a model’s performance under single-bit errors to its parameter representation in memory. Our method reduces the number of erratic parameters by 10%, decreasing those whose corruption causes a 90–100% RAD drop by almost half. Our method is particularly effective on fully connected layers, and results in flatter loss surfaces. We also show improved performance at an extreme pruning and quantization ratios. Our method is complementary to existing hardware-level or system-level approaches to protecting models against parameter-corruption attacks. We finally discuss the potential synergy of combining these mechanisms with our method. We hope our work will inspire future work on the safe deployment of deep neural networks in emerging computing platforms.
+
+ Rest of paper (reference and Appendix) is removed.

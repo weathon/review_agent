@@ -1,0 +1,343 @@
+
+
+{0}------------------------------------------------
+
+# GUIDED-BFNS: TOWARDS VISUALIZING AND UNDERSTANDING BAYESIAN FLOW NETWORKS IN THE CONTEXT OF TRAJECTORY PLANNING
+
+###### Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Bayesian Flow Networks (BFNs) represent an emerging class of generative models that exhibit promising capabilities in modeling continuous, discretized, and discrete data. In this paper, we develop Guided-BFNs to integrate BFNs with conditional guidance and gradient guidance to facilitate the effective application of such models in trajectory planning tasks. Based on our developments, we can better comprehend BFNs by inspecting the generation dynamics of the planning trajectories. Through extensive parameter tuning and rigorous ablation experiments, we systematically delineate the functional roles of various parameters and elucidate the pivotal components within the structure of BFNs. Furthermore, we conduct a comparative analysis of the planning results between diffusion models and BFNs, to discern their similarities and differences. Additionally, we undertake efforts to augment the performance of BFNs, including developing a faster and training-free sampling algorithm for sample generation. Our objectives encompass not only a comprehensive exploration of BFNs' structural insights but also the enhancement of their practical utility.
+
+## 1 INTRODUCTION
+
+Generative models (Shocher et al., 2023; Ho et al., 2020; Goodfellow et al., 2014; Kingma & Dhariwal, 2018) have achieved remarkable progress in multimodal generation, with GPTs (OpenAI, 2023; Brown et al., 2020; Radford et al., 2019; 2018) and Stable Diffusion (Rombach et al., 2022; Podell et al., 2023) as the representative examples. The underlying technical foundations include Auto-Regressive Models (Vaswani et al., 2017; Beltagy et al., 2020; Kitaev et al., 2020; Liu et al., 2021; Parmar et al., 2018), Diffusion Models (Ho et al., 2020; Sohl-Dickstein et al., 2015a; Nichol & Dhariwal, 2021; Song et al., 2020a;b; Dhariwal & Nichol, 2021; Ho & Salimans, 2022; Luo, 2022; Ramesh et al., 2022), etc. However, issues exist that the generative modeling of both continuous and discrete data have not been effectively unified.
+
+Bayesian Flow Networks (BFNs) (Graves et al., 2023) are an emerging type of deep generative model for addressing such an issue. They are conceived from the principles of data compression theory (Lelewer & Hirschberg, 1987; Jain, 1981; Welch, 1984). In BFNs, the parameters of a set of independent distributions are modified with Bayesian inference in the light of noisy data samples, then passed as input to a neural network that outputs a second, interdependent distribution. Starting from a simple prior and iteratively updating the two distributions yields a generative procedure similar to the reverse process of diffusion models; however it is conceptually simpler in that no forward process is required. The network inputs for discrete data lie on the probability simplex, and are therefore natively differentiable. The loss function directly optimises data compression and places no restrictions on the network architecture. In the experiments BFNs achieve competitive log-likelihoods for image modelling on dynamically binarized MNIST(LeCun et al., 1998) and CIFAR-10 (Krizhevsky et al., 2009), and outperform all known discrete diffusion models on the text8 (Shannon, 1951; Cover & King, 1978; Zipf, 2013) character-level language modelling task.
+
+However, the previous empirical studies on CIFAR-10 and text8 expose rare insights into the behavior of BFNs and opportunities for further enhancement. We urgently need a good way to better
+
+{1}------------------------------------------------
+
+054 inspect BFNs and to chase an in-depth understanding, which aids in bringing BFNs to the masses to  
+055 unleash their maximal potential. This paper takes the first step toward bridging the gap.
+
+056  
+057 We first identify a reasonable way to visualize the internal behavior of BFNs—adapting them for  
+058 policy modeling and evaluating in long-horizon decision-making scenarios in several reinforcement  
+059 learning (RL) settings. Given that BFNs employ multi-step sampling in their generation process,  
+060 akin to diffusion models (DMs), we have chosen to assess them within the context of policy plan-  
+061 ning tasks for trajectory generation. This decision is made in favor of planning trajectory generation  
+062 as a testbed for BFNs, primarily because it allows humans to more readily discern and appreciate  
+063 the properties and nuances of the intermediate planning results. In contrast, generating images in-  
+064 volves alterations at the pixel level that are less traceable and exhibit reduced controllability. We  
+065 choose several RL settings, including the Maze-2D environment (Fu et al., 2020), the block stacking  
+066 tasks (Garrett et al., 2022), and the D4RL locomotion benchmark (Fu et al., 2020), then launch ex-  
+067 periments following the fundamental framework of Diffuser (Janner et al., 2022), a diffusion-based  
+068 method employed for trajectory planning problem. Under this framework, planning trajectories  
+069 and sampling from data become essentially equivalent. We will treat "planning" and "sampling" as  
+070 interchangeable terms in the following paragraphs.
+
+071 This paper represents the pioneering effort to apply BFNs in RL settings, contributing to the visual-  
+072 ization and understanding of BFNs in this context. Our contributions are listed as follows:
+
+073 First, We introduce a methodology called Guided-BFNs, that integrates additional conditions from  
+074 the datasets into the model in addressing RL settings using BFNs. In the sampling process, we devise  
+075 a novel classifier-guided approach to implement gradient-guided and conditional-based sampling  
+076 with BFNs.
+
+077 Furthermore, through extensive parameter tuning and comprehensive ablation experiments, we have  
+078 elucidated the critical components within BFNs' structure and how various parameters function.  
+079 Utilizing a straightforward and intuitive visualization approach, we visualize the input distribution,  
+080 output distribution, the sender distribution and the Bayesian update process (Graves et al., 2023),  
+081 which are the key components of BFNs' sampling process. We also investigated the impact of vari-  
+082 ous factors on BFNs. These factors include the min variance on training loss, planning performance  
+083 and sample diversity, as well as the interplay between time steps and sample steps during sampling.
+
+084 Additionally, we conduct a comparative analysis of trajectories generated by both DMs and BFNs  
+085 within identical RL planning settings. Employing the same network architecture and training pa-  
+086 rameters allows us to discern the similarities and differences between the two approaches, provid-  
+087 ing further insights into the functioning of BFNs. Experimental results across various RL settings  
+088 demonstrate that Guided-BFNs based on the brand new BFNs achieve competitive results compared  
+089 to extensively optimized DMs.
+
+090 In the ablation studies, we investigate the effects of the conditional scaling factor and gradient scal-  
+091 ing factor on planning performance to demonstrate the effectiveness of the method of Guided-BFNs  
+092 applied in trajectory planning tasks. These insights significantly contribute to our enhanced under-  
+093 standing of BFNs.
+
+094 Finally, we tried an interpolation method for training-free faster sampling and compare several in-  
+095 terpolation ratios. Our findings on Guided-BFNs in the testbed of RL policy planning settings can  
+096 be directly transferred to the original testbed focused on image and text data, and we leave that for  
+097 future research. We hope our findings may shed light on the developing of more effective BFNs'  
+098 variants and optimization on BFNs' architecture and acceleration on BFNs' sampling process.
+
+###### 099 2 BACKGROUND
+
+100  
+101 In this section, we elucidate the RL policy planning problem setting and provide an overview of  
+102 BFNs.
+
+###### 103 2.1 PROBLEM SETTING
+
+104  
+105 Consider a system governed by the discrete-time dynamics  $s_{t_{p+1}} = f(s_{t_p}, a_{t_p})$  at state  $s_{t_p}$  given an  
+106 action  $a_{t_p}$ . Trajectory optimization involves determining a sequence of actions  $a_{0:T}^h$  that maximizes
+
+{2}------------------------------------------------
+
+(or minimizes) an objective  $\mathcal{J}$  factorized over per-timestep rewards (or costs)  $r(\mathbf{s}_{t_p}, \mathbf{a}_{t_p})$ :
+
+$$\mathbf{a}_{0:T}^* = \arg \min_{\mathbf{a}_{0:T}} \mathcal{J}(\mathbf{s}_0, \mathbf{a}_{0:T}) = \arg \min_{\mathbf{a}_{0:T}} \sum_{t_p=0}^T r(\mathbf{s}_{t_p}, \mathbf{a}_{t_p}) \quad (1)$$
+
+where  $T$  is the planning horizon and  $t_p$  is the planning time step. We use the abbreviation  $\boldsymbol{\tau} = (\mathbf{s}_0, \mathbf{a}_0, \mathbf{s}_1, \mathbf{a}_1, \dots, \mathbf{s}_T, \mathbf{a}_T)$  to refer to a trajectory of interleaved states and actions and  $\mathcal{J}(\boldsymbol{\tau})$  to denote the objective value of that trajectory.
+
+### 2.2 BFNs
+
+In our experimental configuration, BFNs undergo an initial learning phase during which they assimilate knowledge pertaining to a comprehensive set of trajectory data, encompassing various state-action pairs. Subsequently, these BFNs harness the acquired knowledge to generate suitable state-action pairs, thereby constituting trajectory data under specific conditions. These conditions may encompass the fulfillment of predefined start and end points within a maze or the stacking of blocks in a predetermined sequence. This subsection will elucidate the fundamental operational principles underlying BFNs.
+
+Assuming each state-action pair in trajectory data adheres to a normal distribution denoted as  $\boldsymbol{\theta} \stackrel{\text{def}}{=} \{\boldsymbol{\mu}, \boldsymbol{\rho}\}$ , the input mean  $\boldsymbol{\mu}$  (initialized as standard normal  $\boldsymbol{\theta}_0 \stackrel{\text{def}}{=} \{0, 1\}$ ) is input into BFNs' neural network to obtain the output  $\hat{\mathbf{x}}(\boldsymbol{\theta}, t)$ , where  $t$  represents the time step. Subsequently, both  $\mathbf{x}$  comprising all state-action pairs of all possible trajectory data in datasets and  $\hat{\mathbf{x}}(\boldsymbol{\theta}, t)$  undergo the addition of Gaussian noise following an accuracy schedule determined by  $\alpha(t) = -\frac{2 \ln \sigma_1}{\sigma_1^2 t}$ . This results in a sender  $\mathbf{y}$  and a receiver, where  $\sigma_1$  denotes the standard deviation of the input distribution at  $t = 1$ . The sender  $\mathbf{y}$  is then employed to update the input parameters  $\boldsymbol{\theta}$  through Bayesian inference, given by the equations:
+
+$$\boldsymbol{\mu} \leftarrow \frac{\rho \boldsymbol{\mu} + \alpha \mathbf{y}}{\rho + \alpha}, \rho \leftarrow \rho + \alpha. \quad (2)$$
+
+This iterative process is referred to as Bayesian update. The updated input parameters are subsequently fed into the same neural network, and this process is repeated  $n$  times. The Kullback-Leibler (KL) divergence between the sender and receiver is computed for all  $n$  iterations, and the sum yields the discrete-time loss. As  $n$  approaches infinity, the continuous-time loss is given by:
+
+$$L^\infty(\mathbf{x}) = -\ln \sigma_1 \mathbb{E}_{t \sim U(0,1), p_E(\boldsymbol{\theta}|\mathbf{x};t)} \frac{\|\mathbf{x} - \hat{\mathbf{x}}(\boldsymbol{\theta}, t)\|^2}{\sigma_1^{2t}}. \quad (3)$$
+
+Following training, the neural network of BFNs possesses a learned representation of the original data, encompassing all possible trajectories containing state-action pairs. During the planning process (equivalent to the sample generation process), BFNs generate appropriate trajectories without the need for the original data  $\mathbf{x}$ . The sender  $\mathbf{y}$  is utilized by introducing Gaussian noise, according to an accuracy schedule, to the output  $\hat{\mathbf{x}}(\boldsymbol{\theta}, t)$  for Bayesian updates to the input parameters. This process repeats for  $S$  times, with sample steps  $s \in \{1, 2, \dots, S\}$  corresponding to time step  $t \in [0, 1]$ .
+
+Detailed information regarding the input distribution  $p_I(\mathbf{x} \mid \boldsymbol{\theta})$ , output distribution  $p_O(\mathbf{x} \mid \boldsymbol{\theta}, t)$ , sender distribution  $p_S(\cdot \mid \mathbf{x}; \alpha \mathbf{I})$ , receiver distribution  $p_R(\mathbf{y} \mid \boldsymbol{\theta}; t, \alpha)$ , Bayesian flow distribution  $p_E(\boldsymbol{\theta} \mid \mathbf{x}; t)$ , and an overview figure of the training and sampling process of BFNs are provided in the appendix.
+
+In this context, three pivotal time-related variables come into play. The first variable is the sample steps, denoted as  $s \in \{1, 2, \dots, S\}$ , which determines the number of steps taken during the sampling round in BFNs. The second variable is the sample time, denoted as  $t \in [0, 1]$ , and it is closely associated with the sample steps. The number of sample steps dictates the intervals into which the range  $[0, 1]$  is divided during the sampling process in BFNs. The third variable pertains to the planning time steps within the state-action pair, denoted as  $t_p$ , and spans from 1 to the planning horizon  $T$  as defined in eq. (1).
+
+{3}------------------------------------------------
+
+## 3 GUIDED-BFNS
+
+In this section, we establish Guided-BFNS as a novel approach to tackle the planning problem in the upcoming RL experiments. The primary framework, encompassing state-action pairs, temporal locality, trajectory representation, and model architecture, adheres to the structure of Diffuser (Janner et al., 2022). This framework exhibits capabilities such as learning long-horizon planning, temporal compositionality, generation of variable-length plans, and task compositionality.
+
+### 3.1 CONDITIONAL GUIDANCE
+
+Given the parameters of the input distribution  $\theta$  and time  $t \in [0, 1]$ , the output distribution in BFNS is expressed as follows:
+
+$$p_O(\mathbf{x} | \theta; t) = \delta(\mathbf{x} - \tilde{\mathbf{x}}(\theta, t)), \quad (4)$$
+
+Here,  $\delta$  represents the Dirac delta function, and  $\tilde{\mathbf{x}}(\theta, t)$  corresponds to the output sample obtained after iterating through the neural network for several steps, symbolizing the planning trajectory in this context. For each time step  $t \in [0, 1]$  (corresponding to each sample step  $s \in \{1, 2, \dots, S\}$ ), BFNS generate a trajectory composed of state-action pairs:
+
+$$\tau_t = \tilde{\mathbf{x}}(\theta, t) \quad (5)$$
+
+$$= (s_{t,0}, a_{t,0}, \dots, s_{t,t_p}, a_{t,t_p}, \dots, s_{t,T}, a_{t,T}) \quad (6)$$
+
+To incorporate information regarding prior evidence (such as observation history), desired outcomes (like a goal to reach), or general functions to optimize (such as rewards or costs), we introduce the function  $h(\tau_t)$  and integrate it into the output sample in eq. (4):
+
+$$p_O(\mathbf{x} | \theta; t) \propto p_O(\mathbf{x} | \theta; t)h(\tau_t). \quad (7)$$
+
+In certain planning problems, it is more natural to pose them as constraint satisfaction rather than reward maximization. In such settings, the goal is to generate any feasible trajectory that satisfies a set of constraints, such as terminating at a goal location. Representing trajectories in an array, as described by eq. (5), allows translating this setting into an inpainting problem. Here, state and action constraints act similarly to observed pixels in an image (Sohl-Dickstein et al., 2015b). All unobserved locations in the array must be filled in by BFNS in a manner consistent with the observed constraints.
+
+The perturbation function required for this task is a Dirac delta for observed values and constant elsewhere. Specifically, if  $c_t$  is the state constraint at time step  $t$ , then:
+
+$$h(\tau_t) = \delta_{c_t}(s_0, a_0, \dots, s_T, a_T) = \begin{cases} +\infty & \text{if } c_t = s_t \\ 0 & \text{otherwise} \end{cases}$$
+
+The definition for action constraints is identical. In practice, this may be implemented by sampling from the BFNS' sampling process and replacing the sampled values with conditioning values  $c_t$  after all BFNS sample steps  $s \in \{1, 2, \dots, S\}$  (or time steps  $t \in [0, 1]$ ). For each planning round, an observed state  $s$  is given, and then:
+
+$$\tau_t = \tilde{\mathbf{x}}(\theta, t) = (s_{t,0}, a_{t,0}, \dots, s_{t,t_p}, a_{t,t_p}, s_{t,T}, a_{t,T}) \quad (8)$$
+
+is replaced by
+
+$$\tau_t = \tilde{\mathbf{x}}(\theta, t) = (s, a_{t,0}, \dots, s_{t,t_p}, a_{t,t_p}, s_{t,T}, a_{t,T}) \quad (9)$$
+
+Even in reward maximization problems, conditioning-by-inpainting is necessary because all sampled trajectories should commence from the current state.
+
+### 3.2 GRADIENT GUIDANCE
+
+Given the original data  $\mathbf{x}$  and accuracy  $\alpha$ , the sender distribution is defined as follows:
+
+$$p_S(\mathbf{y} | \mathbf{x}; \alpha) = \mathcal{N}(\mathbf{y} | \mathbf{x}, \alpha^{-1} \mathbf{I}). \quad (10)$$
+
+{4}------------------------------------------------
+
+![Figure 1: Visualization of key components in BFNs on a Maze-2D task. The left side shows three rows of six maze states each, labeled 'Input distribution', 'Output distribution', and 'Sender distribution'. Each state shows a blue line representing a trajectory. The right side shows a flow diagram: 'input μ' (a maze state) is processed by a neural network to produce 'output x' (a maze state with a different trajectory). 'output x' is then processed by a sender function p(y|x; α) to produce 'sender y' (a maze state). A 'Bayesian update' block takes 'input μ', 'output x', and 'sender y' to produce a revised 'input' (a maze state).](690fce4fb5c9cbb8beb560cb2a3fcbeb_img.jpg)
+
+Figure 1: Visualization of key components in BFNs on a Maze-2D task. The left side shows three rows of six maze states each, labeled 'Input distribution', 'Output distribution', and 'Sender distribution'. Each state shows a blue line representing a trajectory. The right side shows a flow diagram: 'input μ' (a maze state) is processed by a neural network to produce 'output x' (a maze state with a different trajectory). 'output x' is then processed by a sender function p(y|x; α) to produce 'sender y' (a maze state). A 'Bayesian update' block takes 'input μ', 'output x', and 'sender y' to produce a revised 'input' (a maze state).
+
+Figure 1: This figure illustrates the functioning of several key **components** in BFNs through visualization on Maze-2D. **Left:** Visualization of the input distribution  $p_I$ , the output distribution  $p_O$ , and the sender distribution  $p_S$  as sample steps  $s$  increases. Definitions of these distributions in BFNs are described in section 2.2, with additional mathematical details available in the appendix. All three distributions gradually update towards the correct trajectory, utilizing different functions. **Right:** Visualization of how these key components in BFNs work in a single sample step. The neural network addresses interrelated variables in the data by observing that output trajectories tend to differ significantly from the input ones, indicating large transitions to the correct trajectory. The Bayesian update process deals with independent variables under statistical theory assumptions, revising the trajectory in a more moderate way towards the correct outcome.
+
+To address RL problems using BFNs, the introduction of a reward concept is imperative. We employ the control-as-inference graphical model (Levine, 2018) for this purpose. Let  $O_{t_p}$  be a binary random variable denoting the optimality of planning timestep  $t_p$  of a trajectory, with  $p(O_{t_p} = 1) = \exp(r(s_{t_p}, a_{t_p}))$ . We can sample from the set of optimal trajectories by setting  $h(\tau_t) = p(O_{1:T} | \tau_t)$  in eq. (7):
+
+$$p_O(\mathbf{x} | \theta; t) = p(\tau_t | O_{1:T} = 1) \quad (11)$$
+
+$$\propto p_O(\mathbf{x} | \theta; t) p(O_{1:T} = 1 | \tau_t). \quad (12)$$
+
+The initial step involves training a BFNs' model on the states and actions encompassed in all available trajectory data. Subsequently, a separate model denoted as  $\mathcal{J}_\phi$  is trained to predict the cumulative rewards of the trajectory  $\tau_t = \tilde{\mathbf{x}}(\theta, t)$  sampled from  $p_O(\mathbf{x} | \theta; t)$ . The gradients of  $\mathcal{J}_\phi$  play a pivotal role in guiding the trajectory sampling procedure by modifying the input means  $\mu$ , output sample  $\tilde{\mathbf{x}}(\theta, t)$ , and the sender distribution  $p_S(\mathbf{y} | \mathbf{x}; \alpha)$  of the sampling process. This modification is carried out based on the min variance  $\sigma_1$ , sampling time  $t \in [0, 1]$ , and accuracy  $\alpha$  according to the following equations:
+
+$$\mu_{\text{new}} = \mu_{\text{last}} + \sigma_1^t \cdot g \quad (13)$$
+
+$$\tilde{\mathbf{x}}(\theta, t)_{\text{new}} = \tilde{\mathbf{x}}(\theta, t)_{\text{last}} + \sigma_1^t \cdot g \quad (14)$$
+
+$$p_S(\mathbf{y} | \tilde{\mathbf{x}}(\theta, t); \alpha) = \mathcal{N}(\mathbf{y} | \tilde{\mathbf{x}}(\theta, t) + \sigma_1^t \cdot g, \alpha^{-1} \mathbf{I}) \quad (15)$$
+
+where
+
+$$g = \nabla_{\tau_t} \log p(O_{1:T} | \tau_t) |_{\tau_t = \tilde{\mathbf{x}}(\theta, t)} \quad (16)$$
+
+$$= \sum_{t_p=0}^T \nabla_{s_{t_p}, a_{t_p}} r(s_{t_p}, a_{t_p}) |_{(s_{t_p}, a_{t_p}) = \tilde{\mathbf{x}}(\theta, t)} \quad (17)$$
+
+$$= \nabla \mathcal{J}_\phi(\tilde{\mathbf{x}}(\theta, t)). \quad (18)$$
+
+The rationale for incorporating the gradient into  $\mu$ ,  $\tilde{\mathbf{x}}(\theta, t)$ , and the sender distribution  $p_S(\mathbf{y} | \tilde{\mathbf{x}}(\theta, t); \alpha)$  is twofold. Firstly,  $\tilde{\mathbf{x}}(\theta, t)$  inherently contains information about the planning trajectory and thus requires guidance from the reward function. Secondly, in the Bayesian update function in BFNs (Graves et al., 2023), represented by eq. (2), both  $\mu$  and  $\mathbf{y}$  in the numerator influence the update of the input mean transmitted to the neural network. This, in turn, affects future parameter updates and the data processed by the model. Therefore, they must also be guided by the reward function  $\mathcal{J}_\phi$ .
+
+{5}------------------------------------------------
+
+![Figure 2: Overview of the influence of key parameters in BFNs. (a) Training checkpoints and sample steps. (b) Planning score and trajectory diversity vs. min variance. (c) Function value vs. min variance for different sample steps.](c54b3ca7603d65d4589151bc3a49d054_img.jpg)
+
+Figure 2 consists of three panels. Panel (a) shows 'Training checkpoints' and 'Sample steps  $s$ '. The top row shows checkpoints at planning time steps  $t_p = 0, 50, 100, 150, 200, 250$ . The bottom row shows sample steps  $s = 0, 8, 16, 32, 64, 256$ . Each checkpoint shows a maze with a start (yellow star) and goal (blue star) and a learned trajectory (green line). Panel (b) is a bar chart showing 'Planning score' (blue) and 'Trajectory diversity' (green) for 'Min Variance  $\sigma_1$ ' values:  $1e-06, 1e-05, 0.001, 0.01, 0.1, 0.9$ . Planning score decreases as  $\sigma_1$  increases, while diversity increases. Panel (c) is a line plot of 'Function value' vs. 'Min Variance  $\sigma_1$ ' for sample steps  $s = 10, 20, 30, 40, 50, 60, 70, 80, 90, 100$ . All lines show an increasing trend as  $\sigma_1$  increases.
+
+Figure 2: Overview of the influence of key parameters in BFNs. (a) Training checkpoints and sample steps. (b) Planning score and trajectory diversity vs. min variance. (c) Function value vs. min variance for different sample steps.
+
+Figure 2: This figure provides an overview of the influence of key **parameters** in BFNs. **a.** By selecting different checkpoints during training, the figure visualizes how the correct trajectory is learned and updated by BFNs. Planning performance increases as planning time step  $t_p$  and sample steps  $s$  increase. The last line illustrates the planning score according to sample steps. **b.** As min variance  $\sigma_1$  increases, the planning score decreases, but the generated trajectories' diversity (measured by the variance of 100 different trajectories) increases. This finding enlightens similar results in the original tested of image and text data in BFNs. **c.** The variance of the sender distribution increases for a fixed sample steps  $S = 100$  as  $\sigma_1$  increases for all discrete sample steps  $s = n \in \{1, 2, \dots, S\}$ . This explains the sampling diversity result in (b) and the decreasing speed of trajectory shape variation in fig. 1 Left.
+
+It is noteworthy that, in addition to the gradient, we introduce a posterior variance  $\sigma_1^t$ . Theoretically, incorporating a posterior variance  $\sigma_1^t$  imparts varying degrees of information based on different variances and times, resulting in more effective guidance similar to classifier-guidance (Dhariwal & Nichol, 2021) in DMs. Empirically, our experiments demonstrate a substantial improvement in planning performance with the inclusion of posterior variance  $\sigma_1^t$ .
+
+Finally, the first action of a sampled trajectory  $\tau_t \sim p(\tau_t | \mathcal{O}_{1:T} = 1)$  may be executed in the environment, after which the planning procedure recommences in a standard receding-horizon control loop.
+
+### 3.3 TRAINING AND SAMPLING
+
+The training step of Guided-BFNs directly optimizes the continuous time loss in eq. (3). Conditional guidance is combined in the training process. The model architecture, the reward model  $\mathcal{J}_\phi$  and other training details are listed in appendix. The rationale behind training the reward function lies in utilizing the gradient of the output sample to guide trajectory generation, representing a novel approach in classifier-guided BFNs.
+
+The sampling step of Guided-BFNs combines both the conditional guidance and the gradient guidance from the reward function  $\mathcal{J}_\phi$ . Pseudocode for the training method and guided planning method is given in algorithms 1 to 3 in appendix.
+
+## 4 EXPERIMENTS
+
+In this section, we perform a series of experiments aimed at visualizing and comprehending the behavior of BFNs with Guided-BFNs in the RL policy planning setting. Our investigations encompass several key aspects. Initially, key components of BFNs' architecture, including the input distribution, the output distribution and the sender distribution are visualized under the Maze-2D setting to investigate how the neural network and Bayesian update function work. Subsequently, we delve into
+
+{6}------------------------------------------------
+
+the influence of the min variance  $\sigma_1$ , the planning time steps  $t_p$ , and sample steps  $s$  on training loss, planning score and samples diversity. Following this, we conduct a comparative analysis of trajectories generated by both DMs and BFNs to unveil their similarities and differences. We then proceed with ablation studies, demonstrating the successful operation of the novel Guided-BFNs method under both conditional and gradient guidance. Finally, we explore interpolation studies, aiming to develop a training-free and faster sampling method for BFNs.
+
+To quantitatively assess planning effectiveness, we introduce a metric called **score**. A higher score indicates superior model performance, representing the normalized cumulative reward eq. (1) of the agent up to the current time step in the episode. In the reinforcement learning environment of Mujoco, the score can be directly calculated for the trajectory. Taking the Maze-2D environment as an example, the score calculation includes whether the target is reached, the path length, the number of time steps to reach the target, and the number of collisions. A larger score indicates a better trajectory.
+
+**Datasets** We utilize the Maze-2D (Fu et al., 2020), Kuka block stacking (Garrett et al., 2022), and D4RL locomotion datasets (Brockman et al., 2016; Fu et al., 2020) in the RL setting with Guided-BFNs to visualize and comprehend the behavior of BFNs. The introduction of these datasets and details of  $h(\tau)$  and reward settings of each dataset are listed in appendix.
+
+### 4.1 KEY COMPONENTS IN BFNs
+
+In this section, we provide visualizations of the input distribution  $p_I$ , the output distribution  $p_O$ , and the sender distribution  $p_S$  (as discussed in section 2.2), presented in fig. 1. Additional mathematical details are available in the appendix. These visualizations aim to elucidate the workings of key components within BFNs.
+
+The parameters of an input distribution (Gaussian, with both mean and variance, but only the mean  $\mu$  is considered) are inputted and processed by a pretrained neural network optimized using the continuous time loss in eq. (3). This process yields the parameters of an output distribution (Delta distribution). Noise is subsequently added to the output, resulting in a sender  $y$ , according to the accuracy schedule outlined in section 2.2 and the appendix. Following this, the input and sender are utilized to update the initial input distribution through Bayesian inference. The updated input parameters are then fed into the same neural network, producing the final output, which is the planning trajectory in our setting.
+
+**Neural Network:** The neural network addresses interrelated variables in data by leveraging its capacity to amalgamate such variables and learn implicit representations. This is a fundamental aspect observed in deep learning, where the output trajectories exhibit significant deviations from the input ones, representing large transitions toward the correct trajectory.
+
+**Bayesian Update:** The Bayesian update process deals with independent variables in accordance with statistical theory. Trajectories undergo more moderate revisions towards the correct outcome through this process. The combination of these components in BFNs harnesses the advantages of both deep learning and Bayesian inference.
+
+### 4.2 KEY PARAMETERS IN BFNs
+
+In this section, we explore the impact of several key parameters in BFNs, as shown in fig. 2. These parameters include the min variance  $\sigma_1$ , planning time step  $t_p$ , and sample steps  $s$  through visualization.
+
+**Min Variance  $\sigma_1$**  The hyperparameter  $\sigma_1$  is of paramount importance in BFNs, influencing the accuracy schedule, which determines the manner and rate of introducing noise to the original data during both training and inference. Specifically,  $\sigma_1$  represents the standard deviation of the input distribution at  $t = 1$  in eq. (3). Although the original BFNs paper (Graves et al., 2023) provides an approach for deriving the accuracy schedule, the selection process for  $\sigma_1$  is not discussed or experimented within the context of BFNs.
+
+In our observations, we note that the converged training loss tends to decrease as  $\sigma_1$  increases, as shown in table 8 in the appendix. Simultaneously, the fluctuation of loss during training shows an inverse relationship with  $\sigma_1$ ; it increases as  $\sigma_1$  decreases.
+
+{7}------------------------------------------------
+
+After training on different values of  $\sigma_1$ , we evaluate planning performance with these pretrained Guided-BFNs with fixed sample steps  $S = 64$  on 100 trajectories generated by each  $\sigma_1$ . We also investigate the samples' diversity, measured by the variance of 100 trajectories' state-action pairs data (fig. 2 (b)). We find that as  $\sigma_1$  increases, the planning performance decreases, while the samples' diversity increases. There is a trade-off between sampling quality (correctness of trajectory) and sampling diversity (different shapes of trajectory) determined by  $\sigma_1$  in BFNs. This finding is valuable for designing testbeds for BFNs with image and text data, where the influence of  $\sigma_1$  on sample quality and diversity is opposite and requires careful consideration.
+
+The variance of the sender distribution in eq. (10), determined by the accuracy schedule during BFNs' sampling, is defined in algorithm 3 in the appendix:
+
+$$\alpha = \sigma_1^{-2i/n} \left( 1 - \sigma_1^{2/n} \right) \quad (19)$$
+
+where  $n = S$  is the total sample steps, and  $i = s \in \{1, 2, \dots, n\}$ . We visualize this variance with different  $\sigma_1$  and  $i$  in fig. 2 (c). As  $\sigma_1$  increases, the variance of the sender distribution rises, which is used for Bayesian update (fig. 1 **Right**). Consequently, the diversity of samples increases, as confirmed in fig. 2 (b). Additionally, as sample steps increase, the variance decreases with a fixed  $\sigma_1$ , leading to less uncertainty in Bayesian update. This results in less change in input, output, and sender distribution as sample steps increase, as intuitively confirmed in fig. 1 **Left**.
+
+**Planning Time Steps  $t_p$  & Sample Steps  $s$**  In the sampling process of Guided-BFNs, two crucial parameters, planning time steps  $t_p$  in the RL setting and sample steps  $s$  in BFNs during the planning round, play a vital role. The trajectory's gradual approach towards the goal is illustrated in fig. 2 (a). Additionally, we observe an improvement in planning performance as both  $t_p$  and  $s$  increase. These findings provide valuable insights for parameter selection, contributing to a deeper understanding of BFNs.
+
+### 4.3 BFNs vs DMs
+
+Table 1: Planning performance under the same setting between Diffuser Janner et al. (2022) based on DMs and Guided-BFNs based on BFNs Graves et al. (2023).
+
+| Dataset / Method / Score | Diffuser | Guided-BFNs |
+|-|-|-|
+| Maze2D-Umaze | 113.9 | <b>121.4</b> |
+| Maze2D-Medium | 121.5 | <b>132.5</b> |
+| Maze2D-Large | 123.0 | <b>136.5</b> |
+| Kuka-Unconditional | 58.7 | <b>57.7</b> |
+| Kuka-Conditional | 45.6 | <b>50.2</b> |
+| Kuka-Rearrangement | 58.9 | <b>63.4</b> |
+| halfcheetah-medium-expert-v2 | 88.9 | <b>98.5</b> |
+| halfcheetah-medium-replay-v2 | 37.7 | <b>50.7</b> |
+| halfcheetah-medium-v2 | 42.8 | <b>64.1</b> |
+| hopper-medium-expert-v2 | 103.3 | <b>110.7</b> |
+| hopper-medium-replay-v2 | 93.6 | <b>100.0</b> |
+| hopper-medium-v2 | 74.3 | <b>85.4</b> |
+| walker2d-medium-expert-v2 | 106.9 | <b>118.6</b> |
+| walker2d-medium-replay-v2 | 70.6 | <b>74.1</b> |
+| walker2d-medium-v2 | 79.6 | <b>82.6</b> |
+
+cess.
+
+**Different Trajectories** Additionally, we conduct a comparative analysis of the trajectories learned by both DMs and BFNs from the provided data. To gain insights into how these models process
+
+Upon scrutinizing the effects of components and parameters in BFNs, we extend our investigation by conducting comparative studies between DMs and BFNs applied to the same task. This analysis aims to elucidate their respective trajectories, seeking to identify similarities and differences, thereby enhancing our understanding of BFNs.
+
+**Unlimited Sampling Steps** Our investigation reveals a distinct advantage of BFNs over DMs. BFNs exhibit flexibility by enabling an unrestricted number of sample steps during planning, facilitated by the utilization of a continuous time loss function (3). This feature eliminates the need for a fixed step during training, allowing for the enhancement of planning performance with an increase in sample steps  $S$ . In contrast, DMs impose limitations, permitting only a finite number of sampling steps equal to those fixed during the training process.
+
+{8}------------------------------------------------
+
+disorganized data, we visualize the results in fig. 3 **Left**, shedding light on the distinct approaches employed by DMs and BFNs in handling complex and unstructured datasets.
+
+![Figure 3: Comparison of Diffusion and BFNs on noisy data and conditional planning.](91be14371a97fb5ce9eeb29ae18d07c3_img.jpg)
+
+The figure is divided into two main sections: **Left** and **Right**.  
+**Left Section:** A 2x5 grid of images. The top row is labeled 'Diffusion' and the bottom row is labeled 'BFNs'. Each row shows five stages of a trajectory on a noisy, black-and-white grid world. The Diffusion row shows more fragmented and less smooth trajectories compared to the BFNs row, which shows more continuous and direct paths.  
+**Right Section:** A 2x5 grid of images. The top row is labeled 'Training' and the bottom row is labeled 'Planning'. Each row shows five stages of a trajectory on a simple grid world with a single obstacle. The trajectories start at a blue star (start) and end at a yellow star (end). As the conditional ratio  $\alpha$  increases from 0 to 1 (indicated by a scale at the bottom), the trajectories become more direct and better conditioned on the start and end points.
+
+Figure 3: Comparison of Diffusion and BFNs on noisy data and conditional planning.
+
+Figure 3: **Left:** The initial data is more noisy for BFNs than DMs. However BFNs can generate proper trajectory more faster than DMs, which indicates a more rapid learning speed for BFNs. The trajectory generated by BFNs is more smooth than DMs. BFNs learn by Bayesian update while DMs learn by denoising data. **Right:** As the conditional ratio  $\alpha$  incrementally approaches 1, indicative of an increased reliance on conditioning to guide the trajectories towards the start and end points, a noticeable trend emerges.
+
+**Competitive Results** In a conclusive evaluation, we assess the planning performance under identical training and sampling configurations using both Diffuser (Janner et al., 2022) and Guided-BFNs in table 1. The outcomes indicate that Guided-BFNs not only achieve competitive performance but, in most instances, surpass the performance achieved by DMs. This attests to the efficacy of Guided-BFNs in delivering robust planning outcomes, establishing them as a compelling alternative to DMs in the context of the evaluated tasks.
+
+### 4.4 ABLATION STUDIES
+
+To assess the effectiveness of the novel method Guided-BFNs, incorporating both conditional and gradient guidance (analogous to classifier-guidance (Dhariwal & Nichol, 2021) in DMs), ablation studies are conducted. For conditional guidance, we introduce a scaling factor  $\alpha \in [0, 1]$  in front of the conditional guidance term in eq. (7), transforming it into:
+
+$$p_O(\mathbf{x} | \theta; t) = \alpha p_O(\mathbf{x} | \theta; t) h(t).$$
+
+In practice, we directly multiply the state-action pair trajectory array eq. (9) by  $\alpha$ . We examine how the trajectory evolves as  $\alpha$  varies, specifically on the Maze2d-umaze dataset, as depicted in fig. 3.
+
+Simultaneously, for the gradient guidance in Guided-BFNs, we introduce a scalar  $\alpha'$  in eq. (13), resulting in:
+
+$$p_S(\mathbf{y} | \tilde{\mathbf{x}}(\theta, t); \alpha) \approx \mathcal{N}(\mathbf{y} | \tilde{\mathbf{x}}(\theta, t) + \sigma_1^* * g * \alpha', \alpha^{-1} \mathbf{I}).$$
+
+We investigate the impact of the gradient scalar  $\alpha'$  on planning score and conduct experiments on Kuka-conditioning and Kuka-rearrangement datasets, as illustrated in fig. 4. This finding underscores the pivotal role of gradient guidance in achieving superior planning outcomes in the evaluated scenarios.
+
+### 4.5 INTERPOLATION SAMPLING ACCELERATION
+
+Developing training-free, faster sampling algorithms for generative AI models is of paramount importance. In our pursuit of this objective, we experimented with an interpolation method applied to BFNs on the Kuka-unconditioning dataset. The aim was to accelerate the sampling process and potentially provide insights for future research in the domain of efficient BFNs sampling methods.
+
+In essence, we kept the last sample step  $S$  unchanged and evenly distributed sampling points at equal intervals among the remaining  $S - 1$  points. The details of the interpolation sampling acceleration algorithm can be found in the appendix. The remarkable outcome signifies an acceleration in sampling efficiency by half (fig. 4), showcasing the potential of interpolation as a promising strategy for expediting the sampling process without compromising planning performance.
+
+{9}------------------------------------------------
+
+![Figure 4: Two line plots showing planning scores. The left plot shows Planning Score vs. Gradient Scalar alpha for kuka_conditional and kuka_rearrangement. The right plot shows Planning Scores vs. Interpolation Points Numbers.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+The figure contains two line plots. The left plot shows 'Planning Score' on the y-axis (ranging from 10 to 60) against 'Gradient Scalar  $\alpha$ ' on the x-axis (ranging from 0.0 to 1.0). Two data series are plotted: 'kuka\_conditional' (blue line with circular markers) and 'kuka\_rearrangement' (yellow line with circular markers). The 'kuka\_rearrangement' series starts at a high score of approximately 60 at  $\alpha=0.0$ , peaks at  $\alpha=0.3$  with a score of about 62, and then generally declines to around 10 at  $\alpha=1.0$ . The 'kuka\_conditional' series starts at a much lower score of about 10 at  $\alpha=0.0$ , peaks at  $\alpha=0.3$  with a score of about 50, and then declines to around 10 at  $\alpha=1.0$ . The right plot shows 'Planning Scores' on the y-axis (ranging from 10 to 60) against 'Interpolation Points Numbers' on the x-axis (ranging from 1 to 1000). A single data series (blue line with circular markers) starts at a score of about 10 at 1 interpolation point, rises sharply to about 42 at 100 points, dips slightly to 32 at 300 points, then rises to a peak of about 58 at 700 points, before slightly declining to about 55 at 1000 points.
+
+Figure 4: Two line plots showing planning scores. The left plot shows Planning Score vs. Gradient Scalar alpha for kuka\_conditional and kuka\_rearrangement. The right plot shows Planning Scores vs. Interpolation Points Numbers.
+
+Figure 4: **Left:** The depicted figure illustrates the variation in planning scores corresponding to different gradient scalar values  $\alpha'$  within the Kuka settings. Our observations reveal that a non-zero scalar  $\alpha'$  significantly enhances planning performance compared to the case where  $\alpha'$  is set to 0, thereby validating the effectiveness of gradient guidance. Notably, the optimal gradient scalar under this specific setting is determined to be 0.3. **Right:** The depicted figure illustrates the impact of the interpolation method on the planning score, as observed in experiments conducted on the Kuka-unconditional dataset. The experiments were conducted using a pretrained Guided-BFNs with a fixed sample step of  $S = 1000$  on the average of 1000 trajectories each interpolation points numbers. The x-axis represents the number of sample steps preserved after interpolation. By employing interpolation, we can preserve approximately half of the original sample steps while maintaining nearly the same planning score as observed without interpolation.
+
+## 5 RELATED WORK
+
+Deep generative modeling has significantly advanced model-based reinforcement learning. Recent studies explore dynamic models with neural ODEs (Du et al., 2020), vector quantized autoencoders (Hafner et al., 2020), and Transformers (Chen et al., 2022). This reflects a shift in the research focus and methods. Various works (Tamar et al., 2017; Farahmand et al., 2017; Rybkin et al., 2021) have investigated bridging the gap between model learning and planning. Notably, (Janner et al., 2022) introduced Diffuser, a diffusion (Ho et al., 2020; Sohl-Dickstein et al., 2015a; Nichol & Dhariwal, 2021)-based model that concurrently generates trajectory timesteps, conditioned with auxiliary functions. This paper pioneers in visualizing and comprehending Bayesian Flow Networks (BFNs) (Graves et al., 2023). Their adaptability to continuous, discretized, and discrete data, with minimal training adjustments, stands in contrast to discretized diffusion models (Austin et al., 2021), which necessitate defined transition matrices.
+
+## 6 CONCLUSION
+
+In summary, this paper introduces Guided-BFNs, an innovative extension of BFNs, showcasing their enhanced applicability in various RL scenarios through the integration of additional conditions and gradient guidance. Through systematic parameter tuning and rigorous experiments, we uncover crucial components and elucidate the functional roles of parameters, providing valuable insights for practitioners. A comparative analysis highlights difference between BFNs and DMs. Our contribution includes a faster, training-free sampling algorithm, improving efficiency for real-time applications. By presenting our findings, we aim to inspire further research in the realms of BFNs' explanation and optimization, fostering advancements in these areas in the future.
+
+## REFERENCES
+
+- Jacob Austin, Daniel D Johnson, Jonathan Ho, Daniel Tarlow, and Rianne Van Den Berg. Structured denoising diffusion models in discrete state-spaces. *Advances in Neural Information Processing Systems*, 34:17981–17993, 2021.
+- Iz Beltagy, Matthew E Peters, and Arman Cohan. Longformer: The long-document transformer. *arXiv preprint arXiv:2004.05150*, 2020.
+
+ Rest of paper (reference and Appendix) is removed.

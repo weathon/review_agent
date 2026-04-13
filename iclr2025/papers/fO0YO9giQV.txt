@@ -1,0 +1,302 @@
+
+
+{0}------------------------------------------------
+
+# ANYECG: FOUNDATIONAL MODELS FOR ELECTROCARDIOGRAM ANALYSIS
+
+## Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Electrocardiogram (ECG), a non-invasive and affordable tool for cardiac monitoring, is highly sensitive in detecting acute heart attacks. However, due to the lengthy nature of ECG recordings, numerous machine learning methods have been developed for automated heart disease detection to reduce human workload. Despite these efforts, performance remains suboptimal. A key obstacle is the inherent complexity of ECG data, which includes heterogeneity (e.g., varying sampling rates), high levels of noise, demographic-related pattern shifts, and intricate rhythm-event associations. To overcome these challenges, this paper introduces AnyECG, a foundational model designed to extract robust representations from any real-world ECG data. Specifically, a tailored ECG Tokenizer encodes each fixed-duration ECG fragment into a token and, guided by proxy tasks, converts noisy, continuous ECG features into discrete, compact, and clinically meaningful local rhythm codes. These codes encapsulate basic morphological, frequency, and demographic information (e.g., sex), effectively mitigating signal noise. We further pre-train the AnyECG to learn rhythmic pattern associations across ECG tokens, enabling the capture of cardiac event semantics. By being jointly pre-trained on diverse ECG data sources, AnyECG is capable of generalizing across a wide range of downstream tasks where ECG signals are recorded from various devices and scenarios. Experimental results in anomaly detection, arrhythmia detection, corrupted lead generation, and ultra-long ECG signal analysis demonstrate that AnyECG learns common ECG knowledge from data and significantly outperforms cutting-edge methods in each respective task.
+
+## 1 INTRODUCTION
+
+The electrocardiogram (ECG) is a widely used test that records the heart’s electrical activity, facilitating the monitoring and diagnosis of various cardiac conditions. Due to variations in ECG devices, recording conditions, patient characteristics, the length of recorded ECG signals, the number of leads, the sampling rates, as well as the signal-to-noise ratio (SNR), can vary significantly. For example, in non-clinical settings, wearable devices typically collect long-term single-lead or dual-lead ECG signals at lower sampling rates, covering a variety of human activity scenarios, which often results in higher noise levels (Abbaspourazad et al., 2023; Ansari et al., 2023). In contrast, standard devices used in hospital outpatient clinics capture high-resolution eight-, twelve-, or eighteen-lead ECG signals in a resting state for diagnostic purposes (Herman et al., 2024). Additionally, the noise in ECG data can originate from device artifacts, baseline wander, muscle noise, as well as external interference (Singh & Sharma, 2022). These heterogeneity and complexity present major challenges in developing a unified model that can effectively handle ECG signals recorded across various devices, scenarios, and clinical purposes.
+
+Sequence models, such as large language models, developed using large-scale data in the wild have shown significant advantages in learning robust representations and demonstrated robustness in downstream tasks. However, adapting sequence model pre-training approaches to ECG data in real-world settings poses unique challenges: **(1) Heterogeneity:** real-world ECG signals vary in length, sampling rate, and the number of channels due to differences in devices and scenarios. A unified model (e.g., with fixed tokenizer settings) is needed to effectively manage this diversity while maintaining temporal resolution and avoiding the introduction of artifacts. **(2) Low SNR:** ECG signals inherently have a low SNR, and pathological waveforms are often subtle, making it easy for noise
+
+{1}------------------------------------------------
+
+to interfere with the understanding of critical features. **(3) Demographic shift:** ECG waveforms can vary due to patient demographics (e.g., age, sex, ethnicity). For instance, pediatric ECGs differ from adults in disease presentation and heart rate (Chen et al., 2024), and distinct ethnic groups may exhibit unique ECG characteristics (Jain et al., 2010), which hinder models from generalizing across diverse populations. **(4) Implicit rhythm-event association:** The systematic arrangement of rhythm patterns may indicate some cardiac events. ECG analysis depends on identifying these rhythm associations and event patterns. However, noisy real-world ECG data make it difficult for models to capture sequential relationships, hindering the accurate cardiac event detection.
+
+To overcome these challenges, we introduce AnyECGs, a family of ECG foundational models designed for robust representation learning on ECG signals in diverse, real-world settings. The development of AnyECG involves two main pre-training phases: the ECG Tokenizer pre-training and the entire AnyECG foundation model pre-training. The first phase captures key local rhythmic patterns from noisy ECG signals, while the second learns associations across the rhythmic patterns that implies cardiac events. Specifically, we first pad any ECG signals to unified length, segment a signal into a collection of fixed-duration fragments, project each fragment into a token orderly, and pad missing channels, standardizing the diversity in sampling rates, lengths, and channel numbers. We further design a new hierarchical modeling approach to tackle ultra-long ECG signal (solving challenge (1)). In the ECG Tokenizer pre-training phase, a Rhythm Codebook is established to capture the key local morphological and frequency features inherent in ECG signals. The ECG Tokenizer extracts ECG features that are closely aligned with these Rhythm Codes, effectively reducing noise by matching the input patches to those representative codes (solving challenge (2)). Additionally, the extracted ECG features are also required to recover demographic information about the patient (addressing challenge (3)). Then, we apply ‘masked modeling’ approach in the AnyECG pretraining phase, where the model predicts Rhythm Code indices to fill in masked patches. This approach encourages the recovery of masked ECG patches based on their relationship with unmasked ECG patches, enabling the model to learn cardiac event semantics that are essential for downstream tasks, thus addressing challenge (4). With these designs, AnyECG can facilitate knowledge transfer across various ECG sources in the wild, enabling to learn shared ECG and cardiac event knowledge that is applicable to downstream tasks. Our contributions are listed below.
+
+- **ECG Foundational Model:** We introduce AnyECG, a foundational ECG model that unifies representation learning by capturing important local rhythm patterns in ECG signals and their semantic relationships, providing a flexible framework adaptable to any ECG signals for various downstream applications.
+- **ECG Tokenizer:** We present an ECG tokenizer that extracts compact, noise-resilient Rhythm Codes utilizing the Multi-View Synergistic Decoder that reconstructs these codes from Morphology, Frequency, and Demography perspectives to capture essential diagnostic features and improve generalization across diverse populations.
+- **Various Downstream Tasks Adaptability:** By pretrained to learn the associations among ECG tokens, our AnyECG is sensitive to potential cardiac events, demonstrating strong generalization capabilities across various downstream tasks, including anomaly detection, arrhythmia detection, corrupted lead generation, and ultra-long ECG signal analysis.
+
+## 2 METHODOLOGY
+
+Our proposed AnyECG adopts a common Transformer architecture, incorporating a novel attention module and a special tokenizer that can be adapted to both the self-supervised learning pretraining pipeline and various downstream tasks for any ECG signals, as shown in Figure 1. The self-supervised learning process of AnyECG is divided into two phases: pretraining the ECG Tokenizer and pretraining the AnyECG backbone.
+
+### 2.1 ANYECG ARCHITECTURE
+
+**ECG Signal Pre-Processing.** To preserve the natural characteristics of the ECG signals, we applied minimal pre-processing steps aimed at reducing noise while maintaining signal integrity. First, we used a bandpass filter between 0.1 Hz and 75 Hz to remove low-frequency noise, followed by a notch filter at 50 Hz to eliminate power-line interference. The ECG signals were then resampled to
+
+{2}------------------------------------------------
+
+![Figure 1: Overall architecture and pre-training pipeline of AnyECG. The diagram is divided into two main sections. The top section, 'ECG Tokenizer Pre-Training', shows an ECG signal being processed through a 'Patch & Linear Projection' block to create tokens. These tokens are then processed by an 'ECG Tokenizer' consisting of a 'Temporal Encoder' (Conv, Group Norm, GELU) and a 'Spatial Encoder' (4 Transformer Blocks). The output is a 'Learnable Temporal Encoding' and a 'Learnable Positional Encoding'. These are then processed by a 'Rhythm Codebook' which maps to tokens like 'r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7', 'r8', 'r9', 'r10'. These tokens are then used in a 'Proxy Task' to predict 'Morphology', 'Frequency', and 'Demography'. The bottom section, 'AnyECG Pre-Training', shows a similar process but with 'Masked ECG Patches'. The output is a 'Probability Distribution' over tokens, which is then used in a 'Cross-Mask Attention' block. This block also takes 'Positional Tolerance' as input. The final output is a 'Cross-Mask Attention' matrix.](1b7d539e02a202c2cf2d97698b911447_img.jpg)
+
+Figure 1: Overall architecture and pre-training pipeline of AnyECG. The diagram is divided into two main sections. The top section, 'ECG Tokenizer Pre-Training', shows an ECG signal being processed through a 'Patch & Linear Projection' block to create tokens. These tokens are then processed by an 'ECG Tokenizer' consisting of a 'Temporal Encoder' (Conv, Group Norm, GELU) and a 'Spatial Encoder' (4 Transformer Blocks). The output is a 'Learnable Temporal Encoding' and a 'Learnable Positional Encoding'. These are then processed by a 'Rhythm Codebook' which maps to tokens like 'r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7', 'r8', 'r9', 'r10'. These tokens are then used in a 'Proxy Task' to predict 'Morphology', 'Frequency', and 'Demography'. The bottom section, 'AnyECG Pre-Training', shows a similar process but with 'Masked ECG Patches'. The output is a 'Probability Distribution' over tokens, which is then used in a 'Cross-Mask Attention' block. This block also takes 'Positional Tolerance' as input. The final output is a 'Cross-Mask Attention' matrix.
+
+Figure 1: **Overall architecture and pre-training pipeline of AnyECG.** AnyECG is pre-trained in two steps. The Patient Attribute Tokenizer is pre-trained through proxy tasks to embed morphology, frequency, and demography into tokens (**up**). Then, the entire AnyECG, along with the Patient Attribute Tokenizer, is further pre-trained by predicting the code indices of the masked tokens to learn the semantic relationships between tokens (**bottom-left**). The Cross-Masking approach restricts interactions of patches from the same lead or from the same position across different leads (**bottom-right**). LN: LayerNorm, Conv: 1D convolution with kernel size of 15.
+
+300 Hz to standardize the sampling rate across all data sources, as 300 Hz is considered sufficient for diagnosing most cardiac conditions based on the Nyquist-Shannon sampling theorem. Finally, wavelet-based denoising was performed using the ‘db6’ wavelet, following (Ma et al., 2022). To align with the Transformer input format, a multi-channel ECG signal  $X \in \mathbb{R}^{L \times T}$  (where  $L$  represents the number of ECG leads (channels), and  $T$  denotes the total number of recorded temporal points) was segmented along the time axis into fixed-duration patches of size  $w$ . This divides each lead into  $P$  patches, where  $P$  is the minimal positive integer satisfying  $P \times w \geq T$ . If  $T$  is not divisible by  $s$ , we pad the signal with zeros at the end to reach a length of  $P$  s. Each patch  $x_{j,k} \in \mathbb{R}^s$  is defined as  $x_{j,k} = X_{j, (k-1)s+1:k \times s}$ , where  $j = 1, 2, \dots, L$  denotes the lead index and  $k = 1, 2, \dots, P$  denotes the patch index along the time axis. The total number of patches is  $N = L \times P$ , and we flatten them into a patch sequence  $X' \in \mathbb{R}^{N \times w}$  of length  $N$  before feeding it into the model.
+
+**ECG Tokenizer.** The objective of ECG Tokenizer is to effectively capture both the temporal and spatial features of ECG signals and generate an embedding  $H \in \mathbb{R}^{N \times d}$  from  $X'$ . We firstly use a temporal encoder to learn local temporal patterns by independently processing each ECG patch  $x_{j,k}$ . The temporal encoder consists of one 1D convolution, a group normalization, and a GELU activation function. Then, a spatial encoder with 4 Transformer blocks is used. Each patch  $x_{j,k}$  is processed by the temporal encoder and spatial encoder sequentially to obtain an embedding  $h'_{j,k} \in \mathbb{R}^d$ . To enhance the model’s understanding of the temporal sequence and leads relationships, learnable temporal position encoding  $\tau_k \in \mathbb{R}^d$  and lead position encoding  $\sigma_j \in \mathbb{R}^d$  are along the temporal dimension  $k$  and channel dimension  $j$ , separately. The output of the ECG Tokenizer is the temporal-spatial encoding  $h_{j,k} = h'_{j,k} + \tau_k + \sigma_j$ .
+
+**Cross-Mask Attention (CMA).** Unlike other sequential data like text, ECG signals typically include multiple leads, with the signals at the same positions across leads providing complementary information (Chen et al., 2021). Therefore, in contrast to conventional multi-head self-attention, we introduce CMA, which differentiates the structure of our AnyECG. CMA allows each patch to interact only with patches within relevant channels (i.e. leads) and temporal contexts. We apply CMA as the attention module within the Transformer blocks of both the ECG Tokenizer and AnyECG backbone. Given input  $H$ ,  $Q = \text{LayerNorm}(H)W_Q$ ,  $K = \text{LayerNorm}(H)W_K$ ,  $V = HW_V$ , where
+
+{3}------------------------------------------------
+
+$W_Q, W_K, W_V \in \mathbb{R}^{d \times d_{\text{model}}}$  are learnable projection matrices,  $\text{LayerNorm}(\cdot)$  denotes layer normalization, and  $d_{\text{model}}$  is the model dimension. The CMA is computed as:
+
+$$\text{CMA}(Q, K, V) = \text{softmax} \left( \frac{QK^\top + M}{\sqrt{d_{\text{head}}}} \right) V, \quad M_{i,j} = \begin{cases} 0, & \text{if } j \in \mathcal{A}(i) \\ -\infty, & \text{otherwise} \end{cases} \quad (1)$$
+
+where,  $d_{\text{head}}$  is the number of attention head;  $M \in \mathbb{R}^{N \times N}$  is the attention mask matrix.  $\mathcal{A}(i)$  includes patches from the same lead  $j$  or the same position, as illustrated in Figure 1 bottom right. Notably, a positional tolerance (mask width) is used to improve the model's robustness, accounting for slight delays in certain leads caused by variations in cardiac signal conduction, which is particularly significant for some diseases. In AnyECG, we adopt the multi-head attention version.
+
+### 2.2 ECG TOKENIZER PRETRAINING
+
+#### 2.2.1 ECG TOKENIZER WITH RHYTHM CODEBOOK
+
+**Motivation.** ECG signals are inherently high-dimensional time-series data, often characterized by a low SNR due to sparse key information and contamination from various types of noise. To address these issues, we propose a vector-quantized rhythm codebook that transforms raw ECG signals into compact, discrete tokens, enabling robust and noise-resistant representation learning. The transformation of rhythm codebook enhances low-SNR signals into a high-SNR representation, accurately capturing true cardiac activity while minimizing the effects of noise.
+
+Initially, each patch  $x_{j,k} \in \mathbb{R}^s$  represents a portion of the signal over  $w$  time steps in lead  $j$ . The tokenizer processes these patches into feature representations, yielding embeddings  $h_{j,k} \in \mathbb{R}^d$ , where  $d$  is the dimension of each embedding. To discretize these continuous embeddings into tokens suitable for subsequent processing, we employ a quantizer that maps each embedding  $h_{j,k}$  to the nearest codeword in a predefined codebook  $V$ . The codebook  $V \in \mathbb{R}^{K \times d}$  consists of  $K$  codes  $v_1, v_2, \dots, v_K$ . The quantization process is defined as:
+
+$$i^* = \arg \min_{i \in \{1, 2, \dots, K\}} \left\| \frac{h_{j,k}}{\|h_{j,k}\|_2} - \frac{v_i}{\|v_i\|_2} \right\|_2^2 \quad (2)$$
+
+where  $\|\cdot\|_2$  denotes the  $\ell_2$ -norm, and normalization ensures that the distance measure is equivalent to maximizing the cosine similarity. The assigned discrete token index for the patch  $x_{j,k}$  is index  $i^*$ . This process effectively quantizes the ECG signal into a sequence of discrete tokens  $\{z_{j,k}\}$ , reducing the influence of noise and enhancing the signal quality.
+
+By transforming the ECG data into a low dimension and high-SNR tokenized representations  $z_{j,k}$ , the ECG Tokenizer enables the model to focus on the meaningful aspects of the cardiac signal, such as heartbeat patterns and rhythms, which improves the model's ability to generalize across different datasets.
+
+#### 2.2.2 MULTI-VIEW SYNERGISTIC DECODER
+
+To better capture the demographic variations and morphological changes inherent in ECG signals, we propose a **Multi-View Synergistic Decoder** containing three decoders for different proxy tasks.
+
+**Morphology Decoder** aims to reconstruct the original temporal ECG signals, focusing on preserving time-domain information critical for identifying features like QRS complexes and arrhythmia. By reconstructing the time-domain signals, we ensure that the essential temporal characteristics of the cardiac cycles are retained, providing a foundation for accurate heartbeat analysis. The reconstruction loss for the Morphology Decoder is defined as:
+
+$$\mathcal{L}_{\text{morphology}} = \sum_{j=1}^L \sum_{k=1}^P \|o_{j,k}^n - x_{j,k}\|_2^2 \quad (3)$$
+
+where  $o_{j,k}^n$  is the output of the Morphology Decoder for patch  $x_{j,k}$ .
+
+{4}------------------------------------------------
+
+**Frequency Decoder** predicts the frequency characteristics of ECG signals by incorporating frequency-domain information, which is essential for capturing periodic and spectral features associated with cardiac conditions. Unlike traditional methods that focus solely on time-domain or frequency features, this decoder leverages the Discrete Wavelet Transform (DWT)(Shensa et al., 1992) to analyze the signals simultaneously in both time and frequency domains. For each ECG patch  $x_{j,k} \in \mathbb{R}^s$ , corresponding to lead  $j$  and patch index  $k$ , we apply the DWT to decompose the time-domain signal into wavelet coefficients, capturing localized frequency content. The DWT performs a multi-scale decomposition of the signal recursively, obtaining features across different frequency ranges. The wavelet decomposition process consists of two main parts. At the initial stage, the original signal is the approximation coefficients at level zero,  $c_A^{(0)} = x_{j,k}$ . Then, at the Recursive Decomposition stage, for each level  $l$  ( $l = 1, 2, \dots, L_w$ ), we use the approximation coefficients from the previous level  $c_A^{(l-1)}$  to obtain the current level's approximation coefficients  $c_A^{(l)}$  and detail coefficients  $c_D^{(l)}$  through convolution and downsampling:
+
+$$c_A^{(l)}[n] = \sum_m c_A^{(l-1)}[m] \cdot g[2n - m] \quad c_D^{(l)}[n] = \sum_m c_A^{(l-1)}[m] \cdot h[2n - m] \quad (4)$$
+
+where  $g[\cdot]$  and  $h[\cdot]$  are the coefficients of the low-pass and high-pass filters, respectively,  $n$  is the index of the downsampled coefficients, the convolution operation captures the signal's features in the corresponding frequency range, and downsampling reduces the resolution, focusing on lower-frequency components. We obtain a hybrid time-frequency representation of the ECG signal through multi-scale decomposition by performing these operations on the approximation coefficients  $c_A^{(l-1)}$  at each level, simultaneously capturing both the low-frequency (approximation coefficients) and high-frequency (detail coefficients) information of the signal. For stable convergence during training, we apply z-score normalization to the frequency magnitudes within each patch. The reconstruction loss for the Frequency Decoder is defined as:
+
+$$\mathcal{L}_{\text{freq}} = \sum_{l=1}^{L_w} \left( \left\| \hat{c}_A^{(l)} - c_A^{(l) \text{ norm}} \right\|_2^2 + \left\| \hat{c}_D^{(l)} - c_D^{(l) \text{ norm}} \right\|_2^2 \right) \quad (5)$$
+
+where  $\hat{c}_A^{(l)}$  and  $\hat{c}_D^{(l)}$  are the predicted approximation and detail coefficients at level  $l$ , respectively, and  $c_A^{(l) \text{ norm}}$  and  $c_D^{(l) \text{ norm}}$  are the corresponding normalized actual coefficients. The loss is computed across all decomposition levels  $l$  from 1 to  $L_w$ .
+
+**Demography Decoder** predicts patient-specific attributes (e.g., age, weight, or other demographic factors), represented as a vector  $a \in \mathbb{R}^{d_a}$ . By jointly predicting these attributes, the model gains a personalized understanding of the patient's condition. This personalized aspect allows the model to better account for inter-patient variability, which is critical in making accurate clinical predictions. The loss for the Demography Decoder is defined as:
+
+$$\mathcal{L}_{\text{demography}} = \|o^a - a\|_2^2 \quad (6)$$
+
+where  $o^a$  represents the predicted patient-specific attributes, and  $a$  is the ground truth patient attribute vector.
+
+**Overall Loss Function for ECG Tokenizer** In addition to reconstruction loss functions from all decoders, we also include codebook loss and commitment loss to ensure that the quantized tokens remain faithful to the original signal and stabilize the training process. The codebook loss and commitment loss are defined as:
+
+$$\mathcal{L}_{\text{codebook}} = \sum_{j=1}^C \sum_{k=1}^P \left\| \text{sg}(h_{j,k}) - v_{z_{j,k}} \right\|_2^2 \quad \mathcal{L}_{\text{commitment}} = \beta \sum_{j=1}^C \sum_{k=1}^P \left\| h_{j,k} - \text{sg}(v_{z_{j,k}}) \right\|_2^2 \quad (7)$$
+
+{5}------------------------------------------------
+
+where  $h_{j,k}$  is the embedding of the patch  $x_{j,k}$ ,  $v_{z_{j,k}}$  is the codebook vector corresponding to the token  $z_{j,k}$ ,  $\text{sg}(\cdot)$  denotes the stop-gradient operator, and  $\beta$  is a weighting coefficient for the commitment loss. The overall loss function combines all components:
+
+$$\mathcal{L}_T = \mathcal{L}_{\text{morphology}} + \mathcal{L}_{\text{frequency}} + \mathcal{L}_{\text{demography}} + \mathcal{L}_{\text{codebook}} + \mathcal{L}_{\text{commitment}} \quad (8)$$
+
+This loss function requires the reconstruction of both the temporal and frequency components of the ECG signal, while also ensuring the recovery of patient-specific factors for personalized modeling. Experiments in Appendix 7.4 shows the importance of each component in the total loss function.
+
+### 2.3 ANYECG MASKED PRE-TRAINING
+
+Inspired by self-supervised learning from masked modeling in NLP (Kenton & Toutanova, 2019) and vision (Bao et al., 2021; He et al., 2022), we design a hybrid-scale masked ECG modeling strategy, where random segments of ECG signals are masked and the model is learned to reconstruct missing parts.
+
+After using ECG Tokenizer process  $X'$  to embeddings  $H \in \mathbb{R}^{N \times d}$ , we randomly generate a mask  $M \in \mathbb{R}^{N \times 1}$ , where its component  $m_{j,k} \in \{0, 1\}$ . The masked patches are replaced with a learnable mask token  $h_M \in \mathbb{R}^d$ . The masked embeddings  $\tilde{h}_{j,k}$  are defined as:  $\tilde{h}_{j,k} = (1 - m_{j,k}) \cdot h_{j,k} + m_{j,k} \cdot h_M$ . These augmented embeddings  $\tilde{h}_{j,k}$  are then reshaped into a sequential format and fed into a Transformer encoder to generate contextualized representations  $\tilde{h}'_{j,k} \in \mathbb{R}^d$ . Each contextualized vector  $\tilde{h}'_{j,k}$  is passed through a linear classifier followed by a softmax function to produce a probability distribution over the codebook tokens  $V = \{v_1, v_2, \dots, v_K\}$ :  $p(v_i | \tilde{H}) = \text{softmax} \left( W \tilde{h}'_{j,k} + b \right)_i$ , where  $\tilde{H}$  denotes the collection of all augmented embeddings  $\tilde{h}_{j,k}$ , and the subscript  $i$  refers to the  $i$ -th element of the output vector. The training objective for the masked modeling process is to minimize the negative log-likelihood of predicting the correct tokens  $v_{z_{j,k}}$  at the masked positions:
+
+$$\mathcal{L}_{\text{mask}} = - \sum_{j=1}^L \sum_{k=1}^P m_{j,k} \cdot \log p \left( v_{z_{j,k}} | \tilde{H} \right) \quad (9)$$
+
+The masked pretraining facilitates the model in learning generic representations from the input data by capturing the implicit rhythm-event associations and sequential relationships crucial for ECG analysis, thereby enhancing its ability to capture the underlying cardiac event patterns in the ECG signals.
+
+## 3 DOWNSTREAM APPLICATION
+
+This section evaluates AnyECG’s performance across multiple ECG datasets to prove its generality. In Section 3.1, we summarize datasets utilized in the experiments. Section 3.2 explains the experimental setup in detail. In Section 3.3, we present the results of our experiments, benchmarking AnyECG against state-of-the-art methods across multiple tasks, including anomaly detection, arrhythmia detection, ECG lead generation, and ultra-long ECG sequence recognition. In Section 7.4 and 7.3, we also present **ablation studies** on hyperparameter selection and the necessity of two-stage pre-training.
+
+### 3.1 ECG DATASETS
+
+To evaluate the performance of AnyECG and baseline models, we utilized a comprehensive set of ECG datasets that include all available unlabeled data during pretraining. These datasets cover a wide spectrum of cardiac conditions, patient demographics, and recording scenarios, ensuring robust testing across diverse settings. For various downstream tasks, we mixed all datasets together to minimize biases introduced by individual datasets and to better validate the model’s generalizability. This approach reduces the discrepancies arising from different data sources and enhances the unified
+
+{6}------------------------------------------------
+
+Table 1: Summary of ECG Datasets
+
+| Dataset | Recordings | Sampling Rate | Duration | Notes |
+|-|-|-|-|-|
+| CPSC (Liu et al., 2018) | 6877 | 500 Hz | 6–60 s | Balanced sex |
+| CPSC-Extra (Liu et al., 2018) | 3453 | 500 Hz | 6–60 s | Balanced sex |
+| INCART (Tihonenko et al., 2008) | 74 | 257 Hz | 30 min each | High-res; arrhythmia |
+| PTB (Bousseljot et al., 1995) | 516 | 1000 Hz | Varies | Wide range of pathologies |
+| PTB-XL (Wagner et al., 2020) | 21837 | 500 Hz | 10 s | Extensive clinical ECGs |
+| G12EC | 10344 | 500 Hz | Varies | The Southeast’s unique demographics |
+| Undisclosed Dataset | 10000 | 500 Hz | 6–60 s | Geographically distinct test set |
+
+capability of the model. The detailed data construction of the datasets can be found in Table 1. All datasets are formatted in WFDB format, including associated binary and text files that detail signal attributes and clinical annotations using SNOMED-CT codes. Detailed information about the datasets is provided in Appendix 7.1.
+
+### 3.2 EXPERIMENTAL SETUP
+
+**Model Configurations.** We introduce three configurations of AnyECG: AnyECG-B, AnyECG-L, and AnyECG-XL, containing 254M, 500M, and 1.7B parameters, respectively. The increase in parameters is achieved by deepening the Transformer encoder and expanding the hidden layer sizes. To maintain consistency across all configurations, we set the patch size  $P = 300$ , which corresponds to 1 second of ECG data. The maximum sequence length is fixed at 1,024 tokens, sufficient for most ECG applications. During ECG Tokenizer training and AnyECG pre-training, sequences shorter than this length are padded. To preserve data integrity, we mask the attention values associated with these padding tokens.
+
+**Training Environment.** The pre-training of AnyECG was conducted on a comprehensive dataset compiled from seven different sources. For the downstream tasks, data splitting followed standard procedures, dividing the data into training and validation subsets using an 80/20 ratio. Binary cross-entropy loss was employed for binary classification tasks, while cross-entropy loss was utilized for multi-class classification tasks. Evaluation metrics for the downstream tasks are detailed in the Appendix 7.2. All experiments were executed on a computing cluster equipped with eight high-performance GPUs. We used the Adam optimizer with a learning rate of 1e-4 for all models training. Model selection was based on the best performance on validation sets, and final evaluations were conducted on separate test sets. To ensure the reliability of our results, performance metrics—including averages and standard deviations—were reported across five random seeds.
+
+### 3.3 EXPERIMENTAL RESULTS
+
+**Anomaly Detection.** Table 2 compares AnyECG to state-of-the-art models in the anomaly detection task. AnyECG consistently outperforms other advanced models across all evaluation metrics. Specifically, the largest variant, AnyECG-XL, achieves the highest scores in accuracy, AUC-PR, AUROC, and Weighted F1 Score, demonstrating its strong ability to capture ECG signal characteristics. In contrast, traditional models like DENS-ECG (Peimankar & Puthusserypady, 2021) and ContraWR (Yang et al., 2021) show lower performance. DENS-ECG achieves moderate scores in accuracy and Weighted F1 Score, while ContraWR falls short in both metrics. Even the smaller versions of AnyECG, such as AnyECG-B and AnyECG-L, perform competitively and surpass most baseline models. This indicates that AnyECG maintains high performance across different scales without requiring extensive model parameters. Notably, the finetuned ECG-FM model (McKeen et al., 2024) performs at an intermediate to above-average level compared to the baseline. However, as a pre-trained model, its performance may still be hindered by substantial differences between the pre-training data and the downstream task dataset, which likely impedes its ability to fully converge.
+
+**Arrhythmia Detection.** Table 3 presents a performance comparison between AnyECG and other leading models in arrhythmia detection. The results show that AnyECG, particularly the AnyECG-XL variant, consistently outperforms competing models across all metrics. This demonstrates its strong ability to handle arrhythmia detection effectively. In contrast, models like DENS-ECG (Peimankar & Puthusserypady, 2021) and ContraWR (Yang et al., 2021) exhibit lower per-
+
+{7}------------------------------------------------
+
+Table 2: Results Comparison with State-of-the-Art Models in Anomaly Detection
+
+| Methods | Pretrain | Accuracy $\uparrow$ | AUC-PR $\uparrow$ | AUROC $\uparrow$ | Weighted FI Score $\uparrow$ |
+|-|-|-|-|-|-|
+| DENS-ECG (Peimankar & Pathusseryapady, 2021) | $\times$ | 0.79284 $\pm$ 0.019 | 0.93194 $\pm$ 0.019 | 0.84884 $\pm$ 0.0070 | 0.79284 $\pm$ 0.0009 |
+| ContraWR (Yang et al., 2021) | $\times$ | 0.75514 $\pm$ 0.011 | 0.93744 $\pm$ 0.001 | 0.81534 $\pm$ 0.002 | 0.76114 $\pm$ 0.003 |
+| XResNet1D (He et al., 2019) | $\times$ | 0.77684 $\pm$ 0.015 | 0.92174 $\pm$ 0.045 | 0.75224 $\pm$ 0.0121 | 0.76064 $\pm$ 0.0093 |
+| CNN-Transformer (Peh et al., 2022) | $\times$ | 0.74014 $\pm$ 0.019 | 0.93404 $\pm$ 0.011 | 0.80744 $\pm$ 0.0034 | 0.74444 $\pm$ 0.0005 |
+| RNN1D (Salloum & Kuo, 2017) | $\times$ | 0.79924 $\pm$ 0.017 | 0.92844 $\pm$ 0.006 | 0.78684 $\pm$ 0.0015 | 0.78384 $\pm$ 0.0012 |
+| FFCL (Li et al., 2022) | $\times$ | 0.67094 $\pm$ 0.012 | 0.86824 $\pm$ 0.003 | 0.64234 $\pm$ 0.0018 | 0.67464 $\pm$ 0.0003 |
+| InceptionID (Strodthoff et al., 2020) | $\times$ | 0.80014 $\pm$ 0.029 | 0.94084 $\pm$ 0.004 | 0.80974 $\pm$ 0.0015 | 0.78684 $\pm$ 0.0018 |
+| ST-Transformer (Song et al., 2021) | $\times$ | 0.80704 $\pm$ 0.017 | 0.94714 $\pm$ 0.007 | 0.80464 $\pm$ 0.0004 | 0.80464 $\pm$ 0.0007 |
+| ECG-FM (McKeen et al., 2024) | $\checkmark$ | 0.77884 $\pm$ 0.0029 | 0.90364 $\pm$ 0.0197 | 0.76934 $\pm$ 0.0028 | 0.73214 $\pm$ 0.0112 |
+| AnyECG-B | $\checkmark$ | 0.81884 $\pm$ 0.0025 | 0.95174 $\pm$ 0.0049 | 0.85024 $\pm$ 0.0026 | 0.88634 $\pm$ 0.0022 |
+| AnyECG-L | $\checkmark$ | 0.82414 $\pm$ 0.0043 | 0.95354 $\pm$ 0.0030 | 0.84834 $\pm$ 0.0025 | 0.88984 $\pm$ 0.0026 |
+| AnyECG-XL | $\checkmark$ | <b>0.82554<math>\pm</math>0.0035</b> | <b>0.95384<math>\pm</math>0.0012</b> | <b>0.85504<math>\pm</math>0.0016</b> | <b>0.89124<math>\pm</math>0.0033</b> |
+
+formance. Notably, although ECG-FM (McKeen et al., 2024) employs pretraining, it achieves significantly lower accuracy. This underscores AnyECG’s robustness, as its consistent performance across all metrics confirms its suitability for real-world arrhythmia detection.
+
+Table 3: Results Comparison with State-of-the-Art Models in Arrhythmia Detection
+
+| Methods | Pretrain | Accuracy $\uparrow$ | AUC-PR $\uparrow$ | Weighted FI Score $\uparrow$ | Precision $\uparrow$ |
+|-|-|-|-|-|-|
+| DENS-ECG (Peimankar & Pathusseryapady, 2021) | $\times$ | 0.32024 $\pm$ 0.0074 | 0.15144 $\pm$ 0.0042 | 0.26694 $\pm$ 0.0085 | 0.28664 $\pm$ 0.0069 |
+| ContraWR (Yang et al., 2021) | $\times$ | 0.30754 $\pm$ 0.0035 | 0.13594 $\pm$ 0.0048 | 0.28024 $\pm$ 0.0055 | 0.27944 $\pm$ 0.0083 |
+| XResNet1D (He et al., 2019) | $\times$ | 0.18224 $\pm$ 0.0058 | 0.10444 $\pm$ 0.0011 | 0.17654 $\pm$ 0.0031 | 0.17464 $\pm$ 0.0124 |
+| CNN-Transformer (Peh et al., 2022) | $\times$ | 0.32854 $\pm$ 0.0202 | 0.14174 $\pm$ 0.0071 | 0.26854 $\pm$ 0.0290 | 0.26414 $\pm$ 0.0061 |
+| RNN1D (Salloum & Kuo, 2017) | $\times$ | 0.25114 $\pm$ 0.0019 | 0.09114 $\pm$ 0.0005 | 0.21644 $\pm$ 0.0011 | 0.19864 $\pm$ 0.0010 |
+| FFCL (Li et al., 2022) | $\times$ | 0.18234 $\pm$ 0.0035 | 0.08324 $\pm$ 0.0050 | 0.17704 $\pm$ 0.0052 | 0.17364 $\pm$ 0.0013 |
+| InceptionID (Strodthoff et al., 2020) | $\times$ | 0.27704 $\pm$ 0.0031 | 0.12804 $\pm$ 0.0006 | 0.24874 $\pm$ 0.0031 | 0.23714 $\pm$ 0.0021 |
+| ST-Transformer (Song et al., 2021) | $\times$ | 0.20114 $\pm$ 0.0057 | 0.09414 $\pm$ 0.0046 | 0.19964 $\pm$ 0.0053 | 0.20184 $\pm$ 0.0027 |
+| ECG-FM (McKeen et al., 2024) | $\checkmark$ | 0.22124 $\pm$ 0.0015 | 0.10374 $\pm$ 0.0042 | 0.22854 $\pm$ 0.0064 | 0.23864 $\pm$ 0.0153 |
+| AnyECG-B | $\checkmark$ | 0.33394 $\pm$ 0.0029 | 0.15244 $\pm$ 0.0069 | 0.27474 $\pm$ 0.0046 | 0.33504 $\pm$ 0.0052 |
+| AnyECG-L | $\checkmark$ | 0.33584 $\pm$ 0.0077 | 0.15424 $\pm$ 0.0035 | 0.26364 $\pm$ 0.0040 | 0.33394 $\pm$ 0.0080 |
+| AnyECG-XL | $\checkmark$ | <b>0.34494<math>\pm</math>0.0095</b> | <b>0.16354<math>\pm</math>0.0028</b> | <b>0.28354<math>\pm</math>0.0033</b> | <b>0.34494<math>\pm</math>0.0075</b> |
+
+**Corrupted Lead Generation.** We evaluated AnyECG against CGAN (Mirza, 2014) and WGAN (Adler & Lunz, 2018) in generating corrupted ECG leads (see Table 4 and Figure 2). Using metrics like PSNR, SSIM, and MAE, AnyECG-L achieved the highest PSNR (32.7372 dB) and SSIM (0.8738), outperforming both CGAN and WGAN. Smaller models like AnyECG-L and AnyECG-B offer a better balance between capacity and generalization compared to AnyECG-XL. Due to limitations in its model architecture, ECG-FM (McKeen et al., 2024) could not be applied to this task. Although the AnyECG models did not achieve the lowest MAE, this may be because they prioritize capturing abstract rhythms and morphological patterns over minimizing pixel-level errors in detailed, noisy signals. This suggests that while AnyECG effectively captures the overall structure and rhythm of ECG signals, it is somewhat less precise in reproducing finer details. Figure 2 shows the ECG signals generated by WGAN, CGAN, and AnyECG. Both WGAN and CGAN can capture general morphology but fail to accurately reproduce certain rhythms, leading to unsuccessful signal generation in those cases. AnyECG leverages two stage pre-training to capture complex rhythmic features, resulting in morphology closer to the original signals. However, it lacks detailed feature extraction in finer wave bands, leading to poorer reconstruction in these regions and higher MAE. These observations suggest that while AnyECG excels in preserving overall rhythmic and morphological integrity, there is room for improvement in reconstructing fine-grained details.
+
+#### Ultra-Long ECG Recognition.
+
+Recognizing ultra-long ECG signals is challenging due to their extended duration, rhythm variability, and noise, which require models to be robust and generalizable. Traditional time series models often struggle with high computational complexity, memory constraints, and difficulty in capturing long-term dependencies. Therefore, We proposed a hierarchical modeling approach that adapts to ultra-long ECG data by employing a sliding window method.
+
+Table 4: Results Comparison with State-of-the-Art Models in Corrupted Lead Generation.
+
+| Methods | PSNR $\uparrow$ | SSIM $\uparrow$ | MAE $\downarrow$ |
+|-|-|-|-|
+| CGAN (Mirza, 2014) | 30.1762 | 0.8591 | <b>0.0142</b> |
+| WGAN (Adler & Lunz, 2018) | 27.5074 | 0.7907 | 0.1099 |
+| AnyECG-B | 32.5456 | 0.8634 | 0.0312 |
+| AnyECG-L | <b>32.7372</b> | <b>0.8738</b> | 0.0296 |
+| AnyECG-XL | 32.4276 | 0.8529 | 0.0376 |
+
+{8}------------------------------------------------
+
+![Figure 2: Visualization of Corrupted Lead Generation among WGAN (top), CGAN (middle), AnyECG (bottom). The figure consists of three vertically stacked line plots showing ECG signal amplitude over time (0 to 2000). Each plot compares 'Ground Truth' (black line) with a model's 'Generation' (orange line). The top plot (WGAN) shows significant deviations between the two lines. The middle plot (CGAN) shows better alignment but still has noticeable gaps. The bottom plot (AnyECG) shows the most accurate generation, with the orange line closely following the black ground truth line throughout the entire time range.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 2: Visualization of Corrupted Lead Generation among WGAN (top), CGAN (middle), AnyECG (bottom). The figure consists of three vertically stacked line plots showing ECG signal amplitude over time (0 to 2000). Each plot compares 'Ground Truth' (black line) with a model's 'Generation' (orange line). The top plot (WGAN) shows significant deviations between the two lines. The middle plot (CGAN) shows better alignment but still has noticeable gaps. The bottom plot (AnyECG) shows the most accurate generation, with the orange line closely following the black ground truth line throughout the entire time range.
+
+Figure 2: **Visualization of Corrupted Lead Generation** among WGAN (top), CGAN (middle), AnyECG (bottom).
+
+As shown in Table 5, AnyECG, particularly the AnyECG-XL, achieves the highest scores across all evaluation metrics. This demonstrates its superior ability to capture complex patterns and maintain high accuracy when analyzing ultra-long ECG signals. Compared to state-of-the-art models like Inception1D (Strodtthoff et al., 2020) and RNN1D (Salloum & Kuo, 2017), AnyECG-XL shows a clear advantage, especially in AUROC and AUC-PR. Even the smaller variants, AnyECG-B and AnyECG-L, outperform most baseline models, highlighting AnyECG’s adaptability and scalability. The absence of results for the other pretrained ECG foundation model ECG-FM (McKeen et al., 2024) is due to its inability to handle ultra-long sequence data, making it unsuitable for this task. In contrast, AnyECG’s consistent performance across all scales confirms its effectiveness in capturing key features of ultra-long ECG signals.
+
+Table 5: Results Comparison with State-of-the-Art Models in Ultra-Long ECG Recognition
+
+| Methods | Adaptation | Accuracy $\uparrow$ | AUC-PR $\uparrow$ | AUROC $\uparrow$ | Weighted F1 Score $\uparrow$ |
+|-|-|-|-|-|-|
+| DENS-ECG (Paimankar & Puthusserypady, 2021) | ✗ | 0.3202 $\pm$ 0.0074 | 0.1514 $\pm$ 0.0042 | 0.2669 $\pm$ 0.0085 | 0.2866 $\pm$ 0.0069 |
+| ContraWR (Yang et al., 2021) | ✗ | 0.3075 $\pm$ 0.0035 | 0.1359 $\pm$ 0.0048 | 0.2802 $\pm$ 0.0055 | 0.2794 $\pm$ 0.0083 |
+| XResNet1D (He et al., 2019) | ✗ | 0.6611 $\pm$ 0.0812 | 0.6916 $\pm$ 0.0797 | 0.6499 $\pm$ 0.1333 | 0.6453 $\pm$ 0.0922 |
+| CNN-Transformer (Peh et al., 2022) | ✗ | 0.3284 $\pm$ 0.0202 | 0.1417 $\pm$ 0.0071 | 0.2685 $\pm$ 0.0290 | 0.2641 $\pm$ 0.0061 |
+| RNN1D (Salloum & Kuo, 2017) | ✗ | 0.7444 $\pm$ 0.0102 | 0.7724 $\pm$ 0.0102 | 0.8679 $\pm$ 0.0291 | 0.7386 $\pm$ 0.0640 |
+| Inception1D (Strodtthoff et al., 2020) | ✗ | 0.1823 $\pm$ 0.0035 | 0.0832 $\pm$ 0.0050 | 0.1770 $\pm$ 0.0052 | 0.1736 $\pm$ 0.0013 |
+| ST-Transformer (Song et al., 2021) | ✗ | 0.5000 $\pm$ 0.0017 | 0.5154 $\pm$ 0.0492 | 0.3197 $\pm$ 0.0573 | 0.3432 $\pm$ 0.0038 |
+|  | ✗ | 0.2011 $\pm$ 0.0057 | 0.0941 $\pm$ 0.0046 | 0.1996 $\pm$ 0.0053 | 0.2018 $\pm$ 0.0027 |
+| AnyECG-B | ✓ | 0.6044 $\pm$ 0.0016 | 0.7482 $\pm$ 0.0025 | 0.6759 $\pm$ 0.0056 | 0.5639 $\pm$ 0.0124 |
+| AnyECG-L | ✓ | 0.7777 $\pm$ 0.0077 | 0.9075 $\pm$ 0.0072 | 0.9104 $\pm$ 0.0039 | 0.7500 $\pm$ 0.0072 |
+| AnyECG-XL | ✓ | <b>0.8055<math>\pm</math>0.0034</b> | <b>0.9088<math>\pm</math>0.0027</b> | <b>0.9104<math>\pm</math>0.0147</b> | <b>0.7741<math>\pm</math>0.0068</b> |
+
+## 4 RELATED WORKS
+
+**Heterogeneous ECG Signal Analysis and Classification.** The application of deep learning techniques has significantly advanced the analysis and classification of ECG signals. However, the heterogeneity of ECG data poses a major challenge for model generalization; models trained on one dataset often do not perform well on others. Consequently, researchers have focused on designing specialized models tailored to specific datasets, employing architectures such as convolutional neural networks (CNNs) (Prathipati & Malayavantham, 2023; Kucukseymen et al., 2022), recurrent neural networks (RNNs) (Kumar et al., 2023; Din et al., 2024), and transformer-based models (Shah et al., 2024; Ji et al., 2024). While these efforts have led to incremental performance improvements (Srivastava et al., 2023; Jasvitha et al., 2024; Ribeiro et al., 2020; Gao et al., 2021), the gains are often not statistically significant due to the limited size and scope of the datasets used. The absence of a unified model capable of handling the diverse nature of ECG data underscores the need for new approaches that can provide more substantial and broadly applicable performance improvements.
+
+{9}------------------------------------------------
+
+486 **Self-supervised ECG Representation Learning.** Self-supervised learning has emerged as a  
+487 promising approach for extracting representations from unlabeled ECG signals, enabling the use  
+488 of large amounts of raw data without manual annotations. Methods such as signal reconstruction,  
+489 contrastive learning, and masked signal modeling have been explored (Yun et al., 2024; Wu et al.,  
+490 2024; Li et al., 2024). However, existing self-supervised learning methods often struggle to general-  
+491 ize across heterogeneous ECG datasets, especially when faced with varying lead configurations and  
+492 noise levels. For example, contrastive methods (Kiyasseh et al., 2021; Wang et al., 2023) encourage  
+493 similar representations for compatible signal segments but do not adequately account for variability  
+494 introduced by different lead setups. Moreover, the low SNR inherent in ECG data can cause models  
+495 to focus on reconstructing noisy or redundant signal components due to high correlations among  
+496 leads, rather than capturing critical physiological information. Models like contrastive predictive  
+497 coding (CPC) (Mehari & Strodtthoff, 2022) and masked autoencoders (Zhang et al., 2022; Na et al.,  
+498 2024) often inadvertently emphasize less relevant features, diminishing their effectiveness in cap-  
+499 turing essential signal characteristics. This focus on less informative aspects can limit the models’  
+500 ability to extract meaningful representations that transfer effectively to unseen data or datasets with  
+501 different characteristics.
+
+## 5 DISCUSSION
+
+506 **Social Impacts.** ECG is one of the most commonly used diagnostic tools in healthcare, with over  
+507 100 million ECG reports obtained annually in the United States alone (Tison et al., 2019). Despite its  
+508 widespread use, unlike other biomedical signals such as electroencephalograms (EEG) (Yang et al.,  
+509 2024; Jiang et al., 2024), there is a scarcity of foundation models specifically designed for ECG data.  
+510 This limitation hampers the potential for advanced analysis and interpretation of ECG signals on a  
+511 large scale. In this work, we propose AnyECG, the largest ECG foundation model family to date.  
+512 Compared to prior works (McKeen et al., 2024; Song et al., 2024; Fu et al., 2024), AnyECG adapts  
+513 to diverse downstream tasks and achieves significantly better performance. By providing a robust  
+514 and generalizable model for ECG data, AnyECG has the potential to greatly enhance diagnostic  
+515 accuracy, facilitate early detection of cardiovascular diseases, and improve patient outcomes on a  
+516 broad scale.
+
+518 **Limitations.** Although we pre-trained AnyECG using a large amount of data across seven  
+519 datasets, there remains a significant gap between AnyECG and current foundation models like LLMs  
+520 in the general domain. This gap is primarily due to the difficulty in obtaining extensive healthcare  
+521 data. Additionally, the model size of AnyECG-XL (1.7B parameters) is considerably smaller than  
+522 that of foundation models in natural language processing and computer vision fields. Despite these  
+523 limitations, it is important to highlight that training a large-scale ECG foundation model with a two-  
+524 stage self-supervised learning approach and more data does yield appreciable performance gains  
+525 compared to existing methods developed for specific downstream tasks, even if it may be computa-  
+526 tionally costly. Exploring the trade-off between employing larger AnyECG models and enhancing  
+527 downstream task performance will be a focus of our future work.
+
+## 6 CONCLUSION
+
+531 In this paper, we proposed AnyECG, a foundation model family that learns universal embeddings  
+532 through a two-stage self-supervised pre-training on seven diverse ECG datasets. AnyECG effec-  
+533 tively handles the heterogeneity of ECG data through the design of a novel ECG Tokenizer, which  
+534 includes a rhythm codebook and a multi-view synergistic decoder to learn representations from  
+535 different proxy tasks. Additionally, the masked modeling in the second-stage pre-training plays a  
+536 crucial role in enabling effective representation learning of both temporal and lead features of ECG  
+537 signals. We validated various sizes of AnyECG models on multiple downstream tasks, including  
+538 anomaly detection, arrhythmia detection, ECG lead generation, and ultra-long ECG signal recogni-  
+539 tion. Our experiments demonstrate that AnyECG outperforms all state-of-the-art methods in their  
+540 respective fields, highlighting its effectiveness and versatility in ECG signal analysis.
+
+ Rest of paper (reference and Appendix) is removed.

@@ -1,0 +1,362 @@
+
+
+{0}------------------------------------------------
+
+# A TRAINING-FREE SUB-QUADRATIC COST TRANSFORMER MODEL SERVING FRAMEWORK WITH HIERARCHICALLY PRUNED ATTENTION
+
+Heejun Lee\*, Geon Park\*, Youngwan Lee\*, Jaduk Suh\*, Jina Kim
+
+Graduate School of Artificial Intelligence (AI)
+
+Korea Advanced Institute of Science and Technology (KAIST)
+
+Seoul, South Korea
+
+{ainl, geon.park, ywlee88, jaduksuh, jinakim}@kaist.ac.kr
+
+Wonyong Jeong, Bumsik Kim, Hyemin Lee
+
+LLMOps Team
+
+DeepAuto.ai
+
+Seoul, South Korea
+
+{young, liam, hailey}@deepauto.ai
+
+Myeongjae Jeon
+
+Graduate School of AI
+
+POSTECH
+
+Pohang, South Korea
+
+mj.jeon@postech.ac.kr
+
+Sung Ju Hwang
+
+Graduate School of AI
+
+KAIST, DeepAuto.ai
+
+Seoul, South Korea
+
+sjhwang@kaist.ac.kr
+
+## ABSTRACT
+
+In modern large language models (LLMs), increasing the context length is crucial for improving comprehension and coherence in long-context, multi-modal, and retrieval-augmented language generation. While many recent transformer models attempt to extend their context length over a million tokens, they remain impractical due to the quadratic time and space complexities. Although recent works on linear and sparse attention mechanisms can achieve this goal, their real-world applicability is often limited by the need to re-train from scratch and significantly worse performance. In response, we propose a novel approach, Hierarchically Pruned Attention (HiP), which reduces the time complexity of the attention mechanism to  $O(T \log T)$  and the space complexity to  $O(T)$ , where  $T$  is the sequence length. We notice a pattern in the attention scores of pretrained LLMs where tokens close together tend to have similar scores, which we call “attention locality”. Based on this observation, we utilize a novel tree-search-like algorithm that estimates the top- $k$  key tokens for a given query on the fly, which is mathematically guaranteed to have better performance than random attention pruning. In addition to improving the time complexity of the attention mechanism, we further optimize GPU memory usage by implementing KV cache offloading, which stores only  $O(\log T)$  tokens on the GPU while maintaining similar decoding throughput. Experiments on benchmarks show that HiP, with its training-free nature, significantly reduces both prefill and decoding latencies, as well as memory usage, while maintaining high-quality generation with minimal degradation. HiP enables pretrained LLMs to scale up to millions of tokens on commodity GPUs, potentially unlocking long-context LLM applications previously deemed infeasible.
+
+## 1 INTRODUCTION
+
+Large Transformer-based generative language models (LLM) trained on huge datasets have recently demonstrated remarkable abilities in various problem domains, such as natural language understanding (Touvron et al., 2023), code generation (Rozière et al., 2024), and multi-modal question answering (Liu et al., 2023a). This is made possible by the effectiveness of the attention mechanism, which learns  $T^2$  pairwise relationships between all tokens in a sequence of  $T$  tokens. Despite their success, the quadratic complexity of the attention mechanism makes it increasingly challenging to meet growing resource demands when processing longer sequences.
+
+\*Equal contributors
+
+{1}------------------------------------------------
+
+![Figure 1: HiP Attention. The figure is divided into three main sections. The left section, 'Hierarchy of Language', shows a tree diagram where 'Dog' and 'Cat' are children of 'Animal'. 'Dog' has children 'Which cat is the first house cat?' and 'Domestication'. 'Cat' has children 'Behavior of Cat' and 'Color of Cat'. A scale on the left indicates 'Distance' from 'Far' to 'Near'. The center section, 'Hierarchically Pruned Attention (HiP) O(T log T)', shows a sequence of tokens: 'African', 'wildcats', 'were', 'attracted', 'to', 'early', 'human', 'settlements'. A 'Query' token is shown. The process involves: 0) Divide Sequence Into Chunks, 1) Select Representative Token in Chunks, 2) Measure chunk importance by comparing between query and representative token, and 3) Select Top-k Important Chunk. The right section, 'HW-aware Block Sparsity', shows a 64-token sequence divided into 16 blocks. A table shows attention scores for a 'cat' token. A 'Thread Block (1 TensorCore)' is highlighted, and 'Blocks Pruned by HiP' are shown in green, with 'Active Blocks' in red.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 1: HiP Attention. The figure is divided into three main sections. The left section, 'Hierarchy of Language', shows a tree diagram where 'Dog' and 'Cat' are children of 'Animal'. 'Dog' has children 'Which cat is the first house cat?' and 'Domestication'. 'Cat' has children 'Behavior of Cat' and 'Color of Cat'. A scale on the left indicates 'Distance' from 'Far' to 'Near'. The center section, 'Hierarchically Pruned Attention (HiP) O(T log T)', shows a sequence of tokens: 'African', 'wildcats', 'were', 'attracted', 'to', 'early', 'human', 'settlements'. A 'Query' token is shown. The process involves: 0) Divide Sequence Into Chunks, 1) Select Representative Token in Chunks, 2) Measure chunk importance by comparing between query and representative token, and 3) Select Top-k Important Chunk. The right section, 'HW-aware Block Sparsity', shows a 64-token sequence divided into 16 blocks. A table shows attention scores for a 'cat' token. A 'Thread Block (1 TensorCore)' is highlighted, and 'Blocks Pruned by HiP' are shown in green, with 'Active Blocks' in red.
+
+Figure 1: **HiP Attention**. HiP dynamically prunes block sparse attention depending on a given query token in sub-quadratic cost by utilizing the hierarchy and locality of natural language.
+
+Various approaches have been suggested to handle longer sequences efficiently to overcome this limitation. FlashAttention (Dao et al., 2022; Dao, 2023) has reduced the space complexity to  $O(T)$  by fusing the component computations to avoid storing  $T^2$  attention scores at one time. However, its time complexity remains  $O(T^2)$ , making it less applicable to inference tasks with long contexts. Many other methods (Lee et al., 2023; Beltagy et al., 2020; Zaheer et al., 2020b; Tay et al., 2020; Kitaev et al., 2019; Tay et al., 2021; Liu et al., 2021) tackle the issue by sparsifying the attention matrix or approximate the attention mechanism using kernel methods to reduce its quadratic complexity. However, these works are not widely employed in real-world LLM serving frameworks because they often lead to performance degradation due to drastic changes in the computation flow and are too complex to implement efficiently for actual speedups. Moreover, they often require extensive fine-tuning or even pre-training from scratch, which can be prohibitively expensive and prevent the timely deployment of production-ready pre-trained models.
+
+In this paper, we define and achieve three fundamental objectives for frameworks tailored to long-context transformer serving frameworks: (1) minimizing the algorithmic complexity of attention mechanisms, (2) enhancing GPU compute efficiency, particularly through TensorCore utilization, and (3) maximizing the effective use of limited GPU memory capacity.
+
+First, to serve long sequence in a timely manner, we propose **Hierarchically Pruned Attention (HiP)**, an efficient training-free attention mechanism reducing the quadratic time complexity to  $O(T \log T)$  by approximating the top- $k$  key tokens in a sequence. HiP exploits “attention locality”, where neighboring tokens often have similar attention scores, as shown in Figure 1 (Left). Therefore, as shown in Figure 1 (Center), HiP divides the input sequence into  $2k$  chunks, and the center token in each chunk is chosen to represent its neighbors, driven by the attention locality within the chunk. HiP computes the attention scores of these representative tokens to approximate the importance of each chunk for a given query. HiP iteratively refines its selection by starting with the top- $k$  most important chunks and progressively narrowing them down until each chunk contains a single token. This hierarchical top- $k$  key estimation takes  $O(T \log T)$  time, which is used for sparse attention computation that costs  $O(T)$ , making the overall complexity of our attention mechanism log-linear. We provide mathematical proof demonstrating that our HiP outperforms random selection, supported by empirical evidence from attention score statistics in Section 4.
+
+Second, we introduce hardware-aware optimizations to enhance GPU compute efficiency for our HiP through block-wise key sparsity, as illustrated in Figure 1 (Right). Specifically, our top- $k$  approximation is implemented in a tiled manner (Tillet et al., 2019) so that it can fully utilize matrix multiplier units (MMUs; e.g., TensorCores (Nvidia, 2024)) and achieve the highest possible token-processing throughput. Additionally, we integrate our attention mechanism into throughput-optimized LLM serving frameworks, such as vLLM (Kwon et al., 2023) and SGLang (Zheng et al., 2024), further enhancing deployment efficiency.
+
+Lastly, to serve extremely long sequences within the limited GPU memory, we propose a KV cache management strategy that stores only  $O(\log T)$  tokens in GPU memory (HBM) and offloads the remaining tokens to host memory (DRAM). The  $O(\log T)$  tokens stored in GPU memory are the ones accessed most frequently and are meant to provide quick access for the GPU’s MMUs. In contrast, other less frequently accessed tokens reside in main memory and are transferred to GPU memory only upon token access misses. With a high access hit ratio in HiP, our memory management scheme effectively meets the demand for limited HBM capacity while leveraging the larger DRAM capacity, preventing token access from becoming a bottleneck.
+
+We validate HiP on various benchmarks by applying it to Llama3.1-8B (Meta, 2024). In LongBench (Bai et al., 2023), HiP maintains 96% of its relative performance while achieving almost  $2.7\times$  speedup in the prefix stage and  $16.5\times$  speedup attention computation in the decode stage with 32k context length compared to Flash Attention. Additionally, in passkey retrieval tasks such as
+
+{2}------------------------------------------------
+
+![Figure 3: Efficient Mask Estimation. The diagram is divided into two main parts: Step 1 and Step 2. Step 1, 'Efficient Mask Estimation with Hierarchical Top-k Key Selection', shows a tree-like structure where 'Queries' are processed through 'Key Block' and 'Attention Score' nodes. It uses 'can tell' and 'walk Tm' nodes to select top-k keys. Step 2, 'Sparse Attention with HIP Attention Mask', shows the 'Estimated Attention Mask M' being used to compute the attention scores via the formula O = softmax(M ⊙ (QK^T))V. The mask M is a sparse matrix where non-zero elements indicate selected key-value pairs.](1b7d539e02a202c2cf2d97698b911447_img.jpg)
+
+Figure 3: Efficient Mask Estimation. The diagram is divided into two main parts: Step 1 and Step 2. Step 1, 'Efficient Mask Estimation with Hierarchical Top-k Key Selection', shows a tree-like structure where 'Queries' are processed through 'Key Block' and 'Attention Score' nodes. It uses 'can tell' and 'walk Tm' nodes to select top-k keys. Step 2, 'Sparse Attention with HIP Attention Mask', shows the 'Estimated Attention Mask M' being used to compute the attention scores via the formula O = softmax(M ⊙ (QK^T))V. The mask M is a sparse matrix where non-zero elements indicate selected key-value pairs.
+
+Figure 2: Overview of our HiP attention mechanism. In HiP, the model dynamically decides which  $k$  number of key tokens to attend to for each query by generating a sparse attention mask. The sparse attention mask is generated in a tree search-like manner. At each iteration, the top- $k$  blocks with the largest attention scores are selected, and the rest of the branches are discarded. The final mask becomes an accurate approximation of the top- $k$  blocks of the true attention map. Please refer to Figure 19 for a more detailed illustration.
+
+RULER (Hsieh et al., 2024), HiP preserves its original effective context length, while all baselines fail to do so. We also evaluate the effectiveness of the proposed KV cache offloading framework. On a machine capable of serving up to a 16k context length with Flash Attention, our method extends the context length up to 64k by offloading the KV cache without significant throughput degradation.
+
+In conclusion, by integrating the three proposed solutions, we present a single long-context serving framework that efficiently manages compute and memory resources while being transparent and easily usable. This extension of serving context length, achieved within the constraints of limited space and compute budgets, delivers substantial benefits for long-context applications, such as question answering with long texts (Kryściński et al., 2022), multi-agent chatbots (Hu et al., 2024), enhanced retrieval-augmented reasoning, and long video data summarization. Furthermore, since our approach is training-free, HIP can be seamlessly applied to pretrained LLMs without requiring additional training. As a result, we expect our method to be highly practical for a wide range of long-context LLM applications.
+
+Our contributions within the proposed framework can be summarized as follows:
+
+- We propose a novel, training-free hierarchically pruned attention mechanism that uses hierarchical score-locality-aware top- $k$  approximation to accelerate LLM serving, reducing the quadratic cost of the attention mechanism to  $O(T \log T)$  time and  $O(T)$  space complexity (Section 3.1).
+ - We further optimize our HiP mechanism with a hardware-aware block-wise tiled optimization using OpenAI Triton, achieving up to speed up to  $6.83\times$  speedup in end-to-end decoding for 128k context. (Section 3.2, Table 5)
+ - We implement KV cache offloading to reduce GPU memory efficiency further, increasing serving context from 16k up to 64k tokens in an RTX 4090 with 8B model (Section 3.3).
+
+## 2 RELATED WORKS
+
+Previous studies proposed several attention approximations with linear complexity using either kernel methods or sparse attention. Low-rank approximations of softmax attention via kernel methods (Choromanski et al., 2022; Qin et al., 2022) achieve faster inference speeds but significantly alter the data flow, leading to performance degradation that is hard to mitigate. In contrast, sparse attention methods, which use attention pruning to preserve trained attention scores, allow for simple replacement of pre-trained mechanisms. However, they often require additional fine-tuning to adapt to static attention patterns (Beltagy et al., 2020; Zaheer et al., 2020a; Xiao et al., 2024) or the training of an attention estimator (Lee et al., 2023; Liu et al., 2021). These methods are generally less efficient than fused attention techniques (Dao et al., 2022; Dao, 2023) due to their fine-grained sparsity, which prevents optimal MMU utilization. For more details, see Appendix E.1.
+
+## 3 METHODOLOGY
+
+Given query, key, and value sequences  $Q, K, V \in \mathbb{R}^{T \times d}$ , the conventional single-head attention output  $O$  is computed as  $S = QK^\top \in \mathbb{R}^{T \times T}$ ,  $P = \text{softmax}(S) \in \mathbb{R}^{T \times T}$ ,  $O = PV \in \mathbb{R}^{T \times d}$ , where  $d$  denotes embedding dimension, and softmax is applied row-wise. The causal masking and
+
+{3}------------------------------------------------
+
+constant scaling are omitted for brevity. The  $\mathbf{S}$  and  $\mathbf{P}$  matrices are respectively called the *attention scores* and *probabilities*. We focus on the fact that, due to the nature of the softmax function, only the highest attention scores significantly impact the output. Therefore, a promising approach to approximating  $\mathbf{S}$  in a sparse format and reducing the complexity from  $O(T^2)$  is to retain only its top- $k$  elements, as detailed in the following equations:
+
+$$\mathbf{M} = \text{top\_k\_mask}(\mathbf{QK}^\top) \in \{0, 1\}^{T \times T}, \quad (1)$$
+
+$$\hat{\mathbf{S}} = \text{mask}_M(\mathbf{QK}^\top) \in \mathbb{R}^{T \times T}, \quad \hat{\mathbf{P}} = \text{softmax}(\hat{\mathbf{S}}) \in \mathbb{R}^{T \times T}, \quad \hat{\mathbf{O}} = \hat{\mathbf{P}}\mathbf{V} \in \mathbb{R}^{T \times d}, \quad (2)$$
+
+$$\text{where } [\text{mask}_M(\mathbf{S})]_{i,j} := \begin{cases} S_{i,j} & \text{if } M_{i,j} = 1 \\ -\infty & \text{if } M_{i,j} = 0 \end{cases}, \quad (3)$$
+
+where  $\text{top\_k\_mask}(\cdot)$  denotes a binary mask which selects the top- $k$  largest elements for each row of the given matrix. Since  $\hat{\mathbf{S}}$  is a sparse matrix with only  $kT$  valid elements,  $\hat{\mathbf{S}}$  and  $\hat{\mathbf{O}}$  in Equation (2) can be computed in  $O(T)$  time using sparse matrix operations.
+
+However, obtaining the binary mask  $\mathbf{M}$  in sub-quadratic time is no easy task. To address this challenging problem, we exploit what we call “attention locality”. Observation of attention scores reveal that the scores tend to exhibit local similarity, a phenomenon we refer to as attention locality. We exploit this observation by performing a tree-based search for the top- $k$  tokens. We divide the sequence into  $2k$  chunks, and then select a representative token from each chunk. Due to attention locality, a representative token have similar scores to other tokens in its chunk - thereby “representing” that chunk. We select the top- $k$  most important chunks based on the attention scores of the representative tokens. By repeating this process, we refine the tokens until we can no longer divide chunks. Exact details of our method are shown in Section 3.1. We only cover the single-head non-causal case here, but note that our method can easily be extended to causal multi-head attention.
+
+### 3.1 HIERARCHICAL SCORE-LOCALITY-AWARE TOP- $k$ ESTIMATION
+
+As shown in Equation (1), our goal is to select the top- $k$  largest elements of each row of pre-trained attention score  $\mathbf{S}$  without computing the entire matrix. To this end, we use a greedy binary tree search algorithm, as illustrated in the left side of Figure 2. The complete algorithm for mask estimation is presented in Algorithm 1.
+
+For a given query  $\mathbf{q} \in \mathbb{R}^d$ , at the first iteration, we divide the key sequence  $\mathbf{K} \in \mathbb{R}^{T \times d}$  along the time dimension into  $k$  equal-sized chunks  $(f_1^{(1)} : l_1^{(1)}), (f_2^{(1)} : l_2^{(1)}), \dots, (f_k^{(1)} : l_k^{(1)})$ , where  $f_j^{(1)} = \lfloor \frac{(j-1)T}{k} \rfloor + 1$  and  $l_j^{(1)} = \lfloor \frac{jT}{k} \rfloor$  are the first and last indices of the  $j$ th chunk, each.<sup>1</sup> The superscripts denote the iteration number. At each iteration  $i$ , we further divide each of the  $k$  chunks into two equal-sized *branches*:
+
+$$\mathcal{B}_{2j-1}^{(i)} = (f_j^{(i)}, m_j^{(i)} - 1), \quad \mathcal{B}_{2j}^{(i)} = (m_j^{(i)}, l_j^{(i)}), \quad \text{where } m_j^{(i)} = \lfloor (f_j^{(i)} + l_j^{(i)})/2 \rfloor, \quad \text{for } j = 1 \dots k.$$
+
+A representative key index  $r_j^{(i)}$  is the center key token index for each branch  $\mathcal{B}_j^{(i)}$ . We assume that this representative key represents the entire branch. Thus, among the  $2k$  branches, the top  $k$  branches whose representative key’s scores are the highest are chosen for the next iteration:
+
+$$(f_j^{(i+1)}, l_j^{(i+1)}) := \mathcal{B}_{t_j}^{(i)} \text{ for } j = 1 \dots k, \quad \text{where } \{t_1, \dots, t_k\} := \text{argtop}_k \left[ \mathbf{q}^\top \mathbf{K}_{r_j^{(i)}, :} \right]. \quad (4)$$
+
+We repeat the above iteration  $n_H := \lceil \log_2 T \rceil$  times, i.e., until the length of each branch all becomes 1. In the end, we obtain a set of indices  $\mathcal{I} = \{f_1^{(n_H)}, \dots, f_k^{(n_H)}\}$ , which is our estimation of the top- $k$  indices of  $\mathbf{K}$  which have the largest attention scores with the query  $\mathbf{q}$ . Thus, we obtain  $\hat{\mathbf{m}}$ , an estimation of a row of the attention mask  $\mathbf{M}^2$ :
+
+$$\hat{\mathbf{m}} = \text{estimate\_attn\_mask}_k(\mathbf{q}, \mathbf{K}) := [\mathbb{1}_Z(1), \mathbb{1}_Z(2), \dots, \mathbb{1}_Z(d)]. \quad (5)$$
+
+In conclusion, this algorithm takes  $O(T \log T)$  time in total because the total number of iterations is  $\log_2 T$  where each iteration takes constant time  $O(k)$ , and we do this for each of the  $T$  queries.
+
+<sup>1</sup> $\lfloor \cdot \rfloor$  denotes rounding to the nearest integer.
+
+<sup>2</sup> $\mathbb{1}_{\mathcal{A}}(x)$ , where  $\mathcal{A}$  is a set, denotes the indicator function:  $\mathbb{1}_{\mathcal{A}}(x) = 1$  if  $x \in \mathcal{A}$ , and otherwise  $\mathbb{1}_{\mathcal{A}}(x) = 0$ .
+
+{4}------------------------------------------------
+
+### 3.2 BLOCK APPROXIMATION OF TOP- $k$ ESTIMATION
+
+Despite the log-linear complexity, obtaining competitive latency to the state-of-the-art implementations of dense attention on an accelerator (e.g., GPU) is difficult. This is because the matrix multiplier unit (MMU) inside accelerators is optimized for dense attention, where they compute fixed-size blocks of matrix multiplication in a few clock cycles. In contrast, the attention score computation in the top- $k$  estimation of HiP cannot be performed with traditional matrix multiplication because a different key matrix is used to compute the dot product for each query vector. To utilize MMU, we use a technique called *block approximation* during top- $k$  estimation, illustrated in Figure 2 (Right).
+
+In top- $k$  estimation, we replace  $\mathbf{K} \in \mathbb{R}^{T \times d}$  with its tiled version  $\mathbf{K} \in \mathbb{R}^{T/b_k \times b_k \times d}$ , and  $\mathbf{Q}$  with its tiled version  $\mathbf{Q} \in \mathbb{R}^{T/b_q \times b_q \times d}$ , where  $b_k$  and  $b_q$  are the size of a key block and a query block. The top- $k$  estimation iterations are done similarly to before, except that the division and branching of the key sequence are done block-wise (using the first dimension of  $\mathbf{K}$ ). Importantly, instead of  $k$ ,  $k/b_k$  chunks are maintained at each iteration in order to select  $k$  tokens, and the score calculation in Equation (4) is replaced with  $\max_{m \in [1:b_q], n \in [1:b_k]} \left( \mathbf{q}_{m,:}^T \mathbf{K}_{j, n,:}^{(t)} \right)$ , where  $\mathbf{q} \in \mathbb{R}^{b_q \times d}$  is the given query block. While this modification enables HiP to reduce the cost further, we internally sample the blocks with stride  $b_{sq}$  in the query dimension and  $b_{sk}$  in the key dimension instead of using the full  $b_q \times b_k$  block.
+
+As a result of this optimization, the estimated mask  $\widehat{\mathcal{M}}$  becomes block-sparse. Therefore, each  $(b_q/b_{sq}) \times d$ -block of the query can be matrix-multiplied with the same  $(k/b_{sk}) \times d$  key matrix to obtain  $(b_q/b_{sq}) \times (k/b_{sk})$  elements of  $\widehat{\mathcal{S}}$ . Thus,  $b_q$  and  $b_{sq}$  are critical for the most efficient utilization of the MMU: we can achieve a considerable latency reduction if we set  $b_q/b_{sq}$  to a multiple of 16 or 32, as shown in Appendix E.4. While the choice of  $b_k$  and  $b_{sk}$  is irrelevant to the MMU utilization, it helps reduce the number of top- $k$  estimation iterations.
+
+### 3.3 KV CACHE OFFLOADING
+
+Thanks to our top- $k$  estimation algorithm, HiP only accesses  $(k/b_{sk}) \log T$  key states per attention head. Moreover, the algorithm’s memory access pattern exhibits strong temporal locality. Using this fact, we can further enhance efficiency by exploiting the memory hierarchy: we offload less frequently accessed key-value (KV) states from the GPU to the main memory. This involves caching frequently accessed KV states (hot tokens) by tracking state access patterns of top- $k$  estimation and sparse attention using the estimated HiP mask.
+
+Our GPU cache that holds the hot tokens consists of two components: a *token bank* containing the actual KV states and a *page table* with the token-bank index mapping, as shown in Figure 4. One straightforward implementation for the page table would be a vector map: a simple length- $T$  array of pointers. While this approach is practical for typical sequence lengths (e.g., 128K - 1M), its space complexity is  $O(T)$ . We employ a linear probing hash table to reduce the space complexity, achieving  $O(\log T)$  space complexity. However, empirical results show that GPU hash map lookups introduce additional latency compared to using a simpler vector-based page table.
+
+Given the distinct memory access patterns in top- $k$  estimation and in sparse attention, we maintain two separate offloading contexts, each containing a page table and a set of GPU-resident hot tokens, as illustrated as two separate GPU loaded KV caches in Figure 3. For the top- $k$  estimation stage,  $k_{\text{cache}} := c \cdot (k/b_{sk}) \log T$  key states are held in VRAM, where  $c$  is a hyperparameter determining the cache size. For sparse attention,  $k$  key and value states are held. In summary, we need to hold  $(k_{\text{cache}}/2 + k)$  tokens’ equivalent of KV states in the GPU. The kernel first queries
+
+![Figure 3: Flow of KV Cache Offloading with HiP. The diagram illustrates the data flow between the GPU and CPU during decoding steps. It shows two main stages: 'Mask Refresh Step' and 'Cached Mask Step'. In the Mask Refresh Step, 'Masking' and 'Sparse Attention' blocks interact with 'Key Access Log' and 'New Mask' on the CPU, and 'Key Tokens for Masking' on the GPU. In the Cached Mask Step, 'Sparse Attention (SA)' interacts with 'New Token' on the CPU and 'Key-Value Tokens for Sparse Attention' on the GPU. A legend indicates: Read (blue arrow), Write (red arrow), and UVW Request (green arrow). The CPU section includes 'Store Every Key Value Tokens O(T)' and 'Offloaded KV Cache'. The GPU section includes 'Key Tokens for Masking O(k log T)' and 'Key-Value Tokens for Sparse Attention O(k)^{next masking step}'.](b4a7906eddfd40aaa750e19e56c94a8b_img.jpg)
+
+Figure 3: Flow of KV Cache Offloading with HiP. The diagram illustrates the data flow between the GPU and CPU during decoding steps. It shows two main stages: 'Mask Refresh Step' and 'Cached Mask Step'. In the Mask Refresh Step, 'Masking' and 'Sparse Attention' blocks interact with 'Key Access Log' and 'New Mask' on the CPU, and 'Key Tokens for Masking' on the GPU. In the Cached Mask Step, 'Sparse Attention (SA)' interacts with 'New Token' on the CPU and 'Key-Value Tokens for Sparse Attention' on the GPU. A legend indicates: Read (blue arrow), Write (red arrow), and UVW Request (green arrow). The CPU section includes 'Store Every Key Value Tokens O(T)' and 'Offloaded KV Cache'. The GPU section includes 'Key Tokens for Masking O(k log T)' and 'Key-Value Tokens for Sparse Attention O(k)^{next masking step}'.
+
+Figure 3: Flow of KV Cache Offloading with HiP.
+
+![Figure 4: KV Token Index Translation. This diagram shows the mapping from a 'Requested Token Index' to a 'Page Bank'. The 'Requested Token Index' is processed through a 'Page Table' (containing 'Token Index -> Page Index' with 'Vector' and 'HashMap' options) to determine the 'Page Index'. This index is then used to access the 'Token Pages' within a 'Page Bank'. The 'Page Bank' also includes 'Access Statistics' and a 'Back reference to Table'. A legend indicates: Read (blue arrow), Write (red arrow), and UVW Request (green arrow).](4d7f667796a8cdcdd745e953ac11e289_img.jpg)
+
+Figure 4: KV Token Index Translation. This diagram shows the mapping from a 'Requested Token Index' to a 'Page Bank'. The 'Requested Token Index' is processed through a 'Page Table' (containing 'Token Index -> Page Index' with 'Vector' and 'HashMap' options) to determine the 'Page Index'. This index is then used to access the 'Token Pages' within a 'Page Bank'. The 'Page Bank' also includes 'Access Statistics' and a 'Back reference to Table'. A legend indicates: Read (blue arrow), Write (red arrow), and UVW Request (green arrow).
+
+Figure 4: KV Token Index Translation
+
+{5}------------------------------------------------
+
+the GPU cache when accessing key or value tokens. Upon a cache miss (which is unavoidable due to the dynamic nature of the attention access pattern), the system attempts to retrieve tokens from the main memory. By using our cache, we can significantly speed up memory access compared to directly accessing CPU memory from the GPU.
+
+In conclusion, we reduce the GPU memory footprint for KV tokens from  $O(T)$  to  $O(\log T)$ , but this comes with page table overhead that can range between  $O(T)$  and  $O(\log T)$  depending on the data structure used. The overall space complexity is thus determined by the type of page table, allowing for a configurable trade-off between GPU memory efficiency and latency. However, we suggest that users use vector maps in many practical long-context ranges (32-512k) to achieve competitive latency compared to Flash attention. Please refer to [Section 5.5](#) for detailed benchmarks.
+
+## 4 THEORETICAL ANALYSIS
+
+In this section, we justify the design choices of our HiP’s approximate top- $k$  key selection algorithm by answering the following questions: (1) Is HiP’s key selection algorithm better than the random selection baseline at finding keys with the biggest scores? (2) How should the representative token in each branch be chosen? We answer these questions by providing a probabilistic analysis of HiP’s key selection algorithm in a simplified setting ( $k = 1$ ), based on the assumption of attention locality.
+
+**Observation: keys closer together exhibit higher similarity in attention scores.** In each attention head of a layer in an LLM, a key sequence  $K \in \mathbb{R}^{T \times d}$  is used for computing the attention mechanism. Given a query vector  $q \in \mathbb{R}^d$ , the scores for each key  $s = Kq \in \mathbb{R}^T$  can be computed. We investigate how much locality these scores exhibit by studying the correlation between their distance  $\Delta := |i - j|$  and the score difference  $\delta_\Delta := s_i - s_j$  for every  $i, j \in [1..T]$ , with a sample natural language data. As shown in [Figure 6](#), our empirical observation shows that  $\delta_\Delta$  generally follows a normal distribution, whose mean is almost zero and the standard deviation is an increasing function of distance  $\Delta$ . More details regarding this observation are provided in [Appendix A.3](#).
+
+**Analysis.** Based on this observation, we assume that we can approximate the difference in attention scores between two keys separated by  $\Delta$  tokens as a scalar random variable  $\delta_\Delta \sim \mathcal{N}(0, \sigma(\Delta)^2)$ , where  $\sigma(\Delta)$  is an increasing function of  $\Delta$ . This can be interpreted as keys that are closer together are more likely to have a similar attention score, which fits well with our observation and attention locality assumption. With this assumption, the following [Theorem 1](#) can be shown.
+
+**Theorem 1 (Informal).** *Consider the case of finding the location of the top-1 key token with the maximum attention score in a context of  $T$  tokens. Suppose that our locality assumption holds true. We divide the context into two branches with  $T/2$  keys each. Then, the branch whose center token has the bigger attention score is more likely to contain the top-1 key token.*
+
+The above shows the effectiveness of one iteration of HiP’s key selection algorithm. By recursive application of HiP’s key selection iterations, we can intuitively see that the probability of HiP’s key selection algorithm finding the location of the top-1 key would be higher than that of uniform random selection as well. Therefore, under the attention locality assumption, on average, HiP’s key selection algorithm on average finds the best key tokens more often than random selection. This is also the basis for choosing the center key token as the representative in our algorithm. See [Appendix A.1](#) for the proof sketch and [Appendix A.2](#) for the formal statement and proof of the theorem.
+
+## 5 EXPERIMENTS
+
+### 5.1 EXPERIMENT SETTINGS
+
+Large Language Models (LLMs) are one of the most prominent models that utilize the attention mechanism. Thus, we first apply our proposed HiP to Llama3.1-8B ([Touvron et al., 2023](#)), a pre-trained LLM that is reported to perform well on various long-context natural language understanding
+
+![Figure 6: Score Difference Distribution. Three plots showing attention score statistics. Left: Histogram of Attention Score Difference with a normal distribution fit (KL difference: 0.0039). Middle: Line plot of Mean vs Index difference (0 to 1000), showing a slight downward trend. Right: Line plot of Standard deviation vs Index difference (0 to 1000), showing an increasing trend.](096d7a8a21933900dad68d82ae8a97fb_img.jpg)
+
+Figure 6: Score Difference Distribution. Three plots showing attention score statistics. Left: Histogram of Attention Score Difference with a normal distribution fit (KL difference: 0.0039). Middle: Line plot of Mean vs Index difference (0 to 1000), showing a slight downward trend. Right: Line plot of Standard deviation vs Index difference (0 to 1000), showing an increasing trend.
+
+**Figure 6: Score Difference Distribution.** We collect the attention score statistics from the 17<sup>th</sup> layer and second attention head of Llama3.1-8B. The left figure shows the raw distribution when  $\Delta = 500$ . The middle and right figures show the mean and standard deviation as a function of  $\Delta$ .
+
+{6}------------------------------------------------
+
+![Figure 7: Latency and Perplexity Evaluation with Various Context Lengths. Three line graphs show Prefill Latency (ms), Decode Latency (ms), and PG19 Perplexity vs Context length (x1024 tokens) for Llama3.1-8B. HiP Attn (Ours) is compared with Flash Attn, BigBird, StreamingLLM, H2O, H2O (stream), Hyper Attn l_r=3, and Hyper Attn l_r=25. HiP Attn (Ours) shows significantly lower latency and perplexity than most baselines, especially at longer context lengths.](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+Figure 7: Latency and Perplexity Evaluation with Various Context Lengths. Three line graphs show Prefill Latency (ms), Decode Latency (ms), and PG19 Perplexity vs Context length (x1024 tokens) for Llama3.1-8B. HiP Attn (Ours) is compared with Flash Attn, BigBird, StreamingLLM, H2O, H2O (stream), Hyper Attn l\_r=3, and Hyper Attn l\_r=25. HiP Attn (Ours) shows significantly lower latency and perplexity than most baselines, especially at longer context lengths.
+
+Figure 7: **Latency and Perplexity Evaluation with Various Context Lengths.** We evaluate our proposed HiP and baselines in PG19 (Rae et al., 2019) with various context length on Llama3.1-8B (Meta, 2024). See Appendix D for experiment details.
+
+Table 1: **Passkey Results.** We evaluate our proposed HiP and baselines using passkey retrieval which is a needle in a haystack style context utilization benchmark.
+
+| Attention Method | Dense Prefill |  |  |  |  |  |  |  |  |  | Sparse Prefill |  |  |  |  |  |  |  |  |  |  |  |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  | Dense |  |  |  |  | Sparse Decode |  |  |  |  | Dense Decode |  |  |  |  | Sparse Decode |  |  |  |  |  |  |  |  |
+|  | FlashAttn | A 2k | A 4k | BigBird 1k | BigBird 2k | H <sub>2</sub> O 256 | H <sub>2</sub> O 512 | HiP 1k | HiP 2k | HiP 1k +VO | A 2k | AVD 1k | BigBird 1k | BigBird 2k | HiP 2k | HiP 1k | HiP 1k +VO | A 2k | AVD 1k | BigBird 1k | BigBird 2k | HiP 2k | HiP 1k | HiP 1k +VO |
+|  | 128k | 64k | 32k | 16k | 8k | 4k | 2k | 1k | 128k | 64k | 32k | 16k | 8k | 4k | 2k | 1k | 128k | 64k | 32k | 16k | 8k | 4k | 2k | 1k |
+| Context Length | 100 | 62.7 | 64.0 | 64.6 | 67.4 | 80.2 | 87.2 | 79.4 | 82.0 | 11.1 | 97.8 | 8.6 | 10.5 | 27.2 | 27.6 | 92.9 | 7.4 | 9.9 | 6.2 | 9.2 | 19.3 | 32.7 | 68.0 |  |
+|  | 100 | 64.3 | 66.3 | 72.9 | 77.3 | 84.6 | 99.0 | 90.7 | 94.0 | 23.2 | 95.0 | 15.0 | 20.2 | 57.5 | 77.2 | 100 | 18.4 | 12.7 | 16.7 | 16.7 | 50.0 | 68.2 | 80.4 |  |
+|  | 100 | 64.5 | 65.3 | 82.2 | 87.1 | 91.2 | 98.0 | 99.7 | 99.6 | 16.5 | 100 | 26.8 | 42.8 | 96.9 | 100 | 100 | 14.6 | 14.8 | 16.1 | 38.1 | 96.3 | 100 | 95.3 |  |
+|  | 100 | 66.2 | 67.5 | 90.3 | 98.0 | 93.7 | 98.5 | 94.7 | 100 | 25.3 | 98.6 | 43.9 | 59.5 | 100 | 100 | 100 | 19.0 | 13.9 | 29.8 | 55.6 | 98.7 | 100 | 91.3 |  |
+|  | 100 | 69.5 | 73.5 | 98.8 | 99.3 | 95.7 | 99.0 | 100 | 100 | 32.3 | 100 | 61.9 | 98.4 | 100 | 100 | 100 | 30.8 | 16.9 | 66.8 | 95.8 | 100 | 100 | 100 |  |
+|  | 100 | 77.3 | 83.1 | 100 | 100 | 98.6 | 99.7 | 100 | 100 | 56.8 | 100 | 90.4 | 100 | 97.8 | 100 | 100 | 56.8 | 24.7 | 94.1 | 100 | 98.0 | 100 | 100 |  |
+| Avg. | 100 | 67.4 | 70.0 | 84.8 | 88.2 | 90.7 | 96.9 | 94.1 | 95.9 | 27.5 | 98.6 | 41.1 | 55.2 | 79.9 | 84.1 | 98.8 | 24.5 | 15.5 | 38.3 | 52.6 | 77.0 | 83.5 | 89.2 |  |
+| Speedup |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Prefill (128k) | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 14.6 | 12.1 | 15.3 | 8.4 | 9.1 | 4.9 | 8.5 | 14.6 | 12.1 | 15.3 | 8.4 | 9.1 | 4.9 | 8.5 |
+| Decode | 1.0 | 29.1 | 14.8 | 21.8 | 11.3 | 29.1 | 14.5 | 29.9 | 15.1 | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 29.1 | 45.0 | 21.8 | 11.3 | 29.9 | 15.1 | 63.9 |
+
+tasks up to 128k context tokens, to evaluate the effectiveness of our HiP mechanism. We replace all, but the initial  $l_d$  attention layers with HiP in the pretrained LLM, where  $L$  is the total number of layers, and  $l_d$  denotes the remaining dense attention layers. We choose  $l_d$  through an ablation study (Appendix E.5). During LLM decoding, we cache the sparse attention mask from the previous step and refresh it every  $r_m$  step to reduce the decoding latency. The latency-performance tradeoff of  $r_m$  is discussed in Section 5.4. For a detailed description of HiP’s decoding process, see Algorithm 2 in the appendix. Further details on the hyperparameters are in Appendix D.
+
+**Baselines.** We use several sparse attention baselines: A, StreamingLLM (SLLM) (Xiao et al., 2024), AVD (Jiang et al., 2024; Li et al., 2024), BigBird (Zaheer et al., 2020a), HyperAttention (Han et al., 2024), and H<sub>2</sub>O (Zhang et al., 2023), chosen for their training-free and sub-quadratic properties. Both StreamingLLM and A use a combination of global sink tokens and sliding window (Beltagy et al., 2020), with StreamingLLM additionally using rolling RoPE indexing (Xiao et al., 2024). AVD retains key vertical and diagonal lines in the prefix attention mask based on snapshot scores on top of A. As it is a prefix-oriented method, A is used for decoding. BigBird uses random masking along with the A pattern. HyperAttention is a token-clustering-style (Kitaitev et al., 2019) attention mechanism. Finally, H<sub>2</sub>O retains the top- $k$  high-scoring KV tokens for the next step’s KV cache.
+
+### 5.2 LANGUAGE MODELING PERFORMANCE EVALUATION
+
+We evaluate HiP on the PG19 (Rae et al., 2019) datasets. We measure latency in two stages: (1) the initial pass (prefill), where the forward pass covers the entire prompt, and (2) subsequent passes (decode), which process one token at a time with a KV cache. In Figure 7, HiP attention is  $9.00\times$  faster in prompt latency and  $29.99\times$  faster in decoding latency on Llama3.1-8B, with only a  $+0.5348$  increase in perplexity on PG19 ( $8.1151 \rightarrow 8.6499$ ). Our method leverages block approximation to maximize MMU efficiency, outperforming quadratic baselines and achieving near-linear decoding latency. Further details on experimental settings are in Appendix D.
+
+{7}------------------------------------------------
+
+Table 3: **LongBench Results.** We evaluate HiP and baselines. We measure the speedup of prefill and decode on 32k context length, the maximum context length of LongBench.
+
+| Attention Method | Dense Prefill |  |  |  |  |  | Sparse Prefill |  |  |  |  |  |  |  |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  | Dense | Sparse Decode |  |  |  |  | Dense Decode |  |  |  |  | Sparse Decode |  |  |  |  |
+|  | Flashqkm | H <sub>0</sub> 256 | H <sub>0</sub> 512 | Bigbird 1k | Bigbird 2k | HiP <sup>1/2</sup> | HiP <sup>1/4</sup> | A1k | A2k | Bigbird 512 | Bigbird 1k | HiP <sup>1/2</sup> | HiP <sup>1/4</sup> | HiP <sup>256-v0</sup> | HiP <sup>512-v0</sup> |  |
+| NarrativeQA | 29.5 | 15.3 | 25.9 | 26.0 | 29.0 | 28.9 | 20.2 | 22.0 | 25.5 | 23.5 | 21.4 | 23.9 | 26.8 | 27.1 | 11.4 | 17.4 |
+| Qasper | 44.3 | 19.4 | 21.6 | 32.3 | 35.6 | 42.1 | 43.2 | 28.6 | 41.4 | 42.9 | 44.3 | 39.8 | 45.1 | 44.2 | 43.1 | 7.8 |
+| HotpotQA | 54.6 | 17.3 | 17.8 | 45.7 | 50.9 | 53.9 | 54.5 | 27.8 | 45.6 | 53.4 | 49.0 | 40.7 | 51.6 | 56.1 | 53.8 | 9.9 |
+| 2WikiMQA | 39.5 | 19.3 | 20.6 | 34.7 | 33.7 | 38.9 | 39.5 | 21.6 | 34.6 | 41.7 | 45.0 | 34.1 | 45.8 | 34.1 | 41.2 | 8.6 |
+| GovReport | 35.0 | 26.7 | 28.2 | 24.9 | 27.3 | 30.3 | 32.4 | 33.8 | 34.2 | 35.0 | 34.3 | 34.0 | 34.6 | 34.4 | 34.6 | 23.2 |
+| MultiNews | 27.4 | 25.1 | 25.6 | 24.1 | 26.4 | 26.5 | 26.8 | 27.1 | 27.2 | 27.4 | 27.1 | 27.0 | 27.1 | 27.1 | 27.2 | 22.6 |
+| Avg. Scores (%) | 38.4 | 20.6 | 21.5 | 31.3 | 33.3 | 36.8 | 37.6 | 26.5 | 34.1 | 37.7 | 37.2 | 32.8 | 38.0 | 38.9 | 37.8 | 13.9 |
+| Rel. Scores (%) | 100 | 53 | 56 | 81 | 87 | 96 | 98 | 69 | 89 | 98 | 97 | 86 | 99 | 101 | 99 | 36 |
+| Speedup (32k) | Prefill | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 |
+|  | Decode | 1.0 | 7.3 | 3.7 | 10.4 | 5.6 | 8.5 | 4.3 | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 10.6 |
+
+### 5.3 LONG CONTEXT PERFORMANCE
+
+In this section, we investigate the performance of our HiP, comparing its latency and accuracy against baselines on various benchmarks. Mainly, we build two kinds of benchmark sets: (1) long-context utilization to verify our method can retrieve the information in a given context using a needle in a haystack (NIAH) and (2) long-context natural language understanding to show that our method can preserve reasoning and text generation performance of original long-context LLM. We apply the efficient attention method to mimic various deployment settings by replacing prefill, decode, or prefill-decode flash attention. We can find our HiP performs robustly in every scenario compared to baselines, by applying efficient attention methods in different phases separately.
+
+**Passkey and RULER.** First, we analyze the result of long-context utilization performance using passkey retrieval in Tables 1 and 2. Our passkey retrieval test is a simple test to find a five-digit passkey in a repeated haystack sentence. RULER (Hsieh et al., 2024) is a more complex benchmark containing NIAH tests, such as finding multiple passkeys and tracking variable changes inside complicated essay-style haystack sentences. In Table 1, our method is the strongest in every deployment setting. Dense prefill in general scores high in this benchmark because the model has no chance of overlooking the passkey tokens. However, interestingly, AVD shows an almost perfect score with sparse prefill + dense decode. We think this is because the snapshot
+
+Table 2: **RULER Results.** We compare the effective context lengths of HiP and baselines with Llama3.1-8B. Accuracies surpassing 80% are marked with bold font.
+
+| Attention Method |  | Dense Prefill |  | Sparse Prefill |  |  |  |  |  |  |  |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  |  | Dense | Sparse | Dense Decode |  |  |  |  | Sparse Decode |  |  |  |  |
+|  |  | Flashqkm | Bigbird 4k | HiP <sup>1/2</sup> | HiP <sup>1/4</sup> | Bigbird 4k | HiP <sup>1/2</sup> | HiP <sup>1/4</sup> | Bigbird 4k | HiP <sup>1/2</sup> | HiP <sup>1/4</sup> | Bigbird 4k | HiP <sup>1/2</sup> |
+| Effective Length | 32k | 4k | 32k | 8k | 16k | 32k | 32k | 32k | 4k | <4k | 16k | 16k | 16k |
+| Context Length | 128k | 77.0 | 13.9 | 38.9 | 31.3 | 19.1 | 52.0 | 58.2 | 11.0 | 8.3 | 21.1 | 26.5 |  |
+|  | 64k | 84.7 | 15.3 | 68.6 | 41.8 | 66.0 | 73.7 | 79.9 | 11.8 | 12.9 | 53.5 | 63.7 |  |
+|  | 32k | 87.4 | 16.9 | 82.9 | 58.1 | 77.0 | 86.5 | 89.7 | 12.5 | 15.9 | 77.5 | 84.2 |  |
+|  | 16k | 91.6 | 27.2 | 92.4 | 76.3 | 89.5 | 92.1 | 94.1 | 24.0 | 22.6 | 90.0 | 93.9 |  |
+|  | 8k | 93.8 | 54.5 | 94.3 | 89.5 | 94.1 | 94.6 | 94.7 | 46.1 | 38.6 | 94.4 | 94.6 |  |
+|  | 4k | 95.5 | 88.3 | 95.9 | 95.3 | 95.9 | 95.9 | 96.0 | 87.1 | 65.1 | 95.7 | 95.9 |  |
+| Avg. |  | 88.3 | 36.0 | 78.8 | 65.4 | 73.6 | 82.5 | 85.4 | 32.1 | 27.2 | 72.0 | 72.6 |  |
+| Speedup (128k) | Prefill | 1.00 | 1.00 | 1.00 | 4.53 | 4.80 | 2.44 | 1.70 | 4.53 | 4.80 | 2.44 | 1.70 |  |
+|  | Decode | 1.00 | 5.90 | 7.05 | 1.00 | 1.00 | 1.00 | 1.00 | 5.90 | 2.71 | 7.05 | 7.75 |  |
+
+heuristic that captures important tokens during prefill is a perfect fit for this benchmark. However, because of this aspect, it performs poorly on more complex tasks such as RULER and LongBench. The combination of HiP and AVD slightly increases the performance from regular HiP, achieving 100% accuracy in passkey up to 64k context length.
+
+**LongBench.** We then use the LongBench benchmark (Bai et al., 2023) to evaluate the long context prompt and decoding performance of HiP in Table 3. We believe that this benchmark is the most important because it shows both long context generation performance and knowledge retrieval performance, which are critical in many LLM applications, such as multi-turn assistants and in-context learning. Compared to passkey, the dense decode setting scores higher because this benchmark is much more decoding-heavy. This means that real-world natural language question answering and long context text generation rely more on decoding accuracy rather than prefill. Therefore, we can see non-decode-friendly baselines such as StreamingLLM, AVD and A failing to recover long-generation performance in GovReport and MultiNews subtasks, which decode 512 tokens. Interestingly, AVD completely fails on those two subtasks while it works moderately well on some QA tasks. We think this is because AVD fails to capture complex reasoning and long-term context due to its restrictive attention mask patterns. In Appendix E.2, we illustrate this long context knowledge retrieval ability by using an example from LongBench. HiP outperforms every baseline, and
+
+{8}------------------------------------------------
+
+Table 4: **Benchmark Performance on Long-Booksum Task.** We evaluate the book summarization task. 2k tokens are generated for the summary of each book, whose lengths are between 32k-128k tokens. For the ‘Half’ and ‘Quarter window’ settings, the context window size of each sparse attention method is adjusted accordingly. The speedups are measured on the Normal setting.
+
+|  | Method | KVCache footprint (tokens) | Decoding context window (tokens) | Llama3.1-8B-Instruct |  |  |  |  |  |  |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  |  |  |  | Normal Window ( $\times 1$ ) |  |  | Half Window ( $\times .5$ ) |  |  | Quarter Window ( $\times .25$ ) |  |  |
+|  |  |  |  | ROUGE-1 | ROUGE-2 | ROUGE-L | ROUGE-1 | ROUGE-2 | ROUGE-L | ROUGE-1 | ROUGE-2 | ROUGE-L |
+| Unlimited VRAM | FlashAttn | $\infty$ | $\infty$ | 41.63% | 10.16% | 23.58% | 41.63% | 10.16% | 23.58% | 41.63% | 10.16% | 23.58% |
+|  | BigBird 4k | $\infty$ | 4K | 36.05% | 7.59% | 19.81% | 34.20% | 7.02% | 18.90% | 31.97% | 6.23% | 18.71% |
+| Restricted VRAM | FlashAttn TRUNC | 8K | 8K | 36.62% | 8.33% | 20.97% | 36.62% | 8.33% | 20.97% | 36.62% | 8.33% | 20.97% |
+|  | BigBird 2K TRUNC | 8K | 4K | 35.44% | 7.57% | 19.65% | 34.60% | 7.20% | 19.32% | 32.36% | 6.46% | 18.62% |
+|  | AVD 4K + 8K + 8K | 8K | 8K | 37.18% | 8.28% | 21.62% | 36.07% | 7.72% | 20.60% | 35.72% | 7.67% | 20.81% |
+|  | HiP 2k (Ours) | 7K | 3K | 38.84% | 9.11% | 21.92% | 38.47% | 8.57% | 21.50% | 37.34% | 8.52% | 21.53% |
+|  | HiP 2k + V2k D1k | 7K | $\sim 4K$ | 39.98% | 9.61% | 22.61% | 39.44% | 9.09% | 22.05% | 38.00% | 8.70% | 22.04% |
+|  |  |  |  |  |  |  |  |  |  |  |  | 7.05x |
+
+![Figure 8: Latency Breakdown in Single Layer Decoding. A stacked bar chart showing latency (us) for context lengths 8, 16, 32, 64, and 128 (x1024 tokens). The chart compares Linear, Flash Attention, Masking, and Sparse Attention components. For context length 128, the total latency is 585.3 us, with Flash Attention being the dominant component at 303.6 us.](bedcca5cdf168e3508ef511d94ec514c_img.jpg)
+
+| Context length (x1024 tokens) | Linear | Flash Attention | Masking | Sparse Attention | Total |
+|-|-|-|-|-|-|
+| 8 | ~25 | ~45 | ~15 | ~10 | ~95 |
+| 16 | ~25 | ~95 | ~30 | ~20 | ~170 |
+| 32 | ~25 | ~195 | ~60 | ~40 | ~320 |
+| 64 | ~25 | ~305 | ~100 | ~60 | ~490 |
+| 128 | ~25 | ~303.6 | ~130 | ~126.7 | ~585.3 |
+
+Figure 8: Latency Breakdown in Single Layer Decoding. A stacked bar chart showing latency (us) for context lengths 8, 16, 32, 64, and 128 (x1024 tokens). The chart compares Linear, Flash Attention, Masking, and Sparse Attention components. For context length 128, the total latency is 585.3 us, with Flash Attention being the dominant component at 303.6 us.
+
+Figure 8: **End-to-end Decoding Latency.** We show two phases of HiP decoding: mask refreshing step triggered in every  $r_m$  decoding step and mask cached sparse attention.
+
+with a small amount of fine-tuning with an unrelated dataset, it even recovers the original model’s performance (‘HiP HEAL’). See Appendix D for more details and discussion about healing.
+
+**BookSum.** We use the BookSum benchmark (Kryściński et al., 2022) to assess the long-context and long-response generation capabilities of HiP. We report the average ROUGE F1-scores (Lin, 2004) for the generated summaries in Table 4. To simulate a realistic long-context decoding scenario and demonstrate the effectiveness of KV cache offloading, we put a limit on the GPU KV memory size to 8K tokens. This represents a practical context length on a 24GB GPU with an 8B model without KV offloading. Specifically, for FlashAttention and BigBird, we truncate the context to 8K tokens, and AVD uses an 8K token length sliding window. With our method, with KV cache offloading, we can expand the effective context length only limited by the main memory’s capacity, which is much cheaper. HiP outperforms all other baselines in this VRAM-limited setting while maintaining high decoding speed: over  $7\times$  faster than regular FlashAttention. Although FlashAttention with a truncated context is faster, it suffers from significant performance degradation and, most importantly, breaks the user’s expectation that the model can access the entire context. We observe that HiP with a context window of only 512 still outperforms AVD with an 8k window.
+
+### 5.4 LATENCY BREAKDOWN AND END-TO-END DECODING SPEEDUP
+
+We evaluate the trade-off between attention latency and the model performance with HiP in Figure 7. We observe that our HiP’s latency-optimized setting shows about  $9.00\times$  speedup of attention decoding latency but only increases the perplexity by 0.5348 in PG19 (Rae et al., 2019), compared to FlashAttention2. In Figure 8, we show the latency breakdown of the HiP-applied transformer model. Our proposed method contains two major components that contribute to the overall latency: (1) top- $k$  estimation iterations and (2) fused sparse attention. We observe that the HiP top- $k$  estimation kernel is the only scaling part as the sequence grows; the sparse attention and linear layer shows constant time for each decoding step. Since the top- $k$  estimation iteration results can be cached and reused  $r_m$  times, the latency of the HiP method is dominated by fused sparse attention in most practical scenarios, as shown in Figure 8. On the other hand, the  $r_m$  hyperparameter trades off the generation quality for latency, especially for long decoding, as shown in Table 5. HiP achieves  $6.83$  times end-to-end decoding speedup with 128k context while maintaining 96.0% relative performance in LongBench. We can speed up further to  $14.30\times$  when we allow a moderate amount of performance degradation (-3.6%p).
+
+Table 5: **End-to-end Decoding Speedup and Quality for each  $r_m$ .** We show the trade-off between end-to-end decoding speedup and decoding quality using LongBench. Metrics are the comparison score to Flash Attention. In LongBench, we merge four tasks into ‘QA’ and merge two tasks into the ‘Summary’ column in the table. The latency is measured with  $l_q=0$ .
+
+| Seq. Length | End-to-End Decoding Speedup |  |  |  |  | LongBench |  |  |
+|-|-|-|-|-|-|-|-|-|
+|  | 8k | 16k | 32k | 64k | 128k | QA | Summary | Avg. |
+| HiP ( $r_m=1$ ) | 0.99 | 1.51 | 2.31 | 4.05 | 6.83 | 95.9 | 96.1 | 96.0 |
+| HiP ( $r_m=2$ ) | 1.26 | 1.93 | 3.09 | 5.51 | 9.57 | 94.7 | 95.5 | 95.0 |
+| HiP ( $r_m=4$ ) | 1.58 | 2.44 | 4.02 | 7.28 | 12.97 | 94.2 | 93.3 | 93.9 |
+| HiP ( $r_m=8$ ) | 1.65 | 2.55 | 4.31 | 7.89 | 14.30 | 93.4 | 90.5 | 92.4 |
+
+{9}------------------------------------------------
+
+![Figure 9: KV Cache Offloading Performance. A dual-axis line graph showing Decode Throughput (tokens/s) on the left y-axis (0-5000) and GPU KV Memory (MB) on the right y-axis (0-175) against Context length (x1024 tokens) from 10 to 60. The graph compares Flash Attention (blue squares), Flash Attention with UVM (green triangles), and HiP Attention variants (red circles for UVM, orange stars for Vector Map, purple diamonds for Hash Map). Straight lines represent GPU memory usage, which increases linearly with context length. Dashed lines represent decode throughput, which decreases as context length increases. HiP Attention variants maintain high throughput (around 4000-4500 tokens/s) even at 64k context, while Flash Attention drops to around 1000 tokens/s. UVM variants show a significant drop in throughput, falling below 1000 tokens/s at 64k context.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 9: KV Cache Offloading Performance. A dual-axis line graph showing Decode Throughput (tokens/s) on the left y-axis (0-5000) and GPU KV Memory (MB) on the right y-axis (0-175) against Context length (x1024 tokens) from 10 to 60. The graph compares Flash Attention (blue squares), Flash Attention with UVM (green triangles), and HiP Attention variants (red circles for UVM, orange stars for Vector Map, purple diamonds for Hash Map). Straight lines represent GPU memory usage, which increases linearly with context length. Dashed lines represent decode throughput, which decreases as context length increases. HiP Attention variants maintain high throughput (around 4000-4500 tokens/s) even at 64k context, while Flash Attention drops to around 1000 tokens/s. UVM variants show a significant drop in throughput, falling below 1000 tokens/s at 64k context.
+
+Figure 9: **KV Cache Offloading Performance (left)**. We measure batched prefill and decoding throughput (tokens/s) with our novel KV cache offloading framework with an on-device offloading cache. Straight lines show the latency, and dashed lines show the GPU memory usage by KV caches.
+
+Table 6: Detailed additional data of KV cache offloading performance on RTX 4090 24GB and A100 80GB.
+
+| Throughput (tok/s) | RTX4090 24GB, $T=64k$ |  |  | A100 80GB, $T=512k$ |  |  |
+|-|-|-|-|-|-|-|
+|  | Prefill | Decode | VRAM (MB) | Prefill | Decode | VRAM (MB) |
+| FA2 | OOM | OOM | OOM | OOM | OOM | OOM |
+| HiP no offload | OOM | OOM | OOM | OOM | OOM | OOM |
+| FA2 UVM | 5678 | 1.91 | N/A | 1382 | 0.18 | N/A |
+| HiP UVM | 9002 | 22.91 | N/A | 8225 | 20.94 | N/A |
+| HiP w/ VectorMap | <b>6386</b> | <b>95.45</b> | <b>2283</b> | <b>4127</b> | <b>85.11</b> | <b>18404</b> |
+| HiP w/ HashMap | 359 | 10.15 | <b>2104</b> | 48 | 2.74 | <b>10890</b> |
+
+### 5.5 KV CACHE OFFLOADING BENCHMARK
+
+In Figure 9, we evaluate the latency and memory usage of our KV offloading framework. The UVM variants use the CUDA unified virtual memory API to offload the whole KV cache to the main memory. Our HiP has two variants that depend on the type of cache implementation. We use Llama3.1-8B with 16-bit weights, and the KV states are stored in 8-bit floats. We use a single RTX 4090 24GB for the graph on the left, and to additionally test our method up to 512k tokens, we also test on a single A100 80GB GPU. We set  $l_d = 0$ , and choose the last token for the representative key to reduce the memory access in this test. See Appendix D for details.
+
+As shown in Figure 9, with UVM, both ours and Flash Attention slow down decoding about 5 to 7 times compared to full GPU runtime. However, we could serve until 64k context, while the same machine can serve only until 16k at maximum. Since memory access is significantly more costly with UVM, the trend of logarithmic scaling of decode throughput is clearer than when working with pure GPU memory. So, at 64k context length, ours is more than 50 times faster than Flash Attention with UVM. However, UVM slows down both methods too much compared to full GPU runtime.
+
+We test two types of cache implementation: vector map and hash map. A vector map uses a  $T$ -sized vector of pointers pointing to the allocated bank to store the mapping between a token index and a bank index. Our GPU-loaded KV offloading cache (Vector Map) shines by achieving 93% decoding throughput compared to no KV offloading at all. Without a significant slowdown, we could extend the serving context from 16k to 64k on an RTX 4090, which is  $4.17\times$  higher decoding throughput compared to HiP<sub>UVM</sub> and  $49.97\times$  higher decoding throughput compared to Flash Attention<sub>UVM</sub>, as shown in Table 6. However, with the vector map, the space complexity is  $O(T)$ . To reduce the space complexity to  $O(\log T)$ , we use a linear probing hash map to store the index mapping. This way, we can reduce the GPU memory consumption by 40.8% on 512k context length. However, since the hash map lookup is not friendly to the GPU, it slows down token accesses more than naive UVM.
+
+We present our KV offloading framework on a standard gaming PC equipped with a single RTX 4090. Our experiments confirm that the PCIe 4.0x8 bandwidth is sufficient to manage offloading traffic through KV accesses using UVM. Furthermore, when scaled up to a single A100 80GB, our framework demonstrates its ability to extend serving context length, even on server-grade hardware. We anticipate that our HiP’s KV offloading framework will effectively increase serviceable context length across a wide range of deployments, from on-device setups to cloud-based environments.
+
+## 6 CONCLUSION
+
+In this study, we present HiP Attention, a novel framework for accelerating pretrained Transformer-based models without any training, with a focus on the acceleration of LLMs for long-context tasks. Our proposed HiP rapidly estimates the top- $k$  context keys for computing sparse attention, drastically reducing the computation required for long context inference and fine-tuning from  $O(T^2)$  to  $O(T \log T)$ . Our HiP attention is a drop-in replacement for the core of any Transformer-based model, such as language and multimodal models, and does not require modifying the existing weights. This is a practical and meaningful improvement as it allows pre-trained models to be fine-tuned and executed much more efficiently in long sequences without sacrificing quality. We are looking forward to contributing to open-source LLM serving frameworks by combining various efficient decoding strategies with HiP attention.
+
+ Rest of paper (reference and Appendix) is removed.

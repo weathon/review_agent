@@ -1,0 +1,307 @@
+
+
+{0}------------------------------------------------
+
+# SAMPLE-EFFICIENT ALIGNMENT FOR LLMs
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+We study methods for efficiently aligning large language models (LLMs) with human preferences given budgeted online feedback. We first formulate the LLM alignment problem in the frame of contextual dueling bandits. This formulation, subsuming recent paradigms such as online RLHF and online DPO, inherently quests for sample-efficient algorithms that incorporate *online active exploration*. Leveraging insights from bandit algorithm, we introduce a unified algorithm based on **Thompson sampling** and highlight its applications in two distinct LLM alignment scenarios. The practical agent that efficiently implements this algorithm, named **SEA** (Sample-Efficient Alignment), is empirically validated through extensive experiments across three model scales (1B, 2.8B, 6.9B) and three preference learning algorithms (DPO, IPO, SLIC). The results demonstrate that **SEA** achieves highly sample-efficient alignment with oracle’s preferences, outperforming recent active exploration methods for LLMs. We will release our codebase to hopefully accelerate future research in this field.
+
+![Figure 1: Win rate comparison of model responses against reference responses on the TL;DR task, judged by the preference oracle. The figure contains two plots. The left plot shows Win rate v.s. reference responses (0.2 to 1.0) for model sizes 1B, 2.8B, and 6.9B. The right plot shows Queries required by Passive (0 to 50k) versus Queries required by alternatives (0 to 50k).](1559db1c389771b44f7dc11d48b06079_img.jpg)
+
+**Left Plot: Win rate v.s. reference responses**
+
+| Model size | SFT | Offline DPO | Online DPO | SEA DPO |
+|-|-|-|-|-|
+| 1B | ~0.35 | ~0.45 | ~0.55 | ~0.65 (+205%) |
+| 2.8B | ~0.40 | ~0.55 | ~0.65 | ~0.75 (+142%) |
+| 6.9B | ~0.45 | ~0.65 | ~0.75 | ~0.85 (+176%) |
+
+**Right Plot: Queries required by Passive vs. Queries required by alternatives**
+
+| Win rate | Passive | APL | XPO | SEA |
+|-|-|-|-|-|
+| 0.4 | ~45k | ~40k | ~35k | ~10k |
+| 0.6 | ~35k | ~30k | ~25k | ~8k |
+| 0.8 | ~25k | ~20k | ~15k | ~5k |
+
+Figure 1: Win rate comparison of model responses against reference responses on the TL;DR task, judged by the preference oracle. The figure contains two plots. The left plot shows Win rate v.s. reference responses (0.2 to 1.0) for model sizes 1B, 2.8B, and 6.9B. The right plot shows Queries required by Passive (0 to 50k) versus Queries required by alternatives (0 to 50k).
+
+**Figure 1:** Win rate comparison of model responses against reference responses on the TL;DR task, judged by the preference oracle. All compared methods use the same optimization method (DPO). **(Left)** Performance improvements at convergence over SFT models achieved by offline (Offline DPO), passively online (Online DPO), and our *active exploration* (SEA DPO) methods. **(Right)** The number of queries required by the passively online method (Passive) versus that by different active exploration methods to attain various levels of win rates. **SEA** achieves the best sample efficiency for online alignment compared to XPO and APL.
+
+## 1 INTRODUCTION
+
+Aligning LLMs with human preferences is a crucial step to elicit various desirable behaviors, e.g., helpfulness and harmlessness (Bai et al., 2022). Moreover, it holds the potential to create superhuman capabilities with only human-level feedback, as verifying is believed to be easier than synthesizing novel behaviors. By iteratively generating massive new candidates and asking for human feedback, LLMs could learn to reinforce good behaviors and may eventually surpass human capabilities.
+
+Existing methods, either via reinforcement learning from human feedback (RLHF) (Stiennon et al., 2020; Ouyang et al., 2022) or direct alignment from preferences (DAP) (Rafailov et al., 2023; Azar et al., 2024), typically require a large amount of human annotations to achieve effective alignment. As a result, the volume of human feedback becomes a major bottleneck in practical alignment scenarios. This poses a challenging and under-explored research question:
+
+*How to align LLMs sample-efficiently?*
+
+To seek answers, in Section 2, we formalize LLM alignment as a contextual dueling bandit (CDB) (Yue et al., 2012; Dudík et al., 2015), where the agent (i.e., the learner and decision maker, in
+
+{1}------------------------------------------------
+
+our case the LLM) interacts with the environment (i.e., human) to collect experience for improving its policy. This formulation naturally calls for two key properties for alignment algorithms to be sample-efficient:
+
+**Property 1 (Online interaction).** Interacting and learning *online* allows the agent to act with the latest learned policy and then use that experience to immediately improve the policy.
+
+**Property 2 (Active exploration).** An *actively exploring* agent strategically selects actions such that the collected experience leads to maximal policy improvement.
+
+Since the CDB formulation is general and almost subsumes all existing LLM alignment methods, it provides us a lens to scrutinize prior methods on the axes of Properties 1 and 2. In Section 3, we thoroughly discuss prior alignment approaches, ranging from offline learning (Rafailov et al., 2023; Azar et al., 2024) and passive learning with iterative (Christiano et al., 2017; Dong et al., 2024) or online interaction (Guo et al., 2024), to active exploration for learning preference models (Dwaracherla et al., 2024) or aligning LLMs (Muldrew et al., 2024; Zhang et al., 2024a; Xie et al., 2024). As will be revealed, most prior methods (partially) fail to satisfy the two properties, resulting in inferior sample efficiency. Moreover, through the CDB formulation, we identify two LLM alignment scenarios, namely aligning from online users’ feedback (e.g., ChatGPT (2024)) and aligning from crowdsourcing (Christiano et al., 2017; Ouyang et al., 2022), and shed light on their correspondences to two bandit settings (explore & exploit and best arm identification). Understanding their differences is important for designing efficient alignment algorithms for respective scenarios. We detail these two settings in Section 2 and discuss how prior works approach them in Section 3.
+
+Leveraging algorithmic insights from bandit theory, our answer to the research question above is a principled alignment algorithm based on Thompson sampling (TS) (Thompson, 1933). Our method fulfills Properties 1 and 2 to enhance sample efficiency, and it solves either of the two settings depending on practical scenarios (Section 4.1). We incorporate techniques including *epistemic reward model*, *policy-guided search* and *mixed preference learning* to implement the proposed TS algorithm (Section 4.2), yielding a practical agent which we call **SEA** (Sample-Efficient Alignment). In addition, we develop and open source a highly efficient, distributed learning system for studying online LLM alignment methods (Section 5), eliminating barriers to *fair* empirical comparisons of different alignment algorithms. Through extensive experiments (Section 6), **SEA** shows strong empirical results (see Figure 1), consistently achieving higher win rates and improved sample efficiency compared to baseline approaches across three model scales. We will open source the codebase to hopefully accelerate future research in this field.
+
+## 2 LLM ALIGNMENT AS CONTEXTUAL DUELING BANDITS
+
+We first review the definitions and two typical objectives of *Contextual Dueling Bandits* (Section 2.1), then translate them into the language of *LLM alignment* (Section 2.2). The tight connection between them, as we will see, allows us to leverage insights from bandit algorithms to design efficient alignment algorithms for LLMs.
+
+### 2.1 CONTEXTUAL DUELING BANDITS
+
+Contextual dueling bandits (CDB) (Yue et al., 2012; Dudík et al., 2015) is proposed to study online learning problems where the feedback consists of relative pairwise comparisons. A CDB problem can be characterized by a tuple  $(\mathcal{C}, \mathcal{A}, \mathbb{P})$ , where  $\mathcal{C}$  is the context space,  $\mathcal{A}$  is the action space, and  $\mathbb{P} : \mathcal{A} \times \mathcal{A} \times \mathcal{C} \mapsto [0, 1]$  denotes the unknown *preference oracle*. An agent learns by iteratively interacting with the environment (i.e., the preference oracle  $\mathbb{P}$ ) as follows. At each round  $t$  of the learning process, a context  $c_t \sim p_c$  is presented to the agent, who needs to take two actions  $a_t, a'_t \in \mathcal{A}$  for a “dueling” comparison. The agent then receives stochastic feedback in the form of a **comparison result**  $z_t \sim \text{Ber}(\mathbb{P}(a_t \succ a'_t|c_t))$  from the environment, where  $\text{Ber}(\cdot)$  is the Bernoulli distribution and  $\succ$  denotes that the first action is preferred.
+
+**Regret.** The quality of the dueling actions selected by the agent is measured by the *immediate regret*:  $R_t = \mathbb{P}(a_t^* \succ a_t|c_t) + \mathbb{P}(a_t^* \succ a'_t|c_t) - 1$ , where  $a_t^*$  is the best action<sup>1</sup> the agent would take at round  $t$  if it had complete knowledge of  $\mathbb{P}$ . Intuitively, if the agent has learned how to act optimally from round  $t$  onwards, it would no longer suffer any regret since its actions would be indistinguishable from the best action ( $\mathbb{P}(a_t^* \succ a_\tau|c_\tau) = \frac{1}{2}$  hence  $R_\tau = 0$  for  $\tau \geq t$ ).
+
+<sup>1</sup>We assume that a best action  $a^*$  in the sense that  $\mathbb{P}(a^* \succ a|c) \geq \frac{1}{2}, \forall a \in \mathcal{A}$  exists for all context  $c \in \mathcal{C}$ .
+
+{2}------------------------------------------------
+
+![Figure 2: Comparison of three LLM alignment pipelines: Offline RLHF, Offline DAP, and Online Alignment as CDB. Offline RLHF involves collecting a preference dataset, training a reward model as a proxy environment, and running RL. Offline DAP simplifies this to a single supervised learning step. Online Alignment as CDB involves an agent interacting with a preference oracle (humans) to learn an optimal policy.](1b7d539e02a202c2cf2d97698b911447_img.jpg)
+
+The diagram illustrates three distinct LLM alignment pipelines. **Offline RLHF** (Left) shows a three-stage process: 1) Collecting a preference dataset  $\mathcal{D} = \{(x_i, y_i^+, y_i^-)\}_{i=1}^N$  via Human Feedback (HF). 2) Training a reward model  $r_\phi$  to serve as a proxy "environment". 3) Running Reinforcement Learning (RL) with actions  $a_t$  and rewards  $r_t$  to optimize the policy  $\pi_\theta$ . **Offline DAP** (Middle) simplifies the process to a single supervised learning step on the dataset  $\mathcal{D} = \{(x_i, y_i^+, y_i^-)\}_{i=1}^N$  by minimizing a loss  $\mathcal{L}(\theta, \mathcal{D})$ . This can be implemented using algorithms like DPO, IPO, KTO, or CPO to achieve direct alignment from preferences. **Online Alignment as CDB** (Right) shows an agent interacting with a preference oracle (humans) online. The agent chooses actions  $y_t$  based on context  $x_t$  and a probability distribution  $p_t = \mathbb{P}(y_t > y_t' | x_t)$ . The oracle provides binary feedback  $z_t \sim \text{Ber}(p_t)$ . The agent uses a Contextual Dueling Bandit (CDB) interface with a CDB Agent to learn an optimal policy  $\pi_\theta$  by exploring and exploiting. The objectives are either Explore & Exploit (E&E) or Best Arm Identification (BAI).
+
+Figure 2: Comparison of three LLM alignment pipelines: Offline RLHF, Offline DAP, and Online Alignment as CDB. Offline RLHF involves collecting a preference dataset, training a reward model as a proxy environment, and running RL. Offline DAP simplifies this to a single supervised learning step. Online Alignment as CDB involves an agent interacting with a preference oracle (humans) to learn an optimal policy.
+
+**Figure 2: (Left)** A typical offline RLHF pipeline consists of three stages: collecting preference dataset, training a reward model to serve as a proxy “environment”, and running RL to optimize the LLM policy inside the proxy “environment”. **(Middle)** DAP simplifies RLHF by merging the last two stages of RLHF into a single step of contrastive supervised learning. **(Right)** Unlike prior two offline approaches, online alignment employs a CDB interface, where the agent directly interacts with the preference oracle (e.g., humans) online, learning to produce *good* responses satisfying either E&E or BAI objectives. [general1.fdaL: use fig.2 to provide a clearer comparison between our CDB formulation and RLHF/DPO.]
+
+**Optimal policy.** A policy  $\pi \in \Delta_{\mathcal{A}}^{\mathcal{C}}$  associates each context  $c \in \mathcal{C}$  with a probability distribution  $\pi(\cdot | c) \in \Delta_{\mathcal{A}}$  over the action space. The *total preference* of policy  $\pi$  over policy  $\mu$  given a context sampling distribution  $p_C \in \Delta_{\mathcal{C}}$  and a preference oracle  $\mathbb{P}$  is defined as
+
+$$P_{p_C, \mathbb{P}}(\pi > \mu) = \mathbb{E}_{c \sim p_C} [\mathbb{E}_{a \sim \pi(\cdot | c)} \mathbb{E}_{a' \sim \mu(\cdot | c)} [\mathbb{P}(a > a' | c)]] . \quad (1)$$
+
+We adopt the *von Neumann winner* (Dudík et al., 2015) as the solution concept, which requires the optimal policy  $\pi^*$  to satisfy that
+
+$$\forall \pi' \in \Delta_{\mathcal{A}}^{\mathcal{C}}, P_{p_C, \mathbb{P}}(\pi^* > \pi') \geq \frac{1}{2}. \quad (2)$$
+
+In words, the von Neumann winner policy should beat or tie with every policy (i.e., is zero-regret) on average.
+
+**Learning objectives.** The goal of bandit agents is to learn an optimal policy through interactions with the environment. There are two subtypes of objectives that focus on different learning scenarios. The first type considers the conventional *explore and exploit (E&E)* setting (Robbins, 1952; Auer et al., 2002), where the agent learns fully **online** and tries to minimize the cumulative regret over  $T$  rounds:  $\sum_{t=1}^T R_t$ . The second type of objective concerns the *best arm identification (BAI)* setting (Bubeck et al., 2009; Audibert & Bubeck, 2010), where the agent is only evaluated **offline** on its average performance, possibly at any round (a.k.a., anytime regret), and tries to learn the optimal policy with minimum interaction. Both settings call for effective *online exploration* strategies that satisfy Properties 1 and 2. Their differences will be made clearer with real scenarios in Section 2.2.
+
+### 2.2 ONLINE ALIGNMENT AS CDB
+
+Online LLM alignment can be framed as a CDB problem as illustrated in Figure 2 (Right). Specifically, at time  $t$  a text prompt (cf. context)  $x_t \in \mathcal{X}$  is sampled from a prompt distribution  $p_{\mathcal{X}}$ . Then, two distinct responses (cf. actions),  $y_t, y_t' \in \mathcal{Y}$ , are chosen by the agent, and presented to human annotators (cf. the environment) for preference ranking. The winning and losing responses are labeled as  $(y_t^+, y_t^-)$  based on a binary stochastic feedback  $z_t \sim \text{Ber}(\mathbb{P}(y_t > y_t' | x_t))$ . The agent is expected to produce *good* responses satisfying either E&E or BAI objectives, with knowledge learned from the experience accumulated so far:  $\mathcal{D}_t = \{(x_\tau, y_\tau^+, y_\tau^-)\}_{\tau=1}^t$ . A standard assumption is that human preferences follow the Bradley-Terry (BT) model (Bradley & Terry, 1952):
+
+$$\mathbb{P}(y_t > y_t' | x_t) = \frac{\exp(r^*(x_t, y_t))}{\exp(r^*(x_t, y_t)) + \exp(r^*(x_t, y_t'))} = \sigma(r^*(x_t, y_t) - r^*(x_t, y_t')), \quad (3)$$
+
+<sup>2</sup>We denote by  $\Delta_{\mathcal{A}}^{\mathcal{C}}$  the set of all mappings  $\mathcal{C} \mapsto \Delta_{\mathcal{A}}$ , where  $\Delta_{\mathcal{A}}$  denotes the set of all probability distributions over  $\mathcal{A}$ .
+
+{3}------------------------------------------------
+
+![Figure 3: Four diagrams (a, b, c, d) illustrating different paradigms for online LLM alignment. (a) Iterative RLHF: A policy pi_theta sends a prompt to a Human, who sends a response to a reward model D. D sends a reward r_phi back to pi_theta. (b) Iterative or Online DAP: Similar to (a), but the reward model D is shaded gray, indicating it is an uncertainty-aware reward model. (c) Exploration with RMs: Similar to (a), but the reward model D is shaded gray. (d) Sample-Efficient Alignment: Similar to (a), but the reward model D is shaded gray, and there is an additional green arrow from the Human to the policy pi_theta, representing active exploration.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 3: Four diagrams (a, b, c, d) illustrating different paradigms for online LLM alignment. (a) Iterative RLHF: A policy pi\_theta sends a prompt to a Human, who sends a response to a reward model D. D sends a reward r\_phi back to pi\_theta. (b) Iterative or Online DAP: Similar to (a), but the reward model D is shaded gray, indicating it is an uncertainty-aware reward model. (c) Exploration with RMs: Similar to (a), but the reward model D is shaded gray. (d) Sample-Efficient Alignment: Similar to (a), but the reward model D is shaded gray, and there is an additional green arrow from the Human to the policy pi\_theta, representing active exploration.
+
+**Figure 3:** Different paradigms to solve online LLM alignment in the CDB interface (Figure 2 (Right)). The CDB agent is shaded in gray. We use colors to denote **learnable components**, **RL optimizer**, **direct optimizer**, and **active exploration**.  $r_\phi$  denotes a point estimate of human’s implicit reward, while  $\mathcal{R}_\phi$  refers to an uncertainty-aware reward model. Please see Section 3 for detailed comparisons with references to prior works. [fdaL: updated fig.3 to highlight the differences between (b) and (d).]
+
+where  $\sigma$  is the sigmoid function and  $r^*$  encodes human’s implicit reward. The immediate regret of LLM alignment can be rewritten as  $R_t = r^*(\mathbf{x}_t, \mathbf{y}_t^+) - (r^*(\mathbf{x}_t, \mathbf{y}_t) + r^*(\mathbf{x}_t, \mathbf{y}_t^+))/2$  with the BT assumption (Saha, 2021; Li et al., 2024), where  $\mathbf{y}_t^+$  is the best response for prompt  $\mathbf{x}_t$  given human’s implicit reward, i.e.,  $r^*(\mathbf{x}_t, \mathbf{y}_t^+) \geq r^*(\mathbf{x}_t, \mathbf{y}), \forall \mathbf{y} \in \mathcal{Y}$ . The von Neumann winner policy is also redefined as
+
+$$\pi^* \in \arg \max_{\pi \in \Delta_{\mathcal{S}}^{\mathcal{Y}}} J(\pi), \text{ where } J(\pi) = \mathbb{E}_{\mathbf{x} \sim p_{\mathcal{X}}} \mathbb{E}_{\mathbf{y} \sim \pi(\cdot|\mathbf{x})} [r^*(\mathbf{x}, \mathbf{y})] \text{ is the objective,} \quad (4)$$
+
+by substituting Eq. (3) into Eq. (1) and maximizing  $P_{p_{\mathcal{X}}, \mathbb{P}}(\pi > \pi^*)$  towards  $1/2$ .
+
+The **two settings in bandits** have their respective applications in LLM alignment. **(1)** The E&E setting applies to the scenario of serving an LLM-based application online and aligning it continually with users’ preferences. In this setting, the agent needs to balance exploration with exploitation, thus the cumulative regret is of interest because the quality of *every* response matters. In fact, commercial systems like ChatGPT would strategically ask users to make a dueling comparison, while upholding the quality of both responses. Please see Figure 12 in Appendix G for an example. **(2)** The BAI setting corresponds to the other scenario where annotators are paid to provide human feedback (Christiano et al., 2017; Ouyang et al., 2022). The desideratum in this scenario is to align the LLM at the minimum labeling cost, while the quality of the dueling responses is not important as long as the experience helps sample-efficiently learn the von Neumann winner policy.
+
+After formalizing LLM alignment in the framework of CDB and uncovering their tight connections, we next thoroughly discuss existing alignment methods in the CDB framework and reveal the sources of their sample inefficiencies.
+
+## 3 HOW PRIOR WORKS (PARTIALLY) SOLVE LLM ALIGNMENT AS CDB
+
+We first align the notations and terminology used in CDB with commonly referred ones in the LLM community. Previously, we used the term “agent” to denote the learner and decision maker, and referred to its overall behavior as the “policy”  $\pi$  (as in Eq. (4)), following the standard abstraction in RL (Sutton & Barto, 2018; Sutton et al., 2022). However, in the LLM literature, “policy” typically refers to the generative language model alone, excluding components like reward models (RMs) that the agent might additionally build (see Figure 2 (Right)). To avoid confusion, from now on we use  $\pi_\theta$  to denote the generative language model (policy) and  $r_{\phi,t}$  to denote the (optional) RM at time  $t$ , both of which are learned from preference data  $\mathcal{D}_t$  collected up to time  $t$ . We will omit  $t$  when the time-indexing is not applicable (i.e., no online interaction) or not important in the context.
+
+**RLHF and DAP.** Commonly adopted RLHF pipelines (Christiano et al., 2017; Stiennon et al., 2020; Bai et al., 2022; Ouyang et al., 2022) first learn a proxy RM with a negative log-likelihood loss:
+
+$$\mathcal{L}_r(\phi|\mathcal{D}) = -\mathbb{E}_{(\mathbf{x}, \mathbf{y}^+, \mathbf{y}^-) \sim p_{\mathcal{D}}} [\log \sigma (r_\phi(\mathbf{x}, \mathbf{y}^+) - r_\phi(\mathbf{x}, \mathbf{y}^-))], \quad (5)$$
+
+where  $\mathcal{D}$  is collected by querying human annotators using a behavior policy  $\pi_{\text{ref}}$  (typically the supervised fine-tuned policy  $\pi_{\text{sft}}$ ). Afterwards, *offline RL*<sup>3</sup> (Lange et al., 2012; Levine et al., 2020) is conducted to learn  $\pi_\theta$  with respect to the learned reward  $r_\phi$  *internally* within the agent (Figure 3a). However, the learned model  $\pi_\theta$  might be inaccurate at regions out of the distribution (o.o.d.) of  $\pi_{\text{ref}}$  because little training data can be collected. An effective remedy is to incorporate a pessimistic term to combat the distributional shift, leading to a reformulation of the von Neumann winner
+
+<sup>3</sup> *Offline* in the sense that  $\pi_\theta$  is not directly learned from online human feedback. See Appendix B for details.
+
+{4}------------------------------------------------
+
+policy objective in Eq. (4) as
+
+$$J(\pi_\theta) = \mathbb{E}_{\mathbf{x} \sim p_X} \mathbb{E}_{\mathbf{y} \sim \pi_\theta(\cdot|\mathbf{x})} \left[ \underbrace{r_\phi(\mathbf{x}, \mathbf{y})}_{\text{estimated } r^*} - \underbrace{\beta \log \frac{\pi_\theta(\mathbf{y}|\mathbf{x})}{\pi_{\text{ref}}(\mathbf{y}|\mathbf{x})}}_{\text{o.o.d. reward penalty}} \right] \quad (6)$$
+
+$$= \mathbb{E}_{\mathbf{x} \sim p_X} \left[ \mathbb{E}_{\mathbf{y} \sim \pi_\theta(\cdot|\mathbf{x})} [r_\phi(\mathbf{x}, \mathbf{y})] - \beta D_{\text{KL}}(\pi_\theta(\cdot|\mathbf{x}) \| \pi_{\text{ref}}(\cdot|\mathbf{x})) \right], \quad (7)$$
+
+which converts an online objective regarding the human’s implicit reward  $r^*$  to an offline objective regarding the proxy reward  $r_\phi$ . The KL penalty in Eq. (7) is widely used for language model fine-tuning (Jaques et al., 2020; Xiong et al., 2024), and PPO (Schulman et al., 2017) has become a default *RL optimizer* to maximize the KL-regularized reward. However, the performance of RLHF is guaranteed only if the preference data  $\mathcal{D}$  induced by  $\pi_{\text{ref}}$  adequately covers  $\pi^*$  (Zhu et al., 2023), which is often approximated by updating  $\pi_{\text{ref}}$  with the latest (improved)  $\pi_\theta$  for re-sampling a batch of online experience and repeating Eq. (5) and (7). Prior works typically focus on offline (Figure 2 (Left)) or iterative online (with only a few iterations) settings (Xiong et al., 2024; Dong et al., 2024), which may compromise sample efficiency (Property 1).
+
+True online RLHF is difficult due to the complexity and instability of RL optimizers. For example, Huang et al. (2024) openly reproduces offline RLHF scaling behaviors but requires many implementation tricks for training, highlighting the difficulties of an online counterpart. Fortunately, the introduction of DAP (or *direct optimizers*) largely simplifies and stabilizes fine-tuning by conducting contrastive supervised learning directly on  $\mathcal{D}$  (Figure 3b). While most DAP works focus on learning from a fixed offline preference dataset (Figure 2 (Middle), including Zhao et al. (2023); Rafailov et al. (2023); Azar et al. (2024); Meng et al. (2024); Zhang et al. (2024b)), iterative DPO (Xu et al., 2023) observes improved results when allowing iterative online interaction. Guo et al. (2024) further propose OAIIF to make DAP faithfully online, satisfying Property 1, and demonstrate that online learning prevents over-fitting and yields continual performance improvement. Nevertheless, it still employs passive exploration strategies (using  $\mathbf{y}, \mathbf{y}' \sim \pi_\theta$ ), hindering sample efficiency (Property 2).
+
+**Online exploration in LLMs.** A line of recent works (Mehta et al., 2023; Das et al., 2024; Melo et al., 2024; Dwaracherla et al., 2024) adopts the fully online bandit formulation and incorporates *active exploration* with uncertainty-aware RMs for response selection (Figure 3c). In particular, Mehta et al. (2023) consider the E&E setting and develop a UCB-style (Auer et al., 2002) algorithm; Das et al. (2024) instead select the dueling responses with the most uncertain preference estimate, targeting the BAI setting in a pure exploration way; unlike the above, Melo et al. (2024) view the problem from the angle of pool-based active learning and propose an acquisition function based on both entropy and epistemic uncertainty; finally, the work by Dwaracherla et al. (2024) is the closest to ours in the sense that they apply double Thompson sampling (DTS) (Wu & Liu, 2016) for exploration, but DTS is designed for the E&E setting while they evaluate anytime average performance as in the BAI setting. We will show in Appendix E.1 that pure exploration by Das et al. (2024) is not the best choice for BAI, and the objective mismatch in Dwaracherla et al. (2024) could lead to sub-optimal performance in respective settings. Meanwhile, all these works primarily focus on learning uncertainty-aware RMs online without updating LLM policies. Therefore, all responses are sampled from a fixed proposal policy  $\pi_\beta$  (or even a fixed dataset), making the data coverage a critical concern.
+
+Another line of research updates LLMs online while incorporating exploration. Zhang et al. (2024a) and Xie et al. (2024) independently propose to learn an optimistic RM to encourage exploration. They leverage the property of DPO (Rafailov et al., 2023) to reparameterize RM with policy and conclude with an extra optimistic term in the DPO loss function. Thus, their learning processes are like Figure 3b but with an optimistic direct optimizer. Muldrew et al. (2024) adopt the vanilla DPO loss but utilize the implicit reward margin to actively select dueling responses. Yet, these methods are tightly coupled with DPO and not compatible to other direct optimizers. Their experiments are also limited to a few online iterations, possibly due to the implementation difficulty of a faithfully online learning system. Given their relevance to our approach, we will reproduce them in a fully online manner for fair comparisons in Section 6.1. We summarize prior works in Table 3 in Appendix G.
+
+## 4 SEA: SAMPLE-EFFICIENT ALIGNMENT FOR LLMs
+
+In this section we present our online exploration agent **SEA** (Figure 3d). We first introduce a principled Thompson sampling algorithm inspired by bandit theory (Section 4.1), and then derive **SEA** as
+
+{5}------------------------------------------------
+
+#### **Algorithm 1** Thompson sampling for LLM alignment (intractable).
+
+```
+
+1: Input: Prompt distribution  $p_{\mathcal{X}}$ , unknown but queryable preference oracle  $\mathbb{P}$ .
+2: Initialize experience  $\mathcal{D}_0 \leftarrow \emptyset$ .
+3: for  $t = 1, \dots, T$  do
+4:   Receive a prompt  $x_t \sim p_{\mathcal{X}}$ .
+5:   Sample  $r \sim p_r(\cdot | \mathcal{D}_{t-1})$  and set  $y_t \leftarrow \arg \max_{b \in \mathcal{Y}} r(x_t, b)$ . // Select 1st response  $y_t$ .
+6:   // E&E objective: aligning an online system.
+7:   repeat
+8:     Sample  $r' \sim p_r(\cdot | \mathcal{D}_{t-1})$  and set  $y'_t \leftarrow \arg \max_{b \in \mathcal{Y}} r'(x_t, b)$ . // Select 2nd response  $y'_t$ .
+9:     until  $y'_t \neq y_t$ .
+10:    // BAI objective: labeling via crowdsourcing.
+11:    Set  $y'_t \leftarrow \arg \max_{b \in \mathcal{Y}} \mathbb{V}[\sigma(r(x_t, y_t) - r(x_t, b))]$ , // OR select 2nd response  $y'_t$ .
+12:    where  $\mathbb{V}[\cdot]$  computes variance over the posterior  $p_r(\cdot | \mathcal{D}_{t-1})$ .
+13:    Query  $\mathbb{P}$  to label  $\{y_t, y'_t\}$ , and update experience  $\mathcal{D}_t \leftarrow \mathcal{D}_{t-1} \cup \{(x_t, y_t^+, y_t^-)\}$ .
+14: end for
+// See Algorithm 2 for a practical version.
+
+```
+
+its practically efficient implementation (Section 4.2). Interestingly, **SEA** can also be viewed as an instantiation of a classical model-based RL architecture called Dyna (Sutton, 1990), for which we defer the discussion to Appendix B.
+
+### 4.1 THOMPSON SAMPLING FOR LLM ALIGNMENT
+
+**Thompson sampling (TS)** (Thompson, 1933) is widely adopted for solving bandit problems at scale due to its efficiency and strong empirical performance in general online learning problems (Chapelle & Li, 2011; Russo et al., 2018). A bandit agent using Thompson sampling typically maintains and incrementally updates a posterior distribution of the oracle reward  $p(r|\mathcal{D})$ . Meanwhile, the agent takes actions following a greedy policy with respect to a sampled RM:  $a_t = \arg \max_a r(a)$  with  $r \sim p_r(\cdot | \mathcal{D})$ . This simple yet effective algorithm naturally balances exploration and exploitation: when the agent has limited knowledge about the environment, the posterior estimate exhibits high uncertainty so that the sampled RM could guide the greedy policy to explore; after sufficient experience is gathered, the sampled RM approximates the oracle more closely, allowing the agent to exploit near-optimal policies.
+
+In the context of LLM alignment, we leverage the BT assumption (Eq. (3)) to replace the preference oracle  $\mathbb{P}$  with human’s implicit reward  $r^*$ . This substitution enables us to model the reward posterior  $p(r|\mathcal{D})$  in the standard TS framework, preserving the probabilistic structure necessary for effective posterior sampling. Inspired by prior works (Wu & Liu, 2016; González et al., 2017) on non-contextual  $K$ -arm bandits and preferential Bayesian optimization problems, we generalize them for LLM alignment and develop a unified algorithm as shown in Algorithm 1. Note that we assume for now the LLM agent can be fully described by the posterior  $p(r|\mathcal{D})$ , and we defer practical reward ( $r_\phi$ ) and policy ( $\pi_\theta$ ) learning to Section 4.2.
+
+As Algorithm 1 presents, the first response of the duel is always selected via standard TS (Line 4). The selection of the second response varies across different settings. Line 5 will be used for scenarios where preference feedback is collected from online users (the E&E setting). The dueling responses selected in this case will both try to maximize a sampled RM, so that the online user experience is warranted with best effort. However, such algorithm can have poor asymptotic performance for BAI problems (Russo, 2016), because sub-optimal responses with confidently high rewards might be tried for a long time at the expense of not exploring other potentially better choices. In light of this, Line 6 provides an alternative for scenarios where we could hire annotators for feedback and low-quality but exploratory responses are safe to try. Specifically, Line 6 selects the second response as the one that maximizes the variance of the preference (Eq. (3)) over the first response  $y_t$ . This variance quantifies the *epistemic uncertainty* of the RM, pointing the agent to the maximally informative direction to explore for better sample efficiency.
+
+However, Algorithm 1 is yet to be practical for LLM alignment for three main reasons. First, computing and sampling from a reward posterior is intractable for nearly all RMs at LLM scale, which are mostly based on large transformers (Lambert et al., 2024). Second, even if we managed to approximate the reward posterior, the **arg max** operations for response selection are still intractable
+
+{6}------------------------------------------------
+
+since the search space  $\mathcal{Y}$  is discrete and massive for token sequences of arbitrary length. Last but not least, an LLM agent (Achiam et al., 2023; Touvron et al., 2023) typically consists in a generative model  $\pi_\theta$  (e.g., a transformer (Vaswani et al., 2017)), while the algorithm above is centered around a reward posterior  $p(r|\mathcal{D})$  that cannot be easily converted into a generative model. We next detail how **SEA** practically addresses the three aforementioned issues.
+
+### 4.2 PRACTICAL IMPLEMENTATION
+
+#### 4.2.1 EPISTEMIC REWARD MODEL FOR POSTERIOR SAMPLING
+
+To implement active exploration with TS, we seek an efficient way to maintain and incrementally update the reward posterior  $p(r|\mathcal{D})$ . We consider *deep ensemble* for our purpose, due to its capability to model epistemic uncertainty (Lakshminarayanan et al., 2017) and provable results when applied to TS in linear bandits (Qin et al., 2022). Specifically, we update a set of plausible RMs independently and online, using the preference data and a regularized negative log-likelihood loss:
+
+$$\mathcal{L}_\mathcal{R}(\Phi^t|\mathcal{D}_t) = \sum_{k=1}^K (\mathcal{L}_r(\phi_k^t|\mathcal{D}_t) - \lambda \|\phi_k^t - \phi_k^0\|), \quad (8)$$
+
+where  $\mathcal{L}_r$  is defined in Eq. (5),  $\Phi^t = \{\phi_k^t\}_{k=1}^K$  contains the weights of the ensemble of size  $K$ , and  $\lambda$  controls the regularization towards individual initial weights  $\phi_k^0$ . Each ensemble member is initialized independently with random weights, and then trained with regularization to maintain the diversity across ensemble members (Dwaracherla et al., 2024). Randomly picking a  $\phi_k^t$  from  $\Phi^t$  would approximate the posterior sampling ( $r \sim p_r(\cdot|\mathcal{D}_t)$ ) for the RM (Lu & Van Roy, 2017; Gustafsson et al., 2020). In practice, we train  $K$  MLP heads on top of a pretrained and frozen transformer. We refer to the ensemble as the Epistemic Reward Model (ERM, denoted as  $\mathcal{R}_\Phi$ ).
+
+#### 4.2.2 POLICY-GUIDED SEARCH TO APPROXIMATE arg max
+
+With the ERM approximating the reward posterior, we need to further approximate the response selection steps (Lines 4 to 6) which generally take the form of  $\arg \max_{b \in \mathcal{Y}} U(b)$ , where  $U$  absorbs the sampled prompt, the sampled RM, and optionally the selected first response (for BAL, Line 6). To obtain the maximum, bandit algorithms for large action spaces typically resort to an action optimization oracle (Katz-Samuels et al., 2020; Zhu et al., 2022), but they assume a linear structure of  $U$  with respect to  $b$ , which might be impractical for LLMs. Therefore, we instead replace the optimization over  $\mathcal{Y}$  with sampling from a policy-guided distribution conditioned on  $U$ ,  $\pi_{\text{prior}}(\cdot|\mathbf{x}) \exp(U(\cdot)/\eta)$ , which is appropriate since it favors responses  $\mathbf{y}$  that approximately maximize  $U(\mathbf{y})$ . In practice, for a given prompt  $\mathbf{x}_t$ , we sample  $M$  candidate responses from the prior policy  $\pi_{\text{prior}}(\cdot|\mathbf{x}_t)$  to construct a proposal set  $\mathcal{S}_t = \{\mathbf{y}_i^t\}_{i=1}^M$ . We then conduct a greedy search in  $\mathcal{S}_t$  (taking  $\eta \rightarrow 0$ ) to identify the response  $\mathbf{y}_t$  (or  $\mathbf{y}_t$ ) that locally maximizes the utility function  $U$ , which is subsequently used in the duel. We also reuse the same  $\mathcal{S}_t$  for different  $U$  functions at time  $t$  to save computation. The choice of  $\pi_{\text{prior}}$  will be discussed in the next section.
+
+#### 4.2.3 ONLINE POLICY LEARNING FROM MIXED PREFERENCES
+
+We finally resolve two remaining questions: (Q1) how to choose a sensible  $\pi_{\text{prior}}$  at each time  $t$  and (Q2) how to get a good generative policy online. To this end, we propose a simple approach to approximately address both questions simultaneously. That is, we can utilize any direct optimizer to learn the policy  $\pi_{\theta^t}$  online with the following loss and use the latest online policy as  $\pi_{\text{prior}}$ :
+
+$$\mathcal{L}_\pi(\theta^t|\mathcal{B}_t, \pi_{\text{ref}}, F) = \mathbb{E}_{(\mathbf{x}, \mathbf{y}^+, \mathbf{y}^-) \sim p_{\text{gt}}} [F_{\theta^t}(\mathbf{x}, \mathbf{y}^+, \mathbf{y}^-, \pi_{\text{ref}})], \quad (9)$$
+
+where  $\mathcal{B}_t$  is a batch of preference data labeled by the oracle wherein the responses are proposed by  $\pi_{\text{prior}}$  and selected by  $\mathcal{R}_{\theta^t}$ ,  $F$  could be any DAP loss (see Appendix A for some examples), and  $\pi_{\text{ref}}$  is chosen to be  $\pi_{\text{sft}}$ . Note that we use  $\pi_{\theta^t}$  as  $\pi_{\text{prior}}$  at any time  $t$ , thus  $\mathcal{B}^t$  is a batch of on-policy data. By *contrastive training* on these *on-policy* data, we leverage their orthogonal benefits to achieve maximal policy improvement (Tajwar et al., 2024; Tang et al., 2024).
+
+Now that optimizing Eq. (9) yields a good online policy  $\pi_{\theta^t}$  (answering Q2), we need to assess whether  $\pi_{\theta^t}$  can serve as a suitable  $\pi_{\text{prior}}$  for approximating the arg max in TS (Q1). If we optimize  $\pi_{\theta^t}$  with oracle preference data,  $\mathcal{S}_t$  will be biased towards responses with high oracle reward  $r^*$ . Bias towards high- $r^*$  region is generally helpful because it aligns with  $\arg \max_{b \in \mathcal{Y}} r(\mathbf{x}, b)$  that seeks high-reward responses. However, optimizing  $\pi_{\theta^t}$  *only* with oracle data can average out the
+
+{7}------------------------------------------------
+
+epistemic uncertainty of  $\mathcal{R}$ , hindering the exploration efficiency. To mitigate this issue, we further align  $\pi_{\theta'}$  with  $\mathcal{R}_{\theta'}$  using the same direct optimizer to encourage  $\pi_{\theta'}$  to propose high- $r_{\phi'}$  responses for individual  $r_{\phi'}$ , leading to better approximation of  $\arg \max_{b \in \mathcal{Y}^r} \mathbf{r}(\mathbf{x}, b)$  for any sampled  $r$ . To implement, we optimize Eq. (9) over a mixture distribution  $p_{\text{Bmix}}^{\text{ERM}} = \gamma p_{\text{B}_+} + (1 - \gamma) p_{\text{Bmix}}^{\text{ERM}}$ , where  $\gamma \in [0, 1]$  controls the mixture ratio and  $\text{Bmix}^{\text{ERM}} = \{(x_i, \tilde{y}_i^1, \tilde{y}_i^2)\}_{i=1}^b$  consists of preference data labeled by randomly sampled individual ensemble members  $r_{\phi'}$ . Interestingly, learning from mixed preferences further boosts sample efficiency because it utilizes the internal ERM to get pseudo labels instead of querying humans. This relates closely to model-based RL, for which we discuss further in Appendix B. We summarize our practical algorithm (Algorithm 2) in Appendix A.
+
+## 5 EXPERIMENTAL SETUP
+
+In this section, we elaborate the experimental setup employed to validate our algorithm and ensure fair comparisons with other online alignment baselines. We start by introducing the distributed learning system designed for experimenting with online LLM alignment using simulated human preferences (Section 5.1). Then, we provide key experimental details in Section 5.2, with a full description available in Appendix D.
+
+### 5.1 DISTRIBUTED LEARNING SYSTEM
+
+The interactive nature of LLM alignment necessitates an integrated online learning system that simulates the interface depicted on the right of Figure 2. The absence of a performant open-source online alignment system has restricted many existing works to only a few iterations of batch learning (Muldrew et al., 2024; Dong et al., 2024; Chen et al., 2024; Zhang et al., 2024a; Xie et al., 2024), which creates a mismatch with their theories that typically require a large number of online interaction rounds. Even worse, such absence also makes the comparison between different LLM exploration methods difficult, often restricting evaluations to the simplest iterative DAP baselines (Zhang et al., 2024a; Xie et al., 2024).
+
+To fill this gap, we build a highly efficient learning system for experimenting with online LLM alignment algorithms. We notice that the computational bottleneck lies in online response sampling (i.e., autoregressive generation) and preference labeling (e.g., human, large RMs, or large LLMs), which mirrors the slow actor-environment interaction seen in RL systems. Inspired by distributed deep RL systems which spawn many actors or environments in parallel (Espeholt et al., 2018; Weng et al., 2022), we design an Actor-Learner-Oracle architecture for online LLM alignment, which is depicted in Figure 4. The three types of workloads (i.e., actor, learner and oracle) are heterogeneous and require different optimization. In particular, we adopt vLLM (Kwon et al., 2023) for the actor to accelerate the autoregressive response generation. We also use DeepSpeed’s ZeRO (Rasley et al., 2020; Rajbhandari et al., 2020) strategies to enhance the memory efficiency of the learner. The updated model weights are broadcasted from the learner master to all actors after every optimizer step efficiently via NCCL, similar to Hu et al. (2024). Furthermore, to improve the scalability, we wrap the oracle RM as a service using Mosce (Yang et al., 2021b), which supports dynamic batching and parallel processing, to minimize preference query latency. Finally, we leverage DeepMind Launchpad (Yang et al., 2021a) to compose all workloads into a distributed program and adopt Plasma (Philipp & Robert, 2017) to efficiently transfer data across process boundaries.
+
+We benchmark our system’s efficiency against a concurrent implementation of online DPO by HuggingFace<sup>4</sup>, which utilizes only DeepSpeed for memory optimization. Our system achieves up to  $2.5\times$  latency reduction compared to this counterpart, demonstrating its computational efficiency. Due to space constraints, detailed benchmarking methods and results are presented in Appendix F.
+
+### 5.2 SETTINGS
+
+We adopt SFT models tuned on TL;DR (Stiennon et al., 2020) from Huang et al. (2024), which cover three scales (1B, 2.8B, 6.9B) of the Pythia family (Biderman et al., 2023), as starting points
+
+![Figure 4: The learning system for experimenting online LLM alignment algorithms. The diagram shows a central 'Learner Master' node connected to multiple 'Learner Workers' and an 'Actor' node. The 'Learner Master' sends 'Parameters' to the 'Learner Workers' and the 'Actor'. The 'Learner Workers' send 'Experience' to the 'Learner Master'. The 'Actor' sends 'Query' to the 'Oracle RM' node, which in turn sends 'Experience' back to the 'Actor'. The 'Oracle RM' node is also connected to the 'Learner Master' via 'Mosce'.](7affafe7362a2d2d072e9d4bf515f0bb_img.jpg)
+
+```
+
+graph TD
+    LM[Learner Master] -- Parameters --> LW[Learner Workers]
+    LW -- Experience --> LM
+    LM -- Parameters --> A[Actor]
+    A -- Query --> OR[Oracle RM]
+    OR -- Experience --> A
+    OR -- Mosce --> LM
+  
+```
+
+Figure 4: The learning system for experimenting online LLM alignment algorithms. The diagram shows a central 'Learner Master' node connected to multiple 'Learner Workers' and an 'Actor' node. The 'Learner Master' sends 'Parameters' to the 'Learner Workers' and the 'Actor'. The 'Learner Workers' send 'Experience' to the 'Learner Master'. The 'Actor' sends 'Query' to the 'Oracle RM' node, which in turn sends 'Experience' back to the 'Actor'. The 'Oracle RM' node is also connected to the 'Learner Master' via 'Mosce'.
+
+Figure 4: The learning system for experimenting online LLM alignment algorithms.
+
+<sup>4</sup>[https://huggingface.co/docs/trl/main/en/online\\_dpo\\_trainer](https://huggingface.co/docs/trl/main/en/online_dpo_trainer).
+
+{8}------------------------------------------------
+
+![Figure 5: Win rate comparison of different algorithms against their initial SFT models across three scales (Pythia 1B, Pythia 2.8B, Pythia 6.9B) and three direct optimizers (DPO, IPO, SLiC). The figure is a 3x3 grid of line plots. Each plot shows 'Win rate' (y-axis, 0.5 to 0.9) vs 'Query step' (x-axis, 0 to 50k). The columns represent model scales: Pythia 1B, Pythia 2.8B, and Pythia 6.9B. The rows represent direct optimizers: DPO (top), IPO (middle), and SLiC (bottom). Each plot compares Offline (blue), Online (purple), and SEA (red) methods. In all cases, SEA (red) achieves the highest win rate, followed by Offline (blue) and then Online (purple).](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 5: Win rate comparison of different algorithms against their initial SFT models across three scales (Pythia 1B, Pythia 2.8B, Pythia 6.9B) and three direct optimizers (DPO, IPO, SLiC). The figure is a 3x3 grid of line plots. Each plot shows 'Win rate' (y-axis, 0.5 to 0.9) vs 'Query step' (x-axis, 0 to 50k). The columns represent model scales: Pythia 1B, Pythia 2.8B, and Pythia 6.9B. The rows represent direct optimizers: DPO (top), IPO (middle), and SLiC (bottom). Each plot compares Offline (blue), Online (purple), and SEA (red) methods. In all cases, SEA (red) achieves the highest win rate, followed by Offline (blue) and then Online (purple).
+
+**Figure 5:** Win rate comparison of different algorithms against their initial SFT models across three scales and three direct optimizers.
+
+for our experiments. We use a strong scalar RM (Liu et al., 2024a)<sup>5</sup> to simulate the preference oracle. To verify the effectiveness of **SEA**, we employ three direct optimizers: DPO (Rafailov et al., 2023), IPO (Azar et al., 2024), and SLiC (Zhao et al., 2023) to serve as  $F$  in Eq. (9). Besides, two LLM exploration methods built on DPO, APL (Muldrew et al., 2024) and XPO (Xie et al., 2024), are fairly compared when using DPO as the optimizer. Our experiments primarily focus on the BAI setting (crowdsourcing labeling), where we report the win rate of learned models against initial SFT models. **All experiments are repeated three times to ensure statistical significance.** Please see Appendix D for more details.
+
+## 6 EMPIRICAL STUDIES
+
+We next present our empirical studies highlighting four results: **(1)** Comparisons with baselines across various direct optimizers and model scales demonstrate **SEA**’s superior *sample efficiency* (Section 6.1). **(2)** Ablations confirm that both *online policy learning* and *active exploration* contribute to sample-efficient alignment, and using the learned ERM for Best-of-N sampling further improves the performance (Section 6.2). **(3)** Different exploration strategies (Line 5 or Line 6 in Algorithm 1) are verified to work best in respective settings. **(4)** **SEA** robustly outperforms baselines when GPT4o-mini is used as a judge to simulate human feedback. **Results for (3-4) are deferred to Appendices E.1 and E.2 due to space constraints.**
+
+### 6.1 OVERALL COMPARISON
+
+We first compare **SEA** with all baselines across three model scales and three direct optimizers. APL and XPO are only compared when DPO is used as the direct optimizer, because they are incompatible with IPO or SLiC. Figure 5 shows the win rate curves versus the number of query steps. Across all settings, Online agents consistently improve sample efficiency over their Offline counterparts, validating the necessity of Property 1 for alignment algorithms. Focusing on the first row, we observe that among prior active exploration methods, XPO gives a small improvement in final performance over Online (passive) at the 1B scale, but falls short for larger scales. On the other hand, APL shows a significant sample efficiency boost at the 1B scale, but this advantage diminishes when scaling up and it performs almost the same as Online at 6.9B scale. Our method, **SEA**, outperforms both offline and online passive methods across all scales and all direct optimizers, confirming the critical role that Property 2 plays for sample-efficient alignment. Meanwhile, in the special case of using DPO as the direct optimizer, **SEA** also shows superior performance to prior online active exploration methods including APL and XPO. We invite readers to revisit Figure 1,
+
+<sup>5</sup><https://huggingface.co/Skywork/Skywork-Reward-Llama-3.1-8B>.
+
+{9}------------------------------------------------
+
+**Table 1:** Decomposition of different driving factors of online active alignment algorithms.
+
+| Variant | Inference (Test) | Exploration | Learn | Remark |
+|-|-|-|-|-|
+| 1 | $\pi_\theta$ | passive | $\pi_\theta$ | Online DAP (Guo et al., 2024) |
+| 2 | $\pi_\theta$ | active | $(\pi_\theta, \mathcal{R}_\Phi)$ | <b>SEA</b> without ERM sync (Section 4.2.3) |
+| 3 | $\pi_\theta$ | active | $(\pi_\theta \leftrightarrow \mathcal{R}_\Phi)$ | <b>SEA</b> |
+| 4 | BoN( $\pi_\theta, \mathcal{R}_\Phi$ ) | passive | $(\pi_\theta, \mathcal{R}_\Phi)$ | - |
+| 5 | BoN( $\pi_\theta, \mathcal{R}_\Phi$ ) | active | $(\pi_\theta, \mathcal{R}_\Phi)$ | - |
+| 6 | BoN( $\pi_\theta, \mathcal{R}_\Phi$ ) | active | $(\pi_\theta \leftrightarrow \mathcal{R}_\Phi)$ | <b>SEA</b> with Best-of-N sampling |
+| 7 | BoN( $\pi_{\text{ref}}, \mathcal{R}_\Phi$ ) | active | $\mathcal{R}_\Phi$ | Not learn policy (Dwaracherla et al., 2024) |
+
+where we show that **SEA** not only attains significantly improved final performance (Left) but also achieves  $2.5\times$  better sample efficiency (Right).
+
+Additionally, we note that the choice of direct optimizer matters for both online learning and active exploration. When comparing different optimizers at 1B scale (the first column), all Offline agents demonstrate comparable learning efficiency and reach the same level of final performance (around 70% win rate), but SLiC Online agent deliver slightly less improvement than DPO and IPO Online agents. Besides, when incorporating active exploration, the **SEA** agent using DPO shows much larger improvement than the other two. This suggests that selecting the most suitable policy optimizer coupled with active exploration would yield the best agent.
+
+### 6.2 ABLATION ANALYSIS
+
+Next, we decompose **SEA** into distinct components to evaluate their individual contributions. Table 1 shows the three axes we dissect **SEA** on, including inference methods, exploration strategies, and learning components. We construct seven agent variants from different combinations, which cover two closely related baselines (Guo et al., 2024; Dwaracherla et al., 2024). We show in Figure 6 the performance curves of each variant, all trained with DPO on 1B scale.
+
+The left plot compares variants that directly use the policy for inference. It clearly shows the benefits of learning ERM for active exploration (Variant-2) and aligning  $\pi_\theta$  with  $\mathcal{R}_\Phi$  (Variant-3). Since a reward model is learned within the agent, we can further incorporate inference-time alignment via Best-of-N (BoN) sampling (Nakano et al., 2021; Touvron et al., 2023). This also facilitates a direct comparison between **SEA** and Dwaracherla et al. (2024), which learns a similar ERM for both exploration and BoN but does not align the LLM policy. Results in the right plot of Figure 6 suggest a similar trend that Variant-6  $\succ$  Variant-5  $\succ$  Variant-4. The Variant-7 (Dwaracherla et al., 2024), however, ceases to improve after ERM converges due to the limited capability of its fixed policy.
+
+## 7 CONCLUSION
+
+In this paper, we study the problem of LLM alignment through the lens of contextual dueling bandits and propose a Thompson sampling-based algorithm to achieve sample-efficient alignment. We incorporate three techniques, including epistemic reward model, policy-guided search and mixed preference learning to yield a practically efficient online alignment method. Extensive empirical evaluation demonstrates the superior sample efficiency of our method compared to existing baselines. To our knowledge, this is the first work to study active exploration for online LLM alignment with fully online experimental verification. We hope our positive empirical results, along with the open-sourced codebase, will encourage future research in this direction, ultimately enabling LLMs to achieve superhuman intelligence with an affordable amount of human feedback.
+
+## REFERENCES
+
+Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Florencia Leoni Aleman, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, et al. Gpt-4 technical report. *arXiv preprint*
+
+ Rest of paper (reference and Appendix) is removed.

@@ -1,0 +1,427 @@
+
+
+{0}------------------------------------------------
+
+# MLLM Is A Strong Reranker: Advancing Multimodal Retrieval-Augmented Generation via Knowledge-Enhanced Reranking and Noise-Injected Training
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Multimodal Large Language Models (MLLMs) have demonstrated remarkable capabilities in processing and generating content across multiple data modalities. However, a significant drawback of MLLMs is their reliance on static training data, leading to outdated information and limited contextual awareness. This static nature hampers their ability to provide accurate and up-to-date responses, particularly in dynamic or rapidly evolving contexts. Though integrating Multimodal Retrieval-augmented Generation (Multimodal RAG) offers a promising solution, the system would inevitably encounter the multi-granularity noisy correspondence (MNC) problem, which hinders accurate retrieval and generation. In this work, we propose **RagVL**, a novel framework with knowledge-enhanced reranking and noise-injected training, to address these limitations. We instruction-tune the MLLM with a simple yet effective instruction template to induce its ranking ability and serve it as a reranker to precisely filter the top-k retrieved images. For generation, we inject visual noise during training at the data and token levels to enhance the generator's robustness. Extensive experiments on four datasets verify the effectiveness of our method. Code and models are available at <https://anonymous.4open.science/r/RagVL-F694>.
+
+## 1 INTRODUCTION
+
+As an attempt towards Artificial General Intelligence (AGI), Large Language Models (LLMs) have made significant strides in language understanding and human-like text generation (Brown et al., 2020; Achiam et al., 2023; Touvron et al., 2023). However, true AGI requires more than just linguistic capabilities. It necessitates a comprehensive understanding and interaction with the world, encompassing multiple modalities beyond text. Thus, the recent progress of Multimodal Large Language Models (MLLMs) in handling multimodal information has attracted the community. By processing and generating content across different modalities, MLLMs aim to create a more holistic and nuanced understanding of the world, closer to how humans perceive and interpret information. This integration of modalities enables MLLMs to perform tasks that require contextual understanding from multiple data sources, such as Visual Question Answering (VQA) (Goyal et al., 2017; Hudson & Manning, 2019; Marino et al., 2019), Table Question Answering (Lu et al., 2022), Text-to-image Generation (Ramesh et al., 2021; Yu et al., 2022; Aghajanyan et al., 2022), etc.
+
+Nevertheless, the promising performance of language models primarily relies on the knowledge implicitly stored in their massive parameters, leading to several issues such as long-tail knowledge gaps (Asai et al., 2024), generating hallucinations (Ye & Durrett, 2022), and poor model interpretability. To better adapt to knowledge-intensive tasks and real-world scenarios, Retrieval-augmented Language Models (RALM) (Lewis et al., 2020; Lin et al., 2023; Izacard & Grave, 2020; Karpukhin et al., 2020) employ a dense retriever to retrieve up-to-date knowledge from external memories for grounded generation. Similarly, Multimodal Retrieval-augmented Generation (Multimodal RAG) enhances MLLMs by dynamically retrieving relevant information from external multimodal data sources before generation. This allows the models to incorporate real-time, contextually accurate visual information, significantly improving the factuality and accuracy of their outputs.
+
+{1}------------------------------------------------
+
+![Figure 1: Difference between traditional VQA and multimodal knowledge-seeking question answering. The diagram shows two paths. On the left, 'Traditional Visual Question Answering' takes an image of a yellow taxi and a question 'What is unusual about this image?' to produce an answer. On the right, 'Multimodal Knowledge-seeking Question Answering' takes a text-only question about a carving in Uxmal, Mexico, and uses 'Retrieval' from 'External Memory' to find images. This leads to 'Noisy Mismatch' (retrieved images with coarse-grained noise) and 'Ground Truth' (retrieved images with fine-grained noise). The model then generates a 'Reliable Output'.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+054  
+055  
+056  
+057  
+058  
+059  
+060  
+061  
+062  
+063  
+064  
+065  
+066  
+067  
+068  
+069  
+070  
+071  
+072  
+073  
+074  
+075  
+076  
+077  
+078  
+079  
+080  
+081  
+082  
+083  
+084  
+085  
+086  
+087  
+088  
+089  
+090  
+091  
+092  
+093  
+094  
+095  
+096  
+097  
+098  
+099  
+100  
+101  
+102  
+103  
+104  
+105  
+106  
+107
+
+**Traditional Visual Question Answering**
+
+Which is better maintained, the carving on the front of the Palace of the Governor in Uxmal or the Bird carving above the doorway in Mexico, Yucatan?
+
+Text only
+
+I have no idea
+
+**Multimodal Knowledge-seeking Question Answering**
+
+Retrieval
+
+Noisy Mismatch
+
+Ground Truth
+
+External Memory
+
+What is unusual about this image?
+
+Palacio Gobernador Uxmal, Yucatan, Mexico. The carving above the doorway is in a state of disrepair.
+
+Palacio del Gobernador Uxmal, Yucatan, Mexico. The carving is well-maintained.
+
+Palacio del Gobernador Uxmal, Yucatan, Mexico. The carving is well-maintained.
+
+Palacio del Gobernador Uxmal, Yucatan, Mexico. The carving is well-maintained.
+
+(Hallucinated or Faulty Output)
+
+(Reliable Output)
+
+Figure 1: Difference between traditional VQA and multimodal knowledge-seeking question answering. The diagram shows two paths. On the left, 'Traditional Visual Question Answering' takes an image of a yellow taxi and a question 'What is unusual about this image?' to produce an answer. On the right, 'Multimodal Knowledge-seeking Question Answering' takes a text-only question about a carving in Uxmal, Mexico, and uses 'Retrieval' from 'External Memory' to find images. This leads to 'Noisy Mismatch' (retrieved images with coarse-grained noise) and 'Ground Truth' (retrieved images with fine-grained noise). The model then generates a 'Reliable Output'.
+
+Figure 1: Difference between traditional VQA and multimodal knowledge-seeking question answering. An example from WebQA (Chang et al., 2022) reveals the challenge of multi-granularity noisy correspondence (MNC).
+
+As illustrated in Figure 1, to answer the information-seeking query, the model must retrieve and reason over external visual knowledge, which differs from traditional VQA on the left and is non-trivial. To solve this, MuRAG (Chen et al., 2022) makes the first endeavor to extend RAG to multiple modalities. It is built upon ViT (Dosovitskiy et al., 2020) and T5 (Raffel et al., 2020) and pre-trained to encode image-text pairs for both answer generation and retrieval. MuRAG embeds items into an external memory and handles queries for retrieving multimodal knowledge from the same memory.
+
+However, integrating multimodal RAG would inevitably introduce the multi-granularity noisy correspondence problem (MNC) (Huang et al., 2021). As shown in Figure 1, MNC refers to the noise at two different granularities: (I) *Coarse-grained noise (query-caption)*. During the retrieval stage, coarse-grained captions result in retrieving similar but negative images (e.g., ‘*Uxmal Gobernador Uxmal, Yucatan, Mexico Governor’s Palace, seen from House of the Old Woman*’ and ‘*Palacio del Gobernador-Uxmal-Yucatan-Mexico0277 Palace of the Governor in Uxmal*’). (II) *Fine-grained noise (query-image)*. The retriever and generator must distinguish fine-grained visual elements to formulate the responses. Any discrepancies between the images and the question can introduce noise, thereby compromising the accuracy of the results. In this scenario, the classical CLIP (Radford et al., 2021) struggles to match the query with the image during the retrieval phase (see in Table 1). Also, identifying the correct correspondence amidst the fine-grained noise to provide an answer to the query is a challenge.
+
+To this end, we propose **RagVL**, a novel framework with knowledge-enhanced reranking and noise-injected training, to mitigate MNC in multimodal RAG. In the retrieval stage, we instruction-tune the MLLM with a simple yet effective instruction template to induce its ranking ability. Given that MLLMs are inherently capable of understanding cross-modal information, we employ the fine-tuned model as a reranker to evaluate the relevance between the query and the image, which precisely selects top- $N$  candidates that are more related to the query semantically. Subsequently, we apply an adaptive threshold to filter the candidates, collaborating with the reranker to alleviate the fine-grained mismatches. To further mitigate the impact of fine-grained mismatches during the generation phase, we introduce noise at both data and token levels in the training process. Specifically, at the data level, we perform negative sampling for single-image input questions within the single/multiple-image interleaved dataset, supplementing them with references from hard negative images. At the token level, we introduce additional visual uncertainty to images through Gaussian noise and reassign training loss weights by comparing the logits of the distorted and original inputs.
+
+In a nutshell, the main contributions of this work are as follows:
+
+- We achieve effective and robust multimodal retrieval-augmented generation with a three-stage pipeline. Additionally, we address the inherent multi-granularity noisy correspondence (MNC) problem in multimodal retrieval-augmented generation.
+- We introduce the knowledge-enhanced reranking and noise-injected training technique to mitigate the coarse-grained and fine-grained noise from MNC.
+
+{2}------------------------------------------------
+
+- Extensive experiments on multimodal knowledge-seeking QA and retrieval tasks demonstrate the effectiveness of the proposed framework.
+
+## 2 RELATED WORK
+
+### 2.1 MULTIMODAL LARGE LANGUAGE MODEL
+
+Recent advances in Multimodal Large Language Models (MLLMs) have demonstrated impressive performances in handling multi-format information (Driess et al., 2023; Huang et al., 2024; Achiam et al., 2023). MLLMs are generally built upon existing Large Language Models (LLMs) and integrating visual information as input tokens by utilizing an additional vision encoder (e.g. CLIP) and a bridging connector (e.g. MLP). For instance, LLaVA (Liu et al., 2024b,a) adopts one/two linear MLP to project visual tokens and align the feature dimension with word embeddings, while BLIP-2 (Li et al., 2023) leverages a group of learnable query tokens to extract information in a query-based manner. By connecting the visual and textual modalities, MLLMs significantly enhance human-AI interaction and demonstrate remarkable capabilities in understanding and generating multimodal content. Despite these advances, MLLMs tend to underperform in knowledge-intensive tasks (e.g. WebQA and MultimodalQA (Talmor et al., 2021)) that require seeking up-to-date information. Since the knowledge stored in their massive parameters is currently limited, it is crucial for MLLMs to resort to external memories for grounded generation.
+
+### 2.2 MULTIMODAL RETRIEVAL-AUGMENTED GENERATION
+
+Enhancing language models by incorporating relevant information from diverse knowledge sources has been shown to improve performance across various NLP tasks (Borgeaud et al., 2022; Lewis et al., 2020). DPR (Karpukhin et al., 2020) trains the retriever using in-batch documents and samples negative examples for contrastive learning, allowing the pre-trained retriever to excel in open-domain question answering. REALM (Guu et al., 2020) and RAG (Lewis et al., 2020) treat the retrieved passages as latent variables and train the retriever-generator system jointly, leading to more effective retrieval-augmented generation models. Inspired by textual RAG, Plug-and-play (Tiong et al., 2022) retrieves relevant image patches using GradCAM (Selvaraju et al., 2017) to localize relevant parts based on the query. MuRAG (Chen et al., 2022) proposes the first multimodal retrieval-augmented Transformer, which accesses an external non-parametric multimodal memory to augment language generation. To better connect candidates and model their relations during retrieval, SKURG (Yang et al., 2023) employs an Entity-centered Fusion Encoder to align sources from different modalities and determines the number of retrieval steps adaptively using a unified Retrieval-generation Decoder. However, none of these works specifically focus on MNC in multimodal RAG, which is the primary focus of our research. Experimental results show that the proposed knowledge-enhanced reranking and noise-injected training effectively improves multimodal RAG.
+
+## 3 METHODOLOGY
+
+### 3.1 PRELIMINARIES
+
+The traditional Retrieval-augmented Language Model (RALM) acquires knowledge from the external memory  $\mathcal{M}$  and utilizes the knowledge in grounded outputs to promote accurate and explainable generation. The retriever  $\mathcal{R}$  first retrieves the top- $K$  most relevant contexts  $\mathcal{C} = \{c_1, \dots, c_k\}$  from  $\mathcal{M}$  for the given question  $q$ . Subsequently, the autoregressive language model generates answers based on these retrieved contexts. Under the multimodal setting, the retriever needs to compare the textual queries with the multimodal documents and find the best matches for the generator  $\mathcal{G}$ . In this paper, we focus on retrieving the visual-related contexts to study open-world multimodal question answering.
+
+### 3.2 MULTIMODAL RETRIEVER
+
+We follow the dual-encoder architecture based on CLIP text encoder  $\Phi_{text}$  and image encoder  $\Phi_{img}$ . Before the retrieval stage, given image-query pairs  $(v, q)$  from the dataset  $\mathcal{D}$ , we first apply the image
+
+{3}------------------------------------------------
+
+![Figure 2: Overview of the proposed RagVL architecture. The diagram is divided into two main parts: Knowledge-enhanced Reranking and Noise-injected Training. In the Knowledge-enhanced Reranking part, a Query is processed by a Text Encoder (MIPS) and an Image Encoder (Frozen Parameters) to produce CLIP-retrieved Top-K Images. These are then reranked by an MLLM Reranker (Tuned Parameters) using an Adaptive Threshold. The reranked Top-N Images are fed into an MLLM Generator (Tuned Parameters) along with the Query to produce the Generated Output. The MLLM Generator also receives input from a Ranking Task Instruction Tuning module. In the Noise-injected Training part, a Query is processed by a Text Encoder (MIPS) and an Image Encoder (Frozen Parameters) to produce CLIP-retrieved Top-K Images. These are then reranked by an MLLM Reranker (Tuned Parameters) using an Adaptive Threshold. The reranked Top-N Images are fed into an MLLM Generator (Tuned Parameters) along with the Query to produce the Generated Output. The MLLM Generator also receives input from a Noise-injected Training module, which includes a Distortion module and a Logits Contrasting & Loss Reweight module. The legend indicates that MIPS is represented by a magnifying glass icon, Frozen Parameters by a blue square, and Tuned Parameters by an orange diamond.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 2: Overview of the proposed RagVL architecture. The diagram is divided into two main parts: Knowledge-enhanced Reranking and Noise-injected Training. In the Knowledge-enhanced Reranking part, a Query is processed by a Text Encoder (MIPS) and an Image Encoder (Frozen Parameters) to produce CLIP-retrieved Top-K Images. These are then reranked by an MLLM Reranker (Tuned Parameters) using an Adaptive Threshold. The reranked Top-N Images are fed into an MLLM Generator (Tuned Parameters) along with the Query to produce the Generated Output. The MLLM Generator also receives input from a Ranking Task Instruction Tuning module. In the Noise-injected Training part, a Query is processed by a Text Encoder (MIPS) and an Image Encoder (Frozen Parameters) to produce CLIP-retrieved Top-K Images. These are then reranked by an MLLM Reranker (Tuned Parameters) using an Adaptive Threshold. The reranked Top-N Images are fed into an MLLM Generator (Tuned Parameters) along with the Query to produce the Generated Output. The MLLM Generator also receives input from a Noise-injected Training module, which includes a Distortion module and a Logits Contrasting & Loss Reweight module. The legend indicates that MIPS is represented by a magnifying glass icon, Frozen Parameters by a blue square, and Tuned Parameters by an orange diamond.
+
+Figure 2: Overview of our proposed RagVL. In the retrieval stage, we utilize the CLIP model and faiss to find the top- $K$  most relevant images through Maximum Inner Product Search (MIPS) (Guo et al., 2020). Subsequently, the highly similar top- $K$  images are reranked into top- $N$  with the fine-tuned MLLM reranker. Finally, the top- $N$  images are fed into the MLLM generator along with the query for accurate generation.
+
+encoder  $\Phi_{img}$  to encode each image and build the image memory  $\mathcal{M}$  using faiss (Douze et al., 2024). From the external memory  $\mathcal{M}$ , the retriever aims to retrieve a small set of images that support the textual query  $q$ . Specifically, we encode the query with the text encoder  $\Phi_{text}$  and use MIPS over all of the image candidates  $v \in \mathcal{M}$  as follows,
+
+$$\hat{\mathcal{M}} = \text{TopK}(\mathcal{M}|q) = \text{TopK}_{v \in \mathcal{M}} \Phi_{text}(q) \cdot \Phi_{img}(v). \quad (1)$$
+
+The top- $K$  images with the highest inner product scores, i.e. the nearest top- $K$  neighbors  $\hat{\mathcal{M}} = \{v_1, v_2, \dots, v_k\}$ , are retrieved as the candidate images for answer generation.
+
+### 3.3 INDUCING RANKING ABILITY OF MLLMS
+
+CLIP stands out across a wide range of multimodal representations and retrieval tasks as a powerful and highly transferable model. However, when encountering long-tail distribution or domain-specific terms, CLIP fails to match the proper pairs across text and images. It results in lower accuracy and higher demand of  $k$  value to increase the recall rate of supporting materials, which is time- and resource-consuming. More importantly, simply aligning different modalities is insufficient for real-time multimodal queries, leading to severe performance degradation in knowledge-intensive situations (see in Table 1). To mitigate this, we resort to MLLMs for their capabilities of semantic understanding. In general, MLLMs are pre-trained on vast image-text pairs for feature alignment and fine-tuned on language-image instruction-tuning datasets for instruction following. With this pre-injected multimodal knowledge, they are inherently capable of understanding semantically relevant contents across both visual and textual modalities at a deeper level, while CLIP merely computes similarity between vectors. Therefore, to mitigate the bottleneck challenge of multimodal RAG, we introduce the flexible knowledge-enhanced reranking to induce the ranking ability of MLLMs.
+
+**Ranking Data Construction** To enhance the ranking capability of MLLMs, we construct the instruction-following data based on each multimodal QA dataset. We treat each query and the ground truth images as relevant, while the hard negative images as irrelevant. We construct two types of ranking tasks and require the model to generate ‘Yes’ for the relevant pairs and ‘No’ for the irrelevant pairs. Intuitively, the caption-aware style brings more additional knowledge for the model to distinguish the relevance between the image and query. Therefore, we train the reranker with the caption-aware ranking task. In addition, the instruction tuning for ranking can be either blended into the supervised fine-tuning of downstream tasks or conducted separately. See the details of the instruction template in Table 9.
+
+{4}------------------------------------------------
+
+**Knowledge-enhanced Reranking** By simply asking the question “*Based on the image and its caption, is the image relevant to the question? Answer ‘Yes’ or ‘No’*”, we measure the relevance between the image and query with the probability  $p$  of generating ‘Yes’ calculated from the output logits. Thus, reranking the top- $K$  candidates into top- $N$  can be formulated as follows,
+
+$$\hat{\mathcal{M}} = \text{TopN}(\hat{\mathcal{M}}|\phi) = \text{TopN}_{(v,c) \in \mathcal{M}} p_\phi(v, c, q), \quad (2)$$
+
+$$p_\phi(v, c, q) = \frac{\exp(\text{logit}(y_1 = \text{"Yes"}|v, c, q))}{\exp(\text{logit}(y_1 = \text{"Yes"}|v, c, q)) + \exp(\text{logit}(y_1 = \text{"No"}|v, c, q))}, \quad (3)$$
+
+where  $v$ ,  $c$ , and  $q$  denote the image, corresponding caption, and query, respectively.  $\phi$  is the weight of the reranker.  $y_1$  denotes the first token in the generated output.
+
+**Adaptive Threshold** Since the reranked images might still have low relevance  $p$  to the query, they can negatively affect answer generation, potentially performing worse than not including the images. To further improve the retrieval accuracy, we apply an adaptive threshold  $\eta$  to filter out candidates when  $p < \eta$ . We set two types of thresholds: the natural threshold and the adaptive threshold. The natural threshold refers to  $\eta = 0.5$ , which is the natural boundary for our binary classification ranking. For more precise retrieval, we experiment on the validation set and utilize the intersection point of the interpolated curve of exact match and mismatch as the adaptive threshold. In this way, the model can avoid the distraction from irrelevant images. By forcing the MLLM to jointly consider the query, caption, and image, the simple yet effective question template stimulates and enhances the model’s ranking ability with multimodal knowledge, thereby supporting the trustworthy generation.
+
+### 3.4 NOISE-INJECTED TRAINING
+
+Compared to providing a fixed number of images each time, the task with single/multiple images interleaved is more aligned with real-world scenarios. However, it also presents challenges in determining the optimal number of images to provide each time and in extracting relevant information rather than distracting information from the provided images. Though the reranker performs well in selecting relevant images, irrelevant ones still inevitably disturb the accurate generation.
+
+Inspired by VCD (Leng et al., 2024), visual uncertainty amplifies language priors, and contrasting the logits obtained from the enhanced language priors with the original logits can better highlight visual relevance. In light of this, we propose enhancing the model’s robustness by injecting visual noise during training, both at the data level and token level: (I) For single-image/multi-image interleaved datasets, we sample randomly from the hard negatives to ensure that each instruction-following data has the same amount of image input. (II) We introduce additional visual uncertainty by applying a Gaussian noise mask and contrasting the logits to reweight the loss for each token.
+
+**Noise-injected Data Construction** For datasets that may require both single and multiple image inputs, we standardize the number of image inputs for each sample in the instruction-following data to the maximum number needed for any question. In the case of WebQA, where each question requires 1-2 images for answering, we randomly sample 1 image from the hard negatives as an injected noise for the single-image query. The model is required to distinguish between relevant and irrelevant visual information, which strengthens its capability of visual understanding.
+
+**Noise-injected Logits Contrasting** Although injecting noise into the dataset can help the model better adapt to noisy environments, it can also be a double-edged sword, making the training process more unpredictable. Instead of the simple Maximum Likelihood Estimation (MLE) loss, we need a more robust objective (Xiao et al., 2024) to guide the model to learn the correlation between visual tokens and textual (query) tokens accurately. Thus, we resort to reweight the training loss and first employ the forward diffusion process (Ho et al., 2020) to distort the image:
+
+$$f(v_t | v_{t-1}) = \mathcal{N}\left(v_t; \sqrt{1 - \gamma}v_{t-1}, \gamma \mathbf{I}\right), \quad f(v_T | v_0) = \prod_{t=1}^T f(v_t | v_{t-1}), \quad (4)$$
+
+where  $\mathbf{I}$  and  $v_0$  denote an identity matrix and the original image, respectively. We gradually distort the original image by adding the Gaussian noise for  $T$  steps and  $\gamma$  controls the amount of noise
+
+{5}------------------------------------------------
+
+added in each step. Subsequently, given a textual query  $x$  and an image input  $v$ , the model generates two logit distributions conditioned on different visual posteriors: the original  $v$  and distorted  $v^*$ . By contrasting the logit distributions obtained from these two conditions, we can get the contrastive probability distribution of the  $i$ -th sample at time step  $t$  as follows,
+
+$$\Delta \text{logit}(y_{i,t}|v_{i,t}^*, x_{i,t}, y_{i,<t}) = \text{logit}_\theta(y_{i,t}|v_{i,t}, x_{i,t}, y_{i,<t}) - \text{logit}_\theta(y_{i,t}|v_{i,t}^*, x_{i,t}, y_{i,<t}), \quad (5)$$
+
+where  $y_{i,t}$  and  $y_{i,<t}$  denote the token at time step  $t$  and the generated tokens sequence up to the time step  $t-1$  of the  $i$ -th sample, respectively. Subsequently, we can obtain the visual correlation weight:
+
+$$\mathbf{w}_{i,t} = \Delta \text{logit}(y_{i,t}|v_{i,t}^*, x_{i,t}, y_{i,<t}). \quad (6)$$
+
+Following Xiao et al. (2024) to post-process and smooth the weights, we finally reassign the weight of each token in the vanilla MLE loss, which can be formulated as follows,
+
+$$\mathcal{L}_{INJ}^{i,t} = -\frac{\tilde{\mathbf{w}}_{i,t}}{\sum_{k=1}^l \tilde{\mathbf{w}}_{i,k}} \cdot \log p_\theta(y_{i,t}|v_{i,t}, x_{i,t}, y_{i,<t}), \quad (7)$$
+
+where  $l$  and  $\tilde{\mathbf{w}}$  represent the length of textual tokens and the smooth weight, respectively.
+
+## 4 EXPERIMENTS AND ANALYSIS
+
+### 4.1 EXPERIMENT SETUP
+
+**Datasets and Evaluation Metrics** For evaluation, we consider the image-related subsets of two multimodal QA datasets WebQA and MultimodalQA. Both datasets contain multimodal knowledge-seeking query-answer pairs. Since the test set labels from both datasets are not publicly available, the training and validation sets in our work are new subsets of the original training data, while the test sets are sourced from the original validation sets. Each query is associated with a set of hard negative distractors so that two evaluation setups can be used, namely distractor and full-wiki. However, we only consider the full-wiki setting to demonstrate the superiority of our *retrieval-rerank-generation* pipeline. Additionally, we conduct more experiments on Flickr30K (Young et al., 2014) and MS-COCO (Lin et al., 2014) to evaluate the performance on caption-to-image retrieval tasks. More details can be found in Appendix A, B and E.
+
+### 4.2 EVALUATION ON MULTIMODAL KNOWLEDGE-SEEKING
+
+**Results of Retrieval** Table 1 shows the performance of knowledge-enhanced rerankers on MultimodalQA and WebQA. The experimental results show that the retriever performs weakly regarding precise recall ( $R@1$  and  $R@2$ ) on both datasets, making it difficult for accurate multimodal retrieval-augmented generation. Since the captions from the two datasets are basically names of objects or places, it isn't easy to adapt to the scenarios using vanilla contrastive learning, as proven in the table. After inducing the ranking abilities of MLLMs, our proposed method effectively improves the retrieval performance by a large margin. Specifically, with five MLLMs, our method consistently improves  $R@2$  on WebQA by an average of 40%. The results are significantly improved after reranking the Top-K candidates from four different retrievers. Notably, on MultimodalQA, it reaches the upper limit of Recall@20 (98.26%) from CLIP on LLaVA-v1.5-13B and InternVL2-1/2B. These demonstrate the superior performance of our proposed method in multimodal knowledge retrieval.
+
+**Generalizabilities of Caption-aware Instruction Tuning** To further validate the generalizability of our method, on one hand, we test the reranker fine-tuned on the WebQA training set on MMQA. As shown in Figure 3a, the reranker trained on WebQA exhibits competitive performance in terms of  $R@1$ ,  $R@5$ , and  $R@10$ , and even matches the original reranker's performance with InternVL2-1/2B. On the other hand, we randomly select different portions of data from WebQA to train InternVL2-2B in a low-resource setting, and obtain the probability distribution of the reranker outputting 'Yes' for correctly recalled images. Figure 3b shows the robust performance of our proposed method under the low-resource settings. With only 2.5% of the original data, the reranker significantly outperforms the strong retriever baseline, InternVL-G, in terms of  $R@2$ . As the data scale increases, the probability of correctly recalling images also improves, stabilizing around 20%, and the recall metrics follow a similar trend. In summary, these two points fully demonstrate the strong generalizability of our proposed method across datasets as well as in low-resource settings within the same dataset, making it easily adaptable to more scenarios. We provide an evaluation on LLaVA-v1.5-13B and make further discussion in Appendix F.
+
+{6}------------------------------------------------
+
+Table 1: Performance of knowledge-enhanced rerankers on multimodal knowledge-seeking. The reranking is conducted based on the top 20 candidates from the retrievers (see details in Appendix A). The best scores in each setting are in **bold**.
+
+| Methods | MultimodalQA |  |  | WebQA |  |  |
+|-|-|-|-|-|-|-|
+|  | R@1 | R@5 | R@10 | R@2 | R@5 | R@10 |
+| CLIP-ViT-L/14-336px | <b>84.78</b> | 94.35 | 95.65 | 57.10 | 71.96 | 84.86 |
+| <i>w/ SFT</i> | 83.04 | 94.35 | 94.78 | 55.09 | 73.23 | 81.94 |
+| Vis-BGE-base | 49.57 | 74.78 | 82.61 | 28.78 | 43.62 | 54.56 |
+| Vis-BGE-m3 | 43.48 | 66.52 | 72.17 | 26.69 | 40.75 | 51.14 |
+| InternVL-C | 82.17 | <b>95.65</b> | 96.96 | <b>64.90</b> | <b>81.22</b> | 88.09 |
+| InternVL-G | 82.17 | 95.22 | <b>97.39</b> | <b>64.90</b> | 80.23 | <b>88.28</b> |
+| <i>Reranking Top-K from CLIP-ViT-L/14-336px</i> |  |  |  |  |  |  |
+| LLaVA-v1.5-13B | 72.61 | 90.87 | 95.22 | 45.35 | 65.87 | 80.56 |
+| <i>w/ caption-aware IT</i> | <b>98.26</b> | <b>98.26</b> | <b>98.26</b> | 79.74 | 88.14 | 89.77 |
+| mPLUG-Owl2 | 67.83 | 87.39 | 93.91 | 43.26 | 63.80 | 79.38 |
+| <i>w/ caption-aware IT</i> | 90.87 | 96.09 | 97.39 | 71.27 | 85.08 | 88.97 |
+| Qwen-VL-Chat | 68.26 | 89.57 | 92.61 | 47.64 | 67.22 | 80.42 |
+| <i>w/ caption-aware IT</i> | 91.30 | 95.65 | 97.39 | 80.12 | 88.53 | <b>89.96</b> |
+| InternVL2-1B | 47.39 | 84.78 | 93.91 | 34.99 | 57.49 | 74.72 |
+| <i>w/ caption-aware IT</i> | <b>98.26</b> | <b>98.26</b> | <b>98.26</b> | <b>82.00</b> | 88.78 | 89.94 |
+| InternVL2-2B | 66.52 | 88.70 | 93.91 | 42.79 | 62.48 | 77.97 |
+| <i>w/ caption-aware IT</i> | <b>98.26</b> | <b>98.26</b> | <b>98.26</b> | 81.91 | <b>88.94</b> | 89.94 |
+| <i>Reranking Top-K from Different Retrievers</i> |  |  |  |  |  |  |
+| LLaVA-v1.5-13B |  |  |  |  |  |  |
+| <i>w/ Vis-BGE-base</i> | 88.70 | 88.70 | 88.70 | 59.61 | 64.71 | 65.70 |
+| <i>w/ Vis-BGE-m3</i> | 84.78 | 84.78 | 84.78 | 57.57 | 62.26 | 63.03 |
+| <i>w/ InternVL-C</i> | <b>98.70</b> | <b>98.70</b> | <b>98.70</b> | <b>82.08</b> | <b>90.79</b> | <b>92.72</b> |
+| <i>w/ InternVL-G</i> | 97.83 | 97.83 | 97.83 | 81.91 | 90.24 | 92.31 |
+
+![Figure 3: Generalizabilities of caption-aware instruction tuning. (a) Bar chart showing Recall (%) for various models (LLaVA-v1.5-13B, mPLUG-Owl2, Qwen-VL-Chat, InternVL2-1B, InternVL2-2B) on MultimodalQA. A dashed red line indicates the performance of the reranker fine-tuned on WebQA (84.7%). (b) Line graph showing Probability and Recall (%) vs. Data scale (%) for R@2, R@5, and R@10. A dashed red line indicates the performance of the reranker fine-tuned on WebQA (44.9%).](a6a8016b231533e7f34b550f4676afc6_img.jpg)
+
+Figure 3 consists of two plots. Plot (a) is a bar chart titled '(a) Generalizability of reranking.' showing Recall (%) for five models on MultimodalQA. The models are LLaVA-v1.5-13B, mPLUG-Owl2, Qwen-VL-Chat, InternVL2-1B, and InternVL2-2B. For each model, there are two bars: a purple bar for 'R@10(CLIP)' and a green bar for 'R@10(MM-Rerank)'. A dashed red horizontal line at 84.7% represents the performance of the reranker fine-tuned on WebQA. Plot (b) is a line graph titled '(b) Low-resource settings on WebQA.' showing Probability (left y-axis, 0.5 to 1.0) and Recall (%) (right y-axis, 65 to 90) versus Data scale (%) (x-axis, 1.25 to 100). Three lines represent R@2 (blue), R@5 (orange), and R@10 (purple). A dashed red horizontal line at 44.9% represents the performance of the reranker fine-tuned on WebQA.
+
+Figure 3: Generalizabilities of caption-aware instruction tuning. (a) Bar chart showing Recall (%) for various models (LLaVA-v1.5-13B, mPLUG-Owl2, Qwen-VL-Chat, InternVL2-1B, InternVL2-2B) on MultimodalQA. A dashed red line indicates the performance of the reranker fine-tuned on WebQA (84.7%). (b) Line graph showing Probability and Recall (%) vs. Data scale (%) for R@2, R@5, and R@10. A dashed red line indicates the performance of the reranker fine-tuned on WebQA (44.9%).
+
+Figure 3: Generalizabilities of caption-aware instruction tuning. (a) compares the performance of the reranker fine-tuned on WebQA with the one fine-tuned on MultimodalQA, evaluated on MultimodalQA. (b) visualizes the changes in the probability distribution of correctly recalled items and the recall rate of the reranker under low-resource settings as the scale of the training dataset varies.
+
+### 4.3 EVALUATION ON MULTIMODAL RETRIEVAL-AUGMENTED GENERATION
+
+**Reranking Performance with Thresholds** Due to the strong performance of the reranker in low-resource settings, we train InternVL2-1/2B as the rerankers using only 20% of the data, considering efficiency. As shown in Figure 4, we collect the relevance probability of the image candidates after reranking and the results prove the superiority of our proposed knowledge-enhanced reranking. Among the train, validation, and test sets, the relevance probabilities of correct recalls are concentrated in the highest range. Since there is still a portion of erroneous recalls, we plotted the interpo-
+
+{7}------------------------------------------------
+
+![Figure 4: Density distribution of the relevance probability of correct and incorrect recalls on WebQA after reranking from the InternVL2-2B reranker. The figure consists of three subplots: (a) Train set, (b) Validation set, and (c) Test set. Each subplot shows two density curves: 'Correct Recalls' (purple) and 'Incorrect Recalls' (green). The x-axis is 'Relevance Probability' from 0.0 to 1.0, and the y-axis is 'Density Distribution' from 0 to 16. In all three plots, the 'Correct Recalls' curve is heavily skewed towards higher relevance probabilities (0.8 to 1.0), while the 'Incorrect Recalls' curve is more spread out. In the validation set plot (b), a point is marked at (0.88, 1.83).](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 4: Density distribution of the relevance probability of correct and incorrect recalls on WebQA after reranking from the InternVL2-2B reranker. The figure consists of three subplots: (a) Train set, (b) Validation set, and (c) Test set. Each subplot shows two density curves: 'Correct Recalls' (purple) and 'Incorrect Recalls' (green). The x-axis is 'Relevance Probability' from 0.0 to 1.0, and the y-axis is 'Density Distribution' from 0 to 16. In all three plots, the 'Correct Recalls' curve is heavily skewed towards higher relevance probabilities (0.8 to 1.0), while the 'Incorrect Recalls' curve is more spread out. In the validation set plot (b), a point is marked at (0.88, 1.83).
+
+Figure 4: Density distribution of the relevance probability of correct and incorrect recalls on WebQA after reranking from the InternVL2-2B reranker.
+
+Table 2: Performance of InternVL2-2B reranker on two benchmark datasets.  $P$  and  $R$  denote precision and recall, respectively. The best scores in each setting are in **bold**.
+
+| Methods | MultimodalQA |  |  | WebQA |  |  |
+|-|-|-|-|-|-|-|
+|  | $P$ | $R$ | $F1$ | $P$ | $R$ | $F1$ |
+| CLIP Top- $N$ | 84.78 | 84.78 | 84.78 | 41.24 | 57.10 | 47.89 |
+| <i>Caption-aware Instruction Tuning</i> |  |  |  |  |  |  |
+| CLIP Top- $K$ + Reranker | 98.26 | <b>98.26</b> | 98.26 | 59.26 | <b>82.05</b> | 68.82 |
+| w/ Natural Threshold | <b>100.00</b> | 97.83 | <b>98.90</b> | 74.89 | 80.59 | <b>77.64</b> |
+| w/ Adaptive Threshold | <b>100.00</b> | 97.83 | <b>98.90</b> | <b>88.34</b> | 68.29 | 77.03 |
+
+lated curves of correct recalls and erroneous recalls on the validation set and took the x-coordinate of their intersection point as the adaptive threshold. Due to the perfect performance on MultimodalQA with the natural threshold, we set the adaptive threshold to the same as the natural threshold.
+
+As demonstrated in Table 2, our proposed knowledge-enhanced reranking method demonstrates superior performances. We train the reranker with the caption-aware instructions and achieve better performance across all metrics compared to directly using CLIP for top- $N$  retrieval. When the adaptive threshold  $\eta$  is activated, the model accurately filters out irrelevant images, improving *accuracy* and *F1* score. Specifically, in WebQA, when  $\eta$  is set to an intuitively reasonable value of 0.5, the corresponding F1 score increases by 29.75%. In MultimodalQA, the reranker successfully identifies all ground truth images from the retrieved top- $K$  candidates when  $\eta$  is set to 0.5, proving the strong capability of our proposed method in retrieval reranking.
+
+**Results of Retrieval-augmented Generation** Table 3 displays the results on multimodal question answering which requires retrieving images. The baselines without retrieval show limited performance, even the powerful gpt-3.5-turbo-0125 fails to answer the knowledge-intensive questions. Notably, the backbone LLMs of InternVL2-1/2B (Qwen2-0.5B-Instruct and internlm2-chat-1.8b) perform poorly while their multimodal counterparts are somewhat improved. This phenomenon indicates that MLLMs can indeed learn world knowledge from different modalities and store it inside the parameters. Moreover, as a more timely and flexible approach for knowledge updates, retrieval-augmented generation also offers the potential for better knowledge integration in MLLMs.
+
+After applying our proposed pipeline, all configurations on InternVL2-1B and InternVL2-2B demonstrate excellent performance of retrieval-augmented generation, approaching or even surpassing the performance of *Oracle*. When the natural threshold is activated, there is a significant increase in the accuracy of recalling the correct images (as shown in Table 2), leading to substantial improvements in all metrics across both datasets. Moreover, this improvement is more evident in the single-image scenario. This is because we fixed the number of images recalled each time, and setting the threshold allows us to filter out erroneously recalled images, resulting in a consistent performance enhancement. However, when adopting adaptive thresholds, the improvement in results is not as significant as with natural thresholds. This can be seen from Table 2, where, despite a substantial
+
+{8}------------------------------------------------
+
+Table 3: Performance of multimodal knowledge-seeking question answering on WebQA and Multi-modalQA. In addition to the overall results, we report the accuracy of single-image and multi-image input with *Single.* and *Multi.* for WebQA, respectively. *Oracle* refers to directly feeding the ground truth image to the generator after *NIT* (*Noise-injected Training*). The best scores in each setting are in **bold**.
+
+| Methods | MultimodalQA | WebQA |  |  |
+|-|-|-|-|-|
+|  | EM | Single. | Multi. | Overall |
+| <i>w/o Retrieval-augmented Generation</i> |  |  |  |  |
+| Qwen2-0.5B-Instruct | 10.43 | 17.29 | 19.33 | 18.20 |
+| internlm2-chat-1.8b | 10.43 | 23.25 | 32.58 | 27.40 |
+| gpt-3.5-turbo-0125 | <b>25.22</b> | <b>40.80</b> | <b>54.49</b> | <b>46.88</b> |
+| InternVL2-1B | 19.57 | 26.10 | 43.57 | 33.86 |
+| InternVL2-2B | <b>25.22</b> | 30.37 | 48.20 | 38.29 |
+| <i>InternVL2-1B w/ Retrieval-augmented Generation</i> |  |  |  |  |
+| InternVL2-1B |  |  |  |  |
+| w/ CLIP Top-N | 50.87 | 35.98 | 48.65 | 41.61 |
+| w/ InternVL-G Top-N | 49.57 | 38.88 | 49.11 | 43.43 |
+| <b>RagVL</b> w/o <i>NIT</i> | 54.78 | 38.09 | 50.91 | 43.79 |
+| w/ Natural Threshold | 54.78 | 40.43 | 50.96 | 45.11 |
+| w/ Adaptive Threshold | 54.78 | 40.64 | 50.98 | 45.23 |
+| <b>RagVL</b> w/ <i>NIT</i> | 68.26 | 53.07 | 72.53 | 61.72 |
+| w/ Natural Threshold | <b>68.70</b> | 56.68 | 72.49 | 63.71 |
+| w/ Adaptive Threshold | <b>68.70</b> | <b>56.71</b> | <b>72.60</b> | <b>63.78</b> |
+| Oracle | 69.13 | 60.09 | 73.23 | 65.93 |
+| <i>InternVL2-2B w/ Retrieval-augmented Generation</i> |  |  |  |  |
+| InternVL2-2B |  |  |  |  |
+| w/ CLIP Top-N | 61.30 | 40.80 | 48.88 | 44.39 |
+| w/ InternVL-G Top-N | 60.00 | 41.92 | 48.45 | 44.82 |
+| <b>RagVL</b> w/o <i>NIT</i> | 64.78 | 41.68 | 48.40 | 44.67 |
+| w/ Natural Threshold | 65.65 | 44.71 | 48.97 | 46.60 |
+| w/ Adaptive Threshold | 65.65 | 44.37 | 48.98 | 46.42 |
+| <b>RagVL</b> w/ <i>NIT</i> | 73.04 | 53.91 | 72.62 | 62.23 |
+| w/ Natural Threshold | 73.48 | 57.25 | <b>73.01</b> | 64.25 |
+| w/ Adaptive Threshold | <b>73.48</b> | <b>57.94</b> | 72.47 | <b>64.40</b> |
+| Oracle | 73.48 | 60.66 | 73.59 | 66.41 |
+
+increase in accuracy, there is a significant drop in recall. Therefore, natural thresholds are a better and more efficient choice for retrieval-augmented generation.
+
+**Ablation Studies** To validate the efficacy of each component in our proposed method, we conduct a set of ablation experiments on WebQA with InternVL2-2B, and the results are reported in Table 4. For “*w/o Reranker*”, we directly retrieve Top-2 images with CLIP in the inference stage. The use of the reranker in RagVL shows an improvement in all metrics (*Single.*, *Multi.*, and *Overall*) compared to “*w/o Reranker*”. For “*w/o ND*”, we replace the noise-injected dataset with the vanilla dataset. Ablating *ND* results in a performance decrease on all metrics. Introducing noise at both data and token levels helps the model learn to distin-
+
+Table 4: Ablation study on WebQA with InternVL2-2B. *NLC* and *ND* refer to Noise-injected Logits Contrasting and Noise-injected Data, respectively.
+
+| Methods | WebQA |  |  |
+|-|-|-|-|
+|  | Single. | Multi. | Overall |
+| <b>RagVL</b> ( $\eta = 0.5$ ) | <b>57.25</b> | <b>73.01</b> | <b>64.25</b> |
+| w/o Reranker | 53.63 | 71.79 | 61.70 |
+| w/o ND | 57.11 | 71.24 | 63.39 |
+| w/o NLC | 56.42 | 72.40 | 63.52 |
+| w/o ND & NLC | 56.27 | 70.10 | 62.42 |
+
+{9}------------------------------------------------
+
+486  
+487  
+488  
+489  
+490  
+491  
+492  
+493  
+494  
+495  
+496  
+497  
+498  
+499  
+500  
+501  
+502  
+503  
+504  
+505  
+506  
+507  
+508  
+509  
+510  
+511  
+512  
+513  
+514  
+515  
+516  
+517  
+518  
+519  
+520  
+521  
+522  
+523  
+524  
+525  
+526  
+527  
+528  
+529  
+530  
+531  
+532  
+533  
+534  
+535  
+536  
+537  
+538  
+539
+
+![Figure 5(a): Three attention heatmaps for the question 'How many primary colors are found on the head of the Violet Turaco?'. The heatmaps show attention weights across the image of a bird. The first two heatmaps (base model w/o IT and fine-tuned w/o IT) show sparse attention, while the third heatmap (fine-tuned w/ NIT) shows more concentrated attention on the bird's head.](349ca0a6a9c2e2651a4deeeaf8be6da1_img.jpg)
+
+Figure 5(a): Three attention heatmaps for the question 'How many primary colors are found on the head of the Violet Turaco?'. The heatmaps show attention weights across the image of a bird. The first two heatmaps (base model w/o IT and fine-tuned w/o IT) show sparse attention, while the third heatmap (fine-tuned w/ NIT) shows more concentrated attention on the bird's head.
+
+(a) "How many primary colors are found on the head of the Violet Turaco?"
+
+![Figure 5(b): Three attention heatmaps for a multi-image question about architecture. The heatmaps are shown for three images: a building facade, a close-up of a carving, and another view of the building. The heatmaps show attention weights across these images. The first two heatmaps (base model w/o IT and fine-tuned w/o IT) show sparse attention, while the third heatmap (fine-tuned w/ NIT) shows more concentrated attention on the relevant architectural details.](e9b30aeb317ed964fa6de36804acf24c_img.jpg)
+
+Figure 5(b): Three attention heatmaps for a multi-image question about architecture. The heatmaps are shown for three images: a building facade, a close-up of a carving, and another view of the building. The heatmaps show attention weights across these images. The first two heatmaps (base model w/o IT and fine-tuned w/o IT) show sparse attention, while the third heatmap (fine-tuned w/ NIT) shows more concentrated attention on the relevant architectural details.
+
+(b) "Which is better maintained, the carving on the front of the Palace of the Governor in Uxmal or the Bird carving above the doorway in Mexico, Architecture?"
+
+Figure 5: Visualization of attention heatmaps w/ and w/o *NIT*. Displayed from left to right are the attention maps for the base model (*w/o IT*), the model fine-tuned *w/o IT*, and the model fine-tuned *w/ NIT*, respectively, with each corresponding to its respective question in the caption.
+
+guish between the candidate images more effectively in multi-image inference. Since *NLC* enhances the model's robustness at the token level, ablating it leads to a decrease in all metrics on WebQA. This decline is more pronounced when both *NLC* and *ND* are ablated, especially in multi-image inference scenarios. Therefore, our proposed training method, which injects noise at the data and token levels, helps reduce the distractions from noise and mitigate MNC during inference time.
+
+### 4.4 QUALITATIVE ANALYSIS
+
+As illustrated in Figure 5, we visualize the attention heatmaps from the three models, providing insights into how each model focuses on the details of the input image. The attention weights are calculated by accumulating the attention score between image tokens and text tokens across all layers. Obviously, the model *w/ NIT* provides more focused attention on the crucial parts of the query than the other two models. More cases can be seen in Appendix I.
+
+## 5 CONCLUSION
+
+In this paper, we present a robust framework for enhancing Multimodal Large Language Models (MLLMs) through knowledge-enhanced reranking and noise-injected training to tackle the multi-granularity noisy correspondence (MNC) problem in multimodal retrieval-augmented generation. Our comprehensive approach addresses both coarse-grained and fine-grained noise, significantly improving retrieval accuracy and generation robustness. The results from our extensive experiments on the WebQA and MultimodalQA datasets demonstrate the superiority of our proposed method, especially in scenarios requiring fine-grained visual understanding and robust generation. By instruction-tuning MLLMs for reranking and injecting visual noise during training, we enhance the model's capability to handle real-world noisy data and improve its overall performance in multimodal tasks.
+
+ Rest of paper (reference and Appendix) is removed.

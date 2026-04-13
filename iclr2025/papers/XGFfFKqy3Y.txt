@@ -1,0 +1,372 @@
+
+
+{0}------------------------------------------------
+
+# STEP-WISE TRIPLE-CONSISTENT DIFFUSION SAMPLING FOR INVERSE PROBLEMS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Diffusion models (DMs) are a class of generative models that allow sampling from a distribution learned over a training set. When applied to solving inverse imaging problems (IPs), the reverse sampling steps of DMs are typically modified to approximately sample from a measurement-conditioned distribution in the image space. However, these modifications may be unsuitable for certain settings (such as in the presence of measurement noise) and non-linear tasks, as they often struggle to correct errors from earlier sampling steps and generally require a large number of optimization and/or sampling steps. To address these challenges, we state three conditions for achieving measurement-consistent diffusion trajectories. Building on these conditions, we propose a new optimization-based sampling method that not only enforces the standard data manifold measurement consistency and forward diffusion consistency, as seen in previous studies, but also incorporates [step-wise and network-regularized](#) backward diffusion consistency that maintains a diffusion trajectory by optimizing over the input of the pre-trained model at every sampling step. By enforcing these conditions, either implicitly or explicitly, our sampler requires significantly fewer reverse steps. Therefore, we refer to our accelerated method as **Step-wise Triple-Consistent Sampling (SITCOM)**. Compared to existing state-of-the-art baseline methods, under different levels of measurement noise, our extensive experiments across five linear and three non-linear image restoration tasks demonstrate that SITCOM achieves competitive or superior results in terms of standard image similarity metrics while requiring a reduced run-time across all considered tasks.
+
+## 1 INTRODUCTION
+
+Inverse problems (IPs) arise in a wide range of science and engineering applications, including computer vision (Li et al., 2024), signal processing (Byrne, 2003), medical imaging (Alkhouri et al., 2024), remote sensing (Levis et al., 2022), and geophysics (BnilLam and Al-Khoury, 2020). In these applications, the primary goal is to recover an unknown image or signal  $\mathbf{x} \in \mathbb{R}^n$  from measurements or degraded image  $\mathbf{y} \in \mathbb{R}^m$ , which are often corrupted by noise. Mathematically, the unknown signal and the measurements are related as
+
+$$\mathbf{y} = \mathcal{A}(\mathbf{x}) + \mathbf{n}, \quad (1)$$
+
+where  $\mathcal{A}(\cdot) : \mathbb{R}^n \rightarrow \mathbb{R}^m$  (with  $m \leq n$ ) represents the linear or non-linear forward operator that models the measurement process, and  $\mathbf{n} \in \mathbb{R}^m$  denotes the noise in the measurement domain, e.g., assumed sampled from a Gaussian distribution  $\mathcal{N}(0, \sigma_y^2 \mathbf{I})$ , where  $\sigma_y > 0$  denotes the noise level. Exactly solving these inverse problems is challenging due to their ill-posedness in many settings, requiring advanced techniques to achieve accurate solutions.
+
+Deep learning techniques have recently been utilized as a prior to aid in solving these problems (Ravishankar et al., 2019; Lempitsky et al., 2018). One framework that has shown significant potential is the use of generative models, particularly diffusion models (DMs) (Ho et al., 2020). Given a training dataset, DMs are trained to learn the underlying distribution  $p(\mathbf{x})$ . During inference, DMs enable sampling from this learned distribution through an iterative procedure (Song et al., 2021b). When employed to solving inverse problems, DM-based IP solvers often modify the reverse sampling steps to allow sampling from the measurements-conditioned distribution  $p(\mathbf{x}|\mathbf{y})$  (Chung et al.,
+
+{1}------------------------------------------------
+
+![Figure 1: Qualitative results on the FFHQ dataset. The figure is a 2x2 grid of image restoration examples. The top row shows 'Super Resolution' and 'Motion Deblurring' tasks. The bottom row shows 'Non-linear Deblurring' and 'Phase Retrieval' tasks. Each example includes the 'Ground Truth', 'Measurements' (noisy or degraded), and three restoration methods: 'DPS', 'DAPS', and 'SITCOM (ours)'. Zoomed-in regions are shown for each method to highlight details. PSNR and LPIPS values are provided for each restoration result.](c803f6f6e2c49429d2951832bd0f208d_img.jpg)
+
+| Task | Method | PSNR | LPIPS |
+|-|-|-|-|
+| Super Resolution | DPS | 24.66 | 0.251 |
+|  | DAPS | 30.22 | 0.172 |
+|  | SITCOM (ours) | 32.39 | 0.156 |
+| Motion Deblurring | DPS | 22.58 | 0.289 |
+|  | DAPS | 31.46 | 0.131 |
+|  | SITCOM (ours) | 32.26 | 0.099 |
+| Non-linear Deblurring | DPS | 23.12 | 0.267 |
+|  | DAPS | 27.65 | 0.167 |
+|  | SITCOM (ours) | 29.22 | 0.145 |
+| Phase Retrieval | DPS | 17.88 | 0.461 |
+|  | DAPS | 30.89 | 0.118 |
+|  | SITCOM (ours) | 32.67 | 0.112 |
+
+Figure 1: Qualitative results on the FFHQ dataset. The figure is a 2x2 grid of image restoration examples. The top row shows 'Super Resolution' and 'Motion Deblurring' tasks. The bottom row shows 'Non-linear Deblurring' and 'Phase Retrieval' tasks. Each example includes the 'Ground Truth', 'Measurements' (noisy or degraded), and three restoration methods: 'DPS', 'DAPS', and 'SITCOM (ours)'. Zoomed-in regions are shown for each method to highlight details. PSNR and LPIPS values are provided for each restoration result.
+
+Figure 1: **Qualitative results on the FFHQ dataset** on two linear tasks (*top*) and two non-linear tasks (*bottom*) under measurement noise of  $\sigma_y = 0.05$ . The PSNR and LPIPS values are given below each restored image. Zoomed-in regions show how SITCOM captures greater image details when compared to two general (non)linear DM-based methods (DPS (Chung et al., 2023b) and DAPS (Zhang et al., 2024)).
+
+2023b; 2022). These modifications typically rely on approximations that may not be suitable for all tasks and settings, and in addition to generally requiring many sampling iterations, often suffer from errors accumulated during early diffusion sampling steps (Zhang et al., 2024). In most DM-based IP solvers, these approximations are designed to enforce standard measurement consistency on the estimated image (or posterior mean) at every reverse sampling iteration, as in (Chung et al., 2023b), and may also include resampling using the forward diffusion process (which we refer to as forward diffusion consistency), such as in (Lugmayr et al., 2022; Song et al., 2023a).
+
+A key bottleneck in DMs is their computational speed, as they are slower than other generative models due to the large number of sampling steps. Although various methods have been proposed to reduce sampling frequency (e.g., (Song et al., 2023b)), these improvements have yet to be fully realized for DMs applied to IPs. Most existing methods still require dense sampling, which continues to pose speed challenges.
+
+**Contributions:** In this paper, we: (i) identify key issues in accelerating DMs for IPs, (ii) propose three conditions that could fully leverage the information from the measurements and the [implicit bias of the](#) pre-trained DM to effectively address these issues, and (iii) present a new optimization-based sampler that satisfies these conditions. We refer to our accelerated sampling method as **Step-wise Triple-Consistent Sampling (SITCOM)**. We evaluate our method on several image restoration tasks. Compared to leading baselines, our approach consistently achieves either state-of-the-art or highly competitive quantitative results, while also reducing the number of sampling steps and, consequently, the computational time. See Figure 1 for examples.
+
+## 2 BACKGROUND: DIFFUSION MODELS & THEIR USAGE IN SOLVING IPs
+
+Pre-trained Diffusion Models (DMs) generate images by applying a pre-defined iterative denoising process (Ho et al., 2020). In the Variance-Preserving Stochastic Differentiable Equations (SDEs) setting (Song et al., 2021b;a), DMs are formulated using the forward and reverse processes
+
+$$d\mathbf{x}_t = -\frac{\beta_t}{2}\mathbf{x}_t dt + \sqrt{\beta_t} d\mathbf{w}, \quad d\mathbf{x}_t = -\beta_t \left[ \frac{1}{2}\mathbf{x}_t + \nabla_{\mathbf{x}_t} \log p_t(\mathbf{x}_t) \right] dt + \sqrt{\beta_t} d\bar{\mathbf{w}}, \quad (2)$$
+
+where  $\beta : \{0, \dots, T\} \rightarrow (0, 1)$  is a pre-defined function that controls the amount of additive perturbations at time  $t$ ,  $\mathbf{w}$  (resp.  $\bar{\mathbf{w}}$ ) is the forward (resp. reverse) Weiner process (Anderson, 1982),  $p_t(\mathbf{x}_t)$  is the distribution of  $\mathbf{x}_t$  at  $t$ , and  $\nabla_{\mathbf{x}_t} \log p_t(\mathbf{x}_t)$  is the score function that is replaced by a neural network (typically a time-encoded U-Net (Ronneberger et al., 2015))  $\mathbf{s} : \mathbb{R}^n \times \{0, \dots, T\} \rightarrow \mathbb{R}^n$ , parameterized by  $\theta$ . In practice, given the score function  $\mathbf{s}_\theta$ , the SDEs in Equation (2) can be discretized as in Equation (3) where  $\boldsymbol{\eta}_t, \boldsymbol{\eta}_{t-1} \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$ .
+
+$$\mathbf{x}_t = \sqrt{1 - \beta_t} \mathbf{x}_{t-1} + \sqrt{\beta_t} \boldsymbol{\eta}_{t-1}, \quad \mathbf{x}_{t-1} = \frac{1}{\sqrt{1 - \beta_t}} \left[ \mathbf{x}_t + \beta_t \mathbf{s}_\theta(\mathbf{x}_t, t) \right] + \sqrt{\beta_t} \boldsymbol{\eta}_t. \quad (3)$$
+
+{2}------------------------------------------------
+
+When employed to solve inverse problems, the score function in Equation (2) is replaced by a conditional score function which, by Bayes' rule, is  $\nabla_{x_t} \log p_t(x_t|y) = \nabla_{x_t} \log p_t(x_t) + \nabla_{x_t} \log p_t(y|x_t)$ . Solving the SDE in Equation (2) with the conditional score is referred to as *posterior sampling* (Chung et al., 2023b). As there doesn't exist a closed-form expression for the term  $\nabla_{x_t} \log p_t(y|x_t)$  (which is termed as the measurements matching term in (Daras et al., 2024)), previous works have explored different approaches, which we will briefly discuss below. We refer the reader to the recent survey in (Daras et al., 2024) for an overview on DM-based methods for solving IPs.
+
+A well-known method is Diffusion Posterior Sampling (DPS) (Chung et al., 2023b), which uses the approximation  $p(y|x_t) \approx p(y|\hat{x}_0)$  where  $\hat{x}_0(x_t)$  (or simply  $\hat{x}_0$ ) is the estimated image at time  $t$  as a function of the pre-trained model and  $x_t$  (Tweedie's formula (Vincent, 2011)), given as
+
+$$\hat{x}_0(x_t) = \frac{1}{\sqrt{\alpha_t}} \left[ x_t - \sqrt{1 - \alpha_t} \epsilon_\theta(x_t, t) \right] =: f(x_t; t, \epsilon_\theta), \quad (4)$$
+
+where  $\tilde{\alpha}_t = \prod_{j=1}^t \alpha_j$  and  $\alpha_t = 1 - \beta_t$ . We call the function  $f$ , defined in Equation (4), as '**Tweedie-network denoiser**' (also termed as 'posterior mean predictor' in (Chen et al., 2024)). Here,  $\epsilon_\theta(x_t, t) = -\sqrt{1 - \tilde{\alpha}_t} s_\theta(x_t, t)$  (Luo, 2022) outputs the noise in  $x_t$ . Tweedie's formula is also adopted in other DM-based IP solvers such as (Rout et al., 2023; Chung et al., 2023c; Wang et al., 2022). The drawback of these methods is that they require a large number of sampling steps.
+
+The work in ReSample (Song et al., 2023a), solves an optimization problem on the estimated posterior mean in the latent space to enforce a **step-wise** measurement consistency, requiring many sampling and optimization steps.
+
+The work in (Mardani et al., 2023) introduced RED-Diff, a variational Bayesian method that fits a Gaussian distribution to the posterior distribution of the clean image **given** the measurements. This approach involves solving an optimization problem using stochastic gradient descent (SGD) to minimize a data-fitting term while maximizing the likelihood of the reconstructed image under the denoising diffusion prior (as a regularizer). However, the SGD process requires multiple iterations, each involving evaluations of the pre-trained DM on a different noisy image at some randomly selected time. **While RED-diff reduces the run-time, their qualitative results are not competitive on several image restoration tasks.**
+
+Recently, Decoupling Consistency with Diffusion Purification (DCDP) (Li et al., 2024) proposed separating diffusion sampling steps from measurement consistency by using DMs as diffusion purifiers (Nie et al., 2022; Alkhouri et al., 2024), with the goal of reducing the run-time. **However, for every task, DCDP requires tuning the number of forward diffusion steps for purification for each sampling step.** Shortly after, Decoupled Annealing Posterior Sampling (DAPS) (Zhang et al., 2024) introduced another decoupled approach, incorporating gradient descent noise annealing via Langevin dynamics. DAPS, similar to DPS, also requires a large number of sampling and optimization steps. Under measurement noise, DCDP achieves SOTA run-time across various linear restoration tasks, while DAPS sets the SOTA in restoration quality. Both will serve as primary baselines in our experiments.
+
+## 3 SITCOM: STEP-WISE TRIPLE-CONSISTENT SAMPLING
+
+### 3.1 MOTIVATION: ADDRESSING THE CHALLENGES IN APPLYING DMs TO IPs
+
+Most inverse problems are ill-conditioned and undersampled. DMs, when trained on a dataset that closely resembles the target image, can provide critical information to alleviate ill-conditioning and improve recovery. Despite various previous efforts, a key challenge remains: How to *efficiently* integrate DMs into the framework of inverse problems? We will now elaborate on this challenge in detail.
+
+The standard reverse sampling procedure in DMs consists of applying the backward discrete steps in Equation (3) for  $t \in \{T, T-1, \dots, 1\}$ , forming the standard diffusion trajectory for which  $x_0$  is the generated image<sup>1</sup>. To incorporate the measurement  $y$  into these steps, a common approach
+
+<sup>1</sup>Diffusion trajectory refers to the path that leads to an in-distribution image, where the distribution is the one learned by the DM from the training set.
+
+{3}------------------------------------------------
+
+adopted in previous works that demonstrate superior performance (e.g., (Song et al., 2023a; Zhang et al., 2024; Li et al., 2024)) is to the  $\tilde{\mathbf{x}}_0$  computed via Equation (4) as follows:
+
+$$\hat{\mathbf{x}}'_0(\mathbf{x}_t) = \arg \min_{\mathbf{x}} \|\mathcal{A}(\mathbf{x}) - \mathbf{y}\|^2 + \lambda \|\mathbf{x} - \tilde{\mathbf{x}}_0(\mathbf{x}_t)\|^2, \quad (5)$$
+
+where  $\lambda \in \mathbb{R}_+$  is a regularization parameter. The  $\hat{\mathbf{x}}'_0(\mathbf{x}_t)$  obtained from Equation (5) is close to  $\tilde{\mathbf{x}}_0(\mathbf{x}_t)$  while also remaining consistent with the measurements. When using  $\hat{\mathbf{x}}'_0(\mathbf{x}_t)$  to sample  $\mathbf{x}_{t-1}$ , the second formula in Equation (3) can be rewritten as in Equation (6), where the derivation is provided in Appendix A.
+
+$$\mathbf{x}_{t-1} = \frac{\sqrt{\bar{\alpha}_t}(1 - \bar{\alpha}_{t-1})}{1 - \bar{\alpha}_t} \mathbf{x}_t + \frac{\sqrt{\bar{\alpha}_{t-1}}\beta_t}{1 - \bar{\alpha}_t} \tilde{\mathbf{x}}_0(\mathbf{x}_t) + \sqrt{\beta_t} \boldsymbol{\eta}_t. \quad (6)$$
+
+By substituting the  $\tilde{\mathbf{x}}_0(\mathbf{x}_t)$  in Equation (6) with the measurement-consistent  $\hat{\mathbf{x}}'_0(\mathbf{x}_t)$ , the modified sampling formula becomes:
+
+$$\mathbf{x}_{t-1} = \frac{\sqrt{\bar{\alpha}_t}(1 - \bar{\alpha}_{t-1})}{1 - \bar{\alpha}_t} \mathbf{x}_t + \frac{\sqrt{\bar{\alpha}_{t-1}}\beta_t}{1 - \bar{\alpha}_t} \hat{\mathbf{x}}'_0(\mathbf{x}_t) + \sqrt{\beta_t} \boldsymbol{\eta}_t. \quad (7)$$
+
+While this approach effectively ensures data consistency at each step, it inevitably causes  $\hat{\mathbf{x}}'_0$  to deviate from the diffusion trajectory, leading to two major issues:
+
+- (I1) The image  $\tilde{\mathbf{x}}_0(\mathbf{x}_t)$ , initially constructed through Tweedie’s formula, usually appears quite natural (e.g., columns 3 to 5 of Figure 2); however, the modified version,  $\hat{\mathbf{x}}'_0(\mathbf{x}_t)$ , is likely to exhibit severe artifacts (e.g., columns 6 to 8 of Figure 2).
+- (I2) Since the DM network,  $\epsilon_\theta$ , is trained via minimizing the objective function  $\mathbb{E}_{\mathbf{x}_0, \boldsymbol{\epsilon}} \|\epsilon - \epsilon_\theta(\sqrt{\bar{\alpha}_t} \mathbf{x}_0 + \sqrt{1 - \bar{\alpha}_t} \boldsymbol{\epsilon}, t)\|^2$  (denoising score matching (Vincent, 2011)) on a finite dataset, it performs best on noisy images lying in the high-density regions of the *training distribution*  $\mathcal{N}(\mathbf{x}_t; \sqrt{\bar{\alpha}_t} \mathbf{x}_0, (1 - \bar{\alpha}_t) \mathbf{I})$ ,  $\mathbf{x}_0 \sim p(\mathbf{x}_0)$ . We define an algorithm as **forward-consistent** if it likely applies  $\epsilon_\theta$  only to in-distribution inputs (i.e., those from the same distribution used for training). For example, if the forward diffusion used to train  $\epsilon_\theta$  adds Gaussian noise, the in-distribution input to  $\epsilon_\theta$  should ideally be sampled from a Gaussian with specific parameters. If Poisson noise is used in the forward process, inputs drawn from suitable Poisson distributions are more likely to fall within the well-trained region of the network. In summary, forward consistency requires that inputs to  $\epsilon_\theta$  during sampling align with the forward process. While the  $\mathbf{x}_{t-1}$  generated from Equation (6) is forward-consistent by design, the one generated from the modified formula Equation (7) is not. Therefore, in the latter case, the DM network,  $\epsilon_\theta$ , may be applied to many out-of-distribution inputs, leading to degraded performance.
+
+We pause to verify our claimed Issue (I1) through a box-inpainting experiment. Columns 3 to 5 of Figure 2 show  $\hat{\mathbf{x}}'_0(\mathbf{x}_t)$  at various  $t$ . The results clearly demonstrate successful enforcement of data consistency, as the region outside the box aligns with the original image. However, this enforcement compromises the natural appearance of the image, introducing significant artifacts in the reconstructed area inside the box. Details about the setting of the results in Figure 2 are given in Section C.
+
+Issue (I2) was previously observed in (Lugmayr et al., 2022), which proposed a remedy known as ‘*resampling*’. In this approach, the sampling formula in Equation (7) is replaced by
+
+$$\mathbf{x}_{t-1} = \sqrt{\bar{\alpha}_{t-1}} \tilde{\mathbf{x}}_0 + \sqrt{1 - \bar{\alpha}_{t-1}} \boldsymbol{\eta}_t. \quad (8)$$
+
+Provided  $\tilde{\mathbf{x}}_0$  is close to the ground truth  $\mathbf{x}_0$ , the  $\mathbf{x}_{t-1}$  generated this way will stay in-distribution with high probability. For a more detailed explanation of the rationale behind this remedy, we refer the reader to (Lugmayr et al., 2022). This method has since been adopted by subsequent works, such as (Song et al., 2023a; Zhang et al., 2024), and we will also employ it to address (I2).
+
+### 3.2 NETWORK REGULARIZATION & BACKWARD DIFFUSION CONSISTENCY
+
+Previous studies, such as (Song et al., 2023a; Zhang et al., 2024), mitigate issue (I1) by using a large number of sampling steps, which inevitably increases the computational burden. In contrast, this paper proposes employing a *network regularization* to resolve issue (I1). This approach not only
+
+{4}------------------------------------------------
+
+![Figure 2: Effects of enforcing backward-consistency in box-inpainting. The figure shows a grid of images. The first column is 'Ground Truth'. The second is 'Masked Image'. Columns 3-5 are 'Tweedie's Formula without Measurement Consistency' at time steps t'=200, 400, 600. Columns 6-8 are 'Measurement Consistency by Equation (5)' at time steps t'=200, 400, 600. Columns 9-11 are 'Measurement & Backward Consistency by Equation (11)' at time steps t'=200, 400, 600. The images show a woman's face with a box mask on the right side. The reconstruction quality improves from left to right, especially in the masked region.](a0167e3dcece9dcd8a378bcd98fb9cfa_img.jpg)
+
+Figure 2: Effects of enforcing backward-consistency in box-inpainting. The figure shows a grid of images. The first column is 'Ground Truth'. The second is 'Masked Image'. Columns 3-5 are 'Tweedie's Formula without Measurement Consistency' at time steps t'=200, 400, 600. Columns 6-8 are 'Measurement Consistency by Equation (5)' at time steps t'=200, 400, 600. Columns 9-11 are 'Measurement & Backward Consistency by Equation (11)' at time steps t'=200, 400, 600. The images show a woman's face with a box mask on the right side. The reconstruction quality improves from left to right, especially in the masked region.
+
+Figure 2: Effects of enforcing backward-consistency in box-inpainting: Results of using Tweedie’s formula without measurement consistency (columns 3 to 5), enforcing measurement-consistency via Equation (5) (columns 6 to 9), and enforcing both measurement-consistency and backward-consistency via Equation (12) (columns 10 to 12) at different time steps  $t'$ . Experimental details are given in Appendix C.
+
+accelerates convergence but also enhances reconstruction quality. Let’s first clarify the underlying intuition.
+
+It is widely observed that the U-Net architecture or trained transformers exhibit an effective image bias (Ulyanov et al., 2018; Liang et al., 2024; Ghosh et al., 2024; Hatamizadeh et al., 2023). From columns 3 to 5 of Figure 2, we observe that without enforcing data consistency, the reconstructed  $\tilde{\mathbf{x}}_0$ , derived directly from Tweedie-network denoiser  $f(\mathbf{x}_t; t, \epsilon_\theta)$  for each time  $t$ , exhibits natural textures. This indicates that the reconstruction using the combination of Tweedie’s formula and the DM network has a natural regularizing effect on the image.
+
+By definition, the output of  $f(\mathbf{x}_t; t, \epsilon_\theta)$  in Equation (4) represents the *denoised* version of  $\mathbf{x}_t$  at time  $t$  using the Tweedie’s formula and the DM denoiser  $\epsilon_\theta$ . Due to the implicit bias of  $\epsilon_\theta$ , this denoised image tends to align with the clean image manifold, even if  $\mathbf{x}_t$  does not correspond to a training image, as shown in columns 3 to 5 of Figure 2. We refer to this regularization effect of  $f(\mathbf{x}_t; t, \epsilon_\theta)$ , which arises from network bias, as ‘network regularization’.
+
+By employing network regularization, we can address **(II)** by ensuring that the data-consistent  $\tilde{\mathbf{x}}'_0$  is also network-consistent. We refer the latter condition as **Backward Consistency** and define it formally as follows.
+
+**Definition 1** (Backward Consistency). *We say a reconstruction  $\tilde{\mathbf{x}}'_0$  is backward-consistent with posterior mean predictor  $f(\cdot, t, \epsilon_\theta)$  at time  $t$  if it can be expressed as  $\tilde{\mathbf{x}}'_0 = f(\mathbf{v}_t; t, \epsilon_\theta)$  with some  $\mathbf{v}_t$ . In other words, backward consistency requires  $\tilde{\mathbf{x}}'_0$  to be an output of  $f$  at time  $t$ .*
+
+The use of network regularization to define step-wise backward consistency is inspired by the implicit bias of the Deep Image Prior (DIP) (Ulyanov et al., 2018). When  $g_\phi$  represents a DIP with  $\phi$  as its weights, it can regularize the reconstruction of inverse problems by solving the following optimization problem:  $\hat{\phi}, \tilde{\mathbf{x}} = \{\arg \min_{\phi, \mathbf{x}} \|\mathcal{A}(\mathbf{x}) - \mathbf{y}\|_2^2, \text{ subject to } \mathbf{x} = g_\phi(\mathbf{z})\}$ , where  $\mathbf{z}$  is a random vector. In this setup, the reconstruction  $\tilde{\mathbf{x}}$  is constrained to be the output of the DIP network  $g_\phi$ , and the optimization is performed over both the network parameters  $\phi$  and the reconstruction  $\mathbf{x}$ . Similarly, in Definition 1,  $\tilde{\mathbf{x}}'_0$  is required to be the output of the posterior mean estimator  $f$ , which is defined by the network  $\epsilon_\theta$ .
+
+The subset of images that are in the range of the function  $f$  (i.e., backward-consistent) is denoted by  $\mathcal{C}_t$  and defined as
+
+$$\mathcal{C}_t := \{f(\mathbf{v}_t; t, \epsilon_\theta) : \mathbf{v}_t \in \mathbb{R}^n\}. \quad (9)$$
+
+Enforcing  $\tilde{\mathbf{x}}'_0$  to be both measurement- and backward-consistent involves solving the following optimization problem
+
+$$\tilde{\mathbf{x}}'_0, \tilde{\mathbf{v}}_t := \arg \min_{\mathbf{v}'_t, \mathbf{x}'_0} \left\{ \|\mathcal{A}(\mathbf{x}'_0) - \mathbf{y}\|_2^2 \text{ subject to } \mathbf{x}'_0 = f(\mathbf{v}'_t; t, \epsilon_\theta) \right\}. \quad (10)$$
+
+However, Equation (10) may violate forward consistency, as  $\tilde{\mathbf{v}}_t$  could possibly be far from  $\mathbf{x}_t$ . Therefore, we propose adding a regularization term, for which Equation (10) becomes
+
+$$\tilde{\mathbf{x}}'_0, \tilde{\mathbf{v}}_t := \arg \min_{\mathbf{v}'_t, \mathbf{x}'_0} \left\{ \|\mathcal{A}(\mathbf{x}'_0) - \mathbf{y}\|_2^2 + \lambda \|\mathbf{x}_t - \mathbf{v}'_t\|_2^2 \text{ subject to } \mathbf{x}'_0 = f(\mathbf{v}'_t; t, \epsilon_\theta) \right\}. \quad (11)$$
+
+During the reverse sampling process, at each time  $t$ , with the given  $\mathbf{x}_t$ , we seek a  $\mathbf{v}'_t$  in the nearby region (i.e.,  $\|\mathbf{x}_t - \mathbf{v}'_t\|$  is small), such that  $\mathbf{v}'_t$  can be denoised by  $f$  to produce a clean image  $\mathbf{x}'_0$  (i.e.,  $\mathbf{x}'_0 = f(\mathbf{v}'_t; t, \epsilon_\theta)$ ), which is also consistent with the measurements  $\mathbf{y}$  (i.e.,  $\|\mathcal{A}(\mathbf{x}'_0) - \mathbf{y}\|_2^2$  is small). We need to identify such a  $\mathbf{v}'_t$  because  $\mathbf{x}_t$  itself cannot be directly denoised by  $f$  to yield an
+
+{5}------------------------------------------------
+
+image consistent with the measurements. By substituting the constraint into the objective function, the optimization problem in Equation (11) is reduced to
+
+$$\tilde{\mathbf{v}}_t := \arg \min_{\mathbf{v}'_t} \left\{ \|\mathcal{A}(f(\mathbf{v}'_t; t, \epsilon_\theta)) - \mathbf{y}\|_2^2 + \lambda \|\mathbf{x}_t - \mathbf{v}'_t\|_2^2 \right\}, \quad \tilde{\mathbf{x}}'_0 = f(\tilde{\mathbf{v}}_t; t, \epsilon_\theta). \quad (12)$$
+
+The benefit of the considered backward consistency constraint is shown in columns 6 to 8 of Figure 2. After obtaining  $\tilde{\mathbf{x}}'_0$ , the resampling formula in Equation (8) is used to obtain  $\mathbf{x}_{t-1}$ .
+
+### 3.3 TRIPLE CONSISTENCY CONDITIONS
+
+We now summarize the three key conditions that apply at each sampling step.
+
+**(C1) Measurement Consistency:** The reconstruction  $\tilde{\mathbf{x}}'_0$  is consistent with the measurements. This means that  $\mathcal{A}(\tilde{\mathbf{x}}'_0) \approx \mathbf{y}$ .
+
+**(C2) Backward Consistency:** The reconstruction  $\tilde{\mathbf{x}}'_0$  is a denoised image produced by the Tweedie-network denoiser  $f$ . More generally, we define the backward consistency to include any form of DM network regularization (e.g., using the DM probability-flow (PF) ODE (Karras et al., 2022)) applied to  $\tilde{\mathbf{x}}'_0$ .
+
+**(C3) Forward Consistency:** The pre-trained DM network  $\epsilon_\theta$  is provided with in-distribution inputs with high probability. To ensure this, we apply the resampling formula in Equation (8) and enforce that  $\tilde{\mathbf{v}}_t$  remains close to  $\mathbf{x}_t$ .
+
+We note that the three considered consistencies are step-wise, meaning they are enforced at every sampling step. This approach contrasts with enforcing these consistencies solely on the final reconstruction at  $t = 0$ , which represents a significantly weaker requirement.
+
+**C1-C3** aim to ensure that all intermediate reconstructions  $\tilde{\mathbf{x}}'_t(\mathbf{x}_t)$  (with  $t > 0$ ) are as accurate as possible, allowing us to effectively reduce the number of sampling steps.
+
+Previous works, such as (Song et al., 2023a; Zhang et al., 2024), enforce measurement consistency by applying  $\mathcal{A}(\tilde{\mathbf{x}}_0) = \mathbf{y}$  exactly, whereas DPS (Chung et al., 2023b) does not ensure consistency along the diffusion trajectory.
+
+### 3.4 THE PROPOSED SAMPLER
+
+Given  $\mathbf{x}_t$ ,  $\epsilon_\theta$ , and towards satisfying the above conditions, our method, at sampling time  $t$ , consists of the following three steps:
+
+$$\tilde{\mathbf{v}}_t := \arg \min_{\mathbf{v}'_t} \underbrace{\|\mathcal{A}\left(\frac{1}{\sqrt{\alpha_t}} [\mathbf{v}'_t - \sqrt{1 - \alpha_t} \epsilon_\theta(\mathbf{v}'_t, t)]\right) - \mathbf{y}\|_2^2}_{f(\tilde{\mathbf{v}}_t; t, \epsilon_\theta)} + \lambda \|\mathbf{x}_t - \mathbf{v}'_t\|_2^2 \quad (S_1)$$
+
+$$\tilde{\mathbf{x}}'_0 = f(\tilde{\mathbf{v}}_t; t, \epsilon_\theta) \equiv \frac{1}{\sqrt{\alpha_t}} [\tilde{\mathbf{v}}_t - \sqrt{1 - \alpha_t} \epsilon_\theta(\tilde{\mathbf{v}}_t, t)] \quad (S_2)$$
+
+$$\mathbf{x}_{t-1} = \sqrt{\alpha_{t-1}} \tilde{\mathbf{x}}'_0 + \sqrt{1 - \alpha_{t-1}} \boldsymbol{\eta}_t, \quad \boldsymbol{\eta}_t \sim \mathcal{N}(\mathbf{0}, \mathbf{I}). \quad (S_3)$$
+
+The minimization in the first step optimizes over the input  $\mathbf{v}'_t$  of the pre-trained diffusion model at time  $t$ , where the first term of the objective enforces measurement consistency for the posterior mean estimated image, satisfying condition **C1**. The second term serves as a regularization term, implicitly promoting closeness between  $\tilde{\mathbf{v}}_t$  and  $\mathbf{x}_t$  (i.e., condition **C3**), with  $\lambda > 0$  acting as the regularization parameter. The argument of the forward operator in Equation (S<sub>1</sub>) and the second step in Equation (S<sub>2</sub>) enforce that  $\tilde{\mathbf{v}}_t$  and  $\tilde{\mathbf{x}}'_0$ , respectively, maintain the diffusion trajectory through
+
+{6}------------------------------------------------
+
+![Figure 3: Illustrative diagram of the proposed procedure in SITCOM. The left side shows a flowchart of the SITCOM procedure with three steps: Step (1) SITCOM (Measurement & Backward Consistency), Step (2) SITCOM (Forward Consistency), and Step (3) SITCOM (Optimization Over Network Input). The right side shows a conceptual illustration of SITCOM, depicting DM Generative Manifolds (M_t, M_{t-1}, M_0) and the set of images that are backward-consistent (C_t).](1956f44611abd5c3c41049836aa78ad8_img.jpg)
+
+The diagram is divided into two main parts. The left part is a flowchart titled 'Measurement & Backward Consistency'. It shows a sequence of nodes:  $\hat{x}'_0$  (Measurement Consistent Posterior Mean),  $\hat{v}_t$  (Measurement-Consistent Image at  $t$ ),  $x_{t-1}$ , and  $x_t$ . Arrows indicate the flow: a solid arrow from  $\hat{x}'_0$  to  $\hat{v}_t$  labeled 'Estimation by Tweedie's', a dashed arrow from  $\hat{v}_t$  to  $x_t$  labeled 'Optimization Over Network Input', a solid arrow from  $x_t$  to  $x_{t-1}$  labeled 'Forward Consistency', and a dotted arrow from  $x_{t-1}$  to  $\hat{x}'_0$ . Below this, a legend shows three steps: Step (1) SITCOM (solid arrow), Step (2) SITCOM (dotted arrow), and Step (3) SITCOM (dashed arrow). The right part is a conceptual illustration titled 'DM Generative Manifolds'. It shows three curved surfaces representing manifolds  $\mathcal{M}_t$ ,  $\mathcal{M}_{t-1}$ , and  $\mathcal{M}_0$ . A point  $x_t$  is on  $\mathcal{M}_t$ , and  $\hat{v}_t$  is a point on a line. A point  $\hat{x}'_0 = f(\hat{v}_t; t, \epsilon_\theta)$  is shown on a line. A yellow ellipsoid  $\mathcal{C}_t$  represents the set of images that are backward-consistent. A legend indicates that  $\{\hat{x}'_0 : \mathcal{A}(\hat{x}'_0) = y\}$  are ground truth points (red dots).
+
+Figure 3: Illustrative diagram of the proposed procedure in SITCOM. The left side shows a flowchart of the SITCOM procedure with three steps: Step (1) SITCOM (Measurement & Backward Consistency), Step (2) SITCOM (Forward Consistency), and Step (3) SITCOM (Optimization Over Network Input). The right side shows a conceptual illustration of SITCOM, depicting DM Generative Manifolds (M\_t, M\_{t-1}, M\_0) and the set of images that are backward-consistent (C\_t).
+
+Figure 3: Illustrative diagram of the proposed procedure in SITCOM (left). Conceptual illustration of SITCOM, where  $\mathcal{M}_t$  is the DM generative manifold at time  $t$  and  $\mathcal{C}_t$  is the subset of images that are backward-consistent, defined in Equation (9) (right). Step (1) (solid arrow), Step (2) (dotted arrow), and Step (3) (dashed arrow) correspond to Equation (S<sub>1</sub>), Equation (S<sub>2</sub>), and Equation (S<sub>3</sub>), respectively.
+
+obeying Tweedie’s formula, thereby satisfying the backward consistency condition, C2. After obtaining the measurement-consistent estimate,  $\hat{x}'_0$ , as given in Equation (S<sub>2</sub>), it must be mapped back to time  $t - 1$  to generate  $x_{t-1}$ . This is achieved through the forward diffusion step in Equation (S<sub>3</sub>) as outlined in the forward consistency condition, C3. A diagram of SITCOM procedure is provided in Figure 3 (left).
+
+**Remark 1.** Obtaining the estimated image at time 0 given some  $x_t$  using the standard DM PF-ODE (Karras et al., 2022) is more accurate compared to the one-step Tweedie’s formula. However, since PF-ODE is an iterative procedure, it requires more computational time. In SITCOM, PF-ODE could replace Tweedie’s formula in Equation (S<sub>2</sub>). Nevertheless, we chose not to use it, as this would increase the run time, and our empirical results are already highly competitive using Tweedie’s formula.
+
+A conceptual illustration of SITCOM is shown in Figure 3 (right). The DM generative manifold,  $\mathcal{M}_t$ , is defined as the set of all  $x_t$ , sampled from  $q(x_t|x_0) = \mathcal{N}(x_t; \sqrt{\alpha_t}x_0, (1 - \alpha_t)\mathbf{I})$ , and  $x_0 \sim p_0(\mathbf{x})$ . This set coincides with the entire space  $\mathbb{R}^n$  equipped with the probability measure induced by the distribution of  $x_t$ , which we denote as  $\mathcal{P}_t$ . In Figure 3 (right), the variation of color around each  $\mathcal{M}_t$  indicates the concentration of the measure  $\mathcal{P}_t$ , with darker colors representing higher concentration. SITCOM’s Step (1) and Step (2) enforce measurement consistency and backward consistency, thus map  $x_t$  to  $\hat{x}'_0 = f(\hat{v}_t; t, \epsilon_\theta)$  which lies within the intersection of (i) measurement-consistent set  $\{\hat{x}'_0 : \mathcal{A}(\hat{x}'_0) \approx y\}$  (the shaded black line) and (ii) the backward-consistent set  $\mathcal{C}_t$  (the yellow ellipsoid) defined in Equation (9). Subsequently,  $x_{t-1}$  is generated by inserting  $\hat{x}'_0$  into the resampling formula, which enforces the forward consistency.
+
+**Handling Measurement Noise:** To avoid the case where the first term of the objective in Equation (S<sub>1</sub>) reaches small values yielding noise overfitting (i.e., when additive Gaussian noise in Equation (1) is considered,  $\sigma_y > 0$ ), we propose refraining from enforcing strict measurement fitting  $\mathcal{A}(\mathbf{x}) = \mathbf{y}$ . Instead, we use the stopping criterion  $\|\mathcal{A}(\frac{1}{\sqrt{\alpha_t}}[\mathbf{v}'_t - \sqrt{1 - \alpha_t}\epsilon_\theta(\mathbf{v}'_t, t)]) - \mathbf{y}\|_2^2 < \delta^2$ , where  $\delta \in \mathbb{R}_+$  is a hyper-parameter that indicates the level of tolerance for noise and helps prevent overfitting. This is equivalent to enforcing an  $\ell_2$  constraint, and is in spirit similar to (Wang et al., 2024). Since the noise level cannot be accurately estimated, in our experiments, we use  $\delta$  that is slightly larger than the actual level of noise in the measurements, i.e.,  $\delta > \sigma_y\sqrt{m}$ .
+
+### 3.5 SITCOM WITH ARBITRARY STEP SIZES
+
+In this subsection, we explain how to apply SITCOM with a large step size and present the final algorithm. The pre-trained DM is trained with  $T$  diffusion steps. Given that our method is designed to satisfy measurement and diffusion consistency, SITCOM requires  $N \ll T$  sampling iterations, using a step size of  $\Delta t := \lfloor \frac{T}{N} \rfloor$ . Thus, we introduce the index  $i$  instead of  $t$  with a relation  $t = i\Delta t$ .
+
+{7}------------------------------------------------
+
+#### **Algorithm 1** Step-wise Triple-Consistent Sampling (SITCOM).
+
+**Input:** Measurements  $\mathbf{y}$ , forward operator  $\mathcal{A}(\cdot)$ , pre-trained DM  $\epsilon_\theta(\cdot, \cdot)$ , number of diffusion steps  $N$ , DM noise schedule  $\bar{\alpha}_i$  for  $i \in \{1, \dots, N\}$ , number of gradient updates  $K$ , stopping criterion  $\delta$ , learning rate  $\gamma$ , and regularization parameter  $\lambda$ .
+
+**Output:** Restored image  $\hat{\mathbf{x}}$ .
+
+**Initialization:**  $\mathbf{x}_N \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$ ,  $\Delta t = \lfloor \frac{T}{N} \rfloor$
+
+1: **For each**  $i \in \{N, N-1, \dots, 1\}$ . (Reducing diffusion sampling steps)
+
+2: **Initialize**  $\mathbf{v}_i^{(0)} \leftarrow \mathbf{x}_i$ . (Initialization to ensure Closeness: **C3**)
+
+3: **For each**  $k \in \{1, \dots, K\}$ . (Gradient updates for measurement & backward consistency: **C1**, **C2**)
+
+4:  $\mathbf{v}_i^{(k)} = \mathbf{v}_i^{(k-1)} - \gamma \nabla_{\mathbf{v}_i} \left[ \left\| \mathcal{A} \left( \frac{1}{\sqrt{\bar{\alpha}_i}} [\mathbf{v}_i - \sqrt{1 - \bar{\alpha}_i} \epsilon_\theta(\mathbf{v}_i, i\Delta t)] \right) - \mathbf{y} \right\|_2^2 + \lambda \|\mathbf{x}_i - \mathbf{v}_i\|_2^2 \right] \Big|_{\mathbf{v}_i = \mathbf{v}_i^{(k-1)}}$ .
+
+5: **If**  $\left\| \mathcal{A} \left( \frac{1}{\sqrt{\bar{\alpha}_i}} [\mathbf{v}_i^{(k)} - \sqrt{1 - \bar{\alpha}_i} \epsilon_\theta(\mathbf{v}_i^{(k)}, i\Delta t)] \right) - \mathbf{y} \right\|_2^2 < \delta^2$ . (Stopping criterion)
+
+6: **Break the For** loop in step 3. (Preventing noise overfitting)
+
+7: **Assign**  $\hat{\mathbf{v}}_i \leftarrow \mathbf{v}_i^{(k)}$ . (Backward diffusion consistency of  $\hat{\mathbf{v}}_i$ : **C2**)
+
+8: **Obtain**  $\hat{\mathbf{x}}'_0 = f(\hat{\mathbf{v}}_i; t, \theta) = \frac{1}{\sqrt{\bar{\alpha}_i}} [\hat{\mathbf{v}}_i - \sqrt{1 - \bar{\alpha}_i} \epsilon_\theta(\hat{\mathbf{v}}_i, i\Delta t)]$ . (Backward consistency of  $\hat{\mathbf{x}}'_0$ : **C2**)
+
+9: **Obtain**  $\mathbf{x}_{t-1} = \sqrt{\bar{\alpha}_{t-1}} \hat{\mathbf{x}}'_0 + \sqrt{1 - \bar{\alpha}_{t-1}} \boldsymbol{\eta}_t$ ,  $\boldsymbol{\eta}_t \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$ . (Forward diffusion consistency: **C3**)
+
+10: **Restored image:**  $\hat{\mathbf{x}} = \mathbf{x}_0$ .
+
+The procedure of SITCOM is outlined in Algorithm 1. As inputs, SITCOM takes  $\mathbf{y}$ ,  $\mathcal{A}(\cdot)$ ,  $\epsilon_\theta$ , the number of sampling steps  $N$ ,  $\bar{\alpha}_i$  for all  $i \in \{1, \dots, N\}$ , the number of optimization steps  $K$  per sampling step, stopping criteria  $\delta$ , and the learning rate  $\gamma$ .
+
+Starting with initializing  $\mathbf{v}_i^{(0)}$  as  $\mathbf{x}_i$  (satisfying condition **C3**), lines 3 through 6 correspond to the first step of SITCOM, where Equation (S<sub>1</sub>) is solved via either gradient descent (as shown in the algorithm), or the ADAM optimizer (Kingma and Ba, 2015). In lines 5 and 6, the stopping criterion is applied to prevent strict data fidelity (avoiding noise overfitting). Following the gradient updates in the inner loop,  $\hat{\mathbf{v}}_i$  is obtained in line 7, which is then used in line 8 to obtain  $\hat{\mathbf{x}}'_0$  as specified in Equation (S<sub>2</sub>), satisfying condition **C2**. Note that line 8 requires no additional computation, as the  $\hat{\mathbf{x}}'_0$  calculated here was already obtained while checking the stopping condition in line 6. After obtaining the double-consistent  $\hat{\mathbf{x}}'_0$ , the resampling is applied to map the image back to time  $t-1$  while ensuring  $\mathbf{x}_{t-1}$  to be in-distribution, as indicated in line 9 of the algorithm. In the next iteration, the requirement that  $\hat{\mathbf{v}}_{t-1}$  is close to  $\mathbf{x}_{t-1}$  ensures that the input  $\hat{\mathbf{v}}_{t-1}$  to the DM network,  $\epsilon_\theta$ , is also in-distribution, thus satisfying the forward-consistency (condition **C3**).
+
+The computational requirements of SITCOM are determined by (i) the number of sampling steps  $N$  and (ii) the number of gradient steps  $K$  required for each sampling iteration. Given the proposed stopping criterion, this results in at most  $NK$  Number of Function Evaluations (NFEs) of the pre-trained model (forward pass),  $NK$  backward passes through the pre-trained model, and  $NK$  applications each for the forward operator and its adjoint to solve the optimization problem in Equation (S<sub>1</sub>). With early stopping, the computational cost is lower. For example, for a linear operator  $\mathcal{A}$  with dimensions  $m \times n$ , the cost of applying it (or its adjoint) to a vector is  $\mathcal{O}(mn)$ . For a network with width  $M$  and depth  $L$ , the cost for making a forward pass is  $\mathcal{O}(LM^2)$ . The gradients are computed w.r.t. the input of the DM network, requiring an additional backward pass. Consequently, this procedure is significantly more efficient than network training, where the network weights are updated instead of the input.
+
+### 3.6 RELATION WITH EXISTING APPROACHES
+
+While SITCOM and DPS (Chung et al., 2023b) both use Tweedie’s formula, there are two major differences. First, DPS does not enforce backward consistency. Specifically, it only considers one gradient descent step of the optimization in Equation (S<sub>1</sub>), whereas our method perform multiple steps, initializing with  $\mathbf{x}_i$ . Second, DPS does not enforce the forward diffusion consistency, namely, it does not use resampling Equation (S<sub>3</sub>). This means that DPS does not enforce a step-wise **C1-C3**. Both SITCOM and the works in (Song et al., 2023a; Zhang et al., 2024) are optimization-based methods that modify the sampling steps to enforce measurement consistency, and both involve
+
+{8}------------------------------------------------
+
+mapping back to time  $t - 1$  (as in step 3 of SITCOM). However, there is a major difference between them: The optimization variable in these works is the estimated image at time  $t$  (the output of the DM network), whereas in SITCOM, it is the noisy image at time  $t$  (the input of the network). This means that these studies enforce **C1** and **C3**, but not **C2**.
+
+It is worth noting that while some previous works, such as RED-diff (Wang et al., 2024) and DMPlug (Mardani et al., 2023), also utilize the implicit bias of the network, they adopt the full diffusion process as a regularizer, applied only once. In contrast, our method uses the neural network as the regularizer at each iteration and focuses specifically on reducing the number of sampling steps for a given level of accuracy.
+
+## 4 EXPERIMENTAL RESULTS
+
+**Tasks, Baselines, & Datasets:** Our experimental setup for IPs and noise levels used largely follows DPS (Chung et al., 2023b). For linear IPs, we evaluate five tasks: super resolution, Gaussian deblurring, motion deblurring, box inpainting, and random inpainting. For Gaussian deblurring and motion deblurring, we use  $61 \times 61$  kernels with standard deviations of 3 and 0.5, respectively. In the super-resolution task, a bicubic resizer downscales images by a factor of 4. For box inpainting, a random  $128 \times 128$  box is applied to mask image pixels, and for random inpainting, the mask is generated with each pixel masked with a probability of 0.7, as described in (Song et al., 2023a). For nonlinear IP tasks, we consider three tasks: phase retrieval, high dynamic range (HDR) reconstruction, and nonlinear (non-uniform) deblurring. For phase retrieval, an oversampling rate of 2 is applied in frequency domain, and we report the best result out of four independent samples, consistent with (Chung et al., 2023b; Zhang et al., 2024) (see Appendix D for more discussion on phase retrieval). In HDR reconstruction, the goal is to restore a higher dynamic range image from a lower dynamic range image (with a factor of 2). Nonlinear deblurring follows the setup in (Tran et al., 2021). For measurement noise, we use  $\sigma_y \in \{0.01, 0.05\}$  for all tasks. For baselines, in this section, we use DPS (Chung et al., 2023b), DDNM (Wang et al., 2022), DCDP (Li et al., 2024), and DAPS (Zhang et al., 2024). The selection criteria is based on these baselines’ competitive performance on several linear and non-linear inverse problems under measurement noise. Additionally, we provide comparison results with three other baselines in Table 5 of Appendix E. We evaluate SITCOM and baselines using 100 test images from the validation set of FFHQ (Karras et al., 2019) and 100 test images from the validation set of ImageNet (Deng et al., 2009) for which the FFHQ-trained and ImageNet-trained DMs are given in (Chung et al., 2023b) and (Dhariwal and Nichol, 2021), respectively, following the previous convention. For evaluation metrics, we use PSNR, SSIM (Wang et al., 2004), and LPIPS (Zhang et al., 2018).
+
+**SITCOM Settings:** For Algorithm 1, we set  $N = 20$  and  $K = 30$  for most tasks. We show the impact of  $N$  and  $K$  in Appendix F.1. The parameter  $\lambda$  is set to 0 for all tasks other than phase retrieval where we use  $\lambda = 1$ , following the ablation study in Appendix F.2. The impact of the stopping criterion under the noisy setting is given in Appendix F.3. The learning rate for Equation (51) is set to  $\gamma = 0.01$  across all measurements noise levels, datasets, and tasks. Table 8 in Appendix F.4 lists all the hyper-parameters used for every task. We note that the exact set of hyper-parameters is used for the FFHQ and ImageNet datasets. Our code is available online<sup>2</sup>.
+
+**Main Results:** In Table 1, we present the quantitative results in terms of the average PSNR, SSIM, LPIPS, and run-time (minutes). Columns 3 to 6 correspond to the FFHQ dataset, while columns 7 to 10 reflect results for the ImageNet dataset. The table covers 8 tasks, 4 evaluation metrics, and 2 datasets, totaling 64 results. Among these, SITCOM reports the best performance in 58 out of 64 cases. On average, SITCOM demonstrates strong reconstruction capabilities across most tasks. For the FFHQ dataset, SITCOM reports a PSNR improvement of over 1 dB in Super Resolution, random In-painting, and Gaussian Deblurring compared to the second-best method. On ImageNet, we observe more than a 1 dB improvement in random In-painting. Other than ImageNet Gaussian Deblurring and ImageNet Phase Retrieval, for which we under-perform by 0.66 dB and 0.31 dB, respectively, our PSNR improvement when compared to the second-best results are less than 1 dB. However, in terms of run-time, SITCOM consistently requires less computational time across all tasks. For FFHQ, SITCOM is over  $3 \times$  faster in Box In-painting and motion Deblurring, and more
+
+<sup>2</sup><https://anonymous4open.science/s/z/SITCOM-7539/README.md>
+
+{9}------------------------------------------------
+
+486  
+487  
+488  
+489  
+490  
+491  
+492  
+493  
+494  
+495  
+496  
+497  
+498  
+499  
+500  
+501  
+502  
+503  
+504  
+505  
+506  
+507  
+508  
+509  
+510  
+511  
+512  
+513  
+514  
+515  
+516  
+517  
+518  
+519  
+520  
+521  
+522  
+523  
+524  
+525  
+526  
+527  
+528  
+529  
+530  
+531  
+532  
+533  
+534  
+535  
+536  
+537  
+538  
+539
+
+| Task | Method | FFHQ |  |  |  | ImageNet |  |  |  |
+|-|-|-|-|-|-|-|-|-|-|
+|  |  | PSNR (↑) | SSIM (↑) | LPIPS (↓) | Run-time (↓) | PSNR (↑) | SSIM (↑) | LPIPS (↓) | Run-time (↓) |
+| Super Resolution 4× | DPS | 24.44 <sub>±0.06</sub> | 0.801 <sub>±0.002</sub> | 0.26 <sub>±0.002</sub> | 1.26 <sub>±0.052</sub> | 23.86 <sub>±0.034</sub> | 0.76 <sub>±0.041</sub> | 0.357 <sub>±0.009</sub> | 2.38 <sub>±0.02</sub> |
+|  | DAPS | 29.24 <sub>±0.042</sub> | 0.833 <sub>±0.004</sub> | <b>0.135</b> <sub>±0.009</sub> | 1.24 <sub>±0.022</sub> | 25.62 <sub>±0.073</sub> | 0.802 <sub>±0.045</sub> | 0.356 <sub>±0.007</sub> | 2.16 <sub>±0.04</sub> |
+|  | DDNM | 28.02 <sub>±0.076</sub> | 0.842 <sub>±0.002</sub> | 0.117 <sub>±0.001</sub> | 1.07 <sub>±0.032</sub> | 23.96 <sub>±0.034</sub> | 0.767 <sub>±0.005</sub> | 0.475 <sub>±0.004</sub> | 1.27 <sub>±0.051</sub> |
+|  | DCDP | 27.88 <sub>±0.134</sub> | 0.825 <sub>±0.007</sub> | 0.211 <sub>±0.005</sub> | 0.52 <sub>±0.034</sub> | 24.12 <sub>±0.134</sub> | 0.772 <sub>±0.000</sub> | 0.351 <sub>±0.008</sub> | 1.45 <sub>±0.008</sub> |
+|  | SITCOM (ours) | <b>30.68</b> <sub>±0.102</sub> | <b>0.867</b> <sub>±0.048</sub> | <b>0.142</b> <sub>±0.006</sub> | <b>0.45</b> <sub>±0.008</sub> | <b>26.35</b> <sub>±0.121</sub> | <b>0.812</b> <sub>±0.021</sub> | <b>0.232</b> <sub>±0.008</sub> | <b>1.12</b> <sub>±0.02</sub> |
+| Box In-Painting | DPS | 23.20 <sub>±0.080</sub> | 0.754 <sub>±0.003</sub> | 0.196 <sub>±0.002</sub> | 1.57 <sub>±0.055</sub> | 19.78 <sub>±0.082</sub> | 0.691 <sub>±0.002</sub> | 0.312 <sub>±0.025</sub> | 2.28 <sub>±0.02</sub> |
+|  | DAPS | 24.17 <sub>±0.102</sub> | 0.787 <sub>±0.002</sub> | <b>0.135</b> <sub>±0.002</sub> | 1.35 <sub>±0.045</sub> | 21.43 <sub>±0.040</sub> | 0.736 <sub>±0.009</sub> | <b>0.218</b> <sub>±0.021</sub> | 2.54 <sub>±0.02</sub> |
+|  | DDNM | 24.37 <sub>±0.082</sub> | 0.792 <sub>±0.004</sub> | 0.122 <sub>±0.008</sub> | 0.50 <sub>±0.035</sub> | 21.64 <sub>±0.035</sub> | 0.732 <sub>±0.028</sub> | 0.319 <sub>±0.005</sub> | 1.45 <sub>±0.01</sub> |
+|  | DCDP | 23.66 <sub>±0.167</sub> | 0.765 <sub>±0.007</sub> | 0.144 <sub>±0.005</sub> | 0.56 <sub>±0.035</sub> | 20.54 <sub>±0.107</sub> | 0.712 <sub>±0.002</sub> | 0.298 <sub>±0.004</sub> | 1.12 <sub>±0.023</sub> |
+|  | SITCOM (ours) | <b>24.68</b> <sub>±0.076</sub> | <b>0.801</b> <sub>±0.042</sub> | <b>0.121</b> <sub>±0.008</sub> | <b>0.35</b> <sub>±0.035</sub> | <b>21.88</b> <sub>±0.092</sub> | <b>0.742</b> <u><u>±0.002</u></u> | <b>0.214</b> <u><u>±0.021</u></u> | <b>1.12</b> <u><u>±0.02</u></u> |
+| Random In-Painting | DPS | 28.39 <sub>±0.082</sub> | 0.844 <sub>±0.042</sub> | 0.194 <sub>±0.021</sub> | 1.52 <sub>±0.030</sub> | 24.86 <sub>±0.042</sub> | 0.772 <sub>±0.002</sub> | 0.326 <sub>±0.004</sub> | 2.27 <sub>±0.02</sub> |
+|  | DAPS | 31.02 <sub>±0.045</sub> | 0.902 <sub>±0.005</sub> | <b>0.098</b> <u><u>±0.007</u></u> | 1.56 <sub>±0.040</sub> | 28.44 <sub>±0.045</sub> | 0.872 <sub>±0.004</sub> | 0.135 <sub>±0.002</sub> | 2.14 <sub>±0.04</sub> |
+|  | DDNM | 29.93 <sub>±0.067</sub> | 0.889 <sub>±0.002</sub> | 0.122 <sub>±0.006</sub> | 1.45 <sub>±0.035</sub> | 26.22 <sub>±0.113</sub> | 0.791 <sub>±0.004</sub> | 0.289 <sub>±0.008</sub> | 1.54 <sub>±0.04</sub> |
+|  | DCDP | 28.59 <sub>±0.085</sub> | 0.852 <sub>±0.006</sub> | 0.202 <sub>±0.004</sub> | 0.55 <sub>±0.035</sub> | 24.85 <sub>±0.045</sub> | 0.771 <sub>±0.002</sub> | 0.326 <sub>±0.004</sub> | 1.44 <sub>±0.04</sub> |
+|  | SITCOM (ours) | <b>32.05</b> <u><u>±1.02</u></u> | <b>0.909</b> <u><u>±0.009</u></u> | <b>0.095</b> <u><u>±0.005</u></u> | <b>0.45</b> <u><u>±0.030</u></u> | <b>29.69</b> <u><u>±0.078</u></u> | <b>0.915</b> <u><u>±0.008</u></u> | <b>0.127</b> <u><u>±0.009</u></u> | <b>1.14</b> <u><u>±0.04</u></u> |
+| Gaussian Deblurring | DPS | 25.52 <sub>±0.078</sub> | 0.865 <sub>±0.002</sub> | 0.211 <sub>±0.007</sub> | 1.50 <sub>±0.030</sub> | 21.86 <sub>±0.045</sub> | 0.772 <sub>±0.008</sub> | 0.362 <sub>±0.004</sub> | 2.55 <sub>±0.04</sub> |
+|  | DAPS | 29.22 <sub>±0.050</sub> | 0.884 <sub>±0.006</sub> | 0.164 <sub>±0.002</sub> | 1.40 <sub>±0.032</sub> | 26.12 <sub>±0.078</sub> | 0.832 <sub>±0.002</sub> | 0.245 <sub>±0.002</sub> | 2.23 <sub>±0.02</sub> |
+|  | DDNM | 28.22 <sub>±0.052</sub> | 0.867 <sub>±0.006</sub> | 0.216 <sub>±0.042</sub> | 1.56 <sub>±0.045</sub> | 28.00 <sub>±0.052</sub> | 0.879 <sub>±0.002</sub> | 0.278 <sub>±0.009</sub> | 1.75 <sub>±0.04</sub> |
+|  | DCDP | 26.67 <sub>±0.076</sub> | 0.835 <sub>±0.008</sub> | 0.196 <sub>±0.004</sub> | 0.56 <sub>±0.023</sub> | 23.24 <sub>±0.118</sub> | 0.781 <sub>±0.006</sub> | 0.343 <sub>±0.008</sub> | 1.24 <sub>±0.04</sub> |
+|  | SITCOM (ours) | <b>30.25</b> <u><u>±0.09</u></u> | <b>0.899</b> <u><u>±0.002</u></u> | <b>0.135</b> <u><u>±0.008</u></u> | <b>0.46</b> <u><u>±0.025</u></u> | <b>27.40</b> <u><u>±0.045</u></u> | <b>0.854</b> <u><u>±0.005</u></u> | <b>0.236</b> <u><u>±0.009</u></u> | <b>1.10</b> <u><u>±0.02</u></u> |
+| Motion Deblurring | DPS | 23.40 <sub>±0.142</sub> | 0.737 <sub>±0.004</sub> | 0.270 <sub>±0.025</sub> | 2.40 <sub>±0.055</sub> | 21.86 <sub>±0.045</sub> | 0.724 <sub>±0.002</sub> | 0.357 <sub>±0.002</sub> | 2.56 <sub>±0.06</sub> |
+|  | SITCOM (ours) | <b>29.66</b> <u><u>±0.060</u></u> | <b>0.872</b> <u><u>±0.007</u></u> | <b>0.157</b> <u><u>±0.002</u></u> | <b>1.86</b> <u><u>±0.012</u></u> | <b>27.86</b> <u><u>±0.120</u></u> | <b>0.862</b> <u><u>±0.002</u></u> | <b>0.196</b> <u><u>±0.021</u></u> | <b>2.43</b> <u><u>±0.045</u></u> |
+| Phase Retrieval | DPS | 17.34 <sub>±0.267</sub> | 0.67 <sub>±0.045</sub> | 0.41 <sub>±0.008</sub> | 1.50 <sub>±0.034</sub> | 16.82 <sub>±0.122</sub> | 0.64 <sub>±0.008</sub> | 0.447 <sub>±0.002</sub> | 2.17 <sub>±0.02</sub> |
+|  | DAPS | 30.67 <sub>±0.312</sub> | 0.906 <sub>±0.004</sub> | 0.122 <sub>±0.004</sub> | 1.34 <sub>±0.078</sub> | 25.76 <sub>±0.333</sub> | 0.797 <sub>±0.045</sub> | 0.255 <sub>±0.005</sub> | 2.24 <sub>±0.02</sub> |
+|  | SITCOM (ours) | 28.52 <sub>±0.206</sub> | 0.882 <sub>±0.019</sub> | 0.167 <sub>±0.002</sub> | 3.30 <sub>±0.045</sub> | 24.25 <sub>±0.225</sub> | 0.778 <sub>±0.014</sub> | 0.287 <sub>±0.009</sub> | 3.49 <sub>±0.045</sub> |
+| Non-Uniform Deblurring | DPS | 23.42 <sub>±0.215</sub> | 0.915 <sub>±0.064</sub> | 0.112 <sub>±0.002</sub> | 0.52 <sub>±0.034</sub> | 25.45 <sub>±0.278</sub> | 0.808 <sub>±0.065</sub> | 0.246 <sub>±0.008</sub> | 1.40 <sub>±0.00</sub> |
+|  | DAPS | 28.23 <sub>±0.155</sub> | 0.833 <sub>±0.002</sub> | 0.155 <sub>±0.004</sub> | 1.42 <sub>±0.041</sub> | 27.65 <sub>±0.112</sub> | 0.822 <sub>±0.006</sub> | 0.169 <sub>±0.004</sub> | 2.14 <sub>±0.04</sub> |
+|  | DCDP | 28.78 <sub>±0.144</sub> | 0.827 <sub>±0.008</sub> | 0.162 <sub>±0.004</sub> | 3.30 <sub>±0.045</sub> | 26.56 <sub>±0.109</sub> | 0.803 <sub>±0.006</sub> | 0.182 <sub>±0.008</sub> | 3.70 <sub>±0.04</sub> |
+|  | SITCOM (ours) | <b>30.17</b> <u><u>±0.048</u></u> | <b>0.902</b> <u><u>±0.002</u></u> | <b>0.145</b> <u><u>±0.007</u></u> | <b>0.52</b> <u><u>±0.035</u></u> | <b>28.78</b> <u><u>±0.079</u></u> | <b>0.832</b> <u><u>±0.006</u></u> | <b>0.164</b> <u><u>±0.004</u></u> | <b>1.25</b> <u><u>±0.02</u></u> |
+| High Dynamic Range | DPS | 22.88 <sub>±0.125</sub> | 0.722 <sub>±0.006</sub> | 0.264 <sub>±0.009</sub> | 1.45 <sub>±0.034</sub> | 19.33 <sub>±0.045</sub> | 0.688 <sub>±0.007</sub> | 0.503 <sub>±0.002</sub> | 2.42 <sub>±0.06</sub> |
+|  | SITCOM (ours) | <b>27.12</b> <u><u>±0.009</u></u> | <b>0.825</b> <u><u>±0.006</u></u> | <b>0.166</b> <u><u>±0.008</u></u> | <b>1.25</b> <u><u>±0.035</u></u> | <b>26.30</b> <u><u>±0.045</u></u> | <b>0.792</b> <u><u>±0.006</u></u> | <b>0.177</b> <u><u>±0.009</u></u> | <b>2.18</b> <u><u>±0.05</u></u> |
+|  |  | <b>27.98</b> <u><u>±1.06</u></u> | <b>0.832</b> <u><u>±0.002</u></u> | <b>0.158</b> <u><u>±0.002</u></u> | <b>0.52</b> <u><u>±0.030</u></u> | <b>26.97</b> <u><u>±0.047</u></u> | <b>0.821</b> <u><u>±0.005</u></u> | <b>0.167</b> <u><u>±0.002</u></u> | <b>1.54</b> <u><u>±0.03</u></u> |
+
+Table 1: Average PSNR, SSIM, LPIPS, and run-time (minutes) of SITCOM and baselines using 100 test images from the **FFHQ** dataset (columns 3 to 7) and 100 test images from the **ImageNet** dataset with a **measurement noise level of  $\sigma_y = 0.05$** . The results for the  $\sigma_y = 0.01$  case are given in Table 4 of Appendix E. The first five tasks are linear, while the last three tasks are non-linear (underlined). For each task and dataset combination, the best results are bolded, and the second-best results are underlined. Values after ± represent the standard deviation. All results were obtained using a **single RTX5000 GPU** machine. For phase retrieval, the run-time is reported for the best result out of four independent runs. This is applied for SITCOM and baselines. More discussion about phase retrieval is given in Appendix D.
+
+than 2× faster in the remaining tasks, whereas on ImageNet, the run-time improvement ranges from 36 seconds (for HDR) to 62.4 seconds (for Super Resolution), when compared to DPS, DDNM, and DAPS. For linear tasks, SITCOM requires slightly less run-time than DCDP on both datasets. However, across the two datasets, SITCOM achieves PSNR improvements of more than 1 dB, 2 dB, and 3 dB for the tasks of super resolution, box in-painting, and random in-painting (and Gaussian Deblurring), respectively, as compared to DCDP. For non-linear tasks, SITCOM not only provides PSNR improvements over DCDP but also significantly reduces run-time.
+
+In summary, the results in Table 1 demonstrate that SITCOM either provides a notable improvement in restoration quality (e.g., cases where we report PSNR improvements of over 1 dB) or delivers comparable results to the baselines, all while reducing computation time. In Appendix E, we present the results with  $\sigma_y = 0.01$  case (Table 4). Additionally, Table 5 includes quantitative results for three more baselines. In addition to the FFHQ restored images in Figure 1, we also provide additional samples from both datasets in the figures found in Appendix H.
+
+## 5 CONCLUSION
+
+In this paper, we proposed three conditions to achieve measurement- and diffusion-consistent trajectories for linear and non-linear inverse imaging problems using diffusion models (DMs) as priors. These conditions form the basis of our unique optimization-based sampling method, which optimizes the input of the diffusion model at each step. This approach allows for greater control over the diffusion process and enhances data consistency with the given measurements. Through extensive experiments across eight image restoration tasks, we evaluated the effectiveness of our method. The results showed that our sampler consistently delivers improved or comparable quantitative performance against state-of-the-art baselines, even with measurement noise. Notably, our method is efficient, requiring significantly less run-time than leading baselines, making it practical for real-world applications.
+
+ Rest of paper (reference and Appendix) is removed.

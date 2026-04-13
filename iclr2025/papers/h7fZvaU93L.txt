@@ -1,0 +1,364 @@
+
+
+{0}------------------------------------------------
+
+# SEMANTICALLY CONSISTENT VIDEO INPAINTING WITH CONDITIONAL DIFFUSION MODELS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Current state-of-the-art methods for video inpainting typically rely on optical flow or attention-based approaches to inpaint masked regions by propagating visual information across frames. While such approaches have led to significant progress on standard benchmarks, they struggle with tasks that require the synthesis of novel content that is not present in other frames. In this paper, we reframe video inpainting as a conditional generative modeling problem and present a framework for solving such problems with conditional video diffusion models. We introduce inpainting-specific sampling schemes which capture crucial long-range dependencies in the context, and devise a novel method for conditioning on the known pixels in incomplete frames. We highlight the advantages of using a generative approach for this task, showing that our method is capable of generating diverse, high-quality inpaintings and synthesizing new content that is spatially, temporally, and semantically consistent with the provided context.
+
+![Figure 1: A 3x6 grid of video frames showing inpainting results. The first row, labeled 'Input', shows frames with green occlusion masks. The second row, labeled 'Ours', shows the inpainting results from the proposed method. The third row, labeled 'ProPainter', shows the inpainting results from the ProPainter method. The frames depict a street scene with cars and buildings. The occlusion masks cover parts of the cars and the road. The 'Ours' method successfully inpaints the missing parts, while the 'ProPainter' method fails to complete the car, which quickly fades away.](0538daaa5583c23e17db3a12f2281a55_img.jpg)
+
+Figure 1: A 3x6 grid of video frames showing inpainting results. The first row, labeled 'Input', shows frames with green occlusion masks. The second row, labeled 'Ours', shows the inpainting results from the proposed method. The third row, labeled 'ProPainter', shows the inpainting results from the ProPainter method. The frames depict a street scene with cars and buildings. The occlusion masks cover parts of the cars and the road. The 'Ours' method successfully inpaints the missing parts, while the 'ProPainter' method fails to complete the car, which quickly fades away.
+
+Figure 1: Inpainting results on a challenging example from our BDD-Inpainting dataset. The first row shows the input to the model, with the occlusion mask shown in green. Note that the left side of the car in the center lane is never visible, and it becomes fully occluded soon after the first frame. Our method (second row) is capable of generating a plausible completion of the car and realistically propagating it through time. On the contrary, in the result from the best-competing method, ProPainter (Zhou et al., 2023) (third row), the car is not completed and quickly fades away.
+
+{1}------------------------------------------------
+
+## 1 INTRODUCTION
+
+Video inpainting is the task of filling in missing pixels in a video with plausible values. It has practical applications in video editing and visual effects, including video restoration (Tang et al., 2011), object or watermark removal (Patwardhan et al., 2005), and video stabilization (Matsushita et al., 2006). While significant progress has been made on image inpainting in recent years (Saharia et al., 2022; Lugmayr et al., 2022; Suvorov et al., 2021), video inpainting remains a challenging task due to the added time dimension, which drastically increases computational complexity and leads to a stricter notion of what it means for an inpainting to be plausible. Specifically, inpainted regions require not only per-frame spatial and semantic consistency with the context as in image inpainting, but also temporal consistency between frames and realistic motion of objects in the scene.
+
+Current state-of-the-art video inpainting methods explicitly attempt to inpaint masked regions by exploiting visual information present in other frames, typically by using optical flow estimates (Li et al., 2022; Gao et al., 2020) or attention-based approaches (Zeng et al., 2020; Liu et al., 2021) to determine how this information should be propagated across frames. Such methods, which we refer to as “content propagation” methods, implicitly assume that the content in unmasked regions is sufficient to fill in the missing values, and tend to fail when this assumption is violated. In the presence of large occlusions, objects may be partially or fully occluded for long durations, and in these cases an inpainting method may need to complete an object’s appearance (as in Fig. 1) or infer its behaviour (as in Fig. 2) to produce a plausible result, requiring the generation of novel content.
+
+![Figure 2: A sequence of six frames from the Traffic-Scenes dataset showing a car at a roundabout. In the first frame, a green rectangle masks the car. In subsequent frames, the car moves from the top of the roundabout to the bottom, with the green mask following its position. The background shows other cars and buildings around the roundabout.](d5fc881e4328d6a2e76c9576408ced49_img.jpg)
+
+Figure 2: A sequence of six frames from the Traffic-Scenes dataset showing a car at a roundabout. In the first frame, a green rectangle masks the car. In subsequent frames, the car moves from the top of the roundabout to the bottom, with the green mask following its position. The background shows other cars and buildings around the roundabout.
+
+Figure 2: An example inpainting task from our Traffic-Scenes dataset. The black car becomes occluded near the top of the roundabout and emerges many frames later near the bottom. Inpainting such an example requires the ability to model plausible vehicle behaviour.
+
+We argue that a more sensible approach to video inpainting is to learn a conditional distribution over possible inpaintings given the observed context. Conditional generative models such as GANs (Suvorov et al., 2021), autoregressive models (Peng et al., 2021), and diffusion models (Saharia et al., 2022; Lugmayr et al., 2022) have long dominated image inpainting, a task that inherently requires content synthesis as there is no additional information to draw upon. Learning such a distribution naturally accounts ill-posedness of the video inpainting problem: for instance, given the observed entry and exit points of the car in Fig. 2 there exists a diversity of plausible trajectories it could take. Further, generative approaches for image inpainting have a demonstrated ability to produce results that are *semantically* consistent with the context, a quality which is particularly important for video inpainting tasks that require inferring an object’s behaviour as in Fig. 2 – without a strong prior, there is insufficient information in the context to determine what such a trajectory might look like; the model must have some notion of what makes a vehicle trajectory plausible at a semantic level.
+
+In this work we aim to overcome the inherent limitations of content propagation by advancing generative inpainting, making the following key contributions:
+
+- We reframe video inpainting as a conditional generative modeling problem, and present a framework for solving this problem using conditional video diffusion models.
+- We demonstrate how to use long-range temporal attention to generate semantically consistent behaviour of inpainted objects over long time horizons, even when our model cannot jointly model all frames due to memory constraints. We can do this even for inpainted objects that have limited or no visibility in the context, a quality not present in the current literature.
+
+{2}------------------------------------------------
+
+- We introduce inpainting-specific sampling schemes which capture crucial long-range dependencies in the context, and devise a novel method for conditioning on the known pixels in incomplete frames.
+- We report strong experimental results on several challenging video inpainting tasks, outperforming state-of-the-art approaches on a range of standard metrics.
+- We release the BDD-Inpainting dataset, a large scale video inpainting dataset with two test sets representing a challenging new benchmark for video inpainting methods.
+
+## 2 RELATED WORK
+
+**Video Inpainting.** Recent advances in video inpainting have largely been driven by methods which fill in masked regions by borrowing content from the unmasked regions of other frames, which we refer to as content propagation methods. These methods typically use optical flow estimates (Huang et al., 2016; Kim et al., 2019; Xu et al., 2019; Gao et al., 2020), self-attention (Zeng et al., 2020; Liu et al., 2021; Oh et al., 2019; Lee et al., 2019) or a combination of both (Zhou et al., 2023; Zhang et al., 2022; Li et al., 2022) to determine how to propagate pixel values or learned features across frames. Such methods often produce visually compelling results, particularly on tasks where the mask-occluded region is visible in nearby frames such as foreground object removal with a near-static background. They struggle, however, in cases where this does not hold, for instance in the presence of heavy camera motion, large masks, or tasks where semantic understanding of the video content is required to produce a convincing result.
+
+More recent work has utilized diffusion models for video inpainting. Gu et al. (2023) proposes a method for video inpainting that combines a video diffusion model with optical flow guidance, following a similar “content propagation” approach to the methods listed above. Chang et al. (2023) uses a latent diffusion model (Rombach et al., 2022; Vahdat et al., 2021) to remove the agent’s view of itself from egocentric videos for applications in robotics. Notably, this is framed as an image inpainting task, where the goal is to remove the agent (with a mask provided by a segmentation model) from a single video frame conditioned on  $h$  previous frames. Consequently, the results lack temporal consistency when viewed as videos, and the model is evaluated using image inpainting metrics only. Zhang et al. (2023b) proposes a method for the related task of text-conditional video inpainting, which produces impressive results but requires user intervention.
+
+**Image Inpainting with Diffusion Models.** This work takes inspiration from the recent success of diffusion models for image inpainting. These methods can be split into two groups: those that inpaint using an unconditional diffusion model by making heuristic adjustments to the sampling procedure (Lugmayr et al., 2022; Zhang et al., 2023a), and those that explicitly train a conditional diffusion model which, if sufficiently expressive and trained to optimality, enables exact sampling from the conditional distribution (Saharia et al., 2022). In this work we extend the latter approach to video data.
+
+## 3 BACKGROUND
+
+**Conditional Diffusion Models.** A conditional diffusion model (Tashiro et al., 2021; Ho et al., 2020; Sohl-Dickstein et al., 2015) is a generative model parameterized by a neural network trained to remove noise from data. The network is conditioned on  $t \in \{1, \dots, T\}$ , an integer describing how much noise has been added to the data. Given hyperparameters  $1 > \bar{\alpha}_1 > \dots > \bar{\alpha}_T > 0$ , training data is created by multiplying the original data by a factor  $\sqrt{\bar{\alpha}_t}$  and then adding unit Gaussian noise  $\epsilon$  scaled to have variance  $(1 - \bar{\alpha}_t^2)$ . The network should then map from this noisy data, the timestep  $t$ , and conditioning input  $\mathbf{y}$ , to a prediction of the added noise  $\epsilon$ . It is trained with the squared error loss
+
+$$\mathcal{L}_{\text{CDM}}(\theta) := \mathbb{E}_{t, \mathbf{x}, \mathbf{y}, \epsilon} \left[ \left\| \epsilon - \epsilon_\theta \left( \sqrt{\bar{\alpha}_t} \mathbf{x} + \sqrt{1 - \bar{\alpha}_t^2} \epsilon, \mathbf{y}, t \right) \right\|^2 \right], \quad (1)$$
+
+where  $\epsilon_\theta(\dots)$  is the output of the network. Data  $\mathbf{x}$  and  $\mathbf{y}$  are sampled from the data distribution  $p_{\text{data}}$ , and the timestep  $t$  is typically sampled from a pre-specified categorical distribution. Once such a network has been trained, various methods exist for using it to draw approximate samples from  $p_{\text{data}}(\mathbf{x}|\mathbf{y})$  (Ho et al., 2020; Sohl-Dickstein et al., 2015; Tashiro et al., 2021; Song et al., 2020; Karras et al., 2022).
+
+{3}------------------------------------------------
+
+![Figure 3: Sampling schemes from Harvey et al. (2022) for generating videos of length N = 31 while accessing only K = 8 frames at a time. The figure consists of three subplots: (a) AR, (b) Reverse AR, and (c) Hierarchy-2. Each subplot shows a grid of frames over time (x-axis) and different sampling stages (y-axis). In (a) AR, frames are generated sequentially from left to right. In (b) Reverse AR, frames are generated from right to left. In (c) Hierarchy-2, frames are generated in a hierarchical manner, starting with a few frames and then filling in the gaps. Cyan frames are sampled conditioned on previously sampled frames (dark red). White frames are not yet generated. Light gray frames are the final generated frames.](e94f3bbb6f7501b9a1344dd0210e5dd8_img.jpg)
+
+Figure 3: Sampling schemes from Harvey et al. (2022) for generating videos of length N = 31 while accessing only K = 8 frames at a time. The figure consists of three subplots: (a) AR, (b) Reverse AR, and (c) Hierarchy-2. Each subplot shows a grid of frames over time (x-axis) and different sampling stages (y-axis). In (a) AR, frames are generated sequentially from left to right. In (b) Reverse AR, frames are generated from right to left. In (c) Hierarchy-2, frames are generated in a hierarchical manner, starting with a few frames and then filling in the gaps. Cyan frames are sampled conditioned on previously sampled frames (dark red). White frames are not yet generated. Light gray frames are the final generated frames.
+
+Figure 3: Sampling schemes from Harvey et al. (2022) for generating videos of length  $N = 31$  while accessing only  $K = 8$  frames at a time. Each row of each subfigure depicts a different stage of our sampling process, starting from the top row and working down. Each column represents one video frame. Within each stage, frames shown in cyan are being sampled conditioned on the values of previously-sampled frames shown in dark red. Frames shown in white are not yet generated. By the end, all frames are generated and shown in light gray.
+
+**Video Diffusion Models.** A number of recent papers have proposed diffusion-based approaches to generative modeling of video data (Höppe et al., 2022; Harvey et al., 2022; Ho et al., 2022; Yang et al., 2022; Voleti et al., 2022). We follow the majority of these approaches in using a 4-D U-Net (Ronneberger et al., 2015) architecture to parameterize  $\epsilon_\theta(\dots)$ . Alternating spatial and temporal attention blocks within the U-Net capture dependencies within and across frames respectively, with relative positional encodings (Shaw et al., 2018; Wu et al., 2021) providing information about each frame’s position within the video. Due to computational constraints, video diffusion models are inherently limited to conditioning on and generating a small number of frames at a time, which we denote as  $K$ .
+
+**Flexible Video Diffusion Models.** Generating long videos with frame count  $N \gg K$  then requires sampling from the diffusion model multiple times. A typical approach is to generate frames in multiple stages in a block-autoregressive fashion, in each stage sampling  $K/2$  frames conditioned on the previous  $K/2$  frames. We depict this approach in Fig. 3a, with each row representing one stage. A problem with this strategy is that it fails to capture dependencies on frames more than  $K/2$  frames in the past. Alternative orders in which to generate frames (which we refer to as “sampling schemes”) are possible, as depicted in Figs. 3b and 3c. To avoid iteratively retraining to identify an optimal sampling scheme, Harvey et al. (2022) proposes training a single model that can perform well using any sampling scheme, referred to as a Flexible Diffusion Model (FDM). An FDM is trained to generate any subset of video frames conditioned on any other subset with the objective
+
+$$\mathcal{L}_{\text{FDM}}(\theta) := \mathbb{E}_{t, \mathbf{x}, \mathbf{y}, \mathcal{X}, \mathcal{Y}, \epsilon} \left[ \left\| \epsilon - \epsilon_\theta \left( \sqrt{\alpha_t} \mathbf{x} + \sqrt{1 - \alpha_t} \epsilon, \mathbf{y}, \mathcal{X}, \mathcal{Y}, t \right) \right\|^2 \right], \quad (2)$$
+
+in which  $\mathbf{x}$  are the frames to remove noise from at indices  $\mathcal{X}$ , and  $\mathbf{y}$  are the frames to condition on at indices  $\mathcal{Y}$ . Sampling  $\mathbf{x}$  and  $\mathbf{y}$  is accomplished by first sampling  $\mathcal{X}$  and  $\mathcal{Y}$ , then sampling a training video, and then extracting the frames at indices  $\mathcal{X}$  and  $\mathcal{Y}$  to form  $\mathbf{x}$  and  $\mathbf{y}$ , respectively. Once a network is trained to make predictions for arbitrary indices  $\mathcal{X}$  given arbitrary indices  $\mathcal{Y}$ , it can be used to sample videos with any desired sampling scheme. Sampling schemes will henceforth be denoted as  $\{\mathcal{X}_s, \mathcal{Y}_s\}_{s=1}^S$  where  $S$  is the number of sampling stages and, at stage  $s$ ,  $\mathcal{X}_s$  and  $\mathcal{Y}_s$  are the indices of the latent and observed frames, respectively.
+
+## 4 VIDEO INPAINTING WITH CONDITIONAL DIFFUSION MODELS
+
+### 4.1 PROBLEM FORMULATION
+
+We consider the problem of creating an  $N$ -frame video  $\mathbf{V}$  conditioned on some subset of known pixel values specified by a pixel-level mask  $\mathbf{M}$ . Entries of  $\mathbf{M}$  take value 1 where the corresponding pixel in  $\mathbf{V}$  is known and take 0 elsewhere. Unlike content propagation methods which deterministically generate one possible completion, we aim to model the posterior distribution over possible inpaintings as  $p_\theta(\mathbf{V} | \mathbf{V} \odot \mathbf{M}) \approx p_{\text{data}}(\mathbf{V} | \mathbf{V} \odot \mathbf{M})$  with a conditional video diffusion model, where  $\odot$  is defined such that  $a \odot \mathbf{M}$  returns the elements in  $a$  for which the corresponding value in  $\mathbf{M}$  is 1.
+
+Recall that, due to memory constraints, video diffusion models are typically restricted to conditioning on or generating at most  $K$  frames at a time. In the video inpainting problem we are predicting and conditioning on pixels rather than frames, but our network architecture imposes an analogous constraint: we can only predict or condition on pixels from at most  $K$  different frames at a time. We modify the definition of a sampling scheme from FDM (Harvey et al., 2022) as follows: we again
+
+{4}------------------------------------------------
+
+![Figure 4: Example model inputs during training. The figure is divided into three main sections. The 'Left' section shows a 5-frame video V, a corresponding mask M, and the resulting known pixel values V ∘ M for frames 0 to 4. The 'Center' section shows collated training inputs for X = [0, 3] and Y = [2], where y contains the whole of frame 2 and known pixels from frames 0 and 3. The 'Right' section shows the inputs to the neural network, which include noise added to the known pixels in x, and the task is to predict the noise epsilon. Below the network diagram, the expression sqrt(alpha_t)x + sqrt(1 - alpha_t)epsilon, y is shown.](a0167e3dcece9dcd8a378bcd98fb9cfa_img.jpg)
+
+Figure 4: Example model inputs during training. The figure is divided into three main sections. The 'Left' section shows a 5-frame video V, a corresponding mask M, and the resulting known pixel values V ∘ M for frames 0 to 4. The 'Center' section shows collated training inputs for X = [0, 3] and Y = [2], where y contains the whole of frame 2 and known pixels from frames 0 and 3. The 'Right' section shows the inputs to the neural network, which include noise added to the known pixels in x, and the task is to predict the noise epsilon. Below the network diagram, the expression sqrt(alpha\_t)x + sqrt(1 - alpha\_t)epsilon, y is shown.
+
+Figure 4: Example model inputs during training. **Left:** Visualizations of a 5-frame video  $\mathbf{V}$ , a corresponding mask  $\mathbf{M}$ , and the resulting known pixel values  $\mathbf{V} \odot \mathbf{M}$ . **Center:** Collated training inputs if  $\mathcal{X} = [0, 3]$  and  $\mathcal{Y} = [2]$ . The observations in  $\mathbf{y}$  are then the whole of frame 2 and known pixel values in frames 0 and 3. The task is to predict the unknown pixel values in frames 0 and 3. **Right:** Inputs fed to the neural network, with noise added to pixel values in  $\mathbf{x}$  but not those in  $\mathbf{y}$ . The task is then to predict the noise  $\epsilon$ . For simplicity we do not show inputs  $t$ ,  $\mathbf{M}_{\mathcal{X}, \mathcal{Y}}$ , or  $\mathcal{X} \oplus \mathcal{Y}$ .
+
+denote sampling schemes  $\{\mathcal{X}_s, \mathcal{Y}_s\}_{s=1}^S$  with  $\mathcal{X}_s$  and  $\mathcal{Y}_s$  being collections of frame indices. Now, however, at each stage we sample values for only unknown pixels in frames indexed by  $\mathcal{X}_s$ , and condition on known pixel values in all frames indexed by either  $\mathcal{X}_s$  or  $\mathcal{Y}_s$ . Referencing Fig. 6, in each row (stage) we show frames indexed by  $\mathcal{X}_s$  in cyan and frames indexed by  $\mathcal{Y}_s$  in either dark red or bright red. Frames shown in bright red contain missing pixels, which we do not wish to sample or condition on until a later sampling stage; we describe how we deal with this in Section 4.3.
+
+### 4.2 METHOD
+
+**Architecture.** We generalize the FDM architecture to use pixel-level masks rather than frame-level masks, as in the image inpainting approach proposed by Saharia et al. (2022). Concretely, every input frame is concatenated with a mask which takes value 1 where the corresponding pixel is observed and 0 elsewhere. The input values are clean (without added noise) for observed pixels and noisy otherwise.
+
+**Model Inputs.** Recall that we wish to train a model that can generate plausible values for unknown pixels in frames indexed by  $\mathcal{X}$ , conditioned on known pixel values in frames indexed by either  $\mathcal{X}$  or  $\mathcal{Y}$ . We simulate such tasks by first sampling a video  $\mathbf{V}$  and a mask  $\mathbf{M}$  from our dataset, and then sampling frame indices  $\mathcal{X}$  and  $\mathcal{Y}$  from a “frame index distribution” similar to that of FDM.<sup>1</sup> The distribution over masks  $\mathbf{M}$  can be understood as reflecting the variability in the types of masks we will encounter at test-time, and the frame index distribution can be understood as reflecting our desire to be able to sample from the model using arbitrary sampling schemes. Given  $\mathbf{M}$ ,  $\mathcal{X}$ , and  $\mathcal{Y}$ , we create a combined list of frames  $\mathcal{X} \oplus \mathcal{Y}$ , where  $\oplus$  denotes concatenation, and a corresponding mask  $\mathbf{M}_{\mathcal{X}, \mathcal{Y}} := \mathbf{M}[\mathcal{X}] \oplus \mathbf{1}[\mathcal{Y}]$ , where  $\mathbf{1}[\mathcal{Y}]$  is a mask of all 1’s for each frame indexed in  $\mathcal{Y}$ . This masks only the missing pixels in frames  $\mathcal{X}$  while treating all pixels in frames  $\mathcal{Y}$  as observed (visualized in Fig. 4). We then extract our training targets from the video as  $\mathbf{x} := \mathbf{V}[\mathcal{X} \oplus \mathcal{Y}] \odot (1 - \mathbf{M}_{\mathcal{X}, \mathcal{Y}})$ , and our observations as  $\mathbf{y} := \mathbf{V}[\mathcal{X} \oplus \mathcal{Y}] \odot \mathbf{M}_{\mathcal{X}, \mathcal{Y}}$ .
+
+**Training Objective.** Sampling  $\mathbf{V}$ ,  $\mathbf{M}$ ,  $\mathcal{X}$ , and  $\mathcal{Y}$  for every training example therefore defines a distribution over  $\mathbf{x}$  and  $\mathbf{y}$ , which we use when estimating the expectation over them in Eq. (2). Combining this method of sampling  $\mathbf{x}$  and  $\mathbf{y}$  with our pixel-wise mask, we write the loss as
+
+$$\mathcal{L}(\theta) := \mathbb{E}_{t, \mathbf{x}, \mathbf{y}, \mathcal{X}, \mathcal{Y}, \epsilon} \left[ (1 - \mathbf{M}_{\mathcal{X}, \mathcal{Y}}) \odot \left\| \epsilon - \epsilon_\theta \left( \sqrt{\alpha_t} \mathbf{x} + \sqrt{1 - \alpha_t} \epsilon, \mathbf{y}, \mathbf{M}_{\mathcal{X}, \mathcal{Y}}, \mathcal{X}, \mathcal{Y}, t \right) \right\|^2 \right], \quad (3)$$
+
+where  $\mathcal{X}, \mathcal{Y}$  provide information about each frame’s index within  $\mathbf{V}$ , and  $\mathbf{M}_{\mathcal{X}, \mathcal{Y}}$  is the mask. Note that the loss is only computed for missing pixels, as indicated by the elementwise multiplication of the loss by  $(1 - \mathbf{M}_{\mathcal{X}, \mathcal{Y}})$ .
+
+<sup>1</sup>Our frame index distribution is a mixture distribution between the one used by FDM and one which always samples  $\mathcal{X}$  and  $\mathcal{Y}$  so that they represent sequences of consecutive frames. We found that including these sequences of consecutive frames improved temporal coherence.
+
+{5}------------------------------------------------
+
+270  
+271  
+272  
+273  
+274  
+275  
+276  
+277  
+278  
+279  
+280  
+281  
+282  
+283  
+284  
+285  
+286  
+287  
+288  
+289  
+290  
+291  
+292  
+293  
+294  
+295  
+296  
+297  
+298  
+299  
+300  
+301  
+302  
+303  
+304  
+305  
+306  
+307  
+308  
+309  
+310  
+311  
+312  
+313  
+314  
+315  
+316  
+317  
+318  
+319  
+320  
+321  
+322  
+323
+
+![Figure 5: A visualization of the inpainting procedure using an arbitrary sampling scheme. The diagram shows two main components: 'Repeated applications of diffusion sampling' on the left and 'Diffusion sampling' on the right. The left side shows a sequence of frames with masks being updated. The right side shows a 4D U-net architecture with input frames and masks, leading to output frames. Arrows indicate the flow of information between the two components.](a7d78d22e465dea388b31d0739f9d0cd_img.jpg)
+
+Figure 5: A visualization of the inpainting procedure using an arbitrary sampling scheme. The diagram shows two main components: 'Repeated applications of diffusion sampling' on the left and 'Diffusion sampling' on the right. The left side shows a sequence of frames with masks being updated. The right side shows a 4D U-net architecture with input frames and masks, leading to output frames. Arrows indicate the flow of information between the two components.
+
+Figure 5: A visualization of our inpainting procedure using an arbitrary sampling scheme. At each *sampling stage*, a subsequence of frames and their corresponding masks are selected to be generated and conditioned on. At each step in the inner denoising process, only the pixels corresponding to masked regions are updated, leaving ground truth and previously inpainted pixels unaltered.
+
+![Figure 6: Sampling schemes visualizations. (a) Lookahead-AR shows a grid of frames with a diagonal band of unknown pixels (red). (b) Lookahead-AR++ shows a similar grid with a more complex pattern of unknown pixels. (c) Multires-AR-2 shows a grid with a different pattern of unknown pixels, with some frames having more unknown pixels than others.](ac99eff233b8fe51d30f499e7413c345_img.jpg)
+
+Figure 6: Sampling schemes visualizations. (a) Lookahead-AR shows a grid of frames with a diagonal band of unknown pixels (red). (b) Lookahead-AR++ shows a similar grid with a more complex pattern of unknown pixels. (c) Multires-AR-2 shows a grid with a different pattern of unknown pixels, with some frames having more unknown pixels than others.
+
+Figure 6: Sampling schemes visualizations similar to Fig. 3. In addition we now also condition on observed pixel values in frames that can also contain unknown pixel values. Frames where we do so are shown in **bright red** and the color scheme is otherwise the same as in Fig. 3.
+
+**Sampling.** Sampling from a model trained using the above objective can be done with any diffusion model sampler. The only difference is that, at each step in the reverse process, only the values of the unknown pixels are updated, such that the known pixels retain their ground-truth values at each step. We use the Heun sampler proposed by Karras et al. (2022), and leave further details to the appendix.
+
+### 4.3 CONDITIONING ON INCOMPLETE FRAMES
+
+Given our proposed architecture and training procedure, we can sample from the resulting models using the FDM sampling schemes shown in Fig. 3 without further complication. A downside of these sampling schemes, however, is that they do not enable us to condition on frames with unknown pixel values. That is, we are unable to condition on the known pixels in a frame unless we either (a) have previously inpainted it and know all of its pixel values already, or (b) are inpainting it as we condition on it. We show in our experiments that this often leaves us unable to account for important dependencies in the context.
+
+We therefore propose a method for conditioning on *incomplete* frames. This enables the sampling schemes shown in Fig. 6, where we condition on the known pixels in incomplete frames, marked in **red**. Recall that  $\mathbf{x}$  denotes “unknown pixels in frames indexed by  $\mathcal{X}$ ” and  $\mathbf{y}$  denotes “known pixels in frames indexed by  $\mathcal{X}$  or  $\mathcal{Y}$ ”. If any frames indexed by  $\mathcal{Y}$  are incomplete then we have a third category, which we’ll call  $\mathbf{z}$ : “unknown pixels in frames indexed by  $\mathcal{Y}$ ”.
+
+We then wish to approximately sample  $\mathbf{x} \sim p_{\text{data}}(\cdot|\mathbf{y})$  without requiring values of  $\mathbf{z}$ . We do not have a way to sample directly from an approximation of this distribution, as the diffusion model is not trained to condition on “incomplete” frames. We note, however, that this desired distribution is the marginal of a distribution that our diffusion model *can* approximate:
+
+$$p_{\text{data}}(\mathbf{x}|\mathbf{y}) = \int p_{\text{data}}(\mathbf{x}, \mathbf{z}|\mathbf{y}) d\mathbf{z} \approx \int p_{\theta}(\mathbf{x}, \mathbf{z}|\mathbf{y}) d\mathbf{z}. \quad (4)$$
+
+{6}------------------------------------------------
+
+![Figure 7: A 3x6 grid of images showing inpainting results. The first row is labeled 'Input' and shows six frames with green rectangular masks covering parts of a white car. The second row is labeled 'Ours' and shows the corresponding inpainted frames where the car is reconstructed. The third row is labeled 'ProPainter' and shows the inpainted frames from that model. The background is a street scene with other cars and buildings.](9ebd85380ef496499e5f23ec0d9cd744_img.jpg)
+
+Figure 7: A 3x6 grid of images showing inpainting results. The first row is labeled 'Input' and shows six frames with green rectangular masks covering parts of a white car. The second row is labeled 'Ours' and shows the corresponding inpainted frames where the car is reconstructed. The third row is labeled 'ProPainter' and shows the inpainted frames from that model. The background is a street scene with other cars and buildings.
+
+Figure 7: Inpaintings from our model and ProPainter on the task introduced in Fig. 2 from our Traffic-Scenes dataset. Our model can inpaint a realistic trajectory for the occluded vehicle. Competing flow-based approaches correctly inpaint the background but are unable to account for the vehicle.
+
+This means that we can sample from the required approximation of  $p_{\text{data}}(\mathbf{x}|\mathbf{y})$  by sampling from  $p_\theta(\mathbf{x}, \mathbf{z}|\mathbf{y})$  and then simply discarding  $\mathbf{z}$ .
+
+### 4.4 SAMPLING SCHEMES FOR VIDEO INPAINTING
+
+The ability to condition on incomplete frames enables us to design new sampling schemes that better capture dependencies that are necessary for high-quality video inpainting. **Lookahead-AR** is a variant of AR that takes into account information from future frames by conditioning on the observed parts of the frames immediately after the sequence of frames being generated, as well as on the frames before; see Fig. 6a. **Lookahead-AR++** builds on “Lookahead-AR” by conditioning on the observed parts of frames far in the future instead of frames immediately after those being sampled; see Fig. 6b. **Multires-AR-3** builds on “Lookahead-AR” by first inpainting every fifteenth frame using Lookahead-AR, then inpainting every fifth frame while conditioning on nearby inpainted frames, and then inpainting all other frames. We visualize a “Multires-AR-2” version (inpainting every third frame and then every frame) in Fig. 6c. Visualizations of all sampling schemes considered in this work can be found in Section D.
+
+## 5 EXPERIMENTS
+
+### 5.1 DATASETS
+
+To highlight the unique capabilities our generative approach offers, we wish to target video inpainting tasks in which visual information in nearby frames cannot be easily exploited to achieve a convincing result. The YouTube-VOS (Xu et al., 2018) (training and test) and DAVIS (Perazzi et al., 2016) (test) video object segmentation datasets have become the *de facto* standard benchmark datasets for video inpainting in recent years, and the foreground object masks included in these datasets have led to a heavy focus on object removal tasks in qualitative evaluations of video inpainting methods. Object removal in these datasets is a task to which content propagation methods are specifically well-suited, as the backgrounds are often near-stationary and so information in neighboring frames can be used to great effect. In contrast, we wish to focus on tasks where inpainting requires the visual appearances of objects to be hallucinated in whole or in part and realistically propagated through time, or where the behavior of occluded objects must be inferred. We propose three new large-scale video inpainting datasets targeting such tasks. All datasets are  $256 \times 256$  res-
+
+{7}------------------------------------------------
+
+378  
+379  
+380  
+381  
+382  
+383  
+384  
+385  
+386  
+387  
+388  
+389  
+390  
+391  
+392  
+393  
+394  
+395  
+396  
+397  
+398  
+399  
+400  
+401  
+402  
+403  
+404  
+405  
+406  
+407  
+408  
+409  
+410  
+411  
+412  
+413  
+414  
+415  
+416  
+417  
+418  
+419  
+420  
+421  
+422  
+423  
+424  
+425  
+426  
+427  
+428  
+429  
+430  
+431
+
+![Figure 8: A 3x8 grid of images showing inpaintings from the Inpainting-Cars dataset. The first row shows the masked input where cars are blacked out. The second and third rows show two separate inpainting samples from the model, reconstructing the cars and their motion.](32a03202e95ff09a974e12e4be687885_img.jpg)
+
+Figure 8: A 3x8 grid of images showing inpaintings from the Inpainting-Cars dataset. The first row shows the masked input where cars are blacked out. The second and third rows show two separate inpainting samples from the model, reconstructing the cars and their motion.
+
+Figure 8: Inpaintings from our model on the Inpainting-Cars dataset. The first row is the masked input to the model, the lower two rows are two separate inpaintings sampled from our model.
+
+olution and 10 fps. Representative examples of each dataset, along with details of how each dataset was constructed, are included in Section F.
+
+**BDD-Inpainting.** We adapt the BDD100K (Yu et al., 2020) dataset for video inpainting. This dataset contains 100,000 high-quality first-person driving videos and includes a diversity of geographic locations and weather conditions. We select a random subset of approximately 50,000 of these, and generate a set of both moving and stationary masks of four types: grids, horizontal or vertical lines, boxes (Fig. 7), and blobs (Fig. 1). During training both videos and masks are sampled uniformly, giving a distribution over an extremely varied set of inpainting tasks. We include two test sets of 100 video-mask pairs each, the first (BDD-Inpainting) containing only grid, line, and box masks, and the second (BDD-Inpainting-Blobs) containing only blob masks. The second is a substantially more challenging test set, as the masks are often large and occlude objects in the scene for a significant period of time. See the appendix for representative examples; mask types, shown in green, are indicated for each. The test sets we use, along with code for processing the original BDD100K dataset and generating masks, will be released upon publication.
+
+**Inpainting-Cars.** We use an in-house dataset of overhead drone footage of vehicle traffic to create a dataset targeting the *addition* of cars to videos. Crops are taken such that each video centers a single vehicle, and tracker-generated bounding boxes are used as masks. Note that the masked-out vehicle is not visible at any time in the context, and so, given an input, the model must generate a vehicle and propagate it through time, using only the size and movement of the mask as clues to plausible vehicle appearance and motion.
+
+**Traffic Scenes.** Using the same in-house dataset as referenced above, we create another dataset where large sections of the roadway are occluded, requiring the model to infer vehicle behavior in the masked-out region. Crops are centered over road features like intersections, roundabouts, highway on-ramps, etc. where complex vehicle behavior and interactions take place. This dataset contains exceptionally challenging video inpainting tasks as vehicles are often occluded for long durations of time, requiring the model to generate plausible trajectories that are semantically consistent with both the observations (e.g. the entry and exit point of a vehicle from the masked region) and the roadway. This dataset contains approximately 13,000 videos in the training set and 100 video-mask pairs in the test set.
+
+### 5.2 BASELINES AND METRICS
+
+We compare our method with four recently proposed video inpainting methods that achieve state-of-the-art performance on standard benchmarks: ProPainter (Zhou et al., 2023), E<sup>2</sup>FGVI (Li et al., 2022), FGT (Zhang et al., 2022), and FGVC (Gao et al., 2020). For each model, we use pre-trained checkpoints made available by the respective authors. We adopt the evaluation suite of DEVIL (Szeto & Corso, 2021), which includes a comprehensive selection of commonly used metrics targeting three different aspects of inpainting quality:
+
+{8}------------------------------------------------
+
+Table 1: Quantitative comparison with state-of-the-art video inpainting methods across each of our four datasets. For each dataset/metric, the best performing model is indicated with bold font and the second best performing model is underlined. Lookahead-AR++ is used for all datasets.
+
+| Method | PSNR▲ | SSIM▲ | LPIPS▼ | PVCS▼ | FID▼ | VFID▼ | $E_{\text{warp}}$ ▼ |
+|-|-|-|-|-|-|-|-|
+| BDD-Inpainting |  |  |  |  |  |  |  |
+| ProPainter | <u>32.65</u> | <u>0.968</u> | <u>0.0355</u> | <u>0.2806</u> | <u>2.51</u> | <u>0.1599</u> | <b>1.5 · 10<sup>-3</sup></b> |
+| FGT | <u>28.50</u> | <u>0.937</u> | <u>0.0843</u> | <u>0.6430</u> | <u>9.94</u> | <u>0.7865</u> | <u>4.0 · 10<sup>-3</sup></u> |
+| E <sup>2</sup> FGVI | <u>30.16</u> | <u>0.946</u> | <u>0.0640</u> | <u>0.4765</u> | <u>6.58</u> | <u>0.3665</u> | <u>2.3 · 10<sup>-3</sup></u> |
+| FGVC | <u>25.84</u> | <u>0.884</u> | <u>0.1498</u> | <u>1.0210</u> | <u>32.08</u> | <u>1.7995</u> | <u>7.5 · 10<sup>-3</sup></u> |
+| Ours | <b>33.68</b> | <b>0.972</b> | <b>0.0261</b> | <b>0.2037</b> | <b>1.71</b> | <b>0.0748</b> | <u>1.8 · 10<sup>-3</sup></u> |
+| BDD-Inpainting-Blobs |  |  |  |  |  |  |  |
+| ProPainter | <u>30.54</u> | <u>0.960</u> | <u>0.0467</u> | <u>0.3120</u> | <u>2.56</u> | <u>0.1499</u> | <b>1.2 · 10<sup>-3</sup></b> |
+| FGT | <u>27.33</u> | <u>0.938</u> | <u>0.0737</u> | <u>0.5130</u> | <u>9.41</u> | <u>0.3594</u> | <u>2.5 · 10<sup>-3</sup></u> |
+| E <sup>2</sup> FGVI | <u>29.04</u> | <u>0.950</u> | <u>0.0667</u> | <u>0.4414</u> | <u>4.23</u> | <u>0.2339</u> | <u>1.7 · 10<sup>-3</sup></u> |
+| FGVC | <u>25.10</u> | <u>0.913</u> | <u>0.0980</u> | <u>0.6957</u> | <u>16.64</u> | <u>0.6184</u> | <u>3.8 · 10<sup>-3</sup></u> |
+| Ours | <b>30.67</b> | <b>0.961</b> | <b>0.0442</b> | <b>0.2857</b> | <b>1.69</b> | <b>0.1083</b> | <u>1.5 · 10<sup>-3</sup></u> |
+| Traffic-Scenes |  |  |  |  |  |  |  |
+| ProPainter | <u>31.98</u> | <u>0.967</u> | <u>0.0326</u> | <u>0.2909</u> | <u>8.51</u> | <u>0.3482</u> | <u>2.5 · 10<sup>-4</sup></u> |
+| FGT | <u>31.97</u> | <u>0.963</u> | <u>0.0397</u> | <u>0.3528</u> | <u>9.92</u> | <u>0.5392</u> | <u>3.6 · 10<sup>-4</sup></u> |
+| E <sup>2</sup> FGVI | <u>31.40</u> | <u>0.957</u> | <u>0.0440</u> | <u>0.3809</u> | <u>13.13</u> | <u>0.6113</u> | <u>4.1 · 10<sup>-4</sup></u> |
+| FGVC | <u>29.11</u> | <u>0.926</u> | <u>0.0794</u> | <u>0.5914</u> | <u>25.93</u> | <u>1.2358</u> | <u>9.9 · 10<sup>-4</sup></u> |
+| Ours | <b>35.29</b> | <b>0.978</b> | <b>0.0202</b> | <b>0.1725</b> | <b>4.87</b> | <b>0.1637</b> | <u>2.3 · 10<sup>-4</sup></u> |
+
+- Reconstruction, or how well the method’s output matches the ground truth: PSNR, SSIM (Wang et al., 2004), LPIPS (Zhang et al., 2018a), PVCS (Szeto & Corso, 2021).
+- Perceptual realism, or how well the appearance and/or motion resembles a reference set of ground truth videos: FID (Heusel et al., 2017), VFID (Wang et al., 2018).
+- Temporal consistency: Flow warping error ( $E_{\text{warp}}$ ) (Lai et al., 2018), which measures how well an inpainting follows the optical flow as calculated on the ground truth.
+
+For our method, we train one model on each dataset with  $K = 16$ . Models are trained on  $4 \times$  NVIDIA A100 GPUs for 1-4 weeks. A detailed accounting of each model’s hyperparameters and training procedure can be found in the appendix.
+
+### 5.3 QUANTITATIVE EVALUATION
+
+We report quantitative results for three of our datasets in Table 1. For each dataset, for our method we report metrics for the best-performing model and sampling scheme we found for that dataset. Our method outperforms the baselines on all metrics except  $E_{\text{warp}}$  for all datasets, often by a significant margin. We suspect the discrepancy between  $E_{\text{warp}}$  and the other metrics arises because each of the competing methods predicts a completion of the optical flow field and utilizes this during the inpainting process, in a sense explicitly targeting  $E_{\text{warp}}$ . Inpainting-Cars is omitted from this section, as we are not aware of an existing method suitable for this task.
+
+### 5.4 QUALITATIVE EVALUATION
+
+**BDD-Inpainting.** On this dataset, qualitative differences between our method and competing approaches are most evident in the presence of large masks that partially or fully occlude objects for a long period of time. In such cases our method can retain or complete the visual appearance of occluded objects and propagate them through time in a realistic way, while such objects tend to disappear gradually with flow-based approaches (as in Fig. 1). Qualitative results on this dataset are heavily influenced by the sampling scheme used. Our “Lookahead-AR++” sampling scheme tends to perform best, as it allows information from both past and future frames to be conditioned on in the inpainting process. See Section H.2 for a qualitative demonstration of the effects of different sampling schemes. Additional results are provided in Section J.1.
+
+**Traffic-Scenes.** On this dataset, all competing methods tend to inpaint only the road surface; when vehicles enter the occluded region they disappear almost instantaneously. Our method shows a surprising ability to inpaint long, realistic trajectories that are consistent with the entry/exit points of
+
+{9}------------------------------------------------
+
+Table 2: Effect of sampling schemes, measured on the Traffic-Scenes test set.
+
+| Sampling Scheme | PSNR $\blacktriangle$ | SSIM $\blacktriangle$ | LPIPS $\blacktriangledown$ | PVCS $\blacktriangledown$ | FID $\blacktriangledown$ | VFID $\blacktriangledown$ | $E_{\text{warp}}$ $\blacktriangledown$ |
+|-|-|-|-|-|-|-|-|
+| AR (Harvey et al., 2022) | 31.72 | 0.9595 | 0.0392 | 0.2989 | 8.85 | 0.3016 | $3.01 \cdot 10^{-4}$ |
+| Hierarchy-2 (Harvey et al., 2022) | <b>35.53</b> | <b>0.9794</b> | <b>0.0196</b> | 0.1732 | <b>4.55</b> | 0.1714 | $2.48 \cdot 10^{-4}$ |
+| Lookahead-AR++ (ours) | 35.29 | 0.9783 | 0.0202 | <b>0.1725</b> | 4.87 | <b>0.1637</b> | <b><math>2.26 \cdot 10^{-4}</math></b> |
+| Multires-AR-3 (ours) | 35.32 | 0.9785 | 0.0210 | 0.1815 | 5.07 | 0.1821 | $2.43 \cdot 10^{-4}$ |
+
+Table 3: Effect of diffusion samplers, using AR sampling on BDD-Inpainting.
+
+| Sampler | PSNR $\blacktriangle$ | SSIM $\blacktriangle$ | LPIPS $\blacktriangledown$ | PVCS $\blacktriangledown$ | FID $\blacktriangledown$ | VFID $\blacktriangledown$ | $E_{\text{warp}}$ $\blacktriangledown$ |
+|-|-|-|-|-|-|-|-|
+| Heun (10 steps) | 33.00 | 0.9687 | 0.0339 | 0.2437 | 2.39 | 0.1155 | <b><math>1.66 \cdot 10^{-3}</math></b> |
+| Heun (25 steps) | <b>33.05</b> | <b>0.9703</b> | 0.0290 | 0.2202 | 1.84 | 0.0815 | $1.78 \cdot 10^{-3}$ |
+| Heun (50 steps) | 33.00 | 0.9699 | 0.0282 | 0.2177 | 1.81 | <b>0.0766</b> | $1.82 \cdot 10^{-3}$ |
+| Heun (100 steps) | 32.98 | 0.9700 | 0.0280 | <b>0.2171</b> | 1.76 | 0.0788 | $1.85 \cdot 10^{-3}$ |
+| DDPM (1000 steps) | 32.41 | 0.9665 | <b>0.0272</b> | 0.2244 | <b>1.68</b> | 0.0779 | $2.39 \cdot 10^{-3}$ |
+
+vehicles into the occluded region, as well as correctly following roadways as in Fig. 7. Additional results are provided in Section J.2.
+
+**Inpainting-Cars.** Sampled inpaintings from our model on an example from the Inpainting-Cars dataset are shown in Fig. 8. Our model is capable of generating diverse, visually realistic inpaintings for a given input. We note the model’s ability to use *semantic* cues from the context to generate plausible visual features, such as realistic behavior of shadows and plausible turning trajectories based only on the movement of the mask. Additional results are provided in Section J.3.
+
+### 5.5 ABLATIONS
+
+**Effect of Sampling Schemes.** We compare selected sampling schemes on the Traffic-Scenes dataset in Table 2, before providing more thorough qualitative and quantitative comparisons in the appendix. We find Lookahead-AR++ performs best on all datasets in terms of video realism (VFID) and temporal consistency (warp error), demonstrating the importance of our method’s ability to condition on incomplete frames. AR tends to do poorly on all metrics on both the Traffic-Scenes and BDD-Inpainting datasets; this is likely due to its inability to account for observed pixel values in frames coming after the ones being generated at each stage, causing divergence from the ground-truth and then artifacts when producing later frames conditioned on incompatible values. Hierarchy-2 does well on some metrics of reconstruction and frame-wise perceptual quality. It does less well in terms of video realism, as the inpainting of the “keyframes” in the first stage is done without conditioning on the known pixels of frames in their immediate vicinity, potentially leading to incompatibility with the local context.
+
+**Samplers and Number of Sampling Steps.** The use of diffusion models allows for a trade-off between computation time and inpainting quality by varying the sampler and number of steps used in the generative process. In Table 3 we report the results of our model on the BDD-Inpainting test set with the AR sampling scheme using different samplers and numbers of sampling steps. Aligning with expectations and qualitative observations, performance on metrics degrades as the number of sampling steps decreases for LPIPS, PVCS, FID and VFID. We note, however, that performance on  $E_{\text{warp}}$ , PSNR, and SSIM improves, suggesting that these metrics may not correlate well with perceived quality, as has been previously suggested for the latter two metrics in Zhang et al. (2018b).
+
+## 6 CONCLUSION
+
+In this work, we have presented a framework for video inpainting by conditioning video diffusion models. This framework allows for flexible conditioning on the context, enabling post-hoc experimentation with sampling schemes which can greatly improve results. We introduce four challenging tasks for video inpainting methods and demonstrate our model’s ability to use semantic information in the context to solve these tasks effectively. Our experiments demonstrate a clear improvement on quantitative metrics and, contrary to existing methods, our approach can generate semantically meaningful completions based on minimal information in the context.
+
+ Rest of paper (reference and Appendix) is removed.

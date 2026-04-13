@@ -1,0 +1,312 @@
+
+
+{0}------------------------------------------------
+
+# YOSO: YOU-ONLY-SAMPLE-ONCE VIA COMPRESSED SENSING FOR GRAPH NEURAL NETWORK TRAINING
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Graph Neural Networks (GNNs) have become essential tools for analyzing structured data across various domains. In GNNs, sampling is critical for reducing training latency by limiting the number of nodes processed during training, especially for large-scale applications. However, as the demand for better prediction performance increases, existing sampling algorithms become more complex, introducing significant overhead in the training process. To address this issue, we introduce YOSO (You-Only-Sample-Once), an algorithm designed to achieve highly efficient training while preserving prediction accuracy in downstream tasks. YOSO proposes a compressed sensing-based sampling and reconstruction framework, where nodes are sampled once at the input layer, followed by a *lossless* reconstruction at the output layer during each epoch. This approach not only avoids costly computations, such as orthonormal basis, but also guarantees high-probability accuracy retention, equivalent to full node participation. Experimental results on both node classification and link prediction tasks demonstrate the effectiveness and efficiency of YOSO, reducing GNN training by an average of around 75% compared to state-of-the-art methods, while maintaining accuracy on par with top-performing baselines.
+
+## 1 INTRODUCTION
+
+Graph Neural Networks (GNNs) (Kipf & Welling, 2016; Hamilton et al., 2017; Veličković et al., 2017; Chen et al., 2018; Chiang et al., 2019; Zou et al., 2019) have become pivotal in [modeling](#) structured data across various domains, such as social network analysis (Guo & Wang, 2020), protein interactions (Réau et al., 2023), and transportation systems (Liu et al., 2021a). As graphs rapidly grow, long training time in GNNs becomes a crucial factor impeding the wide utilization of GNNs. To mitigate the issue, various sampling strategies such as node-wise (Hamilton et al., 2017; Chen et al., 2017), layer-wise (Chen et al., 2018; Zou et al., 2019; Huang et al., 2018), and subgraph-based methods (Chiang et al., 2019; Zeng et al., 2019) have been developed. These techniques facilitate mini-batch training, which reduces the amount of memory required to sustain the training process and potentially speeds up convergence. However, with the increasing complexity of sampling algorithms, GNNs have struggled to maintain training efficiency in large-scale applications (Gong et al., 2023) and large graph datasets (e.g., OGB (Hu et al., 2020) and IGB (Khatua et al., 2023)).
+
+Theoretically, the challenge in sampling stems from the biases and variances introduced when altering the data distribution during training (Huang et al., 2018). Unlike the inherently unbiased and variance-free GCN (Kipf & Welling, 2016; Huang et al., 2018) that utilize all training nodes, easily computable sampling methods struggle to accurately estimate both graph structure and features or embeddings (Jin et al., 2020), potentially degrading the learning outcomes. To achieve more precise estimates, such as ensuring unbiasedness and variance reduction, subsequent methods have become increasingly complex, focusing predominantly on reducing variance to improve accuracy but often at the expense of increased computational demands. However, this contradicts the initial goal of sampling—to reduce computational load—and highlights a significant gap in current research: finding a method that achieves both high accuracy and efficiency. This gap is represented by the difference between the target goal (i.e., the seven-pointed red star) and other sampling schemes in Figure 1(a).
+
+To reveal the large overhead introduced by sampling in GNN training, we conduct empirical evaluations for state-of-the-art (SOTA) sampling schemes with Reddit dataset (Hamilton et al., 2017)(de-
+
+{1}------------------------------------------------
+
+![Figure 1: Total training time (with breakdown) and model accuracy for different sampling schemes. (a) Total training time v.s. model accuracy. (b) Total training time breakdown on Reddit.](49ad3a646d84bcfeac02bdf2b3792a3e_img.jpg)
+
+Figure 1 consists of two plots. Plot (a) shows Model Accuracy (Micro-F1) on the y-axis (ranging from 0.90 to 1.00) against Total Training Time (s) on the x-axis (ranging from 0 to 4000). Plot (b) shows Total Training Time (s) on the y-axis (ranging from 0 to 4000) against Sampling Scheme on the x-axis (GS, VG, AG, LA, CG, S\_EG, S\_RW). The legend for (b) indicates three components: Sampling (red), Mem2GPU (blue), and Computation (green).
+
+**Data for Figure 1(a):**
+
+| Sampling Scheme | Total Training Time (s) | Model Accuracy (Micro-F1) |
+|-|-|-|
+| VRGCN | ~1000 | ~0.967 |
+| GraphSAINT-EDGE | ~1200 | ~0.967 |
+| ClusterGCN | ~1300 | ~0.967 |
+| FastGCN | ~1500 | ~0.964 |
+| LADIES | ~1800 | ~0.964 |
+| AS-GCN | ~3500 | ~0.964 |
+
+**Data for Figure 1(b):**
+
+| Sampling Scheme | Sampling (s) | Mem2GPU (s) | Computation (s) | Total (s) |
+|-|-|-|-|-|
+| GS | ~100 | ~100 | ~100 | ~300 |
+| VG | ~100 | ~100 | ~100 | ~300 |
+| AG | ~2000 | ~500 | ~1000 | ~3500 |
+| LA | ~100 | ~100 | ~100 | ~300 |
+| CG | ~1000 | ~500 | ~1000 | ~2500 |
+| S_EG | ~1500 | ~500 | ~1000 | ~3000 |
+| S_RW | ~1500 | ~500 | ~1000 | ~3000 |
+
+Figure 1: Total training time (with breakdown) and model accuracy for different sampling schemes. (a) Total training time v.s. model accuracy. (b) Total training time breakdown on Reddit.
+
+Figure 1: Total training time (with breakdown) and model accuracy for different sampling schemes, including GS (GraphSage (Hamilton et al., 2017)), VG (VR-GCN (Chen et al., 2017)), FG (FastGCN (Chen et al., 2018)), AG (AS-GCN (Huang et al., 2018)), LA (LADIES (Zou et al., 2019)), CG (Cluster-GCN (Chiang et al., 2019)) and two versions of GraphSAINT (Zeng et al., 2019): S\_EG (EDGE) and S\_RW (Random Walk), on Reddit dataset (Hamilton et al., 2017). The seven-pointed red star marks the contribution of this paper.
+
+tailed setup and environments consistent with Section 6.1). As shown in Figure 1(b), we break down the total training time into three non-overlapping components: (1) Sampling, (2) Mem2GPU: refers to transferring mini-batches from memory to GPU memory, and (3) Computation: all processes on GPU—forward/backward propagation and parameter updates etc. Our results indicate that sampling can account for 35.7% to 64% of the total training time across various sampling algorithms, making it a significant overhead when considering both training efficiency and model accuracy. For instance, as a layer-wise sampling method, AS-GCN (Huang et al., 2018) spends 55.6% of the total training time (i.e., 3376.5 seconds) on sampling but only achieves suboptimal accuracy (0.964, which is 0.03 below the best-performing method, as shown in Figure 1(a)). In contrast, subgraph-based sampling methods, although achieving the highest model accuracy at 0.967, incur the most significant overhead, with sampling accounting for up to 64% of the total training time. Node-wise sampling methods fall between these two paradigms in terms of overall performance. For example, VR-GCN spends 685.72 seconds on sampling and achieves a Micro-F1 score of 0.962.
+
+To address these inefficiencies and the identified research gap, we propose a novel approach, YOSO (You-Only-Sample-Once), which innovatively applies compressed sensing (Candes & Tao, 2006) (CS) to GNN sampling. YOSO reimagines the feature or embedding matrix as multi-channel signals, utilizing adapted compressed sensing techniques to reduce the amount of computation involved in the training by transferring the feature matrix to another domain with high sparsity. This approach enables training with only a fraction  $M$  of nodes from a graph with  $N$  nodes (where  $M \ll N$ ), and reconstructs the training effect as if all  $N$  nodes were used. The nearly lossless reconstruction feature of YOSO guarantees that model performance closely aligns with zero bias and variance. Moreover, the sampling process in YOSO is designed to occur only once at the beginning of the training. This involves determining the sampling set and sampling matrix based on the specific characteristics of the graph. Subsequently, the reconstruction process takes place after each forward propagation. This is done by utilizing the loss generated from the reconstructed embedding matrix to guide the backward propagation. This innovative approach not only streamlines the entire training process by eliminating the need for continuous resampling but also ensures that every step of learning is informed by an optimally reconstructed data state, significantly enhancing both the efficiency and efficacy of the model training. We summarize our contributions below.
+
+- We proposed a novel approach named YOSO that significantly reduces GNN training time while maintaining strong prediction accuracy across various downstream tasks by performing only-once sampling for the entire training process.
+- YOSO eliminates the need for expensive computations typically associated with combining compressed sensing with GNN sampling (e.g., determining the orthonormal basis and sampling matrix), thereby making the sampling process highly efficient.
+- Experimental results demonstrate the effectiveness of YOSO on both node classification and link prediction tasks. Specifically, YOSO significantly reduces overall training time by an average of around 75% while preserving model accuracy. Ablation studies further reveal that YOSO achieves near-zero bias and variance, effectively reconstructing the embedding matrix with minimal error.
+
+{2}------------------------------------------------
+
+## 2 RELATED WORK
+
+### 2.1 SCHEMES FOR LARGE-SCALE GNN TRAINING
+
+To address the efficiency issue of large-scale GNN training, different schemes have been proposed at the algorithmic level (Zhang et al., 2023), such as Historical Embedding (Chen et al., 2017; Fey et al., 2021), Linearization (Frasca et al., 2020; Abu-El-Haija et al., 2021), Graph Condensation & Distillation (Zheng et al., 2024; Wu et al., 2022), and sampling-based methods. For the first three schemes, please refer to Appendix A for a detailed description, where we discuss their differences and connections with sampling-based methods. The scope of this paper focuses on sampling-based methods.
+
+A widely accepted criterion (Liu et al., 2021b) divides current different sampling methods into three categories: node-wise sampling, layer-wise sampling, and subgraph-based sampling, depending on the granularity of the sampling operation during mini-batch generation.
+
+**Node-wise Sampling:** This fundamental approach, pioneered by works such as GraphSage (Hamilton et al., 2017) and others (Ying et al., 2018; Chen et al., 2017; Dai et al., 2018), involves sampling at the individual node level. Each node’s neighbors are selected according to specific probabilities. For example, GraphSage samples  $k$ -hop neighbors at varying depths with the sampling sizes, for each depth tailored to optimize model performance. This approach, while simple and effective, has been criticized for its exponential increase in sampling time complexity as the number of GNN layers grows.
+
+**Layer-wise Sampling:** Developed to address the exponential growth in computational complexity as GNNs depth increases in node-wise sampling, this method samples multiple nodes simultaneously in one step. Techniques like FastGCN (Chen et al., 2018) reframe GNN loss functions as integral transformations and utilize importance sampling and Monte-Carlo approximation to manage variance. Further developments, such as AS-GCN (Huang et al., 2018) and LADIES (Zou et al., 2019), focus on maintaining sparse connections between sampled nodes to aid convergence. However, these methods tend to introduce additional complexity and computational cost.
+
+**Subgraph-based Sampling:** This approach forms mini-batch training subgraphs using expensive graph partitioning algorithms. Cluster-GCN (Chiang et al., 2019) partitions the full graph into clusters, sampling these clusters to create subgraphs for training batches. GraphSAINT (Zeng et al., 2019) dynamically estimates sampling probabilities for nodes and edges to form subgraphs over which the full GNN model is trained. While these techniques typically improve model accuracy, they also lead to longer training time.
+
+### 2.2 COMPRESSED SENSING
+
+CS (Candes & Tao, 2005; 2006) is a framework that enables perfect recovery of data from a significant small number of measurements. Assuming a signal  $\mathbf{x} \in \mathcal{R}^N$  can be sparsely represented as  $\mathbf{x} = \mathbf{U}\tilde{\mathbf{x}}$ , where  $\tilde{\mathbf{x}} \in \mathcal{R}^K$  is sparse, i.e.,  $\|\tilde{\mathbf{x}}\|_0 \ll K$ .  $\mathbf{U} \in \mathcal{R}^{N \times K}$  usually is a known transformation, the measurement process is modeled as  $\mathbf{y} = \Phi\mathbf{x} = \Phi\mathbf{U}\tilde{\mathbf{x}}$ , with  $\Phi \in \mathcal{R}^{M \times N}$  and  $M \ll N$ .  $\Phi$  is called sensing matrix (Candes & Tao, 2006) or sampling matrix (Anis et al., 2016). Subsequently, CS uses  $\mathbf{y} \in \mathcal{R}^M$  instead of the original data  $\mathbf{x} \in \mathcal{R}^N$  for processes, such as computation (Shi et al., 2019) or network transmission (Haupt et al., 2008). Since  $M \ll N$ , the cost of using  $\mathbf{y}$  is significantly lower than directly using  $\mathbf{x}$ . After the process step is completed, the original data  $\mathbf{x}$  needs to be reconstructed from  $\mathbf{y}$ . The Restricted Isometry Property (RIP) provides a necessary condition for successfully recovering  $\mathbf{x}$  from  $\mathbf{y}$ , which guarantees that  $\Phi\mathbf{U}$  should preserve:
+
+$$(1 - \delta_k)\|\tilde{\mathbf{x}}\|_2^2 \leq \|\Phi\mathbf{U}\tilde{\mathbf{x}}\|_2^2 \leq (1 + \delta_k)\|\tilde{\mathbf{x}}\|_2^2,$$
+
+where  $\delta_k \in (0, 1)$  is a constant. If the chosen  $\Phi$  and  $\mathbf{U}$  satisfy the RIP, then  $\tilde{\mathbf{x}}$  can be reconstructed perfectly from  $\mathbf{y}$  by solving an  $\ell_1$ -minimization problem
+
+$$\operatorname{argmin}_{\tilde{\mathbf{z}} \in \mathcal{R}^K} \|\tilde{\mathbf{z}}\|_1 \quad \text{s.t.} \quad \mathbf{y} = \Phi\mathbf{U}\tilde{\mathbf{z}} \quad (1)$$
+
+## 3 PRELIMINARIES
+
+**Graph Neural Networks.** GNNs operate on graphs  $G = \{V, E, \hat{\mathbf{A}}, \mathbf{X}\}$ , where  $V = \{1, 2, \dots, N\}$  represents the set of nodes,  $E = \{(i, j) \mid i, j \in V\}$  defines the edges, and  $\hat{\mathbf{A}} \in \mathcal{R}^{N \times N}$  is a matrix
+
+{3}------------------------------------------------
+
+that encoding the connections between nodes, i.e., adjacency matrix or normalized Laplacian matrix. The initial node features are stored in the matrix  $\mathbf{X} \in \mathbb{R}^{N \times d}$ , where  $d$  is the feature dimension. GNNs iteratively learn node embeddings  $\mathbf{H}^{(l)}$  through a layer-specific transformations governed by parameters  $\theta^{(l)}$ , expressed as  $\mathbf{H}^{(l)} = f_{\theta^{(l)}}(\mathbf{H}^{(l-1)}, \hat{\mathbf{A}})$ ,  $l = 1, 2, \dots, L$ , where  $L$  represents the number of layers, with  $\mathbf{H}^{(0)} = \mathbf{X}$ .
+
+**Sampling-based GNNs.** To manage computational and storage complexity, a class of GNNs employs sampling techniques, where a subset  $V' \subset V$  of nodes is selected based on certain rules  $\mathcal{P}$ , such as importance sampling and Monte Carlo estimation (Chen et al., 2018). The node embeddings  $\mathbf{H}^{(l)}$  are then approximated as  $f_{\theta^{(l)}}(\mathbf{H}^{(l-1)}_{[V']}, \hat{\mathbf{A}})$ , where  $[V']$  denotes the indices corresponding to  $V'$ , reducing the data need to be processed. However, many sampling methods have increasingly complicated the computation of  $\mathcal{P}$  to achieve more accurate approximations, leading to a growing overhead in sampling time.
+
+**Apply CS to GNNs.** Assume there exists a matrix  $\mathbf{U}^{(l)} \in \mathcal{R}^{M \times N}$  such that:  $\mathbf{H}^{(l)} = \mathbf{U}^{(l)} \hat{\mathbf{H}}^{(l)}$ ,  $l = 1, 2, \dots, L$ , where  $\hat{\mathbf{H}}^{(l)}$  is sparse, i.e.,  $\hat{\mathbf{H}}^{(l)}$  contains at most  $K$  non-zero rows, noted as  $\|\hat{\mathbf{H}}^{(l)}\|_{0, \text{row}} \leq K$ . The set of indices corresponding to the non-zero rows in  $\hat{\mathbf{H}}^{(l)}$  is called the support. The existence of such  $\mathbf{U}^{(l)}$  is a necessary condition for CS to operate on GNNs. Fortunately,  $\mathbf{U}^{(l)}$  that satisfying  $\mathbf{H}^{(l)} = \mathbf{U}^{(l)} \hat{\mathbf{H}}^{(l)}$  where  $\|\hat{\mathbf{H}}^{(l)}\|_{0, \text{row}} \leq k$ , exists. The existence has been proven in studies of graph signal processing (Isufi et al., 2024; Bo et al., 2023; Tsitsvero et al., 2016; Puy et al., 2018; Chen et al., 2015).  $\mathbf{U}^{(l)}$  can be derived from the properties of graph structure, i.e., normalized Laplacian matrix, and possesses orthogonality:  $\mathbf{U}^{(l)}[\mathbf{U}^{(l)}]^T = [\mathbf{U}^{(l)}]^T \mathbf{U}^{(l)} = \mathbf{I}$ . Let  $\mathbf{T}^{(l)} \in \mathbb{R}^{M \times d}$  where  $M \ll N$ , be the measurements, computed as:
+
+$$\mathbf{T}^{(l)} = \Phi^{(l)} \mathbf{U}^{(l)} \hat{\mathbf{H}}^{(l)} \quad (2)$$
+
+where  $\Phi^{(l)} \in \mathcal{R}^{M \times N}$  is the sampling matrix. To reconstruct the original sparse  $\hat{\mathbf{H}}^{(l)}$ , the following optimization problem need to be solved:
+
+$$\operatorname{argmin}_{\tilde{\mathbf{H}}^{(l)}} \|\tilde{\mathbf{H}}^{(l)}\|_{2,1} \quad \text{s.t.} \quad \mathbf{T}^{(l)} = \Phi^{(l)} \mathbf{U}^{(l)} \tilde{\mathbf{H}}^{(l)} \quad (3)$$
+
+where  $\|\cdot\|_{2,1}$  is  $l_{2,1}$  norm (Liu et al., 2018). Perfect reconstruction requires that the matrix  $\Phi^{(l)} \mathbf{U}^{(l)}$  satisfies RIP:
+
+$$(1 - \delta_k) \|\hat{\mathbf{H}}^{(l)}\|_F^2 \leq \|\Phi^{(l)} \mathbf{U}^{(l)} \hat{\mathbf{H}}^{(l)}\|_F^2 \leq (1 + \delta_k) \|\hat{\mathbf{H}}^{(l)}\|_F^2 \quad (4)$$
+
+where  $0 < \delta_k < 1$ , and  $\|\cdot\|_F$  is the Frobenius norm. After obtaining  $\tilde{\mathbf{H}}^{(l)}$  through Equation (3), the original  $\mathbf{H}^{(l)}$  can be reconstructed as:
+
+$$\mathbf{H}^{(l)} = [\mathbf{U}^{(l)}]^T \tilde{\mathbf{H}}^{(l)} \quad (5)$$
+
+## 4 DISCUSSION OF COMPRESSED SENSING AS SAMPLING FOR GNNs
+
+**Reason why CS can be used as sampling.** As discussed in Section 3, the goal of sampling is to select a  $V'$  that  $V' \subset V$  and perform GNN computations on it. Meanwhile,  $\mathbf{T}^{(l)} \in \mathbb{R}^{M \times d}$ , where the rows of  $\mathbf{T}$  form a subset of  $V$ . Therefore, using  $\mathbf{T}$  for GNN computation achieves the same effect as traditional sampling.
+
+**Benefits of compressed sensing as sampling.** Assuming a  $\Phi^{(l)}$  that satisfies all requirements exists (the existence proof and specific form are provided in Section 5.3), CS offers two main advantages over other sampling methods. Firstly, input matrix  $\mathbf{H}^{(0)} = \mathbf{X} \in \mathbb{R}^{N \times d}$  can be sampled into a much smaller  $\mathbf{T}^{(0)} \in \mathbb{R}^{M \times d}$ , significantly reducing computational and storage requirements while retaining essential information. Second, CS enables lossless reconstruction at the output layer, allowing  $\mathbf{T}^{(L)} \in \mathcal{R}^{M \times d}$  accurately expanded back to  $\mathbf{H}^{(L)} \in \mathcal{R}^{N \times d}$ , as if all nodes were involved in the whole computation. Thus, a smaller sample size can effectively emulate the full training set, achieving high accuracy and reduced sampling time.
+
+We can obtain lossless  $\mathbf{H}^{(l)} \in \mathbb{R}^{N \times d}$  from  $\mathbf{T}^{(l-1)} \in \mathbb{R}^{M \times d}$ . This lossless property ensures that the model retains all information, thereby enhancing accuracy. Specifically:
+
+$$\mathbf{H}^{(l)} = f_{\theta^{(l)}} \left( \operatorname{Rec} \left\{ \mathbf{T}^{(l-1)} \right\}, \hat{\mathbf{A}} \right) \quad (6)$$
+
+{4}------------------------------------------------
+
+where  $Rec\{\cdot\}$  represents the processing of reconstruction, i.e., solving the optimization problem in Equation (3) and Equation (5). However, the iterative processes outlined in Equation (6) is highly inefficient and has the following challenges:
+
+- **Expensive Computations of Orthonormal Basis  $U^{(l)}$  and Sampling Matrix  $\Phi^{(l)}$ .** Determining appropriate orthonormal bases  $U^{(l)}$  and sampling matrices  $\Phi^{(l)}$  for  $l = 1, \dots, L$  is time-consuming. While Section 3 theoretically confirms the existence of  $U^{(l)}$ , its practical computation is costly, often requiring matrix decompositions with an average time complexity of  $O(n^3)$ . Since  $H^{(l)}$  changes across GNN layers, a single  $U^{(l)}$  is unlikely to fulfill the sparsity requirements for all layers, necessitating  $(L + 1)$  separate decompositions. Similarly,  $\Phi^{(l)}$  must adapt to changes in  $U^{(l)}$  to maintain RIP, requiring an additional  $(L + 1)$  adjustments. Thus, determining both  $U^{(l)}$  and  $\Phi^{(l)}$  involves a total of  $2(L + 1)$  costly computations during training.
+- **Accurate but Time-inefficient Reconstruction.** The original approach reconstructs  $H^{(l)}$  at every layer before proceeding to the next layer’s computation to minimize error propagation, as described in Equation (6). However, this incurs significant computational overhead. The fastest known reconstruction algorithm has an average time complexity of  $O(nm)$  (Maleki, 2010), where  $n$  is the signal dimension and  $m$  is the measurement length. For GNNs, this translates to an average reconstruction time complexity of  $O(dM)$  per layer, resulting in a total cost of  $O(dML)$  for an  $L$ -layer GNN. Such overhead greatly reduces training efficiency.
+
+Consequently, to effectively integrate CS into GNNs and ensure its efficiency, two obstacles must be overcome in YOSO design:
+
+**Obstacle I. Working with Unknown  $U$  and Universal  $\Phi$ .** Given the high computational cost of determining  $U^{(l)}$ , we need to satisfy or approximate CS’s necessary and sufficient condition without explicitly knowing  $U^{(l)}$ . Without  $U^{(l)}$ , identifying the support and determining essential nodes for reconstruction becomes challenging, complicating the construction of  $\Phi^{(l)}$ . Since  $\Phi^{(l)}$  is layer-specific, calculating it for each layer is impractical. Thus, we require a method that works with an unknown  $U$  using a universal sampling matrix  $\Phi$ , ensuring  $\Phi$  remains adaptable to any  $U$  while satisfying compressed sensing conditions.
+
+**Obstacle II. Balancing computational efficiency with the need for accurate reconstruction.** If we sample once at the input layer and use these results throughout the GNN computation, followed by reconstruction only at the output layer, this approach requires just one sampling and reconstruction step for the entire training process. Although it may introduce some accuracy loss due to reduced intermediate layer information, it remains efficient if this loss is controllable with a known upper bound, allowing a balance between computational efficiency and model accuracy.
+
+We address the Obstacle I in Section 5.2 (Unknown  $U$ ) and Section 5.3 (Universal  $\Phi$ ), respectively, and explain how YOSO solve the Obstacle II in Section 5.2.
+
+## 5 METHODOLOGY
+
+In Section 4, we explained why CS can be applied to GNN sampling and highlighted the benefits of this approach compared to other sampling methods. In this section, we provide a detailed description of the YOSO design, including how it addresses Obstacles I and II from Section 4.
+
+### 5.1 OVERALL PROCESS OF YOSO
+
+YOSO is primarily divided into four parts:
+
+- **Construction of Sampling Matrix  $\Phi$ .** As discussed in Section 4, we require an universal sampling matrix  $\Phi$  to perform one-time sampling and enable the subsequent training process. Therefore, before the training process in YOSO (as indicated in Equation (2)), it is necessary to construct  $\Phi$  first. For a detailed construction of the sampling matrix  $\Phi$ , please refer to Section 5.3.
+- **One-time Sampling.** This process (Equation (2) where  $l = 0$ ) takes node feature  $X = H^{(0)} \in \mathcal{R}^{N \times d}$  as input and produces  $T^{(0)} \in \mathcal{R}^{M \times d}$ , where  $M \ll N$ . The computation of the orthonormal basis  $U$  is provided in Section 5.2.
+- **Forward Propagation.** After obtaining  $T^{(0)}$  from one-time sampling,  $T^{(0)}$  is used as the input for the forward propagation process (Equation (7) in Section 5.2). Upon reaching the output of
+
+{5}------------------------------------------------
+
+- the  $L$ -th layer (i.e., the output layer), noted as  $\mathbf{Z} \in \mathcal{R}^{M \times d}$ , reconstruction is then performed to obtain  $\mathbf{H}^{(L)} \in \mathcal{R}^{N \times d}$ . Unlike the traditional CS process (Candes & Tao, 2005), where  $\mathbf{U}$  is known and the reconstruction process can be directly computed, in the GNN context,  $\mathbf{U}$  is unknown. To overcome this, YOSO constructs a joint loss function to determine the optimal  $\mathbf{U}$  together with GNN model parameters through the backpropagation process.
+- (d) **Joint Optimization and Backward Propagation.** YOSO constructs a joint optimization problem to form the loss function. This loss function consists of two parts. The first part is related to reconstruction (Equation (8) in Section 5.2). The unknown  $\mathbf{U}$  affects the reconstruction performance (Equation (3) and Equation (5)) and must ensure that the matrix  $\tilde{\mathbf{H}}^{(L)}$  to be reconstructed remains sparse; The second part is the GNN's inherent loss, which is specific to the learning task. For example, in node classification, a possible loss function is the cross-entropy loss. By combining these two parts, we aim to simultaneously minimize the reconstruction error and the GNN's inherent loss. This results in a joint loss function (Equation (9) in Section 5.2), which is used to update the relevant parameters through backpropagation.
+
+### 5.2 YOSO DESIGN
+
+This section provides a detailed elaboration on the YOSO design.
+
+Unlike the standard GNN training process, YOSO operates within a specific sparse domain (i.e.,  $\mathbf{U}$ ) instead of the original data domain. As shown in Algorithm 1, the YOSO training process consists of four key stages: one-time sampling, forward propagation, loss computation, and backward propagation. The process begins with transforming the data into the sparse domain (Line 3), where one-time sampling is performed using the sampling matrix  $\Phi$ . The subsequent steps: forward propagation (Lines 4-7), loss computation (Lines 8-10), and backward propagation (Lines 11-17) are carried out entirely within this sparse domain. A detailed explanation of these steps is provided below:
+
+**Initialization process (Line 1).** The parameters are initialized randomly using the Xavier initialization method (Glorot & Bengio, 2010). It is worth noting that  $\mathbf{U}$  is not initialized as an orthogonal matrix but is iteratively adjusted to become orthogonal during the training process (Line 16).
+
+**One-time sampling (Line 3).** Given a graph  $G = \{V, E, \tilde{\mathbf{A}}, \mathbf{X}\}$ , where specific  $\tilde{\mathbf{A}}$  is the normalized Laplacian matrix. We perform the sampling stage only once using the sampling matrix  $\Phi$  on the sparsity domain  $\tilde{\mathbf{X}} = \Phi \mathbf{U} \tilde{\mathbf{X}}$ , resulting in  $\mathbf{T}^{(0)} \in \mathbb{R}^{M \times d}$ , where  $M \ll |V| = N$ . This process involves the construction of the sampling matrix  $\Phi$ , for details, please refer to Section 5.3.
+
+**Forward propagation (Lines 4-7).** The forward propagation of YOSO can be expressed as:
+
+$$\begin{cases} \mathbf{T}^{(l)} = \sigma \left( \Phi \tilde{\mathbf{A}} \Phi^T \mathbf{T}^{(l-1)} \mathbf{W}^{(l)} \right) & 1 \leq l \leq L-1 \\ \mathbf{U}, \tilde{\mathbf{H}}^{(L)} = \text{Rec} \left\{ \sigma \left( \Phi \tilde{\mathbf{A}} \Phi^T \mathbf{T}^{(L-1)} \mathbf{W}^{(L)} \right) \right\} & l = L \end{cases} \quad (7)$$
+
+where  $\sigma(\cdot)$  is the activation function,  $\mathbf{W}^{(l)}, l = 1, \dots, L$  is the  $l$ -th layer's trainable parameters,  $\mathbf{U}$  is the unknown orthonormal basis and the method for addressing this (working with unknown  $\mathbf{U}$ ) will be discussed in the following.
+
+**Loss function and working with unknown  $\mathbf{U}$  (Lines 8-10).** We discuss the construction of YOSO's loss function in the following two points (i.e., P1 and P2). These two points mainly explain how this construction effectively overcomes the challenge of working with the unknown  $\mathbf{U}$  (Obstacle I from Section 4).
+
+**(P1) Loss function.** The  $\text{Rec}\{\cdot\}$  in Equation (7) is equal to solve the following optimization problem:
+
+$$\arg \min_{\tilde{\mathbf{H}}^{(L)}, \mathbf{U}} \left\{ \frac{1}{2} \left\| \mathbf{Z} - \Phi \mathbf{U} \tilde{\mathbf{H}}^{(L)} \right\|_F^2 + \lambda \left\| \tilde{\mathbf{H}}^{(L)} \right\|_{2,1} \right\} \quad \text{s.t. } \mathbf{U} \mathbf{U}^T = \mathbf{U}^T \mathbf{U} = \mathbf{I} \quad (8)$$
+
+where  $\mathbf{Z} = \sigma(\Phi \tilde{\mathbf{A}} \Phi^T \mathbf{T}^{(L-1)} \mathbf{W}^{(L)})$  represents the measurement matrix at the output layer, and  $\lambda$  is a hyperparameter controlling the balance between fidelity and sparsity. Equation (8) is a non-trivial optimization problem involving both  $\tilde{\mathbf{H}}^{(L)}$  and  $\mathbf{U}$  due to non-convexity introduced by orthogonality constraint ( $\mathbf{U} \mathbf{U}^T = \mathbf{U}^T \mathbf{U} = \mathbf{I}$ ) and the interaction between variables. To overcome it, we perform joint optimization of Equation (8) with the GNN's specific loss function (e.g., cross-entropy in node classification learning task). Let the GNN's loss function be  $\mathcal{L}_{GNN}^\Theta$ , where  $\Theta = \{\mathbf{W}^{(1)}, \dots, \mathbf{W}^{(L)}\}$
+
+{6}------------------------------------------------
+
+represents the set of all trainable parameters. The joint optimization objective function is defined as:
+
+$$\arg \min_{\hat{\mathbf{H}}^{(L)}, \mathbf{U}, \Theta} \left\{ \alpha \left( \frac{1}{2} \left\| \mathbf{Z} - \Phi \mathbf{U} \hat{\mathbf{H}}^{(L)} \right\|_F^2 + \lambda \left\| \hat{\mathbf{H}}^{(L)} \right\|_{2,1} \right) + \beta \mathcal{L}_{GNN}^\Theta(\bar{\mathbf{H}}^{(L)}) \right\} \quad \text{s.t. } \mathbf{U} \mathbf{U}^\top = \mathbf{U}^\top \mathbf{U} = \mathbf{I} \quad (9)$$
+
+where  $\alpha$  and  $\beta$  are the hyperparameters to balance the reconstruction loss and GNN loss, and based on the reconstruction process in Equation (5), we have  $\bar{\mathbf{H}}^{(L)} \in \mathcal{R}^{N \times d}$ , which contains the representations for all nodes in the entire graph, will be reconstructed from the results of  $\mathbf{Z}$  and subsequently used in calculating the GNN loss.
+
+#### --- Algorithm 1 Forward and Backward Propagation of YOSO ---
+
+- 1: Initialize  $\Theta$ ,  $\mathbf{U}$ , and  $\hat{\mathbf{H}}^{(L)}$
+ - 2: **while** not converged **do**
+ - 3:   Compute  $\mathbf{T}^{(0)} = \Phi \mathbf{U} \hat{\mathbf{X}}$
+ - 4:   **for**  $l$  to  $L - 1$  **do**
+ - 5:     Compute  $\mathbf{T}^{(l)} = \sigma \left( \Phi \hat{\mathbf{A}} \Phi^\top \mathbf{W}^{(l)} \mathbf{T}^{(l-1)} \right)$
+ - 6:   **end for**
+ - 7:   Compute  $\mathbf{Z} = \sigma \left( \Phi \hat{\mathbf{A}} \Phi^\top \mathbf{W}^{(L)} \mathbf{T}^{(L-1)} \right)$
+ - 8:   Compute reconstruction Loss:  $\mathcal{L}_{\text{recon}} = \frac{1}{2} \left\| \mathbf{Z} - \Phi \mathbf{U} \hat{\mathbf{H}}^{(L)} \right\|_F^2 + \lambda \left\| \hat{\mathbf{H}}^{(L)} \right\|_{2,1}$
+ - 9:   Compute GNN Loss:  $\mathcal{L}_{GNN}^\Theta(\bar{\mathbf{H}}^{(L)})$
+ - 10:   Compute Total Loss:  $\mathcal{L} = \alpha \mathcal{L}_{\text{recon}} + \beta \mathcal{L}_{GNN}^\Theta(\bar{\mathbf{H}}^{(L)})$
+ - 11:   Compute gradient w.r.t  $\Theta$ :  $\nabla_\Theta \mathcal{L} = \alpha \nabla_\Theta \mathcal{L}_{\text{recon}} + \beta \nabla_\Theta \mathcal{L}_{GNN}^\Theta(\bar{\mathbf{H}}^{(L)})$
+ - 12:   Compute gradient w.r.t  $\mathbf{U}$ :  $\nabla_{\mathbf{U}} \mathcal{L} = \alpha \nabla_{\mathbf{U}} \mathcal{L}_{\text{recon}} + \beta \nabla_{\mathbf{U}} \mathcal{L}_{GNN}^\Theta(\bar{\mathbf{H}}^{(L)})$
+ - 13:   Compute gradient w.r.t  $\hat{\mathbf{H}}^{(L)}$ :  $\nabla_{\hat{\mathbf{H}}^{(L)}} \mathcal{L} = \eta_{\hat{\mathbf{H}}^{(L)}} \nabla_{\hat{\mathbf{H}}^{(L)}} \mathcal{L}_{\text{recon}}$
+ - 14:   Update  $\Theta$ :  $\Theta \leftarrow \Theta - \eta_\Theta \nabla_\Theta \mathcal{L}$
+ - 15:   Update  $\mathbf{U}$ :  $\mathbf{U}_{\text{temp}} = \mathbf{U} - \eta_{\mathbf{U}} \nabla_{\mathbf{U}} \mathcal{L}$
+ - 16:   Project  $\mathbf{U}$  onto the Stiefel manifold (Koochakzadeh et al., 2016) to ensure  $\mathbf{U}^\top \mathbf{U} = \mathbf{I}$
+ - 17:   Update  $\hat{\mathbf{H}}^{(L)}$ :  $\hat{\mathbf{H}}^{(L)} \leftarrow \hat{\mathbf{H}}^{(L)} - \eta_{\hat{\mathbf{H}}^{(L)}} \nabla_{\hat{\mathbf{H}}^{(L)}} \mathcal{L}$
+ - 18: **end while**
+- 
+
+**(P2) Working with unknown  $\mathbf{U}$ .** To tackle the challenge of the unknown  $\mathbf{U}$ , we treat  $\mathbf{U}$  as an optimization target. By leveraging Equation (9), we compute the total loss, which is subsequently used to generate gradients for updating  $\mathbf{U}$  through all training processes. A detailed derivation of the gradient of the loss in Equation (9) with respect to  $\mathbf{U}$  can be found in Appendix D.1.
+
+**Backward Propagation (Lines 11-17).** The backward propagation process uses the loss generated by Equation (9) to update three parameters, which are  $\mathbf{U}$ ,  $\hat{\mathbf{H}}^{(L)}$  and  $\Theta = \{\mathbf{W}^{(1)}, \dots, \mathbf{W}^{(L)}\}$  through gradient descent. This process results in three gradients, namely  $\nabla_{\mathbf{U}} \mathcal{L}$ ,  $\nabla_{\hat{\mathbf{H}}^{(L)}} \mathcal{L}$ , and  $\nabla_\Theta \mathcal{L}$ , each corresponding to three learning rates  $\eta_{\mathbf{U}}$ ,  $\eta_{\hat{\mathbf{H}}^{(L)}}$ , and  $\eta_\Theta$ , respectively. For the detailed setting of hyperparameters used here, i.e.,  $\alpha$  and  $\eta_{\mathbf{U}}$ , please refer to Appendix C.4 and the detailed gradient computation list in Appendix D.1.
+
+Through Algorithm 1, we obtain both  $\mathbf{U}$  and  $\hat{\mathbf{H}}^{(L)}$ . With  $\mathbf{U}$  now determined, Equation (5) can be used to reconstruct  $\mathbf{H}^{(L)}$ , which is then applicable to downstream tasks such as link prediction. Compared to Equation (6), the process described in Algorithm 1 achieves improved efficiency at the cost of a slight reduction in accuracy and this loss in accuracy is bounded. For detailed statements and proofs, see Appendix D.4.
+
+### 5.3 CONSTRUCTION OF SAMPLING MATRIX $\Phi$
+
+When the orthonormal basis  $\mathbf{U}$  remains unspecified prior to training, a key challenge arises in computing  $\mathbf{T}^{(0)} = \Phi \mathbf{U} \hat{\mathbf{X}}$  in Equation (7), as the lack of knowledge about  $\mathbf{U}$  complicates the design of  $\Phi$ . In traditional CS,  $\mathbf{U}$  maps data into a sparse domain, where the support (i.e., the indices of non-zero rows) is explicitly identifiable, and these non-zero rows contain the crucial information. This clarity allows  $\Phi$  to be tailored to the supports. However, without prior knowledge of  $\mathbf{U}$ , designing a
+
+{7}------------------------------------------------
+
+$\Phi$  that effectively captures the essential information becomes significantly more difficult. Thus, the core challenge lies in designing an robust and universal sampling matrix  $\Phi$  that accurately captures the key characteristics of the graph data while remaining compatible with any  $\mathbf{U}$  without violating the RIP.
+
+To address this challenge, we propose an approach that integrates the design of a matrix  $\tilde{\mathbf{S}} \in \mathbb{R}^{M \times N}$ , derived from the graph structure, with the construction of the sampling matrix  $\Phi$ , i.e.,  $\Phi = \tilde{\mathbf{S}} \otimes \Sigma$ , where  $\Sigma \in \mathbb{R}^{M \times N}$  is a random matrix and  $\otimes$  is element-wise production. The matrix  $\tilde{\mathbf{S}}$  is determined once during the preprocessing phase and remains fixed throughout training. Its design is based on graph-structure for two reasons: (1) the graph structure is invariant, and (2) it reflects the importance of certain nodes, which is crucial for the GNN message-passing process. For the sampling matrix  $\Phi$ , maintaining a row full rank property is essential. Intuitively,  $\Phi$  combines node features or embeddings linearly, using weights corresponding to the indices of the support (non-zero rows). If  $\Phi$  is row over-ranked, it introduces redundancy, if row under rank, it results in information loss. Thus, ensuring that  $\Phi$  is crucial for effectively capturing the necessary information.
+
+**Construction of  $\tilde{\mathbf{S}}$ .** Considering the normalized Laplacian matrix  $\tilde{\mathbf{A}} = \mathbf{I} - \mathbf{D}^{-1/2} \mathbf{A} \mathbf{D}^{-1/2}$  where  $\mathbf{D}$  and  $\mathbf{A}$  denote the degree matrix and adjacency matrix, respectively. The  $N$  nodes correspond to  $N$  eigenvalues from the spectral decomposition of  $\tilde{\mathbf{A}}$ , denoted as  $\{\lambda_1, \dots, \lambda_N\}$  with  $\lambda_i \geq 0$  for any  $i$ . These eigenvalues capture important structural properties of the graph, where larger eigenvalues correspond to more influential nodes. To construct the sampling probability distribution, we define  $P(i) = \frac{\lambda_i}{\sum_{j=1}^N \lambda_j}$ , assigning node  $i$  a sampling probability proportional to its eigenvalue relative to the total eigenvalue sum. Using this distribution, we sample  $M$  times to form the  $M$  rows of  $\tilde{\mathbf{S}}$ . If node  $i$  is sampled, the corresponding row in  $\tilde{\mathbf{S}}$  includes the 1-hop neighbors of node  $i$ . Assume node  $i$  has  $N(i)$  neighbors, each neighbor is randomly sampled with a probability of  $\frac{1}{N(i)}$ . This construction ensures that  $\tilde{\mathbf{S}}$  will not contain any all-zero rows, due to the self-loop added by the normalized Laplacian. Consequently, the matrix  $\Phi = \tilde{\mathbf{S}} \Sigma$  is row full rank (detailed proof in Appendix D.2), avoiding any row rank deficiency issues.
+
+**Construction of  $\Sigma$ .** Randomness has been shown to play a critical role in achieving the RIP (Barniuk et al., 2008). Therefore, we define  $\Sigma$  as a random matrix. Intuitively, in the absence of precise support knowledge, we estimate the support by randomly sampling  $M$  nodes based on eigenvalue weights. The matrix  $\Sigma$  must represent the contribution level of each node  $i$  to the non-zero rows (the support). For instance, if node  $k$  contributes to both nodes  $i$  and  $j$ ,  $\Sigma$  should quantify  $k$ 's contribution to each. This is crucial for ensuring accurate reconstruction and satisfying the RIP. For any column  $j$  in  $\tilde{\mathbf{S}}$ , assume it contains  $g(j)$  non-zero elements. The corresponding elements in  $\Sigma$  are assigned random values drawn from a Gaussian distribution  $N(0, \frac{1}{g(j)})$ . This design effectively captures contribution levels, ensuring compliance with the Restricted Isometry Property (detailed proof in Appendix D.3).
+
+## 6 EXPERIMENTS
+
+In Section 6.2, we evaluate the training time along with model accuracy across two learning tasks: node classification and link prediction. Also, to investigate convergence performance, we assess the convergence of both the baselines and YOSO in Section 6.3. Finally, we conduct an ablation study on the proposed compensations in Section 6.4. Details on the dataset, baselines, experimental hardware and software configuration can be found in Section 6.1 and Appendix C.1.
+
+### 6.1 EXPERIMENTAL SETTINGS
+
+**Datasets.** For the node classification task, we selected Reddit (Hamilton et al., 2017), ogbn-arxiv and ogbn-products (Hu et al., 2020). For the link prediction task, we used ogbl-ppa, and ogbl-citation2 (Hu et al., 2020). For detailed dataset statistics, data splits and metrics, please refer to Appendix C.2.
+
+**Baselines and Implementation.** The baselines used in this paper include node-wise sampling methods (GraphSage (Hamilton et al., 2017) and VR-GCN (Chen et al., 2017)), layer-wise sampling methods (FastGCN (Chen et al., 2018), AS-GCN (Huang et al., 2018) and LADIES (Zou et al., 2019)) and subgraph-based sampling methods (Cluster-GCN (Chiang et al., 2019) and GraphSAINT (Zeng et al., 2019)). Notably, several baseline models lacked implementations for link pre-
+
+{8}------------------------------------------------
+
+![Figure 2: Total training time comparison with breakdown times including Sampling, Computation, and Mem2GPU. The figure contains five bar charts (a-e) for different datasets: (a) ogbn-arxiv, (b) Reddit, (c) ogbn-products, (d) ogbl-ppa, and (e) ogbl-citation2. Each chart compares the total training time of YOSO (blue) against various baselines (grey). The breakdown for YOSO includes Sampling (red), Mem2GPU (green), and Computation (blue).](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 2 consists of five bar charts (a-e) showing total training time in seconds for different datasets. Each chart compares YOSO (blue bar) against several baselines (grey bars). The YOSO bar is broken down into three components: Sampling (red), Mem2GPU (green), and Computation (blue). The baselines are: GS, VG, FG, AG, LA, CG, S, E, G, S, RW, YOSO. The total training time for YOSO is significantly lower than all baselines across all datasets.
+
+| Dataset | GS | VG | FG | AG | LA | CG | S | E | G | S | RW | YOSO |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|
+| (a) ogbn-arxiv | 15.7 | 26.6 | 12.14 | 23.32 | 142.7 | 199.02 | 189.42 |  |  |  |  | 10.08 |
+| (b) Reddit | 503.44 | 485.72 | 376.5 | 1453.66 | 1796.39 | 1991.66 |  |  |  |  |  | 213.63 |
+| (c) ogbn-products | 1054.45 | 1802.88 | 1996.6 | 2332.72 | 5484.79 | 7463.74 | 8803.23 |  |  |  |  | 498.8 |
+| (d) ogbl-ppa | 45.45 | 44.23 | 43.67 | 44.57 | 44.57 | 44.57 | 44.57 | 44.57 | 44.57 | 44.57 | 44.57 | 21.42 |
+| (e) ogbl-citation2 | 1017.87 | 4423.96 | 3969.39 | 4897.4 | 4216.41 |  |  |  |  |  |  | 455.35 |
+
+Figure 2: Total training time comparison with breakdown times including Sampling, Computation, and Mem2GPU. The figure contains five bar charts (a-e) for different datasets: (a) ogbn-arxiv, (b) Reddit, (c) ogbn-products, (d) ogbl-ppa, and (e) ogbl-citation2. Each chart compares the total training time of YOSO (blue) against various baselines (grey). The breakdown for YOSO includes Sampling (red), Mem2GPU (green), and Computation (blue).
+
+Figure 2: Total training time comparison with the breakdown times including Sampling, Computation, and Mem2GPU. This evaluation covers two learning tasks across five datasets: (a) to (c) represent the results for the node classification task on ogbn-arxiv (Hu et al., 2020), Reddit (Hamilton et al., 2017), and ogbn-products (Hu et al., 2020), respectively; while (d)-(e) correspond to the link prediction task on ogbl-ppa (Hu et al., 2020) and ogbl-citation2 (Hu et al., 2020). We use the same model name abbreviations as in Figure 1.
+
+dition, prompting us to modify them accordingly. Detailed information on the source code for these baselines, the YOSO implementation, and other related materials can be found in Appendix C.3.
+
+**Hyperparameter Setting.** All experiments are conducted using a two-layer GNN. Detailed hyperparameter settings are described in Appendix C.4.
+
+### 6.2 OVERALL COMPARISON
+
+In this section, we evaluate baselines and YOSO with two key metrics: model accuracy (varies with different datasets and tasks) and total training time. The training time is broken down into three non-overlapped parts: Sampling, Mem2GPU, and Computation.
+
+**Node Classification Task:** First, YOSO achieves the shortest total training time with an average of 75.3% reduction across all datasets compared to all baselines as shown in Figure 2. For example, YOSO reduces around 95% total training time from 2332.22 seconds (ogbn-arxiv/AS-GCN) and 12,387.2 seconds (ogbn-products/AS-GCN) to 199.02 and 8,013.23 seconds, respectively. The main reason is that YOSO significantly reduces the sampling time while introducing a little reconstruction overhead. As shown in Figure 2(a)-(c), the most substantial sampling time reduction occurs on the Reddit dataset, where YOSO achieved a 99% decrease, cutting the sampling time from 1149.02 seconds for GraphSAINT-EDGE and 1107.54 seconds for Random Walk to just 15.13 seconds. On average, YOSO reduced sampling time by approximately 95.7% compared to all other baselines.
+
+For model accuracy shown in Table 1, YOSO consistently matches or closely approaches the top performers. For example, YOSO obtains an accuracy of 0.71 on ogbn-arxiv, just 0.01 below GraphSage. On Reddit, it achieves the highest score of 0.967, matching GraphSAINT-Random Walk, and on ogbn-products, it reaches 0.787, slightly trailing GraphSAINT-EDGE’s 0.792.
+
+**Link Prediction Task:** For total training time, similar to the node classification task, YOSO achieves the best training time with a 72.13% average training time decrease across all datasets for the link prediction. For example, YOSO decreases the training time for the ogbl-ppa dataset from 44.53 seconds with AG-GCN to 21.42 seconds, and for the ogbl-citation2 dataset from 8423.06 seconds with AG-GCN to 455.35 seconds. This improvement is consistent with the node classification task, where YOSO achieves considerable reductions in sampling time while introducing minimal reconstruction overhead. As depicted in Figure 2(d)-(e), YOSO achieves an average sampling time reduction of about 80.5% across all datasets. As for model accuracy, outlined in Table 1, YOSO
+
+{9}------------------------------------------------
+
+Table 1: Model accuracy results for different sampling schemes on node classification and link prediction tasks. For specific evaluation metrics on each dataset, please refer to Table 5.
+
+| Different Sampling Schemes | Dataset |  |  |  |  |
+|-|-|-|-|-|-|
+|  | Node Classification |  |  | Link Prediction |  |
+|  | ogbn-arxiv | Reddit | ogbn-products | ogbl-ppa | ogbl-citation2 |
+| GraphSage | <b>0.72</b> | 0.949 | 0.772 | 0.1704 | <b>0.8054</b> |
+| VR-GCN | 0.697 | 0.962 | 0.699 | 0.1704 | 0.7967 |
+| FastGCN | 0.438 | 0.927 | 0.404 | 0.1088 | 0.6555 |
+| AS-GCN | 0.687 | 0.964 | 0.51 | 0.1245 | 0.6593 |
+| LADIES | 0.649 | 0.927 | 0.501 | 0.1131 | 0.6693 |
+| Cluster-GCN | 0.653 | 0.966 | 0.769 | 0.2053 | 0.7904 |
+| GraphSAINT-EG | 0.702 | <b>0.967</b> | <b>0.792</b> | 0.2143 | 0.8039 |
+| GraphSAINT-RW | 0.701 | <b>0.967</b> | 0.783 | <b>0.2263</b> | <b>0.8054</b> |
+| YOSO | <b>0.72</b> | <b>0.967</b> | 0.787 | 0.2238 | 0.8025 |
+
+![Figure 3: Training loss and epoch curves for YOSO and baselines on two benchmark datasets. (a) ogbn-arxiv: Training loss (0.5 to 2.0) vs Epoch (0 to 200). YOSO (blue) shows the lowest loss, followed by GraphSage (orange), GraphSAINT-EG (green), GraphSAINT-RW (red), VR-GCN (purple), and FastGCN (yellow). (b) ogbl-ppa: Training loss (0.2 to 1.4) vs Epoch (0 to 175). YOSO (blue) shows the lowest loss, followed by GraphSage (orange), GraphSAINT-EG (green), GraphSAINT-RW (red), VR-GCN (purple), and FastGCN (yellow).](f519a5be118c846f631c992412353fb9_img.jpg)
+
+Figure 3: Training loss and epoch curves for YOSO and baselines on two benchmark datasets. (a) ogbn-arxiv: Training loss (0.5 to 2.0) vs Epoch (0 to 200). YOSO (blue) shows the lowest loss, followed by GraphSage (orange), GraphSAINT-EG (green), GraphSAINT-RW (red), VR-GCN (purple), and FastGCN (yellow). (b) ogbl-ppa: Training loss (0.2 to 1.4) vs Epoch (0 to 175). YOSO (blue) shows the lowest loss, followed by GraphSage (orange), GraphSAINT-EG (green), GraphSAINT-RW (red), VR-GCN (purple), and FastGCN (yellow).
+
+Figure 3: Training loss and epoch curves for YOSO and baselines on two benchmark datasets.
+
+maintained results with only a very small gap—0.0025 on ogbn-arxiv and 0.0029 on ogbl-citation2—compared to the best results achieved by GraphSAINT-Random Walk and GraphSage, respectively.
+
+In summary, for both tasks of node classification and link prediction, by combining high accuracy with substantial reductions in sampling and total training time, YOSO demonstrates its efficiency in GNN training and significantly improves both sampling and total training times across all datasets while maintaining competitive accuracy, highlighting its effectiveness compared to the baselines on the node classification task.
+
+### 6.3 CONVERGENCE COMPARISON
+
+We investigate YOSO’s convergence performance compared to other baselines. Specifically, we select ogbn-arxiv and ogbl-ppa as representatives for node classification and link prediction, respectively. The training loss-epoch curves are shown in Figure 3.
+
+In both experiments, YOSO consistently outperformed the baselines in terms of convergence speed and stability. On the ogbn-arxiv dataset, YOSO reached a lower training loss more rapidly than GraphSAGE, GraphSAINT-EDGE, and FastGCN, with significantly fewer oscillations, indicating a more stable and efficient training process. Similarly, on the ogbl-ppa dataset, YOSO demonstrated faster convergence and maintained a smoother training loss curve, while the baselines, especially FastGCN, exhibited more fluctuations. These results suggest that YOSO not only accelerates the convergence process but also ensures a more stable training path compared to existing sampling methods, highlighting its effectiveness in GNN training.
+
+### 6.4 ABLATION STUDY
+
+In this subsection, we explore how YOSO’s total training time and model accuracy vary with different sampling sizes  $M$  and evaluate reconstruction effectiveness by comparing the  $\mathbf{H}^{(L)}$  matrix generated without sampling to the  $\tilde{\mathbf{H}}^{(L)}$  matrix produced by YOSO’s sampling-reconstruction process, with the differences visualized with heatmaps.
+
+ Rest of paper (reference and Appendix) is removed.

@@ -1,0 +1,296 @@
+
+
+{0}------------------------------------------------
+
+# CODEDPO: ALIGNING CODE MODELS WITH SELF GENERATED AND VERIFIED SOURCE CODE
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Code generation models have shown significant potential for programming tasks. However, existing training methods like supervised fine-tuning face key limitations: they do not effectively teach models to prioritize correct over incorrect solutions in ambiguous situations, nor do they effectively optimize the runtime efficiency of the generated code. To address these challenges, we propose CodeDPO, a framework that integrates preference learning into code generation to improve two key code preference factors: code correctness and efficiency. CodeDPO employs a novel dataset construction method, utilizing a self-generation-and-validation mechanism that simultaneously generates and evaluates code and test cases. The underlying assumption is that test cases executable by multiple code snippets provide more reliable validation, and code that passes more tests is more likely to be correct. Through this self-validation process, our PageRank-inspired algorithm iteratively updates the ranking score of each code snippet, ultimately creating a code preference optimization dataset based on correctness and efficiency. CodeDPO is flexible and scalable, generating diverse preference optimization data without depending on powerful models such as GPT-4. Through comprehensive evaluations of five widely used benchmarks, CodeDPO demonstrates significant improvements in correctness and efficiency compared to existing methods. Our experiments prove that CodeDPO enhances the capabilities of LLMs in code generation and provides a robust foundation for conducting code preference optimization in more complex and challenging real-world scenarios.<sup>1</sup>
+
+## 1 INTRODUCTION
+
+In recent years, code generation models have gained significant attention for their potential to automate software development. Models such as GPT-4 (GPT-4, 2023), Claude, and open-source alternatives like Phi (Gunasekar et al., 2023; Abdin et al., 2024), DeepSeekCoder (Guo et al., 2024), and StarCoder (Li et al., 2023; Lozhkov et al., 2024) have demonstrated the capability of LLMs to handle complex code generation tasks. However, one of the ongoing challenges lies in boosting the correctness and efficiency of the generated code.
+
+To improve code generation models, a common approach is supervised fine-tuning (SFT) (Zhang et al., 2023b), where models are trained on pairs of instructions and correct code snippets. While SFT improves the overall quality of the generated code, it falls short in teaching models to consistently prefer correct solutions over incorrect ones (Hong et al., 2024). Figure 1 illustrates the likelihood of generating code with varying correctness and efficiency during SFT training. When we adopt SFT training on those correct solutions, as the likelihood of preferred outputs increases, the probability of generating undesirable outputs also rises, leading to performance saturation.
+
+To address these limitations, recent research has turned to direct preference optimization (DPO) (Rafailov et al., 2024), a method designed for alignment based on pairwise preference data. DPO allows models to rank different outputs and choose preferable solutions (e.g., more factual or helpful). While DPO has shown success in reasoning tasks like mathematics (Lai et al., 2024; Wu et al., 2024), its application in code generation remains under-explored. Unlike natural language tasks, code generation requires objective metrics, such as executability, which poses challenges for directly applying
+
+<sup>1</sup>Code and additional details are available: <https://anonymous.4open.science/r/CodeDPO/>
+
+{1}------------------------------------------------
+
+![Figure 1: Two line graphs showing log probabilities for code with varying correctness and efficiency. The left graph, 'SFT Logg Changes', shows SFT training where the 'Correct Code' (blue solid line) stays around -25, while 'Inefficiency Code' (green dashed) and 'Incorrect Code' (yellow dash-dot) fluctuate between -30 and -40. The right graph, 'CodeDPO Logg Changes', shows CodeDPO training where 'Correct Code' (blue solid) stays around -30, 'Inefficiency Code' (green dashed) drops from -40 to -65, and 'Incorrect Code' (yellow dash-dot) drops sharply to -70.](49ad3a646d84bcfeac02bdf2b3792a3e_img.jpg)
+
+Figure 1: Two line graphs showing log probabilities for code with varying correctness and efficiency. The left graph, 'SFT Logg Changes', shows SFT training where the 'Correct Code' (blue solid line) stays around -25, while 'Inefficiency Code' (green dashed) and 'Incorrect Code' (yellow dash-dot) fluctuate between -30 and -40. The right graph, 'CodeDPO Logg Changes', shows CodeDPO training where 'Correct Code' (blue solid) stays around -30, 'Inefficiency Code' (green dashed) drops from -40 to -65, and 'Incorrect Code' (yellow dash-dot) drops sharply to -70.
+
+Figure 1: Log probabilities for code with varying correctness and efficiency during Phi-2-2.7B model training on our constructed dataset. The traditional SFT strategy struggles to teach models to prefer correct solutions over incorrect or slow ones. In contrast, our CodeDPO approach effectively optimizes for both correctness and efficiency.
+
+**DPO. In this paper, we first define code preference based on two key factors—Correctness and efficiency.** Correctness refers to whether the code solves the problem accurately, while efficiency measures how quickly the code runs. Existing methods (Gee et al., 2024; Zhang et al., 2024) rely heavily on high-quality test cases to assess correctness. However, these approaches struggle to fully address correctness and efficiency, facing limitations such as restricted data diversity, an imbalance between positive and negative samples, and insufficient focus on optimizing code efficiency.
+
+In this paper, we introduce CodeDPO, a novel framework that integrates preference learning into code model training to optimize both correctness and efficiency. CodeDPO constructs the dataset from real-world code repositories using a self-generation-and-validation mechanism, where code and test cases are simultaneously generated and evaluated. We assume that tests executable by more code snippets are more reliable, and code that passes more tests is more likely to be correct. To implement this, CodeDPO uses a mutual verification process: each receives an initial self-validation score, which is iteratively updated using a PageRank-inspired (Page, 1999) algorithm. This algorithm adjusts the credibility of each code snippet and tests by considering their relations in cross-verification, prioritizing solutions based on correctness and efficiency. The final preference-optimized dataset is then used to train various code models using the DPO learning algorithm. A key advantage of CodeDPO is its flexibility. Unlike existing methods that rely on high-quality test cases or powerful models to generate them, CodeDPO does not depend on these resources. Its self-generation and validation mechanism supports the scalable creation of diverse and robust preference optimization data. This allows our framework to optimize code models for real-world scenarios where high-quality test data may be sparse.
+
+CodeDPO can serve as a crucial step in the post-training phase of code models. We conduct experiments on five popular benchmarks such as HumanEval (Chen et al., 2021), HumanEval+ (Liu et al., 2024a), MBPP (Austin et al., 2021), MBPP+, and DS-1000 (Lai et al., 2023) with CodeDPO, demonstrating its superiority over existing methods. Notably, we develop a top-performing 6.7B model by building on an existing SFT strategy (Guo et al., 2024; Wei et al., 2023) and further enhancing it with our CodeDPO approach, achieving an impressive 83.5% pass rate on HumanEval. We also conduct ablation studies to investigate the impact of our self-generation-and-validation mechanism and other preference optimization settings. Our findings confirm that CodeDPO enhances the code generation capabilities of LLMs while providing a solid foundation for further research into optimizing code generation for both correctness and efficiency.
+
+## 2 RELATED WORK
+
+### 2.1 LARGE LANGUAGE MODELS FOR CODE
+
+Code generation, which automates writing source code from natural language (NL) descriptions, is gaining significant attention. LLMs have shown strong capabilities in this area due to their large-scale training on diverse datasets, such as OpenAI’s GPT-4 (GPT-4, 2023), StarCoder (Li et al., 2023; Lozhkov et al., 2024), Code Llama (Rozière et al., 2023), and DeepSeekCoder (Guo et al., 2024). These models are often fine-tuned further, such as through instruction-supervised fine-tuning (SFT), to maximize their coding potential. Since gathering high-quality data is difficult, researchers
+
+{2}------------------------------------------------
+
+![Figure 2: A flow diagram illustrating the four steps of CodeDPO. Step 1: Data Seed Construction shows a GitHub logo leading to a document icon. Step 2: Correctness Optimization with self-validation score shows three code snippets with scores (1 to 2.7, 1 to 1.8, 1 to 1) and test cases with scores (1 to 2.2, 1 to 1.4, 1 to 1). Arrows indicate updates to scores. Step 3: Efficiency Optimization with execution time shows a clock icon and a code snippet. Step 4: Model Optimization shows a final code snippet with a checkmark and a cross, labeled 'DPO on correctness & efficiency'.](1b7d539e02a202c2cf2d97698b911447_img.jpg)
+
+Figure 2: A flow diagram illustrating the four steps of CodeDPO. Step 1: Data Seed Construction shows a GitHub logo leading to a document icon. Step 2: Correctness Optimization with self-validation score shows three code snippets with scores (1 to 2.7, 1 to 1.8, 1 to 1) and test cases with scores (1 to 2.2, 1 to 1.4, 1 to 1). Arrows indicate updates to scores. Step 3: Efficiency Optimization with execution time shows a clock icon and a code snippet. Step 4: Model Optimization shows a final code snippet with a checkmark and a cross, labeled 'DPO on correctness & efficiency'.
+
+Figure 2: Our CodeDPO involves four steps: ❶ Data Seed Construction with real-world source code; ❷ Correctness Optimization with self-validation score (in this figure we set  $T$  to 2 and  $d$  to 0.5. For simplicity, the final score in the figure is rounded to one decimal place. Details are shown in Appendix H.3.1); ❸ Efficiency Optimization with execution time on credible tests; ❹ Model Optimization Training.
+
+use self-instruct methods to generate synthetic instruction data from powerful models like GPT-4 (Wang et al., 2022; Taori et al., 2023; Chaudhary, 2023). Evol-Instruct (Luo et al., 2023) uses more complex prompts for better data generation. OSS-instruct (Wei et al., 2023) allows LLMs to get inspired from real-world code snippets for better quality in coding tasks. While these SFT methods boost code quality, it does not fully train models to prefer correct solutions over incorrect ones (Hong et al., 2024). Updating training strategies is critical for improving these code models to handle various coding tasks.
+
+### 2.2 PREFERENCE OPTIMIZATION FOR CODE MODELS
+
+Preference optimization techniques have recently been used to help LLMs prefer better outputs over weaker ones in various natural language tasks (Rafailov et al., 2024). The **Direct Preference Optimization** (Rafailov et al., 2024) has been widely applied to LLM alignment due to its convenience and effectiveness. Its objective is defined as:
+
+$$L_{\text{DPO}} = -\mathbb{E}_{(x, y_w, y_l) \sim \mathcal{D}} \left[ \log \sigma \left( \beta \log \frac{\pi_\theta(y_w | x)}{\pi_{\text{ref}}(y_w | x)} - \beta \log \frac{\pi_\theta(y_l | x)}{\pi_{\text{ref}}(y_l | x)} \right) \right]$$
+
+Compared with the SFT loss, the DPO loss introduces a preference-based mechanism. Instead of merely maximizing the likelihood of ground truth data, as in SFT, DPO optimizes the model to align with human preferences by leveraging both preferred responses ( $y_w$ , winning) and dispreferred responses ( $y_l$ , losing). While DPO has proven effective in reasoning tasks like mathematics (Lai et al., 2024), its use in code generation is still under-explored. Code generation requires objective measures of correctness and efficiency, unlike natural language tasks where preferences are often more subjective. Some works have simply explored PO. Code-Optimize (Gee et al., 2024) builds its dataset from the MBPP-train subset, which includes just 384 problems. PLUM uses GPT-4 to generate tests, which are then used to validate and rank code solutions. PLUM currently achieves state-of-the-art performance in preference optimization for code models. However, PLUM (Zhang et al., 2024) faces some limitations. It uses a limited number of tests to validate the code, and the resulting dataset is imbalanced due to its validation method, which means it can only use KTO (Ethayarajh et al., 2024) for training. Additionally, PLUM does not consider the code efficiency. This paper introduces CodeDPO, which does not rely on external test cases or powerful models for dataset generation. Our approach uses a self-generation and validation mechanism to create balanced preference pairs, aiming to optimize both correctness and efficiency.
+
+## 3 CODEDPO: SELF-VERIFIED PERFORMANCE OPTIMIZATION CODE GENERATION FRAMEWORK
+
+CodeDPO is designed to integrate preference learning into code generation models, improving both the correctness and efficiency of the generated code. As shown in Figure 2, our method involves
+
+{3}------------------------------------------------
+
+four key steps: **❶ Data Seed Construction with real-world source code:** We first collect a data seed from open-source code repositories and generate programming task prompts. **❷ Correctness Optimization with self-validation score:** We generate code and tests simultaneously, using a self-generation-and-validation loop to build a dataset for correctness optimization. The self-validation score is iteratively updated based on whether the generated code passes the tests. We assume that tests executable by multiple code snippets are more reliable, and code that passes more tests is more likely to be correct. As illustrated in the figure, after two iterations, the score of *code-1* changes from 1 to 1.75 to 2.6875 ( $\sim 2.7$  in the figure), as it passes more reliable tests and receives higher scores with each update, indicating a greater likelihood of correctness. **❸ Efficiency Optimization with execution time:** We measure execution time on selected credible test sets to build the dataset for efficiency optimization. In the figure, we select *test-1* and *test-2* as the credible test set to measure the execution time of each code snippet. **❹ Model Optimization Training:** We collect the dataset from the previous two stages and use Direct Preference Optimization (DPO) to train various code models.
+
+### 3.1 DATA SEED CONSTRUCTION
+
+The data seed construction for CodeDPO is the first step for initiating the preference learning process to generate programming task prompts. We adopt a method inspired by OSS-instruct (Wei et al., 2023; 2024)<sup>2</sup>, which extracts key programming concepts from open-source code repositories. These concepts serve as the foundation for generating various programming task prompts. For example, a code snippet that performs sorting operations might highlight concepts such as sorting algorithms, data structure traversal, and time complexity. From these concepts, we generate code generation prompts. The data seed thus allows the model to explore a wide range of scenarios.
+
+### 3.2 CORRECTNESS OPTIMIZATION WITH SELF-GENERATION AND VALIDATION
+
+Central to CodeDPO is the self-generation-and-validation loop, which enables the model to iteratively update the code correctness rank through mutual validation of code and test cases (Chen et al., 2022; 2023; Zhang et al., 2023a). The process begins by generating multiple candidate code snippets based on a prompt. Simultaneously, corresponding test cases are generated to evaluate these snippets. The validation loop follows these steps: **1. Code Generation:** Given an instruction, the model generates a set of candidate code snippets  $C = \{c_1, c_2, \dots, c_n\}$ . **2. Test Case Generation:** Test cases  $T = \{t_1, t_2, \dots, t_m\}$  are generated in parallel to validate the candidate snippets. **3. Validation Process:** Each code snippet is executed against the generated test cases. The validation outcomes are used to update the self-validation scores for both the code snippets and the test cases.
+
+**Ranking Code Snippets and Test Cases Using Self-Validation Scores** To rank both code snippets and tests, we employ a PageRank-inspired (Page, 1999) iterative algorithm. Initially, each code and test is assigned a self-validation score of 1. Over a fixed number of iterations  $T = 10$ , these scores are updated based on the performance of the snippets and test cases during validation.
+
+The self-validation score for code snippets and test cases is updated using the following formulas:
+
+$$\text{Score}_t(c_i) = (1 - d) \times \text{Score}_{t-1}(c_i) + d \times \sum_{t_j} \text{Score}_{t-1}(t_j) \times \text{Link}(t_j, c_i) \quad (1)$$
+
+$$\text{Score}_t(t_j) = (1 - d) \times \text{Score}_{t-1}(t_j) + d \times \sum_{c_i} \text{Score}_{t-1}(c_i) \times \text{Link}(c_i, t_j) \quad (2)$$
+
+Where  $d$  is the damping factor, and  $\text{Link}(t_j, c_i)$  indicates whether a code snippet  $c_i$  passes the test case  $t_j$ . This iterative process is repeated until convergence. After  $T$  iterations, the final rankings reflect the quality of the code snippets and test cases based on the correctness.
+
+<sup>2</sup>We follow the implementation provided at <https://github.com/bigcode-project/starcoder2-self-align/tree/fd0af77e2773b14696c7cea02a472f9e99d9c4e3>.
+
+{4}------------------------------------------------
+
+### 3.3 EXECUTION EFFICIENCY OPTIMIZATION
+
+In addition to ensuring correctness, CodeDPO integrates execution efficiency optimization to ensure that our approach generates functionally correct and efficient code. During the self-validation loop, the execution time for each code snippet is recorded. However, not all test cases accurately reflect the efficiency of the code. To address this, we use the top-performing code from the correctness optimization phase as a reference, assuming the test cases it passes are credible. The total execution time for each code snippet is then measured based on the subset of these credible tests. Code snippets that pass these credible test cases with lower execution times are assigned higher efficiency scores. Finally, we collect both fast and slow code snippets as part of the training dataset for execution efficiency optimization, which is used for further training, encouraging the model to prioritize solutions that are accurate and optimized for speed during code generation.
+
+### 3.4 FINAL DATASET AND MODEL OPTIMIZATION
+
+The final dataset is built from the previous two optimization dataset construction stages, accounting for correctness and execution time. This dual-optimization approach ensures that our CodeDPO dataset can train models to generate not only accurate code but also efficient solutions, addressing both functional and performance challenges in real-world coding tasks. We filter out samples whose ranking scores are identical or too close. The final dataset consists of **93k correctness optimization samples** and **21k efficiency optimization samples**. Each sample includes a unique code problem prompt with a preferred and a rejected solution. We carefully avoid overlap between the data seeds of correctness and efficiency samples, ensuring that the constructed dataset captures various problems and instructions. In the subsequent training, we combine both correctness and efficiency data to optimize the model in both aspects simultaneously.
+
+In our experiments, we apply Direct Preference Optimization (DPO) (Rafailov et al., 2024) across various code models to facilitate optimization learning. To enhance the stability and robustness of the training process, we employ RPO (Pang et al., 2024; Liu et al., 2024b) format loss, which essentially consists of a weighted SFT loss on the chosen preferences together with the original DPO loss, which is defined as:  $L = L_{DPO} + L_{SFT}$ . CodeDPO is plug-and-play and can be applied to nearly all code models, regardless of their type or training stage. We utilize both base models and SFT models as the backbone for further training. Our goal is to demonstrate that CodeDPO has the potential to enhance code models at different stages of their training, even for models that have undergone extensive training or fine-tuning. The setup details are provided in Section 4.2.
+
+## 4 EXPERIMENT SETUP
+
+In this study, we aim to investigate the following research questions:
+
+**RQ1: Does CodeDPO improve the correctness of generated code compared to baseline models on standard benchmarks? How does CodeDPO compare with other code preference optimization baselines?** We evaluate the pass rate of CodeDPO on benchmarks such as HumanEval (Chen et al., 2021), HumanEval+ (Liu et al., 2024a), MBPP (Austin et al., 2021), MBPP+, and DS-1000 (Lai et al., 2023). We further compare the performance of CodeDPO with other baselines (Gee et al., 2024; Zhang et al., 2024) that also utilize preference optimization techniques.
+
+**RQ2: Does CodeDPO enhance the execution efficiency of generated code?** We measure the execution efficiency of code generated by CodeDPO compared to baseline models.
+
+**RQ3: What is the impact of the self-generation-and-validation algorithm on CodeDPO’s performance?** We perform ablation studies by removing or modifying the self-generation-and-validation mechanism to assess its contribution to the overall performance.
+
+**RQ4: How does the choice of preference optimization strategy affect CodeDPO’s effectiveness?** We evaluate different preference optimization strategies, including Direct Preference Optimization (DPO), Kahneman-Tversky Optimization (KTO) (Ethayarajh et al., 2024), and Supervised Fine-Tuning (SFT), to understand their impact on the model’s performance.
+
+**RQ5: How does data scaling influence the performance of CodeDPO?** We investigate data scaling for CodeDPO by varying the amount of training data to show how data size affects its ability.
+
+{5}------------------------------------------------
+
+### 4.1 BACKBONE LLMs
+
+We evaluate several widely used LLMs in the code generation domain for our experiments, covering both **base models** and **SFT models** at different training stages. For **base models**, we apply CodeDPO to **Phi-2 (2.7B)** (Gunasekar et al., 2023), **DeepSeekCoder-base (1.3B, 6.7B)** (Guo et al., 2024), and **StarCoder2-base (7B)** (Lozhkov et al., 2024). Additionally, we evaluate our method on several fine-tuned **SFT models** (Wei et al., 2023), including **Magicoder-CL-7B**, **Magicoder-S-CL-7B**, **Magicoder-DS-6.7B**, and **Magicoder-S-DS-6.7B**, which are fine-tuned based on *CodeLlama-7B* and *DeepSeekCoder-base-6.7B* using state-of-the-art SFT techniques.
+
+While applying the PO phase after SFT is generally recommended (Rafailov et al., 2024), we extend our evaluation to base models as they can generate more diverse code snippets and offer more significant potential for improvement (Wang et al., 2024). Since CodeDPO’s optimization focuses on objective metrics such as code correctness and efficiency, it contrasts with other natural language tasks where preferences are often more subjective. This does not require our backbone model to have a strong ability to follow subjective instructions, allowing CodeDPO to be directly applied to base models. We choose all these popular models as the backbone of our experiments to optimize correctness and execution efficiency.
+
+### 4.2 TRAINING AND INFERENCE SETTINGS
+
+For dataset construction, in order to balance generation speed and cost efficiency, we use *DeepSeekCoder-v2* as the data generation model. For each problem prompt, we sample 15 code solutions and test cases from this model with *temperature* = 1.5. To construct the preference optimization dataset, we set *T* to 10 and *d* to 0.85 for the self-validation score. Our practice shows that this parameter configuration quickly yields a stable ranking score. In this paper, we focus on constructing a Python dataset. [The total cost of our dataset construction process is nearly 80\\$](#).
+
+For training, we train each code model for 10 epochs and select the best-performing model based on the lowest validation loss. We utilize a learning rate of 5e-6 with a linear scheduler and warm-up. The maximum sequence length is set to 2048 tokens.
+
+For inference, we use greedy search decoding for code generation. All evaluations use the framework from *bigcode-evaluation-harness* (Ben Allal et al., 2022). We use 16 A100 GPUs for all experiments.
+
+## 5 RESULTS AND ANALYSES
+
+### 5.1 CODE CORRECTNESS (RQ1)
+
+To answer **RQ1**, we evaluate the model performance on five widely-used code generation benchmarks: **HumanEval**, **HumanEval+**, **MBPP**, **MBPP+**, and **DS-1000**. Following the standard training process (base model → SFT → DPO), we first record the performance of the base model, SFT model, and DPO-aligned model on DeepSeekCoder-6.7B, as shown in Table 1. With the enhancement of our CodeDPO, the final model achieves an 83.5% pass rate on HumanEval. Notably, even after high-quality SFT training, CodeDPO still achieves additional performance improvements. CodeDPO plays a crucial role in the post-training phase of code models, significantly boosting overall performance.
+
+| Model | HumanEval | HumanEval+ | MBPP | MBPP+ |
+|-|-|-|-|-|
+| DeepSeekCoder-6.7B-base | 47.60 | 39.60 | 70.20 | 56.60 |
+| + SFT ( <i>with Magicoder-OSS-instruct</i> ) | 73.17 | 68.29 | 76.72 | 66.67 |
+| + SFT + <b>Our CodeDPO</b> | <b>83.54</b> | <b>76.22</b> | <b>80.70</b> | <b>70.93</b> |
+
+Table 1: Pass rates (%) of code models at different stages on HumanEval(+) and MBPP(+). We track the performance of the base model, SFT model, and DPO-aligned model on DeepSeekCoder-6.7B. Our CodeDPO shows additional improvements, even after high-quality SFT training.
+
+{6}------------------------------------------------
+
+We further evaluate the performance of CodeDPO alongside baselines<sup>3</sup> on a wide range of models, including four base models and four SFT models. As shown in Table 2, CodeDPO achieves the best performance on both HumanEval(+) and MBPP(+). Compared to the baseline models in the first row of each block, we observe that CodeDPO delivers significant improvements across all models, regardless of their initial performance. Notably, we achieve a 36.1% relative improvement on StarCoder2-7B. Additionally, CodeDPO shows remarkable gains on the more challenging HumanEval+, demonstrating its robustness under stricter evaluation. Thanks to CodeDPO’s data construction strategy, we can build a reliable preference dataset that helps the model favour high-quality outputs, leading to more robust and reliable code generation.
+
+For DS-1000, as shown in Table 3, we further evaluate CodeDPO across different libraries. We did not incorporate prior knowledge of specific Python libraries in our data construction. Thanks to our approach’s flexibility, we can create a wide variety of programming problems and corresponding code pairs. While we observe slight performance drops in the Torch and TensorFlow settings, this may be due to the relatively low percentage of these libraries in our dataset construction. However, CodeDPO demonstrates overall performance improvements over their respective baselines. It is important to note that DS-1000 differs from benchmarks like HumanEval and MBPP in data format and the coding skills it assesses. The dataset generation process for DS-1000 ensures that *it is excluded from nearly all models’ training sets*, making the improvements we observe on DS-1000 reliable. These results show that CodeDPO does more than just adapt to standard coding benchmarks like HumanEval. It proves that CodeDPO can enhance the model’s coding capabilities in more complex and diverse scenarios.
+
+### 5.2 CODE EFFICIENCY (RQ2)
+
+To address **RQ2**, we follow existing methods (Shypula et al., 2024) by measuring the execution time of the generated code and calculating the **speed-up** ratio. We also evaluate the **percentage of optimized code** before and after applying CodeDPO, where a program is considered optimized if it is at least 10% faster than its baseline. These metrics are based on the intersection of solved problems before and after applying CodeDPO. We select **HumanEval+** and **MBPP+** for evaluation because they significantly expand the diversity of test cases, making them more reliable for measuring the execution efficiency of the generated code under a variety of edge cases. Since runtime environments can affect measurements, we repeat each evaluation five times and show the distribution in Figure 3. It is clear that CodeDPO consistently improves code performance. The speed-up ratio shows that our method speeds up the code by 1.25 to 1.45 times. The range in the figure highlights that most measurements cluster around a significant performance boost. Additionally, the percentage of optimized code indicates that after applying CodeDPO, around 20%-45% of generated code solutions have been improved, confirming its effectiveness in enhancing code efficiency.
+
+![Figure 3: Runtime Speedup and Percentage of Optimized Code on HumanEval+ and MBPP+. The figure contains four box plots arranged in a 2x2 grid. The top-left plot shows 'Runtime Speedup for HumanEval+' with speedup values between 1.3x and 1.6x. The top-right plot shows 'Runtime Speedup for MBPP+' with speedup values between 1.2x and 1.5x. The bottom-left plot shows 'Opt for HumanEval+' with optimization percentages between 20% and 50%. The bottom-right plot shows 'Opt for MBPP+' with optimization percentages between 15% and 35%. All plots compare three models: Phi-2-2-7B, DeepSeekCoder-1.3B, and DeepSeekCoder-6.7B. In all cases, the speedup and optimization percentage decrease as the model size increases.](4279c8be6ec4ed56f4b3349be98bb426_img.jpg)
+
+Figure 3: Runtime Speedup and Percentage of Optimized Code on HumanEval+ and MBPP+. The figure contains four box plots arranged in a 2x2 grid. The top-left plot shows 'Runtime Speedup for HumanEval+' with speedup values between 1.3x and 1.6x. The top-right plot shows 'Runtime Speedup for MBPP+' with speedup values between 1.2x and 1.5x. The bottom-left plot shows 'Opt for HumanEval+' with optimization percentages between 20% and 50%. The bottom-right plot shows 'Opt for MBPP+' with optimization percentages between 15% and 35%. All plots compare three models: Phi-2-2-7B, DeepSeekCoder-1.3B, and DeepSeekCoder-6.7B. In all cases, the speedup and optimization percentage decrease as the model size increases.
+
+Figure 3: Runtime Speedup and Percentage of Optimized Code on HumanEval+ and MBPP+.
+
+<sup>3</sup>The baselines have not yet published their datasets. We reproduced the Code-Optimize experiment based on the reported settings. For PLUM, we report results from their paper using models identical to ours, which is why some models do not include PLUM results.
+
+{7}------------------------------------------------
+
+| Model | HumanEval | HumanEval+ | MBPP | MBPP+ |
+|-|-|-|-|-|
+| <i>SFT Model</i> |  |  |  |  |
+| MagiCoder-CL-7B | 51.21 | 48.78 | 65.60 | 55.82 |
+| Our CodeDPO | <b>60.36</b> | <b>54.87</b> | <b>70.93</b> | <b>59.15</b> |
+| <i>Code-Optimise</i> | 48.78 | 46.95 | 67.17 | 57.14 |
+| MagiCoder-S-CL-7B | 67.07 | 61.59 | 69.58 | 60.58 |
+| Our CodeDPO | <b>74.39</b> | <b>71.95</b> | <b>71.43</b> | <b>61.40</b> |
+| <i>Code-Optimise</i> | 64.63 | 54.88 | 69.42 | 60.15 |
+| <i>PLUM</i> | 73.80 | 69.50 | 71.40 | 60.80 |
+| MagiCoder-DS-6.7B | 57.93 | 53.66 | 75.93 | 64.02 |
+| Our CodeDPO | 67.07 | 62.80 | <b>81.70</b> | <b>68.92</b> |
+| <i>Code-Optimise</i> | 57.93 | 51.83 | 76.19 | 64.91 |
+| <i>PLUM</i> | <b>71.30</b> | <b>65.90</b> | 79.60 | 66.70 |
+| MagiCoder-S-DS-6.7B | 73.17 | 68.29 | 76.72 | 66.67 |
+| Our CodeDPO | <b>83.54</b> | <b>76.22</b> | <b>80.70</b> | <b>70.93</b> |
+| <i>Code-Optimise</i> | 68.90 | 64.63 | 78.20 | 67.92 |
+| <i>PLUM</i> | 80.50 | 73.80 | 80.40 | 69.30 |
+| <i>Base Model</i> |  |  |  |  |
+| Phi-2-2.7B | 48.78 | 46.34 | 65.34 | 54.49 |
+| Our CodeDPO | <b>57.32</b> | <b>51.83</b> | <b>69.05</b> | <b>56.88</b> |
+| <i>Code-Optimise</i> | 49.39 | 47.56 | 67.42 | 55.80 |
+| DeepSeekCoder-1.3B | 31.53 | 28.65 | 57.40 | 48.67 |
+| Our CodeDPO | <b>42.07</b> | <b>38.04</b> | <b>61.37</b> | <b>53.43</b> |
+| <i>Code-Optimise</i> | 34.15 | 30.49 | 59.15 | 49.87 |
+| DeepSeekCoder-6.7B | 47.60 | 39.60 | 70.20 | 56.60 |
+| Our CodeDPO | <b>59.75</b> | <b>51.83</b> | 72.18 | <b>60.01</b> |
+| <i>Code-Optimise</i> | 47.56 | 37.20 | 72.18 | 57.64 |
+| <i>PLUM</i> | 56.70 | 48.80 | <b>72.90</b> | 58.90 |
+| StarCoder2-7B | 35.40 | 29.90 | 54.40 | 45.60 |
+| Our CodeDPO | <b>48.17</b> | 34.15 | 58.40 | <b>49.37</b> |
+| <i>Code-Optimise</i> | 32.32 | 28.05 | 58.90 | 47.89 |
+| <i>PLUM</i> | 46.30 | <b>39.60</b> | <b>60.40</b> | 49.10 |
+
+Table 2: Pass rate (%) of CodeDPO compared to baseline models on HumanEval and MBPP.
+
+### 5.3 ABLATION STUDIES
+
+#### 5.3.1 SELF GENERATION AND VALIDATION ALGORITHM (RQ3)
+
+**Correlation between self-validation scores and actual code accuracy using HumanEval ground truth tests** To evaluate the effectiveness of our self-generation-and-validation algorithm, we examine the correlation between self-validation scores and actual code accuracy. We use a benchmark with pre-existing ground truth test cases, such as HumanEval, for *this preliminary experiment*. For each problem in HumanEval, we sample 15 code solutions and tests following the setting in Section 4, and then use different strategies to rank these generated codes. To evaluate the rank quality, we execute with the ground truth for each code to get the actual code accuracy. Then, we calculate the correlation between our self-validation scores and actual code accuracy.
+
+We consider three experimental strategies: ❶ **Self-validation score**, which refers to our original method. ❷ **Filter with all tests**, which assumes all generated test cases are correct and uses them to judge code correctness. This approach creates passed/non-passed pairs, similar to the baseline **PLUM** (though PLUM uses GPT-4 for test generation, while we use a more cost-effective model). ❸ **Sort by number of passed tests**, which counts the number of passed tests for each code among all generated tests, using the code with the most and least passed tests as the comparison pair. This principle is commonly employed in post-processing methods, such as **CodeT** Chen et al. (2022).
+
+{8}------------------------------------------------
+
+| <b>Model</b> | plot (155) | np (220) | pd (291) | torch (68) | scipy (106) | sk (115) | tf (45) | <b>Average</b> |
+|-|-|-|-|-|-|-|-|-|
+| <i><b>SFT Model</b></i> |  |  |  |  |  |  |  |  |
+| Magic-CL-7B | 54.8 | 16.4 | 16.5 | 17.6 | 23.6 | 29.6 | <b>33.3</b> | 25.5 |
+| Our CodeDPO | <b>57.4</b> | <b>37.3</b> | <b>22.7</b> | <b>22.1</b> | <b>35.8</b> | <b>31.3</b> | 31.1 | <b>34.0</b> |
+| Magic-S-CL-7B | 52.3 | 43.2 | 30.6 | <b>47.1</b> | 34.9 | <b>46.1</b> | <b>44.4</b> | 40.7 |
+| Our CodeDPO | <b>58.7</b> | <b>44.5</b> | <b>31.3</b> | 38.2 | <b>40.6</b> | 42.6 | 33.3 | <b>41.3</b> |
+| Magic-DS-6.7B | 55.5 | 37.7 | 28.2 | <b>25.0</b> | 34.0 | <b>45.2</b> | <b>33.3</b> | 37.1 |
+| Our CodeDPO | <b>59.4</b> | <b>40.5</b> | <b>29.2</b> | 23.5 | <b>39.6</b> | 42.6 | 31.1 | <b>38.7</b> |
+| Magic-S-DS-6.7B | 53.5 | 49.5 | 30.6 | <b>47.1</b> | 35.8 | <b>53.0</b> | <b>40.0</b> | 42.9 |
+| Our CodeDPO | <b>59.4</b> | <b>50.5</b> | <b>31.9</b> | 39.7 | <b>41.5</b> | 47.8 | 33.3 | <b>43.7</b> |
+| <i><b>Base Model</b></i> |  |  |  |  |  |  |  |  |
+| Phi-2-2.7B | 42.6 | 33.6 | 15.5 | <b>16.2</b> | 17.0 | 11.3 | <b>17.8</b> | 23.5 |
+| Our CodeDPO | <b>49.0</b> | <b>33.6</b> | <b>16.5</b> | 14.7 | <b>20.8</b> | <b>14.8</b> | 13.3 | <b>25.3</b> |
+| DSC-1.3B | <b>36.8</b> | 19.5 | 10.0 | 14.7 | 10.4 | <b>17.4</b> | <b>11.1</b> | 17.5 |
+| Our CodeDPO | 34.8 | <b>23.6</b> | <b>10.7</b> | <b>14.7</b> | <b>20.8</b> | 13.9 | 8.9 | <b>18.9</b> |
+| DSC-6.7B | 52.3 | 35.5 | 20.6 | <b>19.1</b> | 24.5 | <b>37.4</b> | <b>22.2</b> | 31.1 |
+| Our CodeDPO | <b>56.8</b> | <b>36.4</b> | <b>21.6</b> | 17.6 | <b>34.0</b> | 34.8 | 20.0 | <b>32.8</b> |
+| StarCoder2-7B | 54.2 | 37.7 | 18.6 | <b>25.0</b> | 31.1 | 23.5 | <b>35.6</b> | 31.4 |
+| Our CodeDPO | <b>56.8</b> | <b>38.2</b> | <b>18.9</b> | 20.6 | <b>39.6</b> | <b>25.2</b> | 31.1 | <b>32.6</b> |
+
+Table 3: Pass rate (%) of CodeDPO on DS-1000 across seven libraries using greedy decoding.
+
+Table 4 presents the Spearman, Kendall’s Tau, and Normalized Discounted Cumulative Gain (NDCG) metrics for the different ranking strategies. Our experiments show that the self-validation score is highly correlated with actual code accuracy, and its ranking closely reflects true code quality, making it a reliable metric for preference optimization. In contrast, filtering by all tests heavily depends on the quality of the test generation model. While baselines like PLUM ensure high-quality test generation using GPT-4, our more economical approach highlights that using all tests indiscriminately can introduce noise, as lower-quality tests skew the final ranking and poison the dataset. Sorting by the number of passed tests treats all tests equally important. However, due to the inherent uncertainty in generated tests, this method can be vulnerable to low-quality tests. Our proposed self-validation method employs a mutual reinforcement mechanism to update the credibility of both code and tests, effectively mitigating these issues.
+
+| <b>Method</b> | <b>Spearman</b> | <b>Kendall’s Tau</b> | <b>NDCG</b> |
+|-|-|-|-|
+| Self-validation score | <b>0.8598</b> | <b>0.8047</b> | <b>0.9653</b> |
+| Filter with all tests | 0.6114 | 0.6114 | 0.8753 |
+| Sort by # of passed tests | 0.7724 | 0.7250 | 0.9162 |
+
+Table 4: Correlation between self-validation score and actual code accuracy on HumanEval.
+
+**Impact of self-validation score on model performance** We apply these strategies to construct datasets and evaluate the final model performance in code generation. Table 5 presents the model performance across various dataset construction strategies. In addition, we introduce a new strategy—*random selection*—which randomly selects two code solutions from the generated code as the preference pair. The experiment results demonstrate that the self-generation-and-validation algorithm plays an essential role in ensuring the correctness and reliability of the preference dataset construction, significantly improving the performance of our CodeDPO framework.
+
+#### 5.3.2 IMPACT OF PO TRAINING STRATEGY (RQ4)
+
+We explore the impact of different preference optimization strategies (DPO, KTO, and SFT) on model performance. For training, the SFT strategy uses the best code solution from our constructed
+
+{9}------------------------------------------------
+
+| Model | HumanEval | HumanEval+ | MBPP | MBPP+ |
+|-|-|-|-|-|
+| Phi-2-2.7B | 48.78 | 46.34 | 65.34 | 54.49 |
+| Our CodeDPO | <b>57.32</b> | <b>51.83</b> | <b>69.05</b> | <b>56.88</b> |
+| Filter with all tests | 49.39 | 48.17 | 69.17 | 55.13 |
+| Sort by # of passed tests | 50.60 | 49.39 | 67.16 | 54.88 |
+| Random selection | 22.56 | 18.90 | 45.11 | 36.59 |
+| DeepSeekCoder-1.3B | 31.53 | 28.65 | 57.40 | 48.60 |
+| Our CodeDPO | <b>42.07</b> | <b>38.04</b> | <b>61.37</b> | <b>53.43</b> |
+| Filter with all tests | 34.75 | 29.89 | 57.40 | 48.80 |
+| Sort by # of passed tests | 37.19 | 31.09 | 58.39 | 50.37 |
+| Random selection | 21.34 | 18.29 | 48.94 | 38.35 |
+
+Table 5: Ablations of our self validation score on the trained model performance.
+
+dataset. In our KTO strategy, we replace DPO with KTO in our framework. As shown in Figure 1, the traditional SFT strategy struggles to guide the model in preferring correct solutions over incorrect or slower ones during training. The results in Table 6 demonstrate that DPO performs best among these strategies. Benefiting from our dataset construction method, we can obtain well-balanced preference pairs, enhancing the contrastive mechanism in DPO.
+
+| Model | HumanEval | HumanEval+ | MBPP | MBPP+ |
+|-|-|-|-|-|
+| Phi-2-2.7B | 48.78 | 46.34 | 65.34 | 54.49 |
+| SFT | 55.49 | 49.22 | 66.87 | 55.76 |
+| Our CodeDPO | <b>57.32</b> | <b>51.83</b> | <b>69.05</b> | <b>56.88</b> |
+| Our CodeKTO | 54.88 | 51.22 | 64.91 | 53.63 |
+| DeepSeekCoder-1.3B-base | 31.53 | 28.65 | 57.40 | 48.67 |
+| SFT | 39.02 | 35.36 | 59.45 | 50.26 |
+| Our CodeDPO | <b>42.07</b> | <b>38.04</b> | <b>61.37</b> | <b>53.43</b> |
+| Our CodeKTO | 40.85 | 35.98 | 59.65 | 50.13 |
+| DeepSeekCoder-6.7B-base | 47.60 | 39.60 | 70.20 | 56.60 |
+| SFT | 56.09 | 46.95 | 70.18 | 56.88 |
+| Our CodeDPO | <b>59.75</b> | <b>51.83</b> | <b>72.18</b> | <b>60.01</b> |
+| Our CodeKTO | 54.88 | 49.39 | 71.93 | 58.65 |
+
+Table 6: Comparison of preference optimization strategies (DPO vs. KTO vs. SFT).
+
+### 5.4 DATA SCALING LAW FOR CODEDPO (RQ5)
+
+To address **RQ5**, we explore how scaling the training data affects CodeDPO’s performance. As shown in Table 7, increasing the data consistently improves model performance, but these improvements gradually plateau as the dataset size grows. In our experiments, we carefully balance performance gains and training costs, ensuring optimal results with CodeDPO. Details are shown in Appendix A.
+
+## 6 CONCLUSION
+
+We propose CodeDPO, a preference optimization framework for code models that focuses on both correctness and efficiency. CodeDPO introduces a novel dataset construction method that utilizes a self-generation-and-validation mechanism, enabling the simultaneous generation and evaluation of code and test cases to ensure correctness. Our PageRank-inspired algorithm iteratively updates the self-validation score of each code snippet, prioritizing solutions based on correctness and efficiency. Our work technically validates the reliability of self-validation to synthesize preference optimization data, eliminating the need for complex resources such as pre-existing tests or powerful generation models. We hope this work opens new avenues for synthesizing data and implementing large-scale preference optimization for code models.
+
+ Rest of paper (reference and Appendix) is removed.

@@ -1,0 +1,299 @@
+
+
+{0}------------------------------------------------
+
+# LEARNING GRAPH INVARIANCE BY HARNESSING SPURIOSITY
+
+Tianjun Yao<sup>1</sup> Yongqiang Chen<sup>1,2</sup> Kai Hu<sup>2</sup> Tongliang Liu<sup>3,1</sup> Kun Zhang<sup>1,2</sup> Zhiqiang Shen<sup>1</sup>
+
+<sup>1</sup>Mohamed bin Zayed University of Artificial Intelligence
+
+<sup>2</sup>Carnegie Mellon University
+
+<sup>3</sup>The University of Sydney
+
+{tianjun.yao, yongqiang.chen}@mbzuai.ac.ae, kaihu@cs.cmu.edu
+
+tongliang.liu@sydney.edu.au, {kun.zhang, zhiqiang.shen}@mbzuai.ac.ae
+
+## ABSTRACT
+
+Recently, graph invariant learning has become the *de facto* approach to tackle the Out-of-Distribution (OOD) generalization failure in graph representation learning. They generally follow the framework of invariant risk minimization to capture the invariance of graph data from different environments. Despite some success, it remains unclear to what extent existing approaches have captured invariant features for OOD generalization on graphs. In this work, we find that representative OOD methods such as IRM and VRex, and their variants on graph invariant learning may have captured a limited set of invariant features. To tackle this challenge, we propose **LIRS**, a novel learning framework designed to **Learn** graph **Invariance** by **Removing** **Spurious** features. Different from most existing approaches that *directly* learn the invariant features, LIRS takes an *indirect* approach by first learning the spurious features and then removing them from the ERM-learned features. We demonstrate that learning the invariant graph features in an *indirect* way enables the model to capture a more comprehensive set of invariant features, leading to better OOD generalization performance in novel environments. Notably, LIRS surpasses the second-best method by as much as 25.50% across all competitive baselines, underscoring its efficacy in OOD generalization.<sup>1</sup>
+
+## 1 INTRODUCTION
+
+Graph representation learning with graph neural networks (GNNs) (Kipf & Welling, 2017; Xu et al., 2019; Veličković et al., 2017) has proven to be highly successful in tasks involving relational information (Qiu et al., 2018; Wu et al., 2022b; Yu et al., 2018; Zhang et al., 2022c). Despite their achievements, GNNs often assume that the training and test data share the same distribution. This assumption often does not hold in real-world applications (Hu et al., 2020; Huang et al., 2021; Ji et al., 2022; Koh et al., 2021) due to changes in the underlying data generation process, leading to distribution shifts. Such phenomenon can severely degrade the performance of GNN models, which presents a critical challenge for their deployment in practical scenarios (DeGrave et al., 2020).
+
+To address the OOD generalization challenge, graph invariant learning has become the *de facto* approach. Inspired by the success of invariance principle (Arjovsky et al., 2020; Kreuzer et al., 2021), graph invariant learning aims to identify invariant subgraphs that are causally related with the targets (Yang et al., 2022; Li et al., 2022b; Liu et al., 2022; Zhuang et al., 2023; Chen et al., 2022; Li et al., 2022a). Typically, they follow the framework of Invariant Risk Minimization (IRM) (Arjovsky et al., 2020) or Variance-Risk Minimization (VRex) (Krueger et al., 2021), which aim to capture invariant features by learning an equipredictive classifier across different environments. Despite some success, many graph invariant learning methods only perform similarly compared to the traditional Empirical Risk Minimization (ERM) (Vapnik, 1995) in graph OOD benchmarks (Gui et al., 2022), it raises a critical yet overlooked question:
+
+*To what extent do the graph invariant learning algorithms capture the graph invariance?*
+
+<sup>1</sup>Code is available at <https://github.com/tianyao-aka/LIRS-ICLR2025>
+
+{1}------------------------------------------------
+
+In this work, we address this question by investigating two representative OOD algorithms, namely IRMv1 (Arjovsky et al., 2020) and VRex (Kreuzer et al., 2021), in graph-level OOD classification scenarios. These algorithms are widely used, and many graph invariance learning algorithms are based on their variants or extensions (Li et al., 2022b; Liu et al., 2022; Zhuang et al., 2023; Wu et al., 2022c). Surprisingly, we find that IRM, VRex and their variants on graph invariant learning may only learn a *subset* of invariant features (Sec. 3). In contrast, the learning paradigm that learns invariant features *indirectly* by removing spurious features from the ERM-learned features may render learning a more comprehensive set of invariant features (Figure 1 and Sec. 3). Motivated by this observation, we propose a novel learning framework **LIRS**: Learning graph Invariance by Removing Spurious. Different from most existing approaches that *directly* learn the invariant features, LIRS adopts the *indirect* learning paradigm. Specifically, LIRS first leverages the *biased information principle* (Def. 3) to effectively learn graph spuriousity (Theorem 4.1), then employs *class-conditioned cross entropy loss* to effectively learn graph invariance (Theorem 4.2). Extensive experiments on synthetic datasets demonstrate that LIRS is able to learn more invariant features compared to state-of-the-art graph invariant learning methods that adopt the direct invariant learning paradigm. Furthermore, LIRS shows superior OOD performance on real-world datasets with various types of distribution shifts, highlighting its effectiveness in learning graph invariant features. Our contributions can be summarized as follows:
+
+- We reveal that learning invariant features *indirectly* i.e., by first learning and then removing spurious features, can be more effective in capturing invariant features than existing (graph) invariant learning algorithms that learn invariant features *directly*.
+- We propose **LIRS**, a novel framework that adopts the indirect learning paradigm for learning invariant features, which consists of: a) The *biased infomax principle*, a contrastive learning algorithm that provably learns graph spuriousity; b) *class-conditioned cross-entropy loss*, a learning objective that effectively learns graph invariance by removing spurious features from ERM-learned features.
+- Extensive experiments demonstrate that LIRS outperforms second-best baseline methods by up to 25.50% across 17 competitive baselines on both synthetic and real-world datasets with various distribution shifts.
+
+## 2 PRELIMINARY
+
+**Notations.** An undirected graph  $G$  with  $n$  nodes and  $m$  edges is denoted by  $G := (\mathcal{V}, \mathcal{E})$ , where  $\mathcal{V}$  is the node set and  $\mathcal{E}$  is the edge set.  $G$  is also represented by the adjacency matrix  $\mathbf{A}$  and the node feature matrix  $\mathbf{X} \in \mathbb{R}^{n \times D}$  with  $D$  feature dimensions. We use  $G_c$  and  $G_s$  to denote invariant and spurious subgraph for graph  $G$  respectively, and  $\mathbf{h}_c$  and  $\mathbf{h}_s$  are invariant and spurious features in the latent space.  $\hat{\mathbf{h}}_i$  and  $\hat{\mathbf{h}}_G$  denote the estimated representations for node  $v_i$  and graph  $G$  respectively. Finally, we use  $[K] := \{1, 2, \dots, K\}$  to denote an index set,  $w$  to denote a scalar value,  $\mathbf{w}$  to denote a vector,  $\mathbf{W}$  to denote a matrix,  $W$  to denote a random variable, and  $\mathcal{W}$  to denote a set. A more complete set of notations is presented in Appendix A.
+
+**Problem Definition.** We focus on OOD generalization in graph classification in hidden environments. Given a set of graph datasets  $\mathcal{D} = \{\mathcal{G}^e\}_{e \in \mathcal{E}_{tr}, e \subseteq \mathcal{E}_{all}}$ , a GNN model  $f$ , denoted as  $\rho \circ h$ , comprises an encoder  $h: \mathbb{G} \rightarrow \mathbb{R}^F$  that learns a representation  $\hat{\mathbf{h}}_G$  for each graph  $G$ , followed by a downstream classifier  $\rho: \mathbb{R}^F \rightarrow \mathbb{Y}$  to predict the label  $\hat{Y}_G = \rho(\hat{\mathbf{h}}_G)$ . The objective of OOD generalization on graphs is to learn an optimal GNN model  $f^*(\cdot): \mathbb{G} \rightarrow \mathbb{Y}$  using data from training environments  $\mathcal{D}_{tr} = \{\mathcal{G}^e\}_{e \in \mathcal{E}_{tr}}$ , that effectively generalizes across all (unseen) environments:
+
+![Figure 1: Illustration of the two graph invariant learning paradigms. The diagram shows a GNN Encoder processing a graph. The graph consists of nodes (circles) and edges (lines). Some nodes are blue (invariant) and some are red (spurious). The encoder outputs three representations: (a) Invariant learning directly: A representation h_c for the invariant features. (b) Invariant learning indirectly: A representation h_c for the invariant features, which is learned by first learning the spurious features h_s and then removing them using a disentanglement module A_Disent.](715219db84ec2a5622d09f9d822b4550_img.jpg)
+
+The diagram illustrates two learning paradigms for graph invariant features. On the left, a graph is shown with nodes represented by circles and edges by lines. A legend indicates that blue circles represent nodes in the invariant subgraph  $G_c$  and red circles represent nodes in the spurious subgraph  $G_s$ . A GNN Encoder processes the graph. The output is split into two paths. Path (a), labeled 'Invariant learning directly', shows a representation  $\mathbf{h}_c$  being learned. Path (b), labeled 'Invariant learning indirectly', shows a representation  $\mathbf{h}_s$  being learned first, followed by a disentanglement module  $\mathcal{A}_{Disent}$  that removes the spurious features to reveal the invariant features  $\mathbf{h}_c$ .
+
+Figure 1: Illustration of the two graph invariant learning paradigms. The diagram shows a GNN Encoder processing a graph. The graph consists of nodes (circles) and edges (lines). Some nodes are blue (invariant) and some are red (spurious). The encoder outputs three representations: (a) Invariant learning directly: A representation h\_c for the invariant features. (b) Invariant learning indirectly: A representation h\_c for the invariant features, which is learned by first learning the spurious features h\_s and then removing them using a disentanglement module A\_Disent.
+
+Figure 1: Illustration of the two graph invariant learning paradigms. Compared with the invariant learning methods  $\mathcal{A}_{Inv}$  that adopt the direct learning paradigm, our proposed method first adopts a spuriousity learner  $\mathcal{A}_{Spu}$  to learn spurious features, then learns invariant features by removing the spurious features using the feature disentanglement module  $\mathcal{A}_{Disent}$ .
+
+{2}------------------------------------------------
+
+$f^*(\cdot) = \arg \min_f \sup_{e \in \mathcal{E}_{all}} \mathcal{R}(f | e)$ , where  $\mathcal{R}(f | e) = \mathbb{E}_{e, Y}^e [l(f(G), Y)]$  is the risk of the predictor  $f$  on the environment  $e$ , and  $l(\cdot, \cdot) : \mathbb{Y} \times \mathbb{Y} \rightarrow \mathbb{R}_+$  denotes a loss function.
+
+**Assumption 1. (Stable and predictive subgraphs)** Given a graph  $G \in \mathcal{D}$ , there exists a set of stable (causal) substructure patterns  $\mathcal{G}_c$  for every class label  $Y = y$ , satisfying: a)  $\forall e, e' \in \mathcal{E}_{tr}, G_c \in \mathcal{G}_c, \mathbb{P}^e(Y | G_c) = \mathbb{P}^{e'}(Y | G_c)$ ; and b) The target  $Y$  can be expressed as  $Y = f^*(G_c) + \epsilon$ , where  $\epsilon \perp G$  represents random noise, and  $\perp$  indicates statistical independence.
+
+Assumption 1 posits that one or more substructure patterns in  $\mathcal{G}_c$  are not only stably associated with the target label  $Y$  across different environments but also possess sufficient predictive power to accurately determine  $Y$ . This assumption is well-aligned with real-world scenarios. For instance, in the GOODHIV dataset (Gui et al., 2022; Hu et al., 2020; Wu et al., 2018), a molecule’s ability to inhibit HIV may depend on the presence of several functional groups interacting with various parts of the virus. Moreover, recent study also provides empirical evidence for graph applications, suggesting that multiple substructures remain stable and predictive of the targets (see Appendix E.2 in Bui et al. (2024)), thereby supporting the validity of Assumption 1. Therefore, when the OOD algorithms are able to learn a broader set of invariant substructures (features), they will generalize more effectively across different environments.
+
+## 3 WHY LEARNING INVARIANT FEATURES INDIRECTLY?
+
+In this section, we motivate our study by addressing the question: *Why might learning invariant features indirectly be more effective than learning them directly?* We begin by presenting an intuitive hypothesis related to our research question, followed by an empirical study on synthetic datasets to support this hypothesis. Consider a dataset  $\mathcal{D}$
+
+![Figure 2: Comparison of the distribution P_Delta_prob across different OOD algorithms. The figure contains two density plots for SPMotif-0.40 and SPMotif-0.60. Each plot shows the density of Delta_prob for five algorithms: Ours (blue), IRM (green), VREx (red), GREA (purple), and GL (orange). The 'Ours' algorithm consistently shows a distribution centered near 0, while the others show distributions shifted towards higher Delta_prob values. Insets show zoomed-in views of the distributions near Delta_prob = 0.](9455ca65b9fc488df790769b0122628e_img.jpg)
+
+Figure 2: Comparison of the distribution P\_Delta\_prob across different OOD algorithms. The figure contains two density plots for SPMotif-0.40 and SPMotif-0.60. Each plot shows the density of Delta\_prob for five algorithms: Ours (blue), IRM (green), VREx (red), GREA (purple), and GL (orange). The 'Ours' algorithm consistently shows a distribution centered near 0, while the others show distributions shifted towards higher Delta\_prob values. Insets show zoomed-in views of the distributions near Delta\_prob = 0.
+
+Figure 2: Comparison of the distribution  $\mathbb{P}_{\Delta_{prob}}$  across different OOD algorithms.
+
+where each sample  $G^{(i)}$  comprises invariant features  $\{\mathbf{h}_{c,j}^{(i)}\}_{j=1}^{n_c}$  and spurious features  $\{\mathbf{h}_{s,j}^{(i)}\}_{j=1}^{n_s}$ , with  $n_c$  and  $n_s$  denoting the number of invariant and spurious features respectively. Any subset of the invariant features  $\{\mathbf{h}_{c,j}^{(i)}\}_{j=1}^{n_c}$  maintains stable relationships with  $Y$ , consequently OOD objectives that aim to directly learn invariant features (e.g., IRMv1 and VREx) may only capture a subset of these invariant features if a subset of invariant features can already achieve accurate predictions in the training set. In contrast, an OOD objective that seeks to remove the spurious features  $\{\mathbf{h}_{s,j}^{(i)}\}_{j=1}^{n_s}$  from the ERM-learned features may result in learning a more complete set of invariant features from  $\{\mathbf{h}_{c,j}^{(i)}\}_{j=1}^{n_c}$ , thus facilitating OOD generalization in unseen environments.
+
+**Empirical Study.** To validate our hypothesis that learning invariant features by removing spurious features may facilitate learning more invariant features, we perform experiments using a variant of SPMotif datasets (Wu et al., 2022c; Ying et al., 2019). Specifically, for each sample three invariant subgraphs are attached to the base spurious subgraph in the training and validation sets. In the test dataset, we perform model inference and record the estimated probability for *correctly predicted samples*, denoted as  $\hat{y}_j^{(i)}$ . Subsequently, we randomly removed two invariant subgraphs from these samples and compute the new estimated probability score, denoted as  $\tilde{y}_j^{(i)}$ . We then fit the distribution  $\mathbb{P}_{\Delta_{prob}}$  using Kernel Density Estimation (KDE) (Terrell & Scott, 1992), based on the changes in probability  $\Delta_{prob} := \hat{y}_j^{(i)} - \tilde{y}_j^{(i)}$ ,  $\forall i, j$ , as illustrated in Figure 2. If the encoder  $h(\cdot)$  can indeed learn all invariant features in the test set, then removing two invariant subgraphs should not change  $\hat{y}_j^{(i)}$ . Therefore, the closer  $\mathbb{P}_{\Delta_{prob}}$  is to 0, the more it indicates that the encoder has learned the full set of invariant features. In addition to the density function of  $\Delta_{prob}$ , we also calculate the Wasserstein distance of each algorithm to a null distribution, where the probability mass is entirely centered at 0. As demonstrated in Figure 2, IRMv1 (Arjovsky et al., 2020) and VREx (Krueger et al., 2021) exhibit significant changes in  $\Delta_{prob}$ , implying that for some samples, IRMv1 and VREx learn
+
+{3}------------------------------------------------
+
+only a subset of the invariant patterns. GIL (Li et al., 2022b) and GREA (Liu et al., 2022) are two variants of VRex and IRM that learn invariant features directly by performing environment inference and environment augmentation respectively. As shown in Figure 2, the Wasserstein distances for GIL (Li et al., 2022b) and GREA (Liu et al., 2022) are also greater than that of our proposed method. This highlights the advantages of the learning paradigm that indirectly learns invariant features by first learning and then removing spuriousness. However, one may raise concerns that while learning invariant features by first removing spurious features may indeed lead to capturing a more complete set of invariant features for the correctly predicted samples, it may also introduce spurious patterns if the spurious features are not effectively removed, which could render such a learning paradigm suboptimal in practice. To address this concern, we report test accuracy under varying strengths of spurious correlations, following previous experiments. As the strength of the spurious correlation increases, it becomes more challenging to eliminate the spurious features. From Figure 3, we have three observations: a) Our method consistently achieves superior OOD performance across different correlation strengths; b) Our method is less sensitive to the increased spurious correlations compared to other representative OOD methods, which is evident by the flatter curve in Figure 3; c) The higher test accuracy, combined with the distribution of probability changes from the previous experiment, suggests that our method enables a larger number of test samples to learn a more complete set of invariant features. Based on these observations and analysis, we conclude that indirectly learning invariant features is more effective than learning them directly.
+
+![Figure 3: A line graph showing Test Accuracy (%) on the y-axis (ranging from 45.0 to 62.5) versus Spurious correlation strengths on the x-axis (ranging from 0.4 to 0.9). Six methods are plotted: ERM (purple), IRM (blue), VRex (green), GIL (yellow), GREA (cyan), and Ours (red). The 'Ours' method maintains the highest accuracy, starting at approximately 62.0% at 0.4 strength and slightly decreasing to about 56.5% at 0.9 strength. Other methods show a more significant drop in accuracy as the correlation strength increases, with ERM and GREA reaching the lowest accuracies of approximately 43.5% and 46.0% respectively at 0.9 strength.](7fb5215fd72210a2e4cce6df55550c89_img.jpg)
+
+| Method | 0.4 | 0.6 | 0.8 | 0.9 |
+|-|-|-|-|-|
+| ERM | 57.5 | 51.5 | 51.5 | 43.5 |
+| IRM | 60.5 | 57.5 | 51.5 | 51.5 |
+| VRex | 60.0 | 56.0 | 47.5 | 46.0 |
+| GIL | 61.5 | 57.5 | 52.5 | 52.5 |
+| GREA | 60.0 | 57.5 | 46.0 | 46.0 |
+| Ours | 62.0 | 61.5 | 57.5 | 56.5 |
+
+Figure 3: A line graph showing Test Accuracy (%) on the y-axis (ranging from 45.0 to 62.5) versus Spurious correlation strengths on the x-axis (ranging from 0.4 to 0.9). Six methods are plotted: ERM (purple), IRM (blue), VRex (green), GIL (yellow), GREA (cyan), and Ours (red). The 'Ours' method maintains the highest accuracy, starting at approximately 62.0% at 0.4 strength and slightly decreasing to about 56.5% at 0.9 strength. Other methods show a more significant drop in accuracy as the correlation strength increases, with ERM and GREA reaching the lowest accuracies of approximately 43.5% and 46.0% respectively at 0.9 strength.
+
+Figure 3: Test accuracy under varying spurious correlation strengths of the variant of SPMotif datasets.
+
+## 4 METHODOLOGY
+
+Motivated by the observations in Sec. 3, we now introduce our proposed **LIRS** framework, which learns invariant features on graphs *indirectly*.
+
+### 4.1 LEARNING GRAPH SPURIOUSITY VIA BIASED INFOMAX
+
+The first step of learning invariant features in the LIRS framework is to effectively learn graph spuriousness. In this section, we first propose a variant of the infomax principle (Hjelm et al., 2019; Veličković et al., 2019; Linsker, 1988), namely *biased infomax*, which encourages spuriousness learning by suppressing invariant signals. We then present a more practical version of biased infomax, suitable for the real-world datasets. We first formally define *spuriousness learning* in below:
+
+**Definition 1. (Spuriousness Learning)** Assuming each data instance  $G^{(i)}$  in a dataset  $\mathcal{D}$  is composed of two parts  $\mathbf{h}_s^{(i)}$  and  $\mathbf{h}_s^{(i)}$ , an algorithm  $\mathcal{A}$  is said to be a spuriousness learner if  $\mathbf{h}_s^{(i)} = \mathcal{A}(G^{(i)})$ ,  $\forall i$ , i.e.,  $\mathcal{A}$  learns only the spurious features for all instances in  $\mathcal{D}$ .
+
+One such algorithm to encourage spuriousness learning is the *global-local infomax principle* (Hjelm et al., 2019; Veličković et al., 2019; Linsker, 1988), which maximizes the mutual information (MI) between global representation and local node representations, as defined in the following:
+
+**Definition 2. (The Infomax Principle)** The infomax principle optimizes the following optimization objective in Eqn. 1 w.r.t the GNN encoder  $h_\theta(\cdot)$ .
+
+$$\max_{\theta} \mathbb{E}_{G \sim \mathcal{G}} \frac{1}{|G|} \sum_{v_i \in G} I\left(\hat{\mathbf{h}}_i, \hat{\mathbf{h}}_G\right), \text{ s.t. } \hat{\mathbf{h}}_i = h_\theta(G), \hat{\mathbf{h}}_G = \text{READOUT}(\hat{\mathbf{h}}_i). \quad (1)$$
+
+The encoder  $h_\theta(\cdot)$  will primarily learn spurious features (Yao et al., 2024). However, it will still be constrained by  $|G_c|$ , the size of the invariant subgraph. As  $|G_c|$  increases, the learned global representation  $\hat{\mathbf{h}}_G$  will increasingly capture invariant representations (Yao et al., 2024). To mitigate this constraint and further facilitate spuriousness learning, we propose the *biased infomax principle*.
+
+{4}------------------------------------------------
+
+**Definition 3.** (The Biased Infomax Principle) The biased infomax principle optimizes the following optimization objective in Eqn. 2 w.r.t the GNN encoder  $h_\theta(\cdot)$ .
+
+$$\max_{\theta'} \mathbb{E}_{G \sim \mathcal{G}} \frac{1}{|G|} \left( \sum_{v_i \in G_s} I(\hat{\mathbf{h}}_i, \hat{\mathbf{h}}_G) - \sum_{v_i \in G_c} I(\hat{\mathbf{h}}_i, \hat{\mathbf{h}}_G) \right), \text{ s.t. } \hat{\mathbf{h}}_i = h_\theta(G), \hat{\mathbf{h}}_G = \text{READOUT}(\hat{\mathbf{h}}_i). \quad (2)$$
+
+By maximizing MI across nodes  $v_i \in G_s$  and minimizing MI across nodes  $v_i \in G_c$ , the biased infomax principle yields an encoder  $h_{\theta^*}(\cdot)$  that encourages the learning of spurious patterns while suppressing invariant ones. Formally, we can demonstrate that the biased infomax principle achieves spuriousity learning.
+
+**Theorem 4.1.** Given that the invariant subgraph  $G_c$  contains invariant patterns that are causally related to the target labels, and  $G_s$  contains only spurious patterns, the biased infomax principle achieves spuriousity learning, i.e., the encoder  $h_{\theta^*}(\cdot)$  learns solely the spurious features for each data sample  $G$  in  $\mathcal{D}$ .
+
+To achieve invariant learning by removing spuriousity, it is crucial to effectively learn the spurious features first. Theorem 4.1 demonstrates that the biased infomax principle can learn graph spuriousity more effectively than the vanilla infomax, as defined in Def. 2. However, in real-world scenarios,  $G_c$  is often unobservable, which hinders the practicality of the biased infomax principle. To make the proposed algorithm more practical, we propose an instance-level adaptive biased infomax, which incorporates a GNN explainer to identify the important nodes first, and then performs instance-wise counterfactual inference to determine whether the selected nodes should be biased or not.
+
+**Instance-level adaptive biased infomax.** At first glance, the biased infomax principle appears impractical due to the necessity of knowing  $G_c$  and  $G_s$ . To address this limitation, we employ an approximation algorithm to identify  $\tilde{G}_c$ , which serves as an estimate for  $G_c$ . Subsequently, we treat nodes  $v_i \in \tilde{G}_c$  to realize the biased infomax principle. In practice, we utilize GSAT (Miao et al., 2022), a GNN explainer  $e(\cdot)$  that is robust under distribution shifts, to identify  $\tilde{G}_c$  and  $\tilde{G}_s = G \setminus \tilde{G}_c$ . Nevertheless, the approximation error may inadvertently bias the algorithm by amplifying invariant signals and suppressing spurious ones, as demonstrated in the following proposition.
+
+**Proposition 1.** Given an error rate  $p\%$  in the approximation algorithm for  $G_c$ , i.e.,  $\tilde{G}_c$  contains  $1 - p\%$  nodes from  $G_c$  and  $p\%$  nodes from  $G_s$ , let the learning objectives for the biased infomax with the ground-truth subgraphs  $G_c$  and  $G_s$  and with the approximated subgraphs  $\tilde{G}_c$  and  $\tilde{G}_s$  be denoted as  $\mathcal{L}(\theta^*; \mathcal{D})$  and  $\mathcal{L}(\theta'; \mathcal{D})$  respectively. The difference between  $\mathcal{L}(\theta^*; \mathcal{D})$  and  $\mathcal{L}(\theta'; \mathcal{D})$  can be expressed as:
+
+$$\mathbb{E}_{G \sim \mathcal{G}} \left[ \frac{2}{|G|} \left( \sum_{v_i \in pG_s} I(\hat{\mathbf{h}}_i; \hat{\mathbf{h}}_G) - \sum_{v_i \in pG_c} I(\hat{\mathbf{h}}_i; \hat{\mathbf{h}}_G) \right) \right].$$
+
+Here  $pG$  denotes  $p\%$  nodes in graph  $G$ . When  $\hat{\mathbf{h}}_G$  learns primarily spurious features,  $I(\hat{\mathbf{h}}_j; \hat{\mathbf{h}}_G) > I(\hat{\mathbf{h}}_j; \hat{\mathbf{h}}_G), \forall v_i \in G_s, v_j \in G_c$ , then Prop. 1 implies that as  $p\%$  increases, the gap between the ground-truth learning objective and the learning objective with approximation will also increase, thus leading to inaccurate graph representations. To reduce the approximation error and mitigate this issue, we conduct *counterfactual inference* for a graph  $G$  by evaluating the changes in predicted probability with and without  $\tilde{G}_c$  derived from the GNN explainer. Assuming  $\tilde{G}_c = e(G, Y)$  closely approximates the ground-truth  $G_c$ , the removal of  $\tilde{G}_c$  should result in a significant change in the predicted probability score. Under this condition, for graph  $G$ , we bias  $v_i \in \tilde{G}_c$ . Otherwise, we employ vanilla infomax without the bias operation. Specifically, we use a pre-defined threshold  $\tau$ . For each graph data instance  $G^{(i)}$  with target label  $j$ , let  $\hat{y}_j^{(i)}$  and  $\tilde{y}_j^{(i)}$  denote the predicted probability scores before and after the removal of  $\tilde{G}_c$ , respectively. We then bias the infomax for graph  $G^{(i)}$  if  $\hat{y}_j^{(i)} - \tilde{y}_j^{(i)} > \tau$  using Eqn. 2; otherwise, we use Eqn. 1 to learn the graph representation.
+
+{5}------------------------------------------------
+
+### 4.2 LEARNING GRAPH INVARIANCE VIA CLASS-CONDITIONED CROSS-ENTROPY LOSS
+
+**Class-conditioned cross-entropy loss.** So far we have obtained the spurious graph representations  $\mathbf{h}_s$  for every instance  $G$  in the dataset. Next we consider how to learn graph invariance by removing the spurious features from ERM-learned representations. To solve this challenge, previous study (Yao et al., 2024) takes spurious features  $\mathbf{h}_s$  and target label  $Y$  as inputs to train a linear classifier using cross-entropy loss to obtain the logits, which capture spurious correlation for each sample  $G$ , and use these (spurious) logits for subsequent spurious feature removing. Although the input only contains spurious features, we argue that: *The logits generated may be inaccurate to capture the spurious correlation strengths due to the overlapping of spurious patterns across different classes.* To see this, we propose Prop. 2 to demonstrate this issue:
+
+**Proposition 2.** *Given a linear regression model with parameters  $\{\theta_1, \theta_2\}$  and spurious features  $\{x_1, x_2\}$ , the correlation strength for feature  $x_1$  is  $p$  and for  $x_2$  is  $1 - p$  when  $Y = 0$ . Similarly, the correlation strength for feature  $x_1$  is  $q$  and for  $x_2$  is  $1 - q$  when  $Y = 1$ . Assuming the spurious features  $x_1$  and  $x_2$  can each take values in  $\{0, 1\}$ , we obtain the following parameter estimates using Mean Squared Error (MSE) loss:  $\theta_1 = \frac{q}{p+q}, \theta_2 = \frac{1-q}{2-p-q}$ .*
+
+Prop. 2 demonstrates the issue brought by the interference of overlapping spurious features across different classes. For instance, when  $p = q, \theta_1 = \theta_2 = \frac{1}{2}$ , the generated logits fail to distinguish different spurious patterns. To mitigate this issue, we propose *class-conditioned cross-entropy loss*. Specifically, we first perform clustering within each class based on the spurious features  $\{\mathbf{h}_s^{(i)}\}_{i=1}^n$ . The resulted clusters will reflect different spurious patterns and environments accurately given the spurious features learned by the biased infomax objective. However, employing hard labels can result in a loss of information regarding the relative positions of samples within a cluster. To address this, we refit a linear classifier using the cluster labels as targets. This approach ensures that samples near the cluster boundaries exhibit higher entropy in their spurious logits, thereby preserving the information about their position within the cluster. Given the estimated spurious logits  $\mathbf{s}^{(i)} \in \mathbb{R}^K$  with  $K$  clusters in each class, we propose the following learning objective for spurious feature removing:
+
+$$\mathcal{L}_{inv} := \mathbb{E}_{y \sim y'} \mathbb{E}_{G^{(i)}|Y=y} - \sum_{j=1}^K w^{(i)} \mathbf{s}_j^{(i)} \log \left( \sigma(\hat{\mathbf{s}}_j^{(i)}) \right), \text{ s.t. } \hat{\mathbf{s}}^{(i)} = \rho'(\hat{\mathbf{h}}_G^{(i)}) \in \mathbb{R}^K. \quad (3)$$
+
+Here,  $\sigma(\cdot)$  denotes the softmax function,  $\rho'(\cdot) : \mathbb{R}^F \rightarrow \mathbb{R}^C$  represents the clustering classification head, which takes  $\hat{\mathbf{h}}_G$  from the GNN encoder  $h(\cdot)$  as input. The reweighting coefficient for each sample  $G^{(i)}$  is denoted as  $w^{(i)}$ , which adjusts the weight for samples from the majority group by reducing it and increases the weight for samples from the minority group. The generalized cross-entropy (GCE) method (Zhang & Sabuncu, 2018) is employed to calculate  $w^{(i)}$ , i.e.,  $w^{(i)} = \frac{1 - (\mathbf{s}_j^{(i)})^\gamma}{\gamma}$ , where  $j$  is the ground-truth clustering label for sample  $G^{(i)}$ , and  $\gamma$  is a hyper-parameter. Finally, The loss objective for feature disentanglement is:
+
+$$\mathcal{L} = \mathcal{L}_{GT} + \lambda \mathcal{L}_{inv}, \quad (4)$$
+
+where  $\mathcal{L}_{GT}$  denotes the ERM loss.  $\mathcal{L}_{inv}$ , serving as a regularization term, will guide the learning process to learn invariant features by removing spurious features from the ERM-learned features. Formally, we present the following theorem.
+
+**Theorem 4.2.** *There exists a suitable  $\gamma$  and clustering number  $K$ , such that minimizing the loss objective  $\mathcal{L} = \mathcal{L}_{GT} + \lambda \mathcal{L}_{inv}$  will lead to the optimal encoder  $h^*(\cdot)$  which elicits invariant features for any graph  $G$ , i.e.,  $\hat{\mathbf{h}}_G = h^*(G) = \mathbf{h}_e$ .*
+
+The proof is included in Appendix D. In the proof of Theorem 4.2, we show that  $\mathcal{L}_{inv}$  will guide the ERM-learned features to focus on invariant features by removing or unlearning the spurious ones. More concretely, given ERM learns both invariant and spurious features (Kirichenko et al., 2023; Chen et al., 2023b), i.e.,  $\hat{\mathbf{h}}_G = \kappa(\mathbf{h}_e, \mathbf{h}_s)$ , where  $\kappa(\cdot)$  is a functional mapping to graph representation  $\hat{\mathbf{h}}_G$  given a set of invariant features  $\mathbf{h}_e$  and a set of spurious features  $\mathbf{h}_s$ ,  $\mathcal{L}_{inv}$  regularizes the learning
+
+{6}------------------------------------------------
+
+Table 1: Performance on synthetic and real-world datasets. Numbers in **bold** indicate the best performance, while the underlined numbers indicate the second best performance.
+
+| Method | GOOD-Motif |  | GOOD-HIV |  | OGBG-Molbace |  | OGBG-Molbbp |  |
+|-|-|-|-|-|-|-|-|-|
+|  | base | size | scaffold | size | scaffold | size | scaffold | size |
+| ERM | 68.66 $\pm$ 4.25 | 51.74 $\pm$ 2.88 | 69.58 $\pm$ 2.51 | 59.94 $\pm$ 2.37 | 75.11 $\pm$ 3.03 | 83.60 $\pm$ 3.47 | 68.10 $\pm$ 1.68 | 78.29 $\pm$ 3.76 |
+| IRM | 70.65 $\pm$ 4.17 | 51.41 $\pm$ 3.78 | 67.97 $\pm$ 1.84 | 59.00 $\pm$ 2.92 | 75.47 $\pm$ 2.22 | 83.12 $\pm$ 2.58 | 67.22 $\pm$ 1.15 | 77.56 $\pm$ 2.48 |
+| GroupDRO | 70.62 $\pm$ 8.92 | 51.95 $\pm$ 5.86 | 70.64 $\pm$ 2.57 | 58.98 $\pm$ 2.16 | - | - | 66.47 $\pm$ 2.39 | 79.27 $\pm$ 2.43 |
+| VREx | 71.47 $\pm$ 6.69 | 52.67 $\pm$ 5.54 | 70.77 $\pm$ 2.84 | 58.53 $\pm$ 2.88 | 72.81 $\pm$ 4.29 | 82.55 $\pm$ 2.51 | 68.74 $\pm$ 1.03 | 78.76 $\pm$ 2.37 |
+| RSC | 46.12 $\pm$ 3.76 | 51.70 $\pm$ 5.47 | 69.16 $\pm$ 2.23 | 61.17 $\pm$ 0.74 | 74.59 $\pm$ 3.65 | 84.34 $\pm$ 2.65 | 69.01 $\pm$ 2.84 | 78.07 $\pm$ 3.89 |
+| DiverseModel | 54.24 $\pm$ 8.22 | 41.01 $\pm$ 1.98 | 69.17 $\pm$ 3.62 | 61.59 $\pm$ 2.23 | 73.48 $\pm$ 3.56 | 79.40 $\pm$ 1.70 | 68.04 $\pm$ 3.27 | 77.62 $\pm$ 1.90 |
+| DropEdge | 45.08 $\pm$ 4.46 | 45.63 $\pm$ 4.61 | 70.78 $\pm$ 1.38 | 58.53 $\pm$ 1.26 | 70.81 $\pm$ 2.12 | 76.39 $\pm$ 2.29 | 66.49 $\pm$ 1.55 | 78.32 $\pm$ 3.44 |
+| FLAG | 61.12 $\pm$ 2.39 | 51.66 $\pm$ 4.14 | 68.45 $\pm$ 2.30 | 60.59 $\pm$ 2.95 | <u>80.37<math>\pm</math>1.58</u> | 84.72 $\pm$ 0.88 | 67.69 $\pm$ 2.36 | 79.26 $\pm$ 2.26 |
+| LiSA | 54.59 $\pm$ 4.81 | 53.46 $\pm$ 3.41 | 70.38 $\pm$ 1.45 | 52.36 $\pm$ 3.73 | 78.05 $\pm$ 5.01 | 83.92 $\pm$ 2.52 | 68.11 $\pm$ 0.52 | 78.62 $\pm$ 3.74 |
+| DIR | 62.07 $\pm$ 8.75 | 52.27 $\pm$ 4.56 | 68.07 $\pm$ 2.29 | 58.08 $\pm$ 2.31 | 75.49 $\pm$ 2.80 | 77.42 $\pm$ 7.43 | 66.86 $\pm$ 2.25 | 76.40 $\pm$ 4.43 |
+| Disc | 51.08 $\pm$ 3.08 | 50.39 $\pm$ 1.15 | 68.07 $\pm$ 1.75 | 58.76 $\pm$ 0.91 | 57.78 $\pm$ 3.60 | 71.13 $\pm$ 8.86 | 67.12 $\pm$ 1.11 | 56.59 $\pm$ 10.09 |
+| CAL | 65.63 $\pm$ 4.29 | 51.18 $\pm$ 5.60 | 67.37 $\pm$ 3.61 | 57.95 $\pm$ 2.24 | 76.29 $\pm$ 1.60 | 79.68 $\pm$ 4.06 | 68.06 $\pm$ 2.60 | 79.50 $\pm$ 4.81 |
+| GREA | 56.74 $\pm$ 9.23 | 54.13 $\pm$ 10.02 | 67.79 $\pm$ 2.56 | 60.71 $\pm$ 2.20 | 77.16 $\pm$ 1.37 | 83.15 $\pm$ 9.07 | 69.72 $\pm$ 1.66 | 77.34 $\pm$ 3.52 |
+| GSAT | 62.80 $\pm$ 11.41 | 53.20 $\pm$ 8.35 | 68.66 $\pm$ 1.35 | 58.06 $\pm$ 1.98 | 72.32 $\pm$ 4.66 | 82.45 $\pm$ 2.73 | 66.78 $\pm$ 1.45 | 75.63 $\pm$ 3.83 |
+| CIGA | 66.43 $\pm$ 11.31 | 49.14 $\pm$ 8.34 | 69.40 $\pm$ 2.39 | 59.55 $\pm$ 2.36 | 76.44 $\pm$ 1.72 | 83.95 $\pm$ 2.75 | 64.92 $\pm$ 2.09 | 65.98 $\pm$ 3.31 |
+| AIA | 73.64 $\pm$ 5.15 | 55.85 $\pm$ 2.98 | 71.15 $\pm$ 1.81 | 61.64 $\pm$ 3.37 | 79.42 $\pm$ 2.01 | 85.11 $\pm$ 0.74 | 70.79 $\pm$ 1.53 | 81.03 $\pm$ 3.15 |
+| OOD-GCL | 56.46 $\pm$ 4.61 | 60.23 $\pm$ 8.49 | 70.85 $\pm$ 2.07 | 58.48 $\pm$ 2.94 | 75.96 $\pm$ 2.21 | 85.34 $\pm$ 1.77 | 67.28 $\pm$ 3.09 | 78.11 $\pm$ 3.32 |
+| EQUAD | 67.11 $\pm$ 10.11 | 59.72 $\pm$ 3.69 | 72.24 $\pm$ 0.64 | 64.19 $\pm$ 0.56 | 79.15 $\pm$ 2.32 | 86.41 $\pm$ 5.63 | 70.22 $\pm$ 2.36 | 80.82 $\pm$ 2.28 |
+| LIRS | <b>75.51<math>\pm</math>2.19</b> | <b>74.95<math>\pm</math>7.69</b> | <b>72.82<math>\pm</math>1.61</b> | <b>66.64<math>\pm</math>1.44</b> | <b>81.91<math>\pm</math>1.98</b> | <b>88.77<math>\pm</math>1.64</b> | <b>71.04<math>\pm</math>0.76</b> | <b>82.19<math>\pm</math>1.57</b> |
+
+process to optimize  $\kappa^*(\cdot)$  such that  $\hat{h}_G$  contains only  $h_c$ . While previous OOD methods achieve a similar goal (to learn only invariant features), our approach differs by first learning the spurious features and then leveraging them to identify the causal features from the ERM-learned features, a process we refer to as *spurious feature removing or unlearning*.
+
+## 5 EXPERIMENTS
+
+In this section, we perform empirical study on both synthetic and real-world datasets. More details about the datasets and experiment setup are included in Appendix H.
+
+### 5.1 EXPERIMENTAL SETUP
+
+**Datasets.** We adopt GOODMotif and GOODHIV datasets (Gui et al., 2022), OGBG-Molbace and OGBG-Molbbp datasets (Hu et al., 2020; Wu et al., 2018) to comprehensively evaluate the OOD generalization performance of our proposed framework. For GOODMotif datasets, we adopt base shift and size shift, for OGBG datasets, in addition to scaffold shift, we also create size shift, following previous studies (Gui et al., 2022; Sui et al., 2023). More details on the datasets used in our work are included in Appendix H.
+
+**Baselines.** Besides ERM (Vapnik, 1995), we compare our method against three lines of OOD baselines: (1) OOD algorithms on Euclidean data, including IRM (Arjovsky et al., 2020), VREx (Krueger et al., 2021), and GroupDRO (Sagawa et al., 2019); (2) Diverse feature learning methods, including RSC (Huang et al., 2020), and DiverseModel (Teney et al., 2022). (3) graph-specific OOD and data augmentation algorithms without requiring environment labels, including DIR (Wu et al., 2022c), GSAT (Miao et al., 2022), GREA (Liu et al., 2022), Disc (Fan et al., 2022), CIGA (Chen et al., 2022), AIA (Sui et al., 2023), OOD-GCL (Li et al., 2024a), EQUAD (Yao et al., 2024), DropEdge (Rong et al., 2019), FLAG (Kong et al., 2022), and LiSA (Yu et al., 2023). Details of the baselines and their implementation are provided in Appendix H.
+
+**Evaluation.** We report the ROC-AUC score for GOOD-HIV, OGBG-Molbbp, and OGBG-Molbace datasets, where the tasks are binary classification. For GOOD-Motif and SPMotif datasets, we use accuracy as the evaluation metric. We run experiments 4 times with different random seeds, select models based on the validation performance, and report the mean and standard deviations on the test set.
+
+{7}------------------------------------------------
+
+### 5.2 EXPERIMENTAL RESULTS
+
+In this section, we report the main results on both synthetic and real-world datasets.
+
+**Synthetic datasets.** LIRS achieves superior performance on GOOD-Motif, surpassing the second-best method by 12.51% (base split) and 25.50% (size split). This highlights its effectiveness in capturing domain-invariant features. While EQuAD also removes spurious features, its infomax-based learning may inadvertently retain them, whereas LIRS’s biased infomax effectively suppresses spurious signals. OOD-GCL (Li et al., 2024a) employs contrastive learning without labeled data, making invariant feature learning more challenging. As shown in Table 1, LIRS outperforms OOD-GCL across all datasets, benefiting from labeled data during training. We also compare LIRS with RSC Huang et al. (2020) and DiverseModel Teney et al. (2022), which aim to learn diverse features via ERM. As illustrated in Table 1, although RSC and DiverseModel perform well on real-world datasets, they achieve suboptimal results on the GOOD-Motif datasets. This discrepancy may arise from the fact that these methods attempt to capture diverse features, while in the GOOD-Motif datasets, only one invariant subgraph is causally related to the target. As a result, these methods may mistakenly capture non-generalizable patterns in  $G_s$ . In contrast, LIRS leverages biased infomax to effectively learn spurious patterns and subsequently identify the invariant subgraph by unlearning the spurious patterns. Lastly, LIRS significantly outperforms other OOD methods that aim to directly learn invariant features, showcasing the efficacy of the proposed learning paradigm.
+
+**Real-world datasets.** In real-world datasets, which present more complex and realistic distribution shifts, many graph OOD algorithms exhibit instability, occasionally underperforming ERM. In contrast, LIRS adopts an indirect learning paradigm, which may enable the learning of more invariant features compared to previous graph invariant learning methods, leading to more effective OOD generalization. Similarly to the results on synthetic datasets, LIRS also demonstrates superior OOD performance under both scaffold shift and size shift compared to other methods. EQuAD, which adopts a similar learning paradigm as LIRS, shows a comparable trend, with a more significant advantage under the size shift relative to other methods. Furthermore, the improvements of LIRS over EQuAD across various datasets highlights the effectiveness of the biased infomax principle and the intra-class cross-entropy loss for learning spurious features and invariant features respectively. Compared to other baselines that learn invariant features directly, LIRS outperforms the best method (AIA) by 4.62% in size shift and 1.95% in scaffold shift respectively.
+
+### 5.3 IN-DEPTH ANALYSIS
+
+**Can LIRS learn more invariant features?** To further validate the quality of invariant features learned by LIRS, we curated a dataset derived from the SPMotif dataset. Specifically, we constructed a binary classification dataset where the motifs *House* and *Crane* corresponds to label 0, and *Diamond* and *Cycle* corresponds to label 1. During the construction of each class’s samples, we attached both invariant subgraphs to the base subgraph with 50% chance, while in the remaining 50%, we randomly attached one invariant subgraph to the base spurious subgraph. For the test set, we randomly attached a single invariant subgraph to the base subgraph. Similar to the SPMotif dataset, the base spurious subgraph was correlated with the target labels, maintaining an equal correlation strength with the labels in the test set. In addition to evaluating LIRS against traditional methods such as IRM, VReX and their variants, we also incorporated strong graph-specific OOD baselines, including CIGA, AIA, and EQuAD for comparisons. The experimental results in Table 2 demonstrate that LIRS consistently outperforms other baselines across varying spurious correlation strengths, indicating its superior ability to learn more invariant features. Similarly, EQuAD, adopting a similar learning paradigm, also achieves competitive performance in SPMotif-binary datasets. This demonstrates that learning invariant features indirectly can lead to
+
+Table 2: Performance on the SPMotif-binary datasets under varying spurious correlations.
+
+| Method | SPMotif-binary |  |  |
+|-|-|-|-|
+|  | $b = 0.40$ | $b = 0.60$ | $b = 0.90$ |
+| ERM | $74.93 \pm 3.94$ | $72.78 \pm 3.15$ | $63.78 \pm 4.18$ |
+| IRM | $76.01 \pm 4.12$ | $70.85 \pm 4.73$ | $66.55 \pm 4.80$ |
+| VReX | $79.03 \pm 1.02$ | $73.78 \pm 1.75$ | $65.27 \pm 6.78$ |
+| GIL | $77.15 \pm 3.18$ | $73.85 \pm 2.76$ | $68.90 \pm 7.28$ |
+| GREA | $79.65 \pm 6.36$ | $73.01 \pm 7.99$ | $69.85 \pm 0.35$ |
+| CIGA | $76.93 \pm 3.94$ | $71.70 \pm 1.55$ | $66.80 \pm 5.35$ |
+| AIA | $78.46 \pm 3.19$ | $71.83 \pm 0.69$ | $64.37 \pm 4.14$ |
+| EQuAD | $80.82 \pm 0.65$ | $74.20 \pm 4.10$ | $69.79 \pm 7.81$ |
+| <b>LIRS</b> | <b><math>82.17 \pm 0.91</math></b> | <b><math>75.32 \pm 1.68</math></b> | <b><math>71.29 \pm 2.12</math></b> |
+
+{8}------------------------------------------------
+
+learning a more comprehensive set of invariant features and achieving better OOD generalization ability.
+
+![Figure 4: Ablation and hyperparameter sensitivity studies for LIRS. (a) Bar chart showing Test Acc. for LIRS and its ablations across four datasets. (b) Heatmaps showing Test Acc. for GOODHIV-Sea and GOODHIV-Size across hyperparameters lambda and threshold.](91be14371a97fb5ce9eeb29ae18d07c3_img.jpg)
+
+(a) Ablation study on biased infomax and intra-class cross-entropy loss.
+
+| Dataset | LIRS | w/o biased_infomax | w/o intra_class_loss |
+|-|-|-|-|
+| GOODmotif-Base | ~73 | ~70 | ~67 |
+| GOODmotif-Size | ~73 | ~70 | ~60 |
+| GOODHIV-Sea | ~71 | ~70 | ~69 |
+| GOODHIV-Size | ~66 | ~65 | ~64 |
+
+(b) Hyperparameter sensitivity analysis on GOODHIV datasets.
+
+| λ \ threshold | 0.1 | 0.3 | 0.7 | 0.9 |
+|-|-|-|-|-|
+| 0.01 | 72.03 | 71.92 | 72.82 | 72.05 |
+| 0.1 | 71.23 | 71.98 | 71.06 | 70.95 |
+| 0.3 | 70.63 | 72.03 | 71.06 | 71.92 |
+| 0.7 | 71.98 | 71.51 | 71.66 | 71.66 |
+
+| λ \ threshold | 0.1 | 0.3 | 0.7 | 0.9 |
+|-|-|-|-|-|
+| 0.01 | 63.74 | 64.15 | 63.40 | 63.70 |
+| 0.1 | 66.64 | 63.79 | 64.19 | 63.30 |
+| 0.3 | 63.33 | 65.25 | 63.56 | 62.17 |
+| 0.7 | 63.06 | 63.72 | 64.15 | 62.97 |
+| 0.9 | 63.74 | 64.99 | 63.37 | 65.29 |
+
+Figure 4: Ablation and hyperparameter sensitivity studies for LIRS. (a) Bar chart showing Test Acc. for LIRS and its ablations across four datasets. (b) Heatmaps showing Test Acc. for GOODHIV-Sea and GOODHIV-Size across hyperparameters lambda and threshold.
+
+Figure 4: Ablation and hyperparameter sensitivity studies for LIRS.
+
+**Ablation study.** We conducted an ablation study on biased infomax and class-conditioned (intra-class) cross-entropy loss to evaluate their effectiveness in LIRS. As illustrated in Figure 4a, replacing biased infomax with vanilla infomax to generate spurious features leads to performance degradation across all datasets. This decline is primarily due to the enhanced capability of biased infomax in learning spurious features, which is crucial for subsequent steps for learning graph invariance. Furthermore, replacing class-conditioned cross-entropy loss with standard cross-entropy loss also led to negative effects, which is mainly due to the interference of spurious patterns across different classes, as discussed in Sec. 4. One typical empirical support arises from the Motif-size dataset, where each spurious pattern is correlated with different target labels with nearly equal strength. As a result, even though biased infomax can generate accurate spurious features, the logits generated using the standard cross-entropy loss are not sufficiently precise, which aligns with Prop. 2. This limitation significantly constrains the test performance, as illustrated in Figure 4a. In contrast, the class-conditioned cross-entropy loss is able to generate more accurate spurious logits, thus enhancing the OOD performance.
+
+**Hyperparameter Sensitivity.** We investigate the impact of hyperparameters in LIRS, including the reweighting coefficient  $\gamma$ , the penalty weights  $\lambda$ , and hyperparameters related to biased infomax. Specifically, we analyze the effect of the epoch  $E$  at which embeddings are derived from biased infomax and the threshold used to determine whether a sample should be considered biased or not. As illustrated in Figure 4b, for both the GOODHIV-Sea and GOODHIV-Size datasets, LIRS demonstrates stable performance, highlighting its robustness to variations in hyperparameter settings. This consistency suggests that LIRS is agnostic to hyperparameter tuning, which further emphasizes its applicability in real-world scenarios.
+
+**How do different size split methods affect the OOD performance?** For the real-world datasets, the size split was performed in descending order, where the graphs in the training set have a larger number of nodes compared to those in the test set. To evaluate the impact of varying graph sizes on generalization ability of various OOD methods, we also performed size splits based on ascending order for the OGBG-Molbace and OGBG-Molbbp datasets. The results of these experiments are presented in Table 3. As shown, LIRS continues to outperform all competitive baselines under this alternative size split. Specifically, LIRS achieves the highest ROC-AUC scores on both OGBG-Molbace and OGBG-
+
+Table 3: Performance on OGBG datasets using a different size split procedure, where the graphs in the training set have a smaller number of nodes compared to those in the test set.
+
+| Method | OGBG Datasets |  |
+|-|-|-|
+|  | OGBG-Molbace | OGBG-Molbbp |
+| ERM | 76.31 $\pm$ 0.58 | 87.31 $\pm$ 2.37 |
+| IRM | 79.44 $\pm$ 3.05 | 88.77 $\pm$ 2.45 |
+| VRex | 76.38 $\pm$ 1.75 | 84.20 $\pm$ 2.80 |
+| GREA | 77.46 $\pm$ 5.57 | 86.18 $\pm$ 2.54 |
+| GSAT | 72.29 $\pm$ 4.45 | 87.46 $\pm$ 2.67 |
+| CIGA | 77.89 $\pm$ 3.68 | 87.94 $\pm$ 0.86 |
+| AIA | 78.62 $\pm$ 2.88 | 89.18 $\pm$ 1.77 |
+| EQuAD | 82.34 $\pm$ 3.42 | 88.65 $\pm$ 3.83 |
+| <b>LIRS</b> | <b>84.62<math>\pm</math>0.84</b> | <b>90.24<math>\pm</math>4.14</b> |
+
+{9}------------------------------------------------
+
+Molbbbp datasets. This highlights the superiority of LIRS in generalizing to larger graphs when trained on smaller ones, further confirming its potential for real-world applications.
+
+## 6 RELATED WORK
+
+**Learning invariant features.** OOD generalization is a critical challenge in machine learning, where models trained on a specific data distribution often fail to generalize well to unseen distributions. Recently invariance learning has been proposed to tackle this issue, which builds upon the theory of causality (Peters et al., 2016; Pearl, 2009) to learn causally-related representation that remain stable across different environments (Arjovsky et al., 2020; Parascandolo et al., 2020; Mahajan et al., 2021; Wald et al., 2021; Ahuja et al., 2020; 2021). Inspired from IRM (Arjovsky et al., 2020), several invariant learning methods on graphs are proposed (Yang et al., 2022; Li et al., 2022b; Fan et al., 2022; Liu et al., 2022; Wu et al., 2022c; Chen et al., 2022; 2023a; Gui et al., 2023; Sui et al., 2023; Li et al., 2024b) to learn graph-level representations that are robust to distribution shifts. Most of these methods aim to learn invariant features directly by training an equipredictive classifier. Recent study (Yao et al., 2024) has proposed a new learning paradigm to learn graph invariance indirectly by learning spurious features first, then disentangle them from the ERM-learned representations. In this work, we adopt this learning paradigm for learning graph invariance.
+
+**Self-supervised learning induces spuriousity.** Self-supervised learning (SSL) has emerged as a potent paradigm for learning representations from unlabeled datasets. The fundamental concept involves devising pretext tasks that maximize similarity between two augmented views of the same data point, often utilizing the InfoNCE loss (Oord et al., 2018). This approach has been widely applied in domains such as images (Chen et al., 2020a;b) and graphs (Veličković et al., 2019; Sun et al., 2019; Zhu et al., 2020; You et al., 2020). Recent work have shown that SSL may tend to learn spurious features in both image domain (Hamidieh et al., 2024; Meehan et al., 2023) and graph domain (Yao et al., 2024). Hamidieh et al. (2024) attempted to enhance SSL model performance by addressing this issue and promoting the learning of invariant features. In contrast, our goal in this work is to improve SSL model ability to capture spuriousity, thereby facilitating better feature disentanglement for invariant learning.
+
+**Learning diverse features.** Recent studies have shown that ERM tends to encourage models to learn the simplest predictive features (Hermann & Lampinen, 2020; Kalimeris et al., 2019; Neyshabur et al., 2014; Pezeshki et al., 2021). This simplicity bias causes the models to rely on simple (spurious) but non-causal features, ignoring more complex patterns that might be equally predictive. To address this challenge, Huang et al. (2020) employs a self-challenging mechanism to force the model to learn diverse patterns by discarding dominant features, while Teney et al. (2022) constructs diverse features by training a collection of classifiers with diversity regularization. Additionally, Zhang et al. (2022a); Chen et al. (2023b) adopt DRO to iteratively explore new features. While previous works aim to encourage models to learn a diverse set of predictive patterns, our method takes a different approach. Specifically, we aim to remove or unlearn spurious features from ERM-learned features, thereby allowing the model to capture more invariant features.
+
+## 7 CONCLUSIONS
+
+In this study, we identified a critical limitation in IRM, VRex and their variants on graph invariant learning, i.e., these methods may only capture a subset of the invariant features, thereby limiting their OOD generalization performance. To address this issue, we investigate the effectiveness of learning invariant features *indirectly* by first learning and then removing spurious features. Our theoretical and empirical analyses demonstrate that this approach facilitates the learning of a more comprehensive set of invariant features than traditional (graph) invariant learning methods, thereby improving generalization to unseen environments. We then propose **LIRS** that adopts this learning paradigm, which consists of: a) The biased infomax principle, and b) The class-conditioned cross-entropy loss, which elicit effective spuriousity learning and invariant learning respectively, aiming to learn more invariant features. Extensive experiments on both synthetic and real-world datasets demonstrate the superiority of our proposed method over existing state-of-the-art OOD algorithms.
+
+ Rest of paper (reference and Appendix) is removed.

@@ -1,0 +1,403 @@
+
+
+{0}------------------------------------------------
+
+# METAOPTIMIZE: A FRAMEWORK FOR OPTIMIZING STEP SIZES AND OTHER META-PARAMETERS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+We address the challenge of optimizing meta-parameters (i.e., hyperparameters) in machine learning algorithms, a critical factor influencing training efficiency and model performance. Moving away from the computationally expensive traditional meta-parameter search methods, we introduce MetaOptimize framework that dynamically adjusts meta-parameters, particularly step sizes (also known as learning rates), during training. More specifically, MetaOptimize can wrap around any first-order optimization algorithm, tuning step sizes on the fly to minimize a specific form of regret that accounts for long-term effect of step sizes on training, through a discounted sum of future losses. We also introduce low complexity variants of MetaOptimize that, in conjunction with its adaptability to multiple optimization algorithms, demonstrate performance competitive to those of best hand-crafted learning rate schedules across various machine learning applications.
+
+## 1 INTRODUCTION
+
+Optimization algorithms used in machine learning involve meta-parameters (i.e., hyperparameters) that substantially influence their performance. These meta-parameters are typically identified through a search process, such as grid search or other trial-and-error methods, prior to training. However, the computational cost of this meta-parameter search is significantly larger than that of training with optimal meta-parameters (Dahl et al., 2023; Jin, 2022). Meta-parameter optimization seeks to streamline this process by concurrently adjusting meta-parameters during training, moving away from the computationally expensive and often sub-optimal trial and error search methods.
+
+Meta-parameter optimization is particularly important in continual learning (De Lange et al., 2021), its primary domain, where dynamic environments or evolving loss functions necessitate meta-parameters, like step sizes, to adapt to optimal time-varying values rather than settling on a static value as in the stationary case. Nevertheless, this work concentrates on the stationary scenario, demonstrating the competitiveness of meta-parameter optimization even in this case.
+
+In this work, we propose *MetaOptimize* as a framework for optimizing meta-parameters to minimize a form of regret, specifically accounting for the long-term influence of step sizes on future loss. The framework is applicable to a broad range of meta-parameters, however the primary focus of this paper is on step sizes as a critical meta-parameter that is universally present.
+
+MetaOptimize brings additional benefits beyond simplifying the search process. Firstly, it enables a dynamic step-size adjustment during training, potentially accelerating the learning process. Traditional methods typically require manual customization of learning rate schedules for each problem, often following an optimal pattern of initial increase and subsequent decay (Amid et al., 2022). As our experiments show, step sizes obtained from MetaOptimize follow similar patterns automatically.
+
+Secondly, varying step sizes across different blocks of a neural network, such as layers or neurons, has been shown to improve performance (Singh et al., 2015; Howard & Ruder, 2018). Manually tuning or using grid search for block-wise step-sizes is impractical in networks with numerous blocks. MetaOptimize framework can automatically manage blockwise step-sizes.
+
+The concept of meta step-size optimization can be traced back to (Kesten, 1958), Delta-bar-Delta (Sutton, 1981; Jacobs, 1988), and its incremental variant, IDBD (Sutton, 1992). Over the years, numerous methods have been developed to address this challenge, detailed further in Section 8. This research distinguishes itself from prior work through the following key aspects:
+
+{1}------------------------------------------------
+
+- We introduce a formalization of step-size optimization as minimizing a specific form of regret, essentially a discounted sum of future losses. We demonstrate how to handle this minimization in a causal manner, by introducing the MetaOptimize framework.
+- MetaOptimize framework is general in the sense that it can wrap around any first-order optimization algorithm, also called *base update*, (such as SGD, RMSProp (Hinton, 2012), Adam (Kingma & Ba, 2014), or Lion (Chen et al., 2023)), for which it optimizes step sizes via an algorithm of desire (such as SGD, Adam, RMSProp, or Lion), called the *meta update*.
+- We develop approximation methods (Section 6), that when integrated into MetaOptimize, lead to computationally efficient algorithms that outperform state-of-the-art automatic hyperparameter optimization methods on CIFAR10, ImageNet, and language modeling applications (refer to experiments in Section 7).
+- We show that some existing methods (like IDBD, its extension (Xu et al., 2018), and hypergradient descent (Baydin et al., 2017)) are specific instances or approximations within the MetaOptimize framework (see Section 5).
+
+## 2 PROBLEM SETTING
+
+We introduce a general continual optimization setting that, for a given sequence of loss functions  $f_t(\cdot) : \mathbb{R}^n \rightarrow \mathbb{R}$ ,  $t = 0, 1, 2, \dots$ , aims to find a sequence of weight vectors  $w_1, w_2, w_3, \dots$  to minimize a discounted sum of future losses:
+
+$$F_t^\gamma \stackrel{\text{def}}{=} (1 - \gamma) \sum_{\tau > t} \gamma^{\tau-t-1} f_\tau(w_\tau), \quad (1)$$
+
+where  $\gamma \in [0, 1)$  is a fixed constant, often very close to 1, called the *discount factor*. As an important special case, the above setting includes stationary supervised learning if  $f_t$  are sampled from a static distribution, for all  $t$ . In this case, minimizing  $F_t^\gamma$  results in rapid minimization of expected loss.
+
+Consider an arbitrary first order optimization algorithm (including but not limited to SGD, RMSProp, Adam, or Lion) for updating  $w_t$ . At each time  $t$ , this algorithm takes the gradient  $\nabla f_t(w_t)$  of the immediate loss function, along with an  $m$ -dimensional vector  $\beta_t$  of meta-parameters, and updates  $w_t$  and possibly some internal variables (e.g., momentum in Adam or trace of gradient squares in RMSProp), based on a fixed update rule  $\text{Alg}_{\text{base}}$ , referred to as the *base-update*,
+
+$$x_{t+1} = \text{Alg}_{\text{base}}(x_t, \nabla f_t(w_t), \beta_t), \quad (2)$$
+
+where  $x_t \stackrel{\text{def}}{=} \text{Stack}(w_t, \tilde{x}_t)$  is an  $\tilde{n}$ -dimensional vector obtained by stacking  $w_t$  and all internal variables of the algorithm that are being updated (e.g., momentum), denoted by  $\tilde{x}_t$ . The goal of the MetaOptimize framework is to find a sequence of meta-parameters  $\beta_t$ , for  $t = 1, 2, \dots$ , such that when plugged into the base update, (2), results in relative minimization of  $F_t^\gamma$  defined in (1).
+
+Step-size optimization is a special case of the above framework where at each time  $t$ , the  $m$  dimensional vector  $\beta_t$  is used to determine the  $n$ -dimensional (weight-wise) vector  $\alpha_t$  of step sizes (typically  $m \ll n$ ), through a fixed function  $\sigma : \mathbb{R}^m \rightarrow \mathbb{R}^n$ ,
+
+$$\alpha_t = \sigma(\beta_t). \quad (3)$$
+
+A typical choice is to partition weights of the neural network into  $m$  blocks and use step-size  $\exp(\beta)$  within each block for some entry  $\beta$  of  $\beta$ . Depending on  $m$ , this can result in a single shared scalar step-size, or layer-wise, node-wise, or weight-wise step-sizes. It is particularly beneficial to consider a function  $\sigma$  of the exponential form, mentioned above, because of two reasons (Sutton, 1992). First, it ensures that  $\alpha_t$  will always be positive. Second, a constant change in  $\beta_t$  would lead to a multiplicative change in  $\alpha_t$ , making it suitable for adapting step sizes with different orders of magnitude.
+
+## 3 FORWARD AND BACKWARD VIEWS
+
+Since the definition of  $F_t^\gamma$  in (1) relies on information forward into the future, minimizing it in a causal way necessitates alternative views; discussed in this section. In order to motivate our approach, we start by considering a hypothetical meta-parameter optimization algorithm that has oracle access
+
+{2}------------------------------------------------
+
+to future information (e.g., future loss), and updates  $\beta_t$  along the gradient of  $F_t^\gamma$  with respect to  $\beta_t$ ; that is for  $t = 0, 1, 2, \dots$
+
+$$\beta_{t+1} = \beta_t - \eta \frac{d}{d\beta_t} F_t^\gamma = \beta_t - \eta (1 - \gamma) \sum_{\tau > t} \gamma^{\tau-t-1} \frac{d}{d\beta_t} f_\tau(w_\tau), \quad (4)$$
+
+for some fixed *meta step-size*,  $\eta > 0$ . This *forward-view* update however requires that at time  $t$ , we have access to  $f_\tau(\cdot)$  and  $w_\tau$  for all  $\tau > t$ , which are typically unavailable. To circumvent this problem, we adopt an idea similar to *eligibility traces* in reinforcement learning (Sutton, 1988; Sutton & Barto, 2018). More specifically, instead of the forward-view update, we introduce an update of the following type, which we call the *backward-view* update. At time  $\tau = 0, 1, 2, \dots$ , we let
+
+$$\beta_{\tau+1} \leftarrow \beta_\tau - \eta (1 - \gamma) \sum_{t < \tau} \gamma^{\tau-t-1} \frac{d}{d\beta_t} f_\tau(w_\tau). \quad (5)$$
+
+Note that every term  $\gamma^{\tau-t-1} \frac{d f_\tau(w_\tau)}{d\beta_t}$  in the right hand side of (4) also appears in (5), but is applied at time  $\tau$  instead of time  $t$ , which is the earliest time that all required information for computing this term is available. Similar to the eligibility traces in RL, backward view updates are accurate approximation of the forward view updates for sufficiently small meta-step sizes (i.e., when  $\eta \rightarrow 0$ ), in the following sense: consider some  $T \geq 1$  and suppose that  $f_t(\cdot) = 0$  for all  $t < 0$  and all  $t > T$ . Then, as  $\eta \rightarrow 0$ , it can be shown that  $(\beta_T^{(5)} - \beta_0)/\eta \rightarrow (\beta_T^{(4)} - \beta_0)/\eta$ , where  $\beta_T^{(5)}$  and  $\beta_T^{(4)}$  are the values of  $\beta$  at time  $T$  obtained from updates (5) and (4), respectively, starting from the same initial value  $\beta_0$  at time 0. This is because as  $\eta \rightarrow 0$ ,  $\beta$  remains almost constant over the interval  $[0, T]$ , and the right hand side of (5) would be equal to the right hand side of (4) when summed over  $[0, T]$ , with accuracy  $O(\eta^2)$ . For larger values of  $\eta$ , the approximation may not be as accurate. Refer to Section 9 for a discussion on more accurate approximations.
+
+In light of (5), the  $\widehat{\nabla}_\beta F_\tau$ , defined below serves as a causal proxy for  $d F_\tau^\gamma / d \beta_\tau$ :
+
+$$\widehat{\nabla}_\beta F_\tau \stackrel{\text{def}}{=} (1 - \gamma) \sum_{t=0}^{\tau-1} \gamma^{\tau-t-1} \frac{d}{d\beta_t} f_\tau(w_\tau). \quad (6)$$
+
+It follows from chain rule that
+
+$$\widehat{\nabla}_\beta F_\tau = \mathcal{H}_\tau^T \nabla f_\tau(w_\tau), \quad (7)$$
+
+where
+
+$$\mathcal{H}_\tau \stackrel{\text{def}}{=} (1 - \gamma) \sum_{t=0}^{\tau-1} \gamma^{\tau-t-1} \frac{d w_\tau}{d \beta_t}. \quad (8)$$
+
+The  $d w_\tau / d \beta_t$  in (8) denotes the Jacobian matrix of  $w_\tau$  with respect to  $\beta_t$ . Therefore,  $\mathcal{H}_\tau$  is an  $n \times m$  matrix such that  $\mathcal{H}_\tau v$ , for any  $m \times 1$  vector  $v$ , equals the change in  $w_\tau$  if we increment all past  $\beta_t$  along  $\gamma^{\tau-t} v$ , while taking into account the non-linear dynamics of  $\beta$  (i.e., the impact of each  $\beta_t$  increment on  $\beta_\tau$  of future times  $\tau > t$ ).
+
+## 4 METAOPTIMIZE
+
+The general formulation of MetaOptimize framework is given in Algorithm 1. The idea is to update  $\beta_t$  via any first order optimization algorithm to minimize  $F_t^\gamma$ , while using the surrogate gradient  $\widehat{\nabla}_\beta F_t$  in place of  $\nabla_\beta F_t^\gamma$ , to preserve causality of the updates. More specifically, for  $t = 1, 2, \dots$ , let
+
+$$y_{t+1} = \text{Alg}_{\text{meta}}(y_t, \widehat{\nabla}_\beta F_t) = \text{Alg}_{\text{meta}}(y_t, \mathcal{H}_t^T \nabla f_t(w_t)) \quad (9)$$
+
+be the *meta update*, where  $y_t \stackrel{\text{def}}{=} \text{Stack}(\beta_t, \hat{y}_t)$  is an  $\tilde{m}$ -dimensional vector obtained from stacking  $\beta_t$  and all other internal variables  $\hat{y}_t$  of the  $\text{Alg}_{\text{meta}}$  algorithm (e.g., momentum), and the second equality follows from (7). Examples of  $\text{Alg}_{\text{meta}}$  include SGD, RMSprop, Adam, and Lion algorithms. Note that in all cases, we pass  $\widehat{\nabla}_\beta F$  to the algorithm as the gradient.
+
+In each iteration, after performing the base update (2), we compute  $\mathcal{H}_t^T \nabla f_t(w_t)$  and plug it into (9) to update  $y$  (and in particular  $\beta$ ). In the rest of this section, we present incremental updates for  $\mathcal{H}_t$ .
+
+{3}------------------------------------------------
+
+Let  $h_t$  be an  $nm$ -dimensional vector obtained by stacking the columns of the  $n \times m$  matrix  $\mathcal{H}_t$ . It follows from the chain rule that for any times  $t$  and  $\tau$  with  $t \geq \tau$ ,
+
+$$\begin{aligned}\frac{d y_{t+1}}{d \beta_\tau} &= \frac{d y_{t+1}}{d y_t} \frac{d y_t}{d \beta_\tau} + \frac{d y_{t+1}}{d x_t} \frac{d x_t}{d \beta_\tau} + \frac{d y_{t+1}}{d h_t} \frac{d h_t}{d \beta_\tau}, \\ \frac{d x_{t+1}}{d \beta_\tau} &= \frac{d x_{t+1}}{d y_t} \frac{d y_t}{d \beta_\tau} + \frac{d x_{t+1}}{d x_t} \frac{d x_t}{d \beta_\tau} + \frac{d x_{t+1}}{d h_t} \frac{d h_t}{d \beta_\tau}, \\ \frac{d h_{t+1}}{d \beta_\tau} &= \frac{d h_{t+1}}{d y_t} \frac{d y_t}{d \beta_\tau} + \frac{d h_{t+1}}{d x_t} \frac{d x_t}{d \beta_\tau} + \frac{d h_{t+1}}{d h_t} \frac{d h_t}{d \beta_\tau}.\end{aligned}$$
+
+Letting
+
+$$G_t \stackrel{\text{def}}{=} \begin{bmatrix} \frac{d y_{t+1}}{d y_t} & \frac{d y_{t+1}}{d x_t} & \frac{d y_{t+1}}{d h_t} \\ \frac{d x_{t+1}}{d y_t} & \frac{d x_{t+1}}{d x_t} & \frac{d x_{t+1}}{d h_t} \\ \frac{d h_{t+1}}{d y_t} & \frac{d h_{t+1}}{d x_t} & \frac{d h_{t+1}}{d h_t} \end{bmatrix}, \quad (10)$$
+
+the above set of equations can be equivalently written as
+
+$$\begin{bmatrix} \frac{d y_{t+1}}{d \beta_\tau} & \frac{d x_{t+1}}{d \beta_\tau} & \frac{d h_{t+1}}{d \beta_\tau} \end{bmatrix}^T = G_t \begin{bmatrix} \frac{d y_t}{d \beta_\tau} & \frac{d x_t}{d \beta_\tau} & \frac{d h_t}{d \beta_\tau} \end{bmatrix}^T.$$
+
+It follows that
+
+$$\sum_{\tau=0}^t \gamma^{t-\tau} \begin{bmatrix} \frac{d y_{t+1}}{d \beta_\tau} & \frac{d x_{t+1}}{d \beta_\tau} & \frac{d h_{t+1}}{d \beta_\tau} \end{bmatrix}^T = G_t \begin{bmatrix} \frac{d y_t}{d \beta_t} & \frac{d x_t}{d \beta_t} & \frac{d h_t}{d \beta_t} \end{bmatrix}^T + G_t \sum_{\tau=0}^{t-1} \gamma^{t-\tau} \begin{bmatrix} \frac{d y_\tau}{d \beta_\tau} & \frac{d x_\tau}{d \beta_\tau} & \frac{d h_\tau}{d \beta_\tau} \end{bmatrix}^T. \quad (11)$$
+
+Let
+
+$$Y_t \stackrel{\text{def}}{=} (1-\gamma) \sum_{\tau=0}^{t-1} \gamma^{t-\tau-1} \frac{d y_\tau}{d \beta_\tau} \quad (12)$$
+
+$$X_t \stackrel{\text{def}}{=} (1-\gamma) \sum_{\tau=0}^{t-1} \gamma^{t-\tau-1} \frac{d x_\tau}{d \beta_\tau}, \quad (13)$$
+
+$$Q_t \stackrel{\text{def}}{=} (1-\gamma) \sum_{\tau=0}^{t-1} \gamma^{t-\tau-1} \frac{d h_\tau}{d \beta_\tau}. \quad (14)$$
+
+Note also that  $d x_t / d \beta_t = 0$ ,  $d h_t / d \beta_t = 0$ , and  $d y_t / d \beta_t = d \text{Stack}(\beta_t, \tilde{y}_t) / d \beta_t = \text{Stack}(I, 0)$ . Plugging these into (11), we obtain
+
+$$\begin{bmatrix} Y_{t+1} \\ X_{t+1} \\ Q_{t+1} \end{bmatrix} = G_t \left( \gamma \begin{bmatrix} Y_t \\ X_t \\ Q_t \end{bmatrix} + (1-\gamma) \begin{bmatrix} I \\ 0 \\ 0 \end{bmatrix} \right). \quad (15)$$
+
+Matrices  $X_t, Y_t, Q_t$  can be computed iteratively using (15). The matrix  $\mathcal{H}_t$  in (8) is then obtained from the sub-matrix constituting the first  $n$  rows of  $X_t$ , because  $x_t = \text{Stack}(w_t, \tilde{x}_t)$ .
+
+To complete Algorithm 1, it only remains to compute the matrix  $G_t$  in (10). In Appendix A, we calculate  $G_t$  for common choices of base and meta updates: SGD, AdamW, and Lion. Notably, the first row of  $G_t$  blocks depends only on  $\text{Alg}_{\text{meta}}$ , and the rest of  $G_t$  blocks depend only on  $\text{Alg}_{\text{base}}$ . This simplifies the derivation and implementation for various base and meta algorithm combinations.
+
+*Remark 4.1.* A key distinction of MetaOptimize from existing meta-parameter optimization methods is that it accounts for the dynamics of the meta-parameters  $\beta$ —specifically, how changes in the current  $\beta$  affect future values of  $\beta$ . This is captured by the  $Y_t$  matrix defined in (12), whose influence then propagates into  $\mathcal{H}_t$  and the meta-update (see (15)). To provide more intuition, let's focus on a simple case with one-dimensional  $\beta$  and SGD meta-updates, and consider two cases: a) If  $\beta_t$  has consistently increased over the recent past trying to track the optimal  $\beta$ , then  $Y_t$  will grow large, resulting in significant increments of  $H_t$ . This increases the norm of  $H_t$ , and improves the tracking of optimal  $\beta$ . b) If  $\beta_t$  has remained nearly constant, suggesting convergence to the optimal value,  $Y_t$  will shrink, leading to smaller  $H_t$  increments and smaller updates to  $\beta_t$ . This helps stabilize  $\beta$  around its optimal value.
+
+{4}------------------------------------------------
+
+#### **Algorithm 1** MetaOptimize Framework (for general meta-parameters)
+
+---
+
+**Given:** Base-update  $\text{Alg}_{\text{base}}$ , meta-update  $\text{Alg}_{\text{meta}}$ ,  
+**Parameters:** Discount-factor  $\gamma \leq 1$ .  
+**Initialize:**  $X_0 = 0_{(n+\tilde{n}) \times m}$ ,  $Y_0 = [I_{m \times m} | 0_{m \times \tilde{n}}]^T$ , and  $Q_0 = 0_{nm \times m}$ .  
+**for**  $t = 0, 1, 2, \dots$  **do**  
+     $x_{t+1} \leftarrow \text{Alg}_{\text{base}}(x_t, \nabla f_t(w_t), \beta_t)$ .  
+     $\mathcal{H}_t =$  sub-matrix of  $X_t$ , constituting its first  $n$  rows.  
+     $y_{t+1} \leftarrow \text{Alg}_{\text{meta}}(y_t, \mathcal{H}_t^T \nabla f_t(w_t))$ .  
+    Update  $X_t$ ,  $Y_t$ , and  $Q_t$  from (15), using  $G_t$  in (10).  
+**end for**
+
+---
+
+## 5 REDUCING COMPLEXITY
+
+The matrix  $G_t$  in (10) is typically large, reducing the algorithm’s practicality. We discuss two approximations of  $G_t$  for more efficient algorithms.
+
+**$2 \times 2$  approximation:** The vector  $h_t$ , formed by stacking  $\mathcal{H}_t$ ’s columns, has length  $mn$ , making  $G_t$ ’s last row and column of blocks very large. Moreover, as shown in Appendix A, the term  $d h_{t+1} / d x_t$  typically involves third order derivatives of  $f_t$  with respect to  $w_t$ , which is not practically computable.
+
+In the  $2 \times 2$  approximation, we resolve the above problems by completely zeroing out all blocks in the last row and also in the last column of blocks of  $G_t$  in (10). Consequently, we can also remove  $Q_t$  from the algorithm. This appears to have minimal impact on the performance, as we empirically observed in simple settings. Intuitively, the block  $d x_{t+1} / d h_t$  in  $G_t$  is zero, as  $\mathcal{H}_t$  doesn’t affect the base update (2). Thus,  $Q$  affects  $X$ , only indirectly, via  $Y$ .
+
+**L-approximation:** Herein, we take a step further, and in addition to the last row and the last column of blocks of  $G_t$ , we also zero out the block in the first row and the second column of  $G_t$ . In other words, we let
+
+$$G_t^L \stackrel{\text{def}}{=} \begin{bmatrix} \frac{d y_{t+1}}{d y_t} & 0 \\ \frac{d x_{t+1}}{d y_t} & \frac{d x_{t+1}}{d x_t} \end{bmatrix}, \quad (16)$$
+
+and simplify (15) as
+
+$$\begin{bmatrix} Y_{t+1} \\ X_{t+1} \end{bmatrix} = G_t^L \left( \gamma \begin{bmatrix} Y_t \\ X_t \end{bmatrix} + (1 - \gamma) \begin{bmatrix} I \\ 0 \end{bmatrix} \right). \quad (17)$$
+
+We have empirically observed that the resulting algorithm typically performs as good as the  $2 \times 2$  approximation, and even results in improved stability in some cases.
+
+**Intuition of MetaOptimize updates:** Algorithm 2 provides a  $2 \times 2$  approximation of MetaOptimize for the case where both base and meta updates use SGD, and under scalar step-size (detailed derivation in Appendix A). It shows that  $\mathcal{H}_t$  traces past gradients, decaying at rate  $\gamma(I - [\alpha] \nabla^2 f_t)$ . This decay ensures that if past gradients poorly approximate future ones due to large  $\nabla^2 f_t$  or  $\alpha$ , their influence fades more rapidly. If the current gradient aligns positively with past gradients (i.e.,  $-\mathcal{H}_t^T \nabla f_t > 0$ ), the algorithm increases the step-size  $\alpha$  for quicker adaptation; if negatively correlated, it reduces the step size to prevent issues like zigzagging.  $Y_t$  in (12) reflects the impact of changes in past  $\beta$  on the current value of  $\beta$ , amplifying the increment in the  $\mathcal{H}_{t+1}$  update if  $\beta$  has been consistently rising or falling over the recent past. It is also worth noting that in Algorithm 2, under the L-approximation,  $Y_t$  remains constant, equal to  $I$ . A similar phenomenon occurs also when Adam, RMSProp, or Lion algorithms are used instead of SGD.
+
+**Containing some existing algorithms as special cases:** Special cases of the above L-approximation method include IDBD algorithm (Sutton, 1982) and its extension (Xu et al., 2018), if we limit  $\text{Alg}_{\text{base}}$  and  $\text{Alg}_{\text{meta}}$  to SGD algorithm. Refer to Appendix B.1 for more details and proofs.
+
+MetaOptimize also contains the hypergradient-descent algorithm (Baydin et al., 2017) as a special case, when using SGD for both base and meta updates of MetaOptimize with  $\gamma = 0$ . Hypergradient-descent updates step size towards minimizing the immediate loss  $f_t$  rather than discounted sum of future losses,  $F_t^\gamma$ , ignoring long-term effects of step size on future loss. See Appendix B.2 for details.
+
+{5}------------------------------------------------
+
+**Algorithm 2** MetaOptimize with  $2 \times 2$  approx.,  $(\text{Alg}_{\text{base}}, \text{Alg}_{\text{meta}}) = (\text{SGD}, \text{SGD})$ , and scalar step-size
+
+**Initialize:**  $\mathcal{H}_0 = 0_{n \times 1}, Y_0 = 1$ .
+
+**for**  $t = 1, 2, \dots$  **do**
+
+$\alpha_t = e^{\beta_t}$
+
+**Base update:**
+
+$$w_{t+1} = w_t - \alpha_t \nabla f_t(w_t)$$
+
+$$\mathcal{H}_{t+1} = \gamma(I - \alpha_t \nabla^2 f_t(w_t)) \mathcal{H}_t - Y_t \alpha_t \nabla f_t(w_t)$$
+
+$$Y_{t+1} = \gamma Y_t + (1 - \gamma) - \gamma \eta \mathcal{H}_t^T \nabla^2 f_t(w_t) \mathcal{H}_t \quad \# \text{ For L-approximation let } Y_{t+1} = 1$$
+
+**Meta update:**
+
+$$\beta_{t+1} = \beta_t - \eta \mathcal{H}_t^T \nabla f_t(w_t)$$
+
+**end for**
+
+## 6 HESSIAN-FREE METAOPTIMIZE
+
+The step-size optimization algorithms discussed so far typically involve Hessian,  $\nabla^2 f_t(w_t)$ , of the loss function. In particular, the Hessian matrix typically appears in the middle column of blocks in the  $G_t$  matrix; e.g., in the  $dw_{t+1}/dw_t$  block where  $w_{t+1} = w_t - \alpha_t \nabla f_t(w_t)$ . Consequently, the update in (15) involves a Hessian-matrix-product of the form  $\nabla^2 f_t(w_t) \mathcal{H}_t$ , which increases per-step computational complexity of the algorithm. The added computational overhead would be still manageable if  $m$  is small. In particular for  $m = 1$  (i.e., the case that a scalar step-size is used for update of all weights),  $\mathcal{H}_t$  would be a vector; and one can leverage efficient Hessian-vector-product computation techniques that have the same complexity as gradient computation (Pearlmutter, 1994).
+
+Interestingly, for certain base and meta algorithms, we can eliminate the Hessian without much compromising the performance. An example of such (base or meta) algorithms is the Lion algorithm (Chen et al., 2023). The Lion algorithm, when used as the base algorithm, updates  $w_t$  as
+
+$$m_{t+1} = \rho m_t + (1 - \rho) \nabla f_t(w_t),$$
+
+$$w_{t+1} = w_t - \alpha_t \text{Sign}(c m_t + (1 - c) \nabla f_t) - \kappa \alpha_t w_t,$$
+
+where  $\rho, c \in [0, 1]$ ,  $\kappa$  is a nonnegative weight-decay parameter, and  $\text{Sign}(\cdot)$  is the entry-wise sign function. In the special cases of  $c = 0$  or  $\rho = 0$ ,  $m_t$  can be eliminated and the above update simplifies to  $w_{t+1} = w_t - \alpha_t \text{Sign}(\nabla f_t) - \kappa \alpha_t w_t$ . In this case, it is easy to see that the derivatives of  $x_t$  in (10) are Hessian-free. The above argument can be extended to arbitrary values of  $c$  and  $\rho$ . In Appendix A.1.3 (respectively Appendix A.3.2), we show that if  $\text{Alg}_{\text{meta}}(\text{Alg}_{\text{base}})$  is the Lion algorithm, then the first row (second and third rows) of blocks in  $G$  would be Hessian-free. In summary, Algorithm 1 turns Hessian-free, if Lion is used in both base and meta updates. This elimination of Hessian results from flatness of the Sign function when ignoring the discontinuity at 0.
+
+For other algorithms, we may consider their *Hessian-free approximation* by zeroing out any Hessian term in  $G_t$ . The Hessian-free approximation turns out to be a good approximation, especially for base and meta algorithms that involve gradient normalization, like RMSProp and Adam. Note that, the sign function used in the Lion algorithm is an extreme form of normalization that divides a vector by its absolute value. We could instead use softer forms of normalization, such as normalizing to square root of a trace of squared vector,  $v_t$ , as in RMSProp. Such normalizations typically result in two opposing Hessian-based terms in  $\mathcal{H}_t$ 's update (stemming from  $\frac{d w_{t+1}}{d w_t}$  and  $\frac{d w_{t+1}}{d v_t}$  blocks of matrix  $G_t$ ), aiming to cancel out, particularly when consecutive gradients are positively correlated.
+
+The main advantage of Hessian-free methods lies in their computational congeniality. For base and meta updates including SGD, RMSProp, AdamW, and Lion, the Hessian-free  $2 \times 2$  approximation has low computational complexity, requiring only a few vector-products per iteration beyond the computations required for the base and meta updates. When Hessian terms in  $2 \times 2$  approximation of  $G_t$  are zeroed out, the blocks in  $G_t$ , and therefore the blocks in  $X_t$  and  $Y_t$ , become diagonal. Thus,  $X_t$  and  $Y_t$  matrices can be simplified to vector forms, eliminating costly matrix multiplications. The same holds for general blockwise step-sizes (e.g., layer-wise and weight-wise step-sizes), leading to computational overheads on par with the scalar case. We note also that for the meta updates mentioned above if we use no weight-decay in the meta update, Hessian-free  $2 \times 2$  approximation becomes equivalent to Hessian-free L-approximation. Algorithm 3 presents Hessian-free approximations for some selected base and meta updates: *SGD with momentum (SGDm)*, AdamW, and Lion.
+
+{6}------------------------------------------------
+
+#### **Algorithm 3** Hessian-free MetaOptimize algorithms with $2 \times 2$ approximation used in experiments
+
+**Parameters:**  $\eta > 0$  (default  $10^{-3}$ ),  $\gamma \in [0, 1]$  (default 1)**Initialize:**  $h_0 = 0_{n \times 1}$ .**for**  $t = 1, 2, \dots$  **do**
+
+|  |  |  |
+|-|-|-|
+| <b>Base update</b> | $\alpha_t = \sigma(\beta_t)$ | # exponential scalar/blockwise |
+|  | $m_{t+1} = \rho m_t + (1 - \rho) \nabla f_t(w_t)$ |  |
+|  | <b>if</b> $\text{Alg}_{\text{base}}$ is SGDm <b>then</b> | $\Delta w = -\alpha_t m_t - \kappa \alpha_t w_t$ |
+|  | <b>if</b> $\text{Alg}_{\text{base}}$ is Lion <b>then</b> | $\Delta w = -\alpha_t \text{Sign}(c m_t + (1 - c) \nabla f_t) - \kappa \alpha_t w_t$ |
+|  | <b>if</b> $\text{Alg}_{\text{base}}$ is AdamW <b>then</b> | $v_{t+1} = \lambda v_t + (1 - \lambda) \nabla f_t(w_t)^2$ |
+|  |  | $\mu_t = \sqrt{1 - \lambda^t / (1 - \lambda)}$ , |
+|  | $\Delta w = -\alpha_t \mu_t m_t / \sqrt{v_t} - \kappa \alpha_t w_t$ |  |
+
+ $w_{t+1} = w_t + \Delta w$   
+ $h_{t+1} = \gamma(1 - \kappa \alpha_t)h_t + \Delta w$ 
+
+|  |  |  |
+|-|-|-|
+| <b>Meta update</b> | $z = h_t \nabla f_t(w_t)$ |  |
+|  | $\bar{m}_{t+1} = \bar{\rho} \bar{m}_t + (1 - \bar{\rho}) z$ |  |
+|  | <b>if</b> $\text{Alg}_{\text{meta}}$ is Lion <b>then</b> | $\beta_{t+1} = \beta_t - \eta \text{Sign}(\bar{c} \bar{m}_t + (1 - \bar{c}) z)$ |
+|  | <b>if</b> $\text{Alg}_{\text{meta}}$ is Adam <b>then</b> | $\bar{v}_{t+1} = \bar{\lambda} \bar{v}_t + (1 - \bar{\lambda}) z^2$ |
+|  |  | $\bar{\mu}_t = \sqrt{1 - \bar{\lambda}^t / (1 - \bar{\lambda})}$ |
+|  |  | $\beta_{t+1} = \beta_t - \eta \bar{\mu}_t \bar{m}_t / \sqrt{\bar{v}_t}$ |
+
+**end for**
+
+## 7 EXPERIMENTS
+
+In this section, we evaluate the MetaOptimize framework on image classification and language modeling benchmarks. Out of several possible combinations of base and meta algorithms and approximations, we report a few Hessian-free combinations from Algorithm 3 that showed better performance. In all experiments, we set the initial step-sizes of MetaOptimize to one or two orders of magnitudes smaller than the range of good fixed step-sizes, with no specific tuning. We compare MetaOptimize against some popular baselines whose meta-parameters are well-tuned for each task separately. Refer to Appendix C for further experiment details. Codes are available at (Anonymous, 2024).
+
+### 7.1 CIFAR10 DATASET
+
+The first set of experiments involve training ResNet-18 with batch size of 100 on the CIFAR10 (Krizhevsky et al., 2009) dataset. Fig. 1 depicts the learning curves of four combinations of (base, meta) algorithms for Hessian-free MetaOptimize, along with the corresponding baselines with well-tuned fixed step sizes. For MetaOptimize, in addition to scalar step-sizes, we also considered block-wise step-sizes by partitioning layers of the ResNet18 network into six blocks (first and last linear blocks and 4 ResNet blocks). Fig. 1 demonstrates that each tested base-meta combination of MetaOptimize, whether scalar or blockwise, surpasses the performance of the corresponding fixed step-size baseline.
+
+Interestingly, as demonstrated in Fig. 2, the MetaOptimize algorithms show remarkable robustness to initial step-size choices, even for initial step sizes that are several orders of magnitude smaller than the optimal fixed step-size.
+
+Fig. 3 depicts the blockwise step-sizes for (SGDm, Adam) across different blocks, showing an increasing trend from the first to the last block (output layer), which is generally a desirable pattern. In contrast, in the blockwise versions of (AdamW, Adam), (Lion, Lion), and (RMSProp, Adam) updates, we empirically observed that the first five blocks exhibit similar trends and values, while the last block follows a distinct trend, growing larger and rising at a later time.
+
+### 7.2 IMAGENET DATASET
+
+We trained ResNet-18 with batch-size 256 on ImageNet (Deng et al., 2009). We compared MetaOptimize with scalar step-size against four state-of-the-art hyperparameter optimization algorithms,
+
+{7}------------------------------------------------
+
+![Figure 1: Learning curves for selected (base, meta) combinations in CIFAR10. The figure contains four subplots: (AdamW, Adam), (Lion, Lion), (RMSprop, Adam), and (SGDM, Adam). Each subplot shows Train Accuracy (%) vs Epoch (0 to 60). The legend for each plot includes 'Fixed step-size' (solid line), 'Scalar' (dashed line), and 'Blockwise' (dash-dot line). In all cases, the 'Blockwise' version achieves higher accuracy faster than the 'Fixed step-size' version, and the 'Scalar' version achieves the highest accuracy.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 1: Learning curves for selected (base, meta) combinations in CIFAR10. The figure contains four subplots: (AdamW, Adam), (Lion, Lion), (RMSprop, Adam), and (SGDM, Adam). Each subplot shows Train Accuracy (%) vs Epoch (0 to 60). The legend for each plot includes 'Fixed step-size' (solid line), 'Scalar' (dashed line), and 'Blockwise' (dash-dot line). In all cases, the 'Blockwise' version achieves higher accuracy faster than the 'Fixed step-size' version, and the 'Scalar' version achieves the highest accuracy.
+
+Figure 1: Learning curves for selected (base, meta) combinations in CIFAR10.
+
+![Figure 2: Robustness to initial step-sizes, for (Lion, Lion) as (base, meta) update in CIFAR10. The plot shows delta step-size (alpha) vs Iteration (0.00 to 2.00). Four curves are shown for initial alpha values of 10e-6, 10e-7, 10e-8, and 10e-9. All curves show a sharp peak around iteration 0.25 and then stabilize around a value of 0.75.](d864789b0d8384da1d22fd6a5d76bbdf_img.jpg)
+
+Figure 2: Robustness to initial step-sizes, for (Lion, Lion) as (base, meta) update in CIFAR10. The plot shows delta step-size (alpha) vs Iteration (0.00 to 2.00). Four curves are shown for initial alpha values of 10e-6, 10e-7, 10e-8, and 10e-9. All curves show a sharp peak around iteration 0.25 and then stabilize around a value of 0.75.
+
+Figure 2: Robustness to initial step-sizes, for (Lion, Lion) as (base, meta) update in CIFAR10.
+
+![Figure 3: Evolution of blockwise step-sizes during training, for (SGDM, Adam) as (base, meta) update in CIFAR10. The plot shows step-size (alpha) vs Iteration (0 to 10). Six curves are shown for alpha_block0, alpha_block1, alpha_block2, alpha_block3, alpha_block4, and alpha_block5. The curves show varying levels of activity, with alpha_block0 being the most active and alpha_block5 being the least active.](7ff005f9556dc6518981bb92091d36ab_img.jpg)
+
+Figure 3: Evolution of blockwise step-sizes during training, for (SGDM, Adam) as (base, meta) update in CIFAR10. The plot shows step-size (alpha) vs Iteration (0 to 10). Six curves are shown for alpha\_block0, alpha\_block1, alpha\_block2, alpha\_block3, alpha\_block4, and alpha\_block5. The curves show varying levels of activity, with alpha\_block0 being the most active and alpha\_block5 being the least active.
+
+Figure 3: Evolution of blockwise step-sizes during training, for (SGDM, Adam) as (base, meta) update in CIFAR10.
+
+namely DoG (Ivgi et al., 2023), gdtuo (Chandra et al., 2022), Prodigy (Mishchenko & Defazio, 2023), and mechanic (Cutkosky et al., 2024), as well as AdamW and Lion baselines with fixed step-sizes, and AdamW with a well-tuned cosine decay learning rate scheduler with a 10k iterations warmup. Learning curves and complexity overheads are shown respectively in Fig. 4 and Table 1, showcasing the advantage of MetaOptimize algorithms (learning curve of DoG is not depicted due to its relatively poor performance). Unlike CIFAR10, here the blockwise versions of MetaOptimize showed no improvement over the scalar versions. Refer to Appendix D for further details.
+
+![Figure 4: ImageNet learning curves. The plot shows Train Accuracy (%) vs Epoch (0 to 80). The legend includes: AdamW, LR scheduler; AdamW, Fixed stepsize; Lion, Fixed stepsize; MetaOptimize (AdamW, Lion), Scalar; MetaOptimize (Lion, Lion), Scalar; MetaOptimize (SGDM, Lion); gdtuo; mechanic; and Prodigy. MetaOptimize variants (AdamW, Lion) and (Lion, Lion) with scalar updates show the highest accuracy, while the fixed stepsize baselines show lower accuracy.](643d86ebba41e16a88461bfcb3741de6_img.jpg)
+
+Figure 4: ImageNet learning curves. The plot shows Train Accuracy (%) vs Epoch (0 to 80). The legend includes: AdamW, LR scheduler; AdamW, Fixed stepsize; Lion, Fixed stepsize; MetaOptimize (AdamW, Lion), Scalar; MetaOptimize (Lion, Lion), Scalar; MetaOptimize (SGDM, Lion); gdtuo; mechanic; and Prodigy. MetaOptimize variants (AdamW, Lion) and (Lion, Lion) with scalar updates show the highest accuracy, while the fixed stepsize baselines show lower accuracy.
+
+Figure 4: ImageNet learning curves.
+
+![Figure 5: TinyStories learning curves. The plot shows Train Loss vs Iteration (0 to 30000). The legend includes: AdamW, LR scheduler; AdamW, Fixed stepsize; Lion, Fixed stepsize; MetaOptimize (AdamW, Lion); MetaOptimize (Lion, Lion); DoG; gdtuo; mechanic; and Prodigy. MetaOptimize variants (AdamW, Lion) and (Lion, Lion) show the lowest loss, while the fixed stepsize baselines show higher loss.](2396add2849eccefcbcfbe1c7142a253_img.jpg)
+
+Figure 5: TinyStories learning curves. The plot shows Train Loss vs Iteration (0 to 30000). The legend includes: AdamW, LR scheduler; AdamW, Fixed stepsize; Lion, Fixed stepsize; MetaOptimize (AdamW, Lion); MetaOptimize (Lion, Lion); DoG; gdtuo; mechanic; and Prodigy. MetaOptimize variants (AdamW, Lion) and (Lion, Lion) show the lowest loss, while the fixed stepsize baselines show higher loss.
+
+Figure 5: TinyStories learning curves.
+
+Table 1: Per-iteration wall-clock-time and GPU-space overhead (compared to AdamW).
+
+|  | ImageNet |  | TinyStories |  |
+|-|-|-|-|-|
+|  | Time | Space | Time | Space |
+| AdamW (fixed stepsize) | 0% | 0% | 0% | 0% |
+| DoG (Ivgi et al., 2023) | +45% | 1.4% | +268% | 0% |
+| gdtuo (Chandra et al., 2022) | +85% | 64% | +150% | 21% |
+| mechanic (Cutkosky et al., 2024) | +42% | 88% | +9% | 0% |
+| Prodigy (Mishchenko & Defazio, 2023) | +42% | 13% | +9% | 0% |
+| MetaOptimize (AdamW, Lion) | +44% | 33% | +13% | 0% |
+
+### 7.3 LANGUAGE MODELING
+
+For language model experiments, we used the TinyStories dataset (Eldan & Li, 2023), a synthetic collection of brief stories designed for children aged 3 to 4. This dataset proves effective for training and evaluating language models that are significantly smaller than the current state-of-the-art, and capable of crafting stories that are not only fluent and coherent but also diverse.
+
+We used the implementation in (Karpathy, 2024) for training 15M parameter model with a batch size of 128 on the TinyStories dataset. Two combinations of Hessian-free MetaOptimize with scalar
+
+{8}------------------------------------------------
+
+132 step sizes were tested against Lion and AdamW with well-tuned fixed step sizes, AdamW with a  
+133 well-tuned cosine decay learning rate scheduler with 1k warmup iterations, and the four state-of-the-  
+134 art step-size adaptation algorithms mentioned in the previous subsection. According to the learning  
+135 curves, shown in Fig. 5, MetaOptimize outperforms all baselines (with an initial delay due to small  
+136 initial step-sizes), except for the well-tuned learning rate scheduler within 30k iterations.  
+137
+
+### 138 7.4 SENSITIVITY ANALYSIS
+
+139 Here, we briefly discuss the sensitivity of MetaOptimize to its meta-meta-parameters.  
+140
+
+141 For the meta-stepsizes  $\eta$  in MetaOptimize, there is generally no need for tuning, and the default value  
+142  $\eta = 10^{-3}$  works universally well in stationary supervised learning. All experiments in this section  
+143 used this default value with no sweeping required. The rationale for this choice is that when using  
+144 Adam, Lion, or RMSProp for meta-updates, the absolute change in  $\beta$  per iteration is approximately  
+145  $\eta \times O(1) \approx 10^{-3}$ . Unless the current stepsize  $\alpha$  is already near its optimal value, most  $\beta$  updates will  
+146 consistently move toward the optimal  $\beta$ . Within 1,000 steps,  $\beta$  can change by  $O(1)$ , nearly doubling  
+147 or halving  $\alpha = \exp(\beta)$ . Over 10,000 iterations,  $\alpha$  can adjust to stepsizes that are  $e^{10} > 20,000$   
+148 times larger or smaller, allowing  $\eta \approx 10^{-3}$  to efficiently track optimal stepsizes while minimizing  
+149 unnecessary fluctuations in  $\alpha$ .  
+150
+
+151 Regarding the discount factor  $\gamma$ , we used the default value  $\gamma = 1$  in all experiments and observed  
+152 minimal sensitivity to  $\gamma$  for values  $\gamma \geq 0.999$  in a series of preliminary tests. However, performance  
+153 begins to degrade with smaller values of  $\gamma$ .  
+154
+
+###### 155 8 RELATED WORKS
+
+156 Automatic adaptation of step sizes, has been an important research topic in the literature of stochastic  
+157 optimization. Several works aimed to remove the manual tuning of learning rates via adaptations  
+158 of classical line search (Rolinek & Martius, 2018; Vaswani et al., 2019; Paquette & Scheinberg, 2020;  
+159 Kunstner et al., 2023) and Polyak step size (Berrada et al., 2020; Loizou et al., 2021), stochastic  
+160 proximal methods (Asi & Duchi, 2019), stochastic quadratic approximation (Schaul et al., 2013),  
+161 hyper-gradient descent (Baydin et al., 2017), nested hyper-gradient descent (Chandra et al., 2022),  
+162 distance to a solution adaptation (Ivgy et al., 2023; Defazio & Mishchenko, 2023; Mishchenko &  
+163 Defazio, 2023), and online convex learning (Cutkosky et al., 2024). A limitation of most of these  
+164 methods is their potential underperformance when their meta-parameters are not optimally configured  
+165 for specific problems (Ivgy et al., 2023). Moreover, the primary focus of most of these methods is on  
+166 minimizing immediate loss rather than considering the long-term effects of step sizes on future loss.  
+167
+
+168 Normalization techniques proposed over past few years, such as AdaGrad (Duchi et al., 2011),  
+169 RMSProp, and Adam have significantly enhanced the training process. While these algorithms show  
+170 promise in the stationary problems, these normalization techniques do not optimize effective step  
+171 sizes and are prone to have sub-optimal performance especially in the continual learning settings  
+172 (Degris et al., 2024).  
+173
+
+174 An early practical step-size optimization method was the Incremental-Delta-Bar-Delta (IDBD)  
+175 algorithm, introduced in (Sutton, 1992), which aimed to optimize the step-size vector to minimize a  
+176 specific form of quadratic loss functions in a continual setting. This algorithm was later extended for  
+177 neural networks in (Xu et al., 2018; Donini et al., 2019), and further adapted in (Mahmood et al., 2012;  
+178 Javed, 2020; Micaelli & Storkey, 2021) for different meta or base updates beyond SGD. However, the  
+179 development of IBDP and its extensions included some implicit assumptions, notably overlooking  
+180 the impact of step-size dynamics on the formulation of step-size update rules. These extensions are,  
+181 in essence, special cases of the L-approximation within the MetaOptimize framework. The current  
+182 work extends the IBDP research, significantly broadening the framework and establishing a solid  
+183 basis for the derivations. IBDP and its extensions have been used in various machine learning tasks  
+184 including independent component analysis (Schraudolph & Giannakopoulos, 1999), human motion  
+185 tracking (Kehl & Van Gool, 2006), classification (Koop, 2007; Andrychowicz et al., 2016), and  
+186 reinforcement learning (Xu et al., 2018; Young et al., 2018; Javed et al., 2024). Refer to (Sutton,  
+187 2022) for a comprehensive history of step-size optimization.
+
+{9}------------------------------------------------
+
+A related line of work is gradient-based bilevel optimization, initially introduced by Bengio (2000) and later expanded in (Maclaurin et al., 2015; Pedregosa, 2016; Franceschi et al., 2018; Gao et al., 2022). Recent advances, such as (Lorraine et al., 2020), enable the optimization of millions of hyperparameters. While bilevel optimization focuses on tuning hyperparameters to minimize validation loss through repeated full training runs of the base algorithm, MetaOptimize diverges significantly. Designed for continual learning, MetaOptimize optimizes meta-parameters on-the-fly during a single streaming run, without relying on validation loss. Instead, it minimizes online loss (or regret) directly, aligning with the continual learning framework where no validation or test sets exist, and data arrives sequentially.
+
+There is also a line of research on the so-called parameter-free optimization that aims to remove the need for step-size tuning with almost no knowledge of the problem properties. Most of these methods are primarily designed for stochastic convex optimization (Luo & Schapire, 2015; Orabona & Pál, 2016), while more recent ones (Orabona & Tommasi, 2017; Ivgi et al., 2023) were applied to supervised learning tasks with small or moderate sample sizes.
+
+## 9 LIMITATIONS AND FUTURE WORKS
+
+Our work represents a step toward unlocking the potential of meta-parameter optimization, with substantial room for further exploration, some of which we outline here:
+
+**Hessian:** We confined our experiments to Hessian-free methods for practicality, though Hessian-based algorithms could offer superior performance. These methods, however, face challenges requiring additional research. The Hessian matrix is notably noisy, impacting  $\mathcal{H}_{t+1}$  multiplicatively, necessitating smoothing and clipping techniques. Additionally, the Hessian approximates the loss landscape’s curvature but fails to account for non-differentiable curvatures, such as those from ReLU unit breakpoints, significant at training’s end. From a computational perspective, developing low-complexity methods for approximate Hessian matrix products, especially for adjusting step-sizes at the layer and weight levels, is essential.
+
+**More accurate traces:** As discussed in Section 3, accuracy of the backward approximation (5) may degrade for larger values of the meta-stepsize  $\eta$ . Eligibility traces in RL suffer from a similar problem, to resolve which more-sophisticated traces (e.g., Dutch traces) have been developed (see Chapter 11 of (Sutton & Barto, 2018)). Developing more accurate backward approximations for meta-parameter optimization can result in considerable improvements in performance and stability.
+
+**Blockwise step-sizes:** While step sizes can vary much in granularity, our experiments focused on scalar and blockwise step-sizes. While increasing the number of step sizes is anticipated to enhance performance, our experimental findings in Section 7 reveal that this improvement is not consistent across the MetaOptimize approximations evaluated. Further investigation is needed in future research.
+
+**Other approximations:** We explored a limited set of MetaOptimize’s possible approximations, leaving a comprehensive analysis of various approximations for future research.
+
+**Other meta-parameters:** Our study was limited to differentiable meta-parameters, not covering discrete ones like batch size or network layer count. We also did not investigate several significant differentiable meta-parameters beyond step-sizes, deferring such exploration to future work.
+
+**Automatic Differentiation:** While certain versions of MetaOptimize, such as the L-Approximation, could be implemented using standard automatic differentiation software, its applicability to the general case of MetaOptimize remains unclear. Unlike updates for  $w$  and  $\beta$  (base and meta parameters), the  $H$  matrix lacks an explicit incremental formula that can be easily handled by automatic differentiation. For some versions of MetaOptimize, including the Hessian-free approximations used in our experiments, automatic differentiation is unnecessary, as meta updates do not require additional differentiation. Exploring the scope and applicability of automatic differentiation across different MetaOptimize instances is an interesting direction for future research.
+
+**Continual learning:** Although continual step-size optimization is primarily aimed at continual learning, this study focused on the stationary case, demonstrating MetaOptimize’s competitiveness in a context that is particularly challenging for it. Investigating the framework within continual learning presents a promising direction for future research.
+
+ Rest of paper (reference and Appendix) is removed.

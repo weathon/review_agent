@@ -1,0 +1,275 @@
+
+
+{0}------------------------------------------------
+
+# CONTEXTUALLY GUIDED TRANSFORMERS VIA LOW-RANK ADAPTATION
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Large Language Models (LLMs) based on Transformers excel at text processing, but their reliance on prompts for specialized behavior introduces computational overhead. We propose a modification to a Transformer architecture that eliminates the need for explicit prompts by learning to encode context into the model’s weights. Our Contextually Guided Transformer (CGT) model maintains a contextual summary at each sequence position, allowing it to update the weights on the fly based on the preceding context. This approach enables the model to self-specialize, effectively creating a tailored model for processing information following a given prefix. We demonstrate the effectiveness of our method on synthetic in-context learning tasks and language modeling benchmarks. Furthermore, we introduce techniques for enhancing the interpretability of the learned contextual representations, drawing connections to Variational Autoencoders and promoting smoother, more consistent context encoding. This work offers a novel direction for efficient and adaptable language modeling by integrating context directly into the model’s architecture.
+
+## 1 INTRODUCTION
+
+Transformer models, laying at the foundation of many modern Large Language Models (LLMs), are exceptionally powerful at understanding and generating text. One of the efficient ways for guiding and specializing their behavior is through the use of prompts – instructions or examples provided at the beginning of an input sequence. These prompts steer model’s attention guiding its output towards a desired specialized behavior. However, there’s a trade-off. Prompts, especially lengthy or complex ones, increase the amount of data the model has to process during inference running with the same prompt again and again. This additional processing translates into higher computational costs and larger latencies thus motivating an exploration of alternative approaches. An active research direction (Phang et al., 2023) is to adjust the model’s internal parameters  $\theta \rightarrow \theta + \delta\theta(p)$  to replicate the outcome of applying a specific prompt  $p$ . This approach effectively incorporates the desired behavior directly into the model. Consequently, the prompt becomes unnecessary during inference, resulting in faster and more resource-efficient computations. Existing methods for transforming prompts into weight updates (Phang et al., 2023) have a couple of common characteristics. First, they tend to treat the prompt as distinct from the main input, handling it separately. Second, they often employ a secondary independently-trained model specifically for interpreting the prompt and calculating the appropriate weight update for the primary model responsible for core language tasks. This separation allows for specialized handling of prompts, but can introduce additional complexity.
+
+In this paper, we propose a novel Transformer design that we call a Contextually Guided Transformer (CGT) that combines both of these components<sup>1</sup> into a single model. For any given Transformer layer  $\ell$ , our model simultaneously performs two key functions: (a) parses the the input sequence, producing for each token an embedding vector  $y^\ell$  that reflects the contextual information (computed at layer  $\ell$ ), and (b) uses this context summary  $y^\ell$  to modulate the computation of subsequent layers (beyond layer  $\ell$ ) by effectively generating the weights for these layers. Unlike other approaches, CGT model maintains a summary of the preceding context at each position within the sequence. We train the model to isolate a sequence prefix of any length and compute its corresponding context embedding  $y^\ell$ . We then freeze this embedding  $y^\ell$ , along with the generated weights of layers beyond
+
+<sup>1</sup>operating on the prompt and operating on the rest of the sequence
+
+{1}------------------------------------------------
+
+![Figure 1: (a) Model architecture showing processing of a single token with the activation component. (b) Auxiliary loss incentivizing the Transformer to encode long-range information in y.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 1 consists of two diagrams, (a) and (b).  
+ Diagram (a) illustrates the model architecture for single-token processing. It shows two stages. Stage 1 takes an input sequence and processes it through a series of blocks containing 'MESH' and 'MT' components, resulting in intermediate representations  $x_{\text{stop}}^{\ell-1}$  and  $x_{\text{stop}}^{\ell}$ . Stage 2 takes these representations and processes them through another series of 'MESH' and 'MT' blocks, eventually producing the final activation  $y^\ell$ . A 'Single-token processing' block is shown, which takes  $y^{\ell-1}$  and  $x^\nu$  as inputs and produces the final activation  $y^\ell$  used for generating all  $T^{\ell-1}$ .  
+ Diagram (b) shows the auxiliary loss setup. It depicts a Transformer architecture with layers 'before' and 'after' layer  $\ell$ . The 'Original Loss (on all tokens)' is applied across the entire sequence. The 'Auxiliary Loss (on last tokens)' is applied to the last tokens. A 'Transplanting' operation is shown, where the context embedding  $\tilde{y}_s := y_s^\ell$  is taken from the Transformer running on the original sequence and used as input for the auxiliary loss calculation.
+
+Figure 1: (a) Model architecture showing processing of a single token with the activation component. (b) Auxiliary loss incentivizing the Transformer to encode long-range information in y.
+
+Figure 1: (a) Model architecture showing processing of a single token with the activation component  $y^\ell$  being a function of  $(x^{\nu-1}, y^{\nu-1})$  and  $x^\nu$  being a function of  $x^{\nu-1}$  alone for any  $\nu \in [2, \ell]$ ; activations  $y^\ell$  are parameterizing transformations  $T^\kappa(\cdot; y^\ell)$  mapping  $x^\nu$  to  $\tilde{x}_{\text{op}}^\nu = T^\kappa x_{\text{op}}^\nu$  for  $\nu \geq \ell$  (see Sec. 3.1). (b) Auxiliary loss incentivizing the Transformer to encode long-range information in  $y$ : the auxiliary loss is applied to an input sequence truncated at some random token  $t_s$ . The context embedding  $\tilde{y}_s := y_s^\ell$  is taken from the Transformer running on the original sequence.
+
+$\ell$ , for the remainder of the sequence. This process effectively creates a specialized model tailored for processing the specific sequence following the chosen prefix.
+
+We believe that CGT models can be particularly useful for scenarios where adapting the model’s behavior based on an initial context is crucial for effective processing of the subsequent information. We empirically study this technique in three setups: (a) linear regression setup, (b) synthetic in-context learning setup, where the model is presented with multiple demonstrations of an arithmetic task with hidden parameters and (c) text datasets including `c4` and `wikipedia`. In all of these examples, we show that the CGT model maps any given prefix into a specialized model that performs well on the remainder of the sequence. For example, in the in-context learning task, we can convert multiple examples of a task presented in-context into a specialized model capable of solving the corresponding task for new inputs.
+
+Our second contribution is a set of techniques for improving interpretability of the context summary  $y^\ell$ . Studying  $y^\ell$  empirically, we observe that it contains information about the prefix it summarizes, but the context summary encoding is not changing gradually from one token to the next, which makes it difficult to interpret it as a consistent context representation. This motivated us to propose a number of techniques that are aimed at improving the properties of  $y^\ell$  endowing it with the desired smoothness prior. Starting with a more grounded approach based on interpreting a Transformer as a Variational Autoencoder, we then derive a simpler regularization scheme that improves the properties of the learned representation  $y^\ell$  while also having a positive impact on the performance of the underlying model. We believe that these developed techniques could be useful in a more general setting of sequence representation learning. Equipped with the knowledge of the properties of the underlying semantic representation (such as it’s characteristic time scale), one could use our proposed VAE model to discover representations adhering to this “smoothness prior”.
+
+## 2 RELATED WORK
+
+**Learning representations with various scales.** Publications (Xu et al., 2022; Tang et al., 2022; Rao et al., 2021; Chen et al., 2023) have explored techniques for assessing the significance of individual tokens with varying levels of detail, aiming to reduce computational overhead. Specifically, (Xu et al., 2022) shares a conceptual similarity with our approach, which involves applying distinct update mechanisms to tokens based on their importance. While their approach distinguishes between informative and placeholder tokens, ours divides embedding dimensions into two segments, each tasked with capturing either local or global context. Also, while (Schmidhuber, 1992) employs a dual-network architecture to address temporal dependencies in sequential data, where the first network dynamically adjusts weights for the second to adapt to temporal patterns, and (Mujika et al., 2017) proposes a recurrent neural network (RNN) with heterogeneous cell types to capture both long-term and short-term dependencies, neither approach facilitates on-the-fly weight updates based on contextual information.
+
+{2}------------------------------------------------
+
+**Transformer + VAE.** Integrating Transformer and Variational Autoencoder (VAE) (Kingma & Welling, 2014) has been a subject of numerous endeavors. (Casale et al., 2018) employs Gaussian processes as priors for the latent space, enabling the model to capture intricate data dependencies. Addressing the issue of controllability in narrative generation, (Wang & Wan, 2019; Fang et al., 2021) develop a conditional VAE framework. (Henderson & Fehr, 2023) introduces a model that incorporates nonparametric variational methods to enhance the information bottleneck in Transformers, leading to better capture of latent representations and improved efficiency across various natural language processing tasks. Similarly to the previous work, our approach proposes a VAE-based method with a meticulously designed regularizer, enabling more flexible control over the representations, ensuring they evolve slowly.
+
+**In-context learning.** In-context learning has garnered significant attention among researchers, particularly with the rise of large language models, owing to its adaptability to unforeseen tasks (Brown et al., 2020). Several studies (Von Oswald et al., 2023; von Oswald et al., 2023; Liu et al., 2022; Min et al., 2022; Zoph et al., 2022) have examined the mechanics of in-context learning to grasp its functionality and rationale. Especially, (Hendel et al., 2023) argues that LLMs learn to represent tasks as vectors in their activation space. When presented with in-context examples, the model constructs a task vector that guides its predictions for new inputs. This work highlights the role of representation learning in ICL and suggests that LLMs can effectively capture task-specific information from few-shot examples. However, it is limited to relatively simple tasks like word mappings and further does not adjust the weights, limiting its adaptability to complex tasks. In contrast, our proposed CGT effectively extracts global context from prompts and generates task-specialized models through weight modulations.
+
+## 3 METHOD
+
+In this section, we detail two core components of our method: (a) our model that simultaneously summarizes the context at layer  $\ell$  and uses it to generate weights for layers above  $\ell$  and (b) techniques for enforcing a *smoothness prior* on the context representation. The outline can be summarized as follows:
+
+1. In Section 3.1, we describe the CGT *model architecture* that simultaneously computes the context representation  $y^\ell$  and uses it to modulate local computation above layer  $\ell$ .
+2. In Section 3.2, we detail the *auxiliary loss*  $\mathcal{L}_{\text{aux}}$  that we use for making it possible to freeze  $y^\ell$  at any point in the sequence effectively generating a model specialized for the remainder of that sequence.
+3. Then, in Section 3.3, we discuss the *smoothness prior* on the context representation  $y^\ell$ .
+4. Finally, in Section 3.4, we introduce our *element-wise regularization technique* for incentivizing representation smoothness. A more elegant *VAE-based approach* and the path to deriving the element-wise regularization method are outlined in Appendix A.
+
+In the following, we consider a modified autoregressive causal Transformer model with  $L$  layers, where each layer is represented by embeddings  $z^\nu$  with  $\nu = 1, \dots, L$ . The model input is a sequence of  $n$  tokens  $t := \{t_1, \dots, t_n\}$  with each token taking value in a finite set of all possible tokens  $\mathcal{T}$ .
+
+### 3.1 MODEL ARCHITECTURE
+
+A central principle of our architecture shown in Figure 1(a) is a carefully designed separation of information flows, enabling efficient computation of the entire model for a given value of  $y^\ell$  (which can be either sequence-dependent or fixed). The model is divided into two stages.
+
+The first stage processes the input sequence and generates a contextual representation  $y^\ell$ , which summarizes information from all preceding tokens at each position. At each layer  $\nu \leq \ell$  our model maintains two independent sets of activations  $x^\nu$  and  $y^\nu$  produced by two sets of Transformer heads. Crucially, the self-attention and MLP operations within these layers are structured to ensure distinct information pathways:  $x$  components are processed based on prior  $x$  components alone, while  $y$  has a full visibility of both  $x$  and  $y$ . This separation ensures that  $x$  remains independent of  $y$  at each layer before  $\ell$ , while the final  $y^\ell$  at layer  $\ell$  aggregates information from both pathways across all preceding layers. Importantly, this also allows the the value of  $y^\ell$  to be provided externally by simply bypassing the  $y^\ell$  pathway, thus reducing computational cost.
+
+{3}------------------------------------------------
+
+At the second stage, we use the contextual representation  $y^\ell$  to modulate the processing of subsequent layers  $\nu > \ell$ . For each layer  $\nu > \ell$ ,  $y^\ell$  dynamically generates the weights of linear operators  $\mathbf{T}^\kappa$ , where  $\kappa = 1, \dots, 2(L - \ell)$ . These operators are applied before each MLP and self-attention operation (a total of  $2(L - \ell)$  operators). The weights of  $\mathbf{T}^\kappa(y^\ell)$  are generated independently for each sequence position  $s$  based on the corresponding  $y_s^\ell$ . This mechanism allows the global context summarized in  $y^\ell$  to influence the processing of each token. In this stage, the model activations only consist of  $x$ . The  $y^\ell$  representation is fixed and used solely for generating the weights of  $\mathbf{T}^\kappa(y^\ell)$ , which are applied to the  $x$  activations at each layer. Specifically, instead of passing  $x$  to an MLP or self-attention layer, we instead pass  $\tilde{x} := \mathbf{T}^\kappa(y^\ell)x$ .
+
+Our model defines the linear operators  $\mathbf{T}^\kappa$  using a low-rank weight generator:
+
+$$\mathbf{T}^\kappa(x; y^\ell) := x + \delta \mathbf{W}^\kappa(y^\ell)x \quad \text{with} \quad \delta \mathbf{W}_{ij}^\kappa(y^\ell) = \sum_{k=1}^r L_{ik}^\kappa(y^\ell) R_{jk}^\kappa(y^\ell),$$
+
+where  $\delta \mathbf{W}^\kappa(y^\ell)$  represents a change in weights applied to  $x$ , and it is generated using a low-rank decomposition:
+
+$$L^\kappa(y^\ell) := \sum_{m=1}^M L^{\kappa,m} \sigma_m^\kappa(y^\ell), \quad R^\kappa(y^\ell) := \sum_{m=1}^M R^{\kappa,m} \sigma_m^\kappa(y^\ell).$$
+
+Here  $L^{\kappa,m} \in \mathbb{R}^{(\dim x) \times r}$  and  $R^{\kappa,m} \in \mathbb{R}^{(\dim x + 1) \times r}$  are additional learned *template* matrices,  $M$  is their total number and  $r$  is the rank of the generated  $\delta \mathbf{W}$ . We use  $\dim x + 1$  for  $R$  to incorporate a bias term within the linear transformation.
+
+The values of  $\sigma(y^\ell) = h(\mathbf{S}^\kappa y^\ell) \in \mathbb{R}^M$  act as template mixing coefficients with a non-linearity  $h(\cdot)$  given by either a hyperbolic tangent or softmax.  $\mathbf{S}^\kappa \in \mathbb{R}^{M \times (\dim y + 1)}$  are learned linear transformations that map  $y^\ell$  to a specific mixture of templates used to generate a low-rank  $\mathbf{T}^\kappa$ . We use  $\dim y + 1$  to incorporate a bias term within this transformation as well.
+
+While more complex operators could be used for  $\mathbf{T}^\kappa(y^\ell)$ , we choose linear<sup>2</sup> operators for efficiency. When  $y^\ell$  is fixed and position-independent, these linear operators can be effectively “folded” into the subsequent self-attention and MLP operations. This way, when  $y^\ell$  is frozen, we can effectively generate a model with embedding size  $\dim x$  and fixed position-independent weights that runs on  $x$  activations alone.
+
+### 3.2 AUXILIARY LOSS
+
+Our model was designed to use a self-modulation mechanism controlled by the context representation  $y^\ell$ . Since  $y^\ell$  is generally token-dependent, the transformations  $\mathbf{T}^\kappa(y^\ell)$  are also generally evolving from token to token. However, if  $y^\ell$  were fixed all  $\mathbf{T}^\kappa$  would become token-independent, which would allow us to “fold” these linear maps into the following linear operators.
+
+While it would be natural to expect the *context representation*  $y^\ell$  to evolve slowly along the sequence<sup>3</sup>, in practice we observe that this property does not generally hold. Furthermore, in few-shot in-context learning tasks, we observe that simply freezing  $y^\ell$  does not generally lead to accurate specialized models (see Section 4). And since this desired property is not emergent, we need to purposely design training objectives to achieve it.
+
+Our primarily loss function is a conventional cross-entropy loss  $\mathcal{L}_{\text{ce}}$ , which measures the difference between the predicted probabilities of our modified causal autoregressive Transformer model and the groundtruth shifted input sequence. However, since we also expect our model with frozen  $y^\ell$  to perform well, our full loss
+
+$$\mathcal{L} = \eta \mathcal{L}_{\text{ce}} + (1 - \eta) \mathcal{L}_{\text{aux}}$$
+
+includes an additional auxiliary loss  $\mathcal{L}_{\text{aux}}$  component with  $0 \leq \eta \leq 1$  interpolating between two losses. This auxiliary loss  $\mathcal{L}_{\text{aux}}$  is computed as follows (see Figure 1(b)): (i) first, we randomly sample a sequence position  $s \in (2, n)$  with  $n$  being the sequence length; (ii) then treating the input sequence prefix  $\{t_1, \dots, t_{s-1}\}$  as our current prompt, we compute the value of  $y_{s-1}^\ell$  at the end of it;
+
+<sup>2</sup>The way  $\mathbf{T}^\kappa(y^\ell)$  acts on  $x$  is linear, not the way its coefficients depend on  $y^\ell$ .
+
+<sup>3</sup>Assuming that the information about the context is changing incrementally
+
+{4}------------------------------------------------
+
+(iii) we build an auxiliary Transformer model with the same weights and a fixed value of  $\tilde{y}^\ell = y_{s-1}^\ell$  and apply it to the remainder of the sequence  $\{t_{s+1}, \dots, t_n\}$ ; (iv) compute  $\mathcal{L}_{\text{aux}}$  as a conventional cross-entropy loss on this subsequence  $\{t_{s+1}, \dots, t_n\}$ .
+
+Our proposed auxiliary loss is designed to force the activation component  $y_s^\ell$  (the only component communicating information between two parts of the sequence in the auxiliary loss; see Fig. 1(b)) to summarize the context  $t_{\leq s} := \{t_1, \dots, t_s\}$ . Indeed, by optimizing the cross-entropy loss on  $t_{>s} := \{t_{s+1}, \dots, t_n\}$  we maximize the lower bound on the mutual information  $\mathbb{I}(t_{>s}; y_s^\ell)$ . This in turn reduces the conditional mutual information  $\mathbb{I}(t_{>s}; t_{\leq s} | y_s^\ell) = \mathbb{I}(t_{>s}; t_{\leq s}) - \mathbb{I}(t_{>s}; y_s^\ell)$ , which can be interpreted as making  $y_s^\ell$  condense all the information from the context  $t_{\leq s}$  that is useful for generating the rest of the sequence  $t_{>s}$ .
+
+For improved efficiency with long sequences, we can focus on a more immediate prediction restricted to a fixed horizon  $\Delta$ . In this case,  $s$  is sampled from a range  $(2, n - \Delta]$  and the fixed representation  $y_{s-1}^\ell$  is applied to a subsequence  $\{t_s, \dots, t_{s+\Delta}\}$  of length  $\Delta + 1$ . More details about our full model can be found in Appendix B.1.
+
+### 3.3 LEARNING SLOW FEATURES
+
+The interpretation of  $y^\ell$  as the context summary intuitively suggests that  $y^\ell$  should not change drastically between consecutive tokens. However, in our experiments with the proposed model and the auxiliary loss, we only witnessed the emergence of smooth  $y^\ell$  in strongly regularized models (see Section 4). More generally,  $y^\ell$  was seen to contain additional irrelevant information and exhibit a non-trivial dependence on the sequence position. Here we propose a set of techniques for enforcing a “slowness prior” on the evolution of  $y^\ell$  allowing us to obtain more interpretable context representations. Here we assume that  $y^\ell$  viewed as a random variable is a Gaussian process, or in a discretized form, a multivariate Gaussian distribution  $p_0(y_1^\ell, \dots, y_n^\ell)$  with the mean  $\langle y_t^\ell \rangle = m_s$  and covariance  $\langle (y_s^\ell - m_s)(y_t^\ell - m_t) \rangle$  being given by a known kernel  $\mathcal{K}_{s,t}$ . If  $\mathcal{K}_{s,t}$  decays towards zero with growing  $|s - t|$ , it ensures that computed at two nearby points in time, the  $y^\ell$  activations maintain a certain degree of coherence, but this correlation disappears over time.
+
+In the following, we choose an unbiased prior with  $m_s = 0$ , but the choice of  $\mathcal{K}_{s,t}$  depends on the nature of the generative process. For example, if  $y^\ell$  is expected to capture a slowly changing context information with a characteristic temporal scale  $\lambda$ , the covariance  $\mathcal{K}_{s,t}$  would only depend on  $|s - t|$  and could scale roughly as  $\exp(-|s - t|/2\lambda^2)$ . However, in in-context learning tasks,  $y^\ell$  would be expected to change more rapidly at the beginning of the sequence and saturate after enough examples of the task are presented to the model. The corresponding  $\mathcal{K}_{s,t}$  would not generally vanish for large enough  $s$  and  $t$ . In Appendix C we consider a trivial example of the sequence mean  $\alpha$  estimation with a prior  $\alpha \sim \mathcal{N}(0, 1)$  given a sequence of observations  $\alpha + \epsilon\beta_s$  with  $\beta_s$  sampled iid from  $\mathcal{N}(0, 1)$ . The covariance matrix for this problem is given by:
+
+$$\mathcal{K}_{s,t} = 1 + \frac{\epsilon^2}{st} \min(s, t). \quad (1)$$
+
+The important characteristic of this covariance matrix is that  $\mathcal{K}_{s,t} \rightarrow 1$  when both  $s$  and  $t$  go to infinity. The constant value of 1 reflects information of the original prior on  $\alpha$  and  $1/t$  dependence is due to the estimation error disappearing as more and more examples are shown. A proper choice of the prior kernel  $\mathcal{K}_{s,t}$  is thus problem-dependent.
+
+### 3.4 ELEMENT-WISE REGULARIZERS
+
+Perhaps one of the most direct ways of incorporating a Gaussian process prior into our model is to view the Transformer as a Variational Autoencoder (VAE). As shown in Appendix A.1, a Transformer model can be viewed as a VAE by replacing conventional  $y_s^\ell$  activations with two sets of variables  $\mu_s$  and  $\sigma_s$  and randomly sampling  $y_{i,s}^\ell$  from  $\mathcal{N}(\mu_{i,s}, \sigma_{i,s})$ . The VAE loss function is then given by:
+
+$$\mathcal{L}_{\text{VAE}}(t) = \mathcal{L}_{\text{rec}} - \frac{\beta_y}{2} \sum_{i,s} \log \sigma_{i,s}(t) + \frac{\beta_y}{2} \sum_{i,s,t} \mathcal{K}_{s,t}^{-1} \mu_{i,s}(t) \mu_{i,t}(t) + \frac{\beta_y}{2} \sum_{i,s} \mathcal{K}_{s,s}^{-1} \sigma_{i,s}(t), \quad (2)$$
+
+where  $\mathcal{L}_{\text{rec}}$  is a cross-entropy reconstruction loss.
+
+While being potentially useful across a wide range of sequence representation learning problems, this approach involves stochastic model activations  $y^\ell$  and was seen to produce less accurate models
+
+{5}------------------------------------------------
+
+than simpler approaches inspired by it. A similar prior can also be enforced by a moment-based regularization technique (Appendix A.2), but it’s reliance on random pairs of sequence elements makes this method computationally expensive and noisy.
+
+Noticing that the 3<sup>rd</sup> term in the right-hand side of equation 2 can be interpreted as form of continuity regularization (Appendix A.3), we found that an even simpler and less computationally intensive technique produces comparable result. The idea that we used in most of our experiments is to enforce the continuity in  $y^\ell$  by simply penalizing large time step differences in  $y_i^\ell$ , or in its normalized value:
+
+$$\mathcal{R}_C^\ell \sim \sum_{s=2}^n \zeta_C(s) \|n_s - n_{s-1}\|^2,$$
+
+where  $n_i := y_i^\ell / \|y_i^\ell\|$  and we choose to normalize  $y^\ell$  since the difference  $\|y_s^\ell - y_{s-1}^\ell\|^2$  would also penalize the norm of  $y_i^\ell$ . A weighting coefficient  $\zeta_C(s) > 0$  can change regularization strength along the sequence. The dependence of  $\zeta_C$  on the sequence index can be derived from the covariance  $\mathcal{K}_{s,t}$  (Appendix A.3) or chosen empirically. As expected,  $\zeta_C$  is constant for uniform priors, and should monotonically increase for in-context learning problems.
+
+In practice, adding this regularization term into the loss with some non-zero weight  $w_C$  can incentivize the model to generate constant activations  $y_i^\ell$  with  $\mathcal{R}_C = 0$ , at least locally. A common way of stopping  $y$  from collapsing to a constant value is to adopt some form of contrastive learning approach. For example, inspired by the orthogonal projection loss (Ranasinghe et al., 2021), we regularize the scalar product of activations across samples in the batch for each sequence element independently:
+
+$$\mathcal{R}_D \sim \sum_{s,\alpha,\beta} \zeta_D(s) \left( n_s^{(\alpha)} \cdot n_s^{(\beta)} - \delta_{\alpha,\beta} \right)^2,$$
+
+where  $\alpha$  and  $\beta$  are the indices of two samples in the batch,  $\delta_{\alpha,\beta}$  is the delta function and  $\zeta_D(s) > 0$  can again be used to increase regularization strength towards the end of the sequence. In the following, we choose  $\zeta_D = \zeta_C$ . Notice that for  $\alpha = \beta$ , the dot product equals to  $1 = \delta_{\alpha,\alpha}$  due to normalization, but for  $\alpha \neq \beta$  the regularizer “pushes” the dot product of two different vectors  $n_s$  towards 0 making them orthogonal. We refer to regularizers that do not depend on cross-element correlations as *element-wise*. This particular regularizer is designed to favor orthogonality of sample representations within the batch and it proved to be sufficiently effective in our experiments, where we end up optimizing the joint loss
+
+$$\mathcal{L}' = \eta \mathcal{L}_{\text{ce}} + (1 - \eta) \mathcal{L}_{\text{aux}} + w_C \mathcal{R}_C + w_D \mathcal{R}_D. \quad (3)$$
+
+## 4 EXPERIMENTS
+
+### 4.1 DATASETS
+
+In this section, we describe 3 dataset families used in our experiments: (a) *synthetic* dataset with each sequence containing multiple arithmetic in-context learning tasks (numbers represented with digits), each of which could be resolved approximately by solving a system of two linear equations; (b) simple *linear regression* dataset with sequences containing sets of  $(x, y)$  pairs with  $y$  being a noisy linear function of  $x$ ; (c) *text mixture* dataset based on frequently used Wikipedia (Wikimedia Foundation) and c4 (Raffel et al., 2020) datasets, where we combine two random excerpts to form a single training example.
+
+154\*709=+07058|648\*011=+05920|526\*187=+06230|893\*495=+11997#  
+122\*395=00273|827\*301=+00526|216\*082=+00134|399\*879=00480#  
+913\*075=+01063|748\*228=+01204|508\*205=+00918|186\*523=+01232#
+
+Figure 2: An example of synthetic sequences analyzed in Sec. 4.2 with  $n_{\text{tasks}} = 3$  tasks of  $n_{\text{ex}} = 4$  examples each. Each example shows two  $d$ -digit integers ( $A_{i,j}$  and  $B_{i,j}$ ) and their truncated linear combination  $C_{i,j} := \lfloor a_i A_{i,j} + b_i B_{i,j} \rfloor$ , where  $a_i \sim \mathcal{U}(0, 10)$ ,  $b_i \sim \mathcal{U}(-10, 10)$  are the hidden task parameters, and  $C_{i,j}$  is a  $(d + 2)$ -digit integer. “|” separates examples within tasks, “#” separates tasks. Line breaks are for visual clarity; the actual input is a single continuous sequence.
+
+{6}------------------------------------------------
+
+|  | Baseline | CGT (no Aux/Reg) | CGT (Aux) | CGT (Aux + Reg) |
+|-|-|-|-|-|
+| <i>Base Accuracy</i> | 77.7% $\pm$ 0.8% | <b>79.0%</b> $\pm$ 0.8% | 77.5% $\pm$ 1.3% | 78.6% $\pm$ 1.2% |
+| <i>Specialized Accuracy</i> | – | 15.3% $\pm$ 7.2% | 77.0% $\pm$ 1% | <b>77.5%</b> $\pm$ 0.9% |
+| <i>Represen. Variation, eq. (4)</i> | – | 0.80 | 0.39 | <b>0.07</b> |
+| <i>Linear Fit Error</i> | – | 0.19 | 0.12 | <b>0.04</b> |
+
+Table 1: Performance of CGT with varying auxiliary loss and regularization on in-context learning tasks. Base accuracy uses dynamic context, while specialized accuracy freezes the context. See equation 4 for representation variation details. Values show mean and  $3\sigma$  error.
+
+**Synthetic In-Context Learning Setup.** This synthetic dataset consists of sequences, each containing several ( $n_{\text{tasks}} \geq 1$ ) in-context learning tasks. Each task is defined by two real-valued hidden parameters  $(a, b)$  drawn uniformly from  $[0, 10)$  and  $(-10, 10)$ . Specifically, each task  $i$  consists of  $n_{\text{ex}}$  examples. Each example  $j$  within task  $i$  presents two random  $d$ -digit integers,  $A_{i,j}$  and  $B_{i,j}$  (typically  $d = 3$ ), and their truncated linear combination  $C_{i,j} := \lfloor a_i A_{i,j} + b_i B_{i,j} \rfloor$ , which is a signed  $(d + 2)$ -digit integer. The hidden coefficients  $a_i$  and  $b_i$  remain constant within a task. The model’s goal is to infer  $a_i$  and  $b_i$  from the provided examples and then apply this linear function to new  $d$ -digit input numbers.
+
+In most of our experiments, we used  $n_{\text{tasks}} = 4$  and provided  $n_{\text{ex}} = 4$  examples for each task. All examples were separated by a special token and all tasks within a sequence were separated by a different special token. A typical example with  $a = 1$  and  $b = 1$  could look like  $012+023=+00035$  and the same arguments for an example with  $a = 0.5, b = -1.5$  would result in  $012+023=-00028$ . In the following, we will refer to substrings following “=” ( $+00035$  and  $-00028$  in the examples above) as *answers*. Examples of actual sequences are presented in Fig. 2.
+
+Inferring  $a$  and  $b$  requires at least two examples. However, because the results are rounded, accurately determining  $a$  and  $b$  becomes more challenging. Thus, even powerful models likely need many examples to achieve near-perfect next-token prediction accuracy.
+
+**Linear Regression.** This dataset contained sequences with interleaved  $(\mathbf{x}, \mathbf{y})$  pairs. Specifically, each sample  $c_i$  contained a sequence of embeddings  $(\mathbf{x}_1^1, \mathbf{y}_1^1, \dots, \mathbf{x}_N^1, \mathbf{y}_N^1)$  with  $\mathbf{y}_k^i := U^i \mathbf{x}_k^i + \mathbf{b}^i + \epsilon \mathbf{q}_k^i \in \mathbb{R}^{d_{\text{out}}}$ ,  $U^i \in \mathbb{R}^{d_{\text{out}} \times d_{\text{in}}}$  being a random per-sample matrix,  $\mathbf{x}_k^i \in \mathbb{R}^{d_{\text{in}}}$  and  $\mathbf{b}^i, \mathbf{q}_k^i \in \mathbb{R}^{d_{\text{out}}}$  being random vectors. All components of these vectors and  $U^i$  were randomly sampled from a univariate Gaussian distribution  $\mathcal{N}(0, 1)$ . Before being passed to a Transformer, each  $\mathbf{x}$  and  $\mathbf{y}$  vector was zero-padded to the input embedding size and the positional encodings were added to them. The model was trained with an  $L_2$  loss matching outputs at  $\mathbf{x}_k^i$  positions with the corresponding  $\mathbf{y}_k^i$  values. In most of our experiments, we used  $d_{\text{in}} = 16$ ,  $d_{\text{out}} = 1$  and  $\epsilon = 0.1$ .
+
+**Text Mixture Datasets.** In another set of experiments, we use text datasets such as wikipedia and c4. Our models are trained on sequences constructed from individual text samples or combinations of two independent text samples coming from the source dataset. When two input text samples are concatenated to form a single sequence, we cut the first text excerpt at a random position sampled uniformly from the range  $[l_{\text{start}}, l_{\text{finish}}]$  and concatenate the second text sequence to it. The concatenation is done after both text sequences are tokenized and the final produced sample is truncated at the maximum sequence length  $l_{\text{max}}$ . In most of our experiments, the total sequence length was  $l_{\text{max}} = 512$ ,  $l_{\text{start}} = 256$  and  $l_{\text{finish}} = 384$ . For additional information see Appendix B.4.
+
+### 4.2 IN-CONTEXT LEARNING RESULTS
+
+Our first experiments were conducted with the synthetic in-context learning dataset described in Section 4.1 with  $n_{\text{tasks}} = 4$  tasks,  $n_{\text{ex}} = 4$  examples per task and  $d = 3$ . We based our CGT models on the GPT2 Transformer architecture (Radford et al., 2019) and trained them with the loss given by equation 3, a combination of cross-entropy loss, our auxiliary loss and the element-wise regularization (Appendix B.1 for model details). Baseline models had 6 layers, an inner dimension of  $\dim \mathbf{x} = 112$ , and 7 heads. The CGT model also introduced  $\mathbf{y}$  with  $\dim \mathbf{y} = 64$  allocating 4 additional heads to it. After a brief hyper-parameter tuning stage, we chose  $\ell = 4$ ,  $w_C = 0.08$  and  $w_D = w_C/2$ . Appendix B.2 summarizes additional parameters and ablation studies.
+
+**Model performance.** First we compared the performance of four different models: (a) a baseline  $\mathbf{x}$ -only model that corresponds to a traditional Transformer, (b) CGT model with both  $\mathbf{x}$  and  $\mathbf{y}$  (cross-entropy loss only,  $\eta = 1$ ), (c) CGT with auxiliary loss ( $\eta = 0.5$ ) and (d) CGT with  $\eta =$
+
+{7}------------------------------------------------
+
+0.5, auxiliary loss and element-wise regularization. In our experiments, we found that regularizing the sequence uniformly with  $\zeta_C(s) = \text{const}$  results in the same performance as if we prioritized regularization in the last two examples. All models were trained from scratch with 6 independent runs per experiment. We compared model accuracies on the answers<sup>4</sup> in the last two examples (of 4) for each individual task in all test sequences. When evaluating CGT models, we also compared: (a) inference with dynamic per-token  $\mathbf{y}^\ell$  and (b) inference with specialized models obtained by freezing  $\mathbf{y}^\ell$  at the end of first two examples and removing the first two examples from context. Our experiments with *task vectors* in baseline models with activation transplantation on “!” and “=” tokens reached the top accuracies of 36.8% and 40.7% correspondingly, suggesting that task vectors do not typically emerge in our baseline experiments.
+
+Results presented in Table 1 can be interpreted as follows. Extending a baseline model to CGT by introducing additional  $\mathbf{y}$  activations and  $\mathbf{y}^\ell$ -dependent transformations  $\mathbf{T}^\kappa(\mathbf{y}^\ell)$  increases model accuracy from 77.7% to 79.0% when training with cross-entropy loss alone. However, specializing these CGT models (by freezing  $\mathbf{y}^\ell$  and removing first two examples from the context) leads to severe performance degradation. This suggests that the dynamics of  $\mathbf{y}^\ell$  and the information encoded in its token-to-token change, is crucial for proper operation of these trained models.
+
+Once we add auxiliary loss ( $\eta = 0.5$ ) as discussed in Section 3.2, the average accuracy of specialized models reaches 77.0% approaching the performance of the baseline model. Finally, when adding element-wise regularization, we observe the specialized model accuracy to increase further to 77.5% (while also improving the average model performance with dynamic  $\mathbf{y}^\ell$ ). We thus conclude that (a) our generated task-specialized models successfully solve the task without any examples in context reaching nearly the same accuracy as the models seeing previous demonstrations in-context, (b) element-wise regularization enforcing the smoothness and sequence-to-sequence variability of  $\mathbf{y}^\ell$  has a positive impact on model performance (with and without  $\mathbf{y}^\ell$  freezing).
+
+**$\mathbf{y}^\ell$  as task representation.** We also analyzed the properties of the context representation  $\mathbf{y}^\ell$ . First we computed the variation of  $\mathbf{y}^\ell$  on the last two examples of 4 (at which point the model should have inferred the task at hand). Our variation metric was chosen as:
+
+$$\frac{1}{|E_2|} \sum_{s \in E_2} \|\bar{\mathbf{y}}_s - \bar{\mathbf{y}}_{s-1}\|, \quad (4)$$
+
+where  $E_1$  and  $E_2$  denote the sequence segments of the first and the last two examples correspondingly and  $\bar{\mathbf{y}}^\ell := \delta \mathbf{y}^\ell / \sqrt{\|(\delta \mathbf{y}^\ell)^2\|_{E_1+E_2}}$  with  $\delta \mathbf{y}^\ell := \mathbf{y}^\ell - \langle \mathbf{y}^\ell \rangle_{E_1+E_2}$ . In other words, we compute the total variation of  $\bar{\mathbf{y}}^\ell(t)$  on  $E_2$  with  $\bar{\mathbf{y}}^\ell$  being normalized across all 4 examples (on  $E_1 + E_2$ ). Results presented in Table 1 confirm that element-wise regularization leads to a significant reduction in  $\mathbf{y}^\ell$  variation.
+
+We then verified that  $\mathbf{y}^\ell$  does in fact encode information about the task by training a *linear model* that predicted normalized values of task multipliers  $a$  and  $b$  from the context embedding  $\mathbf{y}_s^\ell$  computed at arbitrary  $s \in E_2$ . A typical linear fit for both of these coefficients in a model with element-wise regularization is illustrated in Figure 3(b). Quite surprisingly, both coefficients can be approximated by a linear function of  $\mathbf{y}^\ell$  to a very high accuracy. We compared the mean error of this linear fit (on the last two examples) across 4 models (see Table 1), confirming again that the model with element-wise regularization was characterized by the best linear fit.
+
+The effect of element-wise regularization can be studied further by training CGT model with regularization, but no auxiliary loss ( $\eta = 1$ ). Figure 3(a) shows a typical plot of the average dot-product  $\langle \mathbf{n}_s \cdot \mathbf{n}_t \rangle$  of normalized context embeddings  $\mathbf{n}_s = \mathbf{y}_s^\ell / \|\mathbf{y}_s^\ell\|$  emerging in CGT models. A block-diagonal structure with 4 blocks (of nearly orthogonal  $\mathbf{n}$  values) reflects the fact that there are 4 independent tasks in each sequence. Notice that the slow embedding generally evolves in the first half of each task (first 30 tokens), when the model processes the first two examples, but then stabilizes and hardly changes on the last two examples.
+
+### 4.3 LINEAR REGRESSION RESULTS
+
+Just like with the previous synthetic in-context learning dataset, we observed that CGT models trained with equation 3 and specialized by freezing  $\mathbf{y}^\ell$  after 5, 10 and 20 examples achieved linear
+
+<sup>4</sup>Digits following “=” in each example.
+
+{8}------------------------------------------------
+
+![Figure 3: (a) Heatmap of dot product n_i · n_j for normalized y^l embeddings. (b) Scatter plot of True Value vs Predicted Value for multipliers a and b.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 3 consists of two subplots. Subplot (a) is a heatmap showing the dot product  $n_i \cdot n_j$  for normalized  $y^l$  embeddings across a sequence of elements  $i$  and  $j$ . The axes range from 0 to 400. The color scale indicates values from 0.2 to 1.0. Subplot (b) is a scatter plot showing 'True Value' on the y-axis and 'Predicted Value' on the x-axis, both ranging from 0.0 to 1.5. The data points are clustered around the diagonal line  $y=x$ , indicating good agreement between predicted and groundtruth values.
+
+Figure 3: (a) Heatmap of dot product n\_i · n\_j for normalized y^l embeddings. (b) Scatter plot of True Value vs Predicted Value for multipliers a and b.
+
+Figure 3: (a) The dot product  $n_i \cdot n_j$  plot for normalized  $y^l$  embeddings at two different locations in the sequence with 4 tasks and 4 examples per task; (b) linear regression results for the multipliers  $a$  and  $b$  given the average value of  $y^l$ , the plot shows agreement between predicted and groundtruth values.
+
+regression accuracy comparable to in-context presentation of the same examples. While 5 and 10-example specialization yielded near-optimal accuracy largely independent of model parameters, 20-example specialization proved to be more sensitive. Three parameters were particularly important: the input dimension ( $\dim \mathbf{x}$ ), the output dimension ( $\dim \mathbf{y}$ ), and the layer index  $\ell$  at which  $y^\ell$  is applied. Increasing  $\dim \mathbf{x}$  improved overall performance as the number of in-context examples increased. As expected, larger  $\dim \mathbf{y}$  was important for specialized model accuracy. Perhaps more surprisingly, smaller values of  $\ell$  significantly degraded model performance. Only when choosing  $\ell$  to be just one layer below the final layer (with  $y^\ell$  modulating a single layer), were we able to see a specialized model approach the optimal accuracy (see Fig. 4). Using monotonically growing  $\zeta_C$  profiles (including quadratic motivated by equation 1) did not have a statistically significant impact on model performance. Details of our experiments are provided in Appendix D.2.
+
+### 4.4 TEXT MIXTURE RESULTS
+
+In most of our experiments with text datasets, each sequence was a mixture of two distinct c4 text excerpts. The CGT model was based on a 12-layer version of GPT-2 with  $\ell = 8$  being the layer for reading out  $y^\ell$ . We used the loss given by equation 3 with  $w_C = 0.04$  and  $w_D = w_C/2$ . Additional model parameters are discussed in Appendices B.2 and B.4.
+
+**Model performance.** First we verified that the addition of a context embedding  $y$  in CGT architecture improves performance on c4 text dataset (Fig. 5). Using main embeddings with dimensionality  $\dim \mathbf{x} = 128$ , adding a 128-dimensional context embedding ( $\dim \mathbf{y} = 128$ ) at layer  $\ell = 8$  yielded a substantial improvement of 0.23 in average cross-entropy loss from a baseline of approximately 3.65. For comparison, using main embeddings with  $\dim \mathbf{x} = 224$  and a smaller, 32-dimensional context embedding ( $\dim \mathbf{y} = 32$ ) at the same layer resulted in a smaller improvement of 0.04 from a baseline of 3.25.
+
+While the improvement achieved with  $\dim \mathbf{x} = 128$  and  $\dim \mathbf{y} = 128$  is less than that observed when simply increasing the main embedding dimensionality proportionally to 224 (roughly equivalent to  $\dim \mathbf{x} + \dim \mathbf{y}$  in a conventional model), the computational overhead of introducing  $y^\ell$  at a later layer ( $\ell = 8$ ) is relatively small.
+
+Next, we evaluated the performance of specialized models generated from c4 pre-trained models by freezing the context representation  $y^\ell$  after processing an initial portion of the text. We split 11 600 validation samples into two parts, typically at the end of the first sentence (around 400 characters or 100 tokens). After processing the first part,  $y^\ell$  was frozen and the specialized CGT processed the second part. We calculated the average per-token cross-entropy loss across all samples.
+
+Initially, the specialized model had lower loss, but the non-specialized model caught up and surpassed it after roughly 200 tokens (see Fig. 6(a)). This suggests that the fixed  $y^\ell$  benefited the specialized model near its point of calculation but hindered performance further down the sequence,
+
+![Figure 4: Line plot showing error vs samples for various model configurations.](4495fbec19aac6861f1a0b35c4dc38bc_img.jpg)
+
+Figure 4 is a line plot showing 'Error' on a logarithmic y-axis (from  $10^{-3}$  to  $10^{-1}$ ) versus 'Samples' on the x-axis (from 0 to 40). The legend indicates several models: Baseline (solid black line), Ridge (dashed black line), Dynamic (dotted black line), Frozen at 5 (solid green line), Frozen at 10 (solid red line), and Frozen at 20 (solid blue line). The Baseline, Ridge, and Dynamic models show a rapid decrease in error as samples increase, converging to a similar low error level. The 'Frozen' models show significantly higher error, with the error increasing as the number of frozen samples (5, 10, or 20) increases.
+
+Figure 4: Line plot showing error vs samples for various model configurations.
+
+Figure 4: The model continuously learns and improves its predictions as it receives more samples. Models: (i) “baseline” Transformer ( $\dim \mathbf{x} = 128$ ); (ii) CGT (dynamic  $y^\ell$ ,  $\dim \mathbf{x} = 128$ ,  $\dim \mathbf{y} = 64$ ); (iii) CGT (frozen  $y^\ell$  after 5, 10, or 20 samples). Horizontal lines: Baseline  $L_2$  errors after 5, 10 and 20 samples. Ridge regression error is also shown.
+
+![Figure 5: Scatter plot showing Cross-Entropy Loss vs dim x.](ca5f2304ffe22946414ffab54cd3fd93_img.jpg)
+
+Figure 5 is a scatter plot showing 'Cross-Entropy Loss' on the y-axis (ranging from 3.2 to 3.7) versus ' $\dim \mathbf{x}$ ' on the x-axis (ranging from 125 to 225). The legend indicates three data points: Baseline (blue circle at  $\dim \mathbf{x} = 128$ , loss ≈ 3.65), CGT,  $\dim \mathbf{y} = 128$  (red downward triangle at  $\dim \mathbf{x} = 128$ , loss ≈ 3.42), and CGT,  $\dim \mathbf{y} = 32$  (red star at  $\dim \mathbf{x} = 224$ , loss ≈ 3.29). A blue line connects the Baseline point to the CGT,  $\dim \mathbf{y} = 32$  point, showing a decrease in loss as  $\dim \mathbf{x}$  increases.
+
+Figure 5: Scatter plot showing Cross-Entropy Loss vs dim x.
+
+Figure 5: Cross-entropy loss on c4 text dataset.
+
+{9}------------------------------------------------
+
+![Figure 6: (a) Average difference between cross-entropy losses of specialized (fixed y^l, blue curve) and non-specialized (dynamic y^l, green curve) models. (b) Evolution of y^l along the sequence containing two c4 text excerpts joined at 305. (c) t-SNE plot for wikipedia articles from 8 different categories.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 6 consists of three subplots. (a) is a line graph showing the 'Cross-entropy loss difference' on the y-axis (ranging from -0.3 to 0.1) against the 'Sequence index after merging' on the x-axis (ranging from 0 to 500). A blue curve (specialized) starts at 0 and rises to about 0.05, while a green curve (non-specialized) stays near 0. (b) is a heatmap showing the 'Sequence index' (0 to 500) on the y-axis against the 'y Dimension' (0 to 60) on the x-axis. The colors represent the values of  $y^\ell$ , showing a clear transition around sequence index 305. (c) is a t-SNE plot showing clusters of points colored by category, with a color bar on the right indicating values from 0 to 7.
+
+Figure 6: (a) Average difference between cross-entropy losses of specialized (fixed y^l, blue curve) and non-specialized (dynamic y^l, green curve) models. (b) Evolution of y^l along the sequence containing two c4 text excerpts joined at 305. (c) t-SNE plot for wikipedia articles from 8 different categories.
+
+Figure 6: (a) Average difference between the cross-entropy losses of the specialized (fixed  $y^\ell$ , blue curve) and non-specialized (dynamic  $y^\ell$ , green curve) models (typical loss value is  $\sim 3$ ); the specialized model is better where this difference is below zero. (b) Evolution of  $y^\ell$  along the sequence containing two `c4` text excerpts joined at 305. (c) *t*-SNE plot for wikipedia articles from 8 different categories.
+
+likely due to thematic shifts and the fact that we trained the model on small subsequences containing two separate text excerpts. Similar behavior was observed when comparing the specialized model to a separately trained baseline model, with performance leveling around 300 tokens (see Fig. 13(a) in Appendix).
+
+To address this, we experimented with updating  $y^\ell$  as a moving average of its values computed on the second part of the text, rather than simply clamping it. This yielded a consistently lower cross-entropy loss across the entire sequence (Figure 14 in Appendix). This approach effectively injects information from the first part of the text into the second while allowing  $y^\ell$  to adapt to the changing context. Thus,  $y^\ell$  can be viewed as a memory state, or *topic vector* that we can flexibly manipulate.
+
+**$y^\ell$  representation.** Our model, trained with element-wise regularization, learns to encode textual topics in the latent variable  $y^\ell$ . This is evident in two ways. First,  $y^\ell$  exhibits clear transitions between different text excerpts within a single sample (see Fig. 6(b)).
+
+Second,  $y^\ell$  serves as a meaningful embedding for documents. We calculated  $y^\ell$  across hundreds of wikipedia pages from 8 distinct categories (see details in Appendix B.4). The *t*-SNE (van der Maaten & Hinton, 2008) plot in Fig. 4.4 shows the clustering of pages from the same categories, with noticeable distinction between different categories, except for “Mathematical identities” and “Theoretical physics,” which aligns with their semantic similarity. This behavior of  $y^\ell$  is critically dependent on using element-wise regularization and does not generally emerge without it (see Fig. 16). Moreover, we assessed our model on various out-of-distribution mixtures of 3 text excerpts, observing transitions of  $y^\ell$  within approximately 10 to 20 tokens from the merging locations (see Fig. 13(b) in Appendix).
+
+In our experiments with VAE model discussed in Appendix D.4, we observed the emergence of embeddings with similar properties. As expected, by controlling  $\beta_y$  (see equation 2) and the autocorrelation length ( $\lambda$  in Appendix B.2.3), we were able to vary the smoothness of the emergent context representation  $y_\epsilon^\ell$ .
+
+## 5 CONCLUSIONS
+
+Learning slow features that carry information about the global context in a sequence is important for understanding and interpreting data. Here we propose an approach for incentivizing a Transformer model to discover such slow representation within its inner activations. We then modify the model architecture to parameterize local computation by these learned slow features, showing that it is then possible to generate models that are uniquely specialized to a particular local context and no longer need to have direct access to it. While we only consider several simple examples in our experiments (a synthetic few-shot in-context learning task, linear regression and a mixture of texts), we believe that this approach can prove useful for representation learning, model interpretability and generation of specialized models.
+
+ Rest of paper (reference and Appendix) is removed.

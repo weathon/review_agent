@@ -1,0 +1,252 @@
+
+
+{0}------------------------------------------------
+
+# MEXA: MULTILINGUAL EVALUATION OF ENGLISH-CENTRIC LLMs VIA CROSS-LINGUAL ALIGNMENT
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+English-centric large language models (LLMs) often show strong multilingual capabilities. However, the multilingual performance of these models remains unclear and is not thoroughly evaluated for many languages. Most benchmarks for multilingual evaluation focus on classic NLP tasks, or cover a minimal number of languages. We introduce MEXA, a method for assessing the multilingual capabilities of pre-trained English-centric LLMs using parallel sentences, which are available for more languages than existing downstream tasks. MEXA leverages the fact that English-centric LLMs use English as a kind of pivot language in their intermediate layers. It computes the alignment between English and non-English languages using parallel sentences to evaluate the transfer of language understanding from English to other languages. This alignment can be used to estimate task performance in other languages. We conduct studies using various parallel datasets (FLORES-200 and Bible), models (Llama family, Gemma family, Mistral, and OLMo), and established downstream tasks (Belebele, m-MMLU, and m-ARC). We explore different methods to compute embeddings in decoder-only models. Our results show that MEXA, in its default settings, achieves a statistically significant average Pearson correlation of 0.90 with three established downstream tasks across nine models and two parallel datasets. This suggests that MEXA is a reliable method for estimating the multilingual capabilities of English-centric LLMs, providing a clearer understanding of their multilingual potential and the inner workings of LLMs.
+
+![Leaderboard icon](0538daaa5583c23e17db3a12f2281a55_img.jpg)
+
+Leaderboard icon
+
+[Leaderboard](#) [anonymized url]
+
+![Code icon](6ed175c791b5e156d9c98a8dbcc3318c_img.jpg)
+
+Code icon
+
+[Code](#) [anonymized url]
+
+## 1 INTRODUCTION
+
+Most state-of-the-art autoregressive large language models (LLMs) are English-centric, closed-source models such as Claude 3 Opus, GPT-4, and Gemini Pro (Anthropic, 2023; OpenAI et al., 2023; Gemini Team et al., 2023); open-weight models such as Llama 3.1, Gemma 2, and Mixtral (Dubey et al., 2024; Gemma Team et al., 2024b; Jiang et al., 2024); and open-source models such as OLMo (Groeneveld et al., 2024). Except for open-source models, where the data is available and thus the language distribution is transparent, there is confusion regarding the capabilities/language distribution of these LLMs in other languages.
+
+Primarily, the focus in evaluating LLMs has been on developing benchmarks to assess their performance in English. Most benchmarks in multilingual setups consist of classical monolingual NLP tasks such as sequence labeling (Ahuja et al., 2023; Lai et al., 2023a), the automatic translation of popular English benchmarks such as MMLU (Hendrycks et al., 2021) into a limited number of languages (Lai et al., 2023b; OpenAI, 2024), or language-specific benchmarks for languages such as Persian (Ghahroodi et al., 2024), Arabic (Koto et al., 2024), Korean (Son et al., 2024), Turkish (Yüksel et al., 2024), and Chinese (Li et al., 2024c).
+
+Most LLMs are English-centric, either by choice or due to the availability of abundant data sources in English. Either way, for these models to be effective in other languages, it is important that the other languages align with the main language, i.e., English. Given such alignment, English could act as a “*rising tide that raises all ships*,” meaning that improvements in English performance could benefit other languages, especially in tasks such as reasoning (Zhu et al., 2024). Contrarily, if a language does not align well with English, an English-centric LLM may not provide *meaningful coverage* for
+
+{1}------------------------------------------------
+
+that language. Indeed, Wendler et al. (2024) have found that for Llama 2 (Touvron et al., 2023b), an English-centric LLM, English could be seen as a kind of “pivot” language, enabling to solve complex semantic tasks in a foreign language through a detour into English. More precisely, they show that Llama 2 was able to decode semantically correct next tokens in the middle layers, assigning higher probabilities to the English tokens than to the foreign version, which is only selected in the upper layers. Zhao et al. (2024) present a hypothesis regarding the middle layers of English-centric LLMs, suggesting that these models use English as a means of reasoning while incorporating multilingual knowledge. Based on their analysis, the number of language-specific neurons in the middle layers decreases within the self-attention mechanism but remains consistent across the layers of the feed-forward structure when processing multilingual queries.
+
+In this paper, we introduce MEXA, a method that uses the observation that English-centric LLMs semantically use English as a kind of pivot language in their middle layers to evaluate the actual multilingual coverage of LLMs. This is done by measuring how well the embeddings of parallel sentences in the middle layers of LLMs for non-English languages are aligned with the embedding of their corresponding English. We extensively verify the MEXA estimation of language coverage for each LLM, using Pearson correlation between estimated and actual scores for various tasks. We use two parallel datasets: FLORES-200 (NLLB Team et al., 2022) and Bible (Mayer & Cysouw, 2014); nine LLMs: Llama family, Gemma family, Mistral, and OLMo; and three tasks: Belebele (Bandarkar et al., 2024), m-MMLU, and m-ARC (Lai et al., 2023b). Our results show that MEXA achieves a promising average Pearson correlation of 0.90 with established downstream tasks across nine models and two parallel datasets. In our study on the calculation of MEXA scores, we conduct multiple design analyses to examine the impact of token-level pooling for the embeddings (i.e., using the last token versus a weighted average) and layer-level pooling in computing alignment scores. While MEXA demonstrates a high correlation across most setups, we find that a weighted average based on tokens, combined with mean pooling, yields the best results.
+
+## 2 BACKGROUND AND RELATED WORK
+
+We discuss the distribution of pre-training data in LLMs and multilingual evaluation benchmarks in Appendices A.1 and A.2 while focusing on cross-lingual alignment here. Research in the cross-lingual alignment field either aims to uncover the underlying mechanisms of alignment and assess its impact on models and downstream tasks, or attempts to enhance model performance by enforcing alignment before, during, or after the pre-training phase. Most of these papers have focused on encoder-only models, such as XLM-R (Conneau et al., 2020a) and mBERT (Devlin et al., 2019), among others (Hämmerl et al., 2024). In this work, we focus primarily on decoder-only models.
+
+**Understanding Alignment.** Ye et al. (2023) show that English-centric models such as Llama 1 (Touvron et al., 2023a) not only possess multilingual transfer abilities (after fine-tuning on one source language, they can be applied to other languages) but may even surpass the multilingual transfer abilities of multilingual pre-trained models such as BLOOM (BigScience Workshop et al., 2023). Schäfer et al. (2024) find that GPT-2-style decoder-only models show strong cross-lingual generalization when trained on an imbalanced mix of languages. However, when trained on a balanced language set, they do not observe increased performance compared to monolingual settings. Wendler et al. (2024) perform single-token analysis to demonstrate that English-centered LLMs, such as Llama 2, use English semantically as an internal latent language in the middle layers when handling multilingual queries. Zhong et al. (2024) extend this analysis to multiple tokens, also showing that an LLM dominated by both English and Japanese uses both languages as internal latent languages. Zhao et al. (2024) explore how LLMs handle multilingualism. They hypothesize that LLMs initially interpret the query, converting multilingual inputs into English for task-solving. In the middle layers, the models rely on English with self-attention mechanisms for reasoning, while employing multilingual knowledge through feed-forward structures. In the final layers, LLMs generate responses consistent with the original query language. Li et al. (2024f) and Li et al. (2024b) are even more closely related to ours. Li et al. (2024f) employs absolute cosine similarity values between last token embeddings derived from parallel sentences with English to predict the ranking of language performance across various models. However, as we discuss in Section 3, relying solely on absolute cosine values can be misleading, and as shown in Section 5.3, absolute cosine values are less correlated with downstream tasks than MEXA score. Li et al. (2024b) uses English probing tasks and their automatic translations to construct a multilingual evaluation. While they compare
+
+{2}------------------------------------------------
+
+embedding similarity scores between high- and low-resource languages with corresponding evaluation results, similar to Li et al. (2024f), they do not assess whether these correlations hold across other downstream tasks. In Section 5, we demonstrate that MEXA scores align closely with a broad range of downstream tasks.
+
+**Boosting Alignment.** The idea to enforce alignment in encoder-only models using parallel sentences dates back to (Conneau & Lample, 2019), and has been explored under various guises e.g., using mixed-language sentences and/or bilingual dictionaries Huang et al. (2019); Conneau et al. (2020b); Cao et al. (2020); Kulshreshtha et al. (2020); Efimov et al. (2023); Zhang et al. (2023b). Recently, Li et al. (2024d) improve multilingual alignment by initializing the decoder-only models to generate similar representations of aligned words using contrastive learning and preserves this alignment using a code-switching strategy during pretraining. Liu et al. (2024a) propose a data allocation technique to select a core subset of languages for fine-tuning, better aligning the multilingual capabilities of decoder-only LLMs and making them more truthful in their responses. Li et al. (2024a) propose aligning internal sentence representations across different languages using multilingual contrastive learning and aligning outputs by following cross-lingual instructions in the target language for decoder-only models.
+
+## 3 MEXA
+
+We now describe the MEXA method for computing the alignment score of language  $L_1$  with respect to the pivot language  $L_2$ , given the language model  $m$ . In this paper, we use the term *cross-lingual alignment*, *geometric alignment*, or simply *alignment* to refer to the semantic similarity of multilingual embeddings across languages.  $L_2$ , for English-centric LLMs and in this paper, is English. To assess alignment, we use parallel sentences in two languages,  $L_1$  and  $L_2$ .
+
+What defines semantic similarity in multilingual embeddings across languages? The goal of semantic similarity is to ensure that parallel sentences have sufficiently high similarity, reflecting alignment between the two languages. However, considering only the absolute cosine similarity value as the alignment score does not guarantee proper alignment. For some languages, even non-parallel sentences exhibit similarity scores comparable to those of parallel sentences (see §5.3). This is largely due to the high anisotropy observed in Transformer models, which can lead to so-called hubness issues, making it difficult to distinguish between similar and dissimilar embeddings (Ethayarajh, 2019), especially in multilingual models (Hämmerli et al., 2023; Rajaei & Pilchvar, 2022). However, a direct comparative analysis of the cosine similarity between parallel and non-parallel sentence pairs across languages can help overcome these issues. Instead of using the absolute cosine similarity value for alignment, we assign binary values (1 or 0) based on whether a criterion for semantic similarity is satisfied. This criterion imposes that (a) parallel sentences should have high cosine similarity, and (b) non-parallel pairs should also have low similarity values, ensuring the similarity is not random or biased. Specifically, if the cosine similarity for a pair of parallel sentences is higher than for any non-parallel sentences, we assign a value of 1 for this pair; otherwise, a value of 0. This approach sidesteps the hubness problem since the absolute cosine similarity values themselves are not directly used.
+
+To compute MEXA, we first apply the cosine similarity function to the pairs of embeddings of parallel sentences in languages  $L_1$  and  $L_2$ . In Section 3.1, we describe how embeddings can be computed for each layer  $l$  of the autoregressive language model  $m$ . We generate a square matrix  $C(L_1, L_2, m, l)$  representing cosine similarities of embeddings at the output of layer  $l$  for all parallel sentences in languages  $L_1$  and  $L_2$ . We denote  $c_{ij}(l)$  the element in the  $i$ -th row and  $j$ -th column of  $C(L_1, L_2, m, l)$ . It represents the cosine similarity between the  $i$ -th sentence of  $L_1$  and the  $j$ -th sentence of  $L_2$  at layer  $l$  of language model  $m$ . The diagonal elements of  $C$ , denoted  $c_{ii}(l)$ , represent the cosine similarity between parallel sentence pairs from  $L_1$  and  $L_2$ . We define the MEXA alignment score ( $\mu(\cdot)$ ) as follows:
+
+$$\mu(C(L_1, L_2, m, l)) = \frac{1}{n} \sum_{i=1}^n \mathbf{1} \left( c_{ii}(l) > \max_{j \in \{1, \dots, n\} \setminus \{i\}} \{c_{ij}(l), c_{ji}(l)\} \right) \quad (1)$$
+
+where  $n$  is the number of diagonal elements (i.e., the dimension of the matrix), and  $\mathbf{1}(\cdot)$  is the indicator function, which equals 1 if its argument condition evaluates to true and 0 otherwise. This
+
+{3}------------------------------------------------
+
+alignment score measures how often  $e_{ii}(l)$  is the maximum value in both its row and column. The MExA alignment score can alternatively be understood as a measure of sentence retrieval performance (Hu et al., 2020; Liu et al., 2024b; Hämmerl et al., 2024), with the metric of P@1 applied with queries in language  $L_1$  and answers in  $L_2$ , and vice versa. We discuss other ways to calculate semantic similarity between languages in Appendix A.3.
+
+**Layer-wise Pooling.** The MExA alignment score  $\mu(C(L_1, L_2, m, l))$  is computed for language  $L_1$  respect to pivot language  $L_2$  for each layer  $l$  of the language model  $m$ . To compute a single MExA alignment score given the language model  $m$  and  $L_1, L_2$ , we use mean and max pooling strategies over multiple layers.
+
+### 3.1 SENTENCE EMBEDDINGS
+
+Sentence embeddings are a transformation of a sentence into a fixed-size vector that captures its meaning. The process of computing sentence embeddings can vary depending on the model architecture. Typically, sentence embeddings are used in encoder-based models such as BERT, which employ bidirectional attention. In these models, the hidden states of each token are first extracted, then aggregated, commonly by averaging the hidden states from the output layer. Since attention in these models is bidirectional, each token contributes equally to the final embedding. Alternatively one can use the output of the special [CLS] token as per the original BERT work (Devlin et al., 2019).
+
+In this paper, we focus on autoregressive language models that use a decoder-only architecture. In this architecture, attention is not bidirectional; instead, it takes the form of causal attention (left-to-right). In bidirectional attention, each token has access to every other token in the sequence. However, in causal attention, the embedding of a token at position  $t$  is only influenced by the embedding of preceding tokens at positions  $0, 1, \dots, t-1$ . Therefore, simple averaging biases the embeddings towards sentence-initial words. Instead, two alternative methods are considered: using only the last token and weighted averaging. We use and compare both methods to acquire the sentence embeddings needed for MExA.
+
+A standard way to compute a sentence embedding uses only the last token of that sentence. Jiang et al. (2023b) show that using the last token in the format of a prompt template for a sentence  $s$ , such as "This sentence: {s} means in one word:", can be effective. Inspired by this, Li & Li (2024) used the prompt "Summarize sentence {s} in one word:" to obtain the last token embedding as the sentence-level text embedding. However, not all models are instruction-tuned; some earlier works, such as Neelakantan et al. (2022); Wang et al. (2024); Ma et al. (2024), use the last token without any prompt. Since the models studied in this paper are only pre-trained and use multiple languages in the input, we decided to use the last token method without any preceding instruction.
+
+An alternative is weighted averaging. It relies on the intuition that using only the last token might not represent the entire sentence, as the influence of earlier tokens may have diminished. This suggests that tokens at the end of the sentence should contribute more to the overall embedding than those at the beginning. Another motivation is that sentence-final tokens are influenced by preceding tokens and contain more context, while the representation of sentence-initial tokens has significantly less contextual representation. To address this, Muennighoff (2022) proposes to assign weights to each token based on its position. Thus, the sentence embedding of layer  $l$  using position-weighted averaging is:
+
+$$e_l = \sum_{t=1}^T w_t h_{lt} \quad \text{with} \quad w_t = \frac{t}{\sum_{k=1}^T k} \quad (2)$$
+
+where  $T$  is the number of tokens in the given sentence,  $h_{lt}$  is the embedding of the  $t$ -th token at layer  $l$ , and  $e_l$  is the sentence embedding at layer  $l$ .
+
+## 4 EXPERIMENTS
+
+We conduct experiments using various multi-parallel datasets (FLORES-200 and the Bible), models (Llama family, Gemma family, Mistral, and OLMo), and existing benchmarks/tasks (Belebele, m-
+
+{4}------------------------------------------------
+
+MMLU, m-ARC). Our objective is to assess how well the MEXA alignment score from various parallel datasets correlates with the different benchmarks/tasks for different models.
+
+### 4.1 PARALLEL DATA
+
+We calculate the MEXA score using the parallel datasets of FLORES-200 (NLLB Team et al., 2022) and the Bible (Mayer & Cysouw, 2014). While there are other high-quality parallel datasets, such as NTRex-128 (Federmann et al., 2022), IN22 (Gala et al.), OPUS-100 (Zhang et al., 2020), Europarl (Koehn, 2005), OpenSubtitles (Lison & Tiedemann, 2016), TED2020 (Reimers & Gurevych, 2020), and Tatoeba (Tatoeba Community, 2006), we specifically chose FLORES-200 due to its high quality and support for a wide range of languages, while the Bible dataset was selected for its extensive language coverage.
+
+FLORES-200 is a parallel corpus, where the English subset is sourced from Wikimedia projects. Each English sentence has been translated into 204 distinct language-script combinations, these translations have been verified by humans. The dataset contains 997 sentences for development, 1012 sentences for dev-test, and 992 sentences for testing. As the FLORES-200 test set is not publicly accessible, we use the dev-test set as our FLORES parallel test corpus, in line with previous studies. For faster computation, we only consider the first 100 sentences from each language. As shown in Appendix A.4, the odds of the MEXA score randomly achieving a high value with 100 sentences are very slim.
+
+The Parallel Bible (Mayer & Cysouw, 2014) covers a very large number of languages. From this resource, we managed to create a subcorpus, a super parallel dataset of the Bible, with 1,401 language-script labels, each containing 103 sentences (i.e., Bible verses).<sup>1</sup> This corpus includes many low-resource languages, many of which are not covered by existing language technologies (Joshi et al., 2020), and MEXA can be adopted since only parallel data is needed. We use all the 103 sentences from each language.
+
+### 4.2 MODELS
+
+For our experiments, we select models with around 7B parameters, which are considered a base size in the LLM community. The state-of-the-art open-weight models in this range include Llama 1, 2, 3, and 3.1 (Touvron et al., 2023a;b; Meta, 2024; Dubey et al., 2024), Gemma 1 and 2 (Gemma Team et al., 2024a;b), Mistral 0.3 (Jiang et al., 2023a), and the open-source model OLMo 1.7 (Groeneveld et al., 2024). We also select a larger model, Llama 3.1 70B, to show that our findings hold even when scaling further. To apply MEXA, we need to access model weights to compute input sentence embeddings for each layer. We use three popular open-weight model families: Llama, Gemma, and Mistral. As a less multilingual version of state-of-the-art LLMs, we include OLMo, which is trained on a more English-centric corpus of Dolma (Soldaini et al., 2024). Although there are multilingual models such as PolyLM (with support of 18 languages), XGLM (Lin et al., 2022) (with support of 30 languages) and BLOOM (BigScience Workshop et al., 2023) (with support of 46 languages) our focus here is on LLMs which are state-of-the-art in English based tasks such as MMLU (Stanford CRFM, 2024).
+
+### 4.3 BENCHMARKS
+
+Among the existing evaluation benchmarks in Table 4 from Appendix A.2, we chose the Belebele benchmark (Bandarkar et al., 2024), m-ARC (Lai et al., 2023b), and m-MMLU (Lai et al., 2023b), which support the highest number of high-, medium-, and low-resource languages and are directly related to natural understanding tasks, which is the primary focus of this paper.
+
+Belebele is a multiple-choice reading comprehension task designed to assess language models across a range of high-, medium-, and low-resource languages. Each question in the dataset is accompanied by four possible answers and is linked to a brief passage from the FLORES-200 dataset (NLLB Team et al., 2022). The human annotation process was carefully curated to generate questions that effectively differentiate between various levels of language comprehension, supported by rigorous quality checks. Belebele supports 122 distinct labels (language-script combinations) corresponding
+
+<sup>1</sup>[anonymized url]
+
+{5}------------------------------------------------
+
+|  |  | Gemma 2 9B | Gemma 1 7B | Llama 3.1 70B | Llama 3.1 8B | Llama 3 8B | Llama 2 7B | Llama 1 7B | Mistral 0.3 7B | OLMo 1.7 7B | AVG |
+|-|-|-|-|-|-|-|-|-|-|-|-|
+| Task <sub>(avg)</sub> | Belebele | 0.9178 | 0.8467 | <b>0.9456</b> | 0.8767 | 0.8689 | 0.4822 | 0.4156 | 0.8389 | 0.7711 | 0.7737 |
+|  | m-MMLU | <u>0.6998</u> | 0.6138 | <b>0.7700</b> | 0.6315 | 0.6284 | 0.4823 | 0.3569 | 0.5988 | 0.5230 | 0.5859 |
+| Task <sub>(μ)</sub> | m-ARC | <u>0.6775</u> | 0.5870 | <b>0.7014</b> | 0.5794 | 0.5836 | 0.5128 | 0.5000 | 0.5862 | 0.4872 | 0.5795 |
+|  | Belebele (avg.  L = 116) | 0.7093 | 0.5633 | <b>0.7684</b> | 0.5705 | 0.5533 | 0.3028 | 0.2755 | 0.4457 | 0.3627 | 0.5057 |
+|  | m-MMLU (avg.  L = 33) | <u>0.5582</u> | 0.4734 | <b>0.6384</b> | 0.4720 | 0.4664 | 0.3260 | 0.2807 | 0.4207 | 0.3390 | 0.4416 |
+|  | m-ARC (avg.  L = 31) | <u>0.4779</u> | 0.4220 | <b>0.5054</b> | 0.3941 | 0.3892 | 0.3174 | 0.2970 | 0.3662 | 0.2731 | 0.3825 |
+| FLORES | $\mu_{\text{Max}}$ (avg.  L = 116) | <b>0.5688</b> | 0.3815 | <u>0.4110</u> | 0.3963 | 0.3039 | 0.0866 | 0.1946 | 0.2642 | 0.0413 | 0.2976 |
+|  | $\mu_{\text{Max}}$ (avg.  L = 116) | <u>0.5104</u> | 0.3872 | <b>0.7724</b> | 0.6538 | 0.6520 | 0.2464 | 0.3579 | 0.4716 | 0.1965 | 0.5175 |
+| Bible | $\mu_{\text{Max}}$ (avg.  L = 101) | <b>0.5568</b> | 0.2152 | <u>0.3169</u> | 0.2103 | 0.2026 | 0.1246 | 0.0908 | 0.1198 | 0.0121 | 0.1832 |
+|  | $\mu_{\text{Max}}$ (avg.  L = 101) | <u>0.6076</u> | 0.4021 | <b>0.6599</b> | 0.4212 | 0.4190 | 0.2724 | 0.2357 | 0.2606 | 0.0319 | 0.3678 |
+
+Table 1:  $\mu_{\text{pooling}}$  indicates the MEXA score for each corresponding pooling strategy. The embeddings are computed using weighted average based on token positions (Eq. 2). Top values are in **bold**, with second-best underlined.
+
+to 115 distinct languages. However, FLORES-200 does not support 5 of these labels, corresponding to Romaniized versions of 5 Indic languages. Therefore, we conducted our analysis between the FLORES-200 and Belebele benchmarks on 117 common labels. Additionally, there are 102 common labels between the Bible parallel data and Belebele benchmark.
+
+Both ARC Challenge (Clark et al., 2018) and MMLU (Hendrycks et al., 2021) are also set up as multiple-choice question-answering tasks, but they focus on different types of knowledge and reasoning skills. ARC Challenge is classified as a common-sense reasoning task, consisting of grade-school level science questions, while MMLU consists of questions across a wide range of subjects, including humanities, social sciences, and more. Lai et al. (2023b) used GPT-3.5-turbo (OpenAI, 2022) and a translation prompt to translate examples from both datasets and create m-ARC and m-MMLU in 31 languages (excluding English). Later, m-MMLU was expanded to also include Icelandic (isl\_Latn) and Norwegian (nob\_Latn). The Icelandic portion was translated using the Mideand.is, while Norwegian was generated with DeepL.com.<sup>2</sup> m-MMLU consists of 277 questions in its training set, 13,258 in the test set and 1,433 in the validation set. m-ARC consists of 1,116 questions in the training set, 1,169 in the test set, and 298 in the validation set. We use the entire test set for each of these benchmarks to evaluate the models, except in one case. For Llama 3.1 70B, we use the first 500 questions of m-MMLU instead of the whole set due to resource constraints. Since the selected LLMs used in our experiment are not instruction-tuned, we use 5-shot in-context learning with the lm-evaluation-harness framework, employing log-likelihood-based multiple-choice scoring. Other settings, such as prompt templates, are configured according to the framework’s default (Gao et al., 2023; Biderman et al., 2024).
+
+### 4.4 EVALUATION MEASURES
+
+We use Pearson correlation to assess the strength of the correlation between MEXA and downstream performance on our evaluation benchmarks. Pearson correlation is a statistical measure that calculates the strength and direction of the linear relationship between two variables. A high Pearson correlation would indicate that MEXA provides a reliable assessment of multilingual capabilities in English-centric LLMs.
+
+## 5 RESULTS
+
+Table 1 presents the downstream performance of the selected models across three benchmarks, along with MEXA scores from two parallel datasets. Notably, among models with parameter sizes ranging from 7 to 9 billion, both Gemma 2 and Llama 3.1 outperform the others in terms of non-English downstream performance and MEXA scores. The Llama 3.1 and Llama 3 models exhibit similar alignment and downstream task performance; yet, both represent substantial advancements compared to Llama 2. Moreover, results for the Llama 3.1-70B model indicate that scaling can significantly enhance alignment when compared to its smaller version. Interestingly, while Mistral achieves comparable results to Gemma 1 on English benchmarks, it demonstrates inferior alignment, which likely accounts for its reduced performance on non-English tasks. Furthermore, the Llama 2 model achieves higher MEXA scores than OLMo, indicating better alignment. However,
+
+<sup>2</sup>[https://huggingface.co/datasets/alexandrains/m\\_mmlu](https://huggingface.co/datasets/alexandrains/m_mmlu)
+
+{6}------------------------------------------------
+
+|  |  | Gemma 2 9B | Gemma 1 7B | Llama 3.1 70B | Llama 3.1 8B | Llama 3 8B | Llama 2 7B | Llama 1 7B | Mistral 0.3 7B | OLMo 1.7 7B | AVG |
+|-|-|-|-|-|-|-|-|-|-|-|-|
+| FLORES<br>weighted average | $p(\mu_{\text{Mean}}, \text{Belebele})$ | 0.9247 | 0.9421 | 0.8291 | 0.9478 | 0.9588 | 0.8364 | 0.8404 | 0.9732 | 0.8425 | 0.8994 |
+|  | $p(\mu_{\text{Max}}, \text{Belebele})$ | 0.9623 | 0.9676 | 0.9211 | 0.9392 | 0.9326 | 0.8362 | 0.7649 | 0.9448 | 0.9198 | 0.9008 |
+|  | $p(\mu_{\text{Mean}}, \text{m-MMLU})$ | 0.9342 | 0.9097 | 0.9362 | 0.9689 | 0.9647 | 0.9223 | 0.9496 | 0.9387 | 0.9393 | 0.9513 |
+|  | $p(\mu_{\text{Max}}, \text{m-MMLU})$ | 0.9060 | 0.9596 | 0.8946 | 0.9003 | 0.8892 | 0.9386 | 0.8956 | 0.9311 | 0.9565 | 0.9188 |
+|  | $p(\mu_{\text{Mean}}, \text{m-ARC})$ | 0.9741 | 0.9706 | 0.9374 | 0.9515 | 0.9562 | 0.9052 | 0.9268 | 0.9693 | 0.8630 | <b>0.9393</b> |
+|  | $p(\mu_{\text{Max}}, \text{m-ARC})$ | 0.9187 | 0.9499 | 0.8736 | 0.8582 | 0.8663 | 0.9297 | 0.8439 | 0.9001 | 0.8298 | 0.8856 |
+|  | $p(\mu_{\text{Mean}}, \text{Belebele})$ | 0.8997 | 0.9326 | 0.8491 | 0.9494 | 0.9581 | 0.9141 | 0.8340 | 0.9679 | 0.9467 | <b>0.9168</b> |
+|  | $p(\mu_{\text{Max}}, \text{Belebele})$ | 0.9225 | 0.9309 | 0.9127 | 0.9244 | 0.9123 | 0.9125 | 0.7693 | 0.9460 | 0.9218 | 0.9048 |
+|  | $p(\mu_{\text{Mean}}, \text{m-MMLU})$ | 0.8448 | 0.9297 | 0.8645 | 0.9224 | 0.9177 | 0.9699 | 0.8902 | 0.9161 | 0.9649 | 0.9134 |
+|  | $p(\mu_{\text{Max}}, \text{m-MMLU})$ | 0.9190 | 0.9541 | 0.9524 | 0.9536 | 0.9617 | 0.9390 | 0.9146 | 0.7356 | 0.9195 | 0.9125 |
+| Bible<br>weighted average | $p(\mu_{\text{Mean}}, \text{m-ARC})$ | 0.8569 | 0.9147 | 0.9005 | 0.8944 | 0.8879 | 0.9464 | 0.8263 | 0.8859 | 0.7037 | 0.8685 |
+|  | $p(\mu_{\text{Mean}}, \text{Belebele})$ | 0.8360 | 0.8530 | 0.7909 | 0.8781 | 0.8974 | 0.8982 | 0.8404 | 0.9118 | 0.7410 | 0.8496 |
+|  | $p(\mu_{\text{Max}}, \text{Belebele})$ | 0.8863 | 0.9001 | 0.8851 | 0.9242 | 0.9302 | 0.8926 | 0.8230 | 0.9337 | 0.7549 | <b>0.8811</b> |
+|  | $p(\mu_{\text{Mean}}, \text{m-MMLU})$ | 0.8051 | 0.8886 | 0.8958 | 0.8964 | 0.9252 | 0.9159 | 0.9095 | 0.7944 | 0.8823 | <b>0.9045</b> |
+|  | $p(\mu_{\text{Max}}, \text{m-MMLU})$ | 0.5501 | 0.8831 | 0.7748 | 0.8683 | 0.8364 | 0.9180 | 0.9085 | 0.9107 | 0.7388 | 0.8210 |
+|  | $p(\mu_{\text{Mean}}, \text{m-ARC})$ | 0.8505 | 0.8998 | 0.9188 | 0.9267 | 0.9116 | 0.8940 | 0.9208 | 0.9317 | 0.8623 | <b>0.9018</b> |
+|  | $p(\mu_{\text{Max}}, \text{m-ARC})$ | 0.6070 | 0.8803 | 0.8030 | 0.8709 | 0.8552 | 0.8684 | 0.8879 | 0.9178 | 0.8220 | 0.8354 |
+|  | $p(\mu_{\text{Mean}}, \text{Belebele})$ | 0.7656 | 0.8005 | 0.5944 | 0.7934 | 0.8396 | 0.9046 | 0.8299 | 0.9177 | 0.8866 | 0.8147 |
+|  | $p(\mu_{\text{Max}}, \text{Belebele})$ | 0.7844 | 0.8299 | 0.5264 | 0.8000 | 0.8101 | 0.9047 | 0.8048 | 0.9235 | 0.8796 | 0.8070 |
+|  | $p(\mu_{\text{Mean}}, \text{m-MMLU})$ | 0.7194 | 0.7646 | 0.6472 | 0.6068 | 0.6516 | 0.8827 | 0.8692 | 0.8672 | 0.8060 | 0.7572 |
+|  | $p(\mu_{\text{Max}}, \text{m-MMLU})$ | 0.7075 | 0.6886 | 0.5037** | 0.5228** | 0.4461** | 0.9079 | 0.8576 | 0.8643 | 0.7994 | 0.6998 |
+|  | $p(\mu_{\text{Mean}}, \text{m-ARC})$ | 0.7411 | 0.7754 | 0.6592 | 0.5976 | 0.6494 | 0.8537 | 0.8537 | 0.8927 | 0.6997 | 0.7469 |
+|  | $p(\mu_{\text{Max}}, \text{m-ARC})$ | 0.7293 | 0.7000 | 0.5190** | 0.5335** | 0.4853** | 0.8494 | 0.8309 | 0.8624 | 0.6667 | 0.6885 |
+
+Table 2: Pearson correlation of MEXA using FLORES and Bible data across three tasks.  $\rho(\mu_{\text{Pooling}}, \text{Task})$  is the correlation of MEXA for the corresponding pooling strategy and benchmark. In all settings except \*\*, the p-value is  $p < 0.001$ . The best average correlations for each task are in **bold**, and the second bests are underlined.
+
+due to Llama 2’s weaker performance on English tasks, it fails to transfer this alignment effectively, leading to comparable non-English performance between Llama 2 and OLMo. This observation is further explored in Section 5.2, where we normalize the expected performance based on the pivot language, namely English.
+
+### 5.1 MEXA CORRELATION ANALYSIS
+
+We compute sentence embeddings for the selected models using two methods: weighted average based on token positions and last token (see §3.1). We apply mean and max pooling on the MEXA alignment scores across all model layers to derive a single score for each language. In Table 2, we report the correlation between the MEXA scores (computed using both mean- and max-pooling, for the two embedding methods) and task performances. Across all settings, the best overall result (higher correlation) is achieved when embeddings are computed using the **weighted average**, with **mean pooling** as the pooling method. We adopt this configuration as the default setting for MEXA.
+
+**FLORES vs Bible.** In the default setting, the average Pearson correlation score for the FLORES parallel dataset across different tasks is 0.9300, while for the Bible parallel dataset, it is 0.8779. The reason the Bible scores are generally lower than FLORES is that FLORES data is cleaner and more aligned with modern, standardized texts, whereas the Bible data is older and more specialized. For example for some languages, the orthography of Bible texts no longer matches today’s orthography. In the Bible, Arabic often includes diacritics, which are typically omitted in modern writing and tasks, making the text less familiar to models trained on contemporary data. Additionally, although the Bible dataset has been made parallel, sentence alignment can still be inconsistent due to translation nuances. In contrast, FLORES is carefully curated to ensure high-quality, sentence-level parallelism across languages for machine translation tasks.
+
+**Weighted Average vs. Last Token Embeddings.** The use of last token embeddings shows promisingly high correlations with the FLORES parallel data; however, for the Bible dataset, the correlation is low in some cases. We believe this may stem from the high occurrence of Bible sentences (especially in English), which leads models to memorize these phrases. Using the WIMBD toolkit (Elazar et al., 2024), we found that, on average, there are 92 times more documents in Dolma 1.7 (Soldaini et al., 2024) containing exact Bible sentences than those in FLORES. Consequently, when using Bible examples, the last token is biased towards predicting the specific memorized next token rather than incorporating context-related signals. Therefore, one should consider the hazard of memorized data when using last token embeddings. The weighted-average method, which takes into account
+
+{7}------------------------------------------------
+
+the influence of multiple tokens, can mitigate the impact of a poor embedding for the last token and enable the model to capture useful information from the other tokens more robustly.
+
+**Max Pooling vs. Mean Pooling.** In our comparison of mean pooling and max pooling on the Belebele benchmark, we found that mean pooling underestimates low-resource languages (resulting in more MEXA scores near 0), while max pooling correlates better with the Belebele benchmark. This can be explained by the fact that Belebele is an easier task among the three evaluated, allowing even low-resource languages to achieve good scores. Conversely, based on our experiment with m-ARC, max pooling tends to overestimate low-resource languages, making mean pooling more aligned with m-ARC. This can be attributed to m-ARC being the most challenging task among the three, where even medium-resource languages do not achieve high scores. Changing the pooling method from mean to max can be considered when dealing with different levels of understanding.
+
+### 5.2 DOWNSTREAM PERFORMANCE ESTIMATION
+
+![Figure 1: Four scatter plots showing the relationship between MEXA scores and task performance. The first plot shows m-ARC Accuracy vs. J_{Mean} (Bible) x m-ARC_{eng}. The second plot shows m-ARC Accuracy vs. J_{Mean} (FLORES) x m-ARC_{eng}. The third plot shows Belebele Accuracy vs. J_{Mean} (Bible) x Belebele_{eng}. The fourth plot shows Belebele Accuracy vs. J_{Mean} (FLORES) x Belebele_{eng}. Each plot contains data points (blue dots) and a fitted line (red line) that closely follows the dashed diagonal line y=x.](ecb25d766719ce041cf4cc390791a098_img.jpg)
+
+Figure 1: Four scatter plots showing the relationship between MEXA scores and task performance. The first plot shows m-ARC Accuracy vs. J\_{Mean} (Bible) x m-ARC\_{eng}. The second plot shows m-ARC Accuracy vs. J\_{Mean} (FLORES) x m-ARC\_{eng}. The third plot shows Belebele Accuracy vs. J\_{Mean} (Bible) x Belebele\_{eng}. The fourth plot shows Belebele Accuracy vs. J\_{Mean} (FLORES) x Belebele\_{eng}. Each plot contains data points (blue dots) and a fitted line (red line) that closely follows the dashed diagonal line y=x.
+
+Figure 1: The relationship between MEXA scores of Llama 3.1-8B from the Bible and FLORES, adjusted by the English task performance, for tasks in Belebele and the m-ARC benchmark.
+
+A complete Pearson correlation (i.e.  $\rho = 1.0$ ) indicates that a linear equation perfectly describes the relationship between MEXA and the evaluation benchmarks, with all data points lying on a line. Given the high correlation values shown in Table 2, it is reasonable to conclude that we can fit a line that closely approximates this linear relationship. This line converts the MEXA scores back to downstream task performances. We employed a linear model to predict this line by minimizing the residual sum of squares between the MEXA scores (multiplied by the performance on the English task) and the task performances. We needed to adjust the MEXA scores for this purpose, as the MEXA score for language  $L_1$  indicates how well  $L_1$  is aligned with English but does not reflect the estimated task performance of the model for language  $L_1$ . Of course, this does not change the Pearson correlation, as it is unaffected by linear transformations. The three tasks considered in this paper involve multiple-choice questions with four possible answers for each question, resulting in a chance of being randomly correct of  $\frac{1}{4}$ . However, the minimum score for MEXA scores is 0. Thus, the ideal slope for the line would be  $\frac{3}{4}$  with an intercept of  $\frac{1}{4}$  (X-axis: adjusted MEXA scores, Y-axis: task performance). In Figure 1, we plot this relationship for Llama 3.1-8B using the Bible and FLORES parallel datasets for Belebele and m-ARC. We chose mean pooling for Belebele and max pooling for m-ARC, since these pooling methods yield a stronger correlation (see §5.1). The pairs of (slope, intercept) from left to right in the Figure 1 are: (0.6804, 0.2477), (0.6103, 0.1838), (0.6340, 0.3408) and (0.5726, 0.2423). With data points from both high-resource and low-resource languages, this line can be calculated; otherwise, the ideal line may be used as a reference.
+
+**Language Coverage.** We present the adjusted MEXA score for all languages available in FLORES-200 in Table 5 from Appendix A.5 for the selected models. The languages are categorized into groups ranging from well-covered to not covered. In Table 5, we can clearly see that Llama 3.1-70B and Gemma 2-9B show a higher level of multilingualism than other models.
+
+### 5.3 MEXA VS ABSOLUTE COSINE SIMILARITY
+
+We compare MEXA with the use of absolute cosine similarities. To begin with, cosine similarity scores are not always directly comparable across models. For example, if a language shows a higher cosine similarity with English for one model than another, it does not necessarily indicate better alignment in the former model. However, MEXA has the advantage of being directly comparable, as
+
+{8}------------------------------------------------
+
+its score does not rely on absolute similarity values. To examine the correlation of both methods with downstream tasks, we conducted the following experiment. We used parallel data from FLORES and downstream task data from the Belebele benchmark, focusing on 116 common labels. For each non-English language, we computed the average absolute cosine similarity for parallel sentences with English, and the average absolute cosine similarity for non-parallel sentences with English. Following the setup by Li et al. (2024f), which employs absolute cosine similarity values to predict the performance and rank of languages, we computed the embeddings using the last-token method and applied mean pooling over layers {5, 10, 15, 20, 25}. We report results using the Gemma 1 and Llama 1 7B models, which are commonly used in our experiments. For a fair comparison, this setup is applied to both absolute cosine similarity and MEXA. For the Gemma 1 model, MEXA achieves a correlation of 0.9260 with downstream task performance, while the absolute cosine similarity for parallel sentences achieves a correlation of 0.7651. Additionally, the correlation between the absolute cosine similarity for parallel and non-parallel sentences is 0.9232. For the Llama 1 model, MEXA achieves a correlation of 0.8365 with downstream task performance, while the absolute cosine similarity for parallel sentences achieves a correlation of 0.6473. Additionally, the correlation between the absolute cosine similarity for parallel and non-parallel sentences is 0.9064. In both models, the absolute cosine similarity method achieved significantly lower correlations with downstream tasks compared to MEXA. This discrepancy arises primarily because, for some languages, the similarity score can be high regardless of whether the sentences are parallel or non-parallel. Furthermore, a low similarity score between two languages does not necessarily indicate weak alignment, as overall similarity scores may be low while parallel sentences still exhibit much higher scores than non-parallel ones.
+
+### 5.4 VISUALIZATION OF LAYERS
+
+In Figure 2, we show the results of applying MEXA to 20 pairs of language\_script from FLORES parallel dataset for Llama 1-7B and Llama 3.1-8B across all 32 layers. We selected these languages from different families, writing systems, and both high- and low-resource categories. The embeddings are computed using weighted average based on token positions. Figure 2 shows that high-resource languages (with more prevalence on the web; see §A.1) achieve higher alignment scores across different layers, while low-resource languages achieve lower scores. In the initial layers, embeddings are more in-language, resulting in lower alignment scores. As embeddings progress to the mid-layers, they become more aligned with the main language of the LLM, i.e., English.
+
+MEXA is comparable between models as long as the same parallel dataset and setting is used to obtain the MEXA scores. Figure 2 shows that in many languages, particularly high-resource languages, Llama 3.1 achieves a significantly higher alignment score than its predecessor, Llama 1. Although Llama 3.1 exhibits better alignment scores with English for medium and low-resource languages, there is still significant room for improvement. Comparing Arabic (arb\_Arab) with its romanized version (arb\_Latn), we see that both Llama 1 and Llama 3.1 models perform better in the native script than in the Latin script, even though Llama 1’s tokenizer for Arabic is essentially a character-based tokenizer. In general, for very low-resource languages, those in Latin script tend to have higher alignment scores, likely because the tokenization is more favorable for Latin characters.
+
+In Figure 3, we display the t-SNE (Van der Maaten & Hinton, 2008) plots of the embeddings of Figure 2 from 3 different layers of Llama 3.1: embedding layer 0, mid-layer 13, and last layer 32. We assign a different color to each language. For layers 0 and 32, the embeddings are more language-specific, while in the mid-layer, they become more language-neutral. Languages that maintain their language-specific embeddings in the mid-layer are clustered separately and, notably, correspond to the very low-resource languages that receive the worst alignment scores from MEXA.
+
+## 6 CONCLUSION
+
+We introduce MEXA, a method for assessing the multilingual capabilities of English-centric large language models (LLMs). MEXA builds on the observation that English-centric LLMs semantically use English as a pivot language in their intermediate layers. MEXA computes the alignment between non-English languages and English using parallel sentences, estimating the transfer of language understanding capabilities from English to other languages through this alignment. This metric can be useful in estimating task performance, provided we know the English performance in the task and the
+
+{9}------------------------------------------------
+
+![Figure 2: Two line plots comparing Llama 1 7B and Llama 3.1 8B agreement scores across layers for various languages. The y-axis is 'Agreement Score' (0.0 to 1.0) and the x-axis is 'Layers' (0 to 30). The legend lists 15 languages: en_US, es_ES, fr_FR, de_DE, it_IT, pt_PT, nl_NL, pl_PL, ru_RU, uk_UA, ca_ES, gl_ES, eu_ES, ast_ES, and ast_AST. Performance markers are indicated by symbols: triangle, square, star, cross, circle, and dash.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 2: Two line plots comparing Llama 1 7B and Llama 3.1 8B agreement scores across layers for various languages. The y-axis is 'Agreement Score' (0.0 to 1.0) and the x-axis is 'Layers' (0 to 30). The legend lists 15 languages: en\_US, es\_ES, fr\_FR, de\_DE, it\_IT, pt\_PT, nl\_NL, pl\_PL, ru\_RU, uk\_UA, ca\_ES, gl\_ES, eu\_ES, ast\_ES, and ast\_AST. Performance markers are indicated by symbols: triangle, square, star, cross, circle, and dash.
+
+Llama 1 7B
+
+Llama 3.1 8B
+
+Figure 2: Llama 1 vs. Llama 3.1 agreement score for different languages across all layers. Best performance markers in order:  $\triangle$ ,  $\square$ ,  $\star$ ,  $\times$ ,  $\circ$ ,  $-$
+
+![Figure 3: Three t-SNE plots for Llama 3.1 embeddings at Layer 0, Layer 13, and Layer 32. The plots show Dimension 1 vs. Dimension 2. Layer 0 shows distinct clusters of points. Layer 13 shows a more scattered distribution with many points labeled with IDs. Layer 32 shows a highly scattered, language-neutral distribution.](8ee3b76dd49f31624d287885bc2c81ee_img.jpg)
+
+Figure 3: Three t-SNE plots for Llama 3.1 embeddings at Layer 0, Layer 13, and Layer 32. The plots show Dimension 1 vs. Dimension 2. Layer 0 shows distinct clusters of points. Layer 13 shows a more scattered distribution with many points labeled with IDs. Layer 32 shows a highly scattered, language-neutral distribution.
+
+Layer 0
+
+Layer 13
+
+Layer 32
+
+Figure 3: Llama 3.1 t-SNE plots for 3 different layers. As shown, in the mid-layers, the embeddings become more language-neutral. The numbers shown in the mid-layers are the IDs of English sentences that are scattered.
+
+alignment score between languages derived from a parallel dataset. Through different studies with two parallel datasets (FLORES-200 and the Bible); a diverse range of LLMs including the Llama family, Gemma family, Mistral, and OLMo, and three downstream tasks (Belebele, m-MMLU, and m-ARC), we demonstrated that MEXA provides a reliable estimation of multilingual performance. For MEXA score calculations, multiple design analyses are conducted to explore the impact of token-level pooling for embeddings and layer-level pooling in computing alignment scores. While MEXA shows high correlation across most configurations, a weighted average of tokens combined with mean pooling delivers the best results. The results reveal a promising average Pearson correlation of 0.90 with established downstream tasks across nine models and two parallel dataset. Overall, MEXA proves to be a valuable method for practitioners aiming to assess the multilingual capabilities of English-centric LLMs, paving the way for future efforts to expand these models to a wider range of underrepresented languages.
+
+## 7 LIMITATION
+
+MEXA provides a rough estimate of the multilingual capabilities of pre-trained English-centric LLMs. Different tasks offer diverse perspectives on the abilities of LLMs, and MEXA cannot replace all of them. Our goal is to highlight the multilingual potential of English-centric LLMs and propose a simple way to evaluate them. We hope this encourages the development of more multilingual LLMs, even though they are likely to contain large shares of English data. Additionally, it is important to note that answers across languages do not always need to be fully aligned (Naous et al., 2024), and for such cases, language- and culture-specific evaluation benchmarks should be developed.
+
+ Rest of paper (reference and Appendix) is removed.

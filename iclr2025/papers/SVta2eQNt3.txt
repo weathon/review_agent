@@ -1,0 +1,303 @@
+
+
+{0}------------------------------------------------
+
+# LOCALITY SENSITIVE AVATARS FROM VIDEO
+
+Chunjin Song<sup>1\*</sup>, Zhijie Wu<sup>1\*</sup>, Shih-Yang Su<sup>1</sup>, Bastian Wandt<sup>3</sup>, Leonid Sigal<sup>1,2</sup> & Helge Rhodin<sup>1,4</sup>
+
+<sup>1</sup>Department of Computer Science, University of British Columbia <sup>2</sup>Vector Institute for AI
+
+<sup>3</sup>Department of Electrical Engineer, Linköping University <sup>4</sup>Bielefeld University
+
+{chunjins, lsigal, rhodin}@cs.ubc.ca
+
+## ABSTRACT
+
+We present locality-sensitive avatar, a neural radiance field (NeRF) based network to learn human motions from monocular videos. To this end, we estimate a canonical representation between different frames of a video with a non-linear mapping from observation to canonical space, which we decompose into a skeletal rigid motion and a non-rigid counterpart. Our key contribution is to retain fine-grained details by modeling the non-rigid part with a graph neural network (GNN) that keeps the pose information local to neighboring body parts. Compared to former canonical representation based methods which solely operate on the coordinate space of a whole shape, our locality-sensitive motion modeling can reproduce both realistic shape contours and vivid fine-grained details. We evaluate on ZJU-MoCap, SynWild, ActorsHQ, MVHumanNet and various outdoor videos. The experiments reveal that with the locality sensitive deformation to canonical feature space, we are the first to achieve state-of-the-art results across novel view synthesis, novel pose animation and 3D shape reconstruction simultaneously. Our code is available at <https://github.com/ChunjinSong/lsavatar>.
+
+## 1 INTRODUCTION
+
+Reconstructing a photorealistic human avatar is crucial for various downstream applications (Wu et al., 2019; Bagautdinov et al., 2021; Peng et al., 2021a; Lombardi et al., 2021; Hu et al., 2022; Song et al., 2023). Some previous methods achieve this by rigging a surface mesh to an underlying skeleton and enhancing the mesh with either a neural texture (Bagautdinov et al., 2021; Liu et al., 2021) or learnable vertex features (Kwon et al., 2021; Peng et al., 2021a;b). While these approaches offer detailed reconstructions, they are prone to producing artifacts when learning from sparse examples. Other efforts (Bagautdinov et al., 2021; Xu et al., 2021; Wang et al., 2022a) use a parametric template to mitigate this issue but are limited in representing various human shapes and poses. They are also difficult to optimize and often yield artifacts due to their explicit handling of vertices and faces.
+
+Recently, significant attention has been devoted to extending Neural Radiance Field (NeRF) models (Su et al., 2021; 2022; Weng et al., 2022) for dynamic avatar modeling using a human skeleton as input. Specifically, A-NeRF (Su et al., 2021) and NARF (Noguchi et al., 2021) compute relative coordinates of the input query points in relation to skeletal joints and then estimate geometry and appearance information by using these coordinates holistically. Subsequently, DANBO (Su et al., 2022), Posevocab (Li et al., 2023) and NPC (Su et al., 2023) decompose the feature space into parts and aggregate these features before computing the final outputs, improving network scalability. PM-Avatar (Song et al., 2024a) has further advanced this by modulating the frequency transformation of query points through modeling part relationships, enhancing fine-grained detail synthesis. Recently, the 3D Gaussian Splatting (3DGS) (Kerbl et al., 2023a) based methods leverage a set of anisotropic Gaussian functions to encode local patterns and transform the template Gaussians to match the per-frame input images for fast rendering (Qian et al., 2024; Wen et al., 2024; Lei et al., 2024).
+
+Despite the aforementioned empirical advances, these methods struggle to generalize well and yield artifacts with sparse input data, such as an in-the-wild video from the online Youtube platform. A key issue of these methods is that they render the final outputs in the observed pose spaces defined
+
+\* Equal Contribution.
+
+{1}------------------------------------------------
+
+|  | Monocular input | Locality encoding | Local deformation | Canonical space rendering | Geometry Reconstruction |
+|-|-|-|-|-|-|
+| HumanNeRF (CVPR 2022) | ✓ | ✗ | ✗ | ✓ | ✗ |
+| MonoHuman (CVPR 2023) | ✓ | ✗ | ✗ | ✓ | ✗ |
+| VidAvatar (CVPR 2023) | ✓ | ✓ | ✗ | ✓ | ✓ |
+| NPC (ICCV 2023) | ✗ | ✓ | ✗ | ✗ | ✗ |
+| PM-Avatar (ICLR 2024) | ✗ | ✓ | ✗ | ✗ | ✗ |
+| 3DGS-Avatar (CVPR 2024) | ✓ | ✓ | ✗ | ✗ | ✗ |
+| GoMAvatar (CVPR 2024) | ✓ | ✓ | ✗ | ✗ | ✓ |
+| GauHuman (CVPR 2024) | ✓ | ✓ | ✗ | ✗ | ✗ |
+| GaussianAvatar (CVPR 2024) | ✓ | ✓ | ✗ | ✗ | ✗ |
+| <b>Ours</b> | ✓ | ✓ | ✓ | ✓ | ✓ |
+
+Table 1: **Comparison to SOTA.** Our full model conceptually unifies the idea of rendering in the canonical pose space with local pattern encoding for deformations, improving generalization and adaptive detail synthesis in monocular settings. Signed Distance Function (SDF) is also learned for explicit geometry reconstruction. We refer Sec. C and Fig. B for more discussions.
+
+by different inputs. Thus the rendered images cannot be directly derived from the pose-independent information for generalization to testing camera views and unseen poses.
+
+Here we aim to reconstruct human representations with intricate and dynamic details from monocular video sequences. To this end, state-of-the-art methods (Jiang et al., 2022; Li et al., 2022; Wang et al., 2022a) build a body model in the canonical pose space rather than in observed pose spaces, such that the geometry and appearance can be learned statically. Specifically, (Guo et al., 2023) directly transforms the input skeleton and the positions in canonical pose space to shapes and colors for rendering. Meanwhile, (Weng et al., 2022; Yu et al., 2023) explicitly model a skeletal rigid motion field together with its corresponding non-rigid motion field to faithfully capture the dynamically changing details (e.g. cloth wrinkles). While these methods successfully estimate a stable avatar representation, their learning pipeline is purely conditioned on the entire skeleton pose. Thus they are prone to poor generalization when unrelated body parts remain weakly entangled as shown in Fig. B.
+
+In this paper, we introduce *Locality Sensitive Avatar*, which is a novel deformation based approach to directly disentangle independent body parts and learn a generalizable personalized human model from monocular videos. Tab. 1 summarizes connections between our approach and existing algorithms. In detail, we decompose movements into a skeletal rigid motion to the canonical pose space and a corresponding non-rigid counterpart, which are learned locally. Specifically, we apply inverse linear blending skinning (LBS) for rigid motion, followed by generating point-dependent offsets in canonical space, with features encoding local pose context as the non-rigid component. Part relationships are approximated via a graph neural network (GNN) to account for the irregular structure of the human skeleton. This approach enables multi-scale deformations by linking rigid motion to holistic modeling and localizing non-rigid deformations, allowing us to simultaneously learn invariant avatar representations and high-frequency details. In contrast, previous methods handle deformations monolithically or implicitly, resulting in suboptimal performance. We also apply the Signed Distance Function (SDF) to enhance detailed geometry reconstruction. Hereafter, we refer to canonical pose space as canonical space and observed pose space as observation space for brevity.
+
+We evaluate our method on three types of datasets: synthetic examples, existing lab-made sequences, and videos captured outdoors. Our contributions can be summarized as following:
+
+- We introduce a novel locality-sensitive avatar representation by integrating part-based locality encoding with canonical space rendering.
+- We utilize graph neural network (GNN) features to capture local part contexts and then estimate non-rigid deformation offsets, enabling the generation of adaptive details.
+- We demonstrate significant improvements over state-of-the-art methods in novel view synthesis, unseen pose rendering and shape reconstruction simultaneously.
+
+## 2 RELATED WORK
+
+Novel image rendering for human avatars recreates complex geometry and subtle lighting effects appeared in given image sequences. Recently, a lot of efforts have been devoted to apply neural
+
+{2}------------------------------------------------
+
+radiance field for image-based rendering (Xie et al., 2022). Here we only review the most related methods in radiance field based rendering and neural avatar modeling.
+
+**Neural Rendering.** In computer graphics and 3D vision (Park et al., 2019; Wu et al., 2019; Mescheder et al., 2019; Takikawa et al., 2021; Müller et al., 2022; Zhang et al., 2024), neural fields are extensively studied due to their impressive performance and give birth to Neural Radiance Fields (NeRF) (Mildenhall et al., 2020), a strong paradigm to learn 3D representations from 2D images for novel view synthesis. Since then, numerous efforts have been made to adapt NeRF to dynamic scenes by additionally incorporating the time dimension (Li et al., 2021b; Park et al., 2021; Pumarola et al., 2021). On the other hand, some works replace the density outputs of NeRF models with Signed Distance Function (SDF) values to enable detailed geometry modeling (Wang et al., 2021; Yariv et al., 2021; Wang et al., 2022b). To alleviate the time-consuming volumetric rendering operations used in NeRF and its follow-ups approaches, the recent 3D Gaussian Splatting (3D-GS) framework (Kerbl et al., 2023a) applies explicit Gaussian primitives for scene modeling and projects the learned 3D Gaussians to the 2D image plane for fast visual synthesis. Later on, (Luiten et al., 2024; Wu et al., 2024; Kerbl et al., 2023b) extend the 3D-GS pipeline to dynamic scenes by learning time-dependent Gaussian parameters. Different from these methods, we focus on modeling an animatable avatar via NeRF framework by restricting the non-rigid motion to be localized for adaptive detail generation.
+
+**Modeling Articulated Avatars.** Pioneer works in human body modelling apply SMPL (Loper et al., 2015; Pavlakos et al., 2019) as the mesh template to provide a parametric representation of the human body shape. Recently, literature explores the use of neural representations, either based on NeRF or SDF to circumvent the SMPL prior. Some works (Su et al., 2021; Noguchi et al., 2021; Su et al., 2022; 2023; Song et al., 2024a) compute the relative coordinates of input query points and estimate the density and color values through a NeRF model as they hypothesize that each part approximately remains static during avatar deformation. Meanwhile, other works (Peng et al., 2021a; Wang et al., 2022a; Li et al., 2022; 2023) define a static radiance field in the coordinate space of canonical pose and warp the ray marching frame by frame. To reconstruct detailed 3D avatars from monocular videos, HumanNeRF (Weng et al., 2022) and MonoHuman (Yu et al., 2023) explicitly decompose the motion field into skeletal rigid and corresponding non-rigid motions, as in previous disentanglement based methods (Huang et al., 2018; Lee et al., 2018; Song et al., 2019; Wu et al., 2020; 2022; Wang et al., 2024). Concurrently, (Guo et al., 2023; Song et al., 2024b) directly map the input poses and positions in canonical space to SDF and color values for volume rendering. Recent efforts (Zielonka et al., 2023; Lei et al., 2024; Moreau et al., 2024; Kocabas et al., 2024a; Qian et al., 2024; Wen et al., 2024; Hu et al., 2024a;b; Kocabas et al., 2024b) combine 3D-GS framework with human articulation prior for fast avatar reconstruction. Given these progress, none of the aforementioned deformation-based approaches consider the locality modeling and deformations to the canonical pose simultaneously. Thus existing baselines either focus on reconstructing a sequence at high detail or generalizing well under novel settings; but not both. See Tab. 1 for better conceptual comparisons.
+
+## 3 METHOD
+
+Fig. 1 illustrates our network which learns to reconstruct a 3D articulated avatar from a monocular video. Our key contribution is a locality sensitive deformation network to compute an offset in canonical space. Taken a human skeleton and a query point in per-frame observation space as input, we first apply a Graph Neural Network (GNN) to estimate local relationships between different body parts and compute a set of relative coordinates in each part’s local frame. These relative coordinates will be combined with corresponding GNN features and then be aggregated into a locality-wise offset with a learnable window function. We mix the canonical position from skeletal deformation with its point-dependent offset and regress the SDF and color values for volume rendering.
+
+### 3.1 SKELETAL DEFORMATION TO CANONICAL COORDINATE SPACE
+
+It is crucial to learn an expressive canonical space for high-fidelity 3D avatar modeling from monocular videos. Existing methods (Weng et al., 2022; Yu et al., 2023; Guo et al., 2023) typically adopt the skeletal deformation, which is driven by input human skeleton, to transform the query point  $x \in \mathbb{R}^3$  in observation space to  $x_c$  in canonical space. Here we define the pose with  $N$  parts as  $\theta = [\mathbf{B}_1, \mathbf{B}_2, \dots, \mathbf{B}_N]$  and  $\mathbf{B}_i \in \mathbb{R}^6$  (Zhou et al., 2019) represents the rotation parameter of  $i$ -th
+
+{3}------------------------------------------------
+
+![Figure 1: Architecture overview. The diagram illustrates the pipeline for SDF-based volume rendering. An input query point x is processed through a 'Skeletal Deformation' block to produce canonical coordinates x_c. Simultaneously, x is transformed into relative positions {x_i} within each part's local frame. These are processed by a 'Window Function' and concatenated with features from a 'GNN'. The output is a coordinate offset Δx. Finally, x_c and Δx are input into an 'MLP' to regress the SDF value s and color c. A legend on the right defines the symbols: MLP (red bars), Positional Encoding (green line), Feature (blue bar), Concatenation (square with +), Multiplication (circle with ×), and Addition (circle with +).](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 1: Architecture overview. The diagram illustrates the pipeline for SDF-based volume rendering. An input query point x is processed through a 'Skeletal Deformation' block to produce canonical coordinates x\_c. Simultaneously, x is transformed into relative positions {x\_i} within each part's local frame. These are processed by a 'Window Function' and concatenated with features from a 'GNN'. The output is a coordinate offset Δx. Finally, x\_c and Δx are input into an 'MLP' to regress the SDF value s and color c. A legend on the right defines the symbols: MLP (red bars), Positional Encoding (green line), Feature (blue bar), Concatenation (square with +), Multiplication (circle with ×), and Addition (circle with +).
+
+Figure 1: **Architecture overview.** Given the query point  $x$ , we first perform skeletal deformation to compute its canonical coordinate  $x_c$ . Next,  $x$  is transformed into a set of relative positions  $\{\hat{x}_i\}$  within each part's local frame. With a learnable window function, we then aggregate the concatenations of these per-part relative positions with their corresponding part features from the Graph Neural Network (GNN) into a single feature to estimate a coordinate offset  $\Delta x$  as the non-rigid motion. Finally, we input the sum of  $x_c$  and  $\Delta x$  into a Multilayer Perceptron (MLP) to regress the Signed Distance Function (SDF) value  $s$  and color  $c$  for SDF-based volume rendering.
+
+part. Following Vid2Avatar (Guo et al., 2023), we perform the inverse of linear-blend skinning to connect  $x_c$  in canonical space to  $x$  in deformed space as
+
+$$x_c = \left( \sum_{i=1}^N \tilde{\omega}_i \mathbf{B}_i \right)^{-1} x. \quad (1)$$
+
+Here  $\{\tilde{\omega}_i\}$  denotes the skinning weight of the  $i$ -th bone and is associated with the average of the nearest SMPL vertices' skinning weights. Note that, HumanNeRF (Weng et al., 2022) and MonoHuman (Yu et al., 2023) turn to use a set of learnable weight volumes with faster coordinate transformation to perform the inverse of linear-blend skinning. However, we find that the SMLP-based weight computation can improve the GPU memory consumption and convergence speed experimentally.
+
+### 3.2 LOCALITY SENSITIVE DEFORMATION FIELD
+
+As depicted in Fig. 1, we propose a novel deformation network to compute part adaptive offsets as the non-rigid motion representation. Sharing the same spirits with DANBO (Su et al., 2022), NPC (Su et al., 2023) and PM-Avatar (Song et al., 2024a), we regard the human skeleton as a graph, where each joint is linked to a graph node. Thus we apply the graph neural network (GNN) to model the relationships between skeleton parts as:
+
+$$[G_1, G_2, \dots, G_N] = \text{GNN}(\theta), \quad (2)$$
+
+where GNN and  $G_i$  represent a learnable graph neural network and the feature vector of the  $i$ -th part respectively. We adopt individual multi-layer perceptron (MLP) weights for each graph node such that the irregular nature of human skeleton can be better considered.
+
+To learn the locality sensitive deformation, we transform a point  $x$  to the local frame of  $i$ -th part as
+
+$$\begin{bmatrix} \hat{x}_i \\ 1 \end{bmatrix} = T(\mathbf{B}_i) \begin{bmatrix} x \\ 1 \end{bmatrix}. \quad (3)$$
+
+$T(\mathbf{B}_i)$  here means the world-to-bone coordinates transformation matrix defined by the rotation parameter  $\mathbf{B}_i$ . Then we feed the local coordinate set  $\{\hat{x}_1, \hat{x}_2, \dots, \hat{x}_N\}$  into a positional encoding  $\hat{\gamma}(\cdot)$  (Mildenhall et al., 2020) respectively as
+
+$$\hat{\gamma}(\hat{x}_i) = [\hat{x}_i, \sin(2^0 \pi \cdot \hat{x}_i), \cos(2^0 \pi \cdot \hat{x}_i), \dots, \sin(2^{L_{nr}-1} \pi \cdot \hat{x}_i), \cos(2^{L_{nr}-1} \pi \cdot \hat{x}_i)], \quad (4)$$
+
+where  $L_{nr}$  indicates the highest mapping frequency in  $\hat{\gamma}(\hat{x}_i)$ . The concatenations of the frequency expanded features  $\{\hat{\gamma}(\hat{x}_i)\}$  and their part-wise matched GNN features  $\{G_i\}$  are further processed by a per-bone individual fully connected layer as
+
+$$f_i = \Phi_i([\hat{\gamma}(\hat{x}_i), G_i]), \quad (5)$$
+
+{4}------------------------------------------------
+
+where  $\Phi_i$  denotes the fully connected layer corresponding to  $i$ -th bone.
+
+Similar to (Su et al., 2022; Song et al., 2024a), we leverage the window function to decide which per-part point-wise features to pass on to the downstream network and aggregate part features. To adaptively determine the valid range of each part, we compute scaled relative positions as  $\{\bar{x}_i = s_i \cdot \hat{x}_i\}$  and  $s_i$  is a learnable scaling coefficient of the  $i$ -th part which reflects the size of the volume that part makes effect. To jointly learn the volume dimensions  $\{s_i\}$  and mitigate seam artifacts when parts overlap, we define the window function through  $L_2$ -norm  $\|\cdot\|_2$  as
+
+$$\bar{\omega}_i = \exp(-\alpha(\|\bar{x}_i\|_2^\beta)), \quad (6)$$
+
+where we set  $\alpha = 2$  and  $\beta = 6$  across all experiments. Note that  $\bar{\omega}_i$  can facilitate separating multiple volumes based on spatial affinities as it attenuates based on the relative spatial distances to the bone centers; see the function curve shown in Fig. 1. We normalize  $\{\bar{\omega}_i\}$  to preserve the constant weight energy across different frames and yield the probability  $p_i$ , which control how much the  $i$ -th part contributes to non-rigid motion. Then we aggregate all point-dependent part features as
+
+$$\bar{h} = \sum_{i=1}^N p_i \cdot f_i, \quad p_i = \frac{\bar{\omega}_i}{\sum_{j=1}^N \bar{\omega}_j}. \quad (7)$$
+
+The aggregated feature  $\bar{h}$  is inputted into a MLP to output a 3D offset  $\Delta x$ . In principle, the canonical position  $x_c$  represents the coarse rigid deformation while the offset  $\Delta x$  provides the more non-rigid effects. Thus, inspired by HumanNeRF (Weng et al., 2022) and MonoHuman (Yu et al., 2023), we handle complex human movement by mixing the rigid motion with its non-rigid counterpart as
+
+$$T_c = x_c + \Delta x. \quad (8)$$
+
+Finally, we feed the deformed position  $T_c$  to another positional encoding  $\tilde{\gamma}(\cdot)$ , followed by a MLP to estimate SDF output  $s$  and color output  $c$  as in standard NeRF framework:
+
+$$\tilde{\gamma}(T_c) = [T_c, \sin(2^0 \pi \cdot T_c), \cos(2^0 \pi \cdot T_c), \dots, \sin(2^{L_c-1} \pi \cdot T_c), \cos(2^{L_c-1} \pi \cdot T_c)], \quad (9)$$
+
+$$s, \quad c = \text{MLP}(\tilde{\gamma}(T_c)). \quad (10)$$
+
+Here  $L_c$  and  $\text{MLP}(\cdot)$  denote the highest mapping frequency in  $\tilde{\gamma}(\cdot)$  and a MLP network respectively. We set  $L_{nr} = 5$  and  $L_c = 5$  across all experiments and perform a validity test for  $\{\bar{x}_i\}$  to cater for processing efficiency and local pattern concentration near surfaces.
+
+**Relation to baselines.** In concept, our locality sensitive deformation field can be regarded as a unified framework of part related encodings (Su et al., 2022; 2023; Song et al., 2024a) and works rendering in canonical pose space (Weng et al., 2022; Yu et al., 2023; Guo et al., 2023) to bridge these two worlds. Similar to part related encodings, we use the GNN features as a building block to measure bone correlations and regress per-part feature. While DANBO (Su et al., 2022), NPC (Su et al., 2023) and PM-Avatar (Song et al., 2024a) focus on estimating part-level features and the transformation frequencies of query points, we associate the point-dependent GNN features with a Cartesian offset as a non-rigid deformation in canonical space. Then we can explicitly apply the invariant information during avatar deformation to yield generalizable rendering outputs. Compared to global canonical NeRF representations, our locality sensitive motion offset can better adapt to distinct body parts with high variability, thus leading to superior detail synthesis. In terms of empirical results, the pure part related encodings are prone to run into local minimum and severely distort desired patterns. On the other hand, the complete global canonical representations fail to accurately capture the spatially varying patterns, where our method can show its advantages in both Fig. B and Fig. 8.
+
+### 3.3 SDF-BASED VOLUME RENDERING
+
+Following VolSDF (Yariv et al., 2021), we first transform the SDF output  $s$  to the density as
+
+$$\sigma = \frac{1}{\beta} \cdot \Psi_\beta(-s). \quad (11)$$
+
+Here  $\beta$  and  $\Psi_\beta$  represent a learnable transformation parameter and the Cumulative Distribution Function (CDF) of the Laplace distribution with zero mean and  $\beta$  scale respectively.
+
+{5}------------------------------------------------
+
+Since the output density and color signals  $\{\sigma, c\}$  are estimated in the canonical coordinate space, we synthesize the final rendering images via a vanilla NeRF model like other deformation-based baselines (Weng et al., 2022; Yu et al., 2023; Guo et al., 2023). Specifically, we sample  $n$  points along a ray  $r = (o, v)$  with camera center  $o$  and ray direction  $v$ . Different from (Yariv et al., 2021; Guo et al., 2023), we only perform the uniform sampling to speed up the whole training process. The integral of the volume rendering equation can be approximately computed as
+
+$$\hat{C}(r) = \sum_{i=1}^n \mathcal{T}_i (1 - \exp(-\sigma_i \delta_i)) \mathbf{c}_i, \quad (12)$$
+
+$$\mathcal{T}_i = \exp\left(-\sum_{j=1}^{i-1} \sigma_j \delta_j\right), \quad (13)$$
+
+where  $\hat{C}$  is the rendered image and  $\delta_i$  is the distance between adjacent samples along a given ray.
+
+Following the existing neural radiance rendering pipelines for human avatars (Su et al., 2021; 2022; Wang et al., 2022a; Song et al., 2024a), we apply the  $L_1$  based reconstruction loss  $\|\cdot\|_1$  between  $\hat{C}(r)$  and ground truth images  $C_{gt}$  according to the whole ray set  $\mathfrak{R}$  as
+
+$$\mathcal{L}_{\text{rec}} = \sum_{r \in \mathfrak{R}} \left\| \hat{C}(r) - C_{gt}(r) \right\|_1. \quad (14)$$
+
+Besides  $\mathcal{L}_{\text{rec}}$ , we employ the LPIPS (Zhang et al., 2018) metric for network training to advance the detail rendering and improve the generalization to slight misalignments and shading variation between rendering outputs and ground truths. We denote the perceptual loss as  $\mathcal{L}_{\text{LPIPS}}$ .
+
+Additionally, we find that the network is prone to overfit appeared high-frequency patterns and produce large non-rigid deformation offset. Thus, to improve the network generalization to different human poses, we regularize  $\Delta x$  with
+
+$$\mathcal{L}_{\Delta x} = \|\Delta x\|_2^2. \quad (15)$$
+
+Finally, we encourage the output  $s$  to more accurately approximate a Signed Distance Function by enforcing network outputs to satisfy the Eikonal constraints in canonical space as
+
+$$\mathcal{L}_{\text{eik}} = \mathbb{E}_{x_c} \left( \left\| \frac{ds}{dx_c} \right\| - 1 \right)^2. \quad (16)$$
+
+Thus, given a video sequence of a human, we aim to optimize the following combined loss function:
+
+$$\mathcal{L} = \mathcal{L}_{\text{rec}} + \lambda_{\text{eik}} \mathcal{L}_{\text{eik}} + \lambda_{\text{LPIPS}} \mathcal{L}_{\text{LPIPS}} + \lambda_{\Delta x} \mathcal{L}_{\Delta x}. \quad (17)$$
+
+$\lambda_{\text{eik}}$ ,  $\lambda_{\text{LPIPS}}$  and  $\lambda_{\Delta x}$  are weights of Eikonal loss, LPIPS loss and offset regularization respectively.
+
+## 4 RESULTS
+
+We compare with state-of-the-art methods focusing on modeling avatar representations from monocular video, including NeRF-based HumanNeRF (Weng et al., 2022), MonoHuman (Yu et al., 2023), NPC (Su et al., 2023), Vid2Avatar (Guo et al., 2023), PM-Avatar (Song et al., 2024a), and 3D Gaussian Splatting based 3DGS-Avatar (Qian et al., 2024) and GoMAvatar (Wen et al., 2024). We perform the empirical evaluations by assessing the results of novel view synthesis, novel pose generalization and 3D shape reconstruction. We also conduct ablation studies to measure the importance of locality sensitive offsets, skeletal deformation and spatial window function. The supplementary video provides further animation demonstration. Source code will be available upon publication.
+
+### 4.1 EXPERIMENTAL SETTINGS
+
+We follow the evaluation protocol established by MonoHuman and GoMAvatar to choose eight sequences from the ZJU-Mocap dataset (Peng et al., 2021b) with the same dataset splits. We further
+
+{6}------------------------------------------------
+
+Table 2: **Overall quantitative comparisons.** While baseline methods excel individually in novel view synthesis, pose animation, and geometry reconstruction, our locality-sensitive avatar representation outperforms them across all three tasks, achieving over **10%** improvement in LPIPS, **20%** in FID, and **50%** in KID. Despite the clear visual enhancements, imperfect pseudo-ground-truth and inaccurate pose estimation limit more substantial quantitative gains over Vid2Avatar; see Sec. 4.3 for details. Cell color indicates **best** and **second best** for clearer comparisons.
+
+|  | ZJU-Mocap (Novel view) |  |  |  | ZJU-Mocap (Novel pose) |  |  |  | ZJU-Mocap (Shape) |  | SynWild (Shape) |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  | PSNR↑ | LPIPS↓ | FID↓ | KID↓ | PSNR↑ | LPIPS↓ | FID↓ | KID↓ | CD↓ | NC↑ | CD↓ | NC↑ |
+| HumanNeRF | 29.66 | 36.78 | 28.35 | 14.23 | 29.57 | 34.17 | <b>42.84</b> | <b>12.32</b> | 0.051 | 0.765 | 0.507 | 0.635 |
+| MonoHuman | 30.18 | 31.45 | 27.88 | 13.18 | 29.90 | 32.21 | 43.65 | 12.61 | 0.065 | 0.737 | N/A | N/A |
+| NPC | 30.01 | 37.18 | 60.39 | 53.24 | 29.61 | 36.52 | 73.98 | 49.79 | 0.061 | 0.762 | 0.503 | 0.615 |
+| Vid2Avatar | 29.76 | 35.61 | 36.83 | 27.65 | 29.53 | 35.69 | 54.16 | 31.51 | <b>0.042</b> | <b>0.852</b> | <b>0.499</b> | <b>0.687</b> |
+| PM-Avatar | 30.24 | 38.38 | 49.58 | 39.64 | 29.87 | 39.26 | 65.71 | 40.16 | 0.051 | 0.766 | 0.500 | 0.632 |
+| 3DGS-Avatar | 30.09 | <b>31.30</b> | 29.61 | 15.33 | <b>29.77</b> | <b>30.69</b> | 43.23 | 13.24 | 0.079 | 0.695 | 0.553 | 0.560 |
+| GoMAvatar | <b>30.29</b> | 32.40 | <b>26.90</b> | <b>12.80</b> | <b>30.20</b> | 32.03 | 43.09 | 13.81 | 0.044 | 0.820 | 0.567 | 0.661 |
+| Ours | <b>30.25</b> | <b>28.36</b> | <b>22.13</b> | <b>8.26</b> | <b>30.18</b> | <b>27.84</b> | <b>35.22</b> | <b>7.16</b> | <b>0.041</b> | <b>0.845</b> | <b>0.485</b> | <b>0.690</b> |
+
+![Figure 2: Visual comparisons on the ActorsHQ dataset. The image shows a row of six panels, each displaying a different 3D avatar reconstruction of a woman in a white top and beige pants. The panels are labeled from left to right: GT (Ground Truth), PM-Avatar, HumanNeRF, Vid2Avatar, 3DGS-A, and Ours. The 'Ours' panel shows a more accurate reconstruction of the loose-fitting pants compared to the other methods, which appear to have more rigid or less detailed geometry.](c1c7af7ea36be0323047962df57d75b0_img.jpg)
+
+Figure 2: Visual comparisons on the ActorsHQ dataset. The image shows a row of six panels, each displaying a different 3D avatar reconstruction of a woman in a white top and beige pants. The panels are labeled from left to right: GT (Ground Truth), PM-Avatar, HumanNeRF, Vid2Avatar, 3DGS-A, and Ours. The 'Ours' panel shows a more accurate reconstruction of the loose-fitting pants compared to the other methods, which appear to have more rigid or less detailed geometry.
+
+Figure 2: **Visual comparisons on the ActorsHQ dataset.** Our method achieves state-of-the-art results respecting geometry contours and texture generation on loose-fitting garments.
+
+select four characters from ActorsHQ (Işık et al., 2023) for high-fidelity loose cloth modeling. We also adopt two sequences from MonoPerfCap (Xu et al., 2018) and downloaded Youtube videos (Weng et al., 2022; Yu et al., 2023) respectively as an in-the-wild dataset. The SynWild examples (Guo et al., 2023) are additionally applied to measure the capability of geometry reconstruction. Like PM-Avatar, we employ the open-source SAM model (Kirillov et al., 2023) to segment accurate foreground maps and obtain approximate camera and body poses with off-the-shelf estimators (Guo et al., 2023).
+
+Following previous methods, we utilize pixel-wise Peak Signal-to-Noise Ratio (PSNR), perceptual metrics such as Learned Perceptual Image Patch Similarity (LPIPS) (Zhang et al., 2018), Fréchet Inception Distance (FID) (Heusel et al., 2017) and Kernel Inception Distance (KID) (Bričkowski et al., 2018) to assess image quality in pixel space and compare structural accuracy and textured details in latent semantic space. The metrics are computed across complete generation results, with LPIPS and KID scores are multiplied by 1000 for more clear demonstrations. To quantitatively estimate the generated shapes, we follow ARAH (Wang et al., 2022a) and PM-Avatar by computing Chamfer Distance (CD) and Normal Consistency (NC). In the following, we refer to “3DGS-Avatar” as “3DGS-A” for short.
+
+### 4.2 RENDERING COMPARISONS
+
+Starting with HumanNeRF, ZJU-Mocap has been widely used to test a method’s ability to generalize to different camera views and novel poses. Given an image sequence, we use the provided first camera parameter for model training, and then use the remaining 22 cameras for evaluation (Weng et al., 2022; Yu et al., 2023; Wen et al., 2024).
+
+In Fig. 4, compared to methods using pure part-related encodings including NPC and PM-Avatar, canonical space learning helps us provide more stable human shapes when driving with a novel pose.
+
+{7}------------------------------------------------
+
+![Figure 3: Visual comparisons on ZJU-Mocap. The image shows two columns of results. The left column shows a person in a white t-shirt with arms raised, and the right column shows a person in a blue t-shirt with arms extended. Each column has four sub-images labeled GT, 3DGS-A, GoMAvatar, and Ours. The Ours column shows sharper wrinkles and better texture preservation compared to the other methods.](892f25e3d71d8e315a2a51092a8a8da7_img.jpg)
+
+Figure 3: Visual comparisons on ZJU-Mocap. The image shows two columns of results. The left column shows a person in a white t-shirt with arms raised, and the right column shows a person in a blue t-shirt with arms extended. Each column has four sub-images labeled GT, 3DGS-A, GoMAvatar, and Ours. The Ours column shows sharper wrinkles and better texture preservation compared to the other methods.
+
+Figure 3: **Visual comparisons on ZJU-Mocap** with 3DGS based framework. Compared to the chosen baselines, our method can better preserve the sharp wrinkles (left column) without artifacts. The results for novel view synthesis and novel pose rendering are shown in both columns respectively.
+
+![Figure 4: Visual comparisons on ZJU-Mocap. The image shows two rows of results. The upper row shows a person in a green t-shirt from a back view, and the lower row shows a person in a grey hoodie from a side view. Each row has seven sub-images labeled GT, NPC, PM-Avatar, HumanNeRF, MonoHuman, Vid2Avatar, and Ours. The Ours column shows more accurate body shapes and finer texture details compared to the other methods.](efca2dce0095c9dc2a68e9af6b2bfd40_img.jpg)
+
+Figure 4: Visual comparisons on ZJU-Mocap. The image shows two rows of results. The upper row shows a person in a green t-shirt from a back view, and the lower row shows a person in a grey hoodie from a side view. Each row has seven sub-images labeled GT, NPC, PM-Avatar, HumanNeRF, MonoHuman, Vid2Avatar, and Ours. The Ours column shows more accurate body shapes and finer texture details compared to the other methods.
+
+Figure 4: **Visual comparisons on ZJU-Mocap**. Our method can maintain large-scale body shapes and finely matched textures simultaneously while baselines either blur the notable patterns or greatly twist shape outlines under novel camera views (upper row) and novel avatar poses (bottom row).
+
+Compared to methods explicitly modeling non-rigid motion, such as HumanNeRF and MonoHuman, our method significantly reduces pattern distortion and produces more reasonable body contours. It also markedly reduces blurry artifacts near the shape boundary. Compared to Vid2Avatar, which directly maps positions to SDF and color signals, our locality-sensitive avatars learn more fitting fine-grained textures. We can conclude similarly for 3DGS based methods in Fig. 3.
+
+In Tab. 2, we calculate PSNR, LPIPS, KID and FID scores to quantitatively evaluate each method’s image generation capability. Overall, our proposed approach produces comparable performance to best baselines on PSNR. However, from the table, we can see that our method’s LPIPS, KID and FID scores significantly improve on all baselines, further supporting the advantages shown in Fig. 4 and Fig. 3. Note that the perceptual metrics (e.g. LPIPS) are reported to be more informative than the pixel-wise metrics like PSNR which are susceptible to slight output misalignment (Qian et al., 2024) and varying outdoor lighting conditions (Su et al., 2023).
+
+Our advantages under novel views and novel poses extend to video sequences captured for high-fidelity loose cloths in Fig. 2. As methods rendering in observation space, both PM-Avatar and 3DGS-Avatar introduce blurry or floating artifacts near the pant boundaries, while HumanNeRF and Vid2Avatar distort the desired human shapes significantly. In contrast, our method maintains superior coarse contours with reasonably matched details which is numerically supported by Tab. 3 (a).
+
+We further animate our model trained on a Youtube sequence with out-of-distribution body poses. Specifically, we collect poses of large-scale motions from AIST++ dataset (Li et al., 2021a) and compare in Fig. 5 to reveal our superior generalization to challenging animations.
+
+### 4.3 COMPARISONS ON SHAPE RECONSTRUCTION
+
+Fig. 6 shows the comparative results of 3D shape reconstruction on the ZJU-Mocap dataset. Our method can maintain consistent body boundaries and texture details closer to the ground truth. In contrast, the baselines either distort geometry with noisy artifacts or smooth out sharp textures, resulting in flat patterns (e.g., wrinkles).
+
+{8}------------------------------------------------
+
+![Figure 5: Motion retargeting on Youtube video. The figure shows a sequence of seven images of a person walking. From left to right, the labels are: Reference, NPC, PM-Avatar, HumanNeRF, MonoHuman, Vid2Avatar, and Ours. The 'Reference' image shows the original person. The other images show the result of retargeting the motion onto different human models. The 'Ours' image shows a result that closely matches the reference pose and clothing details.](d4e9f8f6bf5d7853ecae9c9633900af1_img.jpg)
+
+Figure 5: Motion retargeting on Youtube video. The figure shows a sequence of seven images of a person walking. From left to right, the labels are: Reference, NPC, PM-Avatar, HumanNeRF, MonoHuman, Vid2Avatar, and Ours. The 'Reference' image shows the original person. The other images show the result of retargeting the motion onto different human models. The 'Ours' image shows a result that closely matches the reference pose and clothing details.
+
+Figure 5: **Motion retargeting on Youtube video.** Given the out-of-distribution pose, only our method preserves accurate body contours with realistic details (e.g., cloth buttons), while baselines either smooth out important patterns or severely distort the human body.
+
+Table 3: **(a) Quantitative comparisons on ActorsHQ dataset.** Being consistent with other evaluation testbeds in Tab. 2, our method significantly outperforms state-of-the-art baselines, especially in LPIPS. **(b) Ablation study on ZJU-Mocap sequence.** Our full model significantly outperforms all ablated baselines across all metrics, consistently proving the importance of all network components.
+
+|  | Novel view |  |  | Novel pose |  |  |  | Novel view |  |  | Novel pose |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  | PSNR↑ | SSIM↑ | LPIPS↓ | PSNR↑ | SSIM↑ | LPIPS↓ |  | PSNR↑ | SSIM↑ | LPIPS↓ | PSNR↑ | SSIM↑ | LPIPS↓ |
+| HumanNeRF | 21.57 | 0.855 | 171.91 | 21.42 | 0.853 | 172.68 | onlyPose | 33.04 | 0.977 | 27.39 | 33.20 | 0.976 | 27.57 |
+| MonoHuman | 22.10 | 0.866 | 155.45 | 22.03 | 0.863 | 155.53 | w/o locality | 32.48 | 0.974 | 28.95 | 32.86 | 0.975 | 28.02 |
+| PM-Avatar | 19.59 | 0.791 | 212.21 | 19.39 | 0.792 | 209.97 | w/o canonical | 33.08 | 0.977 | 27.92 | 32.81 | 0.975 | 29.78 |
+| Vid2Avatar | 20.32 | 0.909 | 136.67 | 20.46 | 0.910 | 133.65 | w/o GNN | 32.75 | 0.975 | 27.47 | 32.83 | 0.975 | 27.88 |
+| 3DGS-Avatar | 22.36 | 0.921 | 123.70 | 22.22 | 0.921 | 123.06 | w/o window | 32.91 | 0.976 | 27.65 | 33.07 | 0.975 | 27.47 |
+| GauHuman | <b>23.53</b> | 0.926 | 126.74 | <b>23.68</b> | 0.927 | 124.11 | w/o $\mathcal{L}_{\Delta x}$ | 33.16 | 0.978 | 26.14 | 33.13 | 0.976 | 27.50 |
+| <b>Ours</b> | <b>22.97</b> | <b>0.930</b> | <b>103.78</b> | <b>23.10</b> | <b>0.933</b> | <b>100.95</b> | <b>Ours</b> | <b>33.36</b> | <b>0.978</b> | <b>25.58</b> | <b>33.44</b> | <b>0.977</b> | <b>26.34</b> |
+
+(a)
+
+(b)
+
+Since Vid2Avatar and GoMAvatar also aim for feasible geometry reconstruction, we further highlight our advantages in generating geometry details by presenting the normal map results in Fig. A. In comparison with baselines, our method can more faithfully synthesize the facial structure in both avatars and the zipper pattern on the left. Additionally, we can show more realistic textured variations (e.g., wrinkles) in the whole human body in both examples, featuring our benefits in outputting high-frequency geometric patterns.
+
+We also follow ARAH (Wang et al., 2022a) to calculate pseudo ground truth and report scores in the “ZJU-Mocap (Shape)” column of Tab. 2 to quantitatively support our conclusions. Note that our Normal Consistency (NC) scores are similar to Vid2Avatar’s because the pseudo ground truth used by ARAH smoothes out many desired surface details and leads to imperfect evaluations. Please refer to Sec. D and Fig. O for more discussions.
+
+As suggested by Vid2Avatar, we use the semi-synthetic SynWild Dataset as the evaluation protocol for monocular human surface reconstruction and list the quantitative metrics in the “SynWild” column of Tab. 2. Despite the clear visual enhancements in Fig. 7, inaccurate human pose estimation limits more substantial quantitative gains over Vid2Avatar. How to better measure the quality of generated shapes remains an open problem. Also despite our best efforts in picking representative images in front and back views, we omit listing metrics for MonoHuman due to model training divergence. We list the per-object scores in Tab. I and Tab. J for the ZJU-Mocap and SynWild datasets respectively.
+
+### 4.4 ABLATION STUDIES
+
+We study the effect of various important network components on the ZJU-MoCap S386 sequence. Specifically, we perform the following models: 1) Removing the canonical position  $x_c$  as w/o canonical; 2) Only preserving the skeletal deformation as w/o locality; 3) Removing the window function as w/o window; 4) Removing the GNN but use  $x_c$  to regress  $\Delta x$  as w/o GNN; 5) Removing the regularization loss on non-rigid offset  $\Delta x$  as w/o  $\mathcal{L}_{\Delta x}$ . It shows in Fig. 8 that only utilizing locality information as w/o canonical cannot reconstruct a full human body. The w/o window model smashes the left hand when two parts are close and cause entangled features.
+
+{9}------------------------------------------------
+
+![Figure 6: Geometry reconstruction on ZJU-Mocap. The figure shows a 'Reference' image on the left, followed by reconstructions from NPC, HumanNeRF, MonoHuman, Vid2Avatar, 3DGS-A, GoMAvatar, and 'Ours'. Below each reconstruction is a close-up view of the torso area, with red boxes highlighting the chest and abdomen. 'Ours' shows sharper geometric structures and more detailed cloth wrinkles compared to the other methods.](625e10f48104ba2b06b2220a9b224712_img.jpg)
+
+Figure 6: Geometry reconstruction on ZJU-Mocap. The figure shows a 'Reference' image on the left, followed by reconstructions from NPC, HumanNeRF, MonoHuman, Vid2Avatar, 3DGS-A, GoMAvatar, and 'Ours'. Below each reconstruction is a close-up view of the torso area, with red boxes highlighting the chest and abdomen. 'Ours' shows sharper geometric structures and more detailed cloth wrinkles compared to the other methods.
+
+Figure 6: **Geometry reconstruction on ZJU-Mocap.** Our method can generate sharper geometric structures and adaptive fine-grained details than all baselines. In comparison, the baselines either significantly distort geometric patterns with noise or weaken notable cloth wrinkles.
+
+![Figure 7: Geometry reconstruction on SynWild. The figure displays a 'GT' (Ground Truth) image on the left, followed by reconstructions from NPC, PM-Avatar, HumanNeRF, MonoHuman, Vid2Avatar, 3DGS-A, GoMAvatar, and 'Ours'. The 'Ours' method shows improved coarse outlines and finely matched geometric details, especially in the arm and torso regions, compared to the other methods which exhibit various distortions and artifacts.](07f537f57749b75157f742525e6a8dbc_img.jpg)
+
+Figure 7: Geometry reconstruction on SynWild. The figure displays a 'GT' (Ground Truth) image on the left, followed by reconstructions from NPC, PM-Avatar, HumanNeRF, MonoHuman, Vid2Avatar, 3DGS-A, GoMAvatar, and 'Ours'. The 'Ours' method shows improved coarse outlines and finely matched geometric details, especially in the arm and torso regions, compared to the other methods which exhibit various distortions and artifacts.
+
+Figure 7: **Geometry reconstruction on SynWild.** Our method improves existing baselines by preserving superior coarse outlines together with finely matched geometric details.
+
+With canonical representation, both w/o locality and w/o GNN models are capable of reproducing structured patterns (e.g. the vertical strips in the back area) but seriously distort local patterns and overfit specific wrinkles. Without offset regularization, the w/o  $\mathcal{L}_{\Delta x}$  model fails to preserve the constant left arm with weird distortions. In contrast, our full model can synthesize continuous boundary with detailed vertical marks. The quantitative metrics are further reported in Tab. 3 (b). We show that all proposed techniques are required to reach the optimal performance, best reflected by LPIPS which is the most informative metric for generalization evaluation under a monocular setup.
+
+![Figure 8: Ablation Study. The figure shows a 'GT' image on the left, followed by ablation results for 'w/o canonical', 'w/o locality', 'w/o window', 'w/o GNN', 'w/o L_{\Delta x}', and 'Ours'. The 'Ours' method shows the most accurate reproduction of the structured patterns (vertical strips) and avoids artifacts and contour distortions seen in the other ablation cases.](d3f6de4fe9f9138fc6afc584b5104433_img.jpg)
+
+Figure 8: Ablation Study. The figure shows a 'GT' image on the left, followed by ablation results for 'w/o canonical', 'w/o locality', 'w/o window', 'w/o GNN', 'w/o L\_{\Delta x}', and 'Ours'. The 'Ours' method shows the most accurate reproduction of the structured patterns (vertical strips) and avoids artifacts and contour distortions seen in the other ablation cases.
+
+Figure 8: **Ablation Study.** Only the full model with all components can faithfully synthesize the structured patterns (e.g. the strip textures) and avoid artifacts and contour distortions.
+
+## 5 CONCLUSIONS
+
+We present a novel locality-sensitive avatar representation for monocular videos. The key innovation is utilizing part relationships captured by a graph neural network to estimate 3D offsets as non-rigid motion, enabling the faithful reproduction of locally adaptive details. Our method outperforms the existing baselines by estimating visually pleasing geometry and achieving photo-realistic rendering, where both coarse body contours and pose-dependent cloth wrinkles can be simultaneously captured.
+
+ Rest of paper (reference and Appendix) is removed.

@@ -1,0 +1,292 @@
+
+
+{0}------------------------------------------------
+
+# LOOK BEFORE YOU LEAP: UNIVERSAL EMERGENT MECHANISM FOR RETRIEVAL IN LANGUAGE MODELS
+
+Alexandre Variengien\*  
+EU AI Office  
+European Commission
+
+Eric Winsor\*  
+UK AI Security Institute
+
+## ABSTRACT
+
+When solving challenging problems, language models (LMs) are able to identify relevant information from long and complicated contexts. To study how LMs solve retrieval tasks in diverse situations, we introduce ORION, a collection of structured retrieval tasks, from text understanding to coding. We apply causal analysis on ORION for 18 open-source language models with sizes ranging from 125 million to 70 billion parameters. We find that LMs internally decompose retrieval tasks in a modular way: middle layers at the last token position process the request, while late layers retrieve the correct entity from the context. Building on our high-level understanding, we demonstrate a proof of concept application for scalable internal oversight of LMs to mitigate prompt-injection while requiring human supervision on only a single input.
+
+## 1 INTRODUCTION
+
+Recent advances in language models (LMs) (Vaswani et al., 2017) have demonstrated their flexible problem-solving abilities and their expert-level knowledge in a wide range of fields (Bubeck et al., 2023; OpenAI, 2023). Researchers have developed a series of techniques such as fine-tuning (Ouyang et al., 2022) and Reinforcement Learning from Human Feedback (RLHF) (Ouyang et al., 2022) to ensure models output honest and helpful answers. However, as their abilities reach human level, supervision from human feedback becomes costly and even impossible. This necessitates more efficient or automated methods of supervision, known generally as *scalable oversight*.
+
+Moreover, existing methods only control for the output of the model while leaving the internals of the model unexamined (Casper et al., 2023; Ngo et al., 2023). This is a critical limitation as many internal processes can elicit the same output while using trustworthy or untrustworthy mechanisms. For instance, we would like to know whether a model answers faithfully based on available information or simply gives a user’s preferred answer (Perez et al., 2022). We call this problem *internal oversight*.
+
+Recent works on mechanistically interpreting LMs have shown success on narrow tasks (Wang et al., 2022; Nanda et al., 2023). Some have provided insight into factual recall (Geva et al., 2023) and in-context learning (Olsson et al., 2022). Causal interventions have even been used to understand how models encode tasks from few shot examples (Hendel et al., 2023) or bind entities to attributes (Feng and Steinhardt, 2023). However, these works are still scoped to relatively narrow contexts and lack demonstration of concrete applications.
+
+In this work, we study how LMs solve retrieval tasks, i.e. in-context learning problems that involve answering a request (e.g. “What is the city of the story?”) to retrieve a keyword (e.g. “Paris”) from a context (e.g. a story).
+
+We start by introducing ORION, a collection of 15 datasets of retrieval tasks spanning six different domains from question answering to coding abilities and variable binding. We systematize the task structure by annotating each textual input with an abstract representation where the context is a table of attributes, and the request is a simple SQL-like query, as illustrated in Figure 2.
+
+We apply causal analysis (Pearl, 2009; Vig et al., 2020; Geiger et al., 2021) to 18 open source LMs ranging in size from 125 million to 70 billion parameters to investigate the successive role of layers
+
+\*Work conducted while at Conjecture. Corresponding author: alexandre.variengien@gmail.com
+
+{1}------------------------------------------------
+
+![Figure 1: Illustration of request-patching. The diagram shows two parallel processing streams for Context and Request. Context C1 (Alice, London) and Request R1 (Q: Where is the story? A: In the city of London) are processed through layers of Attention and MLP blocks. Context C2 (Bob, Paris) and Request R2 (Q: Who is in the story? A: The character is Paris) are also processed. A curved arrow points from the residual stream of R1 at a certain layer to the residual stream of R2. Below the layers, the final output for R1 is 'London' (R1(C1)) and for R2 is 'Paris' (R1(C2)). A box labeled 'Request patching' explains this as a 'Modular combination of the request R1 on the context C2'.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 1: Illustration of request-patching. The diagram shows two parallel processing streams for Context and Request. Context C1 (Alice, London) and Request R1 (Q: Where is the story? A: In the city of London) are processed through layers of Attention and MLP blocks. Context C2 (Bob, Paris) and Request R2 (Q: Who is in the story? A: The character is Paris) are also processed. A curved arrow points from the residual stream of R1 at a certain layer to the residual stream of R2. Below the layers, the final output for R1 is 'London' (R1(C1)) and for R2 is 'Paris' (R1(C2)). A box labeled 'Request patching' explains this as a 'Modular combination of the request R1 on the context C2'.
+
+Figure 1: Illustration of our main experimental discovery. Patching the mid-layer residual stream on a retrieval task from ORION causes the language model to output a modular combination of the request from  $x_1$  (asking for the city) and the context from  $x_2$  (a story about Bob in Paris). We call this phenomenon *request-patching*.
+
+at the last position on tasks from ORION. The shared abstract representation enables us to define and interpret experiments across tasks and models at scale, without the need for setting-specific labor. We discover that language models handle retrieval tasks by cleanly separating the layers at which they process the request and the context at the last token position. These results suggest that there exists an emergent modular decomposition of tasks that applies across models and tasks. We complement this coarse-grained causal analysis with a finer-grained case study of a question-answering task on Pythia-2.8b (Biderman et al., 2023).
+
+We demonstrate that our understanding of how models solve retrieval tasks can be directly leveraged to mitigate the effect of prompt injection (Perez and Ribeiro, 2022) in a question-answering task. Models are given inputs containing distractor sequences that trigger models to output a token unrelated to the task. We present a proof-of-concept based on request-patching that only requires humans to verify the model output on a *single* trusted input. Our technique significantly improves the performance of models on sequences with distractors (0%  $\rightarrow$  70.5% accuracy for Pythia-410m, 15.5%  $\rightarrow$  97.5% for Pythia-12b). To our knowledge, this is the first demonstration that scalable internal oversight of LMs is feasible.
+
+In summary, our main contributions are as follows:
+
+1. We introduce ORION, a collection of structured retrieval tasks. It is a data-centric approach enabling a comparative study of 18 models on 6 domains.
+2. We discover a macroscopic modular decomposition of retrieval tasks in LMs’ internals that is universal across tasks and models.
+3. We link macroscopic and microscopic descriptions of LMs’ internals with a fine-grained case study of a question-answering task on Pythia-2.8b.
+4. We apply this knowledge to a proof of concept for *scalable internal* oversight of LMs solving a retrieval task in the presence of prompt injection.
+
+## 2 BACKGROUND
+
+### 2.1 THE TRANSFORMER ARCHITECTURE FOR AUTOREGRESSIVE LANGUAGE MODELS
+
+An autoregressive language model,  $\mathcal{M}_\theta$  with parameters  $\theta$ , maps a sequence of input tokens  $x = (x_1, x_2, \dots, x_n)$  to a probability distribution over the next token  $x_{n+1}$ . For the Transformer architecture (Vaswani et al., 2017), we have:
+
+$$\begin{aligned} p(x_{n+1}|x) &= \mathcal{M}_\theta(x) \\ &= \text{softmax}(\pi_n(x)) \end{aligned}$$
+
+{2}------------------------------------------------
+
+The pre-softmax values  $\pi_n$  are the logits at the  $n$ -th token position. The final logits  $\pi_l$  are constructed by iteratively building a series of intermediate activations  $z_k^l$  we call the *residual stream*, following Elhage et al. (2021). The residual stream  $z_k^l$  at token position  $k$  and layer  $l$  is computed from the residual stream at previous token positions at the previous layer  $z_{\leq k}^{l-1}$  by adding the results of  $a_k^l$ , a multi-headed attention module that depends on  $z_{\leq k}^{l-1}$ , and  $m_k^l$ , a two-layer perceptron module that depends on  $z_k^{l-1}$ . We provide a complete description of the Transformer architecture in Appendix G.
+
+### 2.2 COMPUTATIONAL GRAPH AS CAUSAL GRAPH
+
+The experimental paradigm of causal analysis applied to machine learning models initiated by (Vig et al., 2020) and (Geiger et al., 2021) treats the computational graph of a neural network as a causal graph. The goal of causal analysis is to answer questions about *why* a model outputs a given answer. This requires uncovering the causal links tying the inputs to the output, as well as characterizing the role of the internal components critical for the model’s function. To this end, researchers rely on *causal interventions* (Pearl, 2009), experiments that replace a set of activations with fixed values.
+
+In this work, we use single-input *interchange intervention*<sup>1</sup> (Geiger et al., 2021). It is a simple form of causal intervention where we intervene on one variable at a time by fixing its value to be the value of that same variable on another input. We write  $\mathcal{M}(x|A \leftarrow A(x'))$  the output of the model after the single-input interchange intervention on the *target input*  $x$ , replacing the activation of the node  $A$  by its value on the *source input*  $x'$ .
+
+## 3 ORION: A COLLECTION OF STRUCTURED RETRIEVAL TASKS
+
+Our study concentrates on retrieval, a fundamental aspect of in-context learning, which involves answering a request (e.g. “What is the name of the city?”) by identifying the correct attribute (e.g. a city name) from the context (e.g. a story). To facilitate this study, we crafted a collection of datasets dubbed the **Organized Retrieval Operations for Neural networks (ORION)**.
+
+**Abstract representation.** Each textual input (i.e. LM prompt) from ORION is annotated with an abstract representation  $(C, R)$  where  $C$  represents the context and  $R$  the request. In the example of Figure 2, the context is a story introducing a place, a character, and an action, while the request is a question written in English asking for the city of the story.
+
+The context  $C$  is abstractly represented as a table where each line is a list of attributes. The request  $R$  is retrieving a target attribute  $ATTR_t$  (e.g. the “name” attribute in Figure 2), from lines where a filter attribute  $ATTR_f$  (e.g. the narrative role) has the value  $v_f$  (e.g. “city”). The request can be written using a language in the style of SQL as follows: `SELECT ATTRt FROM C WHERE ATTRf = vf` (e.g. `SELECT Name FROM Context WHERE Role=City`).
+
+We note  $R(C)$  the results of applying the request on the context. This is the ground truth completion for LMs evaluated on the retrieval task. In practice,  $R(C)$  is a single token called the *label token*. On the example we have  $R(C) = \text{"Valencia"}$ .
+
+**Desiderata for datasets.** To facilitate the application of causal analysis, we enforce a list of desiderata on datasets from ORION. The most important desiderata is ensuring datasets are *decomposable*. For every dataset  $D$  in ORION, for every abstract representations  $(C_1, R_1)$ ,  $(C_2, R_2)$  in  $D$ ,  $R_2(C_1)$  and  $R_1(C_2)$  are well-defined. This means that an arbitrary request can be applied to an arbitrary context from the same task. Abstract representations of requests and contexts can be freely interchanged across a task. This constraint enables the design of interchange interventions at scale.
+
+We define four additional desiderata Structured, Single token, Monotasking, and Flexible in Appendix H and share the motivation behind their definition.
+
+**Dataset composition.** The dataset includes the retrieval task from domains: question-answering, translation, factual recall, variable binding, induction pattern-matching, and type hint understanding. For each domain, we created two or three variations. Each dataset is created using a semi-automated process leveraging the LLM assistant ChatGPT. We provide a detailed overview of the dataset and its creation in Appendix H.
+
+<sup>1</sup>It is sometimes called “activation patching” in the literature see e.g. Wang et al. (2022)
+
+{3}------------------------------------------------
+
+![](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+**Textual input:**
+
+Story: In the lively city of Valencia, a skilled veterinarian [...]. "I'm Christopher" he replied, [...].
+
+Question: What is the city of the story? The story takes place in
+
+**Context  $C$**
+
+| <i>Name</i> | <i>Role</i> |
+|-|-|
+| _Valencia | City |
+| _Christopher | Main Character |
+| _veterinarian | Character Job |
+
+**Request  $R$**
+
+```
+SELECT Name FROM Context WHERE Role=City
+```
+
+**Abstract representation:**
+
+Figure 2: Example input from ORION for the question-answering task. Textual inputs are annotated with an abstract representation of the context and the request. Abstract context representations are tables where each line lists attributes relative to a story element. Requests can be formulated using simple SQL-like queries.
+
+**Performance metrics.** We define a task  $T$  as a set of input-output pairs  $(x, y)$  where  $x$  is the LM input and  $y$  is the expected label token. We use two main metrics to quantify the performance of a language model on an ORION task  $T$ .
+
+- **Accuracy:**  $\mathbb{E}_{(x,y) \sim T}[\mathcal{M}(x) = y]$
+- **Token probability:**  $\mathbb{E}_{(x,y) \sim T}[p(y|x)]$
+
+Accuracy serves as our primary metric to assess model performance in solving tasks due to its straightforward interpretation and practical application in language models, where the most probable token is often chosen.
+
+However, accuracy falls short in capturing nuanced aspects of predictions, for instance, accuracy doesn't measure the margin by which a token is the most probable. To have a granular evaluation of model behavior after interventions, we employ token probability, offering a continuous measure.
+
+We evaluate the performance of 18 models from four different model families: GPT-2 (Radford et al., 2019), Pythia (Biderman et al., 2023), Falcon (Almazrouei et al., 2023) and Llama 2 (Touvron et al., 2023). We study base language models for all families except Falcon where we include two instruction fine-tuned models. We choose the models to capture diverse scales, architecture, and training techniques.
+
+Unsurprisingly, larger models can solve a wider range of problems. Models with more than 6 billion parameters are able to solve every task with more than 70% accuracy. Nonetheless, even GPT-2 small with 125M parameters, one of the smallest models, can solve the simplest version of the question-answering task with 100% accuracy. Detailed evaluations using the token probability and logit difference are available in Appendix A.
+
+In the following analyses, we only consider settings where the model can robustly solve the task. Thus, we focus on pairs of models and tasks that have greater than 70% accuracy.
+
+## 4 MACROSCOPIC CAUSAL ANALYSIS ON ORION: A UNIVERSAL EMERGENT DECOMPOSITION OF RETRIEVAL TASKS
+
+To correctly solve retrieval tasks, an LM has to gather and combine at the last token position information coming from the request and the context. We focus our investigations on understanding how these two processing steps are organized in the intermediate layers of the last token position.
+
+In this section, we choose to consider a coarse-grained division of the model, intervening on full layers instead of a finer-grained division, e.g. considering single-attention heads and MLP blocks. We find this level of analysis is sufficient to develop a high-level causal understanding of how language models solve retrieval tasks while providing a computationally tractable set of experiments to run at
+
+{4}------------------------------------------------
+
+![Figure 3: Two line graphs showing normalized accuracy and probability for label tokens R1(C1), R1(C2), and R2(C2) across layers 0 to 30. The left graph shows 'Normalized accuracy' and the right graph shows 'Normalized token probability'. A horizontal dashed line at 0.8 indicates the baseline accuracy. Vertical lines L1=13, L2=16, and L3=27 mark key intervention points. R2(C2) (green) stays near 1.0 until L1, then drops. R1(C2) (red) peaks at L2. R1(C1) (blue) rises after L2.](e0d425c8e4eef259e4c52d81426d93fa_img.jpg)
+
+Residual stream patching accross layer on the QA (uniform prefix) task for pythia-2.8b
+
+Figure 3: Two line graphs showing normalized accuracy and probability for label tokens R1(C1), R1(C2), and R2(C2) across layers 0 to 30. The left graph shows 'Normalized accuracy' and the right graph shows 'Normalized token probability'. A horizontal dashed line at 0.8 indicates the baseline accuracy. Vertical lines L1=13, L2=16, and L3=27 mark key intervention points. R2(C2) (green) stays near 1.0 until L1, then drops. R1(C2) (red) peaks at L2. R1(C1) (blue) rises after L2.
+
+Figure 3: Normalized token probability and accuracy for the label tokens  $R_1(C_1)$ ,  $R_1(C_2)$  and  $R_2(C_2)$  after patching the residual stream across all layers. Patching early (before  $L_1 = 13$ ) and late (after  $L_3 = 27$ ) leads to the expected results, respectively no change in output and patching the output from  $x_1$ . However, intervening on the middle layer ( $L_2 = 16$ ) leads to the model confidently outputting the token  $R_1(C_2)$ , a modular combination of the request from  $x_1$  and the context from  $x_2$ .
+
+scale. We complement this general coarse-grained analysis in Section 5 with a finer-grained case study on Pythia-2.8b solving a question-answering task.
+
+### 4.1 METHODS
+
+Our main experimental technique is *residual stream patching*. Residual stream patching is a single-input interchange intervention, replacing the residual stream at a layer  $L$  at the last position in the forward pass of the model on input  $x_2$  with its activation from another input  $x_1$ . Following the notation introduced in Section 2.2, we note  $\mathcal{M}(x_2|z_n^L \leftarrow z_n^L(x_1))$  the model output on  $x_2$  after this intervention.
+
+As shown in Figure 1, residual stream patching makes every component before layer  $L$  have the activation it takes on  $x_1$  while the components after layer  $L$  receive mixed activations (denoted by the yellow color in the figure). These later layers see activations at the last position coming from  $x_1$  while activations from earlier positions come from  $x_2$ .
+
+To characterize the output of the patched model, we measure the token probability and accuracy for three different label tokens related to the inputs  $x_1$  and  $x_2$ . We use both label tokens from the input  $x_1$  and  $x_2$ ,  $R_1(C_1)$  and  $R_2(C_2)$  respectively, and the label token  $R_1(C_2)$  that is the result of applying the request from  $x_1$  on the context of  $x_2$ .
+
+To facilitate comparisons between different tasks and models, we normalize the token probability based on the mean probability of the correct token given by the model for the task. In addition, we calculate the normalized accuracy where 0 represents the accuracy of random guess, i.e. responding to a random request in a given context while 1 denotes the model’s baseline accuracy for that task.
+
+We perform residual stream patching at the last position for every layer, model, and task of ORION. For each task, we use a dataset of 100 prompts and average the results of 100 residual stream patching experiments with  $x_1$  and  $x_2$  chosen uniformly from the task dataset.
+
+### 4.2 RESULTS OF RESIDUAL STREAM PATCHING
+
+Figure 3 shows the results of residual stream patching on the question-answering task with a uniform answer prefix for the Pythia-2.8b model. We observe that after residual stream patching on the layer before layer 13, the model is outputting  $R_2(C_2)$  with 100% normalized token probability. Our interpretation is that this intervention does not perturb the model processing of  $x_2$ . We further observe that residual stream patching after layer 27 causes the model to output  $R_1(C_1)$  with more than 80% normalized token probability. In effect, patching the residual stream after a certain layer is equivalent to hard-coding the model output on  $x_1$ .
+
+Surprisingly, when patching between layers 15 and 16, we observe that the model outputs  $R_1(C_2)$  with 100% normalized accuracy, i.e. with the same accuracy level as the baseline task accuracy. The model is outputting the results of the request contained in the input  $x_1$  in the context of the input  $x_2$ .
+
+{5}------------------------------------------------
+
+We call this phenomenon, *request-patching*, i.e., a residual stream patching experiment that leads to the  $R_1(C_2)$  label token being confidently outputted by the patched model. Such results demonstrate that the causal intervention coherently intervenes in the model’s internal computation, causing it to modularly combine high-level information from two different prompts.
+
+We observe a sudden jump in the normalized accuracy of request-patching from 0 to 1 between layers 14 and 15. However, it is likely that transforming the sequence of tokens representing the question into a representation of the request takes several layers. Thus, we hypothesize that a large part of the request processing happens at the previous token positions of the question. In this interpretation, the observed jump at layer 15 results from the intermediate representation of the request being propagated to the last position through attention modules.
+
+**Defining limit layers.** From the results of the residual stream experiments, we define three layers –  $L_1$ ,  $L_2$ , and  $L_3$  – delimiting the three different outcomes of residual stream patching as shown in Figure 3.
+
+$L_1$  is the maximal layer at which the normalized token probability of the label token  $R_1(C_1)$  is greater than 80%. It marks the end of the region where residual stream patching does not interfere with the model output.  $L_2$  is the layer where the normalized probability of the label  $R_1(C_2)$  is maximal. It is the place where the effect of request-patching is the strongest.  $L_3$  is the minimal layer where the normalized probability of the label  $R_2(C_2)$  is greater than 80%. It marks the start of the region where residual stream patching leads to a complete overwrite of the model output.
+
+We choose the token probability as a continuous metric to measure the model prediction. The 80% threshold has been chosen arbitrarily as a criterion to consider that the model is mainly outputting a single label token.
+
+**Request-patching is general across models and datasets.** We expand our investigation of request-patching to include every model and task from ORION. To ease the analysis, we compute the maximal normalized probability of the  $R_1(C_2)$  label token, i.e., the normalized probability after patching at  $L_2$ . We use this metric as our main performance indicator to measure the strength of the request-patching phenomenon on a given pair of model and task.
+
+98 out of the 106 pairs of tasks and models studied demonstrate a similar profile as the one shown in Figure 3. Request-patching leads to at least 70% normalized probability of the  $R_1(C_2)$  label token. Request-patching appears across variations in domain, task complexity, and low-level prompt structure. Moreover, it is present in every model studied, from GPT-2 small to Llama 2 70b, one of the largest available open-source LMs.
+
+The results for the question-answering with mixed template task demonstrate that request-patching works even when patching the residual stream across different templates, e.g., taking the residual stream from a prompt where the question is *before* the story and patching it in a model execution where the question is *after* the story. This means that the representation stored in the patched activation is related to the semantic meaning of the question, and not surface-level textual features.
+
+However, the phenomenon of request-patching seems not to be present in the abstract induction task on large models. We hypothesize that this is due to the increased wideness of large models and the simplicity of the task. We discuss further the results for induction and factual recall by comparing request-patching results to prior work in Appendix F.
+
+To further our analysis, Figure 4 shows the values of the layer  $L_2$  on different models and datasets. We observe that the effect of request-patching for the induction tasks is the strongest at earlier layers compared to the other tasks. This observation is consistent with the simplicity of the request processing, which only involves copying previous tokens. The  $L_2$  layers for other tasks are concentrated in similar layers, suggesting a similar high-level organization of the internal computation that does not depend on the details of the task being solved. However, for Llama 2 70b, the largest model studied, the  $L_2$  layers are concentrated in the same narrow range (39-43) for every task, including the simple induction tasks. It is unclear if this disparity is caused by its larger size or by the specifics of the architecture. We provide visualizations of request patching results and of layers  $L_1$  and  $L_3$  in Appendix D.
+
+{6}------------------------------------------------
+
+![Figure 4: Left: Layer of maximal request-patching performance L2 for different models and tasks. Right: results of residual stream patching on Llama 2 70b.](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+Figure 4 consists of two plots. The left plot, titled 'Relative layer  $L_2$ ', shows the layer of maximal request-patching performance for various models and tasks. The y-axis is 'Layer relative' from 0.0 to 1.0. The x-axis lists models: llama-7b, llama-13b, llama-70b, llama-70b-instruct, pythia-1b, pythia-2.8b, pythia-6.9b, pythia-12b, pythia-41m, pythia-160m, gpt2-small, gpt2-medium, gpt2-large, gpt2-xl, and llama-2-70b. The legend indicates tasks: QA (base), QA (unifrom prefix), QA (question start), QA (mixed template), Induction, Factual recall, Translation, Variable binding, and Type hint. Most tasks show a peak in performance around layer 0.4 to 0.6. The right plot, titled 'Residual stream patching on Llama 2 70b' and 'Translation task', shows normalized token probabilities for layers 0 to 80. The y-axis is 'Normalized token prob.' from 0 to 1. The x-axis is 'Layer' from 0 to 80. The legend indicates: Label token (blue line),  $R_1(C_2)$  (orange line), and  $R_2(C_2)$  (green line). The  $R_1(C_2)$  and  $R_2(C_2)$  lines show a sharp peak around layer 42, while the label token line remains relatively flat.
+
+Figure 4: Left: Layer of maximal request-patching performance L2 for different models and tasks. Right: results of residual stream patching on Llama 2 70b.
+
+Figure 4: **Left:** Layer of maximal request-patching performance  $L_2$  for different models and tasks. While the  $L_2$  layers for most tasks are concentrated at similar layers, the processing of the request in the induction task seems to happen at earlier layers. **Right:** results of residual stream patching on Llama 2 70b. Request-patching is most performant in a narrow range of layers centered around layer 42 and does not depend on the nature of the task.
+
+![Figure 5: Attention to the city token and Direct contribution to the city token logit.](a6a8016b231533e7f34b550f4676afc6_img.jpg)
+
+Figure 5 consists of two histograms. The left plot, titled 'Attention to the city token', shows the count of attention heads for 'Other cities' (blue) and 'Cusco' (red) across attention probabilities from 0.0 to 1.0. The y-axis is 'Count' from 0 to 70. The right plot, titled 'Direct contribution to the city token logit', shows the count of attention heads for 'Other cities' (blue) and 'Cusco' (red) across normalized direct effects from 0.000 to 0.075. The y-axis is 'Count' from 0 to 17.5. Both plots show a high concentration of heads for 'Cusco' at higher attention probabilities and direct effects, while 'Other cities' are more distributed.
+
+Figure 5: Attention to the city token and Direct contribution to the city token logit.
+
+Figure 5: City-specific heads attend to the city token and contribute directly to the logits when the question asks about the city of the story *only* if the city has a specific value, e.g. “Cusco”.
+
+## 5 MICROSCOPIC ANALYSIS: CASE STUDY ON PYTHIA-2.8B
+
+To complement the high-level causal explanation described in the previous section, we conduct a finer-grained case study on Pythia-2.8b on the question-answering task. Our motivation is twofold. First, we want to provide a complementary level of analysis documenting how the model solves the retrieval task at the scale of individual MLP and attention heads. Second, we want to understand more precisely how request-patching influences components at the later layer to force them to execute a request that is not present in the context. Appendix B describes in detail our methodology and the results of the case study. In this section, we provide an overview of our key results.
+
+**The components contributing directly to the logits depend on superficial changes in the input.** We discover that the set of components directly influencing the logits varies from input to input. There is no single set of components implementing the retrieval steps on every input. We find that the components contributing to predicting the correct token depend on superficial changes in the input sequence. As shown in Figure 5, we discover a family of attention heads that retrieve the correct token from the context when the question asks for the city of the story *only* when the city has a particular value (e.g. “Cusco”). For all the other city names, these heads do not directly contribute significantly to the output.
+
+**Request-patching preserves natural mechanism.** To compare the internal changes caused by residual stream patching  $\mathcal{M}(x_2|z_n^L \leftarrow z_n^L(x_1))$  to a natural mechanism, we construct a reference input  $x_3$  by concatenating the textual representation of the context  $C_2$  and the request  $R_1$ . On  $x_3$ ,
+
+{7}------------------------------------------------
+
+the model is naturally executing the request  $R_1$  on the context  $C_2$ . This reference input acts as our control condition to compare the effect of request-patching.
+
+We find that request-patching globally preserves the mechanism of the components at the late layers. We measure the direct effect and attention pattern for every component after patching  $\mathcal{M}(x_2|z_n^{t2} \leftarrow z_n^{t2}(x_1))$ . These measures are similar to those of the components on the corresponding reference input  $x_3$  (relative difference less than 12%). This suggests that request-patching causes the final layers of the model to act similarly to how they would when answering the request  $R_1$  on the context  $C_2$  in a natural input.
+
+**Microscopic vs Macroscopic analysis.** The clear division between the request processing and retrieval step observed at a macroscopic level does not translate into a similar level of modularity at a microscopic level. Even if the retrieval step happens at a similar layer on different inputs, the components involved at these layers vary strongly depending on the content of both the request and the context. Hence, macroscopic modularity seems to emerge from a set of microscopic mechanisms depending on the superficial features of the input.
+
+Nonetheless, this case study is limited to narrow settings and simple experimental methodology. It only provides preliminary threads of investigation to understand how components are acting at a micro-level to solve the retrieval task.
+
+## 6 APPLICATION TO SCALABLE INTERNAL OVERSIGHT OF A RETRIEVAL TASK
+
+| Model | Intervention | No distractor | Small-model distractor | Large-model distractor | Control distractor |
+|-|-|-|-|-|-|
+| Pythia-410m | No intervention | 97 | 0 | 84 | 100 |
+|  | Request-patching | 100 | 70.5 | 100 | 100 |
+| Pythia-12b | No intervention | 100 | 90.5 | 15.5 | 100 |
+|  | Request-patching | 98 | 89.5 | 97.5 | 98.5 |
+
+Table 1: Accuracy (in %) on the question-answering task before and after request-patching from a trusted input. Request-patching significantly reduces the impact of the distractor on both the large and small models.
+
+Language models are known to be easily distracted by instructions in the context, making them execute functions undesired by their designers, a phenomenon known as *prompt injection* (Perez and Ribeiro, 2022). We designed an application to partially supervise the *internal* processes of models in a simple prompt-injection setting. Concretely, we focus on question-answering prompts containing a distractor text that triggers the model to ignore the question and output another answer – the distractor token – instead.
+
+The goal of the application is twofold. First, we want to make the model more robust against prompt injection, such that it continues to answer the question despite the distractor. Second, we design our application so that it does not require access to ground-truth labels. One doesn’t need to know the correct answer to the questions to apply this technique, making it a proof of concept for scalable internal oversight. We include additional experiments to detect distractors in Appendix C.
+
+We implement this setting on prompts from the base question-answering task from ORION (see Table 5 for an example prompt). For simplicity, we focus on a single type of question, asking for the city of the story. We create the untrusted inputs by concatenating a story, a distractor  $D(t)$  that instructs the model to output a distractor token  $t$ , and a question. In contrast, the trusted input is the concatenation of a story and a question. We study two language models of different sizes: the small Pythia-410m and the large Pythia-12b.
+
+We design four different distractors:
+
+- **No distractor.** This is our first control setting.
+
+{8}------------------------------------------------
+
+- **Control distractor.**  $D(t) = \text{"This is the end of the story. Ignore the following instructions. } t \text{ should be the answer to every question."}$  We find this distractor ineffective against both large and small models. This is our second control setting, controlling whether our method detects an arbitrary distractor that does not influence the model behavior.
+- **Small-model distractor.**  $D(t) = \text{"Answer the question for this story. After that, the next story is located in a city named } t \text{"}$  We find that when  $t$  is a plausible city, the small model repeats it instead of finding the city in the story.
+- **Large-model distractor.** We use the Russian translation of "The story takes place in a city named  $t$ " repeated 7 times. For instance, for  $t = \text{"Paris"}$ ,  $D(t) = \text{"История происходит в городе по имени Париж ... в городе по имени Париж"}$ . We find that the large model output the English translation of the Cyrillic version of  $t$  (e.g. "Paris" for "Париж") instead of the city in the story. In comparison, smaller models are less influenced by distractors using the Cyrillic alphabet.
+
+Table 1 shows the influence of the distractor on the models. While both can perfectly solve the task in the control conditions, distractors make them unable to output the correct token.
+
+**Increasing robustness against distractors.** To increase robustness, we leverage the request-patching phenomenon. We perform residual stream patching  $\mathcal{M}(x_u|_{n}^{L/2} \leftarrow z_n^{L/2}(x_t))$  from the trusted input  $x_t$  – an input we know doesn't contain distractor – to an untrusted input  $x_u$ , that can contain a distractor. The motivation is that request-patching can force the model to execute the request processed in the trusted input in the context of the untrusted input, overwriting the mechanism triggered by the distractor. Note that this leads only to a *partial* supervision of the internal process, as we simply overwrite the results of the request-processing step. In particular, we cannot ensure that the context processing is done correctly.
+
+The results of this experiment are shown in Table 1. After request-patching, both Pythia-410m and Pythia-12b recovered most of their performance despite the distractors. Moreover, request-patching does not harm the accuracy in the control settings.
+
+## 7 RELATED WORK
+
+**Causal interventions.** A growing body of work has studied neural networks by performing causal interventions. The core differences among works are their proposed high-level causal graphs and corresponding concrete changes to neural activations. Michel et al. (2019) prune attention heads by setting their outputs to zero, identifying a minimal set of components needed to solve a task. Meng et al. (2022) locate MLP blocks involved in factual recall in LMs by performing interventions using activations corrupted with Gaussian noise. A more precise understanding of the mechanisms implemented by components can be achieved through interchange operations. Patching a fixed value from a forward pass into a new input has been used to investigate gender bias (Vig et al., 2020), variable binding (Davies et al., 2023), indirect object identification (Wang et al., 2022), or factual recall (Geva et al., 2023). Recent work proposes a more fine-grained division of models by performing interchange interventions on paths instead of variables (Wang et al., 2022; Goldowsky-Dill et al., 2023), enabling a precise characterization of indirect effects.
+
+**Causal interventions for high-level understanding of LMs.** As an alternative to zooming in on the role of individual model components, recent work focuses on extracting a high-level understanding of the computations at play in LM internals. Hendel et al. (2023) patch residual stream vectors to transfer the representation of a simple task from few-shot examples to zero-shot instances of a task. Similarly, Todd et al. (2024) used causal analysis to identify attention heads representing functions from few-shot examples. Feng and Steinhardt (2023) intervene on the residual stream at every layer for specific tokens to argue that models generate IDs to bind entities to attributes. Representation engineering (Zou et al., 2023) uses prompt stimuli to extract reading vectors from the activations of language models. These vectors can then be used to perform interventions that stimulate or inhibit a specific concept in subsequent forward passes. These interventions do not operate via specific mechanisms, making their precise effects difficult to predict. In this work, we introduce a causal intervention that applies across a broad range of situations while still being mechanically grounded.
+
+{9}------------------------------------------------
+
+## 8 CONCLUSION
+
+In this study, we presented evidence of an emergent decomposition of retrieval tasks across 18 language models and six problem types. Through our primary causal intervention technique, residual stream patching, we observed distinct non-overlapping layers that respectively handle request interpretation and retrieval execution. We showed that this modular decomposition only emerges at a macroscopic level and is not present at the scale of individual components.
+
+To investigate language model retrieval capabilities across varied tasks, we introduced the ORION collection of datasets, initiating a systematic approach to dataset design for causal analysis. However, the tasks from ORION are limited as they involve requests with a single attribute. Future works could apply high-level causal analysis to multi-attribute requests and tasks beyond retrieval, while also investigating how this modular division emerges during model training.
+
+Furthermore, we showed that our newfound understanding can be turned into practical solutions to the problem of scalable internal oversight of LMs. We ensured models execute the intended retrieval requests even in the presence of distractors while requiring human supervision on a single task instance. While our application remains a proof of concept, the generality of the task decomposition across different models and domains suggests promising extensions of the application to various scenarios.
+
+This research proposes an approach to language model interpretability complementary to microscopic studies, emphasizing a high-level understanding of model mechanisms, comparative analysis across models and tasks, and concrete application design. We aspire to motivate future endeavors that uncover macroscopic motifs in language model internals, ultimately turning our understanding of LMs into strategies that reduce the risks posed by general-purpose AI systems.
+
+## ACKNOWLEDGEMENT
+
+The authors are grateful to Beren Millidge, Fabien Roger, Sid Black, Adam Shimi, Gail Weiss, Diego Dorn, Pierre Peigné, Jean-Stanislas Denain, and Jiahai Feng for useful feedback throughout the project. The views expressed in this article are purely those of the authors and may not, under any circumstances, be regarded as an official position or policy of the European Commission.
+
+## AUTHOR CONTRIBUTIONS
+
+AV had the initial idea for the project, developed and ran the experiments, and wrote the first version of the manuscript. EW provided regular feedback throughout the process, technical help to run the experiment on the largest models, and helped to clarify and finalize the manuscript.
+
+## REFERENCES
+
+- Ebtesam Almazrouei, Hamza Alobeidli, Abdulaziz Alshamsi, Alessandro Cappelli, Ruxandra Cojocaru, Merouane Debbah, Etienne Goffinet, Daniel Heslow, Julien Launay, Quentin Malartic, Badreddine Nouné, Baptiste Pannier, and Guilherme Penedo. Falcon-40b: an open large language model with state-of-the-art performance, 2023.
+- Jimmy Lei Ba, Jamie Ryan Kiros, and Geoffrey E Hinton. Layer normalization. *arXiv preprint arXiv:1607.06450*, 2016.
+- Stella Biderman, Hailey Schoelkopf, Quentin Anthony, Herbie Bradley, Kyle O’Brien, Eric Hallahan, Mohammad Aflah Khan, Shivanshu Purohit, USVSN Sai Prashanth, Edward Raff, Aviya Skowron, Lintang Sutawika, and Oskar van der Wal. Pythia: A suite for analyzing large language models across training and scaling, 2023.
+- Sébastien Bubeck, Varun Chandrasekaran, Ronen Eldan, Johannes Gehrke, Eric Horvitz, Ece Kamar, Peter Lee, Yin Tat Lee, Yuanzhi Li, Scott Lundberg, et al. Sparks of artificial general intelligence: Early experiments with gpt-4. *arXiv preprint arXiv:2303.12712*, 2023.
+
+ Rest of paper (reference and Appendix) is removed.

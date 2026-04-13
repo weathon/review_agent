@@ -1,0 +1,310 @@
+
+
+{0}------------------------------------------------
+
+# COMPOSING UNBALANCED FLOWS FOR FLEXIBLE DOCKING AND RELAXATION
+
+Gabriele Corso \*  
+MIT
+
+Vignesh Ram Somnath \*  
+ETH Zurich
+
+Noah Getz \*  
+MIT
+
+Regina Barzilay  
+MIT
+
+Tommi Jaakkola  
+MIT
+
+Andreas Krause  
+ETH Zurich
+
+## ABSTRACT
+
+Diffusion models have emerged as a successful approach for molecular docking, but they often cannot model protein flexibility or generate nonphysical poses. We argue that both these challenges can be tackled by framing the problem as a transport between distributions. Still, existing paradigms lack the flexibility to define effective maps between such complex distributions. To address this limitation, we propose *Unbalanced Flow Matching*, a generalization of Flow Matching (FM) that allows trading off sample efficiency with approximation accuracy and enables more accurate transport. Empirically, we apply Unbalanced FM on flexible docking and structure relaxation, demonstrating our ability to model protein flexibility and generate energetically favorable poses<sup>1</sup>. On the PDDBind docking benchmark, our method FLEXDOCK improves the docking performance while increasing the proportion of energetically favorable poses from 30% to 73%.
+
+## 1 INTRODUCTION
+
+The mechanism of action of most drug molecules is often rationalized by studying how the molecule binds to one or more key proteins. Computationally, predicting the structure of these binding interactions constitutes the *molecular docking* task. Over the past decades, significant progress has been made in molecular docking, initially through classical search techniques and more recently with deep learning models. However, these methods primarily focus on rigid docking, assuming the protein has a fixed structure.
+
+Proteins however are flexible entities and often undergo conformational changes during docking. Computational methods for understanding flexibility fall into two categories: *co-folding* and *flexible docking*. Co-folding involves predicting the bound structure of the protein and the ligand from scratch as a single task. Flexible docking, instead, aims at only modeling the limited structural transformation between unbound and bound protein structures, a formulation that allows for more efficient, interpretable, and controllable methods.
+
+However, existing flexible docking methods have so far failed to provide satisfactory levels of accuracy. Among these, search-based techniques struggle to account for protein degrees of freedom due to the significantly increased dimensionality of the search space (Koes et al., 2013; McNutt et al., 2021). Deep learning methods have improved on this by extending diffusion or flow processes to include the protein flexibility, but these either severely limit the degrees-of-freedoms or implicitly force the model to learn protein folding entirely, resulting in structure predictions that are frequently inaccurate (Qiao et al., 2024; Lu et al., 2024). Furthermore, recent works have highlighted the tendency of ML docking models to generate non-physical structures (Buttenschoen et al., 2024).
+
+Addressing the challenges above requires new techniques for precise transport between the complex distributions of unbound (apo) and bound (holo) protein structures. Flow matching (FM) (Lipman et al., 2022; Albergo et al., 2023), in principle, can learn such a transport. However, we show that
+
+<sup>\*</sup>Equal contribution. Correspondence to gcorso@csail.mit.edu and vsomnath@inf.ethz.ch.
+
+<sup>1</sup>Our code and models are available at <https://github.com/vsomnath/flexdock>.
+
+{1}------------------------------------------------
+
+![Figure 1: Schematic representation of the FLEXDOCK docking framework. The process starts with a protein-ligand complex (apo structures) and a 2D plot of apo and holo structures. The first step is 'Manifold Docking' with 'Manifold Unbalanced Flow Matching: ε = 4Å', resulting in a predicted structure. The second step is 'Structure Relaxation' with 'Euclidean Unbalanced Flow Matching: ε = 2Å', resulting in a final predicted structure. A 2D plot shows the transition from apo to holo structures.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 1: Schematic representation of the FLEXDOCK docking framework. The process starts with a protein-ligand complex (apo structures) and a 2D plot of apo and holo structures. The first step is 'Manifold Docking' with 'Manifold Unbalanced Flow Matching: ε = 4Å', resulting in a predicted structure. The second step is 'Structure Relaxation' with 'Euclidean Unbalanced Flow Matching: ε = 2Å', resulting in a final predicted structure. A 2D plot shows the transition from apo to holo structures.
+
+Figure 1: Schematic representation of the FLEXDOCK docking framework formed by the chaining of two unbalanced flows. The first (details in Section 4.1) is aimed at resolving the approximate pose by working on longer flows but reduced degrees of freedom, and the second (Section 4.2) aims at relaxing the generated structure producing high-quality poses.
+
+directly applying flow matching to this task results in complex mappings, a difficult learning task, and consequently poor performance. To address this, we propose *Unbalanced Flow Matching*, where we relax the marginal constraints of FM through a more careful choice of coupling distribution. We study these choices both formally and empirically, resulting in a higher docking performance. We further consider composing short unbalanced flows and show that, in the limit, this corresponds to local likelihood gradient steps towards the desired marginal.
+
+Based on the insights above, we construct a new flexible pocket-based docking method FLEXDOCK by chaining two separate Unbalanced Flows (see Figure 1). The first, referred to as *manifold docking*, is defined on a low dimensional space and aims to predict the approximate ligand pose and protein structural change. The second, *relaxation*, is defined on the full Euclidean space but with shorter maps and aims to provide a fast yet effective relaxation of the structure.
+
+Empirically, we demonstrate that the new modeling perspective of FLEXDOCK enhances structure prediction quality, especially for protein conformations. On the PDBBind flexible pocket-based docking benchmark, FLEXDOCK improves the proportion of very accurate protein structure predictions (all-atom RMSD below  $1\text{Å}$ ) from 32% of DiffDock-Pocket to 42% while having the same training data and model architecture. Furthermore, thanks to the relaxation flow, the generated poses are far more physically realistic, as demonstrated by the proportion of poses passing PoseBusters checks (Buttenschoen et al., 2024) which increases from 30% to 73%.
+
+In summary, we propose Unbalanced Flow Matching, a new distribution matching framework, and prove it provides a way to balance sample efficiency and sample quality. Furthermore, by chaining together new manifold docking and structure relaxation models based on Unbalanced FM, we develop a flexible docking method that addresses two major limitations of previous docking techniques: accurate protein flexibility modeling and the generation of energetically favorable poses.
+
+## 2 BACKGROUND AND RELATED WORK
+
+**Flow matching.** Given two distributions  $q_0$  and  $q_1$ , Flow Matching (Lipman et al., 2022; Albergo et al., 2023) provides a way of learning a vector field  $v_t$  which induces a continuous normalizing flow  $\psi_t(\mathbf{x})$  that transports  $q_0$  to  $q_1$ , i.e.,  $q_1(\mathbf{x}) = [\psi_1]_{\#} q_0(\mathbf{x})$ , where  $\#$  denotes the pushforward operator.
+
+The key idea in FM is to define a conditional flow  $\psi_t(\mathbf{x}_0|\mathbf{x}_1)$  interpolating between  $\mathbf{x}_0 \sim q_0$  and  $\mathbf{x}_1 \sim q_1$ , and its associated vector field  $u_t(\mathbf{x}_t|\mathbf{x}_1) = \frac{d}{dt} \psi_t(\mathbf{x}_t|\mathbf{x}_1)$ . One can then learn the marginal vector field  $v_t(\mathbf{x})$  with a neural network  $v_t(\mathbf{x}; \theta)$ , by regressing against the conditional vector field with the conditional flow matching (CFM) objective:
+
+$$\mathcal{L}_{\text{CFM}} = \mathbb{E}_{t, \mathbf{x}_0 \sim q_0, \mathbf{x}_1 \sim q_1} \|v_t(\mathbf{x}_t; \theta) - u_t(\mathbf{x}_t|\mathbf{x}_1)\|^2 \quad (1)$$
+
+FM was further generalized by Pooladian et al. (2023) and Tong et al. (2023) who show that the CFM objective does not require independent samples from  $q_0$  and  $q_1$ , but it can use an arbitrary joint sampling distribution  $q(\mathbf{x}_0, \mathbf{x}_1)$ , the coupling distribution, as long as it satisfies the marginal
+
+{2}------------------------------------------------
+
+constraints being  $q_0$  and  $q_1$  respectively. This formulation enables drawing a connection between FM and optimal transport (OT). When using OT to define the coupling distribution  $q$ , the flows become straight and the transport cost  $\mathbb{E}_{q_0(\mathbf{x}_0)} \|\psi_1(\mathbf{x}_0) - \mathbf{x}_0\|^2$  is the OT cost  $W_2^2(q_0, q_1)$ . An extension of flow matching to the unbalanced setting was first explored in (Eyring et al., 2024), with couplings  $q$  estimated using Unbalanced OT(UOT). In this work, we focus on arbitrary couplings  $q$  and provide a formal and empirical characterization of the associated objectives.
+
+**Flexible Docking.** Flexible docking assumes access to unbound structures of proteins (known as apo) and predicts how these will change upon ligand binding (producing holo-structures). Traditional *search-based* docking methods define a scoring function and search the space of possible poses, aiming to find the pose minimizing the scoring function (Alhossary et al., 2015; McNutt et al., 2021). These methods can in principle incorporate protein flexibility by adding torsion angles of the sidechains in the pocket to the search space. However, they struggle to find optimal joint poses due to the increased dimensionality and they are unable to model proteins' flexibility beyond the sidechains.
+
+Recently, a few deep learning methods for flexible docking have been proposed. DIFFDOCK-POCKET (Plainer et al., 2023) and RE-DOCK (Huang et al., 2024) use diffusion and diffusion bridge models to capture the flexibility in protein pocket sidechains in addition to ligand flexibility, they, however, once again cannot model proteins' flexibility beyond sidechain torsion angles. DYNAMICBIND (Lu et al., 2024) incorporates backbone flexibility but uses hardcoded noise perturbation rules to interpolate from apo residue frames to holo residue frames. Somnath et al. (2023) explicitly predicts the conformational changes between apo and holo states of proteins using Diffusion Schrödinger Bridges by treating the apo and holo states as paired data.
+
+**Structure Relaxation.** Even in rigid docking, ML methods, despite improving geometric prediction accuracy, often produce poses with nonphysical properties like steric clashes and strained bonds (Buttenschoen et al., 2024). These artifacts can hinder downstream prediction tasks, necessitating relaxation using molecular dynamics force fields. However, this relaxation process is often long (Bryant et al., 2024), complicating its use in large-scale screening.
+
+## 3 UNBALANCED FLOW MATCHING
+
+The motivation for flexible docking over co-folding is to leverage the unbound distribution of proteins and focus on modeling the precise effects of ligand binding. Formally, we wish to approximate a flow  $\psi_t$  (equivalently vector field  $v_t$ ), whose pushforward transports the distribution over apo-structures  $q_0$  to the distribution over holo-structures  $q_1$ .
+
+The flexible docking setting presents two challenges that make a direct application of flow matching for this task ineffective (as we will also demonstrate empirically). First, X-ray crystallography data are the main source of bound conformations, resulting in the availability of a single sample for holo-structure for most known complexes. This prevents one from using minibatch-OT based flow matching methods (Pooladian et al., 2023) and leads to a large expected length of conditional flows. Second, even if one could construct the optimal transport mapping  $q$  between  $q_0$  and  $q_1$ , the induced expected cost will likely remain very high. In fact, although the different conformational states of the protein do not change significantly upon ligand binding, their relative weights are often notably altered. Training FM in this setting requires the model to move the protein between conformations, leading to long and complex conditional and marginal flows, and a harder learning task.
+
+We propose the Unbalanced Flow Matching framework to tackle such problems.
+
+### 3.1 FORMALIZATION
+
+Let  $q_0$  be the input distribution, and  $q_1$  a target distribution, defined over a data space  $\mathcal{X}$ . Unbalanced Flow Matching (UFM) aims to learn a continuous normalizing flow parameterized with a vector field  $v_t(\mathbf{x}_t; \theta)$  that minimizes the following objective:
+
+$$L_{\text{UFM}}(q, \theta) = \alpha \underbrace{\mathbb{E}_{t, (\mathbf{x}_0, \mathbf{x}_1) \sim q} \left[ \|v_t(\mathbf{x}_t; \theta) - u_t(\mathbf{x}_t | (\mathbf{x}_0, \mathbf{x}_1))\|^2 \right]}_{\text{Conditional flow matching}} + \underbrace{D_2(q_0 | q_{\mathbf{x}_0}) + D_2(q_{\mathbf{x}_1} | q_1)}_{\text{Mass-variation penalty}} \quad (2)$$
+
+{3}------------------------------------------------
+
+![Figure 2: Schematic depiction of the difference between FM and Unbalanced FM. (a) Flow Matching: A red distribution q0 and a blue distribution q1 are shown. White arrows represent couplings between them, maintaining the marginal distributions. (b) Unbalanced FM: The same distributions q0 and q1 are shown, but the couplings (white arrows) are fewer and do not maintain the marginal distributions, trading off some coverage for reduced transport costs.](e94f3bbb6f7501b9a1344dd0210e5dd8_img.jpg)
+
+Figure 2: Schematic depiction of the difference between FM and Unbalanced FM. (a) Flow Matching: A red distribution q0 and a blue distribution q1 are shown. White arrows represent couplings between them, maintaining the marginal distributions. (b) Unbalanced FM: The same distributions q0 and q1 are shown, but the couplings (white arrows) are fewer and do not maintain the marginal distributions, trading off some coverage for reduced transport costs.
+
+Figure 2: Schematic depiction of the difference between FM and Unbalanced FM. The first builds couplings that maintain the marginal distributions regardless of the difference between the distributions and the consequent expected transport cost. The second trades off some distributional coverage to obtain couplings with significantly reduced transport costs.
+
+where  $q$  is an arbitrary coupling distribution whose marginals we denote by  $q_{\mathbf{x}_0}$  and  $q_{\mathbf{x}_1}$ , and  $D_2$  is the Rényi Divergence of order 2. In Section 3.2, we show that this objective describes a tractable upper bound to the fundamental approximation vs efficiency trade-off.
+
+Flow matching and its variants choose a coupling distribution  $q$  such that marginals are conserved. Although this implies a zero *mass-variation penalty* in Equation 2, the *conditional flow matching* term can suffer significantly from this choice, as it might require the learning of complex couplings and consequently a poor approximation. In contrast, our framework jointly accounts for the flow matching and mass-variation penalty terms. However, jointly optimizing  $q$  and  $\theta$  to find a global minimum is typically intractable. Our approach thus relies on finding an approximation  $q$ , and using the flow matching objective with the chosen  $q$ . From Equation 2 (and assuming the space of  $v_t(\cdot, \theta)$  includes the zero function), it is easy to see that:
+
+$$\min_{q, \theta} L_{\text{UFM}}(q, \theta) \leq \min_q \alpha \mathbb{E}_{t, (\mathbf{x}_0, \mathbf{x}_1) \sim q} \left[ \|u_t(\mathbf{x}_t | (\mathbf{x}_0, \mathbf{x}_1))\|^2 \right] + D_2(q_0 | q_{\mathbf{x}_0}) + D_2(q_{\mathbf{x}_1} | q_1) \quad (3)$$
+
+For  $\mathcal{X} = \mathbb{R}^d$ ,  $u_t(\mathbf{x}_t | (\mathbf{x}_0, \mathbf{x}_1)) = \mathbf{x}_1 - \mathbf{x}_0$  is a common choice. Plugging this into Equation 3 gives us:
+
+$$\min_{q, \theta} L_{\text{UFM}}(q, \theta) \leq \min_q \mathbb{E}_{t, (\mathbf{x}_0, \mathbf{x}_1) \sim q} \left[ \alpha \|\mathbf{x}_1 - \mathbf{x}_0\|^2 \right] + D_2(q_0 | q_{\mathbf{x}_0}) + D_2(q_{\mathbf{x}_1} | q_1) \triangleq \text{UOT}(q_0, q_1) \quad (4)$$
+
+The upper bound corresponds to the Unbalanced Optimal Transport (UOT) objective with quadratic cost  $\alpha \|\mathbf{x}_1 - \mathbf{x}_0\|^2$  that we can approximate to choose  $q$ . Fixing  $q$ , we can then learn  $\theta$  via SGD with the resulting simplification of Equation 2:
+
+$$\mathcal{L}_{\text{UFM}}(\theta; q) = \mathbb{E}_{t, (\mathbf{x}_0, \mathbf{x}_1) \sim q} \left[ \|v_t(\mathbf{x}_t; \theta) - u_t(\mathbf{x}_t | (\mathbf{x}_0, \mathbf{x}_1))\|^2 \right] \quad (5)$$
+
+By lifting the mass-conservation requirement of FM, we now simplify the learning task (see Figure 5 for an empirical validation). However, now even with a perfectly trained vector field, the pushforward of  $q_0$  will no longer correspond to  $q_1$ . Our goal of obtaining samples from  $q_1$ , therefore, involves reweighting the samples generated by the learned flow. In practice, we approximate this re-weighting with a discriminator  $\mathbf{c}$  akin to the confidence model used in (Corso et al., 2022) (see Algorithm 1, and Section 4.1).
+
+#### --- Algorithm 1: UNBALANCED FM INFERENCE ---
+
+Sample prior  $\mathbf{x}_0^{(i)} \sim q_0$
+
+Use flow  $\hat{\psi}_1(\cdot | q, \theta)$  to map  $\mathbf{x}_0^{(i)}$  to  $\mathbf{x}_1^{(i)}$
+
+Reweight or reject with learned discriminator  $\mathbf{c}$
+
+Return  $[\mathbf{x}_1^{(1)}, \mathbf{x}_1^{(2)}, \dots, \mathbf{x}_1^{(n)}]$
+
+---
+
+{4}------------------------------------------------
+
+### 3.2 EFFICIENCY VS APPROXIMATION TRADE-OFF
+
+In this section, we show how the UFM objective arises from optimizing the trade-off between sample efficiency and approximation accuracy. Sample efficiency refers to the number of samples from  $q_0$  needed to obtain an approximate sample of  $q_1$  (passing the discriminator) under the learned flow. These approximate samples of  $q_1$  still incur some imprecision due to the flow not being learned perfectly; the approximation accuracy refers to the Wasserstein distance between  $q_1$  and the distribution of these approximate samples. To study this, we consider a modified version of the Unbalanced FM inference procedure (Algorithm 1). The main difference of this procedure (Algorithm 2) is that we perform some filtering not only after the flow but also before it. Algorithm 2 is, thus, at most as sample efficient as Algorithm 1 but easier to study.
+
+#### Algorithm 2: UFM EFFICIENCY LOWER BOUND
+
+---
+
+Sample prior  $\mathbf{x}_0^{(i)} \sim q_0$
+
+Reweight or reject based on approx.  $\frac{q_{\theta_0}(\mathbf{x}_0^{(i)})}{q_0(\mathbf{x}_0^{(i)})}$
+
+Use flow  $\hat{\psi}_1(\cdot; q, \theta)$  to map  $\mathbf{x}_0^{(i)} \rightarrow \mathbf{x}_1^{(i)} \sim \hat{q}_{\mathbf{x}_1}$
+
+Reweight or reject based on approx.  $\frac{q_1(\mathbf{x}_1^{(i)})}{q_{\mathbf{x}_1}(\mathbf{x}_1^{(i)})}$
+
+Return  $[\mathbf{x}_1^{(1)}, \mathbf{x}_1^{(2)}, \dots, \mathbf{x}_1^{(n)}]$
+
+---
+
+Algorithm 2: High-level inference routine for modified Unbalanced FM routine used to define theoretical a lower bound on the efficiency of the original Unbalanced FM routine of Algorithm 1.
+
+![Figure 3: Relationship between the different distributions introduced in the theoretical analysis of the Unbalanced FM efficiency lower bound algorithm. The diagram shows a starting distribution q_0 at the bottom left, a target distribution q_1 at the bottom right, and a marginal of q_0 at the top left. Arrows represent flows: a vertical dashed arrow from q_0 to q_0^marginal labeled D_2(q_0 || q_{x_0}), a horizontal arrow from q_0^marginal to q_1^marginal labeled psi_1(·; q) optimal flow, a diagonal arrow from q_0^marginal to q_1 labeled psi_1(·; q, theta) learned flow, and a vertical dashed arrow from q_1^marginal to q_1 labeled D_2(q_{x_1} || q_1).](ca5566458a134032dd860e88fdaa0d2b_img.jpg)
+
+Figure 3: Relationship between the different distributions introduced in the theoretical analysis of the Unbalanced FM efficiency lower bound algorithm. The diagram shows a starting distribution q\_0 at the bottom left, a target distribution q\_1 at the bottom right, and a marginal of q\_0 at the top left. Arrows represent flows: a vertical dashed arrow from q\_0 to q\_0^marginal labeled D\_2(q\_0 || q\_{x\_0}), a horizontal arrow from q\_0^marginal to q\_1^marginal labeled psi\_1(·; q) optimal flow, a diagonal arrow from q\_0^marginal to q\_1 labeled psi\_1(·; q, theta) learned flow, and a vertical dashed arrow from q\_1^marginal to q\_1 labeled D\_2(q\_{x\_1} || q\_1).
+
+Figure 3: Relationship between the different distributions introduced in the theoretical analysis of the Unbalanced FM efficiency lower bound algorithm.
+
+**Formalization.** Let  $\psi_1(\cdot; q)$  be the optimal flow from the Unbalanced FM objective with couplings  $q$  and  $\hat{\psi}_1(\cdot; q, \theta)$  its approximation we are able to learn. FM guarantees us that  $q_{\mathbf{x}_1} = [\psi_1(\cdot | q)]_{\#} q_{\mathbf{x}_0}$  and let  $\hat{q}_{\mathbf{x}_1}(\cdot | \theta) = [\hat{\psi}_1(\cdot | q, \theta)]_{\#} q_{\mathbf{x}_0}$ . We summarize all the defined distributions and their relationship in Figure 3.
+
+The definition of Unbalanced FM as a method to bridge two distributions  $q_0$  and  $q_1$  leads us to analyze the trade-off between the approximation error when learning the flow, formalized as  $W_2^2(\hat{q}_{\mathbf{x}_1}(\cdot | \theta), q_{\mathbf{x}_1})$ , and the sample efficiency  $\text{ESS}^*(q)$  that derives from having to perform rejection sampling to bridge the gaps between  $q_0$  and  $q_{\mathbf{x}_0}$  and between  $q_{\mathbf{x}_1}$  and  $q_1$ . Simple mappings will result in low approximation errors but potentially lower efficiency, and vice versa.
+
+**Approximation error.** Using Theorem 1 from Benton et al. (2023) we can show, under appropriate assumptions that the approximation error for a given coupling distribution  $q$ ,  $W_2^2(\hat{q}_{\mathbf{x}_1}(\cdot | \theta), q_{\mathbf{x}_1})$ , is bounded by FM objective:
+
+$$W_2^2(\hat{q}_{\mathbf{x}_1}(\cdot | \theta), q_{\mathbf{x}_1}) \leq L^2 \cdot \mathbb{E}_{t, q} [\|v_t(\mathbf{x}_t; \theta) - v_t(\mathbf{x}_t)\|^2] \leq L^2 \cdot \mathbb{E}_{t, q} [\|v_t(\mathbf{x}_t; \theta) - u_t(\mathbf{x}_t | \mathbf{x}_t)\|^2] \quad (6)$$
+
+where  $L = \exp[\int_0^1 L_t dt]$  and  $L_t$  is a constant such that  $v_\theta(\mathbf{x}, t)$  is  $L_t$ -Lipschitz in  $\mathbf{x}$ . The second inequality follows from the convexity of the squared norm.
+
+**Sample efficiency.** We can measure the sample efficiency that the model has when converting samples of  $q_0$  to unbiased samples of  $q_1$  via the effective sample size  $\text{ESS}^*(q)$ , i.e., the reciprocal of how many samples from  $q_0$  it takes using the ideal flow  $\psi_1(\cdot, q)$  to generate an unbiased sample from  $q_1$ . In Proposition 1 (derivation in Appendix A.1), we demonstrate that for an ideal flow this sample efficiency is bounded by the similarity between  $q_0$  and  $q_1$  and the respective marginals of  $q$ :
+
+**Proposition 1.** The effective sample size,  $\text{ESS}^*$ , for sampling  $q_1$  when having access to samples of  $q_0$  and a perfectly trained flow with coupling distribution  $q$  is bounded by:
+
+$$\text{ESS}^*(q) \geq \exp[-D_2(q_0 | q_{\mathbf{x}_0}) - D_2(q_{\mathbf{x}_1} | q_1)]. \quad (7)$$
+
+{5}------------------------------------------------
+
+**Trade-off upper bound.** The trade-off between approximation error and sampling efficiency in the choice of optimal flow can then be expressed as a joint objective:
+
+$$\beta \underbrace{W_2^2(\hat{q}_{x_1}(\cdot|\theta), q_{x_1})}_{\text{Approximation error}} - \underbrace{\log \text{ESS}^*(q)}_{\text{Sampling efficiency}} \leq L_{\text{UFM}}(\theta, q) \quad (8)$$
+
+where the inequality derives from setting  $\alpha = L^2\beta$  and using the derivation above. This motivates the UFM objective as a way to optimize an upper bound on the joint approximation error and sample (in-) efficiency trade-off.
+
+In practice, since we only have access to one sample for the distribution over bound structures (the crystal structure in PDB, typically unique), we cannot define  $q$  via exact optimal Unbalanced OT. In our experiments, we approximate the optimal coupling with the distribution  $q(\mathbf{x}_0, \mathbf{x}_1) \propto q_0(\mathbf{x}_0)q_1(\mathbf{x}_1)\mathbb{I}_{c(\mathbf{x}_0, \mathbf{x}_1) < c_{\text{task}}}$ , where  $c(\mathbf{x}_0, \mathbf{x}_1)$  is some, task-specific, transport cost, and  $c_{\text{task}}$  is an empirically chosen cutoff to balance sample efficiency and mapping complexity.
+
+### 3.3 COMPOSING UNBALANCED FLOWS
+
+In Section 4.2, we will show how we obtain effective structure relaxations by learning a further unbalanced flow with smaller matching costs on top of the distribution learned by the initial manifold docking unbalanced flow. In this section, we analyze the effect of composing flows together in the case of short distance couplings that corresponds to the setting of structure relaxation.
+
+Each flow tries to learn the matching from the output distribution of the previous flow and the final distribution. We consider the specific coupling introduced in the previous section  $q(\mathbf{x}_0, \mathbf{x}_1) = q_0(\mathbf{x}_0)q_1(\mathbf{x}_1)\mathbb{I}_{\|\mathbf{x}_0 - \mathbf{x}_1\| \leq \epsilon}$ , with  $q_0$  now representing the output distribution of the previous flow. In Proposition 2 (derivation in Appendix A.2), we demonstrate that taking  $\epsilon \rightarrow 0$  leads to approximate local likelihood gradient steps that push  $q_0$  towards matching  $q_1$ :
+
+**Proposition 2.** *A coupling  $q(\mathbf{x}_0, \mathbf{x}_1) \propto q_0(\mathbf{x}_0)q_1(\mathbf{x}_1)\mathbb{I}_{\|\mathbf{x}_0 - \mathbf{x}_1\| \leq \epsilon}$  with  $\epsilon \rightarrow 0$  generated a marginal flow  $\psi_1$  that has the form:*
+
+$$\psi_1(\mathbf{x}_0) \approx \mathbf{x}_0 + C_{\epsilon, n}[q_0(\mathbf{x}_0)\nabla q_1(\mathbf{x}_0) - q_1(\mathbf{x}_0)\nabla q_0(\mathbf{x}_0)] \quad (9)$$
+
+where  $C_{\epsilon, n}$  is a constant that depends on  $\epsilon$  and the dimensionality of the space  $n$ .
+
+therefore, for all the points  $\mathbf{x}_0$  sampled from  $q_0$  that have low likelihood under the final distribution  $q_1$  (so  $q_1(\mathbf{x}_0) \ll q_0(\mathbf{x}_0)$ ), the transform  $\psi_1(\mathbf{x}_0) \approx \mathbf{x}_0 + C_{\epsilon, n}q_0(\mathbf{x}_0)\nabla_{\mathbf{x}_0} q_1(\mathbf{x}_0)$  will push the sample toward the regions of higher likelihood of  $q_1$ . Notably, the learned flows also have the property  $\psi_1(\mathbf{x}_0) = \mathbf{x}_0$  when  $q_0 = q_1$ .
+
+## 4 FLEXIBLE DOCKING
+
+In the flexible docking task, our goal is to learn the joint distribution over the bound structures (equivalently, poses thereof) of a protein-ligand complex given the distribution over the unbound structures of the protein. We focus on the pocket-based flexible docking task, but all components of our framework can be applied to the blind docking setting as well (unknown protein pocket).
+
+In the previous section, we motivated the necessity of Unbalanced FM for the flexible docking task, and the attractive properties that emerge from composing unbalanced flows. In this section, we leverage these insights to decompose the flexible docking task into two subtasks, both modeled as unbalanced flows: i) docking over the manifold degrees of freedom (Section 4.1), and ii) structure relaxation (Section 4.2).
+
+### 4.1 DOCKING OVER MANIFOLD DEGREES OF FREEDOM
+
+Ligand and protein poses can be regarded as elements of  $\mathbb{R}^{3n_l}$  and  $\mathbb{R}^{3n_p}$ , where  $n_l$  and  $n_p$  are the number of atoms in the ligand and protein respectively. However, during docking, ligand flexibility is largely concentrated in the torsion angles at rotatable bonds (Jing et al., 2022), while for proteins, the flexibility lies in the backbone frames and sidechain torsion angles (Jumper et al., 2021). Motivated by the success of Intrinsic Diffusion Models (Corso, 2023) in similar domains, we reduce the space of ligand and protein poses by defining our generative model over these degrees of freedom.
+
+{6}------------------------------------------------
+
+**Transport of distributions formulation.** For the distribution over ligand poses, we largely follow DIFFDOCK (Corso et al., 2022), learning a diffusion model over the product space of rotations, translations, and torsions,  $\mathbb{P} = SO(3) \times \mathbb{R}^3 \times \mathbb{T}^{m_l}$ . To model conformational changes in protein structures upon docking, we employ our Unbalanced FM framework. The prior  $q_0$  is defined as the distribution of (computationally generated) unbound structures, while the target distribution  $q_1$  is defined over the crystallized bound structures. For the prior, given the current inability of computational models to sample the diverse conformational space (Jing et al., 2024), we use outputs from ESMFold (Lin et al., 2022) with the addition of small Gaussian noise. Designing an Unbalanced FM objective then amounts to choosing a coupling  $q(\mathbf{x}_0, \mathbf{x}_1)$ , a conditional probability path  $p_t(\mathbf{x}|\mathbf{x}_0, \mathbf{x}_1)$ ,  $(\mathbf{x}_0, \mathbf{x}_1) \sim q$ , and the associated conditional vector field  $\mathbf{u}_t(\mathbf{x}|\mathbf{x}_0, \mathbf{x}_1)$ .
+
+**Choice of coupling  $q$ .** A key requirement for  $q$  is to be able to sample pairs during training. Because we typically only have access to one sample for the distribution over bound structures (the crystal structure in PDB, typically unique), we cannot define  $q$  via Unbalanced OT. Therefore, we approximate the optimal coupling with the distribution  $q(\mathbf{x}_0, \mathbf{x}_1) \propto q_0(\mathbf{x}_0)q_1(\mathbf{x}_1)\mathbb{I}_{c(\mathbf{x}_0, \mathbf{x}_1) < c_{\text{dock}}}$ , where  $c(\mathbf{x}_0, \mathbf{x}_1)$  is defined as the aligned RMSD between the  $C\alpha$  positions of the residues in the pocket and its neighborhood, and  $c_{\text{dock}}$  is an empirically chosen cutoff to balance sample efficiency and mapping complexity. We can sample from  $q$  by taking independent samples from  $q_0$  and  $q_1$  and rejecting if  $c(\mathbf{x}_0, \mathbf{x}_1) \geq c_{\text{dock}}$ .
+
+**Flow Matching on  $SE(3)$  and  $\mathbb{T}$ .** For a protein with  $n$  residues and  $m_p$  sidechain torsions, we define the flow over the product space  $SE(3)^n \times SO(2)^{m_p}$ , where the  $SE(3)$  frame for each residue corresponds to a roto-translation around the  $C\alpha$  atom, and the hypotors  $\mathbb{T}^{m_p}$  over sidechain torsions.
+
+Following the disintegration of measures (Pollard, 2002), every  $SE(3)$ -invariant measure can be broken down into a  $SO(3)$ -invariant measure and a measure proportional to the Lebesgue measure on  $\mathbb{R}^3$ , allowing us to build flows independently on  $SO(3)$  and  $\mathbb{R}^3$ . Following Chen & Lipman (2024), given two points  $(\mathbf{x}_0, \mathbf{x}_1) \sim q$ , the conditional probability path between  $\mathbf{x}_0$  and  $\mathbf{x}_1$  is given by the geodesic between them,  $\mathbf{x} = \exp_{\mathbf{x}_0}(t \log_{\mathbf{x}_0}(\mathbf{x}_1))$ , and the corresponding conditional flow is  $\mathbf{u}_t(\mathbf{x}_t|\mathbf{x}_0, \mathbf{x}_1) = \frac{\log_{\mathbf{x}_t} \mathbf{x}_1}{1-t}$ .
+
+For  $SO(3)$ , the geodesics can be computed efficiently by using the axis-angle representation (equivalent to  $\log(\mathbf{x}_1)$ ) and the parallel transport operation (left multiplication with  $\mathbf{x}_0$ ), while  $\exp$  is simply the matrix exponential. We view the torus  $\mathbb{T}$  as the quotient space  $\mathbb{R}/2\pi\mathbb{Z}$ , thus  $\exp_{\mathbf{x}_0}(\mathbf{x}_1) = (\mathbf{x}_0 + \mathbf{x}_1) \bmod 2\pi$  (equivalent to wrapping around  $\mathbb{R}$ ), and  $\log_{\mathbf{x}_0} \mathbf{x}_1 = \arctan 2(\sin(\mathbf{x}_1 - \mathbf{x}_0), \cos(\mathbf{x}_1 - \mathbf{x}_0))$ .
+
+**Confidence discriminator.** As discussed in Section 3.1, it is necessary to apply a rejection or filtering step at the end of the unbalanced flow. This is because, by the design of the Unbalanced FM framework, some of the samples produced will be incorrect (i.e. far from high-likelihood regions of  $q_1$ ). To do this we train a confidence model (Corso et al., 2022) to predict the likelihood that a sample from  $q_1$  is within  $2\text{Å}$  ligand-RMSD and  $1\text{Å}$  AA-RMSD of the input pose. This confidence score is then used to rank or select different samples obtained from the flow.
+
+### 4.2 STRUCTURE RELAXATION
+
+Motivated by the results from Section 3.3, we frame structure relaxation as an (unbalanced) flow, where the prior  $q_0$  is now the distribution over poses generated by the manifold docking process in Section 4.1, and the target distribution  $q_1$  is still defined over the crystallized bound structures.
+
+**Choice of coupling  $q$ .** We adopt a similar definition for  $q$  as Section 4.1, except now  $c(\mathbf{x}_0, \mathbf{x}_1)$  is defined as the average of the aligned atomic RMSDs between the predicted pose for both the ligand and protein (not just the latter) and their ground truth counterparts. We also use a smaller cutoff  $c_{\text{relax}} < c_{\text{dock}}$  to enforce small structural changes.
+
+**Flow Matching for Relaxation.** We define the flow over the Euclidean space. Given  $(\mathbf{x}_0, \mathbf{x}_1) \sim q$ , the conditional probability path  $p_t(\mathbf{x}|\mathbf{x}_0, \mathbf{x}_1)$  is defined as  $\mathbf{x}_0 \cdot (1-t) + \mathbf{x}_1 \cdot t$ , and the associated conditional vector field  $\mathbf{u}_t(\mathbf{x}|\mathbf{x}_0, \mathbf{x}_1) = \frac{\mathbf{x}_1 - \mathbf{x}}{1-t}$ .
+
+{7}------------------------------------------------
+
+**Energy-based loss.** Molecular structures are characterized by degrees of freedom with vastly different stiffness, for example the Generalized Amber Force Field (GAFF) is specified such that a single bond between Carbon and Nitrogen atoms allows oscillations with a vibrational frequency of  $4401\text{ cm}^{-1}$  (Wang et al., 2004). This causes even small  $W_2$  approximation errors to be particularly problematic along such degrees of freedom. Therefore, to further improve the flow’s ability to accurately relax degrees of freedom with narrow distributions, we introduce an additional energy-based loss to encourage the model to sample low-energy poses.
+
+A similar approach has been explored in the scope of works on Boltzmann Generators (Noé et al., 2019) where models are trained directly to minimize the reverse KL divergence between the generated samples and some energy function by evaluating the energy of the generated poses and their log-likelihood under the model. Our approach distinguishes from this in two main aspects: firstly, to preserve the stable and efficient training regime of (unbalanced) flow matching we do not use full sampling trajectories but only evaluate the energy of the  $\tilde{\mathbf{x}}_1 = \mathbf{x}_t + (1-t)v_t(\mathbf{x}_t; \theta)$  predicted poses for  $t$  close to 1; secondly, instead of using force-field based energy functions that tend to be very unstable on non-equilibrium poses we employ a handcrafted flat-bottom potential with the following form:
+
+$$\mathcal{L}_{\text{energy}} = \sum_{i,j} \max \left( \left\| \tilde{\mathbf{x}}_1^{(i)} - \tilde{\mathbf{x}}_1^{(j)} \right\| - U_{i,j}, 0 \right) + \max \left( L_{i,j} - \left\| \tilde{\mathbf{x}}_1^{(i)} - \tilde{\mathbf{x}}_1^{(j)} \right\|, 0 \right) \quad (10)$$
+
+where  $L_{i,j}$  and  $U_{i,j}$  are lower and upper bounds (if any) on the distance between each pair of atoms  $(i, j)$  and depend on whether atoms  $i$  and  $j$  are covalently bonded, substituents of the same central atom, or constitute an intermolecular cross term between the protein and ligand. Further details on the formulation are provided in Appendix B.1.
+
+**Energy filtering.** During inference, we utilize this flat-bottom potential combined with the initial poses confidence scores as the Unbalanced FM discriminator to select the predictions for which relaxation was successful. Starting with conformers predicted by the flexible docking model, we use the docking confidence model to score and prioritize the predictions. After relaxation, we use the flat bottomed potential to select only the relaxed conformers for which the potential is zero. We then choose the relaxed pose with the greatest confidence score. If all relaxed conformers have a non-zero potential value, we instead return the highest confidence conformer prior to relaxation.
+
+## 5 EXPERIMENTS
+
+**Benchmark.** We train and test our models on the widely adopted PDBBind benchmark (Liu et al., 2017). We use computationally generated structures from ESMFold (Lin et al., 2022) as samples from the distribution of unbound structures. We also evaluate on PoseBusters, a recent benchmark dataset curated from the PDB, with several filtering steps and sequence-based clustering. Since we focus on the flexible docking task, we evaluate the accuracy of both the predicted ligand and pocket atom poses. We first align the predicted pocket atoms to their ground truth counterparts, and then compute the heavy-atom RMSD between the predicted and ground truth poses for the ligand (with permutation symmetry correction) and pocket atoms. For the ligand, following Huang et al. (2024), we report the median and the percentage of predictions with RMSD below  $2\text{Å}$ . For the pocket atoms, we similarly report the percentage of predictions with RMSD below  $1\text{Å}$ . Finally, we report the pose quality using the percentage of top-1 predictions passing the series of tests from Butenschoen et al. (2024) referred to as PoseBusters checks.
+
+**Baselines.** For the PDBBind benchmark, we compare FLEXDOCK to well established search-based methods SMINA and GNINA, and flexible ML-based pocket level docking methods in DIFFDOCK-POCKET (Plainer et al., 2023) and RE-DOCK (Huang et al., 2024). All methods receive as input – i) the ligand with an initial seed conformation (using RDKit), ii) the ESMFold predicted structure, and iii) the pocket residues. Additional details regarding the experimental setup, data, and baselines can be found in Appendix D along with a link to the code used for our experiments. For the PoseBusters benchmark we also report other baselines for pocket-based docking – these include both rigid methods taking in the holo-structure like DEEPDOCK (Liao et al., 2019), UNIMOL (Zhou et al., 2023), GOLD (Verdonk et al., 2003) and VINA (Trott & Olson, 2010) as well as ML-based cofolding methods UMOL (Bryant et al., 2024) and ALPHAFold3 (Abramson et al., 2024).
+
+{8}------------------------------------------------
+
+**Table 1: Top-1 PDBBind ESMFold Docking Performance** We standardize all the generative modeling-based methods to take 10 samples. - indicates results missing due to baselines taken from previous work where output structures were not provided. \*Note that REDOCK uses a slightly different definition of pocket making the results not fully comparable, while their code is not available.
+
+| Method | Ligand RMSD |  | All-Atom RMSD | % PB valid ↑ | % PB valid and L-RMSD < 2 Å ↑ | Runtime (s) |
+|-|-|-|-|-|-|-|
+|  | % < 2Å ↑ | Median Å ↓ | % < 1Å ↑ |  |  |  |
+| SMINA (rigid) | 6.6 | 7.7 | N.A. | - | - | 258 |
+| SMINA | 3.6 | 7.3 | 5.2 | - | - | 1914 |
+| GNINA (rigid) | 6.7 | 7.1 | N.A. | <b>93.3</b> | 6.7 | 260 |
+| GNINA | 8.4 | 7.9 | 4.5 | 91.3 | 7.7 | 1575 |
+| DIFFDOCK-POCKET (rigid) | 37.5 | 3.0 | N.A. | 25.9 | 4.9 | 17 |
+| DIFFDOCK-POCKET | <b>41.8</b> | <b>2.5</b> | 32.4 | 30.1 | 5.9 | 17 |
+| REDOCK* | 39.0 | <b>2.5</b> | 39.8 | - | - | 15 |
+| <b>FLEXDOCK</b> | <b>39.7</b> | <b>2.5</b> | <b>41.7</b> | <b>72.9</b> | <b>33.7</b> | <b>11</b> |
+
+![Figure 4: Bar chart showing the percentage of passing predictions for various pocket-based methods on the PoseBusters v2 benchmark. The methods are DeepDock, UniMol, Umol, FlexDock, GOLD, VINA, and AF3. The chart compares two metrics: RMSD < 2Å (white bars with diagonal lines) and PB-Valid & RMSD < 2Å (solid grey bars). FlexDock shows a significant improvement in the PB-Valid & RMSD < 2Å metric compared to other methods.](bedcca5cdf168e3508ef511d94ec514c_img.jpg)
+
+Figure 4: Bar chart showing the percentage of passing predictions for various pocket-based methods on the PoseBusters v2 benchmark. The methods are DeepDock, UniMol, Umol, FlexDock, GOLD, VINA, and AF3. The chart compares two metrics: RMSD < 2Å (white bars with diagonal lines) and PB-Valid & RMSD < 2Å (solid grey bars). FlexDock shows a significant improvement in the PB-Valid & RMSD < 2Å metric compared to other methods.
+
+**Figure 4: Performance of different pocket-based methods on the PoseBusters v2 benchmark.** GOLD, VINA, DeepDock and UniMol take as input the holo-structure of the protein, while UMol, FlexDock and AlphaFold3 only the sequence. AlphaFold3 was trained on a dataset  $\sim 10\times$  larger.
+
+![Figure 5: Bar chart showing docking performance for different cutoffs (c_dock) for UFM. The methods compared are UFM (2Å), UFM (4Å), UFM (6Å), UFM (10Å), and FM. The chart shows performance across two metrics: Ligand RMSD < 2Å and All-Atom RMSD < 1Å. UFM with a 2Å cutoff consistently outperforms the other methods and the standard FM baseline.](925f55ce69802b9d3b00546382663ee2_img.jpg)
+
+Figure 5: Bar chart showing docking performance for different cutoffs (c\_dock) for UFM. The methods compared are UFM (2Å), UFM (4Å), UFM (6Å), UFM (10Å), and FM. The chart shows performance across two metrics: Ligand RMSD < 2Å and All-Atom RMSD < 1Å. UFM with a 2Å cutoff consistently outperforms the other methods and the standard FM baseline.
+
+**Figure 5: Docking performance for different cutoffs  $c_{\text{dock}}$ .** FM corresponds to UFM with  $c_{\text{dock}} = \infty$ . We generate 10 samples using a small model (4M parameters) without any additional filtering or relaxation, and evaluate the best prediction of these samples for every complex.
+
+**Results.** Table 1 presents the comparison of previous methods in the field with the overall FLEXDOCK model which shows improvements in many metrics. To better understand the value of our methodological contributions, it is useful to directly compare with DIFFDOCK-POCKET, as this uses the same architecture and training regime. Here we see large improvements in the pocket all-atom accuracy with AA-RMSD  $< 1$  Å improving from 32% to 42% and the pose quality (measured by the proportion of PB valid poses) improving from 30% to 73%.
+
+On PoseBusters, our method performs significantly better than the fast ML-based rigid docking models DEEPOCK and UNIMOL even without receiving the holo-structure. When compared to large-scale co-folding models, it has similar RMSD performance but significantly better validity than UMOL while being significantly faster (average of 11s per complex for FLEXDOCK and 206s for UMOL excluding its MSA computation step). ALPHAFOLD3 performs significantly better, however, it has been trained on more than one order of magnitude extra data compared to FLEXDOCK and UMOL.
+
+**Ablations.** Ablations regarding the choice of cutoff  $c_{\text{dock}}$  (See Para. 4.1) can be found in Figure 5. The comparison with standard FM highlights the importance of unbalanced flows in tackling this task. Using a cutoff of 4Å gives better performance across both ligand and protein pose prediction metrics.
+
+We also perform ablation studies in Table 2 to decompose the improvements from the different components of FLEXDOCK. This shows that, on the one hand, the improvement in All-Atom RMSD
+
+{9}------------------------------------------------
+
+Table 2: Ablation of the effect of the various components of the relaxation unbalanced flow described in Section 4.2. We now split the runtime into the docking time + relaxation time.
+
+| Method | Ligand RMSD |  | All-Atom RMSD | % PB valid | % PB valid and L-RMSD < 2 Å | Runtime (s) |
+|-|-|-|-|-|-|-|
+|  | % < 2 Å ↑ | Median Å ↓ | % < 1 Å ↑ |  |  |  |
+| FLEXDOCK (no relaxation) | 38.8 | 2.6 | 43.8 | 13.1 | 9.4 | 10 |
+| FLEXDOCK (OpenMM Relaxation) | 38.2 | 2.6 | 42.1 | 68.4 | 30.3 | 10 + 155 |
+| FLEXDOCK (relaxation w/out energy loss) | 40.9 | 2.5 | 44.1 | 17.3 | 12.1 | 10 + 0.3 |
+| FLEXDOCK (no energy filtering) | 40.4 | 2.5 | 40.6 | 64.5 | 32.2 | 10 + 0.3 |
+| FLEXDOCK | 39.7 | 2.5 | 41.7 | 72.9 | 33.7 | 10 + 0.3 |
+
+can be attributed to the improved modeling of protein flexibility through the Unbalanced FM over the manifold degrees of freedom, not the relaxation. On the other hand, the improvement in pose quality can be largely attributed to the different steps of the relaxation Unbalanced FM which improves the %-PB valid from 13 to 73. Among these, we highlight the critical role of the energy loss. We additionally compare our relaxation to the OpenMM relaxation offered in the PoseBusters benchmark. Our relaxation routine achieves an improvement of 4.5% in PB-Valid metrics, while being at least 2 order of magnitude faster.
+
+## 6 CONCLUSION
+
+While generative models are revolutionizing the field of structural biology, existing frameworks lack the flexibility needed to tackle outstanding domain-specific issues. In this work, we presented Unbalanced Flow Matching, a generalization of the Flow Matching framework that relaxes the marginal preservation assumption. Theoretically, we showed this approach allows us to improve the approximation error FM incurs at the cost of some sample efficiency. We apply Unbalanced FM to enhance the ability of flexible docking models to model the flexibility of protein structures and predict poses with good energetic properties. Empirically, we show that the resulting framework FLEXDOCK improves these properties over the best existing methods on the PDDBind benchmark.
+
+## ACKNOWLEDGEMENTS
+
+We thank Ya-Ping Hsieh, Itamar Chinn, Hannes Stark, and Bowen Jing for their valuable feedback and insightful discussions.
+
+This work was supported by NCCR Catalysis (grant numbers 180544 and 225147), a National Centre of Competence in Research funded by the Swiss National Science Foundation, the NSF Expeditions grant (award 1918839: Collaborative Research: Understanding the World Through Code), the Abdul Latif Jameel Clinic for Machine Learning in Health, the DTRA Discovery of Medical Countermeasures Against New and Emerging (DOMANE) Threats program, the MATCHMAKERS project supported by the Cancer Grand Challenges partnership financed by CRUK (CGCATF-2023/100001) and the National Cancer Institute (OT2CA297463) and the Machine Learning for Pharmaceutical Discovery and Synthesis (MLPDS) consortium.
+
+ Rest of paper (reference and Appendix) is removed.

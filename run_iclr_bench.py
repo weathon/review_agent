@@ -276,7 +276,7 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
 
     output_path = Path(__file__).parent / "bench_results.md"
     csv_path = Path(__file__).parent / csv_name
-    reviews_dir = Path(__file__).parent / "bench_reviews"
+    reviews_dir = Path(__file__).parent / csv_name.replace(".csv", "_reviews")
     reviews_dir.mkdir(exist_ok=True)
 
     # Check for existing results and ask user whether to continue or overwrite

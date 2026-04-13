@@ -416,14 +416,14 @@ def main(n_samples: int = 100, seed: int = 42, balanced: bool = False, data_dir:
         for future in tqdm.tqdm(as_completed(pending_conversions), total=len(pending_conversions)):
             paper, pdf_path, md_path, review_path = pending_conversions[future]
             title = paper["title"]
-            try:
-                text = future.result()
-            except Exception as e:
-                print(f"  SKIPPED conversion: {title[:60]} | {e}")
-                continue
-            if len(text) < 500:
-                print(f"  SKIPPED (conversion too short, got {len(text)} chars)")
-                continue
+            # try:
+            text = future.result()
+            # except Exception as e:
+            #     print(f"  SKIPPED conversion: {title[:60]} | {e}")
+            #     continue
+            # if len(text) < 500:
+            #     print(f"  SKIPPED (conversion too short, got {len(text)} chars)")
+            #     continue
             md_path.write_text(text, encoding="utf-8")
             print(f"  Saved: {md_path.name} ({len(text):,} chars)")
 

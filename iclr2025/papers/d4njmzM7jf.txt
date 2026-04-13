@@ -1,0 +1,287 @@
+
+
+{0}------------------------------------------------
+
+# DENOISING WITH A JOINT-EMBEDDING PREDICTIVE ARCHITECTURE
+
+Dengsheng Chen<sup>1</sup> Jie Hu<sup>1,2</sup> Xiaoming Wei<sup>1</sup> Enhua Wu<sup>2\*</sup>
+
+<sup>1</sup>Meituan <sup>2</sup>Key Laboratory of System Software (Chinese Academy of Sciences) and State Key Laboratory of Computer Science, Institute of Software, Chinese Academy of Sciences  
+{chendengsheng, weixiaoming}@meituan.com, {hujie, weh}@ios.ac.cn
+
+## ABSTRACT
+
+Joint-embedding predictive architectures (JEPAs) have shown substantial promise in self-supervised representation learning, yet their application in generative modeling remains underexplored. Conversely, diffusion models have demonstrated significant efficacy in modeling arbitrary probability distributions. In this paper, we introduce Denoising with a Joint-Embedding Predictive Architecture (D-JEPA), pioneering the integration of JEPA within generative modeling. By recognizing JEPA as a form of masked image modeling, we reinterpret it as a generalized next-token prediction strategy, facilitating data generation in an autoregressive manner. Furthermore, we incorporate diffusion loss to model the pertoken probability distribution, enabling data generation in a continuous space. We also adapt flow matching loss as an alternative to diffusion loss, thereby enhancing the flexibility of D-JEPA. Empirically, with increased GFLOPs, D-JEPA consistently achieves lower FID scores with fewer training epochs, indicating its good scalability. Our base, large, and huge models outperform all previous generative models across all scales on ImageNet conditional generation benchmarks. Beyond image generation, D-JEPA is well-suited for other continuous data modeling, including video and audio.
+
+Project page: <https://d-jepa.github.io/>.
+
+## 1 INTRODUCTION
+
+The extraordinary success of generative language models (Radford et al., 2018; 2019; Brown et al., 2020), which excel in next-token prediction, has spurred efforts to adapt autoregressive models for other domains, notably image generation (Kilian et al., 2024; Zeng et al., 2021; Li et al., 2024; Esser et al., 2021; Yu et al., 2023b). Typically, this involves discretizing visual data into token sequences (Van Den Oord et al., 2017), a process that can sometimes degrade image quality. Despite this, the technique has gained substantial interest due to its powerful capabilities (Razavi et al., 2019; Peng et al., 2021; Yan et al., 2021).
+
+Recently, diffusion models (Ho et al., 2020; Song et al., 2020; Nichol & Dhariwal, 2021) have emerged as a dominant force in generative modeling, surpassing generative adversarial networks (GANs) (Goodfellow et al., 2014; Wang et al., 2017; Goodfellow et al., 2020) with their superior performance in producing high-fidelity images. Concurrently, significant advancements have been made in self-supervised representation learning, particularly through masked image modeling (Xie et al., 2022; Baevski et al., 2022; Assran et al., 2023; He et al., 2022a) and invariance-based techniques (Assran et al., 2022; Caron et al., 2021; Chen & He, 2021; Grill et al., 2020; Zbontar et al., 2021). However, generative modeling has yet to directly benefit from the advancements in representation learning (Li et al., 2023).
+
+Recent efforts have sought to integrate diffusion models within an autoregressive framework, such as MAR (Li et al., 2024) and Transfusion (Zhou et al., 2024). These models, however, primarily focus on enhancing generative model performance from the perspective of generation alone, often overlooking the potential advancements that can be brought by representation learning. Conversely,
+
+---
+
+\*This work is supported in part by NSFC Grants (62332015).
+
+{1}------------------------------------------------
+
+within the realm of representation learning, researchers tend to emphasize model performance on downstream tasks (Assran et al., 2023), neglecting the potential for these models to excel in generative modeling. To overcome this challenge, we propose a novel framework, termed “Denoising with a Joint-Embedding Predictive Architecture” (D-JEPA), that effectively leverages next-token prediction from a representation learning perspective to generative modeling. Specifically, we adopt the joint-embedding predictive architecture as the core of our design, enabling us to reframe masked image modeling methods into a generalized next-token prediction strategy, thus facilitating autoregressive data generation. Additionally, we incorporate a diffusion loss (or flow matching loss) to model the per-token probability distribution, allowing for data generation in a continuous space.
+
+D-JEPA consists of three identical visual transformer backbones (Dosovitskiy et al., 2020): a context encoder  $\phi$ , a target encoder  $\tilde{\phi}$ , and a feature predictor  $\gamma$ . It employs two loss functions: diffusion loss ( $\mathcal{L}_d$ ) and prediction loss ( $\mathcal{L}_p$ ), both involving a multi-layer perceptron (MLP) network. The denoising MLP, used in diffusion loss, is applied to each masked token  $x_i$ , modeling the conditional probability distribution  $p(x_i | z_i)$  and evaluating the predicted latent variable  $z_i$  generated by the feature predictor  $\gamma$ . The prediction loss ( $\mathcal{L}_p$ ), using a smooth loss function  $l_1$ , facilitates the latent variables  $z_i$  to capture high-level semantic information.
+
+Empirically, D-JEPA exhibits a consistent decrease in FID scores as GFLOPs increase, achieving these results with fewer training epochs, indicating its good scalability. Our base, large, and huge variants outperform all previously generative models across different scales on ImageNet conditional generation benchmarks. In our comprehensive experiments, we further advanced the field of generative models by substituting the diffusion loss with flow matching loss (Lipman et al., 2022). This substitution enables D-JEPA to excel in image generation and modeling other types of continuous data, including video and audio. Moreover, D-JEPA exhibits remarkable flexibility, extending seamlessly to text-conditioned and multi-modal generations.
+
+Our contributions are threefold. *Firstly*, we successfully integrate advancements in representation learning into generative modeling, achieving state-of-the-art performance on the ImageNet conditional generation benchmarks. *Secondly*, we validate the effectiveness of the generalized next-token prediction approach in generative modeling, demonstrating superior scalability, which establishes a robust foundation for developing more powerful text-conditioned models. *Lastly*, D-JEPA exhibits impressive extensibility, directly applicable to generate images, videos, audio, and more, providing theoretical support for constructing unified multi-modal generation models for continuous data.
+
+## 2 BACKGROUND
+
+![Figure 1: Data flow during D-JEPA training. The diagram illustrates the process of training the D-JEPA model. It starts with 'All tokens: U' (represented by a grid of green squares) and 'Unmasked tokens: Y' (represented by a grid of green squares). These are processed by a 'Context encoder φ' and a 'Target encoder φ̃' respectively, using 'EMA' (Exponential Moving Average). The context encoder produces 'Context tokens C' (a grid of green squares) and the target encoder produces 'Target tokens G' (a grid of green squares). A 'Mask' is applied to the context tokens to produce 'Masked tokens' (a grid of green squares with some squares missing). A 'Feature predictor γ' is applied to the context tokens to produce 'Predict tokens Z' (a grid of green squares). The 'Predict tokens Z' are then processed by a 'Denoising MLP' (represented by a box with 'Condition z_i' and 'Noise x_i') to produce 'Diffusion loss' (represented by a box with 'p(x_i|z_i)' and 'ε'). The 'Predict tokens Z' are also processed by a 'Prediction loss' function (represented by a box with 'l_p = ∑ ||u(z_i) - g_i||_2^2') to produce 'Prediction loss' (represented by a box with 'l_p').](895d588a848d9963890c938763de9ecf_img.jpg)
+
+Figure 1: Data flow during D-JEPA training. The diagram illustrates the process of training the D-JEPA model. It starts with 'All tokens: U' (represented by a grid of green squares) and 'Unmasked tokens: Y' (represented by a grid of green squares). These are processed by a 'Context encoder φ' and a 'Target encoder φ̃' respectively, using 'EMA' (Exponential Moving Average). The context encoder produces 'Context tokens C' (a grid of green squares) and the target encoder produces 'Target tokens G' (a grid of green squares). A 'Mask' is applied to the context tokens to produce 'Masked tokens' (a grid of green squares with some squares missing). A 'Feature predictor γ' is applied to the context tokens to produce 'Predict tokens Z' (a grid of green squares). The 'Predict tokens Z' are then processed by a 'Denoising MLP' (represented by a box with 'Condition z\_i' and 'Noise x\_i') to produce 'Diffusion loss' (represented by a box with 'p(x\_i|z\_i)' and 'ε'). The 'Predict tokens Z' are also processed by a 'Prediction loss' function (represented by a box with 'l\_p = ∑ ||u(z\_i) - g\_i||\_2^2') to produce 'Prediction loss' (represented by a box with 'l\_p').
+
+Figure 1: Data flow during D-JEPA training. Initially, the training data is divided into non-overlapping semantic tokens, which can be either in the raw space or in the latent space obtained after VAE encoding. A random subset of these input tokens is then masked. The feature predictor  $\gamma$  is employed to predict features for these masked tokens, utilizing the unmasked tokens as contextual information. Each masked token is concurrently subjected to a diffusion loss (or flow matching loss) to learn the distribution of each token  $p(x_i|z_i)$ , independently. Additionally, a prediction loss is applied, compelling each masked token to regress towards the target tokens  $g_i$ .
+
+D-JEPA is grounded in the principles of joint-embedding predictive architectures (JEPAs) and diffusion models. We provide an overview of these methodologies alongside a generalized next-token prediction strategy to facilitate an understanding of our approach.
+
+{2}------------------------------------------------
+
+**Joint-embedding predictive architectures (JEPAs).** Self-supervised learning has transformed representation learning by enabling systems to uncover autonomously and model relationships within their inputs (LeCun et al., 2006). Among these methods, joint-embedding predictive architectures (JEPAs) (LeCun, 2022; Bardes et al., 2023a,b; Guetschel et al., 2024) have gained prominence. JEPAs are designed to predict the embeddings of a target signal using a context signal processed through a predictor network, which is conditioned on an additional (potentially latent) variable, such as class labels.
+
+A significant challenge in deploying JEPAs is representation collapse, which occurs when the energy landscape flattens, causing the encoder to produce uniform outputs regardless of the inputs. This uniformity negates the advantages of learned representations (Assran et al., 2023). Various strategies have been proposed to address this issue. Contrastive losses (He et al., 2019; Chen & He, 2021) work by explicitly separating the embeddings of negative samples. Non-contrastive losses (Zbontar et al., 2021; Bardes et al., 2021) aims to reduce redundancies between embeddings, thereby improving robustness. Clustering-based methods (Caron et al., 2021; Assran et al., 2021; 2022) increase the entropy of the aggregate embedding to maintain diversity. Additionally, heuristic approaches (Chen & He, 2021; Grill et al., 2020; Baevski et al., 2022; Assran et al., 2023) often utilize asymmetric architectural designs between the context encoder  $\phi$  and the target encoder  $\tilde{\phi}$  to prevent collapse.
+
+However, the issue of representation collapse is effectively mitigated in D-JEPA due to the introduction of an additional diffusion loss for the predicted embeddings. The diffusion loss does not reside in the same energy landscape as JEPAs, thus effectively avoiding model collapse. Consequently, similar to the approach in LeCun (2022), we can employ two identical networks as the context and target encoders. The parameters of the target encoder are efficiently updated through an exponential moving average method, significantly enhancing training efficiency and reducing the number of parameters that need to be learned. Please refer to Sec. 3.2 for more details.
+
+**Diffusion models.** Denoising diffusion models provide a robust framework for modeling arbitrary distributions (Croitoru et al., 2023). Given a ground truth sample  $x$  conditioned on a variable  $z$ , the objective is to model the conditional probability distribution  $p(x|z)$ . The sample  $x$  could represent various domains, such as images in pixel space, features in latent space, or control signals in robotic systems (Chi et al., 2023; Team et al., 2024). In our case,  $x$  represents a token, while  $z$  contains information to aid in reconstructing  $x$ ; here,  $z$  corresponds to the predicted embeddings by feature predictor  $\gamma$ .
+
+Following the formulation presented in Dhariwal & Nichol (2021), we define the loss function for modeling the underlying probability distribution  $p(x|z)$  using a denoising criterion:
+
+$$\mathcal{L}(z, x) = \mathbb{E}_{\varepsilon, t} \left[ \left\| \varepsilon - \varepsilon_\theta(x^t|t, z) \right\|^2 \right], \quad (1)$$
+
+where  $\varepsilon$  represents a noise sample from the normal distribution  $\mathcal{N}(0, \mathbf{I})$ . The noise-corrupted sample  $x^t$  is expressed as  $x^t = \sqrt{\alpha_t}x + \sqrt{1 - \alpha_t}\varepsilon$ , with  $\alpha_t$  defining a noise schedule (Ho et al., 2020; Nichol & Dhariwal, 2021) and  $t$  indicating a specific time step within this schedule. The function  $\varepsilon_\theta(x^t|t, z)$  denotes the network processing  $x^t$ , conditioned on both  $t$  and  $z$ . As discussed in Song & Ermon (2019) and Song et al. (2021), Eq. 1 acts as a form of score matching, associated with a loss function regarding the score function of  $p(x|z)$ , represented as  $\nabla \log_x p(x|z)$ .
+
+Unlike typical applications of diffusion models that represent the joint distribution of all pixels or tokens, our approach leverages the diffusion model to represent the distribution of individual tokens following Li et al. (2024), i.e.,  $p(x_i|z_i)$ . This allows us to simultaneously apply both diffusion loss and prediction loss to the tokens. Consequently, the noise estimator  $\varepsilon_\theta$ , parameterized by  $\theta$ , can be efficiently modeled using a small MLP network in our case. This significantly enhances the efficiency of the denoising process in the continuous space. Further details are provided in Sec. 3.3.
+
+**Generalized next-token prediction.** Next-token prediction, or autoregressive modeling, typically predicts the next token based on preceding tokens, establishing a sequential dependency (Radford et al., 2018). Generalized next-token prediction techniques, such as MaskGIT (Chang et al., 2022) and MAGE (Li et al., 2023), integrate an MAE-style (He et al., 2022a) encoder and decoder with positional embeddings to streamline the prediction process. This approach facilitates interaction among known tokens and accelerates inference by generating multiple tokens per step, as demon-
+
+{3}------------------------------------------------
+
+strated in the next set-of-token prediction strategies like MAR (Li et al., 2024), even without key-value caching (Shazeer, 2019).
+
+Our D-JEPA model extends these innovations by integrating the masked image modeling approach as a generalized next-token prediction strategy to facilitate an autoregressive generation manner. We can flexibly adjust the number of tokens predicted in each step by controlling the auto-regressive steps. Contrary to the intuition formed by existing methods (Li et al., 2024; 2023), the best performance under the D-JEPA architecture is not achieved when the auto-regressive steps are maximized, *i.e.*, when the generalized next-token prediction predicts only one token at a time. Moreover, as the scale of the model parameters increases, the number of auto-regressive steps required to achieve the best sampling results decreases accordingly. This fully demonstrates that converting the masked image modeling method into a next-token prediction strategy is not only feasible but also highly effective. Please refer to the experiment part in Sec. 4 for more analysis.
+
+## 3 METHODOLOGY
+
+In this section, we will first introduce how to convert masked image modeling into the next-token prediction. Following this, we will explain how representation learning and diffusion learning co-exist within D-JEPA. Finally, we will describe how to generate samples using the generalized next-token prediction approach. The overall architecture of D-JEPA is illustrated in Fig. 1.
+
+For clarity, we denote a sequence of tokens using blackboard bold letters, such as  $\mathbb{X}$ , with individual tokens represented by lowercase letters with subscripts (*e.g.*,  $x_i$  as a token in  $\mathbb{X}$ ). The notation  $|\mathbb{X}|$  indicates the number of tokens in the sequence.
+
+### 3.1 TOKENIZATION AND MASKING
+
+In masked image modeling, certain image regions are randomly masked during training, prompting the feature predictor  $\gamma$  to predict the content of these masked areas based on the context (unmasked) regions. In representation learning, masking is typically applied directly to raw pixels (He et al., 2022a; Assran et al., 2023), and it has been observed that masking contiguous regions significantly enhances the representation learning capability. This is crucial, as it implies that when we patchify an image into tokens, we can randomly mask tokens without degrading performance since each token inherently represents a continuous region. Based on this, we can patchify images into non-overlapping semantic tokens  $\mathbb{U}$  based on a specific patch size  $p$ .
+
+Although images are directly segmented into patches on raw pixels, which is also the standard practice in visual transformers (Dosovitskiy et al., 2020), recent generative models (Li et al., 2024; 2023; Rombach et al., 2022) tend to first encode images into the latent space using a VAE before performing patchification, arguing that this significantly reduces the training cost of generative models and accelerates the sampling speed. However, we found that this approach noticeably degrades D-JEPA’s performance in representation tasks. Since the primary goal of this work is to ensure that D-JEPA functions as an outstanding generative model, we adopted the latent space modeling strategy initially proposed by Rombach et al. (2022). (It is important to note that *training in latent space is not a necessity for D-JEPA*; it can be trained in raw space and still achieve excellent results. The experiments conducted in raw pixel space are detailed in Appendix E.2.)
+
+Subsequently, we perform random masking on these tokens. Masking ratios  $r_{mask}$  are sampled from a truncated normal distribution with a mean of 1.0, a standard deviation of 0.25, and a lower bound of 0.7. Consequently, more than 70% of the tokens are randomly masked. This results in a sequence of randomly masked tokens of length  $\lfloor r_{mask} \cdot |\mathbb{U}| \rfloor$ , and a sequence of remaining unmasked tokens,  $\mathbb{Y}$ . Masking a substantial portion of tokens reduces both pre-training time and memory usage while improving performance, consistent with findings in previous works (He et al., 2022a; Li et al., 2023; Assran et al., 2023).
+
+### 3.2 REPRESENTATION LEARNING WITH JEPAS
+
+Earlier masked image modeling methods, such as MAE (He et al., 2022a), directly use a decoder network to predict the missing raw pixels. This approach gives these models some outpainting capabilities (*i.e.*, completing missing parts of an image), but they still cannot directly generate high-
+
+{4}------------------------------------------------
+
+quality images. Subsequent works, such as DiffMAE (Wei et al., 2023), attempted to leverage diffusion models within MAE (He et al., 2022a) to enhance the image generation capabilities of these models, but the results were limited. Moreover, this direct raw pixel prediction approach severely restricts the model’s representation ability, especially compared to models like CLIP (Radford et al., 2021), which use contrastive learning on massive datasets.
+
+Meanwhile, a new architecture called JEPa has gained widespread attention and was successfully applied to representation learning on ImageNet by Assran et al. (2023), achieving excellent results. JEPa does not directly predict the missing raw pixels; instead, it uses a separate feature predictor  $\gamma$  to predict the target embedding  $z_i$  corresponding to the missing parts. The target embedding  $g_i$ , generated by the target encoder  $\bar{\phi}$  by feeding all tokens ( $\mathbb{U}$ ), is used as the ground truth for  $z_i$ .
+
+The prediction loss objective for unsupervised representation learning on each masked token is defined as:
+
+$$\mathcal{L}_p = \mathbb{E}_{z_i = \psi(c_i), g_i} [\mathcal{D}(u_\theta(z_i), g_i)], \quad (2)$$
+
+where  $\mathcal{D}(u_\theta(z_i), g_i)$  is a distance measure function, and  $u_\theta(z_i)$  is the projection feature of  $z_i$  using a two-layer MLP  $u_\theta$ . This loss is optimized exclusively for masked tokens, as optimizing for all tokens has been shown to diminish both generative and representational performance, as noted in He et al. (2022a); Li et al. (2023; 2024). In fact, the choice of distance measure function  $\mathcal{D}$  in Eq. 2 is relatively flexible. In Assran et al. (2023), the MSE function was chosen, while Bardes et al. (2023a) used the  $l_1$  function. Here, we use the smoothed  $l_1$  function, following Baevski et al. (2022), which we found to be more stable.
+
+Since JEPa predicts feature embeddings, they cannot be directly used for generation tasks or even outpainting. Experiments show that token embeddings trained with JEPa can only reconstruct image content somewhat related to the surrounding context and are almost incapable of generating high-quality images (Bardes et al., 2023a). This further diminishes the consideration of JEPa architecture as a generative model. Here, we surprisingly find that as long as the JEPa training process also includes generative task training, excellent generative results can be achieved, which will be elaborated on in the next section.
+
+We use three identical visual transformers as the context encoder  $\phi$ , target encoder  $\bar{\phi}$ , and feature predictor  $\gamma$ . The parameters of  $\phi$  and  $\gamma$  are randomly initialized and then updated with a gradient descent method. The parameters of the target encoder are initialized identically to the context encoder and then updated via an exponentially moving average of the context encoder parameters:
+
+$$\bar{\phi} \leftarrow \alpha \bar{\phi} + (1 - \alpha) \phi, \quad (3)$$
+
+where  $\alpha$  controls the update frequency. In Bardes et al. (2023a) and Assran et al. (2023), a linear warmup is applied to gradually increase  $\alpha$  from a smaller value to a larger one to effectively control the update speed of the target encoder, thereby preventing the model collapse. Thanks to the constraint of diffusion loss, for D-JEPa, we simply use a constant  $\alpha = 0.9999$ , which is sufficient.
+
+In Eq. 2,  $g_i = \text{sg}(\bar{\phi}(\mathbb{U}))$ , where  $\text{sg}(\cdot)$  denotes a stop-gradient operation, which does not backpropagate through its argument. This ensures that the parameters of the target encoder  $\bar{\phi}$  are updated only through exponentially moving average, *i.e.*, Eq. 3, a strategy that has been used to prevent collapse in image pre-training (Grill et al., 2020), and studied empirically (Xie et al., 2022) and theoretically (Tian et al., 2021)<sup>1</sup>.
+
+### 3.3 DIFFUSION LEARNING WITH A DENOISING MLP
+
+Our method diverges from traditional approaches by focusing on learning the conditional distribution  $p(x_i|z_i)$  for each token, given  $z_i$ , rather than capturing the distribution of entire images. This approach eliminates the need to denoise the entire JEPa model, as some prior works require Hatamizadeh et al. (2023); Peebles & Xie (2023); Wei et al. (2023), allowing us to utilize a significantly smaller network to model each token individually.
+
+Hence, the denoising loss objective can be formulated by slightly modifying Eq. 1 to model the token distribution as:
+
+$$\mathcal{L}_d = \mathbb{E}_{\varepsilon, t} \left[ \left\| \varepsilon - \varepsilon_\theta(x_i^t | t, z_i) \right\|^2 \right]. \quad (4)$$
+
+<sup>1</sup>A theoretical motivation for the effectiveness of this collapse prevention strategy is proposed in Appendix E.1.
+
+{5}------------------------------------------------
+
+For denoising, we employ a compact multi-layer perceptron (MLP) comprising a few residual blocks (He et al., 2016) as  $\varepsilon_\theta$ . Each block sequentially applies LayerNorm (LN) (Ba et al., 2016), a linear layer, the SiLU activation function (Elfwing et al., 2018), and another linear layer, integrated with a residual connection, following Li et al. (2024).  $z_i$  is added to the time embedding of the noise schedule time-step  $t$ , then conditions the MLP in the LN layers via AdaLN (Peebles & Xie, 2023). During training, we independently sample  $t$  four times for each token to maximize the utilization of the diffusion loss without recomputing  $z_i$ .
+
+At inference time, it is required to draw samples from the distribution  $p(x_i|z_i)$ . Sampling is done via a reverse diffusion procedure (Ho et al., 2020):
+
+$$x_{i-1}^t = \frac{1}{\sqrt{\alpha_t}} \left( x_i^t - \frac{1 - \alpha_t}{\sqrt{1 - \bar{\alpha}_t}} \varepsilon_\theta(x_i^t | t, z_i) \right) + \sigma_t \delta,$$
+
+where  $\delta$  is sampled from the Gaussian distribution  $\mathcal{N}(\mathbf{0}, \mathbf{I})$  and  $\sigma_t$  is the noise level at time step  $t$ . Starting with  $x_T^t \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$ , this procedure produces a sample  $x_0^t$  such that  $x_0^t \sim p(x_i|z_i)$ .
+
+We adopt the temperature sampling method presented in Dhariwal & Nichol (2021); Li et al. (2024). Conceptually, with a temperature  $\tau$ , one would sample from the (renormalized) probability  $p(x_i|z_i)^{\frac{1}{\tau}}$ , whose score function is  $\frac{1}{\tau} \nabla \log p(x_i|z_i)$ . Intuitively, we adjust the noise variance  $\sigma_t \delta$  in the sampler by  $\tau$  to control the sample diversity. Experimentally,  $\tau = 0.98$  and  $\tau = 0.94$  are suitable for image generation with and without classifier-free guidance, respectively.
+
+Furthermore, we also introduce the recently popular *flow matching loss* (Lipman et al., 2022), *i.e.*, Eq. 7, as an alternative to the denoising loss (Eq. 4). Overall, flow matching achieves faster convergence and generates higher-quality visual content, and it can be more easily adapted to different scenarios. However, for scenarios where the diffusion loss can converge, fully trained diffusion loss can achieve better performance than flow-matching loss.<sup>2</sup>
+
+### 3.4 TRAINING WITH D-JEPA
+
+By choosing different training objectives, D-JEPA can seamlessly transition between representation learning and diffusion learning without any changes to the network architecture. Typically, when faced with multiple training objectives, one needs to carefully balance each component in the final loss objective to ensure the model’s effectivenesses (Kendall et al., 2018). However, the prediction loss  $\mathcal{L}_p$  and the diffusion loss  $\mathcal{L}_d$  in D-JEPA do not have conflicting or mutually exclusive relationships.
+
+The diffusion loss effectively prevents the potential representation collapse issue faced by the prediction loss, while the prediction loss can provide the diffusion model with higher-level semantic feature information  $z_i$ . Therefore, the overall loss function can be simply defined as:
+
+$$\mathcal{L} = \mathcal{L}_d + \mathcal{L}_p.$$
+
+Experiments show that this approach plays a crucial role in enabling D-JEPA to converge faster and achieve better results when scaling up the model.
+
+### 3.5 SAMPLING IN NEXT SET-OF-TOKENS PREDICTION
+
+For the evaluation of generative models in generalized next-token prediction, we adopt an *iterative sampling* strategy analogous to those used in Chang et al. (2022); Li et al. (2023; 2024), as shown in Algo. 1. This strategy gradually reduces the masking ratio from 1.0 to 0.0 in accordance with a cosine schedule, typically utilizing 64 auto-regressive steps. D-JEPA employs fully randomized orderings following Li et al. (2024) to decide the next set of tokens to predict. This design, along with the temperature  $\tau$ , effectively enhances the diversity of the generated samples.
+
+When the number of auto-regressive steps  $T$  equals the total tokens  $N$ , it means that we sample one token at each step. In this case, the *generalized next-token prediction* is equivalent to a *typical next-token prediction*. In another extreme case,  $T = 1$ , all tokens are sampled in one step, *i.e.*, *one-step generation* like He et al. (2022a).
+
+<sup>2</sup>Here, we discuss flow matching loss and diffusion loss, which are not equivalent to flow matching models and diffusion models. For a detailed analysis, please refer to Appendix F.
+
+{6}------------------------------------------------
+
+As analyzed in Appendix C.2, for D-JEPA, adopting a more efficient next set-of-tokens prediction strategy often yields better results. Particularly, as the model scale increases, fewer auto-regressive steps are required. Additionally, as shown in Fig. 5, one-step generation fails to produce high-quality images, which is a major reason for the subpar performance of MAE (He et al., 2022a). Even with just eight steps of iterative sampling, we can generate clearly recognizable content. This fully demonstrates that D-JEPA’s use of the next set of tokens prediction strategy is key to ensuring its strong generative capabilities.
+
+#### --- **Algorithm 1** Generalized next token prediction with D-JEPA ---
+
+**Require:**  $T$ : Number of auto-regressive steps,  $N$ : Total tokens to sample,  $\tau$ : Temperature to control noise.
+
+```
+
+1: Initialize:  $\mathbb{X} \leftarrow \emptyset$ 
+2: for  $n$  in cosine-step-function( $T, N$ ) do
+3:    $\mathbb{C} \leftarrow \phi(\mathbb{X})$  ▷ Encode the sampled tokens to obtain context features
+4:    $\mathbb{Z} \leftarrow \gamma(\mathbb{C})$  ▷ Predict features of unsampled tokens using the feature predictor
+5:    $\{z_0, \dots, z_n\} \sim \mathbb{Z}$  ▷ Randomly select  $n$  tokens from  $\mathbb{Z}$ 
+6:    $\{x_0, \dots, x_n\} \leftarrow \text{denoise}(\epsilon_\theta, \{z_0, \dots, z_n\}, \tau)$  ▷ Perform denoising on the selected tokens
+7:    $\mathbb{X} \leftarrow \mathbb{X} \cup \{x_0, \dots, x_n\}$  ▷ Add the denoised tokens to  $\mathbb{X}$ 
+8: end for
+9: Return:  $\mathbb{X}$ 
+
+```
+
+---
+
+## 4 EXPERIMENTS
+
+To evaluate D-JEPA’s generative performance, we conduct experiments on the ImageNet-1K dataset Russakovsky et al. (2015) for the task of class-conditional image generation. Please refer to Appendix B for detailed experimental settings.
+
+### 4.1 IMAGE SYNTHESIS
+
+|  | #Params | #Epochs | FID↓ | IS↑ | Pre.↑ | Rec.↑ |
+|-|-|-|-|-|-|-|
+| <i>Base scale model (less than 300M)</i> |  |  |  |  |  |  |
+| MAR-B (2024) | 208M | 800 | 3.48 | 192.4 | 0.78 | 0.58 |
+| <b>D-JEPA-B</b> | 212M | 1400 | <b>3.40</b> | <b>197.1</b> | 0.77 | <b>0.61</b> |
+| MaskGIT (2022) | 227M | 300 | 6.18 | 182.1 | <b>0.80</b> | 0.51 |
+| MAGE (2023) | 230M | 1600 | 6.93 | 195.8 | - | - |
+| <i>Large scale model (300~700M)</i> |  |  |  |  |  |  |
+| GIVT (2023) | 304M | 500 | 5.67 | - | 0.75 | 0.59 |
+| MAGVIT-v2 (2023b) | 307M | 1080 | 3.65 | 200.5 | - | - |
+| MAR-L (2024) | 479M | 800 | 2.60 | 221.4 | <b>0.79</b> | 0.60 |
+| DiT-XL (2023) | 675M | 1400 | 9.62 | 121.5 | 0.67 | <b>0.67</b> |
+| SiT-XL (2024a) | 675M | 1400 | 8.60 | - | - | - |
+| MDT <sub>v2</sub> -XL (2023) | 676M | 400 | 5.06 | 155.6 | 0.72 | 0.66 |
+| <b>D-JEPA-L</b> | 687M | 480 | <b>2.32</b> | <b>233.5</b> | <b>0.79</b> | 0.62 |
+| <i>Huge scale model (900+M)</i> |  |  |  |  |  |  |
+| MAR-H (2024) | 943M | 800 | 2.35 | 227.8 | <b>0.79</b> | <b>0.62</b> |
+| <b>D-JEPA-H</b> | 1.4B | 320 | <b>2.04</b> | <b>239.3</b> | <b>0.79</b> | <b>0.62</b> |
+| VDM++ (2024) | 2.0B | 1120 | 2.40 | 225.3 | - | - |
+
+Table 1: System-level comparison on ImageNet 256 × 256 conditional generation *without* classifier-free guidance. For ease of comparison, we have omitted earlier works with FID greater than 10. A more detailed table can be found in the appendix.
+
+**Quantitative analysis.** We present the Fréchet Inception Distance (FID) along with other metrics in Tab. 1 without classifier-free guidance. Two critical conclusions can be drawn from the results: *State-of-the-Art Performance:* D-JEPA achieves state-of-the-art FID and Inception Score (IS) across all model scales. In particular, D-JEPA-L, with only 687M parameters, surpasses all
+
+{7}------------------------------------------------
+
+![Figure 2: A scatter plot showing FID (Fr  chet Inception Distance) on the y-axis versus IS (Inception Score) on the x-axis for D-JEPA models under different sampling efficiencies. The plot includes data points for 43 ms, 120 ms, 248 ms, 800 ms, and 463 ms. The 43 ms point is at approximately (270, 2.2) and is not explicitly labeled on the plot but is mentioned in the text. The 120 ms point is at (280, 1.9). The 248 ms point is at (295, 1.6). The 800 ms point is at (320, 1.5). The 463 ms point is at (340, 1.6). The 120 ms point is also labeled at (320, 2.1).](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 2: A scatter plot showing FID (Fr  chet Inception Distance) on the y-axis versus IS (Inception Score) on the x-axis for D-JEPA models under different sampling efficiencies. The plot includes data points for 43 ms, 120 ms, 248 ms, 800 ms, and 463 ms. The 43 ms point is at approximately (270, 2.2) and is not explicitly labeled on the plot but is mentioned in the text. The 120 ms point is at (280, 1.9). The 248 ms point is at (295, 1.6). The 800 ms point is at (320, 1.5). The 463 ms point is at (340, 1.6). The 120 ms point is also labeled at (320, 2.1).
+
+Figure 2: FID vs. IS under different sampling efficiencies. We can achieve FID  $\approx 4.0$  within 43 milliseconds (not plotted in the figure for compactness). Additionally, the figure shows that D-JEPA can achieve FID  $\approx 2.0$  within 120 milliseconds. Refer to Table 4 for more details. All times are the average inference time using a batch size of 256 on a single H800 GPU for generating  $256 \times 256$  images.
+
+previous works across all scales with FID = 2.32, IS = 233.5. The larger model, D-JEPA-H, further improves the benchmark set by D-JEPA-L to FID = 2.04, IS = 239.3. *Efficiency in Training:* As the model scale increases, the required number of training epochs for D-JEPA decreases significantly. Both D-JEPA-L and D-JEPA-H achieve state-of-the-art performance with substantially fewer training epochs compared to other models. For instance, D-JEPA-L, with 687M parameters and 480 training epochs, outperforms the previous state-of-the-art model, MAR-H, which has 943M parameters and requires 800 training epochs. It is worth noting that D-JEPA-B achieved similar performance to MAR-B (FID=3.50 vs. 3.48) with only 600 training epochs compared to MAR-B’s 800 epochs. For a more detailed analysis, please refer to the ablation study on Appendix C.3.
+
+It is well known that selecting an appropriate cfg scale (Ho & Salimans, 2021) can significantly enhance the quality of generated images. For D-JEPA, in addition to adjusting the cfg scale, it is also necessary to choose an appropriate temperature  $\tau$  to ensure optimal generation quality. We employ a coarse-to-fine grid search to determine the optimal sampling parameters, as detailed in the Appendix C.2. The optimal sampling configurations are listed on Tab. 5.
+
+We list additional results in Tab. 2 with classifier-free guidance. To better showcase D-JEPA’s performance, we provide two sets of sampling performance metrics for each model scale, representing the optimal FID and settings more inclined towards IS. The table reveals that D-JEPA achieves superior results in this scenario as well. Specifically, D-JEPA-L and D-JEPA-H reach FID scores of 1.58 and 1.54, respectively, which are very close to the upper limit of the used VAE (FID = 1.199). Although MAR-H achieves a comparable FID (1.55), its IS (303.7) is significantly lower than that of D-JEPA-L (327.2) and D-JEPA-H (341.0), and it requires more training epochs.
+
+**Qualitative analysis.** In Fig. 3, we present images generated using the next set-of-tokens prediction. Even when trained on ImageNet1k, D-JEPA is capable of producing highly realistic images with rich and clear local details. Notably, the figure also demonstrates that D-JEPA-H can generate high-quality portraits (the second picture in the second row), a capability not seen in previous generative models. Additionally, as shown in Fig. 5, we observe the images generated at different auto-regressive steps. Even with just 8 steps, D-JEPA demonstrates significant generative capabilities, and at 64 steps, it nearly matches the image quality achieved at 256 steps. Fewer auto-regressive steps imply faster image generation, which is crucial for practical applications. In Fig. 2, we use a bubble chart to illustrate D-JEPA’s performance under different computational costs. Remarkably, we can sample high-quality images with FID  $\approx 4.0$  in just 43 milliseconds, which significantly outperforms previous diffusion models and auto-regressive models.
+
+**Scaling law of D-JEPA.** In summary, as the parameter scale increases, D-JEPA achieves better performance with fewer training epochs, demonstrating excellent scalability. Although similar conclusions have been observed in Peebles & Xie (2023) and Li et al. (2024), for the former, the required training epochs increase with model size, and for the latter, the required training epochs do not decrease with model size.
+
+Moreover, with increasing model size, we are surprised to find that the number of auto-regressive steps required for D-JEPA to achieve optimal sampling results also significantly decreases<sup>3</sup>. Specif-
+
+<sup>3</sup>Refer to Appendix C.2 for more details.
+
+{8}------------------------------------------------
+
+|  | #params | FID↓ | IS↑ | Pre.↑ | Rec.↑ |
+|-|-|-|-|-|-|
+| <i>Base scale model (less than 300M)</i> |  |  |  |  |  |
+| MAR-B (2024) | 208M | 2.31 | 281.7 | <b>0.82</b> | 0.57 |
+| D-JEPA-B(cfg=3.1) | 212M | <b>1.87</b> | 282.5 | 0.80 | <b>0.61</b> |
+| D-JEPA-B(cfg=4.1) | 212M | 2.08 | <b>320.9</b> | <b>0.82</b> | 0.59 |
+| <i>Large scale model (300~700M)</i> |  |  |  |  |  |
+| GIVT (2023) | 304M | 3.35 | - | 0.84 | 0.53 |
+| MAGViT-v2 (2023b) | 307M | 1.78 | 319.4 | - | - |
+| VAR-d16 (2024) | 310M | 3.30 | 274.4 | 0.84 | 0.51 |
+| LDM-4 (2022) | 400M | 3.60 | 247.7 | <b>0.87</b> | 0.48 |
+| MAR-L (2024) | 479M | 1.78 | 296.0 | 0.81 | 0.60 |
+| U-ViT-H (2022) | 501M | 2.29 | 263.9 | 0.82 | 0.57 |
+| ADM (2021) | 554M | 4.59 | 186.7 | 0.82 | 0.52 |
+| Flag-DiT (2024b) | 600M | 2.40 | 243.4 | 0.81 | 0.58 |
+| Next-DiT (2024a) | 600M | 2.36 | 250.7 | 0.82 | 0.59 |
+| VAR-d20 (2024) | 600M | 2.57 | 302.6 | 0.83 | 0.56 |
+| DiT-XL (2023) | 675M | 2.27 | 278.2 | 0.83 | 0.57 |
+| SiT-XL (2024a) | 675M | 2.06 | 270.2 | 0.82 | 0.59 |
+| MDTv2-XL (2023) | 676M | <b>1.58</b> | 314.7 | 0.79 | <b>0.65</b> |
+| D-JEPA-L(cfg=3.0) | 687M | <b>1.58</b> | 303.1 | 0.80 | 0.61 |
+| D-JEPA-L(cfg=3.9) | 687M | 1.65 | <b>327.2</b> | 0.81 | 0.61 |
+| <i>Huge scale model (900+M)</i> |  |  |  |  |  |
+| MAR-H (2024) | 943M | 1.55 | 303.7 | 0.81 | <b>0.62</b> |
+| VAR-d24 (2024) | 1.0B | 2.09 | 312.9 | 0.82 | 0.59 |
+| D-JEPA-H(cfg=3.9) | 1.4B | <b>1.54</b> | 324.2 | 0.81 | <b>0.62</b> |
+| D-JEPA-H(cfg=4.3) | 1.4B | 1.68 | <b>341.0</b> | <b>0.82</b> | 0.61 |
+| VDM++ (2024) | 2.0B | 2.12 | 267.7 | - | - |
+
+Table 2: System-level comparison on ImageNet 256 × 256 conditional generation.
+
+ically, for D-JEPA-H, we achieve the best sampling results with just 64 steps. This property ensures performance for constructing larger models and generating ultra-high-definition images and videos such as Sora (OpenAI, 2024) in the future.
+
+### 4.2 COMPREHENSIVE EXPERIMENTS
+
+In Appendix D.4, we further demonstrate the excellent inpainting and outpainting capabilities of the D-JEPA model. Beyond diffusion loss, we also designed a flow matching loss to construct a more powerful D-JEPA (Appendix F). Experiments show that flow matching loss performs better on many tasks. Consequently, we extended our experiments based on flow matching loss to include text-to-image/audio generation and class-conditional video generation. These extended experiments fully demonstrate that D-JEPA is capable of generating various types of continuous data, not limited to images. Furthermore, we attempted to construct a multimodal generation model based on D-JEPA. The results indicate that D-JEPA can generate continuous data and be used to build multimodal understanding and generation models (Appendix G).
+
+## 5 CONCLUSION
+
+In this study, we have introduced D-JEPA as a novel generative model that can handle the generation of continuous data. Through extensive experiments, we have preliminarily validated the feasibility of this approach. However, scaling up the D-JEPA model remains a significant challenge that warrants further investigation. Additionally, the acceleration strategies and application ecosystems for diffusion models and auto-regressive models have already reached a high level of maturity. Adopting these successful strategies for the further development of D-JEPA is crucial. We hope that this work will inspire future researchers to explore the D-JEPA architecture, laying the groundwork for the construction of a unified multimodal model in the future.
+
+{9}------------------------------------------------
+
+![A grid of 100 high-fidelity generated images from D-JEPA-H, arranged in 10 rows and 10 columns. The images show a variety of subjects including animals (cat, dog, monkey, parrot, snail, fly, llama, rabbit, dragonfly, chicken, zebra, penguin, jellyfish, ferret, goat, sheep, cow), objects (corn, nail, rope, baseball), and scenes (beach, landscape). The quality is high, with sharp details and realistic colors.](625e10f48104ba2b06b2220a9b224712_img.jpg)
+
+A grid of 100 high-fidelity generated images from D-JEPA-H, arranged in 10 rows and 10 columns. The images show a variety of subjects including animals (cat, dog, monkey, parrot, snail, fly, llama, rabbit, dragonfly, chicken, zebra, penguin, jellyfish, ferret, goat, sheep, cow), objects (corn, nail, rope, baseball), and scenes (beach, landscape). The quality is high, with sharp details and realistic colors.
+
+A grid of 100 high-fidelity generated images from D-JEPA-H, arranged in 10 rows and 10 columns. The images show a variety of subjects including animals (cat, dog, monkey, parrot, snail, fly, llama, rabbit, dragonfly, chicken, zebra, penguin, jellyfish, ferret, goat, sheep, cow), objects (corn, nail, rope, baseball), and scenes (beach, landscape). The quality is high, with sharp details and realistic colors.
+
+Figure 3: D-JEPA achieves state-of-the-art image quality. We showcase selected high-fidelity examples of class-conditional generation on ImageNet  $256 \times 256$  using D-JEPA-H.
+
+ Rest of paper (reference and Appendix) is removed.

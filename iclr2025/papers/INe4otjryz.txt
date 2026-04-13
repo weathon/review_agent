@@ -1,0 +1,257 @@
+
+
+{0}------------------------------------------------
+
+# CAN IN-CONTEXT LEARNING REALLY GENERALIZE TO OUT-OF-DISTRIBUTION TASKS?
+
+Qixun Wang<sup>1</sup>
+
+Yifei Wang<sup>2</sup>
+
+Xianghua Ying<sup>1,3\*</sup>
+
+Yisen Wang<sup>1,3\*</sup>
+
+<sup>1</sup> State Key Lab of General Artificial Intelligence,
+
+School of Intelligence Science and Technology, Peking University
+
+<sup>2</sup> MIT CSAIL
+
+<sup>3</sup> Institute for Artificial Intelligence, Peking University
+
+## ABSTRACT
+
+In this work, we investigate the mechanism of in-context learning (ICL) on out-of-distribution (OOD) tasks that were not encountered during training. To this end, we conduct synthetic experiments using a GPT-2 model to learn OOD mathematical functions through ICL. Our findings reveal that Transformers may struggle to learn OOD tasks via ICL. Specifically, ICL operates by selecting a function within the pretraining hypothesis space and optimizing it via gradient descent using in-context examples, rather than learning truly novel functions. Additionally, we examine ICL’s well-documented ability to infer unseen abstract labels in context. We demonstrate that this ability only holds in scenarios without distributional shifts, suggesting that it does not constitute genuine new-task learning. Furthermore, we analyze ICL’s OOD performance when pretrained on multiple tasks. Both empirical and theoretical results reveal a low-test-error preference, where ICL tends to select the pretraining function that minimizes test error rather than adapting to entirely new tasks. We validate this phenomenon through numerical experiments. Our theoretical insights, combined with empirical findings, provide a deeper understanding of ICL’s limitations and its underlying mechanism when tackling OOD tasks. Code is available at <https://github.com/NOVAglow646/ICL-OOD>.
+
+# 1 INTRODUCTION
+
+Pretrained large language models (LLMs) can perform in-context learning (ICL) (Brown, 2020), where providing a few examples of input-output pairs and a query example improves the model’s ability to generate the desired output, compared to zero-shot predictions. Understanding ICL’s ability to learn out-of-distribution (OOD) input-output relationships, which are unseen during training, has recently gained significant attention.
+
+Recent studies have demonstrated that ICL can tackle seemingly new tasks. For instance, Garg et al. (2022); Raventós et al. (2023); Zhang et al. (2023a); Akyürek et al. (2023) found that ICL can learn new linear regression weights after pretraining on a large set of weight vectors. Moreover, Pan (2023); Kossen et al. (2024); Vacareanu et al. (2024) revealed that real-world LLMs like Llama-2 (Touvron et al., 2023) and GPT-4 (Achiam et al., 2023) are capable of solving artificially constructed tasks likely unseen in their pretraining data, such as a classification task with abstract labels.
+
+However, another line of research (Yadlowsky et al., 2023; Ahuja & Lopez-Paz, 2023) has raised a contrasting view, showing that ICL struggles to generalize to OOD tasks where there are distributional shifts in either the input distribution  $P(\bar{X})$  or the input-label mapping  $P(Y|\bar{X})$ . These findings raise several important questions:
+
+*Can ICL really learn new input-output mappings from the context?  
+What underlying mechanism of ICL determines its performance on OOD tasks?*
+
+---
+
+\*Corresponding Authors.
+
+{1}------------------------------------------------
+
+This work aims to consolidate previous findings by addressing these questions. First, we empirically show that when pretrained on a specific function class, the OOD performance of ICL approaches that of a model from the same function class optimized via gradient descent. This suggests that ICL tends to implement the function class encountered during pretraining. Additionally, we investigate the widely observed phenomenon where ICL can classify abstract unseen labels. We find that the ability to solve such a task is a form of retrieval capability, which disappears when faced with OOD classification rules, indicating that success in these tasks does not necessarily reflect an inherent ability to learn new tasks. Finally, we explore scenarios in which the model is pretrained on multiple tasks, empirically uncovering the algorithm selection mechanism for OOD tasks. We also theoretically reveal the algorithm-selection mechanism for ICL. Our main contributions are:
+
+1. We empirically show that ICL tends to implement the pretraining function based on the downstream task context, highlighting its limitation in solving OOD tasks (Section 3.1).
+2. We further investigate ICL’s ability to classify unseen abstract labels. We find that such tasks can be solved by retrieving similar examples from the context. This retrieval ability can arise from training on tasks with more diverse abstract labels (Section 4.1) and only emerges when the test function is in distribution (Section 4.2). We further validate our findings by showing that pretrained Llama-3-8B (Dubey et al., 2024) and Llama-2-7B fail to learn OOD functions through ICL in a synthetic vector classification task (Section 4.3).
+3. We explore the ICL’s behavior when trained on multiple tasks, and observe that the algorithm selection mechanism broadly occurs in OOD scenarios. We theoretically prove the **low-test-error** preference of ICL prediction, i.e., the ICL prediction prefers to implement the pretraining function with low test error (Section 5.1). We also validate our theory with numerical experiments (5.2).
+
+## 2 EXISTING THEORETICAL PREDICTIONS OF ICL
+
+Previous literature has provided some theoretical insights into the behavior of ICL. Here we briefly review some of the representative findings. 1) **ICL makes Bayesian predictions.** Xie et al. (2022); Wies et al. (2024); Zhang et al. (2023b) theoretically demonstrated that ICL behaves like a Bayesian-optimal predictor, i.e., it will infer a task concept based on the given test context, and then predict using the inferred task and the input prompt. However, these Bayesian frameworks do not depict the concrete process of how the task concept is inferred, especially for OOD scenarios. 2) **ICL implements gradient descent (GD).** Von Oswald et al. (2023); Zheng et al. (2024) construct specific Transformer weights on which the ICL prediction is equivalent to a linear regression predictor or alignment objective (Wang et al., 2024a) optimized by gradient descent. 3) **ICL implements algorithm selection.** Bai et al. (2023); Wang et al. (2024b) demonstrate the existence of Transformers that can realize algorithm selection between linear classification and regression by constructing specific Transformer weights. 4) **ICL performs retrieval.** Li et al. (2024) proves that a trained non-linear Transformer will concentrate its attention of the query on the in-context examples possessing similar features to that of the query.
+
+These theoretical findings may seem disparate, as they describe different aspects of ICL under varying assumptions and settings. Furthermore, many of them rely on oversimplified model architectures or deliberately constructed model weights to reach their conclusions, limiting their practical applicability. In the following sections, we aim to provide a unified perspective on ICL by conducting experiments with deep nonlinear Transformers on both synthetic and real-world OOD tasks.
+
+## 3 EXPLORING THE PERFORMANCE OF ICL ON OOD TASKS
+
+### 3.1 GPT-2 IMPLEMENTS THE FUNCTIONS CLASS SEEN DURING ICL PRETRAINING
+
+**Evaluating GPT-2 on unseen mathematical function classes.** To investigate the ICL performance on new tasks that are unseen during training, following Garg et al. (2022), we train a GPT-2 (Radford et al., 2019) from scratch on some simple functions and evaluate it on functions different from the training ones. Denote the Transformer model parameterized by  $\theta$  as  $M_\theta$ . The pretraining objective is  $\min_\theta \frac{1}{T} \sum_{t=1}^T \mathbb{E}_{f \sim \mathcal{F}} [\|M_\theta(\mathcal{S}_t \oplus \mathbf{x}_{t+1}) - f(\mathbf{x}_{t+1})\|_2^2]$ , where  $\mathcal{S}_t = [\mathbf{x}_1 \oplus y_1 \oplus \mathbf{x}_2 \oplus y_2 \oplus \dots \oplus \mathbf{x}_t \oplus y_t] \in$
+
+{2}------------------------------------------------
+
+$\mathbb{R}^{d \times 2i}$  is the context,  $\oplus$  denotes concatenation.  $x_i \in \mathbb{R}^d$  are sampled from a standard Gaussian distribution  $\mathcal{N}(0, 1)$  with dimension  $d = 20$ . Let  $y_i = f(x_i) \in \mathbb{R}$  represent the labels, with  $\mathcal{F}$  denoting the hypothesis class to which  $f$  belongs. We train a GPT-2 model on one of the three function classes  $\mathcal{F}$ : linear regression (LR), quadratic regression (QR), and a 2-layer ReLU neural network (ReLU NN, detailed descriptions in Appendix C.1). We then evaluate its ICL performance on all three function classes. For comparison, we also train models of the corresponding  $\mathcal{F}$  with gradient descent (GD) using the test in-context examples (details in Appendix C.1).
+
+**Observations.** We plot the test error on the three tasks in Figure 1 and observe that: 1) when evaluated on the same task  $\mathcal{F}$  as pretraining, ICL can reach near-zero test error, which is consistent with the findings in Garg et al. (2022). 2) when evaluated on a new task, ICL performs similarly to the corresponding model of the pretraining function class optimized by GD given enough in-context examples. This indicates that the ICL prediction implements the training function classes. 3) The models trained on linear and quadratic regression exhibit a double descent error curve (Nakkiran, 2019), characterized by a high error when given exact  $d$  examples and evaluated on a new task. This further demonstrates that ICL implements in-distribution (ID) predictions, as the double descent curve is a distinctive phenomenon unique to linear regression models.
+
+![Figure 1: Evaluated ICL test error of Transformers trained on different function classes. The figure consists of three subplots: (a) Evaluated on LR, (b) Evaluated on QR, and (c) Evaluated on ReLU NN. Each subplot shows squared error on the y-axis (0.0 to 3.0) against in-context examples on the x-axis (0 to 100). Solid lines represent ICL performance, and dashed lines represent GD performance. In (a), ICL LR (solid blue) and GD LR (dashed blue) both drop to near zero. ICL QR (solid orange) and GD QR (dashed orange) show a double descent curve, peaking at d=20. In (b) and (c), ICL performance for the pretraining task drops to near zero, while ICL performance for other tasks remains high, matching their respective GD counterparts.](e863446d7d263c68be9402afd63668ac_img.jpg)
+
+Figure 1: Evaluated ICL test error of Transformers trained on different function classes. The figure consists of three subplots: (a) Evaluated on LR, (b) Evaluated on QR, and (c) Evaluated on ReLU NN. Each subplot shows squared error on the y-axis (0.0 to 3.0) against in-context examples on the x-axis (0 to 100). Solid lines represent ICL performance, and dashed lines represent GD performance. In (a), ICL LR (solid blue) and GD LR (dashed blue) both drop to near zero. ICL QR (solid orange) and GD QR (dashed orange) show a double descent curve, peaking at d=20. In (b) and (c), ICL performance for the pretraining task drops to near zero, while ICL performance for other tasks remains high, matching their respective GD counterparts.
+
+Figure 1: Evaluated the ICL test error of Transformers trained on different function classes (solid lines) and the performance of models from the corresponding pretraining functions classes trained by GD using the test in-context examples (dashed lines). Y-axis: test square error. X-axis: context length. We observe that as the test context length increases, the ICL performance pretrained on a particular function class closely approaches that of the model from this function class trained by GD.
+
+## 3.2 REAL-WORLD LLMs TEND TO MAKE IN-DISTRIBUTION PREDICTIONS DURING ICL
+
+In this section, we will demonstrate how the tendency of ICL to perform ID predictions manifests in real-world LLMs. We designed a task involving label prediction with reversed letters (e.g., in sentimental classification, “positive”  $\rightarrow$  “evitisop”). We found that in this task, a pretrained Llama-3-8B (Dubey et al., 2024) prefers to output the inversion of the query word rather than predict the reversed correct label, as shown in Figure 2. Although both reversal tasks are rare, directly outputting the reversed version of a word is more common than first reasoning and then outputting the reversed prediction. This result suggests that LLMs, when performing ICL, are more inclined to implement ID tasks. For more details, refer to Appendix C.2. Inspired by Raventós et al. (2023), We also explore whether increasing the diversity of training tasks, while keeping them ID, can activate the OOD generalization ability. The results in Appendix B.4 also suggest a negative conclusion.
+
+![Figure 2: The top-1 accuracy of predicting the reversed query word (blue) and predicting the reversed target label word (orange). The figure consists of four subplots: (a) Antonym, (b) Country-capital, (c) English-French, and (d) English-German. Each subplot shows accuracy on the y-axis (0.00 to 0.35) against context length on the x-axis (0 to 3). Blue lines represent 'nvs-query' and orange lines represent 'nvs-target-label'. In all cases, the blue line is consistently higher than the orange line, indicating that the model is more likely to predict the reversed query word (ID) than the reversed target label word (OOD).](87658d45f2d2f009cbb9cd1079519cb5_img.jpg)
+
+Figure 2: The top-1 accuracy of predicting the reversed query word (blue) and predicting the reversed target label word (orange). The figure consists of four subplots: (a) Antonym, (b) Country-capital, (c) English-French, and (d) English-German. Each subplot shows accuracy on the y-axis (0.00 to 0.35) against context length on the x-axis (0 to 3). Blue lines represent 'nvs-query' and orange lines represent 'nvs-target-label'. In all cases, the blue line is consistently higher than the orange line, indicating that the model is more likely to predict the reversed query word (ID) than the reversed target label word (OOD).
+
+Figure 2: The top-1 accuracy of predicting the reversed query word (blue) and predicting the reversed target label word (orange). The accuracy of predicting the reversed query word is higher than outputting the reversed target, indicating ICL makes ID predictions.
+
+{3}------------------------------------------------
+
+## Summary of the Empirical Results & Connections with the Existing Theories (I)
+
+Given an OOD context, ICL finds a near-optimal solution within its pretraining task space. Particularly, when learning OOD mathematical functions, ICL behaves as a predictor of its pretraining function class optimized by GD using the in-context examples. This validates and extends existing results by Zhang et al. (2023a) which theoretically shows that linear attention models trained on linear regression data still implement linear regression given arbitrary downstream context (see Appendix D).
+
+# 4 LEARNING ABSTRACT LABELS MAY NOT BE A REAL OOD CAPABILITY
+
+### 4.1 CLASSIFYING ABSTRACT LABELS IS A PREDICT-THEN-RETRIEVE PROCESS THAT CAN EMERGE FROM TRAINING
+
+Recent works (Pan, 2023; Kossen et al., 2024) have shown that LLMs can successfully perform classification tasks in which the labels are “abstract symbols” with no semantic meaning (e.g., in sentimental classification, “positive” and “negative” are replaced with “foo” and “bar”, respectively). These tasks are likely not encountered during pretraining. Pan (2023) refer to this ability of ICL to perform such classification as “task learning” (TL). In this section, we explore whether this really reflects a new-task-learning capability of ICL, or if it is something else.
+
+**Training GPT-2 to perform a retrieval task through ICL.** The classification of abstract labels can be approached by retrieving an example with semantics similar to the query and then outputting the label of that example. Therefore, the retrieval ability is a crucial prerequisite for performing abstract-label classification. We design a retrieval task to investigate whether ICL’s retrieval capability can emerge from training. Specifically, we generate a predefined word embedding  $E \in \mathbb{R}^{N \times d}$  and randomly sample  $x_i \in \mathbb{R}^d$  from the first 5 rows of  $E$ . Suppose vector  $x_i$  is the  $I_{x_i}$ -th row of  $E$ , i.e.,  $x_i = E_{I_{x_i}}$ . To generate the labels  $y_i \in \mathbb{R}^d$ , we first map the index  $I_{x_i}$  to  $I_{y_i} \in [N]$  using the mapping rule  $I_{y_i} = I_{x_i} + s$ , where  $s \in \mathbb{N}$  is randomly sampled. Next, we set  $y_i = E_{I_{y_i}}$ . All in-context examples in a sequence share the same mapping rule defined by  $s$ . To succeed in this task, the model must retrieve the same token as the query example from the context and output its subsequent token. All models are trained with  $200,000 \times 64$  sequences, where  $200,000$  is the number of training steps and  $64$  is the batch size. We train three models with three different ranges of  $s$ :  $s \sim \mathcal{U}(50, 150)$ ,  $s \sim \mathcal{U}(50, 250)$ , and  $s \sim \mathcal{U}(50, 450)$  and evaluate on  $s \sim \mathcal{U}(50, 150)$ ,  $s \sim \mathcal{U}(10, 20)$ , and  $s \sim \mathcal{U}(500, 600)$ , where  $\mathcal{U}$  denotes the uniform distribution.
+
+![Figure 3: Three line plots showing squared error vs. in-context examples for different evaluation tasks. (a) Eval task: I_y in [50, 150] shows low error for all models. (b) Eval task: I_y in [10, 20] shows high error for I_y in [50, 150] but low error for others. (c) Eval task: I_y in [500, 600] shows high error for I_y in [50, 150] but low error for others. Legend: I_y in [50, 150] (blue), I_y in [50, 250] (orange), I_y in [50, 450] (green).](a30a7877bf2f45b837a9382e22067ad0_img.jpg)
+
+Figure 3: Three line plots showing squared error vs. in-context examples for different evaluation tasks. (a) Eval task: I\_y in [50, 150] shows low error for all models. (b) Eval task: I\_y in [10, 20] shows high error for I\_y in [50, 150] but low error for others. (c) Eval task: I\_y in [500, 600] shows high error for I\_y in [50, 150] but low error for others. Legend: I\_y in [50, 150] (blue), I\_y in [50, 250] (orange), I\_y in [50, 450] (green).
+
+Figure 3: The ICL test error of Transformers trained on the retrieval task with different numbers of label tokens. “Eval” denotes “evaluated on”. The ability to retrieve OOD labels emerges from increasing the number of training mappings (larger range of  $s$ ).
+
+**Observations.** In Figure 3, all three models perform well when labels are ID (a). When the labels are OOD, the ICL performance improves with the number of label vectors (random mappings) encountered during training (b, c). This demonstrates that the ability to retrieve arbitrary labels from the context can emerge from training on diverse retrieval tasks. These findings may also offer new insights into how real-world LLMs develop in-context retrieval capabilities: when autoregressive pretraining includes numerous instances requiring the model to retrieve tokens from previous contexts, such abilities can emerge. We further validate this finding by observing the emergence of induction heads in Appendix B.1.
+
+{4}------------------------------------------------
+
+**Training GPT-2 to perform a predict-then-retrieve task through ICL.** To further explore the emergence of the ability to classify abstract labels, we design a predict-then-retrieve task that emulates the natural language classification with abstract labels. In this task,  $y_i = E_{I_{x_i}}$ , where  $I_{x_i} = \text{floor}(0.4 * (w^\top x_i)) + s$ , with  $E$  being the predefined word embedding and  $s \in \mathbb{N}_+$  shared in a ICL sequence. Here,  $x_i, w \sim \mathcal{N}(0, 1) \in \mathbb{R}^d$ . In this task, estimating  $w$  and calculating  $w^\top x_i$  simulates predicting the original label (“positive” and “negative”) by in-context learning the natural language task, while retrieving  $y_i$  from  $x_i$  such that  $\text{floor}(0.4 * (w^\top x_i)) = \text{floor}(0.4 * (w^\top x_{query}))$  resembles identifying the abstract labels (“foo” and “bar”)<sup>1</sup>, where  $x_{query}$  is the query example. Again, we train three models on different ranges of mappings:  $s \sim \mathcal{U}(100, 200)$ ,  $s \sim \mathcal{U}(100, 1000)$ , and  $s \sim \mathcal{U}(100, 2000)$ , and evaluate on  $s \sim \mathcal{U}(100, 200)$ ,  $s \sim \mathcal{U}(500, 600)$ , and  $s \sim \mathcal{U}(3000, 3100)$ .
+
+**Observations.** In Figure 4, the ability to predict and retrieve unseen labels also improves as the number of labels encountered during training increases. This suggests that as long as the LLM has been exposed to sufficiently many similar tasks during training, it can effectively classify arbitrary OOD labels retrievable from context through ICL.
+
+![Figure 4: Three line plots showing squared error vs. in-context examples for different label token ranges. (a) Eval task: s ~ U(100, 200) shows rapid error reduction. (b) Eval task: s ~ U(500, 600) shows slower error reduction. (c) Eval task: s ~ U(3000, 3100) shows the slowest error reduction. Legend: s ~ U(100, 200) (blue), s ~ U(100, 1000) (orange), s ~ U(100, 2000) (green).](6de7dcb072cef2388026fb0f504084b2_img.jpg)
+
+Figure 4: Three line plots showing squared error vs. in-context examples for different label token ranges. (a) Eval task: s ~ U(100, 200) shows rapid error reduction. (b) Eval task: s ~ U(500, 600) shows slower error reduction. (c) Eval task: s ~ U(3000, 3100) shows the slowest error reduction. Legend: s ~ U(100, 200) (blue), s ~ U(100, 1000) (orange), s ~ U(100, 2000) (green).
+
+Figure 4: The ICL test error of Transformers trained and tested on the linear regression + retrieval task with different numbers of label tokens. “Eval” denotes “evaluated on”. The performance on unseen labels increases with the number of labels seen during training. Note that in this experiment, the underlying test function class is still ID.
+
+### 4.2 ABSTRACT LABEL CLASSIFICATION CAN ONLY BE ACHIEVED ON ID TASKS
+
+**A predict-then-retrieve task with OOD testing functions.** Given the above observations, one might question whether, once the target labels appear in the context, ICL can generalize beyond the training function class by retrieving the target label from the context. To investigate this, we conduct the same predict-then-retrieval task as in Figure 4 but replace the test functions with quadratic regression while preserving linear regression as the pretraining task.
+
+**Observations.** The results in Figure 5 show that the generalization does not improve with training on more ID functions, even when the target label vectors appear in the context. Combining observations from Figure 4, we conclude that ICL can only solve classification with unseen labels over *ID* test function classes. This finding highlights a limitation in improving an LLM’s performance through in-context examples. While providing examples with shared labels may seem helpful, this approach may fail if the underlying prediction rule is too OOD for the LLM to learn.
+
+## Summary of the Empirical Results & Connections with the Existing Theories (II)
+
+To handle classification with abstract labels, the model infers an input-label mapping to implicitly establish a similarity metric. It then retrieves in-context examples similar to the query to deduce the OOD labels using this metric. However, this process succeeds only when the underlying function class is ID, thus it does not represent a true OOD generalization capability. This observation aligns with Bayesian frameworks for ICL—the implicit similarity metric here corresponds to the task concept inferred by the model. We leave an intuitive Bayesian interpretation of the findings in Section 4.1 and 4.2 to Appendix A.4.
+
+<sup>1</sup>In our experimental setup, given a sufficiently long context ( $\approx 50$ ), the label of the query is highly likely to appear in the context, as the number of the possible classes is far less than the number of in-context examples.
+
+{5}------------------------------------------------
+
+![Figure 5: Three line plots showing squared error vs. in-context examples for different evaluation tasks. (a) Eval task: s ~ U(100, 200), (b) Eval task: s ~ U(500, 600), (c) Eval task: s ~ U(3000, 3100). Each plot compares three models: s ~ U(100, 200) (blue), s ~ U(100, 1000) (orange), and s ~ U(100, 2000) (green). In all cases, the models maintain a low squared error (around 1.0) as the number of in-context examples increases from 0 to 100.](c54b3ca7603d65d4589151bc3a49d054_img.jpg)
+
+Figure 5: Three line plots showing squared error vs. in-context examples for different evaluation tasks. (a) Eval task: s ~ U(100, 200), (b) Eval task: s ~ U(500, 600), (c) Eval task: s ~ U(3000, 3100). Each plot compares three models: s ~ U(100, 200) (blue), s ~ U(100, 1000) (orange), and s ~ U(100, 2000) (green). In all cases, the models maintain a low squared error (around 1.0) as the number of in-context examples increases from 0 to 100.
+
+Figure 5: The ICL test error of Transformers evaluated on a quadratic regression + retrieval task. Different colors denote models trained on the linear regression + retrieval task with different numbers of label tokens. “Eval” denotes “evaluation”. The model trained on  $s \sim \mathcal{U}(100, 2000)$  doesn’t generalize better than the other two models.
+
+### 4.3 REAL-WORLD LLMs MAY NOT NECESSARILY IN-CONTEXT LEARN NEW TASKS
+
+**Evaluating Llama-3 on an OOD synthetic vector classification task.** Now we assess whether real-world LLMs can tackle OOD tasks through ICL. We design a synthetic vector classification task for a pretrained Llama-3-8B. Specifically, we randomly sample  $\mathbf{x}_i \in \mathbb{R}^d$  from the word embedding of Llama-3-8B (denoted as  $E_{\text{llama}}$ ) and generate random linear mappings  $\mathbf{W} \in \mathbb{R}^{d \times C}$  as task functions (where  $C = 10$ ). The label vectors are created by mapping  $\mathbf{x}_i$  to one of the ten label vectors in  $E_{\text{llama}}$  using  $\mathbf{W}$ . Experimental details are in Appendix C.4. To complete this task, the model must learn  $\mathbf{W}$  in context, which is unlikely to have been seen during the pretraining of Llama.
+
+For comparison, we also evaluate the ICL performance of Llama-3-8B on a retrieval version of this task. Concretely, we first randomly sample different vectors from  $E_{\text{llama}}$  as  $\mathbf{x}_i$  and compute  $\mathbf{y}_i$  in the same way as the above classification task to get  $S = [\mathbf{x}_1, \mathbf{y}_1, \dots, \mathbf{x}_C, \mathbf{y}_C]$  ( $C = 10$ ). Then we repeat  $S$  for 20 times to construct the input sequence  $S' = [S \oplus S \oplus \dots \oplus S]$ , where  $\oplus$  denotes concatenation operation. The goal is to predict the next token given a prefix of  $S'$ . To succeed in this task, the model has to retrieve the same token as the query token from the context and output its subsequent token  $\mathbf{y}_i$ .
+
+**Observations.** The results of these two tasks are presented in Figure 6. We observe that the ICL performance on the synthetic classification task is close to random guessing (10% accuracy), while performance on the retrieval task is significantly better (similar results also hold for Llama-2-7B in Appendix B.3). This suggests that pretrained real-world LLMs may also struggle to learn new input-output mappings from context; instead, ICL appears to be more adept at retrieval tasks. To show that the failure in the synthetic vector classification task is mainly due to its OOD nature instead of some other factors that make it difficult to learn, we train a GPT-2 to perform the same task in Appendix B.2 and find that the task can be well addressed after training.
+
+![Figure 6: A line plot showing accuracy vs. in context examples for Llama-3-8B on synthetic tasks. The plot compares 'ICL for retrieval' (blue line) which starts at 1.0 accuracy and drops to near 0.0, and 'ICL for OOD classification' (red line) which stays around 0.1 accuracy. A horizontal dashed line at 0.1 represents 'random guess for OOD classification'.](ed2fa033a401564314cdc32fe9732935_img.jpg)
+
+Figure 6: A line plot showing accuracy vs. in context examples for Llama-3-8B on synthetic tasks. The plot compares 'ICL for retrieval' (blue line) which starts at 1.0 accuracy and drops to near 0.0, and 'ICL for OOD classification' (red line) which stays around 0.1 accuracy. A horizontal dashed line at 0.1 represents 'random guess for OOD classification'.
+
+Figure 6: The ICL accuracy of Llama-3-8B on the synthetic tasks.
+
+## 5 THE ALGORITHM SELECTION MECHANISM EXISTS BROADLY WHEN EVALUATED ON OOD TASKS
+
+Real-world LLMs are pretrained on a huge corpus that could contain massive tasks. Bai et al. (2023); Yadlowsky et al. (2023) have empirically found that the ICL performance of Transformers trained on multiple tasks approaches the optimal pretraining function when evaluated on one of the training tasks. In this section, we will show that this algorithm-selection phenomenon of ICL broadly persists when evaluated on OOD tasks, regardless of the test distribution, and provide a comprehensive theoretical characterization of the algorithm-selection mechanism.
+
+{6}------------------------------------------------
+
+**The Model pretrained on a single task vs. the model pretrained on multiple tasks.** In Figure 7, we compare the performance of GPT-2 models trained on a single task—linear regression (LR), quadratic regression (QR), 2-layer ReLU neural network (ReLU NN) regression—against the model trained on all three tasks when encountering four kinds of OOD tasks. We also plot the error of a 2-layer ReLU NN trained by GD (dashed blue line).
+
+![Figure 7: Four line plots (a, b, c, d) showing In-context examples (0 to 100) on the x-axis and Normalized error (log scale) on the y-axis. (a) Evaluated on SRR, (b) Evaluated on CR, (c) Evaluated on LQR, (d) Evaluated on Sigmoid NN. Each plot compares LR+QR+ReLU NN (orange), 2-layer NN, GO (green), GD (dashed blue), and ReLU NN (red).](c0843c6d138705289960d9f53a6e72a1_img.jpg)
+
+Figure 7: Four line plots (a, b, c, d) showing In-context examples (0 to 100) on the x-axis and Normalized error (log scale) on the y-axis. (a) Evaluated on SRR, (b) Evaluated on CR, (c) Evaluated on LQR, (d) Evaluated on Sigmoid NN. Each plot compares LR+QR+ReLU NN (orange), 2-layer NN, GO (green), GD (dashed blue), and ReLU NN (red).
+
+Figure 7: The ICL performance of models trained on the individual task: linear regression (LR), quadratic regression (QR), 2-layer ReLU network (ReLU NN) regression, and the model trained on the mixture of the three tasks (LR+QR+ReLU NN). The evaluation functions are (a) square root regression (SRR), (b) cubic regression (CR), (c) linear+quadratic regression (LQR), and (d) 2-layer Sigmoid network (Sigmoid NN). The details of these evaluation tasks are in Appendix C.1. The performance of the model trained on the mixed tasks is close to that of the model trained on the single task that performs the best on the evaluation task.
+
+**Observations.** 1) The ICL performance of the model trained on mixed tasks (LR+QR+ReLU NN) is close to the performance of the model trained on a single task with the lowest test error on the evaluation task. This suggests that ICL can automatically select the best pretraining functions according to the downstream context. 2) The ICL performance of training on the ReLU NN function class aligns well with the ReLU NN model trained by GD, demonstrating that our findings in Section 3.1 still hold when the Transformer is trained on a mixture of multiple tasks.
+
+### 5.1 THEORETICALLY REVEALING THE MECHANISM OF ALGORITHM SELECTION
+
+In this section, we will provide theoretical insights into the underlying mechanism of the algorithm selection of ICL. We find there simultaneously exist two parallel mechanisms: the **Low-test-error preference** and the **Similar-input-distribution preference**.
+
+**A mixed Gaussian pretraining dataset of multiple tasks.** We adopt the theoretical framework by Lin & Lee (2024). Consider a noisy linear regression pretraining dataset with the inputs and task weights following the mixed Gaussian distribution:
+
+**Assumption 5.1.** (Mixed Gaussian pretraining data) “A pretraining task” corresponds to a component of the mixed Gaussian distribution containing a mean of the input mean  $\boldsymbol{\mu}_m$  and a task weight mean  $w_m$ . The input means  $\boldsymbol{\mu}$  and task weights  $\mathbf{w}$  are sampled from a mixed Gaussian distribution:  $P(\boldsymbol{\mu}, \mathbf{w}) = \sum_{m=1}^M \pi_m \mathcal{N}(\boldsymbol{\mu}|\boldsymbol{\mu}_m, \sigma_\mu^2 \mathbf{I}) \cdot \mathcal{N}(\mathbf{w}|\mathbf{w}_m, \sigma_w^2 \mathbf{I})$ , where  $\sum_{m=1}^M \pi_m = 1$ ,  $0 < \pi_m < 1$  and  $\|\boldsymbol{\mu}_m\| = \|\mathbf{w}_m\| = 1, \forall m$ . The process of sampling a training sequence  $\mathcal{S}_T = [\mathbf{x}_1 \oplus y_1 \oplus \dots \oplus \mathbf{x}_T \oplus y_T]$   $\mathbf{x}_i$  and  $y_i$  is as follows: 1) Sample the input mean  $\boldsymbol{\mu}$  and the task weight  $\mathbf{w}$  according to  $P(\boldsymbol{\mu}, \mathbf{w})$ . 2) Sample  $\mathbf{x}_i$  from  $P(\mathbf{x}|\boldsymbol{\mu}) = \mathcal{N}(\mathbf{x}|\boldsymbol{\mu}, \sigma_x^2 \mathbf{I})$ . 3) Sample  $y_i$  from  $P(y|\mathbf{x}, \mathbf{w}) = \mathcal{N}(y|\langle \mathbf{x}, \mathbf{w} \rangle, \sigma_y^2)$ . Define  $\delta_\mu = \frac{\sigma_\mu^2}{\sigma_x^2}$  and  $\delta_w = \frac{\sigma_w^2}{\sigma_y^2}$ . Denote this pretraining distribution as  $P_{tr}$ .
+
+According to the Corollary 2 of Lin & Lee (2024) (see Lemma E.1 in Appendix E), the closed-form prediction of the model trained on the pretraining data of Assumption 5.1, given the testing context and the query  $\mathbf{x}_{T+1}$ , remains a Gaussian mixture of the reweighted pretraining task weights:  $\mathcal{F}^* := \langle \mathbf{x}_{T+1}, \sum_{m=1}^M \tilde{\pi}_m \tilde{\mathbf{w}}_m \rangle$ , where  $\tilde{\pi}_m$  and  $\tilde{\mathbf{w}}_m$  are the posterior variables of  $\pi_m$  and  $\mathbf{w}_m$  given the downstream context. Hence, to analyze how ICL selects pretraining priors, the key lies in uncovering how  $\tilde{\pi}_m$  evolves after seeing the test context. First, we introduce Lemma 5.2 from Lin & Lee (2024) that characterizes the ratio of the reweighted weight of two pretraining tasks:
+
+**Lemma 5.2.** (Appendix H.1 of Lin & Lee (2024)) Consider any two different pretraining component  $\alpha$  and  $\beta$ , given a test context  $\mathcal{S}_T \oplus \mathbf{x}_{T+1}$  and the well-pretrained model  $M^*$ , the ratio between the
+
+{7}------------------------------------------------
+
+weights of the two task priors  $\tilde{\pi}_\alpha/\tilde{\pi}_\beta$  in  $M^*$ 's ICL prediction can be decomposed into two terms:  $\tilde{\pi}_\alpha/\tilde{\pi}_\beta = \frac{\pi_\alpha}{\pi_\beta} \exp(\Psi_\mu(\alpha, \beta) + \Psi_w(\alpha, \beta))$ , where
+
+$$\Psi_\mu(\alpha, \beta) = \left( \sum_{i=1}^{T+1} \|\mu_\beta - x_i\|^2 - \sum_{i=1}^{T+1} \|\mu_\alpha - x_i\|^2 \right) / (2\sigma_x^2 (1 + (T+1)\delta_\mu)). \quad (1)$$
+
+(ICL favors the pretraining function with similar input distribution to the test data) Further, assuming the test in-context examples  $x_i \sim \mathcal{N}(\mu^*, \tau_x^2 I)$ , if  $\|\mu_\beta - \mu^*\|^2 - \|\mu_\alpha - \mu^*\|^2 \geq 0$  holds, then as the context length  $T \rightarrow \infty$ , the first term  $\Psi_\mu(\alpha, \beta) \rightarrow (\|\mu_\beta - \mu^*\|^2 - \|\mu_\alpha - \mu^*\|^2)/2\sigma_\mu^2 \geq 0$ .
+
+However, Lin & Lee (2024) did not analyze how the second term  $\Psi_w(\alpha, \beta)$  would evolve given any downstream task, which we will demonstrate to play an important role in the algorithm selection mechanism. In the following theorem, we prove that  $\Psi_w(\alpha, \beta)$  converges to a non-negative value when the pretraining function class  $\alpha$  performs better on the downstream context than  $\beta$ .
+
+**Theorem 5.3.** (ICL favors the pretraining function with low error on the context, proof is in Appendix E.3) Given the context  $S_T$ , if the empirical risk of implementing a function of the pretraining task  $\alpha$  is less than that of  $\beta$ , i.e.,  $\frac{1}{T} \sum_{i=1}^T \|\mathbf{w}_\beta x_i - y_i\|^2 - \|\mathbf{w}_\alpha x_i - y_i\|^2 \geq 0$ , then, under some mild Assumptions E.2 on the distribution of  $S_T$ , we have  $\Psi_w(\alpha, \beta) \geq 0$ .
+
+Combining Lemma 5.2, if the downstream inputs  $x_i, x_i \sim \mathcal{N}(\mu^*, \tau_x^2 I)$  and  $\|\mu_\beta - \mu^*\|^2 - \|\mu_\alpha - \mu^*\|^2 \geq 0$  hold, then as  $T \rightarrow \infty$ , we have  $\tilde{\pi}_\alpha/\tilde{\pi}_\beta \geq \pi_\alpha/\pi_\beta$ .
+
+**Summary of the algorithm-selection mechanism.** Lemma 5.2 and Theorem 5.3 together elucidate the algorithm-selection mechanism of ICL. According to Lemma E.1, the ICL prediction of the model pretrained on the mixed Gaussian data will be a reweighted combination of the pretraining task vectors  $\mathbf{w}_\alpha$ . Whether the ratio between the weights of two pretraining tasks,  $\tilde{\pi}_\alpha/\tilde{\pi}_\beta$ , given a downstream context, exceeds the original ratio  $\pi_\alpha/\pi_\beta$  depends on two factors: 1) whether the pretraining input distribution of  $\alpha$  is closer to the downstream input distribution than that of  $\beta$ ; 2) whether the task function of  $\alpha$  induces lower test error in downstream context than that of  $\beta$ . When both conditions are met, we have  $\tilde{\pi}_\alpha/\tilde{\pi}_\beta \geq \pi_\alpha/\pi_\beta$ , indicating that ICL prefers  $\alpha$  over  $\beta$  in its predictions. We leave the discussions of the advantage of our theory result in Appendix A.5 and offer an intuitive Bayesian interpretation of the algorithm selection in Appendix A.4.
+
+### 5.2 EMPIRICAL VALIDATION OF THE ALGORITHM-SELECTION MECHANISM OF ICL
+
+Now we validate our theoretical findings regarding ICL's algorithm-selection mechanism in OOD tasks by conducting numerical experiments following Lin & Lee (2024). In Figure 8a and 8b, the training data is a linear regression Gaussian mixture with four components (see Assumption 5.1), while the test function is a two-layer ReLU network (Appendix C.1). Both the training and the test data are in ICL format. We plot the test error of using each pretraining task function to predict the downstream function (the first row of Figure 8a and 8b), the weights for each pretraining function during ICL inference (the second row), and the test error of the pretrained ICL model with the closed form prediction derived in Lemma E.1 (the third row). We evaluate five different noise levels ( $\delta_x = \delta_w \in \{1/81, 1/9, 1, 9, 81\}$ , greater value means larger noise) and consider two settings described below that respectively validate the two mechanism in Section 5.1.
+
+**Low-test-error preference of ICL.** To validate Theorem 5.3, we ensure that the distributional distances between the inputs of each training task and the test data remain consistent. Specifically, all  $x_i$  in both training and test data are sampled from  $\mathcal{N}([0, 0, 0]^\top, \sigma_x^2 I)$ . The task weights for different pretraining tasks vary, as detailed in the top half of Table 1. In this setup, only the test error of the pretraining functions influences algorithm selection. From the top two rows of Figure 8a, we can observe a clear negative correlation between the task weight and the test error of the corresponding pretraining task. This result supports Theorem 5.3, confirming that ICL prefers the pretraining functions with a low test error. Also, it's consistent with the observations in Figure 7.
+
+**Similar-input-distribution preference of ICL.** We also empirically validate Lemma 5.2 in Figure 8b. In this case, the distributional distances between the input of different pretraining tasks and that of the test context vary: the distances of different tasks are ordered from largest to smallest as  $1 > 2 > 3 > 4$ , while the test errors of different pretraining functions are almost the same (detailed setup is in the bottom half of Table 1). As shown in the bottom two rows in Figure 8b, the task
+
+{8}------------------------------------------------
+
+weight  $\tilde{\pi}_i$  is positively correlated with the similarity between the training and test input distribution. This is consistent with Lemma 5.2 which demonstrates that ICL prefers to select the pretraining function whose input distribution is close to the downstream one.
+
+![Figure 8: Empirical validation of the algorithm-selection mechanism of ICL. The figure consists of two main parts, (a) and (b), each with five columns representing different values of delta_ij = delta_w: 1/81, 1/9, 1, 9, and 81. Each column contains three plots: a bar chart of test errors for four pretraining tasks (PT 1-4), a line plot of task weights (pi_1 to pi_4), and a line plot of the squared distance (pi^2 - pi_{i+1}^2)^2. In (a), the weights are negatively correlated with the distance. In (b), the weights are positively correlated with the distance.](91be14371a97fb5ce9eeb29ae18d07c3_img.jpg)
+
+(a) Numerical verification of the low-test-error preference
+
+(b) Numerical verification of the similar-input-distribution preference
+
+Figure 8: Empirical validation of the algorithm-selection mechanism of ICL. The figure consists of two main parts, (a) and (b), each with five columns representing different values of delta\_ij = delta\_w: 1/81, 1/9, 1, 9, and 81. Each column contains three plots: a bar chart of test errors for four pretraining tasks (PT 1-4), a line plot of task weights (pi\_1 to pi\_4), and a line plot of the squared distance (pi^2 - pi\_{i+1}^2)^2. In (a), the weights are negatively correlated with the distance. In (b), the weights are positively correlated with the distance.
+
+Figure 8: Empirical validation of the algorithm-selection mechanism of ICL. The first rows: the test error of the four pretraining functions. The mid rows: the weights of each pretraining function in the closed-form downstream ICL prediction (given by Lemma E.1). The last rows: the test error of the pretrained ICL model with the closed form prediction derived in Lemma E.1. **Observations.** 1) In the first two rows of Figure 8a, the value of the task weight  $\tilde{\pi}_i$  is negatively correlated with the test error of pretraining task  $i$ . 2) In the first two rows of Figure 8b the task weights are negatively correlated with the distance between the training and testing input distribution.
+
+Table 1: Experiment setting of Figure 8a and Figure 8b. “PT” and “DS” are short for “pretraining” and “downstream”, respectively.
+
+| Experiment | DS inputs | PT task id | PT input distribution | PT task functions | PT-DS input distance |
+|-|-|-|-|-|-|
+| Figure 8a | $\mathcal{N}([0, 0, 0]^\top, \sigma_d^2 \mathbf{I})$ | 1 | $\mathcal{N}([0, 0, 0]^\top, \sigma_p^2 \mathbf{I})$ | $\mathcal{N}([5, 5, 5]^\top, \sigma_p^2 \mathbf{I})$ | 0 |
+|  |  | 2 | $\mathcal{N}([0, 0, 0]^\top, \sigma_p^2 \mathbf{I})$ | $\mathcal{N}([-5, 5, 5]^\top, \sigma_p^2 \mathbf{I})$ | 0 |
+|  |  | 3 | $\mathcal{N}([0, 0, 0]^\top, \sigma_p^2 \mathbf{I})$ | $\mathcal{N}([-5, -5, 5]^\top, \sigma_p^2 \mathbf{I})$ | 0 |
+|  |  | 4 | $\mathcal{N}([0, 0, 0]^\top, \sigma_p^2 \mathbf{I})$ | $\mathcal{N}([-5, -5, -5]^\top, \sigma_p^2 \mathbf{I})$ | 0 |
+| Figure 8b | $\mathcal{N}([-4, -4, -4]^\top, \sigma_d^2 \mathbf{I})$ | 1 | $\mathcal{N}([5, 5, 5]^\top, \sigma_p^2 \mathbf{I})$ | $\mathcal{N}([1, 1, 1]^\top, \sigma_p^2 \mathbf{I})$ | 15.59 |
+|  |  | 2 | $\mathcal{N}([-5, 5, 5]^\top, \sigma_p^2 \mathbf{I})$ | $\mathcal{N}([1, 1, 1]^\top, \sigma_p^2 \mathbf{I})$ | 12.77 |
+|  |  | 3 | $\mathcal{N}([-5, -5, 5]^\top, \sigma_p^2 \mathbf{I})$ | $\mathcal{N}([1, 1, 1]^\top, \sigma_p^2 \mathbf{I})$ | 9.11 |
+|  |  | 4 | $\mathcal{N}([-5, -5, -5]^\top, \sigma_p^2 \mathbf{I})$ | $\mathcal{N}([1, 1, 1]^\top, \sigma_p^2 \mathbf{I})$ | 1.73 |
+
+## 5.3 VERIFYING THE ALGORITHM-SELECTION MECHANISM ON REAL-WORLD LLMs
+
+In this section, we investigate whether real-world LLMs can perform algorithm selection through ICL. To achieve this, we design an ambiguous sentence classification task, in which each sentence
+
+{9}------------------------------------------------
+
+can be classified based on one of three aspects: “sentiment”, “type”, or “location”. For each ICL sequence, we select one of the aspects as the classification criterion and map the label words to meaningless strings. For instance, if we choose to classify each sentence according to its sentiment, then “positive”, “neutral”, and “negative” are mapped to “RqF”, “IwZ”, and “Sdk”, respectively. Detailed experimental setups are in Appendix C.5. We compute the top-5 accuracy of different classification criteria. The results in Figure 9 show that as the context length increases, the LLM finds the most appropriate criterion, exhibiting the low-test-error preference.
+
+![Figure 9: Three line graphs (a, b, c) showing top-5 accuracy vs. context length for different classification criteria. (a) Sentiment: Accuracy for 'sentiment' (green) increases to ~0.65, while 'type' (blue) and 'location' (orange) stay around 0.2. (b) Type: Accuracy for 'type' (green) increases to ~0.65, while 'sentiment' (blue) and 'location' (orange) stay around 0.2. (c) Location: Accuracy for 'location' (green) increases to ~0.65, while 'sentiment' (blue) and 'type' (orange) stay around 0.2. All graphs show that the true underlying criterion achieves significantly higher accuracy as context length increases.](7801d00a216dc4dc8a7d210dcb5fe3c5_img.jpg)
+
+Figure 9: Three line graphs (a, b, c) showing top-5 accuracy vs. context length for different classification criteria. (a) Sentiment: Accuracy for 'sentiment' (green) increases to ~0.65, while 'type' (blue) and 'location' (orange) stay around 0.2. (b) Type: Accuracy for 'type' (green) increases to ~0.65, while 'sentiment' (blue) and 'location' (orange) stay around 0.2. (c) Location: Accuracy for 'location' (green) increases to ~0.65, while 'sentiment' (blue) and 'type' (orange) stay around 0.2. All graphs show that the true underlying criterion achieves significantly higher accuracy as context length increases.
+
+Figure 9: The top-5 accuracy of using (a) “sentiment”, (b) “type”, or (c) “location” as the classification criterion for in-context examples in a test prompt. The accuracy of using the true underlying criterion to predict is significantly higher than the other two. This suggests that LLMs can perform algorithm selection in natural language tasks.
+
+## Summary of the Empirical Results & Connections with the Existing Theories (III)
+
+Despite the impressive empirical performance of real-world LLMs in solving seemingly novel tasks through ICL, we observe that when faced with an OOD task, ICL operates by identifying the most suitable pretraining meta-distribution based on test error and input distribution discrepancies, and then attempts to find an optimal solution within that meta-distribution. Notably, this process occurs consistently, independent of the downstream test distribution. See Appendix A.4 for the potential connection between such empirical observations and the Bayesian framework work.
+
+# 6 CONCLUSION
+
+In this work, we empirically find that Transformers struggle to generalize beyond the pretraining function classes when given downstream in-context examples of OOD tasks. Instead, ICL tries to seek a near-optimal solution within the pretraining function classes. We further investigate the widely observed capability of ICL to perform classification. We reveal that it is a composition of ID prediction and retrieval rather than an OOD generalization ability. We also examine ICL’s performance on OOD tasks after pretraining on multiple tasks. Our theoretical and empirical analysis reveals ICL’s preference for low-test-error functions, i.e., ICL tends to implement pretraining function classes with low test error in the test context. This finding highlights two key factors that determine how ICL will implement the prediction function based on the testing context and pretraining tasks: the distance between the training and testing input distributions, and the ability of a pretraining function to solve the test task.
+
+# ACKNOWLEDGMENT
+
+Yisen Wang was supported by National Key R&D Program of China (2022ZD0160300), National Natural Science Foundation of China (92370129, 62376010), and Beijing Nova Program (20230484344, 20240484642). Xianghua Ying was supported by the National Natural Science Foundation of China (NSFC) under Grant No. 62371009, and Beijing Natural Science Foundation under Grant No. L247029. Yifei Wang was supported in part by the NSF AI Institute TILOS, and an Alexander von Humboldt Professorship.
+
+ Rest of paper (reference and Appendix) is removed.

@@ -1,0 +1,298 @@
+
+
+{0}------------------------------------------------
+
+# REVISITING GENERATIVE POLICIES: A SIMPLER REINFORCEMENT LEARNING ALGORITHMIC PERSPECTIVE
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Generative models, particularly diffusion models, have achieved remarkable success in density estimation for multimodal data, drawing significant interest from the reinforcement learning (RL) community, especially in policy modeling in continuous action spaces. However, existing works exhibit significant variations in training schemes and RL optimization objectives, and some methods are only applicable to diffusion models. In this study, we compare and analyze various generative policy training and deployment techniques, identifying and validating effective designs for generative policy algorithms. Specifically, we revisit existing training objectives and classify them into two categories, each linked to a simpler approach. The first approach, Generative Model Policy Optimization (GMPO), employs a native advantage-weighted regression formulation as the training objective, which is significantly simpler than previous methods. The second approach, Generative Model Policy Gradient (GMPG), offers a numerically stable implementation of the native policy gradient method. We introduce a standardized experimental framework named *GenerativeRL*. Our experiments demonstrate that the proposed methods achieve state-of-the-art performance on various offline-RL datasets, offering a unified and practical guideline for training and deploying generative policies.
+
+## 1 INTRODUCTION
+
+Generative models, such as flow models and diffusion models, have demonstrated remarkable capabilities in modeling multi-modal data across diverse applications, including image, video, and audio generation (Rombach et al., 2022; Ho et al., 2022; Mittal et al., 2021), and protein structure prediction (Abramson et al., 2024). Their expressive power stems from constructing continuous and invertible mappings between probability distributions, enabling the transformation of simple distributions like standard Gaussians into complex target distributions. Generative policies, which are RL policy models based on generative models, have become a focus of study within the RL community (Janner et al., 2022; Chi et al., 2023; Ren et al., 2024). They offer a principled approach to modeling expressive and nuanced action distributions, particularly important in robotics tasks with continuous and high-dimensional action spaces.
+
+Despite the success of recent studies in offline-RL (Chen et al., 2023; Wang et al., 2023; Lu et al., 2023; Hansen-Estruch et al., 2023), these studies often employ complex training schemes and lack systematic investigation. This hinders understanding of key factors in training generative models for policy modeling, leading to unnecessary dependencies, training inefficiencies, and higher inference costs. Some work focuses primarily on diffusion models (Sohl-Dickstein et al., 2015; Ho et al., 2020), which has limited applicability to other generative models, such as flow models (Lipman et al., 2023; Liu et al., 2023; Pooladian et al., 2023; Albergo & Vanden-Eijnden, 2023; Tong et al., 2024).
+
+This motivates us to develop simple yet effective training schemes for both diffusion and other emerging generative models, leveraging their advancements for the RL community’s benefit. We revisit previous works on generative policy optimization in Table 1, and then categorize these works, and propose two training schemes: Generative Model Policy Optimization (GMPO) and Generative Model Policy Gradient (GMPG). GMPO is an advantage-weighted regression method with a stable training process that does not require pretraining the generative model before optimal policy extraction. This makes it more efficient and easier to train, featuring a shorter training schedule and a wider range of model applications while maintaining comparable performance to previous works. GMPG
+
+{1}------------------------------------------------
+
+is a policy gradient-based method in an RL-native formulation. We provide a numerically stable implementation for continuous-time generative models as an RL policy. It has proven effective in optimal policy extraction, especially for suboptimal policies. We evaluate the performance of diffusion and flow models using these two training schemes in an offline reinforcement learning setting with the D4RL dataset (Fu et al., 2021) and RL Unplugged (Gulcehre et al., 2020). Our results demonstrate that the proposed schemes offer comparable or better performance than previous works in most cases. We provide multiple ablations, covering model types, temperature settings, solver schemes, and sampling time steps for training, to validate the effectiveness of our proposed methods.
+
+To facilitate consistent comparisons and analyses, we introduce a standardized experimental framework designed to combine the strengths of generative models and reinforcement learning by decoupling the generative model from the RL components. This decoupling enables consistent comparisons and analyses of different generative models within the same RL context, a capability lacking in previous works. Four key properties distinguish our framework from existing ones: unified API, flexible data formats and shapes, auto-grad support, and diverse generative model integration.
+
+In conclusion, the main contributions of our work include:
+
+- Proposing two simple yet effective RL-native training approaches for generative policies, GMPO and GMPG, which are compatible for both diffusion and flow models.
+- Evaluating the performance of different generative models with the two training schemes on offline-RL dataset, achieving state-of-the-art performance in most cases. Our work elucidates the key factors in training generative policies and corrects several biases described in previous research.
+- Providing a unified framework for combining the power of generative models and RL seamlessly, easy for conducting a fair and RL-native evaluations, named *GenerativeRL*.
+
+## 2 RELATED WORKS
+
+**Generative Policy Algorithms.** Haarnoja et al. (2017) introduces [Soft Q-Learning](#) and uses an energy-based generative policy for learning continuous actions from continuous states. Haarnoja et al. (2018a) integrates hierarchical policies with discrete layers into the Soft Actor-Critic (Haarnoja et al., 2018b) framework, which is called [SACLSP](#) and utilizes normalizing flows. Janner et al. (2022) first incorporate diffusion models into RL named as [diffuser](#), acting as optimal trajectory planners by linking generative models with value function guidance [being applied rudimentary](#). Chi et al. (2023) explores diffusion models for policy modeling in robotics, which is the [concept of diffusion policy is first introduced](#). Chen et al. (2023) demonstrates effective policy learning in offline Q-learning using a diffusion model as support [called SfBC](#). Wang et al. (2023) introduces [Diffusion-QL](#) and achieves policy regularization by alternating training between a Q-function-guided diffusion model and a diffusion-supported Q-function. Lu et al. (2023) introduces [Q-guided Policy Optimization \(QGPO\)](#) and derives the exact formulation of energy guidance for energy-conditioned diffusion models, enabling precise Q-guidance for optimal policy. Hansen-Estruch et al. (2023) introduces [Implicit Diffusion Q-learning \(IDQL\)](#) which uncovers the implicit policy form after Implicit Q-learning, emphasizing the importance of sampling from both the behavior policy and the diffusion model. Chen et al. (2024) uses the score function of a pre-trained diffusion model as a regularizer, optimizing a Gaussian policy to maximize the Q-function by combining the multimodal properties of diffusion models with the fast inference of Gaussian policies, which is called [Score Regularized Policy Optimization \(SRPO\)](#). Similar methods can also be applied to models trained using the flow matching (Zheng et al., 2023b; Kim et al., 2024). More details about the generative policy analyzed in this paper are provided in Appendix C.
+
+**Reinforcement Learning Frameworks.** Several open-source RL frameworks provide unified interfaces for solving RL problems, although some are no longer maintained, such as OpenAI Baselines (Dhariwal et al., 2017), Facebook/ELF (Tian et al., 2017), TFAgents (Guadarrama et al., 2018), and JaxRL (Kostrikov, 2021). Active and widely-used frameworks include RLlib (Liang et al., 2018), which focuses on distributed RL for training large-scale models; Dopamine (Castro et al., 2018), a research framework for rapid RL algorithm prototyping; and Acme (Hoffman et al., 2020), designed for flexibility and scalability in RL research. Stable Baselines3 (Raffin et al., 2021), Tianshou (Weng et al., 2022), DI-engine (Niu et al., 2021), ElegantRL (Liu et al., 2021), and
+
+{2}------------------------------------------------
+
+CleanRL (Huang et al., 2022) offer a wide range of algorithms, environments, and user-friendly interfaces. TorchRL (Bou et al., 2023), a modular RL framework, supports PyTorch’s native API and excels in handling dictionary-type tensors common in RL. The framework most related to ours is CleanDiffuser (Dong et al., 2024), which was recently proposed to integrate different types of diffusion algorithmic branches into a single framework.
+
+## 3 BACKGROUND
+
+This section provides a brief introduction to reinforcement learning and generative models. For more fundamentals of diffusion and flow models, please refer to Appendix B.
+
+### 3.1 REINFORCEMENT LEARNING
+
+Reinforcement learning (RL) addresses sequential decision-making tasks typically modeled as a Markov decision process (MDP), defined by the tuple  $(\mathcal{S}, \mathcal{A}, p, r, \gamma)$ . Here,  $\mathcal{S}$  is the state space,  $\mathcal{A}$  is the action space,  $p(s_{t+1}|s_t, a_t)$  represents the transition dynamics,  $r(s_t, a_t)$  is the reward function, and  $\gamma$  is the discount factor. At each time step  $t$ , the agent, in state  $s_t$ , takes an action  $a_t \in \mathcal{A}$  according to the policy  $\pi(a_t|s_t)$ . The agent then receives a reward  $r_t$  and transitions to a new state  $s_{t+1}$  based on the transition dynamics  $p(s_{t+1}|s_t, a_t)$ . The goal of the agent is to learn a policy  $\pi: \mathcal{S} \rightarrow \mathcal{A}$  that maximizes the expected cumulative reward over time, using only previously collected data. This objective can be expressed as:  $\mathcal{R}_{s_0, a_0} = \mathbb{E}_{s_0, a_0, s_1, a_1, \dots} [\sum_{t=0}^{\infty} \gamma^t r_t]$ .
+
+In offline reinforcement learning (offline-RL), the agent has access to a fixed dataset  $\mathcal{D}_\mu$  of historical interaction trajectories  $\{s_t, a_t, r_t, s_{t+1}\}$ , collected by a behavior policy  $\mu(a_t|s_t)$ , which is often suboptimal. Offline-RL is challenging because the agent cannot collect new data to correct its mistakes, unlike in online-RL, where exploration is possible.
+
+Suppose the value of action  $a$  at state  $s$  is modeled by a Q-function  $Q(s, a) \approx \mathcal{R}_{s, a}$ , which estimates the expected return of taking action  $a$  at state  $s$  and following policy  $\pi$  thereafter. The value of state  $s$  is modeled by a V-function  $V(s) = \mathbb{E}_{a \sim \pi(\cdot|s)}[Q(s, a)]$ .
+
+### 3.2 GENERATIVE MODELS
+
+**Diffusion Models.** Given a fixed data or target distribution, a diffusion model is determined by the diffusion process path as an stochastic differential equation (SDE):  $dx = f(t)x_t dt + g(t)dw_t$ . The transition distribution of a point  $x \in \mathbb{R}^d$  from time 0 to  $t$  is:  $p(x_t|x_0) \sim \mathcal{N}(x_t|\alpha_t x_0, \sigma_t^2 I)$ . The reverse process path can be described by an ordinary differential equation (ODE):
+
+$$\frac{dx_t}{dt} = v(x_t) = f(t)x_t - \frac{1}{2}g^2(t)\nabla_{x_t} \log p(x_t), \quad (1)$$
+
+where  $v(x_t)$  is the velocity function and  $\nabla_{x_t} \log p(x_t)$  is the score function, typically modeled by a neural network with parameters  $\theta$ , denoted as  $v_\theta(x_t)$  and  $s_\theta(x_t)$ , respectively.
+
+**Flow Models.** Consider a flow model with time-varying velocity  $v(x_t)$ , whose flow path can be described by an ODE:  $\frac{dx_t}{dt} = v(x_t)$ . The velocity field transforms the source distribution  $p(x_0)$  at time  $t = 0$  into the target distribution  $p(x_1)$  at time  $t = 1$  along the flow path and conforms to the continuity equation:  $\frac{\partial p}{\partial t} + \nabla_x \cdot (pv) = 0$ .
+
+**Model Training.** Training continuous-time generative model involves a matching objective  $\mathcal{L}_{\text{Matching}}(\theta)$ , including the Score Matching method (Hyvärinen, 2005; Vincent, 2011):
+
+$$\mathcal{L}_{\text{DSM}} = \frac{1}{2} \int_0^1 \mathbb{E}_{p(x_t|x_0)} [\lambda(t) \|s_\theta(x_t) - \nabla_{x_t} \log p(x_t|x_0)\|^2] dt, \quad (2)$$
+
+and the Flow Matching method (Lipman et al., 2023; Tong et al., 2024):
+
+$$\mathcal{L}_{\text{CFM}} = \frac{1}{2} \int_0^1 \mathbb{E}_{p(x_t|x_0, x_1)} [\|v_\theta(x_t) - v(x_t|x_0, x_1)\|^2] dt. \quad (3)$$
+
+{3}------------------------------------------------
+
+Table 1: Training schemes of different generative policy RL algorithms. The “Suitable Generative Model” column indicates the model types to which the algorithm can be applied, with parentheses showing the models actually used in previous work. [If the model type is “Any,” this method is applicable to all generative models, including diffusion and flow models discussed in this paper.](#) The “Behavior Policy” column indicates whether the algorithm requires a pre-trained policy model for subsequent training. The “Critic Training” column describes the scheme used to learn the Q-function. The “Optimal Policy Extraction” column indicates whether the method trains and extracts the optimal policy.
+
+| Algorithm | Suitable Generative Model | Behavior Policy | Critic Training | Optimal Policy Extraction |
+|-|-|-|-|-|
+| SBIC | Any (VPSDE) | Needed | In-support Q-Learning | <span style="color: red;">✗</span> |
+| QGPO | Diffusion (VPSDE) | Needed | In-support Q-Learning | <span style="color: green;">✓</span> |
+| Diffusion-QL | Any (DDPM) | Needed | Conventional Q-Learning | <span style="color: green;">✓</span> |
+| IDQL | Any (DDPM) | Needed | IQL | <span style="color: red;">✗</span> |
+| SRPO | Diffusion (VPSDE) | Needed | IQL | <span style="color: green;">✓</span> |
+| GMPO | Any | Not needed | IQL | <span style="color: green;">✓</span> |
+| GMPG | Any | Needed | IQL | <span style="color: green;">✓</span> |
+
+For diffusion models, we investigate the Linear Variance-Preserving SDE (VP-SDE) model proposed by Song et al. (2021b), a continuous-time variant of Denoising Diffusion Probabilistic Models (DDPM) by Ho et al. (2020), and the Generalized VP-SDE (GVP) model introduced by Albergo & Vanden-Eijnden (2023), which extends the Improved DDPM by Nichol & Dhariwal (2021) with triangular scale and noise levels. For flow models, we investigate a simple flow model named I-CFM by Tong et al. (2024).
+
+## 4 REVISITING GENERATIVE POLICIES
+
+We establish the formulation of the optimal policy in offline-RL in Section 4.1. Next, we review prior work on generative policies in Section 4.2, with additional details in Appendix C. Subsequently, Section 4.3 introduces two straightforward and effective training schemes.
+
+### 4.1 OPTIMAL POLICY IN OFFLINE-RL
+
+Previous works in offline-RL (Peters & Schaal, 2007; Peters et al., 2010; Abdolmaleki et al., 2018; Wu et al., 2020) formulate policy optimization as a constrained optimization problem. The policy is learned by maximizing the expected return, subject to the KL divergence constraint to the behavior policy:  $\pi^* = \arg \max_{\pi} \mathbb{E}_{s \sim \mathcal{D}, a \sim \pi(\cdot|s)} [Q(s, a) - \frac{1}{\beta} D_{\text{KL}}(\pi(\cdot|s) \| \mu(\cdot|s))]$ . This approach ensures the learned policy rarely acts outside the support of the behavior policy, thus avoiding extrapolation errors that could degrade performance, as emphasized by Kumar et al. (2019) and Fujimoto et al. (2019). The optimal policy has an analytical form, as shown by Peng et al. (2021):  $\pi^*(a|s) = \frac{e^{\beta(Q(s, a) - V(s))}}{Z(s)} \mu(a|s)$ , where  $Z(s)$  is a normalizing factor, and  $\beta$  is a temperature parameter. In practice, we can build a parameterized neural-net policy  $\pi_\theta$  to approximate the optimal policy  $\pi^*$ . The policy model can be trained by minimizing the KL divergence:
+
+$$\mathcal{L}(\theta) = \mathbb{E}_{s \sim \mathcal{D}} [D_{\text{KL}}(\pi^*(\cdot|s) \| \pi_\theta(\cdot|s))] = \mathbb{E}_{s \sim \mathcal{D}, a \sim \mu(\cdot|s)} \left[ -\frac{e^{\beta(Q(s, a) - V(s))}}{Z(s)} \log \pi_\theta(a|s) \right] + C, \quad (4)$$
+
+where  $C$  is a constant that does not depend on  $\theta$ , or by using reverse KL divergence:
+
+$$\mathcal{L}(\theta) = \mathbb{E}_{s \sim \mathcal{D}} [D_{\text{KL}}(\pi_\theta(\cdot|s) \| \pi^*(\cdot|s))] = \mathbb{E}_{s \sim \mathcal{D}, a \sim \pi_\theta(\cdot|s)} [-\beta Q(s, a) + D_{\text{KL}}(\pi_\theta(\cdot|s) \| \mu(\cdot|s))] + C. \quad (5)$$
+
+Comparison and derivation details of Eq. 4 and Eq. 5 are provided in Appendix A.
+
+### 4.2 PREVIOUS WORKS ON GENERATIVE POLICY
+
+Table 1 summarizes existing approaches for obtaining optimal generative policies. Table 2 provides an overview of the training and inference schemes of these algorithms.
+
+{4}------------------------------------------------
+
+Table 2: Generative model training and inference schemes of different generative RL algorithms. The forward KL method, which includes SfBC, QGPO, IDQL, and GMPO, incorporates an advantage-weighted regression term in its training or inference schemes. In contrast, the reverse KL method, including Diffusion-QL, SRPO, and GMPG, utilizes the Q-function for policy gradients with KL constraints. More comparisons are provided in Appendix A.2 and Appendix C.
+
+| Algorithm | Training Schemes | Inference Schemes |
+|-|-|-|
+| Forward KL | $\nabla_{\theta} \mathbb{E}_{s,a \sim \mu} \left[ \frac{\epsilon^{\beta(Q(s,a) - V(s))}}{Z(s)} \log \pi_{\theta}(a s) \right]$ |  |
+| Reverse KL | $\nabla_{\theta} \mathbb{E}_{s,a \sim \pi_{\theta}} \left[ -\beta Q(s,a) + D_{\text{KL}}(\pi_{\theta}(\cdot s)    \mu(\cdot s)) \right]$ |  |
+| Public Works |  |  |
+| SfBC | $\nabla_{\theta} \mathcal{L}_{\text{Matching}}(\theta)$ | (Eq. 2) $a \sim \text{softmax}_{a_i \sim \mu_{\theta}} Q(a_i, s)$ |
+| QGPO | $\nabla_{\phi} \mathbb{E}_{t,s,a_i \sim \mu} \left[ \frac{\epsilon^{\beta Q(s,a_i)}}{\sum_{i=1}^N \epsilon^{\beta Q(s,a_i)}} \log \frac{\epsilon^{\phi(s,a_i,t)}}{\sum_{i=1}^N \epsilon^{\phi(s,a_i,t)}} \right]$ | $a \sim \pi, \nabla \log \pi = \nabla \log \mu + \nabla \log \mathcal{E}_{\phi}$ |
+| Diffusion-QL | $\nabla_{\theta} \mathbb{E}_{s,a \sim \pi_{\theta}} \left[ -\beta Q(s,a) + \mathcal{L}_{\text{Matching}}(\theta) \right]$ | $a \sim \text{softmax}_{a_i \sim \pi_{\theta}} Q(a_i, s)$ |
+| IDQL | $\nabla_{\theta} \mathcal{L}_{\text{Matching}}(\theta)$ | (Eq. 2) $a \sim \frac{\left  \frac{\pi_{\theta}}{\mu} (Q(s,a_i) - V(s)) \right }{ Q(s,a_i) - V(s) } \mu_{\theta}(a_i s)$ |
+| SRPO | $\nabla_{\theta} \mathbb{E}_{t,s,a \sim \pi_{\theta}} \left[ -\beta Q(s,a) + w(t)(\epsilon_{\psi}(a_t s) - \epsilon) \right]$ | $a \sim \pi_{\theta}$ |
+| This work |  |  |
+| GMPO | $\nabla_{\theta} \mathbb{E}_{s,a \sim \mu} \left[ \frac{\epsilon^{\beta(Q(s,a) - V(s))}}{Z(s)} \mathcal{L}_{\text{Matching}}(\theta) \right]$ | $a \sim \pi_{\theta}$ |
+| GMPG | $\nabla_{\theta} \mathbb{E}_{s,a \sim \pi_{\theta}} \left[ -\beta Q(s,a) + \log \frac{\pi_{\theta}(a s)}{\mu(a s)} \right]$ | $a \sim \pi_{\theta}$ |
+
+- KL divergence or its variant for behavior policy constraint.
+- Q function for policy gradient method.
+- Importance weight for advantage-weighted regression.
+
+**Generative Model Type** Table 1 highlights that QGPO and SRPO are limited to diffusion models, while other algorithms accommodate various generative models. QGPO’s restriction arises from its reliance on the Contrastive Energy Prediction method (Eq. 30), which distills the Q function into an energy guidance model specifically designed for diffusion models (Appendix C.2). Similarly, SRPO’s constraint stems from its score-regularized loss, which naturally aligns with diffusion models due to their inherent modeling of the score function. This compatibility, however, does not extend to non-diffusion models, such as flow models (see Appendix C.4 for further explanation).
+
+Given the rapid advancements in generative modeling, we strive to establish a unified training scheme applicable to any generative model. By extracting effective designs from QGPO and SRPO algorithms, we can eliminate components that hinder generalization, training efficiency, and complexity without affecting performance
+
+**Behavior Policy Pretraining and Critic Training.** As shown in Table 1, all methods require pretraining a behavior policy. SfBC and IDQL rely on it for importance sampling during inference. QGPO leverages the behavior policy for sampling in conjunction with energy guidance (Eq. 31). SRPO utilizes a well-trained behavior policy to regularize the Gaussian model policy (Eq. 35). Furthermore, while QGPO and SfBC employ in-support Q-learning with data augmentation from the behavior policy for Q function training (Eq. 29), Diffusion-QL utilizes traditional Q-learning with a similar dependence on the behavior policy (Eq. 36).
+
+All three methods use the behavior policy for data augmentation during Q function training, making it essential. In contrast, SRPO and IDQL use Implicit Q-Learning to train the Q function directly (Eq. 32), without needing a behavior policy. This decouples the training of the behavior policy and the Q function, allowing simultaneous training.
+
+The slower sampling rates of generative models raise questions about the necessity of data augmentation in training process of SfBC, QGPO, and Diffusion-QL. Simpler approaches, such as the Implicit Q-Learning employed by SRPO and IDQL, could offer greater efficiency for Q function training
+
+{5}------------------------------------------------
+
+in generative policy optimization. This observation motivates us to investigate whether comparable performance can be achieved by directly leveraging the Q function learned by IQL to guide generative policy optimization. Specifically, we are interested in exploring the potential of explicitly extracting a generative policy from the IQL-trained Q function, a direction not explored in previous works.
+
+**Optimal Policy Extraction.** As shown in Table 1, SfBC and IDQL do not perform explicit policy extraction. Instead, they use importance sampling to derive the optimal policy from the behavior policy by evaluating the Q function. Although parallel computation can save inference time, the total computational budget during inference scales with the number of actions sampled from the behavior policy. SRPO uses a Gaussian model to explicitly output the optimal policy for guidance distillation, reducing computational costs and speeding up deployment. However, Gaussian models are generally less expressive than generative models, which can limit their effectiveness (Chi et al., 2023; Ren et al., 2024). Therefore, explicit policy extraction using generative models is preferred for balancing computational efficiency and expressiveness.
+
+### 4.3 GENERATIVE MODEL POLICY TRAINING
+
+To improve upon previous methods, we propose two straightforward yet effective training schemes for generative model policy optimization, derived from Eq. 4 and Eq. 5, as shown in Table 2. These schemes satisfy three key requirements: (1) Generality: Ensure compatibility with any generative model through a simple and effective training process. (2) Decoupled Training: Train the Q-function directly using Implicit Q-Learning (IQL), minimizing reliance on generative sampling. (3) Explicit Policy Extraction: Consistently infer only one action at a time for model inference.
+
+**Generative Model Policy Optimization.** Inspired by Song et al. (2021a), who demonstrated that training with a maximum likelihood objective is equivalent to score matching, we replace the log-likelihood term with the matching loss (Eq. 2) of the generative model. By keeping the exponential form of the advantage function as the importance weight, as in Eq. 4, we derive the following advantage-weighted regression training objective suitable for both diffusion and flow models:
+
+$$\begin{aligned}\mathcal{L}_{\text{GMPO}}(\theta) &= \mathbb{E}_{s \sim \mathcal{D}, a \sim \pi^*(\cdot|s)} [\mathcal{L}_{\text{Matching}}(\theta)] \\ &= \mathbb{E}_{s \sim \mathcal{D}, a \sim \mu(\cdot|s)} \left[ \frac{e^{\beta(Q(s,a) - V(s))}}{Z(s)} \mathcal{L}_{\text{Matching}}(\theta) \right].\end{aligned}\quad (6)$$
+
+Although Eq. 6 looks similar to Eq. 4, with the log-likelihood term replaced by the matching loss, it can be derived independently. See Appendix C.6 for more details.
+
+Unlike previous works, our GMPO approach does not have to use data augmentation from the behavior policy. This removes the necessity of behavior policy and uses only data from the offline dataset:
+
+$$\mathcal{L}_{\text{GMPO}}(\theta) = \mathbb{E}_{(s,a) \sim \mathcal{D}_\mu} \left[ \frac{e^{\beta(Q(s,a) - V(s))}}{Z(s)} \mathcal{L}_{\text{Matching}}(\theta) \right]. \quad (7)$$
+
+More details about GMPO are provided in Appendix C.6.
+
+**Generative Model Policy Gradient.** This approach is directly derived from Eq. 5:
+
+$$\begin{aligned}\mathcal{L}_{\text{GMPG}}(\theta) &= \mathbb{E}_{s \sim \mathcal{D}} [D_{\text{KL}}(\pi_\theta(\cdot|s) || \pi^*(\cdot|s))] \\ &= \mathbb{E}_{s \sim \mathcal{D}, a \sim \pi_\theta(\cdot|s)} [-\beta Q(s, a) + D_{\text{KL}}(\pi_\theta(\cdot|s) || \mu(\cdot|s))] \\ &= \mathbb{E}_{s \sim \mathcal{D}, a \sim \pi_\theta(\cdot|s)} [-\beta Q(s, a) + \log \pi_\theta(a|s) - \log \mu(a|s)].\end{aligned}\quad (8)$$
+
+As an RL-native policy gradient method, GMPG directly calculates the log-likelihood term. However, efficiently computing gradients for diffusion and flow models is challenging due to their forward sampling process, which involves solving an initial value problem within an ODE solver. To address this, we employ advanced techniques such as the adjoint method or Neural ODEs (as proposed by Chen et al. (2018)), ensuring computational feasibility. Additionally, we utilize the Hutchinson trace estimator (Hutchinson, 1990; Grathwohl et al., 2019) to compute the log-likelihood of the policy for continuous-time generative models. See Appendix C.7.1 for more details.
+
+{6}------------------------------------------------
+
+In contrast to GMPG’s direct log-likelihood calculation, Wang et al. (2023) propose an alternative approach that replaces the log-likelihood term with a score matching loss (Eq. 37), and further mitigates computational costs by employing a low time step ( $T = 5$ ). However, this method has limitations, as it may not scale effectively to high-dimensional spaces and could potentially compromise generation quality with such a low time step. More details about GMPG are provided in Appendix C.7.
+
+We illustrate the intuitive sampling trajectories of GMPO and GMPG with a 2D toy example in Appendix C.8 to clarify how it works.
+
+## 5 FRAMEWORK
+
+Based on the research needs analyzed in previous sections, we create *GenerativeRL* for verifying and comparing various generative models and reinforcement learning algorithms. The key distinction of *GenerativeRL* is its standardized implementation and unified API for generative models, allowing researchers to access these models at the configuration level without dealing with complex details. When compared to existing frameworks like CleanDiffuser (Dong et al., 2024), *GenerativeRL* differs in its design principles:
+
+- **Unified API:** It offers a simple API that maximizes compatibility with different kinds of generative models, avoiding immature algorithms.
+- **Flexible Data Formats:** It ensures consistent data formats for long-term use, supporting inputs and outputs as PyTorch tensors, tensorsdicts (Bou et al., 2023), and treetensors (Contributors, 2021), given the prevalence of dict-type data in RL.
+- **Auto-Grad Support:** Designed to support Neural ODEs, it facilitates gradient-based inference via ODE or SDE, which is useful for many RL policies.
+- **Diverse Model Integration:** It integrates various generative models, including flow and bridge models, treating diffusion models as a special case.
+
+Thus, *GenerativeRL* seamlessly incorporates both diffusion and flow models for various RL algorithms, while decoupling the generative model from RL components. This allows for consistent comparisons and analyses of different generative models within the same RL context. See usage examples in Appendix E.1 and framework structure in Appendix E.2.
+
+## 6 EXPERIMENTS
+
+### 6.1 EXPERIMENTAL SETUP
+
+Experiments are conducted on the classical offline-RL environments, D4RL dataset (Fu et al., 2021) and RL Unplugged DeepMind Control Suite datasets (Gulcehre et al., 2020).
+
+Following QGPO (Lu et al., 2023), we adopt the same U-Net architecture with three hidden layers for all generative policy algorithms. The sampling process is performed using the Euler-Maruyama method in an ODE solver with uniform time steps,  $T = 1000$  in training for GMPG, and  $T = 32$  in evaluation for both GMPO and GMPG. All evaluations are conducted and averaged over five random seeds. Performance scores on D4RL datasets are normalized as suggested by Fu et al. (2021). We re-implemented QGPO, IDQL and SRPO under the same experimental settings for fair comparisons, reporting both our implementation scores and the original scores from the respective papers.
+
+More details about computation resources, hyperparameters, and training specifics can be found in Appendix D.1.
+
+### 6.2 EXPERIMENTS AND ANALYSIS
+
+We address two key questions: (1) Can simpler RL-native training schemes like GMPO and GMPG extract the optimal policy and achieve performance comparable to state-of-the-art algorithms on the classical offline-RL dataset? (2) What are the experimental differences between GMPO and GMPG, given that both forward KL and reverse KL theoretically point to the same optimal policy?
+
+{7}------------------------------------------------
+
+Table 3: Performance evaluation on D4RL datasets of different generative policies. We provide the original scores of SfBC, Diffusion-QL, QGPO, IDQL, and SRPO from their respective papers. SfBC and Diffusion-QL are not integrated into our framework due to the substantial modifications required. Other algorithms have been successfully implemented using our unified framework. A detailed comparison between the original scores and our implementation can be found in Appendix D, Table 9.
+
+| Environment | SfBC | Diffusion-QL | QGPO | IDQL | SRPO | GMPO | GMPG |
+|-|-|-|-|-|-|-|-|
+| Model type | VPSDE | DDPM | VPSDE | VPSDE | VPSDE | GVP | VPSDE |
+| Function type | $\epsilon(x_t, t)$ | $\epsilon(x_t, t)$ | $\epsilon(x_t, t)$ | $\epsilon(x_t, t)$ | $\epsilon(x_t, t)$ | $v(x_t, t)$ | $v(x_t, t)$ |
+| Pretrain scheme | Eq. 2 | Eq. 2 | Eq. 2 | Eq. 2 | Eq. 2 | / | Eq. 3 |
+| Finetune scheme | / | Eq. 37 | Eq. 30 | / | Eq. 35 | Eq. 40 | Eq. 8 |
+| halfcheetah-medium-expert-v2 | 92.6 | 96.8 | $92.0 \pm 1.5$ | $91.7 \pm 2.4$ | $86.7 \pm 3.7$ | $91.9 \pm 3.2$ | $89.0 \pm 6.4$ |
+| hopper-medium-expert-v2 | 108.6 | 111.1 | $107.0 \pm 0.9$ | $96.8 \pm 10.4$ | $100.8 \pm 9.3$ | $112.0 \pm 1.8$ | $107.8 \pm 1.9$ |
+| walker2d-medium-expert-v2 | 109.8 | 110.1 | $107.3 \pm 1.3$ | $107.0 \pm 0.5$ | $118.7 \pm 1.4$ | $108.1 \pm 0.7$ | $112.8 \pm 1.2$ |
+| halfcheetah-medium-v2 | 45.9 | 51.1 | $44.0 \pm 0.7$ | $43.7 \pm 2.8$ | $51.4 \pm 2.9$ | $49.9 \pm 2.7$ | $57.0 \pm 3.1$ |
+| hopper-medium-v2 | 57.1 | 90.5 | $80.1 \pm 7.0$ | $72.1 \pm 17.6$ | $97.2 \pm 3.3$ | $74.6 \pm 21.2$ | $101.1 \pm 2.6$ |
+| walker2d-medium-v2 | 77.9 | 87.0 | $82.8 \pm 2.7$ | $82.0 \pm 2.4$ | $85.6 \pm 2.1$ | $81.1 \pm 4.3$ | $91.9 \pm 0.9$ |
+| halfcheetah-medium-replay-v2 | 37.1 | 47.8 | $42.5 \pm 1.7$ | $41.6 \pm 8.4$ | $47.2 \pm 4.5$ | $42.3 \pm 3.6$ | $50.5 \pm 2.7$ |
+| hopper-medium-replay-v2 | 86.2 | 100.7 | $99.3 \pm 1.8$ | $89.1 \pm 3.1$ | $78.2 \pm 12.1$ | $97.8 \pm 3.8$ | $86.3 \pm 10.5$ |
+| walker2d-medium-replay-v2 | 65.1 | 95.5 | $81.1 \pm 4.2$ | $80.4 \pm 9.2$ | $79.6 \pm 7.6$ | $86.4 \pm 1.7$ | $90.1 \pm 2.2$ |
+| Average (Locomotion) | 75.6 | 88.0 | $81.8 \pm 2.4$ | $78.3 \pm 6.3$ | $82.8 \pm 5.1$ | $82.7 \pm 4.8$ | $87.3 \pm 3.5$ |
+
+Table 3 shows the performance of various generative policy algorithms on D4RL environments, including SfBC (Chen et al., 2023), Diffusion-QL (Wang et al., 2023), QGPO (Lu et al., 2023), IDQL (Hansen-Estruch et al., 2023), and SRPO (Chen et al., 2024). Table 4 presents the performance of generative policies on the RL Unplugged DeepMind Control Suite datasets (Gulcehre et al., 2020). For reference, we include the performance of two classical offline RL algorithms: RABM (Siegel et al., 2020) and D4PG (Barth-Maron et al., 2018), the latter being the algorithm for which most of this dataset was collected. The average performance across these tasks demonstrates that GMPO and GMPG effectively solve challenging continuous control tasks, achieving competitive results compared with other state-of-the-art algorithms.
+
+Hansen-Estruch et al. (2023) claims that using highly expressive models with importance weighted objectives can be problematic as such models can increase the likelihood of all training points regardless of their weight. And they find using advantage-weighted regression in the DDPM objective to not help performance, so they recommend sampling from behavior policy and filter out the high Q-value actions with the softmax importance sampling. However, our practice overturns the above claims and found that generative policy trained with advantage-weighted regression even from a scratch initialization can gain comparably equivalent performance to IDQL using resampling tricks, as shown in Table 3. Since utilizing the same Implicit Q-learning method, GMPO and GMPG both successfully extract optimal policies from the Q function. GMPO, a simpler variant of QGPO, achieves comparable performance on these datasets. This indicates that the advantage-weighted regression loss, a common component of both methods, is crucial for successful training.
+
+Unlike Diffusion-QL, which separates the KL divergence into a simulation-free score matching loss but remains Q guidance through simulation, GMPG computes both Q guidance and the KL divergence directly through simulation, achieving similar performance. Despite using a significantly larger number of sampling steps ( $T = 1000$ ) compared to Diffusion-QL ( $T = 5$ ), GMPG does not exhibit computational difficulties in our implementation. This effectively addresses the limitations highlighted by Wang et al. (2023), where the maximum  $T$  they could afford was 20, and they opted for  $T = 5$  to balance performance and computational cost.
+
+In addition, our experiments challenged the intuition that a complete 1000-step inference inherently leads to high computational costs, even with Neural ODEs. Our results demonstrate that with direct gradient guidance, no extra computational cost is required for optimization. For example, in halfcheetah-medium-v2-GMPG-GVP, optimal performance is achieved in 50-100 steps, taking 5-10 hours on an A100 GPU. Similarly, for halfcheetah-medium-v2-GMPO-GVP, optimal performance occurs at 240K-480K steps, also requiring 5-10 hours. Despite slower calculations for a 1000-step inference for one gradient step, it uses fewer training batches, resulting in similar overall time costs, ensuring no computation is wasted during training.
+
+{8}------------------------------------------------
+
+Table 4: Performance evaluation on RL Unplugged DeepMind Control Suite dataset of different generative policies. We evaluate different generative policies using the RL Unplugged DeepMind Control Suite dataset. D4PG is the primary algorithm used for most of this dataset’s collection, while RABM serves as a classical offline-RL algorithm for comparison. We present the original scores of D4PG and RABM from their respective papers. Since the original papers for QGPO, IDQL, and SRPO do not provide performance metrics on this dataset, we report the scores from our implementations.
+
+| Environment | D4PG | RABM | QGPO | IDQL | SRPO | GMPO | GMPG |
+|-|-|-|-|-|-|-|-|
+| Model type | / | / | VPSDE | VPSDE | VPSDE | GVP | GVP |
+| Function type | / | / | $\epsilon(x_t, t)$ | $\epsilon(x_t, t)$ | $\epsilon(x_t, t)$ | $v(x_t, t)$ | $v(x_t, t)$ |
+| Pretrain scheme | / | / | Eq. 2 | Eq. 2 | Eq. 2 | / | Eq. 3 |
+| Finetune scheme | / | / | Eq. 30 | / | Eq. 35 | Eq. 40 | Eq. 8 |
+| Carpole swingup | $856 \pm 13$ | $798 \pm 31$ | $806 \pm 54$ | $851 \pm 9$ | $842 \pm 13$ | $830 \pm 36$ | $858 \pm 51$ |
+| Cheetah run | $308 \pm 122$ | $304 \pm 32$ | $338 \pm 135$ | $451 \pm 231$ | $344 \pm 127$ | $359 \pm 188$ | $503 \pm 212$ |
+| Humanoid run | $1.72 \pm 1.66$ | $303 \pm 6$ | $245 \pm 45$ | $179 \pm 91$ | $242 \pm 22$ | $226 \pm 72$ | $209 \pm 61$ |
+| Manipulator insert ball | $154 \pm 55$ | $409 \pm 5$ | $340 \pm 451$ | $308 \pm 433$ | $352 \pm 458$ | $402 \pm 489$ | $686 \pm 341$ |
+| Walker stand | $930 \pm 46$ | $689 \pm 14$ | $672 \pm 266$ | $850 \pm 161$ | $946 \pm 23$ | $593 \pm 287$ | $771 \pm 292$ |
+| Finger turn hard | $714 \pm 80$ | $433 \pm 3$ | $698 \pm 352$ | $534 \pm 417$ | $328 \pm 464$ | $738 \pm 204$ | $657 \pm 371$ |
+| Fish swim | $180 \pm 55$ | $504 \pm 13$ | $412 \pm 297$ | $474 \pm 248$ | $597 \pm 356$ | $634 \pm 192$ | $515 \pm 168$ |
+| Manipulator insert peg | $50.4 \pm 9.2$ | $290 \pm 15$ | $279 \pm 229$ | $314 \pm 376$ | $327 \pm 383$ | $398 \pm 481$ | $540 \pm 343$ |
+| Walker walk | $549 \pm 366$ | $651 \pm 8$ | $791 \pm 150$ | $887 \pm 51$ | $963 \pm 15$ | $869 \pm 241$ | $656 \pm 233$ |
+| Average | $416 \pm 83$ | $487 \pm 14$ | $509 \pm 220$ | $538 \pm 224$ | $549 \pm 207$ | $561 \pm 243$ | $599 \pm 230$ |
+
+Figure 1 illustrates the log-likelihood of D4RL datasets evaluated by GMPO/GMPG policies across different training iterations. A higher log-likelihood indicates that the generative model output is closer to the original data distribution. For hopper-medium-v2, the generative model trained with GMPO maintains a certain distance from the original data distribution throughout training. In contrast, the GMPG-trained model closely aligns with the original data distribution during pretraining but diverges more during finetuning compared to GMPO. This divergence allows GMPG to achieve better performance. In the case of halfcheetah-medium-expert-v2, both GMPO and GMPG benefit from high-quality data, as the optimal policy is already near the original distribution. Here, GMPO excels in filtering out high Q-value actions, resulting in a slightly better performance compared to GMPG.
+
+More experiment details for GMPO and GMPG on D4RL AntMaze dataset can be found in Table 11 (Appendix D).
+
+In general, GMPG with reverse KL loss outperforms GMPO and other generative policies with Forward KL loss in most medium and medium-replay locomotion tasks. This suggests that the policy gradient method more aggressively leverages Q guidance and is less constrained by the behavior policy, allowing optimization into regions with less data support — a beneficial exploration strategy in medium and medium-replay data, though it results in slightly poorer performance with expert data as shown in Table 3. Additionally, GMPO shows more stable training convergence with monotonic improvement, while GMPG exhibits fluctuating performance during training with small batch sizes, requiring larger batch sizes for stability.
+
+### 6.3 ABLATION EXPERIMENTS
+
+**Generative Model Type.** Table 5 presents a performance comparison of three generative models: GVP, VPSDE, and I-CFM (a more detailed comparison is available in Table 10). Overall, all three models demonstrate comparable performance. However, I-CFM exhibits slightly weaker performance in certain cases. This discrepancy may stem from its simpler flow path, as defined in Eq. 28, which could potentially limit its ability to capture the environment’s complex dynamics effectively.
+
+**Sampling Scheme for GMPG.** As shown in Table 6, our ablation study reveals that increasing the number of sampling time steps  $T$  within the GMPG algorithm can lead to improved performance.
+
+Further ablation experiments about temperature coefficient  $\beta$  and solver schemes for sampling are detailed in Appendix D.3.
+
+{9}------------------------------------------------
+
+![Figure 1: Four scatter plots (a, b, c, d) showing Log-Likelihood vs. Normalized Returns for D4RL datasets. (a) HM/GMPO-GVP, (b) HM/GMPG-GVP, (c) HME/GMPO-GVP, (d) HME/GMPG-GVP. Each plot shows training points (blue), finetuning points (orange), and an optimal model (red star).](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 1: Four scatter plots (a, b, c, d) showing Log-Likelihood vs. Normalized Returns for D4RL datasets. (a) HM/GMPO-GVP, (b) HM/GMPG-GVP, (c) HME/GMPO-GVP, (d) HME/GMPG-GVP. Each plot shows training points (blue), finetuning points (orange), and an optimal model (red star).
+
+Figure 1: Log-Likelihood of D4RL datasets evaluated by GMPO/GMPG-GVP policies during training. HM stands for hopper-medium-v2, HME stands for halfcheetah-medium-expert-v2. Each point represents a model during training, with colors indicating different stages. The returns of the model are evaluated and averaged over five random seeds. Blue points denote the pretraining stage for GMPG and the training stage for GMPO, as GMPO does not require pretraining. Orange points indicate the finetuning stage for GMPG. The star marker shows the optimal model obtained during training. The density of the points reflects the number of models in that area.
+
+Table 5: Performance comparison of model types on D4RL datasets. The average performance is calculated over 9 locomotion tasks.
+
+| Algo. type | GMPO |  |  | GMPG |  |  |
+|-|-|-|-|-|-|-|
+| Model type | VPSDE | GVP | I-CFM | VPSDE | GVP | I-CFM |
+| Average (Locomotion) | $80.2 \pm 4.2$ | $82.7 \pm 4.8$ | $76.2 \pm 8.0$ | $87.3 \pm 3.5$ | $84.2 \pm 3.2$ | $83.4 \pm 4.2$ |
+
+Table 6: Performance comparison of different sampling time steps for GMPG. The time span of the ODE solver is  $[0, 1]$ , so a larger  $T$  means more sampling steps and a smaller step size.
+
+| Pretrain scheme / Finetune scheme | GMPG / VPSDE / $v(x_t, t)$ |  |  |
+|-|-|-|-|
+|  | Eq. 3 / Eq. 8 |  |  |
+| $T$ (Used for Training Only) | 32 | 100 | 1000 |
+| halfcheetah-medium-v2 | $53.9 \pm 2.7$ | $55.8 \pm 2.8$ | $57.0 \pm 3.1$ |
+| halfcheetah-medium-replay-v2 | $43.4 \pm 3.5$ | $49.1 \pm 3.3$ | $50.5 \pm 2.7$ |
+
+## 7 CONCLUSION
+
+In this paper, we provide a comprehensive study of generative policies and propose two unified and RL-native training schemes, GMPO and GMPG, that are effective and straightforward for both diffusion and flow models. GMPO benefits from a stable training process and does not require pretraining the generative model before optimal policy extraction, making it more efficient and easier to train. GMPG is a native policy gradient-based method for continuous-time generative models, and we provide a numerically stable implementation for the RL community. Our experiment results demonstrate that the proposed training schemes offer comparable or better performance than previous works in most cases.
+
+To ensure consistent comparisons and analyses, we introduce a unified framework for reinforcement learning algorithms that leverages the expressive power of generative models. This standardized experimental framework decouples the generative model from the RL components, allowing for consistent evaluation of different generative models within the same RL context.
+
+Overall, this work simplifies and unifies the training of generative models for policy modeling, providing practical guidelines for training and deploying generative policies in reinforcement learning. Additionally, we discuss existing limitations and valuable topics for future work in Appendix F.
+
+ Rest of paper (reference and Appendix) is removed.

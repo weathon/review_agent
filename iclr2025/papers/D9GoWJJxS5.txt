@@ -1,0 +1,404 @@
+
+
+{0}------------------------------------------------
+
+# BYPASS BACK-PROPAGATION: OPTIMIZATION-BASED STRUCTURAL PRUNING FOR LARGE LANGUAGE MODELS VIA POLICY GRADIENT
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+In contrast to moderate-size neural network pruning, structural weight pruning on the Large-Language Models (LLMs) imposes a novel challenge on the efficiency of the pruning algorithms, due to the heavy computation/memory demands of the LLMs. Recent efficient LLM pruning methods typically operate at the post-training phase without the expensive weight finetuning, however, their pruning criteria often rely on **heuristically hand-crafted metrics**, potentially leading to suboptimal performance. We instead propose a novel **optimization-based structural pruning** that learns the pruning masks in a probabilistic space **directly by optimizing the loss of the pruned model**. To preserve the efficiency, our method **eliminates the back-propagation** through the LLM *per se* during the optimization, requiring only the **forward pass of the LLM**. We achieve this by learning an underlying Bernoulli distribution to sample binary pruning masks, where we decouple the Bernoulli parameters from the LLM loss, thus facilitating an efficient optimization via a *policy gradient estimator* without back-propagation. As a result, our method is able to 1) *operate at structural granularities of channels, heads, and layers*, 2) *support global and heterogeneous pruning (i.e., our method automatically determines different redundancy for different layers)*, and 3) *optionally initialize with a metric-based method* (for our Bernoulli distributions). Extensive experiments on LLaMA, LLaMA-2, LLaMA-3, Vicuna, and Mistral using the C4 and WikiText2 datasets demonstrate that our method operates for 2.7 hours with around 35GB memory for the 13B models on a single A100 GPU, and our pruned models outperform the state-of-the-arts *w.r.t.* both perplexity and the majority of various zero-shot tasks. Codes will be released.
+
+## 1 INTRODUCTION
+
+With the rapid development of Large Language Models (LLMs) Brown et al. (2020); Achiam et al. (2023) and their expanding multitude of applications across various domains, the efficiency of LLMs with vast parameters and complex architectures becomes crucial for practical deployment. In this paper, we aim to compress the LLM through structural pruning, which removes certain structural components such as channels or layers to reduce the model size with hardware-friendly acceleration.
+
+Pioneering structural pruning in the pre-LLM era involves pruning channels or layers through *optimization*, which determines the structures to prune by back-propagating the task loss through the networks Liu et al. (2018); Balock et al. (2020); Zhu & Gupta (2017); Louizos et al. (2017); Gale et al. (2019); Frankle & Carbin (2018). These methods operate at the in-training Huang & Wang (2018); Evci et al. (2020); Zhao et al. (2019); He et al. (2018a) or post-training Molchanov et al. (2019); Wang et al. (2021); Liu et al. (2021) phase, where the latter exhibit better efficiency without model weights update. We thus focus on post-training pruning in the following to ensure efficiency.
+
+However, the heavy computational and memory demands of LLMs make existing *optimization-based pruning* methods (even post-training ones) less appropriate for LLM pruning in terms of efficiency. *Metric-based pruning* is introduced to alleviate this issue, which directly prunes specific network components based on carefully designed criteria, such as the importance score Sun et al. (2023); Das et al. (2023). Nonetheless, those criteria are often based on heuristics. As a re-
+
+{1}------------------------------------------------
+
+![A hierarchical tree diagram showing the taxonomy of LLM Pruning Methods. The root is 'LLM Pruning Methods', which branches into 'w/ Weight Update' and 'w/o Weight Update'. 'w/ Weight Update' branches into 'Metric-based' and 'Optim-based'. 'Metric-based' branches into 'Only Forward' and 'Need Backward'. 'Optim-based' branches into 'Only Forward' and 'Need Backward'. 'w/o Weight Update' branches into 'Metric-based' and 'Optim-based'. 'Metric-based' branches into 'Only Forward' and 'Need Backward'. 'Optim-based' branches into 'Only Forward' and 'Need Backward'. Each leaf node is a box containing 'Structured' and 'Unstructured' information. The 'Our Method' box is highlighted with a red star.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+054  
+055  
+056  
+057  
+058  
+059  
+060  
+061  
+062  
+063  
+064  
+065  
+066  
+067  
+068  
+069  
+070  
+071  
+072  
+073  
+074  
+075
+
+|  |  |
+|-|-|
+| Only Forward | <b>Structured:</b> An et al. (2023); van der Ouderaa et al. (2023); Yang et al. (2024) |
+|  | <b>Unstructured:</b> Boža (2024); Frantar & Alistarh (2023); van der Ouderaa et al. (2023); Zeng et al. (2024); Zhang et al. (2024b) |
+| Need Backward | <b>Structured:</b> Chen et al. (2024); Wei et al. (2024); Zhang et al. (2024a) |
+|  | <b>Unstructured:</b> N/A |
+| Only Forward | N/A (Cannot Update Weights) |
+|  | <b>Structured:</b> Chen et al. (2023); Guo et al. (2023); Ko et al. (2023); Li et al. (2024); Zhao et al. (2024); Xia et al. (2023b) |
+| Need Backward | <b>Unstructured:</b> N/A |
+| Only Forward | ♠ <b>Structured:</b> Ashkboos et al. (2024); Kim et al. (2024); Dery et al. (2024) |
+|  | <b>Unstructured:</b> Li et al. (2023); Shao et al. (2023); Sun et al. (2023); Xu et al. (2024); Yin et al. (2023); Zhang et al. (2023) |
+| Need Backward | ♠ <b>Structured:</b> Ma et al. (2023) |
+|  | <b>Unstructured:</b> Das et al. (2023) |
+| Only Forward | <b>Structured:</b> <span style="color: red;">Our Method</span> |
+|  | <b>Unstructured:</b> N/A |
+| Need Backward | N/A (Less Efficient) |
+
+A hierarchical tree diagram showing the taxonomy of LLM Pruning Methods. The root is 'LLM Pruning Methods', which branches into 'w/ Weight Update' and 'w/o Weight Update'. 'w/ Weight Update' branches into 'Metric-based' and 'Optim-based'. 'Metric-based' branches into 'Only Forward' and 'Need Backward'. 'Optim-based' branches into 'Only Forward' and 'Need Backward'. 'w/o Weight Update' branches into 'Metric-based' and 'Optim-based'. 'Metric-based' branches into 'Only Forward' and 'Need Backward'. 'Optim-based' branches into 'Only Forward' and 'Need Backward'. Each leaf node is a box containing 'Structured' and 'Unstructured' information. The 'Our Method' box is highlighted with a red star.
+
+Figure 1: The taxonomy of our method among the LLM Pruning. Methods without weight update are used for comparison in our experiments (highlighted with ♠), due to the constraints on time and memory efficiency, as well as the accessibility of large-scale finetuning datasets.
+
+sult, metric-based pruning methods often face challenges in achieving promising performance and generalizability, particularly when the pruning rate is high.
+
+Moreover, the majority of *metric-based pruning* methods typically prune the networks by manually-designed thresholds Li et al. (2023); Zhang et al. (2023). Although different layers of LLMs may have varying levels of redundancy Yin et al. (2023); Xu et al. (2024), *achieving a global and heterogeneous pruning strategy is challenging with metric-based approaches*. This arises due to the significantly varying magnitudes of the manually designed metrics across layers, making it laborious or even impossible to set proper pruning threshold for each layer<sup>1</sup>. The above analysis leads to a natural question: *Can we attain the performance of optimization-based methods that facilitates global and heterogeneous pruning without relying on hand-crafted heuristics, while preserving a similar cost with the metrics-based methods that is affordable on a single commercial GPU?*
+
+In view of the above analysis, our proposed method is essentially a novel lightweight *optimization-based method*, where it 1) efficiently avoids the back-propagation through the heavy LLM, 2) naturally supports flexible pruning structural granularities such as channels, heads (of multi-head attention modules), and layers, 3) optionally can be initialized by an arbitrary metric-based approach. Particularly, our pruning efficiency is ensured using a *policy gradient estimator* Williams (1992), requiring only the LLM **forward pass** without back-propagation, which is analogous to many efficient metric-based methods and requires the same memory overhead, such as Shao et al. (2023); Men et al. (2024); Frantar & Alistarh (2023); An et al. (2023). Moreover, our method unifies the pruning of the entire LLM into a probabilistic space (that can be optionally initialized by an arbitrary metric-based approach), which eliminates the magnitude difference issue of most metric-based methods, therefore directly facilitating global and heterogeneous pruning across the entire LLM.
+
+Specifically, we formulate our pruning as a binary mask learning/optimization problem Srinivas et al. (2017), where the binary masks determine whether to prune the corresponding structures by element-product of them. To efficiently learn those binary masks, we construct an underlying probabilistic space of Bernoulli distributions to sample those binary masks. By decoupling the Bernoulli parameters and the sampled masks, our method results in a disentanglement of the
+
+<sup>1</sup>As a practical compromise, most metric-based methods conduct a homogeneous/uniform pruning rate for all the layers, which violates the fact that different layers could possess the different amount of redundancy.
+
+{2}------------------------------------------------
+
+Bernoulli parameters from the LLM loss, which can thus be optimized efficiently exploiting the *policy gradient estimator* in a back-propagation-free manner<sup>2</sup>. Moreover, the probabilistic modeling of Bernoulli distribution facilitates global and heterogeneous pruning across the entire LLM. Furthermore, by formulating the masks at the different structural granularities, our method supports pruning at channels, heads, and layers.
+
+The taxonomy of our methods is illustrated in Fig. 1. In the experiments, our method is compared with SOTA structural pruning methods that *do not update the model weight simultaneously*, due to the constraints on **time and memory efficiency**<sup>3</sup>. We extensively validate our methods using the C4 Raffel et al. (2020) and WikiText2 Merity et al. (2016) datasets on popular LLaMA Touvron et al. (2023a), LLaMA-2 Touvron et al. (2023b), LLaMA-3 Dubey et al. (2024), Vicuna Chiang et al. (2023), and Mistral Jiang et al. (2023) models with various parameter sizes, pruning rates, and initializations, showing the promising performance and efficiency of the proposed method. For example, our method operates only 2.7 hours with about 35GB memory on a single A100 GPU to prune the LLaMA-2-13B model, resulting in clear outperformance over the SOTA methods regarding both perplexity and zero-shot performance. Our method exhibits the following features simultaneously:
+
+- **Accuracy**, ensured by 1) our *optimization-based pruning* without heuristically hand-crafted metrics, which optionally take metric-based pruning as initialization for a better convergence, and 2) the *global and heterogeneous pruning*, as supported by our probabilistic modeling of the pruning masks.
+- **Efficiency** (regarding both computations and memory), achieved by the *policy gradient estimator* for back-propagation-free and forward-only optimization *w.r.t.* the heavy LLMs.
+- **Flexibility** (across various structural pruning granularities including channels, heads, and layers), coming from our *mask formulation of pruning* that can be inherently applied to different structural granularities.
+
+## 2 RELATED WORK
+
+Pruning has proven effective in traditional deep neural networks Han et al. (2015); Frankle & Carbin (2018); Kurtic et al. (2022); Gordon et al. (2020); Liu et al. (2019); He et al. (2018b); Zhong et al. (2018), and extensive research has been conducted on this topic. Typically, post-pruning performance is restored or even enhanced through full-parameter fine-tuning Liu et al. (2018); Blalock et al. (2020). However, for large language models (LLMs) with their vast number of parameters, full-parameter fine-tuning is computationally expensive and often impractical. To overcome this challenge, various pruning strategies Ko et al. (2023); Xia et al. (2023a); Jaiswal et al. (2023); Zhang et al. (2024a); Chen et al. (2023); Zhao et al. (2024); Ashkboos et al. (2024); Dery et al. (2024); Men et al. (2024); Fang et al. (2024); Sreenivas et al. (2024); Shen et al. (2024); Song et al. (2024); Gromov et al. (2024); Liu et al. (2024) have been developed for LLMs in recent years. These strategies can be categorized into metric-based pruning and optimization-based pruning.
+
+**Metric-based Pruning.** Metric-based pruning methods focus on designing importance metrics for model weights or modules. The most representative method is Wanda Sun et al. (2023). It introduces a simple but effective pruning metric by considering both the magnitude of weights and activations without updating model parameters. LLM-Pruner Ma et al. (2023) efficiently trims LLMs by pinpointing and eliminating non-essential coupled structures, assessing weight importance via loss change, and using Taylor expansion to preserve performance. SparseGPT Frantar & Alistarh (2023) propose an efficient technique for estimating the Hessian matrix to reconstruct the model. These methods use pre-defined pruning metrics and often face challenges with high pruning rates. Most recently, Dery et al. (2024) proposes a structured pruning method with only forward passes with promising performance. However, it still relies on regressing the heuristically hand-crafted criteria, *e.g.*, the utility of the pruned sub-networks. Moreover, Dery et al. (2024) also leverages additional assumptions that might not hold universally, *e.g.*, the network’s utility as a linear summation of building elements’ utilities, and the building element’s utility remaining the same/average-able across different sub-networks.
+
+<sup>2</sup>We note that our formulation can also be interpreted from a reinforcement learning (with dense rewards) perspective in terms of Markov Decision Process (MDP), please refer to Appendix A.3 for details.
+
+<sup>3</sup>After pruning is performed, it becomes affordable to finetune the weights of the pruned smaller model on a single commercial GPU, we include this “final” performance with pruning then finetuning in our experiments.
+
+{3}------------------------------------------------
+
+![Figure 2: Overview of the proposed LLM pruning method. The diagram illustrates the flow from input tokens to a pruned model, with learnable parameters (flame icon) and fixed parameters (snowflake icon). It shows the generation of probability scores, Bernoulli sampling for module masks, and the resulting pruned model. The loss is calculated between the pruned model's output and the target. A policy gradient is estimated from the loss to update the probability scores, while the backward gradient is halted at the sampling step.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+The diagram shows the following components and flow:
+
+- Legend:**
+ - Flame icon: Learnable
+ - Snowflake icon: Fixed
+ - Circle with cross icon: Element-wise Product
+ - Solid arrow: Operation Flow
+ - Red dashed arrow: Backward Gradient (e.g., Gumbel Softmax)
+ - Blue dashed arrow: Policy Gradient
+- LLM Modules:** A 4x4 grid of yellow squares, some with snowflake icons, indicating fixed parameters.
+- Input Tokens:** Four green boxes labeled X1, X2, X3, X4.
+- Target:** One green box labeled X5.
+- Probability Scores:** A 4x4 grid of values (e.g., 0.9, 0.5, 0.8, 0.4) with flame icons, indicating learnable parameters.
+- Bernoulli Sampling:** A process that takes probability scores and generates a **Module Mask** (a 4x4 grid of 0s and 1s).
+- Gradient Halt:** A red 'X' symbol indicating that the backward gradient is stopped at the sampling step.
+- Pruned Model:** A smaller grid of yellow squares resulting from the element-wise product of LLM Modules and the Module Mask.
+- Output:** A red box labeled 'O' representing the output of the pruned model.
+- Loss:** A blue box representing the loss between the Output and the Target.
+- Policy Gradient:** A blue dashed arrow from the Loss back to the Probability Scores.
+
+Figure 2: Overview of the proposed LLM pruning method. The diagram illustrates the flow from input tokens to a pruned model, with learnable parameters (flame icon) and fixed parameters (snowflake icon). It shows the generation of probability scores, Bernoulli sampling for module masks, and the resulting pruned model. The loss is calculated between the pruned model's output and the target. A policy gradient is estimated from the loss to update the probability scores, while the backward gradient is halted at the sampling step.
+
+Figure 2: The overview of our method. We formulate LLM pruning as optimizing underlying Bernoulli distributions that sample binary masks. Being different from the conventional back-propagation method (e.g., through *Gumbel Softmax* as shown by the red-dashed-arrows), our formulation decouples the masks and the Bernoulli parameters from the LLM loss (see Eq. (4) and Remark 3), facilitating efficient and unbiased *policy gradient* (the blue-dashed-arrow) without back-propagation through the LLM (see Eq. (5) and Remark 4).
+
+**Optimization-based Pruning.** Optimization-based pruning methods focus on determining the model mask in an optimized manner and also involve updating the model parameters. Sheared LLaMA Xia et al. (2023b) learns pruning masks to find a subnetwork that fits a target architecture and maximizes performance, utilizing dynamic batch loading for efficient data usage. Compresso Guo et al. (2023) optimizes LLM pruning by integrating LoRA Hu et al. (2022) with L0 regularization and dynamically updates parameters during instruction tuning to enhance post-pruning performance and adaptability. LoRAShear Chen et al. (2023) and APT Zhao et al. (2024) also utilize LoRA in the pruning process alongside weight updating. However, these methods, including the optimization process and weight finetuning, invariably rely on back-propagation, which is time and memory-intensive. We propose using policy gradient estimation in the optimization process as an alternative to back-propagation, which significantly reduces the computational demands.
+
+## 3 METHODOLOGY
+
+We introduce our optimization-based pruning for LLMs, which is efficient without back-propagation through the LLM. We detail our probabilistic mask modeling in Sect. 3.1, and our optimization via policy gradient estimator in Sect. 3.2. The overview of our method is illustrated in Fig. 2.
+
+### 3.1 PRUNING VIA PROBABILISTIC MASK MODELING
+
+We formulate the network pruning as seeking binary masks Srinivas et al. (2017) to determine whether the corresponding structure should be pruned or retrained. Those binary masks are further modeled by/sampled from underlying Bernoulli distributions stochastically. Such formulation possesses several merits: 1) the mask formulation enables flexible pruning at channels, heads (of Multi-Head Attention, MHA), and layers; 2) the probabilistic Bernoulli modeling facilitates global and heterogeneous pruning across the entire LLM; and 3) our stochastic sampling decouples Bernoulli parameters and the sampled masks from LLM loss thus empowers an efficient *policy gradient* optimization without back-propagate through the LLM (see Sect. 3.2).
+
+Specifically, denoting the calibration dataset with  $N$  i.i.d. samples as  $\mathcal{D} = \{(x_i, y_i)\}_{i=1}^N$ ,  $\mathbf{w} = \{\mathbf{w}_i\}_{i=1}^n$  as the complete and non-overlapped modules of a LLM with model size  $n$ , and  $\mathbf{m} = \{\mathbf{m}_i\}_{i=1}^n \in \{0, 1\}^n$  as the corresponding binary masks, where  $\mathbf{m}_i = 0$  implies  $\mathbf{w}_i$  is pruned and otherwise  $\mathbf{w}_i$  is retained. We note that  $\mathbf{w}_i$  and  $\mathbf{m}_i$  can be defined with various granularities such as channels, heads, and layers for structural pruning<sup>4</sup>. Then, our structural pruning of LLMs can be
+
+<sup>4</sup>Note that for the channel and head granularities, we prune the dimensions of the hidden states following Ma et al. (2023); An et al. (2023), without altering the final output channels for each block and thus ensuring the feasibility of the residue connections, as shown in the conceptual figure in Appendix A.2.
+
+{4}------------------------------------------------
+
+formulated as a binary optimization with constraints:
+
+$$\min_{\mathbf{m}} \mathcal{L}(\mathcal{D}; \mathbf{w} \odot \mathbf{m}) := \frac{1}{N} \sum_{i=1}^N \ell(f(\mathbf{x}_i; \mathbf{w} \odot \mathbf{m}), \mathbf{y}_i), \quad (1)$$
+
+$$\text{s.t. } \|\mathbf{m}\|_1 \leq rn \text{ and } \mathbf{m} \in \{0, 1\}^n.$$
+
+where  $f(\cdot; \mathbf{w} \odot \mathbf{m})$  is the pruned network,  $\ell(\cdot, \cdot)$  is the loss function, e.g., the cross-entropy loss, and  $r$  is the target pruning rate. We note that the binary optimization problem Eq. (1), i.e., finding high-quality masks  $\mathbf{m}$  from the discrete and exponentially growing solution space, is typically NP-hard.
+
+Therefore, we relax the discrete optimization using a probabilistic approach, by treating  $n$  masks as binary *random variables* sampled from  $n$  underlying Bernoulli distributions with parameters  $\mathbf{s} = \{s_i\}_{i=1}^n \in [0, 1]^n$ . This yields the conditional distribution of  $\mathbf{m}$  over  $\mathbf{s}$ :
+
+$$p(\mathbf{m}|\mathbf{s}) = \prod_{i=1}^n (s_i)^{m_i} (1 - s_i)^{1 - m_i}. \quad (2)$$
+
+By relaxing the  $\ell_1$  norm in Eq. (1) using its expectation, i.e.,  $\|\mathbf{m}\|_1 \approx \mathbb{E}_{\mathbf{m} \sim p(\mathbf{m}|\mathbf{s})} \|\mathbf{m}\|_1 = \sum_{i=1}^n s_i = \mathbf{1}^\top \mathbf{s}$ , we have the following expected loss minimization problem:
+
+$$\min_{\mathbf{s}} \mathbb{E}_{\mathbf{p}(\mathbf{m}|\mathbf{s})} \mathcal{L}(\mathcal{D}; \mathbf{w} \odot \mathbf{m}), \quad (3)$$
+
+$$\text{s.t. } \mathbf{1}^\top \mathbf{s} \leq rn \text{ and } \mathbf{s} \in [0, 1]^n.$$
+
+**Remark 1** Problem (3) is a continuous relaxation of the discrete Problem (1). The feasible region of Problem (3) is as simple as the intersection of the cube  $[0, 1]^n$  and the half-space  $\mathbf{1}^\top \mathbf{s} \leq rn$ . Moreover, the parameterization of Problem (3) in the probabilistic space facilitates automatically learning the redundancy across different layers for global and heterogeneous pruning.
+
+### 3.2 OPTIMIZATION BY POLICY GRADIENT ESTIMATOR
+
+Conventional neural network training paradigm usually adopts back-propagation to estimate the gradient of Eq. (3), e.g., through Gumbel-Softmax Maddison et al. (2016); Dupont et al. (2022) which reparameterizes the mask  $\mathbf{m}$  as a function of  $\mathbf{s}$ , i.e.,  $m_i = \phi(s_i, \epsilon)$  or  $m_i = \phi(s_i, \epsilon)$  with  $\epsilon \sim \mathcal{N}(0, 1)$ . However, the back-propagation has the following intrinsic issues in LLM pruning.
+
+**Remark 2** *Intrinsic issues of back-propagation in LLM pruning:* 1) the back-propagation is computationally expensive and costs a large amount of memory; 2) the computation of gradients can not be satisfied by using the sparsity in  $\mathbf{m}$ , i.e.,  $\frac{\partial \mathcal{L}}{\partial s_i} \neq 0$  even if  $m_i = 0$ . In other words, one has to go through the full model for back-propagation even when lots of the LLM modules have been masked.
+
+Now we present our efficient (back-propagation-free) and unbiased optimization for Problem (3). We proposed to adopt Policy Gradient Estimator (PGE) to estimate the gradient with only forward propagation, avoiding the pathology of the chain-rule-based estimator. Specifically, in order to update the Bernoulli parameters  $\mathbf{s}$ , we have the following objective  $\Phi(\mathbf{s})$ :
+
+$$\Phi(\mathbf{s}) = \mathbb{E}_{\mathbf{p}(\mathbf{m}|\mathbf{s})} \mathcal{L}(\mathcal{D}; \mathbf{w} \odot \mathbf{m}) = \int p(\mathbf{m}|\mathbf{s}) \mathcal{L}(\mathcal{D}; \mathbf{w} \odot \mathbf{m}) d\mathbf{m}, \quad (4)$$
+
+$$\text{s.t. } \mathbf{1}^\top \mathbf{s} \leq rn \text{ and } \mathbf{s} \in [0, 1]^n.$$
+
+Our key idea is that in Eq. (4), the score vector  $\mathbf{s}$  only appears in the conditional probability  $p(\mathbf{m}|\mathbf{s})$  for sampling  $\mathbf{m}$ , which is decoupled from the network loss term  $\mathcal{L}(\mathcal{D}; \mathbf{w} \odot \mathbf{m})$ .
+
+**Remark 3** *Differences with Gumbel Softmax:* 1) As shown in Eq. (4), our PGE formulates the mask  $\mathbf{m}$  as a random variable which is only related to the distribution  $\mathbf{s}$  through the conditional probability  $p(\mathbf{m}|\mathbf{s})$  of probabilistic sampling. Therefore, the expensive back-propagation through the LLM can be omitted in gradient estimation using the PGE. On the contrary, in the Gumbel-Softmax estimator,  $\mathbf{m}$  is a function of  $\mathbf{s}$ , requiring the back-propagation through the whole networks (see the blue and red gradient flows in Fig. 2). 2) As a result, Gumbel-Softmax is challenged by the back-propagation issues discussed in Remark 2. 3) Gumbel-Softmax is known to be biased especially when the temperature is high Huijben et al. (2022). 4) The vanilla PGE might suffer from large variance Liu et al. (2020), we thus exploit a variance-reduced PGE discussed later in Eq. (7) with theoretical analysis and empirical ablations in Appendices A.4 and A.10.
+
+{5}------------------------------------------------
+
+Specifically, the optimization of Eq. (4) via the policy gradient estimator holds that:
+
+$$\begin{aligned}
+\nabla_s \Phi(s) &= \int \mathcal{L}(\mathbf{m}) \nabla_s p(\mathbf{m}|s) + \underbrace{p(\mathbf{m}|s) \nabla_s \mathcal{L}(\mathbf{m})}_{=0} d\mathbf{m} \\
+&= \int \mathcal{L}(\mathbf{m}) p(\mathbf{m}|s) \nabla_s \log(p(\mathbf{m}|s)) d\mathbf{m} \\
+&= \mathbb{E}_{p(\mathbf{m}|s)} \mathcal{L}(\mathbf{m}) \nabla_s \log(p(\mathbf{m}|s)).
+\end{aligned} \tag{5}$$
+
+The last equality shows that  $\mathcal{L}(\mathbf{m}) \nabla_s \log(p(\mathbf{m}|s))$  is an unbiased stochastic gradient for  $\Phi(s)$ .
+
+**Remark 4** *The efficiency of Eq. (5): 1) Equation (5) can be computed purely with forward propagation. 2) The computation cost for the gradients, i.e.,  $\nabla_s \log(p(\mathbf{m}|s)) = \frac{\mathbf{m}-s}{s(1-s)}$ , is negligible. Therefore, our PGE is much efficient compared to the backward-propagation-based estimators.*
+
+The stochastic gradient descent algorithm in the batch-training paradigm is:
+
+$$\mathbf{s} \leftarrow \mathbf{proj}_{\mathcal{C}}(\mathbf{z}) \text{ with } \mathbf{z} := \mathbf{s} - \eta \mathcal{L}(\mathcal{D}_B; \mathbf{w} \odot \mathbf{m}) \nabla_s \log(p(\mathbf{m}|s)). \tag{6}$$
+
+where  $\mathcal{D}_B = \{(x_i, y_i)\}_{i=1}^B$  is batch samples from  $\mathcal{D}$  with batch size  $B$ , and  $\mathcal{L}(\mathcal{D}_B; \mathbf{w} \odot \mathbf{m})$  is the loss on  $\mathcal{D}_B$  with the pruned model by masks  $\mathbf{m}$ . The projection operator  $\mathbf{proj}_{\mathcal{C}}(\cdot)$  is to ensure the updated scores  $\mathbf{s}$  to be constrained in the feasible domain  $\mathcal{C}$  that satisfies  $\mathcal{C} = \{\mathbf{1} \mid \mathbf{s} \leq K\} \cap \{s \in [0, 1]^n\}$ . We implement the projection operator from Wang & Carreira-Perpinán (2013), the details of which can be found in Appendix A.1.
+
+Policy gradient might suffer from large variance Liu et al. (2020). To reduce the variance for fast and stable training, we minus a moving average baseline Zhao et al. (2011) which is calculated by 1) obtaining the averaged loss of multiple sampling trials, then 2) taking the moving average of the current and the previous losses given a window size. Denote the baseline as  $\delta$ , given window size  $T$  (set to 5), and mask sampling times  $N_s$  (set to 2), we update  $\mathbf{s}$  in each training step via Eqs. (7) and (8). The theoretical analysis and empirical ablations can be found in Appendix A.4 and A.10.
+
+$$\mathbf{s} \leftarrow \mathbf{proj}_{\mathcal{C}}(\mathbf{z}) \text{ with } \mathbf{z} := \mathbf{s} - \eta \left[ \frac{1}{N_s} \sum_{i=1}^{N_s} (\mathcal{L}(\mathcal{D}_B; \mathbf{w} \odot \mathbf{m}^{(i)}) - \delta) \nabla_s \log(p(\mathbf{m}^{(i)}|s)) \right]. \tag{7}$$
+
+$$\delta \leftarrow \frac{T-1}{T} \delta + \frac{1}{N_s T} \sum_{i=1}^{N_s} \mathcal{L}(\mathcal{D}_B; \mathbf{w} \odot \mathbf{m}^{(i)}). \tag{8}$$
+
+Our efficient pruning algorithm is summarized in Appendix A.1. Note that our formulation can also be interpreted as a dense rewards reinforcement learning problem, as discussed in Appendix A.3.
+
+**Initialization.** Algorithms based on policy gradient usually require an effective initialization to get enhanced results. In this context, previous hand-crafted pruning metric can be applied to initialize the probability of each module:  $s_0 \leftarrow \sigma(\mathbf{x})$ , in which  $\mathbf{x}$  can be any pruning metric derived from existing method,  $s_0$  represents the initial probability assigned to each module, and  $\sigma$  symbolizes a non-linear transformation. **We note that initializing from a prior metric-based method is only an option, while a random initialization strategy can already produce good performance.** Please refer to different initializations  $\mathbf{x}$  and transformations  $\sigma$  discussed in Appendices A.12 and A.11.
+
+**Applicability of PGE in Learning Pruning Masks.** We note that the precision of PGE may not match that of conventional back-propagation. Given that we are learning the **binary** masks  $\mathbf{m}$  (distinct from the **float** weights), it is expected that the precision requirement of  $\mathbf{s}$  can be modest. Moreover, our PGE is unbiased (compared to the biased Gumbel Softmax). These factors make the PGE suitable for learning the masks, which is empirically validated with extensive experiments.
+
+## 4 EXPERIMENTS
+
+Extensive experiments have been conducted in this section to validate the promising performance of the proposed method. In short, our method has been validated across **different LLM models with various sizes, pruning rates, structural granularities for pruning** (i.e., channels, heads, and layers), and **initializations** (in the ablation analysis). In the following, we first detail our experimental
+
+{6}------------------------------------------------
+
+324 setups in Sect. 4.1. After that, our main results against the state-of-the-art methods for channels and  
+325 heads pruning, as well as layers pruning, are shown in Sects. 4.2 and 4.3. We illustrate the zero-shot  
+326 performance in Sect. 4.4, Appendices A.6 and A.7. Our method runs 2.7 hours for LLaMA-2-  
+327 13B with a similar GPU memory (i.e.,  $\sim 35\text{GB}$ ) as Wanda-sp An et al. (2023) as shown in Appendix  
+328 A.5. Considering the constraints on computations and memory, we compare with the state-of-the-art  
+329 methods without in-pruning weight updates, and we report the *pruning then finetuning* performance  
+330 in Appendix A.6, as it becomes affordable to finetune a smaller model after pruning. We also show  
+331 multiple-run statistics of our method in Appendix A.9.
+
+###### 332 4.1 EXPERIMENTAL SETUP
+
+333  
+334 **Structural Granularities for Pruning.** We validate our method on various structural granularities  
+335 for pruning, namely *channels*, *heads*, and *layers*. For the effects of different initializations, we  
+336 extensively investigated them in Sect. 5 and Appendices A.11 and A.12.
+
+337  
+338 **Head and Channel Granularities:** We follow Ma et al. (2023); Zhang et al. (2024a) to prune the  
+339 *heads* of the multi-head attention (MHA) modules and the *channels* of the MLP modules in Sect.  
+340 4.2. We initialize our methods with an efficient metric-based structural pruning method, i.e., Wanda-  
+341 sp An et al. (2023). Our method is compared to the state-of-the-art Wanda-sp An et al. (2023),  
+342 LLM-Pruner Ma et al. (2023), SliceGPT Frantar & Alistarh (2023), and Bosai Dery et al. (2024).
+
+343  
+344 **Layer Granularity:** We also validate the layer granularity by pruning the entire transformer layer  
+345 consisting of an MHA module and an MLP module. Note that pruning on the structural granularity  
+346 of layers is less exploited for LLMs, thus in this experiment, we use the lightweight Layerwise-PPL  
+347 Kim et al. (2024) for initialization, and compare our method with Layerwise-PPL Kim et al. (2024).
+
+348  
+349 **LLM Models and Sizes.** LLaMA-{7B, 13B} Touvron et al. (2023a), LLaMA-2-{7B, 13B} Tou-  
+350 vron et al. (2023b), LLaMA-3-8B Dubey et al. (2024), Vicuna-{7B, 13B} Chiang et al. (2023), and  
+351 Mistral-7B-Instruct-v0.3 Jiang et al. (2023) are used as the source models in our experiments.
+
+352  
+353 **Pruning Rate.** Promising performance with a high pruning rate could be challenging to obtain  
+354 when employing metric-based pruning, owing to the heuristically designed metrics. To validate the  
+355 superior performance of our optimization-based pruning under this situation, we select high pruning  
+356 rates ranging from 30% to 50%, i.e., **structurally** removing 30% to 50% model parameters.
+
+357  
+358 **Datasets.** We perform the experiments following the cross-dataset settings in Sun et al. (2023),  
+359 where the C4 dataset Raffel et al. (2020) is used for training and the WikiText2 dataset Merity et al.  
+360 (2016) is used for evaluation. This challenging cross-dataset setup potentially better reflects the  
+361 generalization of the pruned model.
+
+362  
+363 **Training and Evaluation Details.** We update the underlying Bernoulli distributions (for mask  
+364 sampling) simply using SGD with a learning rate of  $6\text{e-}3$  for LLaMA-3 experiments and  $2\text{e-}3$  for the  
+365 remaining. The batch size is fixed to 8 and we train our lightweight policy gradient estimator for 1  
+366 epoch on the C4 dataset with 120K segments, in which each segment has a sequence length of 128.
+
+367  
+368 To reduce the evaluation variance, we deterministically construct the pruned architecture for evalu-  
+369 ation, i.e., given a prune rate  $r$ , we first rank all the  $s$ , then deterministically set  $m$  corresponding to  
+370 the minimal  $r\%$  of  $s$  as 0 (otherwise 1). We report the perplexity on the WikiText2 dataset using a  
+371 sequence length of 128. Given a tokenized sequence  $\mathbf{X} = (x_0, x_1, \dots, x_t)$ , the perplexity of  $\mathbf{X}$  is:
+
+$$372 \text{Perplexity}(\mathbf{X}) = \exp \left\{ -\frac{1}{t} \sum_{i=1}^t \log p_\theta(x_i | x_{<i}) \right\},$$
+
+373 where  $\log p_\theta(x_i | x_{<i})$  is the log-likelihood of token  $x_i$  conditioned on the preceding tokens  $x_{<i}$ .
+
+###### 374 4.2 RESULTS ON CHANNELS AND HEADS PRUNING
+
+375  
+376 The results of channels and heads pruning following Ma et al. (2023); Zhang et al. (2024a) are  
+377 shown in Fig. 3. Our method achieves the lowest perplexity scores. It verifies the superiority of  
+378 optimization-based global and heterogeneous pruning. Especially, such outperformance is more  
+379 significant at larger pruning rates over 40%. The results on Mistral-7B-Instruct-v0.3 Jiang et al.  
+380 (2023) are shown in Table A6 of Appendix A.8.
+
+{7}------------------------------------------------
+
+![Figure 3: Results on channels and heads pruning. The figure consists of three bar charts showing Perplexity for different pruning rates (30%, 40%, and 49%) across various model configurations (LLaMA-1 (7B), LLaMA-1 (13B), LLaMA-2 (7B), LLaMA-2 (13B), LLaMA-3 (8B), Vicuna (7B), Vicuna (13B)). The methods compared are LLM-Pruner (blue), SliceGPT (purple), Bonsai (yellow), Wanda-sp (green), and Ours (red). In all cases, the 'Ours' method achieves the lowest perplexity, indicating superior performance.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 3: Results on channels and heads pruning. The figure consists of three bar charts showing Perplexity for different pruning rates (30%, 40%, and 49%) across various model configurations (LLaMA-1 (7B), LLaMA-1 (13B), LLaMA-2 (7B), LLaMA-2 (13B), LLaMA-3 (8B), Vicuna (7B), Vicuna (13B)). The methods compared are LLM-Pruner (blue), SliceGPT (purple), Bonsai (yellow), Wanda-sp (green), and Ours (red). In all cases, the 'Ours' method achieves the lowest perplexity, indicating superior performance.
+
+Figure 3: Results on *channels and heads* pruning. Our method is initialized by Wanda-sp (please also refer to Sect. 5.1 and Appendix A.12 for a detailed discussion about initializations). All the methods are calibrated using the C4 dataset and validated on the WikiText2 dataset *w.r.t.* perplexity.
+
+![Figure 4: Results on layers pruning. The figure consists of three bar charts showing Perplexity for different pruning rates (30%, 40%, and 50%) across various model configurations (LLaMA-1 (7B), LLaMA-1 (13B), LLaMA-2 (7B), LLaMA-2 (13B), LLaMA-3 (8B), Vicuna (7B), Vicuna (13B)). The methods compared are Layerwise-PPL (blue) and Ours (red). The 'Ours' method consistently outperforms Layerwise-PPL, especially at higher pruning rates (40% and 50%).](d864789b0d8384da1d22fd6a5d76bbdf_img.jpg)
+
+Figure 4: Results on layers pruning. The figure consists of three bar charts showing Perplexity for different pruning rates (30%, 40%, and 50%) across various model configurations (LLaMA-1 (7B), LLaMA-1 (13B), LLaMA-2 (7B), LLaMA-2 (13B), LLaMA-3 (8B), Vicuna (7B), Vicuna (13B)). The methods compared are Layerwise-PPL (blue) and Ours (red). The 'Ours' method consistently outperforms Layerwise-PPL, especially at higher pruning rates (40% and 50%).
+
+Figure 4: Results on *layers* pruning. Our method is initialized by Layerwise-PPL (please also refer to Sect. 5.1 and Appendix A.12 for detailed discussion about initializations). All the methods are calibrated using the C4 dataset and validated on the WikiText2 dataset *w.r.t.* perplexity.
+
+### 4.3 RESULTS ON LAYER PRUNING
+
+We illustrate the results on layer pruning in Fig. 4, which demonstrate that our method significantly outperforms the baseline method with pruning rates larger than 40%. For LLaMA-13B and LLaMA-2-13B with moderate pruning rates of 30%, our method works comparable with Layerwise-PPL, which might imply that the searching space is small with the coarse layer granularity, and the larger 13B models with more redundancy works well with metric-based pruning with smaller pruning rate.
+
+### 4.4 ZERO-SHOT PERFORMANCE ON OTHER NLP TASKS
+
+We follow SliceGPT Ashkboos et al. (2024) to assess our pruned LLM using EleutherAI LM Harness Gao et al. (2023) on five zero-shot tasks: PIQA Bisk et al. (2020), WinoGrande Sakaguchi et al. (2021), HellaSwag Zellers et al. (2019), ARC-e and ARC-c Clark et al. (2018). We also report the average scores across the five tasks. Our results on LLaMA-3-8B and LLaMA-2-7B are shown in Tables 1 and A5 of Appendix A.7, which demonstrate that our overall performance is superior to the baselines, though using only the C4 dataset for pruning might introduce a negative influence on some particular cross-dataset zero-shot tasks such as HellaSwag Zellers et al. (2019).
+
+## 5 ABLATION ANALYSIS
+
+For ablations, we investigate 1) effect of various initialization of our method in Sect. 5.1 and Appendices A.11 and A.12, 2) performance of global and heterogeneous pruning versus that of local and homogenous pruning in Sect. 5.2, 3) analysis of the remaining modules after pruning in Sect. 5.3 and Appendix A.13, and 4) effect of the variance-reduced policy gradient in Appendix A.10.
+
+### 5.1 DIFFERENT INITIALIZATIONS
+
+Our Bernoulli policy requires initialization to perform policy gradient optimization and to sample pruning masks. In this section, we investigate the **effect** and the **necessity** of using different metric-based methods as initializations. Moreover, the initialization of the Bernoulli policy
+
+{8}------------------------------------------------
+
+Table 1: Perplexity (PPL) and zero-shot accuracies (%) of LLaMA-3-8B for 5 tasks.
+
+| Method | PruneRate | PPL ↓ | PIQA | HellaSwag | WinoGrande | ARC-e | ARC-c | Average |
+|-|-|-|-|-|-|-|-|-|
+| <b>Dense</b> | <b>0%</b> | <b>14.13</b> | <b>79.71</b> | <b>60.19</b> | <b>72.61</b> | <b>80.09</b> | <b>50.34</b> | <b>68.59</b> |
+| LLM-Pruner | 30% | 40.18 | 71.38 | 37.84 | 55.64 | 57.78 | 27.21 | 49.97 |
+| SliceGPT |  | 183.94 | 68.34 | <b>53.92</b> | 57.22 | 49.41 | 28.07 | 51.39 |
+| Bonsai |  | 80.89 | 64.53 | 36.10 | 55.09 | 47.64 | 22.52 | 45.18 |
+| Wanda-sp |  | 92.14 | 59.74 | 31.46 | 52.64 | 44.02 | 19.88 | 41.55 |
+| Ours |  | <b>38.99</b> | <b>72.25</b> | 43.56 | <b>59.04</b> | <b>59.85</b> | <b>29.44</b> | <b>52.83</b> |
+| LLM-Pruner | 40% | 70.60 | 66.26 | 31.90 | 54.06 | 49.74 | 22.52 | 44.90 |
+| SliceGPT |  | 353.09 | 61.53 | <b>39.98</b> | 52.80 | 36.66 | <b>25.17</b> | 43.23 |
+| Bonsai |  | 204.61 | 58.81 | 29.43 | 48.93 | 33.21 | 18.15 | 37.71 |
+| Wanda-sp |  | 213.47 | 56.58 | 27.46 | 50.35 | 32.07 | 17.06 | 36.70 |
+| Ours |  | <b>63.85</b> | <b>67.63</b> | 37.36 | <b>56.91</b> | <b>50.67</b> | 24.91 | <b>47.50</b> |
+| LLM-Pruner | 50% | 145.65 | 61.15 | 29.10 | <b>51.93</b> | 39.98 | 19.36 | 40.30 |
+| SliceGPT |  | 841.20 | 56.37 | <b>32.66</b> | 48.38 | 32.45 | <b>22.10</b> | 38.39 |
+| Bonsai |  | 440.86 | 55.66 | 26.94 | 50.51 | 30.64 | 17.83 | 36.32 |
+| Wanda-sp |  | 413.86 | 55.39 | 27.07 | 49.72 | 29.59 | 18.26 | 36.01 |
+| Ours |  | <b>119.75</b> | <b>62.51</b> | 30.89 | 51.85 | <b>41.12</b> | 20.65 | <b>41.40</b> |
+
+Table 2: Channels and heads pruning results with *different initializations* on LLaMA-2-7B. **Bold** and Underlined denote the first and second best results, respectively.
+
+| Method | PruneRate | Perplexity | PruneRate | Perplexity | PruneRate | Perplexity |
+|-|-|-|-|-|-|-|
+| LLM-Pruner |  | 38.94 |  | 68.48 |  | 190.56 |
+| SliceGPT | 30% | 40.40 | 40% | 73.76 | 50% | 136.33 |
+| Bonsai |  | 39.01 |  | 69.18 |  | 216.85 |
+| Wanda-sp |  | 49.13 |  | 78.45 |  | 206.94 |
+| Ours (Random Init) |  | 37.24 |  | 60.16 |  | 160.75 |
+| Ours (Random-Prog. Init) | 30% | 31.43 | 40% | 49.86 | 50% | 86.55 |
+| Ours (LLM-Pruner Init) |  | 35.75 |  | 65.32 |  | 116.80 |
+| Ours (Wanda-sp Init) |  | <b>28.18</b> |  | <b>39.81</b> |  | <b>65.21</b> |
+
+should be probabilistic values between 0 and 1, but the metrics calculated by the metric-based methods Sun et al. (2023); An et al. (2023); Ma et al. (2023) may not hold this range. We thus discuss **different projection strategies** that transform those metrics to  $[0, 1]$  in Appendix A.11.
+
+In order to deal with the practical case when a metric-based pruning is not *apriori*, we propose progressive pruning with random initialization (*Random-Progressive*), which is trained progressively with increasing pruning rates (each for only 1/3 epoch). Details can be found in Appendix A.12.
+
+Different initializations are tested on LLaMA-2-7B. The baselines include the simple random initialization with the target pruning rate (*Random*) and the progressive pruning with random initialization (*Random-Progressive*). For the pruning granularity of channels and heads, we investigate the initializations from Wanda-sp An et al. (2023) and LLM-Pruner<sup>5</sup> Ma et al. (2023), as shown in Table 2. While for the layers granularity, we test the initialization using Layerwise-PPL Kim et al. (2024), as shown in Table A11 of Appendix A.12.
+
+Our results in Tables 2 and A11 demonstrate that 1) different initializations lead to different results, 2) compared to the state-of-the-art methods, our method with most initializations except the random one exhibit new state-of-the-art results, and 3) The proposed *Random-Progressive* initialization ranks the second place in most cases, surpassing previous state-of-the-art methods, **which suggests less necessity for employing a prior metric-based method to initialize our algorithm.**
+
+### 5.2 MERITS OF GLOBAL AND HETEROGENEOUS PRUNING
+
+Our method is able to perform global and heterogeneous pruning throughout the entire network, which can be difficult for metric-based pruning methods Sun et al. (2023); Frantar & Alistarh (2023); Shi et al. (2023), as the calculated metrics across different layers oftentimes exhibit different magnitudes. As a compromise, those metric-based methods prune each layer locally and homogeneously.
+
+We validate the merits of global and heterogeneous pruning over local and homogeneous pruning, where we compare our method with a variant in which we prune each layer homogeneously. The
+
+<sup>5</sup>We follow LLM-Pruner Ma et al. (2023) to fix the first four and the last two layers from pruning.
+
+{9}------------------------------------------------
+
+![Figure 5: Global vs. local pruning. A line graph titled 'LLaMA-2-13B' showing Perplexity (y-axis, 20 to 70) versus Sparsity Level (x-axis, 0.30 to 0.50). Two lines are plotted: 'Local Sparsity' (orange dashed line with circles) and 'Global Sparsity' (green dashed line with circles). The 'Local Sparsity' line shows a steeper increase in perplexity as sparsity level increases compared to the 'Global Sparsity' line.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 5: Global vs. local pruning. A line graph titled 'LLaMA-2-13B' showing Perplexity (y-axis, 20 to 70) versus Sparsity Level (x-axis, 0.30 to 0.50). Two lines are plotted: 'Local Sparsity' (orange dashed line with circles) and 'Global Sparsity' (green dashed line with circles). The 'Local Sparsity' line shows a steeper increase in perplexity as sparsity level increases compared to the 'Global Sparsity' line.
+
+Figure 5: Global vs. local pruning.
+
+![Figure 6: Channels, heads, and layers sparsities. A line graph titled 'Layers and Modules Sparsity in LLaMA-2-13B at 0.4'. The y-axis is 'Sparsity' (0.25 to 0.50) and the x-axis is 'Layer Index' (0 to 40). Three lines are plotted: 'Layer Sparsity' (blue dashed line with circles), 'Head Sparsity' (orange dashed line with circles), and 'Channel Sparsity' (green dashed line with circles). The 'Head Sparsity' line shows significant fluctuations, while 'Layer Sparsity' and 'Channel Sparsity' are relatively stable.](f519a5be118c846f631c992412353fb9_img.jpg)
+
+Figure 6: Channels, heads, and layers sparsities. A line graph titled 'Layers and Modules Sparsity in LLaMA-2-13B at 0.4'. The y-axis is 'Sparsity' (0.25 to 0.50) and the x-axis is 'Layer Index' (0 to 40). Three lines are plotted: 'Layer Sparsity' (blue dashed line with circles), 'Head Sparsity' (orange dashed line with circles), and 'Channel Sparsity' (green dashed line with circles). The 'Head Sparsity' line shows significant fluctuations, while 'Layer Sparsity' and 'Channel Sparsity' are relatively stable.
+
+Figure 6: Channels, heads, and layers sparsities.
+
+channels and heads pruning results on LLaMA-2-13B are shown in Fig. 5, demonstrating that the global and heterogeneous pruning significantly outperforms its local and homogeneous counterpart.
+
+### 5.3 ANALYSIS OF THE POST-PRUNING MODULES
+
+As global and heterogeneous pruning is performed through our optimization, it is interesting to investigate the pruned modules in each layer. We show the channel, heads, and layers sparsity (*i.e.*, the pruned portion of the corresponding granularity) on LLaMA-2-13B with channels and heads pruning at 40% in Fig. 6. Those results on LLaMA-2-7B are shown in Fig. A2 of Appendix A.13.
+
+Figures 6 and A2 demonstrate that the pruned LLM exhibits low sparsity in the first and last layers, which is consistent with the previous studies that these layers have a profound impact on the performance of LLMs Ma et al. (2023). Moreover, it can be observed that the heads (of MHA) granularity exhibits lower sparsity in the shallow layers (especially in the first layer), while such observation does not hold for the channels (of MLP) granularity. In other words, the pruned sparsity of the channel granularity is more evenly distributed whereas the deeper layers have a slightly less sparsity. This might imply that the shallow layers focus more on attention, while the deeper layer imposes slightly more responsibility for lifting the feature dimensions through MLP.
+
+## 6 DISCUSSION AND CONCLUSION
+
+**Limitations and Future Works.** Firstly, as an optimization-based pruning, our method *requires more (but affordable) training time* for optimization (*e.g.*, 2.7 hours for LLaMA-2-13B) compared to the (heuristic) metric-based methods, while our method benefits from *significantly improved performance* with a *similar memory complexity* (35GB for LLaMA-2-13B, as both only require forward).
+
+Secondly, there exist advanced policy gradient algorithms with potentially lower variance from the reinforcement learning community Schulman et al. (2017). As 1) the primary focus of this paper is on the back-propagation-free formulation of the LLM pruning problem, and 2) our formulation guarantees dense rewards at each step, we thus use a basic policy gradient algorithm similar to REINFORCE Williams (1992) with simple variance reduction using a moving average baseline. We leave exploiting more powerful policy gradient algorithms as our future work.
+
+Lastly, the performance of the proposed method on specific domains/tasks can rely heavily on the availability of domain-specific datasets. Though the cross-dataset evaluation is verified *w.r.t.* perplexity, using only the C4 dataset for pruning might introduce a negative influence on some particular cross-dataset zero-shot tasks such as Winogrande Sakaguchi et al. (2021) and Hellaswag Zellers et al. (2019), as shown in the Tables 1 and A5 of Appendix A.7.
+
+**Conclusion.** We propose an efficient optimization-based structural pruning method for LLMs, which 1) does not need back-propagation through the LLM *per se*, 2) enables global and heterogeneous pruning, and 3) supports pruning granularities of channels, heads, and layers. Our method can optionally take a metric-based pruning as initialization to achieve a further improved performance. We implement our method by learning an underlying Bernoulli distribution of binary pruning mask. As we decouple the Bernoulli parameter and the sampled masks from the LLM loss, the Bernoulli distribution can thus be optimized by a policy gradient estimator without back-propagation through the LLM. Our method operates for 2.7 hours with 35GB of memory on a single A100 GPU to prune the LLaMA-2 13B model. Extensive experiments on various LLM models and sizes with detailed ablation analysis validate our promising performance.
+
+ Rest of paper (reference and Appendix) is removed.

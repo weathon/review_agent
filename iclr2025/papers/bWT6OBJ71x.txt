@@ -1,0 +1,502 @@
+
+
+{0}------------------------------------------------
+
+# INTERPRETABLE PATTERNS IN RANDOM INITIALIZATION UNVEIL FINAL REPRESENTATION
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+The field of mechanistic interpretability has made strides in unraveling models’ hidden representations but is often puzzled by why specific representations form. This paper addresses a crucial question on this front: when a neural network can learn multiple distinct representations to solve a task, how does it “choose” among them during training? We suggest that, at initialization, instead of starting from an empty scratchpad, the model’s embedding already contains partially formed representations of varying “completeness.” Models tend to develop a representation that is more “complete” at initialization, disregarding less complete alternatives. We empirically examine this hypothesis on algorithmic toy models with clearly defined final representations from which we can elicit an interpretable signal to evaluate such “completeness” of possible representations in the initial embedding. We find that the representations with high initial signals are chosen by the model with high probability, a pattern consistent across models with a single learned representation (remainder equivalence, multi-digit XOR) and with multiple, redundant representations (modular addition). Finally, we investigate the role of embedding dimensionality on model’s representation and their “completeness.” Our results with toy models show that the seemingly chaotic initialization contains many interpretable patterns to understand the training dynamics of representations.
+
+## 1 INTRODUCTION
+
+The field of *mechanistic interpretability* attempts to reverse-engineer the algorithms that neural networks learn. This involves understanding the representations (features) networks learn (Bricken et al., 2023; Cunningham et al., 2023; Gurnee & Tegmark, 2024; Zou et al., 2023) and how these play a role in larger circuits (Elhage et al., 2021; Nanda et al., 2023; Marks et al., 2024). While most such work studies networks as static objects, some have recently begun to study how network representations and circuits form over training (Liu et al., 2022; Olsson et al., 2022; Hoogland et al., 2024; Chen et al., 2023; Singh et al., 2024). By studying training dynamics, we hope to understand not just *what* neural networks learn, but *how* and ultimately *why* they learn the algorithms they do. This understanding may eventually be useful for training models with the properties we desire, such as improved efficiency and safety, through careful design of the training process.
+
+One broad question in mechanistic interpretability regards *universality* (Olah et al., 2020): can models consistently learn the same algorithms across different seeds and scales? While some works have found evidence of universality (Olsson et al., 2022; Gould et al., 2024; Gurnee et al., 2024), in other cases, there seems to be some variability in algorithms and representations that networks learn to solve particular tasks (Zhong et al., 2023; McCoy et al., 2019; Lampinen et al., 2024). In this work, we ask: when networks have a choice between different representations, how do they choose which to learn?
+
+Investigating toy models trained on algorithmic tasks, we can visualize the structure of the final representation forming very early in training using simple tools like PCA, especially under large weight decay. This structure also varies due to different training runs. To understand the reason behind this diversity of representations, we wonder if such structure of the final representation already exists in the seemingly chaotic initialization, albeit not obvious to observe through simple visualization. To formalize this intuition, we propose the following hypothesis:
+
+{1}------------------------------------------------
+
+**Representation “Completeness” Hypothesis** The random embedding initialization already contains many partially formed representations at different levels of “completeness,” and the final representation(s) the model learns are those with high “completeness” at initialization. We define “completeness” as an *interpretable* similarity metric that compares such a partially formed representation to its projected, idealized representation, as if it were to be learned by the model.
+
+We empirically evaluate this hypothesis on three algorithmic tasks: remainder equivalence, multi-digit XOR, and modular addition. We analyze these tasks because they have well-defined representations in mathematics. We analyze the first two tasks in §3 as a proof of concept for our hypothesis because the models trained on these tasks are simple and learn a *single* final representation. In §4, we delve deeper into the more interesting case of modular addition, as it is a harder task, and the model learns *multiple, redundant* representations with complicated mechanisms operating on the Fourier space studied extensively by the interpretability community (Liu et al., 2022; Nanda et al., 2023; Zhong et al., 2023; Morwani et al., 2024). We find, in all three cases, we can find an interpretable and intuitive “completeness” metric that projects the structure of the initialization onto the final representation, where high initial “completeness” is a good indicator of this representation being learned by the model.
+
+Lastly, we investigate how embedding dimensionality affects representations in §5. We show that, as the embedding dimension increases, there are fewer representations with low “completeness” in the initialization. In this case, the model can achieve lower test loss when we freeze the embedding at initialization and train only the MLP to fit all the partially complete representations. This helps explain why representation learning could benefit from large embedding dimensions.
+
+Random initialization has been a subject of continuous studies, such as their general downstream capabilities (Amid et al., 2022; Jarrett et al., 2009; Zhong & Andreas, 2024) and the “Lottery Ticket Hypothesis (Frankle & Carbin, 2019),” where sparse subnetworks pruned at initialization achieve similar capabilities. However, our study takes a first step towards understanding how *interpretable patterns for representations* are structured in initialization and how they can evolve to be significant in the final embedding. This understanding is not only driven by scientific curiosity but can also lead to practical benefits, such as speeding up training in our toy algorithmic tasks. We acknowledge that the extension of this approach to non-algorithmic tasks is non-trivial and hence left for future work, but it is encouraging to see that an intuitive understanding of representation dynamics is feasible and such understanding may potentially lead to algorithmic advancement.
+
+## 2 PROBLEM SETUP
+
+### 2.1 TASK SELECTION
+
+Understanding how a model chooses a certain representation is difficult since representations, in general, are high-dimensional and difficult to disentangle, let alone understanding the dynamics between multiple representations. Therefore, we resort to studying toy models, which might provide us with insights into more general models. We specifically need to study models that meet the following criteria: (1) the model has clearly interpretable representation(s) in its embedding, and (2) the model can form non-trivially distinct representations when trained with different initializations. We find three algorithmic tasks that meet such criteria:
+
+**Remainder equivalence**  $\mathbb{I}[a = b \pmod m]$ , where  $a, b = 0, 1, \dots, p - 1$ , a number much larger than  $m$ . The final representation clusters numbers with the same remainder together and forms a line in the embedding, but how the clusters are ordered on the line is up to  $p!$  permutations.
+
+**Multi-digit XOR**  $a \oplus b = c$ . the representation forms a hypercube that each pair of opposite faces have the numbers differ by exactly one bit. However, the exact arrangement of tokens in the hypercube may vary.
+
+**Modular addition**  $a + b = c \pmod p$ , where  $a, b, c = 0, 1, \dots, p - 1$ . Prior works have shown circular representations in the embedding, akin to how numbers are arranged around a clock (Power et al., 2022; Liu et al., 2022; 2023; Nanda et al., 2023; Zhong et al., 2023), and that the model learns a few such circles that nicely correspond to Fourier frequencies up to  $p$  (Nanda et al., 2023). Over different training runs, different sets of 3-5 frequencies form the final representation, despite all frequencies having a chance to become the final representation.
+
+{2}------------------------------------------------
+
+### 2.2 EXPERIMENT SETUP
+
+We use a fixed model architecture to study all three tasks. Specifically, our model consists of an embedding matrix  $W_E$  and a two-layer MLP. The embedding matrix has size  $(p, d)$ , where  $p$  is the vocabulary size and  $d$  is the embedding dimension. Every integer  $t \in \{0, 1, \dots, p-1\}$  is treated as a token and has an associated embedding vector  $E_t \in \mathbb{R}^d$ . For each task, the model tokenizes the two inputs  $a$  and  $b$ , concatenates their embeddings, and feeds  $[E_a, E_b] \in \mathbb{R}^{2d}$  to the MLP, which produces a categorical output  $c$ . Note that we set weight decay to be high in these models to ensure the model quickly forms the final representation.
+
+As our study focuses on the embedding initialization, there are many other factors that influence the representation features, such as initialization of the MLP and dataset training split (Lampinen et al., 2024). Therefore, for our analysis in this paper, we aggregate training results over different random initializations of embeddings, MLPs, and datasets and report the mean and standard deviation.
+
+## 3 “COMPLETENESS” FOR MODELS WITH SINGLE REPRESENTATION
+
+### 3.1 REMAINDER EQUIVALENCE
+
+We train models to learn the task  $\mathbb{1}[a = b \pmod m]$ , given vocabulary size  $p = 100$  and fixed divisor  $m = 10$ . Post-training, as shown in Figure 1(a), token embeddings with the same remainder clustered together, forming a linear arrangement of clusters representing a permutation  $q$  of  $[0, 1, \dots, m-1]$ .
+
+Observing that the final representation (i.e., the permutation of different remainders) varies across models with different random seeds, we propose a “completeness” metric to capture how well-formed a permutation is at initialization:
+
+$$f(q) = \sum_{0 \leq i < j < m} \|\bar{E}_{q_i} - \bar{E}_{q_j}\|^2 \cdot (j - i)$$
+
+where
+
+$$\bar{E}_i = \frac{1}{p/m} \sum_{j=0}^{p-1} \mathbb{1}[j \equiv i \pmod m] \cdot E_j$$
+
+is the center for each cluster. This metric sums the squared distances between cluster centers, weighted by their relative distances in the permutation.
+
+The metric characterizes permutation “completeness” by considering initial center positions: centers that are close at initialization are likely to remain near each other in the learned representation, and vice versa. The weighted sum is maximized when smaller distances have lower weights and larger distances have higher weights, and we hypothesize that if the initial signal  $f(q)$  is higher, the model is more likely to learn  $q$  as the final representation.
+
+Experimental results support our hypothesis. Figure 1(b) shows that for a given model, the learned representation’s initial signal significantly exceeds the average. Across 100 training runs with various random seeds, the learned representation’s “completeness” signal consistently ranks within the top 15% on average, with a standard deviation of 22%.
+
+### 3.2 MULTI-DIGIT XOR
+
+For this experiment, the models are trained on the task  $c = a \oplus b$ , where  $a$  and  $b$  are 3-bit binary numbers. After training, the embeddings form a cube structure  $\alpha$ , with each pair of opposite faces differing by exactly one bit. Moreover, different initializations lead to varied token arrangements on the cube. For example, in Figure 2(a), the token 000 shares an edge with token 110 and 001 on the cube in both final embeddings; however, while it also shares an edge with token 011 in Final Embedding 1, the edge is instead shared with token 101 in Final Embedding 2.
+
+As such, we propose another signal metric that measures how close the embedding structure is to a cube of structure  $\alpha$ :
+
+$$g(\alpha) = \sum_{0 \leq i < j < 2^3} \|E_i - E_j\|^2 \cdot \alpha_{i,j}$$
+
+{3}------------------------------------------------
+
+![Figure 1: (a) PCA Visualization of Initial and Final Embeddings. (b) Permutation Initial Signal Distribution histogram.](e94f3bbb6f7501b9a1344dd0210e5dd8_img.jpg)
+
+162
+
+163
+
+164
+
+165
+
+166
+
+167
+
+168
+
+169
+
+170
+
+171
+
+172
+
+173
+
+174
+
+175
+
+176
+
+177
+
+Figure 1 consists of two parts. Part (a) shows four scatter plots: 'Initial Embedding 1', 'Final Embedding 1', 'Initial Embedding 2', and 'Final Embedding 2'. The 'Initial' plots show a scattered cloud of points, while the 'Final' plots show points aligned along a single horizontal line. Part (b) is a histogram titled 'Permutation Initial Signal Distribution' showing the count of signals for different permutations, with a vertical dashed line indicating the learned permutation signal.
+
+Figure 1: (a) PCA Visualization of Initial and Final Embeddings. (b) Permutation Initial Signal Distribution histogram.
+
+178
+
+179
+
+180
+
+181
+
+Figure 1: (a) Different colors represent different remainders modulo  $m$ . The randomly initialized embedding evolves into clusters in a straight line in both models. Notice the order of colors differs across models with different initializations. (b) A histogram of initial “completeness” signals for all the  $10!$  possible permutations, with the signal for the final representation highlighted.
+
+![Figure 2: (a) PCA Visualization of Initial and Final Embeddings. (b) Arrangement Initial Signal Distribution histogram.](f961cbef0f8217e216b553bed270315b_img.jpg)
+
+182
+
+183
+
+184
+
+185
+
+186
+
+187
+
+188
+
+189
+
+190
+
+191
+
+192
+
+193
+
+194
+
+195
+
+196
+
+197
+
+198
+
+199
+
+Figure 2 consists of two parts. Part (a) shows four 3D scatter plots: 'Initial Embedding 1', 'Final Embedding 1', 'Initial Embedding 2', and 'Final Embedding 2'. The 'Initial' plots show points forming a cube, while the 'Final' plots show points forming a more compact cube. Part (b) is a histogram titled 'Arrangement Initial Signal Distribution' showing the count of signals for different arrangements, with a vertical dashed line indicating the learned arrangement signal.
+
+Figure 2: (a) PCA Visualization of Initial and Final Embeddings. (b) Arrangement Initial Signal Distribution histogram.
+
+200
+
+201
+
+202
+
+203
+
+Figure 2: (a) The randomly initialized embedding evolves into cubes in both models. Notice the arrangement of numbers on the cube differs across models with different initializations. (b) Histogram of initial “completeness” signals for all possible 168 arrangements of the cube, with the signal for the final representation highlighted.
+
+204
+
+205
+
+206
+
+207
+
+208
+
+209
+
+210
+
+211
+
+212
+
+213
+
+214
+
+215
+
+Here,  $\alpha_{i,j} \in \{1, 2, 3\}$  represents the squared distance between tokens  $i$  and  $j$  on the unit cube. The function  $g(\alpha)$  sums the squared distances between token pairs, weighted by their relative cube positions. Borrowing our analysis from §3.1, higher signals  $g(\alpha)$  translate to a higher likelihood that  $\alpha$  is learned as the final representation.
+
+The result in Figure 2(b) supports this analysis, with learned representations consistently show higher initial signals compared to random arrangements. Across 100 models with different random seeds, the learned representations rank in the top 10% on average, with a standard deviation of 12%.
+
+Both experiments demonstrate that the final learned representations tend to align well with more “complete” structures that we elicit from the initial embedding with high initial signals, supporting our completeness hypothesis. In the following section, we demonstrate the feasibility of our “completeness” hypothesis beyond simple tasks with a single representation. Using modular addition as a
+
+{4}------------------------------------------------
+
+case study, we investigate much more closely whether our hypothesis holds on models with multiple, “redundant” representations as well.
+
+## 4 “COMPLETENESS” FOR MODULAR ADDITION MODEL
+
+### 4.1 REPRESENTATIONS AND THEIR FORMATION
+
+![Figure 3: (a) Evolution of Frequency Signal With Time. A line plot showing signal magnitude (0-100) vs step (logarithmic scale 10^0 to 10^4). Multiple colored lines represent different frequencies; most decay towards zero, while one (grey) remains high. (b) Evolution of Embedding on FFT Plane. A 2x3 grid of scatter plots showing embedding projections at 0, 15000, and 30000 steps. Top row (k=1) shows a dead frequency collapsing to the origin. Bottom row (k=2) shows a surviving frequency forming a clear circle.](b15e3860e0c96ed16ce77f032da6f107_img.jpg)
+
+Figure 3: (a) Evolution of Frequency Signal With Time. A line plot showing signal magnitude (0-100) vs step (logarithmic scale 10^0 to 10^4). Multiple colored lines represent different frequencies; most decay towards zero, while one (grey) remains high. (b) Evolution of Embedding on FFT Plane. A 2x3 grid of scatter plots showing embedding projections at 0, 15000, and 30000 steps. Top row (k=1) shows a dead frequency collapsing to the origin. Bottom row (k=2) shows a surviving frequency forming a clear circle.
+
+Figure 3: (a) The magnitude of the Fourier coefficients of each embedding frequency over time shown on a logarithmic scale. The surviving frequencies clearly separate themselves from the rest of the frequencies that quickly approach 0. (b) Snapshots of the embedding projected onto a dead frequency (top) and a survived frequency (bottom) at different timesteps during training.
+
+**Circles and Fourier Space** Prior work has shown that circular representations (circles) are important for neural networks to perform modular addition (Liu et al., 2022; Nanda et al., 2023; Zhong et al., 2023). However, as shown in Figure 4, neighboring numbers along the circle may have increments other than 1 because there are  $p$  equivalent group representations corresponding to circles with different Fourier frequencies  $k = 1, 2, \dots, (p-1)/2$ .<sup>1</sup> The circle of frequency  $k$  places a token  $t$  at  $(\cos(2\pi kt/p), \sin(2\pi kt/p))$ .
+
+Similar to Nanda et al. (2023), we decompose representations into a linear combination of circles of different frequencies. Denoting  $\mathbf{E}_n \in \mathbb{R}^d$  to be the embedding vector for token  $n$ , we define the Fourier coefficients of frequency  $k$  as
+
+$$\mathbf{F}_k = \sum_{n=0}^{p-1} e^{-i2\pi \frac{k}{p} n} \mathbf{E}_n. \quad (1)$$
+
+The circle of frequency  $k$  is located on the plane spanned by two vectors  $\text{Real}(\mathbf{F}_k), \text{Imag}(\mathbf{F}_k) \in \mathbb{R}^d$ .
+
+**Circle Evolution** We define the Fourier norm of frequency  $k$  as  $\|\mathbf{F}_k\|^2 = \sum_{j=0}^{d-1} (\mathbf{F}_k^j)^2$  and observe how the norm of each frequency evolves over the training steps, as shown in Figure 3(a). We observe that only a few circles have significant norm (learned by the model) in the end, while the norm of all other circles decay to almost zero (thus discarded by the model). As shown in Figure 3(c), projections of a surviving frequency stabilize into a clear circle (bottom), while a dead frequency collapses towards its center (top). While prior works have found circles either with Fourier transformation (Nanda et al., 2023) or with PCA (Liu et al., 2022), we use the Fourier transformation because it can better reveal circular representations (see Figure 4). In Figure 3(a), we observe that the surviving circles in the end tend to have higher initial signal. Can we use this information to predict survived circles? We find two “completeness” signals that use information from initialization (and a few training steps out) to predict final representations with high probability: the initial Fourier norm of such frequency and the gradient.
+
+<sup>1</sup>Note that frequency  $k$  and  $p - k$  refer to the same circle, which accounts for the factor 2.
+
+{5}------------------------------------------------
+
+270  
+271  
+272  
+273  
+274  
+275  
+276  
+277  
+278  
+279  
+280  
+281  
+282  
+283  
+284  
+285  
+286  
+287  
+288  
+289  
+290  
+291  
+292  
+293  
+294  
+295  
+296  
+297  
+298  
+299  
+300  
+301  
+302  
+303  
+304  
+305  
+306  
+307  
+308  
+309  
+310  
+311  
+312  
+313  
+314  
+315  
+316  
+317  
+318  
+319  
+320  
+321  
+322  
+323
+
+![Figure 4: Embeddings of Frequencies on PCA Planes and FFT Planes. The top row shows 'Embeddings of Frequencies on PCA Planes' with five scatter plots for (k=2, Δ=30), (k=8, Δ=22), (k=22, Δ=8), (k=23, Δ=18), and (k=3, Δ=20). The bottom row shows 'Embeddings of Frequencies on FFT Planes' with the same five scatter plots. The PCA plots show more elongated, less circular distributions compared to the FFT plots, which are more tightly clustered circles.](55d2bfe1c3d04e86df8d7a104d802172_img.jpg)
+
+Figure 4: Embeddings of Frequencies on PCA Planes and FFT Planes. The top row shows 'Embeddings of Frequencies on PCA Planes' with five scatter plots for (k=2, Δ=30), (k=8, Δ=22), (k=22, Δ=8), (k=23, Δ=18), and (k=3, Δ=20). The bottom row shows 'Embeddings of Frequencies on FFT Planes' with the same five scatter plots. The PCA plots show more elongated, less circular distributions compared to the FFT plots, which are more tightly clustered circles.
+
+Figure 4: Top: The model embedding projected onto the first 10 principal components in pairs, the only components with significant singular values. Bottom: The model embedding projected onto the Fourier basis of frequencies in descending order of signal magnitude. The  $\Delta$  between adjacent tokens shows a correspondence between PCA and FFT.<sup>2</sup> This indicates that PCA provides a loose approximation of circles associated with Fourier frequencies.
+
+### 4.2 INITIAL FOURIER NORM—1<sup>ST</sup> “COMPLETENESS” SIGNAL
+
+![Figure 5: (a) Empirical Observation: Survival Rate vs. Initial Signal. A scatter plot showing a positive linear correlation between initial signal (x-axis, 75-100) and survival rate (y-axis, 0.0-0.8). (b) Perturbation: Survival Rate vs. Deviation from Mean Signal. A line plot showing survival rate (y-axis, 0.0-1.0) vs. difference to initial signal mean (x-axis, -20 to 5). Multiple lines represent different frequencies. (c) Manual Construction: Survival Rate vs. Ratio r. A line plot showing survival rate (y-axis, 0.0-1.0) vs. ratio r of largest to second largest initial signal (x-axis, 0.0-1.0). Two lines are shown: 'largest' (blue) and 'second largest' (orange).](0ad3f61f997eb05afb341fc46024bf2b_img.jpg)
+
+Figure 5: (a) Empirical Observation: Survival Rate vs. Initial Signal. A scatter plot showing a positive linear correlation between initial signal (x-axis, 75-100) and survival rate (y-axis, 0.0-0.8). (b) Perturbation: Survival Rate vs. Deviation from Mean Signal. A line plot showing survival rate (y-axis, 0.0-1.0) vs. difference to initial signal mean (x-axis, -20 to 5). Multiple lines represent different frequencies. (c) Manual Construction: Survival Rate vs. Ratio r. A line plot showing survival rate (y-axis, 0.0-1.0) vs. ratio r of largest to second largest initial signal (x-axis, 0.0-1.0). Two lines are shown: 'largest' (blue) and 'second largest' (orange).
+
+Figure 5: (a) Survival rates of frequencies given their initial Fourier signals over many randomized trials. (b) Survival rate of an arbitrary perturbed frequency versus deviation from the mean initial signal, with different lines showing the same frequency in different embeddings. (c) Survival rates of the largest frequency and the 2<sup>nd</sup> largest as they differ by  $r$ .
+
+We define a survival rate as the number of times a particular frequency becomes part of the final representation and hence “survives” over the total number of trials, where we fix the embedding and randomize over different MLPs and dataset initializations. In Figure 5(a), we show that, across 10 different embedding initializations and 50 trials each, there is a linear correlation: the higher the initial signal, the more likely it is for the model to choose that frequency as its final representation. To confirm, we find that the Pearson correlation between survival rate and initial norm is 0.85, with a p-value smaller than  $10^{-3}$ .
+
+**Perturbation Experiment** To corroborate, we conduct a perturbation experiment on the initial embeddings. Specifically, for a given embedding at initialization, we perform a Fourier transform to find the initial coefficients of an arbitrary frequency. We manually enlarge or shrink its magnitude and perform an inverse FFT to restore the embedding, from which we perform model training. We demonstrate in Figure 5(b) the survival rate of the perturbed frequency in different initializations as it deviates from the mean of the rest of the signals. We observe that if the frequency is much higher
+
+<sup>2</sup> $\Delta$  can be calculated as the inverse of frequency  $k$  modulo  $p$  so that  $k \cdot \Delta = 1 \pmod p$ .
+
+{6}------------------------------------------------
+
+than the others, the survival rate is near 100%, while the frequency rarely survives if it is much lower than the mean. This experiment suggests that as we control the environment much more closely, the initial signal of the frequency plays a unique role in determining the final representation.
+
+**Manual Construction** Moreover, we manually construct an embedding to evaluate the survival rate. We first randomly sample 2 out of  $p$  frequencies and set their signals to be of a varying ratio  $r \in [0, 1]$ . Concretely, the largest frequency will have signal magnitude  $s$ , while the second highest will have a signal  $r \cdot s$ . We set all other frequencies to have a signal of small  $\epsilon = 10^{-6}$ . In this setup, we demonstrate in Figure 5(c) that the frequency with the highest signal always survives, while the second-highest frequency increases in survival rate as its signal increases and differentiates itself further from the other signals. Interestingly, despite all other frequencies having a signal near 0 at initialization, the model sometimes chooses to revive them rather than always choosing the two clear frontrunners, a phenomenon warranting further investigation in the future.
+
+### 4.3 INITIAL GRADIENT—2<sup>ND</sup> “COMPLETENESS” SIGNAL
+
+We hypothesize that not only the representations with high initial norms, but also those that can quickly adapts into circles, are more likely to survive. We calculate the gradient as the difference in the norms before and after a given timestep  $i$ , which takes into account both the embedding gradients and weight decay.
+
+In Figure 6(a), we show the frequencies’ initial gradient values alongside whether they “survive” (i.e. become a final representation). Due to the weight decay mechanism, all gradients decrease over time; however, those with higher initial gradients tend to shrink less and are more likely to survive. In Figure 6(b), we show that as the initial gradient increases, the survival rate of these frequencies also increases. To analyze the possibly compounding effect, we show in Figure 6 (c) that frequencies with both high initial norms and gradients are more likely to survive, as the top right corner is more lit with oranges, indicating a greater number of survived frequencies. To further verify this observation, we train a linear support vector machine (SVM) that separates the dead and survived frequencies, achieving an 83.8% accuracy.
+
+### 4.4 RELATION TO LOTTERY TICKET HYPOTHESIS
+
+Our analysis can be related to the Lottery Tickets Hypothesis (LTH) (Frankle & Carbin, 2019), where some subnetworks are “winning tickets” that achieve comparable test accuracy to the original network when trained in isolation. Our results suggest that partially formed, decomposable circular representations already exist even at initialization, similar to “winning tickets.” Our analysis differs from LTH in two key ways: (1) LTH requires training and pruning to identify “winning” tickets, whereas circles are mathematically defined without training (but specific to modular addition); (2) LTH states only the existence of “winning” tickets at initialization, while we manage to characterize the properties of “winning” circles, that, when trained in isolation, achieve comparable accuracy (see Appendix G). Our work provides representation-level insights into the studies of LTH.
+
+**Faster Training Convergence** As suggested by Zhang et al. (2021), the pruned “winning ticket” has faster learning convergence, we conduct an ablation experiment in which we keep all frequencies with initial norms one standard deviation above the mean and remove the rest. We train them in separation; given that circles with high initial norms are more likely to be learned, this initialization method significantly accelerates training while still achieving perfect test accuracy. We train the models using 100 random seeds and demonstrate in Figure 6(d) a significant decrease in convergence time, measured by the first time step at which the test accuracy reaches 100%.
+
+## 5 VARYING DIMENSIONALITY’S ROLE IN “COMPLETENESS”
+
+After evaluating models with fixed embedding dimension in §3 and §4, we now consider the role of varying dimensionality in the expressive power of model initialization.
+
+Intuitively, a larger model has stronger approximation power and can lead to better performance on the desired task (Sharma & Kaplan, 2020; Michaud et al., 2024; Song et al., 2024). We expect this to hold
+
+{7}------------------------------------------------
+
+![Figure 6: Four plots showing gradient distribution, survival rates, frequency separation, and convergence speed.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 6 consists of four subplots:
+ 
+
+- (a) **Frequencies' Gradient Histogram (Step 4)**: A histogram showing the distribution of gradients at step 4. The x-axis is 'Gradient' ranging from -0.003 to 0.003, and the y-axis is 'Count' ranging from 0 to 250. The histogram is divided into two categories: 'Survived' (orange) and 'Dead' (blue). The 'Dead' category shows a sharp peak around a gradient of -0.001, while the 'Survived' category is more spread out.
+- (b) **Survival Rate of Frequencies Across Different Steps**: Four line plots for Step 1, Step 2, Step 3, and Step 4. The x-axis is 'Gradient' and the y-axis is 'Survival Rate' (0.0 to 0.8). Each plot shows a blue line that increases as the gradient increases, indicating that higher gradients are more likely to survive.
+- (c) **Separation of Dead/Survived Frequency Given Initial Norm and Gradient**: A scatter plot showing 'Initial Signal' (y-axis, 80 to 92) versus 'Gradient' (x-axis, -0.003 to 0.003). It distinguishes between 'Dead Frequency' (blue dots) and 'Survived Frequency' (orange dots). A dashed red line indicates a negative correlation between initial signal and gradient for dead frequencies.
+- (d) **Initial Ablation Leads to Faster Convergence**: A bar chart showing 'Steps to Perfect Accuracy' (y-axis, 0 to 300) for two conditions: 'Without Ablation' (blue bar, approximately 280 steps) and 'With Ablation' (blue bar, approximately 40 steps). The 'With Ablation' condition shows significantly faster convergence.
+
+Figure 6: Four plots showing gradient distribution, survival rates, frequency separation, and convergence speed.
+
+Figure 6: (a) Distribution of the frequency gradient at step 4. (b) Survival rate in relation to frequency gradients for step 1 to 4. (c) Survived (orange) and dead (blue) frequencies characterized by their initial signals and gradients at step 4. (d) Number of steps to reach perfect test accuracy, before and after ablating to only frequencies with high initial norms, with error bar of 95% confidence interval.
+
+true for our algorithmic models as well. For example, in the context of modular addition, when  $d \geq p$ , with probability one, perfect circles can be obtained by linearly projecting  $d$ -dimensional random representations into suitable subspaces. Finding a subspace where a perfect circle of frequency  $k$  lives on is equivalent to finding two linear projections  $p_1$  and  $p_2$  such that  $E_a \cdot p_1 = \sin(2\pi ak/p)$  and  $E_a \cdot p_2 = \cos(2\pi ak/p)$  for all  $a = 0, 1, \dots, p-1$ . Since these equations are linear and linearly independent (due to random initializations), when the number of unknown variables  $2d$  is greater (less) than the number of equations  $2p$ , the system is underdetermined (overdetermined), leading to the existence (nonexistence) of solutions. This conclusion holds for the other two tasks as well under similar reasoning.
+
+**Freeze Embeddings** To further verify that the initial random embeddings already encapsulate partially complete representations that can solve the problem to some extent, we freeze the embeddings at initialization and train only the MLP. We observe the evolution of test loss over training steps. As dimensionality increases, the test loss decreases at a faster rate during training, as shown in Figure 7 (modular addition) and in Appendix B (remainder equivalence and XOR), confirming that higher-dimensional representations are more “complete” and have a higher approximation power to drive the loss down. More interestingly, regarding the test loss on modular addition in Figure 7, we notice a phase transition around  $d = p$ —the test loss is significantly lower when  $d > p$  compared to when  $d < p$ .
+
+**Completeness Metrics and Dimensionality** How does the result of frozen random embeddings solving the algorithmic task relate to the representation “completeness” at initialization? First, it shows that such partially complete representations do exist, and the MLP learns to extract out such patterns, similar to Jarrett et al. (2009). Second, in a standard setting, the MLP would learn an algorithm that computes the task based on the clear embedding representations (line, cube, or circles); however, in the case of the frozen embeddings, the MLP needs to fit an algorithm to all
+
+{8}------------------------------------------------
+
+432  
+433  
+434  
+435  
+436  
+437  
+438  
+439  
+440  
+441  
+442  
+443  
+444  
+445  
+446  
+447  
+448  
+449  
+450  
+451  
+452  
+453  
+454  
+455  
+456  
+457  
+458  
+459  
+460  
+461  
+462  
+463  
+464  
+465  
+466  
+467  
+468  
+469  
+470  
+471  
+472  
+473  
+474  
+475  
+476  
+477  
+478  
+479  
+480  
+481  
+482  
+483  
+484  
+485
+
+![Figure 7: Test Loss After Various Steps of Training. The figure consists of eight subplots arranged in a 2x4 grid. The top row shows 'Test Loss After Training' (y-axis, 0.0 to 15.0) vs 'Dimension' (x-axis, 0 to 150) for 500, 1000, 5000, and 10000 steps. The bottom row shows the same metrics but zoomed in on the y-axis (0.0 to 1.0). Each plot features a vertical dashed red line at d = p. The loss generally decreases as dimension increases, with a notable dip at d = p.](91be14371a97fb5ce9eeb29ae18d07c3_img.jpg)
+
+Figure 7: Test Loss After Various Steps of Training. The figure consists of eight subplots arranged in a 2x4 grid. The top row shows 'Test Loss After Training' (y-axis, 0.0 to 15.0) vs 'Dimension' (x-axis, 0 to 150) for 500, 1000, 5000, and 10000 steps. The bottom row shows the same metrics but zoomed in on the y-axis (0.0 to 1.0). Each plot features a vertical dashed red line at d = p. The loss generally decreases as dimension increases, with a notable dip at d = p.
+
+Figure 7: Freezing the initial embedding and training only the MLP, test loss trained on modular addition (zoomed in on the *bottom* to  $< 1.0$ ) in relation to embedding dimension  $d$ . One can notice a dip in loss at  $d = p$ . More freeze embedding results in Appendix B.
+
+the partially formed representations there are. We suspect that some particularly poorly formed, “incomplete” representations would serve only as noise and hinder the MLP from fitting the task. We find preliminary evidence to support this by computing the minimum “completeness” score of embeddings with varying dimensions, based on the signal metrics we proposed in §3 and §4. We show in Figure 8 that the minimum “completeness” scores of models on all three tasks increase as the embedding dimension increases, which reduces the noise for fitting the MLP and, thus, increases the test loss shown in Figure 7.
+
+![Figure 8: Signal Minimum of Different Tasks Over Dimension. The figure contains three line plots: 'Remainder Equivalence (m = 6)', 'Multi-digit XOR (p = 2^3)', and 'Modular Addition (p = 59)'. Each plot shows 'Signal' (y-axis) vs 'Dimension' (x-axis, 0 to 125). A blue line represents the 'min' signal. In all cases, the minimum signal increases with dimension and plateaus.](925f55ce69802b9d3b00546382663ee2_img.jpg)
+
+Figure 8: Signal Minimum of Different Tasks Over Dimension. The figure contains three line plots: 'Remainder Equivalence (m = 6)', 'Multi-digit XOR (p = 2^3)', and 'Modular Addition (p = 59)'. Each plot shows 'Signal' (y-axis) vs 'Dimension' (x-axis, 0 to 125). A blue line represents the 'min' signal. In all cases, the minimum signal increases with dimension and plateaus.
+
+Figure 8: The minimum signal of our constructed “completeness” metrics increases with the dimension.
+
+## 6 RELATED WORK
+
+**Mechanistic Interpretability on Algorithmic Tasks** Many studies have been done to reverse engineer how neural networks implement algorithmic tasks (Gromov, 2023; Chughtai et al., 2023; Stander et al., 2023; He et al., 2024) because these tasks are mathematically well-defined and simple. However, even on these toy tasks, neural networks display some intriguing phenomena, including phase changes during training (Nanda et al., 2023), different algorithms (Zhong et al., 2023; Liao et al., 2023), or demonstrate the existence of multiple copies of algorithms (Nanda et al., 2023; Zhong et al., 2023). These works on toy models have also extended to similar findings in language models, such as how they compute addition (Zhou et al., 2024; Quirke & Barez, 2024).
+
+{9}------------------------------------------------
+
+186 **Representation Learning and Variability** Representation learning is crucial for networks to  
+187 generalize (Huh et al., 2024; Bengio et al., 2013; Le-Khac et al., 2020; Zou et al., 2023), as paradigms  
+188 for eliciting better representations get developed (Zhou, 2018; Jaiswal et al., 2020; Grill et al., 2020).  
+189 Meanwhile, studies have found variability to the learned representations due to random initialization  
+190 seeds, dataset orders, and representation complexity, leading to downstream consequences (McCoy  
+191 et al., 2019; Lampinen et al., 2024). On the flipside, prior works have also shown that a single model  
+192 can contain redundant representations and algorithms (Doimo et al., 2023; Song et al., 2024). Most  
+193 recent studies have begun to form understandings of representations at a mechanistic level (Li et al.,  
+194 2023; Engels et al., 2024; Marks & Tegmark, 2023).
+
+195  
+196 **Extracting Patterns from Random Initializations** Prior work has investigated the capabilities of  
+197 randomly initialized, untrained networks, particularly convolutional networks, showing that convolu-  
+198 tional networks can extract features (Amid et al., 2022; Burda et al., 2018) and achieve comparable  
+199 downstream performance when linearly combining these random features (Jarrett et al., 2009; Saxe  
+200 et al., 2011; Cox & Pinto, 2011). More recently, Zhong & Andreas (2024) evaluated the algorithmic  
+201 capabilities of random transformers, training only the embeddings and fixing everything else. The  
+202 study shows that random transformers operate in low-dimensional spaces, which corroborates our  
+203 findings that a “completeness” metric mapping random initialization to a low-dimensional score can  
+204 explain the model’s choice of learned representation.
+
+205 **Lottery Ticket Hypothesis** The Lottery Ticket Hypothesis (Frankle & Carbin, 2019) posits that  
+206 some subnetworks—“winning tickets”—identified at initialization and trained in isolation can match the  
+207 test accuracy of the original, dense network. It has inspired extensions, such as a stronger conjecture  
+208 on finding such subnetworks without training (Zhou et al., 2019; Ramanujan et al., 2020; Malach et al.,  
+209 2020; da Cunha et al., 2022; Orseau et al., 2020; Pensia et al., 2020; Diffenderfer & Kailkhura, 2021),  
+210 transferring winning tickets across setups (Morcos et al., 2019; Chen et al., 2021), and improving  
+211 methods of pruning to find the subnetworks (Frankle et al., 2020; Lee et al., 2019; Frankle et al., 2021;  
+212 Wang et al., 2020; Tanaka et al., 2020). Our work follows a similar style of analysis as the LTH, but  
+213 our methods of extracting the “winning tickets” are different. While the LTH community focuses on  
+214 pruning, we propose interpretable (but representation-specific) properties for these partially formed  
+215 “winning tickets” that allow them to eventually become the learned representations.
+
+## 7 CONCLUSION
+
+216  
+217 In this paper, we propose a Representation “Completeness” Hypothesis that final representations  
+218 learned by the model often have certain intuitive, interpretable properties at initialization, which  
+219 make them more “complete” and closer to the ideal representation than other structures not chosen  
+220 by the model. We verify this hypothesis on three tasks, multi-digit XOR, remainder equivalence,  
+221 and modular addition, and define such “completeness” metrics on each of the tasks. Finally, we  
+222 attribute the reason for larger embedding’s better ability to generalize to the decrease in ill-formed  
+223 representations that take training for the model to unlearn, shown by an increase to the lower bound  
+224 in the “completeness” metrics.
+
+225  
+226 **Limitations** We have focused on studying algorithmic toy models, as our work is made possible  
+227 due to their mathematically well-defined representations that can be clearly disentangled. Significant  
+228 additional work is needed to scale these analyses to even more complex, general models, which  
+229 remain a challenge.
+
+230  
+231 **Broader Impact** Understanding training dynamics allows us to better control neural networks  
+232 in ways we desire, such as making them more accurate and safe. Any dual-use technology, like  
+233 machine learning models, has accompanying risks, so one should exercise caution when deploying  
+234 these techniques.
+
+## REFERENCES
+
+235  
+236 Ehsan Amid, Rohan Anil, Wojciech Kotowski, and Manfred K Warmuth. Learning from randomly  
+237 initialized neural network features. *arXiv preprint arXiv:2202.06438*, 2022.
+
+ Rest of paper (reference and Appendix) is removed.

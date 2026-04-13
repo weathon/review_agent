@@ -1,0 +1,428 @@
+
+
+{0}------------------------------------------------
+
+# CAPTURING AND MITIGATING GRADIENT AGGREGATION ERRORS FOR FAULT-TOLERANT DISTRIBUTED TRAINING
+
+**Anonymous authors**
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Capturing and recovering from hardware failures is important in fault-tolerant distributed training to guarantee system efficiency. However, some hardware-related silent data corruption errors during gradient aggregation like bit corruptions or communication noise, are difficult to capture and address, leading to slow or failed convergence. To understand and mitigate these errors, we first mathematically formulate and generalize them as gradient inconsistency. Then, we theoretically analyze how it leads to model divergence accumulated during training and the failed convergence. Based on the analytical study, we design *PAFT*, a fault-tolerant distributed training system with dynamic and asynchronous parameter synchronization. *PAFT* includes two parts: (1) *PAFT-Sync*, which mitigates model divergence by periodically synchronizing parameters, and (2) *PAFT-Dyn*, which minimizes synchronization overhead through dynamic training overlap and synchronization frequency scheduling based on profiled error degrees. Together, they ensure efficient model convergence at scale. The fault-tolerant synchronization in *PAFT* is optimized to support commonly used optimizers, e.g., Stochastic Gradient Descent (SGD), SGD momentum, and Adam. We implement *PAFT* on PyTorch Distributed and train ResNet, GPT-2, and LLaMA-2 on 4~32 GPUs. Experimental results show that *PAFT* efficiently defends against gradient aggregation error degrees while maintaining training performance.
+
+## 1 INTRODUCTION
+
+To efficiently train deep learning (DL) models (He et al., 2016) and large language models (LLMs) (Radford et al., 2018; Chung et al., 2022), high-performance and large-scale distributed training frameworks have been proposed (Rasley et al., 2020; Narayanan et al., 2021; 2019; Tang et al., 2023). Frequent system failures suspend training and require manual recovery from checkpoints, significantly reducing system efficiency and GPU utilization (up to 43%) (Maeng et al., 2021; Wang et al., 2023b). Approximately 178,000 GPU hours were wasted during the OPT-175B training (Zhang et al., 2022) due to various failures like MPI and CUDA errors (Humbatova et al., 2020), and hardware failures such as GPU malfunctions (Hu et al., 2024), electronic breakdowns, and node failures (Wang et al., 2023b; Hu et al., 2024). Many existing studies focus on improving the robustness and efficiency of the system through fast recovery (Wang et al., 2023b; 2024; Narayanan et al., 2021) or elastic training (Thorpe et al., 2022; Harlap et al.; He et al., 2023a).
+
+However, unlike system failures, *silent data corruption (SDC) errors* (Wang et al., 2023a; Fiala et al., 2012; Bacon, 2022; He et al., 2023b), which do not directly interrupt training, are increasingly affecting model quality and convergence. As reported in LLaMA-3 pretraining cluster and Fire-Flyer cluster, SDC errors have become the main cause of LLM convergence issues, and the secondary cost of fault tolerance during pretraining (Dubey et al., 2024; An et al., 2024), harming the reliability and efficiency of GPU clusters at extensive scale. (We provide more real-world error types and frequency during LLM pretraining in Appendix B).
+
+In this work, we consider the errors happen during gradient aggregation (GA), which are caused by hardware failures like bit corruptions (Jeon et al., 2019; Tiwari et al., 2015; Gao et al., 2023; Hu et al., 2024) and communication noise on network links (Hu et al., 2024; Gill et al., 2011; Tan et al., 2019;
+
+{1}------------------------------------------------
+
+Gao et al., 2023; Khan et al., 2023), as shown in Fig. 1. Specifically, the communicated messages are aggregated and broadcasted with noise, leading to different gradients on workers, which results in slow or failed convergence. To this end, we propose the following research questions.
+
+*How do silent errors in gradient aggregation influence distributed training and how to capture and mitigate them?*
+
+In this work, we formulate and generalize *gradient inconsistency* (in Section 2) errors, where workers obtain different noisy averaged gradients instead of the accurate averages. We then theoretically demonstrate that this gradient inconsistency leads to accumulated model divergence (in Section 3), resulting in failed convergence. Additionally, we quantify the convergence error theoretically concerning the degree of gradient inconsistency.
+
+To address the GA errors at scale, we design PAFT, a fault-tolerant distributed training system with two components: PAFT-Sync and PAFT-Dyn. PAFT-Sync periodically synchronizes model parameters with a frequency  $H$  to eliminate the model divergence. Then, PAFT-Dyn overlaps synchronization with the training process through asynchronous communication to save parameter synchronization overhead. To further reduce unnecessary communication costs, PAFT-Dyn adjusts the synchronization frequency  $H$  according to the signal-to-noise ratio as observed in our theoretical convergence analysis. Our theoretical and empirical studies show that PAFT can alleviate accumulated model divergence, ensuring training convergence.
+
+We implement PAFT on PyTorch Distributed (Ansel et al., 2024) for real-world distributed training and finetuning. We summarize our contributions as follows:
+
+- We formulate and generalize gradient inconsistency caused by silent GA errors. We theoretically analyze how it leads to accumulated model divergence and failed convergence.
+- We design PAFT, a fault-tolerant distributed training system to alleviate the gradient inconsistency. We theoretically prove that PAFT-Sync can illuminate the model divergence and ensure convergence. To reduce the extra communication overhead, we design PAFT-Dyn to overlap synchronization with training, and adjust the synchronization frequency with respect to the profiled error degree based on the theoretical analysis.
+- We conduct real-world experiments with 8-node GPU cluster with  $4 \sim 32$  GPUs to train ResNet-18 with CIFAR-10 (Krizhevsky et al., 2010), ResNet-50 with CIFAR-100 (Krizhevsky et al.), and LLMs including GPT-2 (Radford et al., 2019) and LLaMA-2 (Touvron et al., 2023) with OpenWebText (Gokaslan et al., 2019) and Alpaca (Taori et al., 2023). We consider noises with different patterns to simulate the SDC errors with different degrees. Results show that our method can successfully mitigate these errors.
+
+## 2 PRELIMINARIES
+
+We first present the preliminaries of single-device and distributed training, incorporating both image classification (He et al., 2016) and language modeling tasks (Radford et al., 2019). Then, we formulate the gradient inconsistency caused by the SDC errors during communication.
+
+**Single-device Training.** With a model parameterized by  $\theta \in \mathbb{R}^d$ , and sampling data  $x \sim \mathcal{D}$ , the object function is usually defined as (Bottou et al., 2016)
+
+$$\min_{\theta} F(\theta) \triangleq \mathbb{E}_{x \sim \mathcal{D}} f(\theta; x), \quad (1)$$
+
+{2}------------------------------------------------
+
+in which the specific definition of  $f(\theta; x)$  depends on the task, and it is a general formulation in many deep learning optimization problems (Dean et al., 2012). For image classification, the  $f(\theta; x) = l(\rho_\theta(x_i), x_o)$ , where  $x_i$  is the data inputs,  $x_o$  the labels in the data sample,  $x = (x_i, x_o)$ ,  $\rho_\theta(x_i)$  is the output of model  $\rho_\theta$ ,  $l$  is any classification loss function, like the cross-entropy. For next-word prediction in LLMs (Radford et al., 2019; Yang et al., 2019), the  $f(\theta; x) = l(\rho_\theta(x_{1:n}), x_{n+1:N})$ , where the sequence length of the  $x$  is  $N$ . Given the seen tokens indexed by  $1 : n$ , the model predicts the unseen tokens indexed by  $n + 1 : N$ .
+
+In  $t$ -th iteration, the gradient is estimated as  $g_t(\theta_t; x_t) = \nabla f_{x_t \sim \mathcal{D}}(\theta_t; x_t)$ . With the SGD optimization, the model parameters are descended towards the direction  $g_t$  as  $\theta_{t+1} = \theta_t - \eta_t g_t$ . We also extend our algorithm to SGD momentum and Adam (Kingma & Ba, 2015) optimizer.
+
+**Distributed SGD (DSGD).** In distributed training, multiple workers  $\mathcal{M} = \{m | m = 1, 2, \dots, M\}$  collaboratively optimize  $\theta$ . In  $t$ -th iteration, each worker calculates the local gradient  $g_m(\theta_t^m)$ . Then, the training system uses collective communication (Shi et al., 2021a; Thakur et al., 2005; Tang et al., 2020) or a parameter server (Jiang et al., 2020; Tang et al., 2020) to aggregate and broadcast the averaged gradient across workers to update model parameters  $\theta$ . This distributed gradient computation and model updating can be formulated as follows.
+
+$$\bar{g}_t = \frac{1}{M} \sum_{m \in \mathcal{M}} g_t^m(\theta_t^m; x_t^m), \quad x_t^m \sim \mathcal{D}_m, \quad (2)$$
+
+$$\theta_{t+1}^m = \theta_t^m - \eta_t \bar{g}_t, \quad (3)$$
+
+where  $\mathcal{D}_m$  represents dataset on worker  $m$ ,  $g_t^m(\theta_t^m; x_t^m)$  represents the local gradient of  $f(\theta_t^m)$  of worker  $m$  at iteration  $t$ , and the  $\theta_t^m$  is updated with the average of local gradients  $\bar{g}_t$ . Normally, local dataset  $\mathcal{D}_m$  has the same distribution as  $\mathcal{D}$  in distributed training. We write  $g_t^m(\theta_t^m; x_t^m)$  as  $g_t^m$  for simplicity. Note that all models are initialized as  $\theta_0$ , and all workers utilize the same averaged gradient  $\bar{g}_t$  to update their local models. Thus, there is  $\theta_t^m = \theta_t$  during the training process.
+
+### 2.1 ERRORS IN DISTRIBUTED AVERAGING GRADIENTS
+
+The SDC errors (Hu et al., 2024; Gao et al., 2023) in distributed training (Malcolm, 1971; Saad, 2020) actually add the noise on the estimated average gradient  $\bar{g}_t$ . Thus, workers finally obtain different noised gradients  $\tilde{g}_t^m$  as follows.
+
+**Definition 2.1. (Inconsistent Gradient).** The noised averaged gradient  $\tilde{g}_t^m$  is called inconsistent gradient, if there is an individual noise  $\epsilon_t^m$  generated depending on  $m$ -th worker added on  $\bar{g}_t$ .
+
+$$\tilde{g}_t^m = \bar{g}_t + \epsilon_t^m, \quad \epsilon_t^m \sim \mathcal{N}(0, \sigma^2), \quad (4)$$
+
+in which noise  $\epsilon_t^m$  is sampled from a Gaussian distribution  $\mathcal{N}$  with mean of 0 and variance of  $\sigma^2$ .
+
+**Noise Degree and Patterns.** The small  $\sigma^2$  can represent the small communication noise and less frequent SDC happening. On the contrary, the large  $\sigma^2$  can represent the larger noise like bit corruptions (Jeon et al., 2019; Hu et al., 2024) and more frequent happening. We consider both of these two patterns in our experiments.
+
+The noises may not consistently follow the same pattern during training. We consider the burst pattern of large noise (like bit corruption) that accidentally happen during training in experiments (Section 5). More discussions about the SDC errors and noise simulation are provided in Appendix B.
+
+## 3 ANALYSIS OF THE FAILED CONVERGENCE
+
+Fig. 2(a) shows training ResNet-18 with CIFAR-10 dataset across 4 workers with and without noises  $\epsilon_t^m$  with different  $\sigma^2$  ranging from 0.0001  $\sim$  1.0. Results show that even the small noise 0.001 also leads to failed training convergence.
+
+### 3.1 ACCUMULATED MODEL DIVERGENCE
+
+{3}------------------------------------------------
+
+162  
+163  
+164  
+165  
+166  
+167  
+168  
+169  
+170  
+171  
+172  
+173  
+174  
+175  
+176  
+177  
+178  
+179  
+180  
+181  
+182  
+183  
+184  
+185  
+186  
+187  
+188  
+189  
+190  
+191  
+192  
+193  
+194  
+195  
+196  
+197  
+198  
+199  
+200  
+201  
+202  
+203  
+204  
+205  
+206  
+207  
+208  
+209  
+210  
+211  
+212  
+213  
+214  
+215
+
+To understand and address this problem, we theoretically and empirically show how the gradient inconsistency (Eq. 4) leads to failed convergence. With the noised averaged gradient, the model updating process becomes from Eq. 3 as:
+
+$$\theta_{t+1}^m = \theta_t^m - \eta_t g_t^m = \theta_t^m - \eta_t \tilde{g}_t - \eta_t \epsilon_t^m. \quad (5)$$
+
+At  $t$ -th iteration, local models  $\{\theta_t^m | m \in \mathcal{M}\}$  are updated towards different directions  $g_t^m$ . Thus, this leads to diverged model parameters  $\theta_t^i \neq \theta_t^j \neq \theta_t^k$ , instead of the same  $\theta_t$ , in normal DSGD (Eq. 3). With training goes on, models  $\theta_t^m$  gradually diverge from each other. We define the averaged model  $\bar{\theta}_t = \frac{1}{M} \sum_{m=1}^M \theta_t^m$  and model divergence  $\Delta_t^m = \|\bar{\theta}_{t+1} - \theta_{t+1}^m\|$  to measure it. Fig. 2(b) shows the empirical accumulated model divergence during training. Larger noise (higher  $\sigma^2$ ) introduces more divergence. This aligns with training convergence curves in Fig. 2(a), where larger  $\sigma^2$  leads to a larger accuracy drop or failed convergence.
+
+**Lemma 3.1** (Increasing Model Divergence). *With the same initial point  $\theta_0^m = \theta_0$  across workers  $\{m | m = 1, 2, \dots, M\}$ , DSGD with noise  $\epsilon_t^m \sim \mathcal{N}(0, \sigma^2)$  introduces accumulated model divergence  $\Delta_t^m$  during training:*
+
+$$\mathbb{E} \|\bar{\theta}_{t+1} - \theta_{t+1}^m\|^2 = \frac{(M+1)\sigma^2}{M} \sum_{s=0}^t \eta_s^2. \quad (6)$$
+
+**Remark.** Lemma 3.1 shows that the divergence  $\Delta_t^m$  will be accumulated with the noise during training. This may lead to meaningless gradient estimation. Specifically, if the model  $\theta_t^i$  is far away from the other model  $\theta_t^j$ , the gradient  $\nabla f(\theta_t^i; x)$  has no useful descent information about the  $\theta_t^j$  in the parameter space.
+
+### 3.2 CONVERGENCE ANALYSIS OF NOISED DSGD
+
+**Assumption 3.1.** The following assumptions are commonly used in deep learning (Bottou et al., 2016): (1) Bounded variance:  $\mathbb{E}_m \|g^m(\theta) - \nabla F^m(\theta)\|^2 \leq \sigma_g^2$ , (2) Bounded gradient magnitude:  $\mathbb{E}_m \|g_m^m(\theta)\|^2 \leq G^2$ . The  $\nabla F^m(\theta) = \mathbb{E}_t g^m(\theta)$  and  $\nabla F(\theta) = 1/M \sum_{m \in \mathcal{M}} \nabla F^m(\theta)$ , and the bounded variance comes from sampling bias of the dataset on worker  $m$ .
+
+Now, we have the following theorem to show that it is difficult to tune the learning rate to have a good convergence speed.
+
+**Theorem 3.2.** (Convergence with noised training.) *With object function defined in Eq. 1 satisfying Assumption 3.1, DSGD with noise  $\epsilon_t^m \sim \mathcal{N}(0, \sigma^2)$  has the following convergence bound*
+
+$$\frac{1}{T} \sum_{t=0}^{T-1} \eta_t \mathbb{E} f(\bar{\theta}_t) - f^* \leq \underbrace{\frac{2\mathbb{E} \|\bar{\theta}_0 - \theta^*\|^2}{T}}_{T_1} + \underbrace{\frac{2(\sigma_g^2 + \sigma^2)}{TM} \sum_{t=0}^{T-1} \eta_t^2}_{T_2} + \underbrace{\frac{4L\sigma^2(M+1)}{TM} \sum_{t=0}^{T-1} \eta_t \sum_{s=0}^{t-1} \eta_s^2}_{T_3}. \quad (7)$$
+
+**Remark.** In Theorem 3.2,  $T_1, T_2$  converge with respect to training iteration  $T \rightarrow \infty$ ,  $T_3$  only converges when setting  $\eta_t = 0$ . However, the zero learning rate does not have any practical effect on decreasing the object function. To alleviate the model divergence in Lemma 3.1 and  $T_3$  in Theorem 3.2, we propose PAFT in Section 4.
+
+## 4 PERIODICAL PARAMETER SYNCHRONIZATION
+
+As discussed in Section 2.1, the root cause of the failed convergence is the optimization of local model parameters in different directions. In this section, we begin with a straightforward but systematic solution to this issue, parameter synchronization (Section 4.1). To minimize the additional overhead of this method, we designed PAFT-Sync to efficiently ensure training convergence (Section 4.2 and 4.3).
+
+![Figure 2: Training ResNet-18 with gradient inconsistency on 4 workers. (a) Convergence Gap: Plot of Test Accuracy (%) vs # Epochs (0 to 100). (b) Model Divergence: Plot of TOTAL DIVERGENCE (%) vs # ITERATIONS (0 to 10000). Both plots compare SGD (blue solid line) with Noise 0.0001 (orange dashed), Noise 0.001 (green dashed), Noise 0.01 (purple dashed), and Noise 0.1 (yellow dashed). In (a), SGD reaches ~85% accuracy, while higher noise levels result in lower accuracy (e.g., Noise 0.1 reaches ~20%). In (b), model divergence increases over time, with higher noise levels leading to higher divergence (e.g., Noise 0.1 reaches ~5.5%, while Noise 0.0001 remains near 0%).](06509cc49f3023389a3f15c106907140_img.jpg)
+
+Figure 2: Training ResNet-18 with gradient inconsistency on 4 workers. (a) Convergence Gap: Plot of Test Accuracy (%) vs # Epochs (0 to 100). (b) Model Divergence: Plot of TOTAL DIVERGENCE (%) vs # ITERATIONS (0 to 10000). Both plots compare SGD (blue solid line) with Noise 0.0001 (orange dashed), Noise 0.001 (green dashed), Noise 0.01 (purple dashed), and Noise 0.1 (yellow dashed). In (a), SGD reaches ~85% accuracy, while higher noise levels result in lower accuracy (e.g., Noise 0.1 reaches ~20%). In (b), model divergence increases over time, with higher noise levels leading to higher divergence (e.g., Noise 0.1 reaches ~5.5%, while Noise 0.0001 remains near 0%).
+
+Figure 2: Training ResNet-18 with gradient inconsistency on 4 workers.
+
+{4}------------------------------------------------
+
+![Figure 3: Three contour plots showing the trajectory of model parameters in a 2D parameter space. (a) Distributed training without noise: shows a smooth path from the initial parameter to the optimal point. (b) With noise (gradient inconsistency): shows a jagged path with significant deviations. (c) PSync With noise: shows a path that is more stable than (b) but still has some noise. The legend indicates: Local Gradient (orange arrow), Global Gradient (black arrow), Model Parameter (black dot), Noised Global Gradient (dashed black arrow), Average (dashed orange arrow), and Synchronized Model Parameter (blue dot).](e0d425c8e4eef259e4c52d81426d93fa_img.jpg)
+
+Figure 3: Three contour plots showing the trajectory of model parameters in a 2D parameter space. (a) Distributed training without noise: shows a smooth path from the initial parameter to the optimal point. (b) With noise (gradient inconsistency): shows a jagged path with significant deviations. (c) PSync With noise: shows a path that is more stable than (b) but still has some noise. The legend indicates: Local Gradient (orange arrow), Global Gradient (black arrow), Model Parameter (black dot), Noised Global Gradient (dashed black arrow), Average (dashed orange arrow), and Synchronized Model Parameter (blue dot).
+
+Figure 3: The trajectory of model parameters with training with two workers with/without noise and training with PAFT.
+
+### 4.1 PARAMETER SYNCHRONIZATION
+
+To eliminate the model divergence  $\Delta_t^m$ , one intuitive approach is to directly synchronize model parameters across workers. Specifically, after updating the model at iteration  $t$ , workers can communicate and average their parameters  $\theta_{t+1}^m$ , then reload the local models as  $\tilde{\theta}_{t+1}$ . This synchronization ensures that the model divergence  $\Delta_t^m$  is eliminated, setting it to zero. However, given the model size  $S_\theta$ , this synchronization per iteration incurs additional communication costs amounting to  $TS_\theta$ , which equals the original communication costs of the gradients. Therefore, reducing the overhead of parameter synchronization is crucial.
+
+#### Algorithm 1 Distributed training with PAFT-Sync
+
+**Input:** Initialized model  $\theta_0$ , dataset  $\mathcal{D}$ , workers  $\mathcal{M}$ , total iteration  $T$ , learning rate  $\eta$ , synchronization frequency  $H$ .
+
+**Output:** Final trained model  $\theta_T$ .
+
+```
+
+1: for  $t = 1, \dots, T$  do
+2:   for worker  $m \in \mathcal{M}$  in parallel do
+3:      $g_t^m(\theta_t^m) = 1/B \sum_{i=1}^B \nabla f_{x_{t,i} \sim \mathcal{D}}(\theta_t; x_{t,i})$ ;
+4:      $\tilde{g}_t^m = 1/M \sum_{m \in \mathcal{M}} g_t^m(\theta_t^m) + \epsilon_t^m$ ;
+5:     Communication
+6:      $\theta_{t+1/2}^m = \theta_t^m - \eta \tilde{g}_t^m$ ; ▷ Update model
+7:     if  $t + 1 \% H = 0$  then ▷ Synchronization
+8:        $\theta_{t+1}^m = 1/M \sum_{m \in \mathcal{M}} \theta_{t+1/2}^m$ ;
+9:     else
+10:       $\theta_{t+1}^m = \theta_{t+1/2}^m$ ;
+11: Return  $\theta_T^m = \theta_T$ ;
+
+```
+
+To address this, we propose PAFT-Sync, as detailed in Algorithm 1. In addition to standard forward and backward propagation (FP and BP), gradient averaging, and model updating, PAFT-Sync averages model parameters after every  $H$  training iteration. The model parameters are updated as follows:
+
+$$\theta_{t+1}^m = \begin{cases} \theta_t^m - \eta \tilde{g}_t^m, & \text{if } t + 1 \% H \neq 0 \\ \frac{1}{M} \sum_{m \in \mathcal{M}} (\theta_t^m - \eta \tilde{g}_t^m), & \text{if } t + 1 \% H = 0 \end{cases} \quad (8)$$
+
+where  $\tilde{g}_t^m = \bar{g}_t + \epsilon_t^m = \frac{1}{M} \sum_{m \in \mathcal{M}} g_t^m(\theta_t^m) + \epsilon_t^m$ . After  $H$  iterations, workers start training from the same point in the parameter space. The accumulated model divergence  $\delta_t^m$  is cleared and re-accumulated at a low level, resulting in less harmful influences on gradient estimation. We theoretically and empirically demonstrate that this synchronization effectively eliminates the accumulated model divergence, thus ensuring training convergence.
+
+**Definition 4.1.** (gap). The gap of a set  $\mathcal{A} := \{a_0, a_1, \dots, a_t\}$  of  $t + 1$  integers,  $a_i \leq a_{i+1}$  for  $i = 0, \dots, t - 1$ , is defined as  $\text{gap}(\mathcal{A}) := \max_{i=1, \dots, t} (a_i - a_{i-1})$ .
+
+Definition 4.1 is used to generally describe the fixed and dynamic synchronization frequency in both Algorithm 1 and 2. The timestamp in sequence  $\{H_t\}$  represents the synchronization point. And the  $\text{gap}(\{H_t\})$  is the maximal time gap between two synchronization points.
+
+**Lemma 4.1.** If  $\text{gap}(\mathcal{A}) \leq H$  and sequence of decreasing positive stepsizes  $\{\eta_t\}_{t \geq 0}$  satisfying  $\eta_t \leq 2\eta_{t+H}$  for all  $t \geq 0$ , then. With the same initial point  $\theta_0^m = \theta_0$  across workers  $\{m | m = 1, 2, \dots, M\}$ , DSGD with noise  $\epsilon_t^m \sim \mathcal{N}(0, \sigma^2)$  introduces accumulated model divergence  $\Delta_t^m$  along the training process as
+
+{5}------------------------------------------------
+
+$$\mathbb{E}\|\bar{\theta}_{t+1} - \theta_{t+1}^m\|^2 \leq \frac{4H(M+1)\sigma^2\eta_t^2}{M} \quad (9)$$
+
+**Remark.** Lemma 4.1 shows that the model divergence is bounded with  $\mathcal{O}(H\sigma^2\eta_t^2)$ . Less  $H$  helps to reduce this divergence but introduces more communication overheads. In Section 4.2 We will show that PAFT-Dyn finds a good trade-off between the convergence and the communication in Algorithm 2.
+
+**Theorem 4.2.** (Convergence with noised training with PAFT-Sync.) With object function defined in Eq. 1 satisfying Assumption 3.1, DSGD with PAFT (Eq. 8 or 12) noise  $\epsilon_t^m \sim \mathcal{N}(0, \sigma^2)$ , we have,
+
+$$\mathbb{E}f(\hat{\theta}_T) - f^* \leq \frac{\mu a^3}{2S_T} \|\theta_0 - \theta^*\|^2 + \frac{4T(T+2a)(\sigma_g^2 + \sigma^2)}{\mu M S_T} + \frac{256T}{\mu^2 S_T} \frac{(M+1)}{M} \sigma^2 HL \quad (10)$$
+
+where  $\hat{\theta}_T = \frac{1}{MS_T} \sum_{m=1}^M \sum_{t=0}^{T-1} w_t \theta_t^m$ , for  $w_t = (a+t)^2$  and  $S_T = \sum_{t=0}^{T-1} w_t \geq \frac{1}{3}T^3$
+
+**Remark.** Theorem 4.2 shows that PAFT ensures the convergence of DSGD with noised gradients. And we can adjust the  $H$  with respect to the noise variance  $\sigma$  to trade off the convergence and communication. And Theorem 4.2 is dependent on a heterogeneous synchronization sequence  $\{\mathcal{H}_t\}$  instead of a uniform sequence with the same gap  $H$ . Thus, it is general and can be easily extended to different algorithms that considering adjusting synchronization frequency.
+
+**Corollary 4.3.** Let  $\hat{\theta}_T$  be defined as in Theorem 4.2, for parameter  $a = \max\{16\kappa, H\}$ . Then
+
+$$\begin{aligned} \mathbb{E}f(\hat{\theta}_T) - f^* &= \mathcal{O}\left(\frac{\kappa^3 + H^3}{\mu T^3}\right) G^2 + \mathcal{O}\left(\frac{1}{\mu MT} + \frac{\kappa + H}{\mu MT^2}\right) \sigma_g^2 \\ &\quad + \mathcal{O}\left(\frac{(M+1)H\kappa}{\mu MT^2} + \frac{1}{\mu MT} + \frac{\kappa + H}{\mu MT^2}\right) \sigma^2 \end{aligned} \quad (11)$$
+
+**Remark.** Corollary 4.3 shows that the convergence rate is the same as the SGD (Bottou et al., 2016).
+
+### 4.2 ADJUSTING SYNCHRONIZATION FREQUENCY
+
+While the synchronization can completely address the model divergence problem, it introduces extra communication overheads due to the communication of model parameters. Through the theoretical analysis (Theorem 4.2) in Section 4.1, we adjust the synchronization frequency  $H$  detected error degrees of  $\epsilon$  to reduce the unnecessary communication costs.
+
+In light of this, we propose PAFT-Dyn in PAFT, as detailed in Algorithm 2. Compared with PAFT-Sync (Algorithm 2), PAFT-Dyn detects the magnitude of error degrees in training (Line 10) and adjusts  $H_t$  according to  $\sigma_t$  and the gradient norm (Line 11) to dynamically reduce communication costs.
+
+Then, the new parameter synchronization scheme is given as follows.
+
+$$\theta_{t+1}^m = \begin{cases} \theta_t^m - \eta_t \tilde{g}_t^m, & \text{if } t+1 \notin \mathcal{H}_T \\ \frac{1}{M} \sum_{m \in \mathcal{M}} (\theta_t^m - \eta_t \tilde{g}_t^m), & \text{if } t+1 \in \mathcal{H}_T \end{cases}, \quad (12)$$
+
+in which  $\mathcal{H}_T$  is the sequence that indicates when to synchronize parameters.
+
+**Estimating Error Degree.** The naive error detection method is directly computing the average of the gradients  $1/M \sum_{m \in \mathcal{M}} g_t^m(\theta_t^m)$  and compare it with  $\tilde{g}_t^m$  to estimate the noise degree of  $\epsilon_t^m$ , which introduces extra communication costs equal to synchronization. To this end, we estimate the error degree through the accumulated model divergence  $\Delta_t^m$  to reduce the communication costs, as the  $\Delta_t^m$  takes historical error information and need not be communicated at each iteration. According to Eq. 15 in Lemma 3.1, we can directly compute the accumulated model divergence  $\Delta_t^m$  (Line 22 in Algorithm 2).
+
+**Adjusting Synchronization Frequency.** Observing the convergence rate in Theorem 4.2, the intuitive way to adjust  $H$  is set  $H = \lceil 1/\sigma^2 \rceil$ , thus the third term in the convergence bound (Eq. 10) becomes as  $\mathcal{O}(T(M+1)L/(MS_T))$ . However, this too less  $H$  actually is set too small and, because
+
+{6}------------------------------------------------
+
+#### **Algorithm 2** Distributed training with PAFT
+
+**Input:** Initial model  $\theta_0$ , dataset  $\mathcal{D}$ , workers  $\mathcal{M}$ , total iteration  $T$ , learning rate  $\eta$ , initial detecting time gap  $H_{\text{ad}}$ , initial synchronization sequence  $\mathcal{H}_T = \{H_{\text{ad}}\}$ .
+
+**Output:** Final trained model  $\theta_T$ .
+
+```
+
+1: for  $t = 1, \dots, T$  do
+2:   for worker  $m \in \mathcal{M}$  in parallel do
+3:      $g_t^m(\theta_t^m) = 1/B \sum_{i=1}^B \nabla_{\theta_t^m} f_{x_{t,i}} \sim \mathcal{D}(\theta_t^m; x_{t,i})$ ; ▷ FP and BP
+4:      $g_t^m = 1/M \sum_{m \in \mathcal{M}} g_t^m(\theta_t^m) + \epsilon_t^m$ ; ▷ Communication
+5:     if  $t \in \mathcal{H}_T$  then ▷ Launch Synchronization.
+6:        $\theta_{t+1}^m = \theta_t^m - \eta_t \tilde{g}_t^m$ ; ▷ Update before averaging
+7:       (Asynchronous)  $\tilde{\theta}_{t+1} = 1/M \sum_{m \in \mathcal{M}} \theta_{t+1}^m$ ;
+8:     else if  $t - 1 \in \mathcal{H}_T$  then ▷ Wait for synchronization.
+9:       Wait for  $\tilde{\theta}_t = 1/M \sum_{m \in \mathcal{M}} \theta_t^m$ ;
+10:       $\sigma_{\text{est}} = \|\tilde{\theta}_{t,s} - \theta_{t,s}^m\|$ ;
+11:       $H_{\text{new}} = \text{All-Reduce}(\|g_t^m\|/\sigma_{\text{est}})$ ; ▷ Estimating New  $H$ .
+12:      Append  $t + H_{\text{new}}$  in  $\mathcal{H}_T$ ;
+13:       $\theta_{t+1}^m = \tilde{\theta}_t - \eta_t \tilde{g}_t^m$ ; ▷ Update after synchronization
+14:    else
+15:       $\theta_{t+1}^m = \theta_t^m - \eta_t \tilde{g}_t^m$ ; ▷ Update model
+16: Return  $\{\theta_T^m | m \in \mathcal{M}\}$ ;
+
+```
+
+the dominant bound becomes as the second term as  $\mathcal{O}(2T(T+2a)(\sigma_g^2 + \sigma^2)/(MS_T))$  and cannot be reduced by smaller  $H$ . Thus, we can set the  $H = \sigma_g/\sigma$ . Now, the second term and the third term in Eq. 10 is balanced. Note that the  $H = \|g_{t,p_{\max}}^m\|/\sigma_{\max}$  also represents the signal-to-noise ratio (SNR) that is widely used in many methods to adjust hyper-parameters (Qiao et al., 2021).
+
+### 4.3 OVERLAPPING SYNCHRONIZATION WITH TRAINING
+
+Furthermore, synchronization after some training iterations still requires communication. To further reduce this communication cost, we overlap synchronization with the normal backward propagation process using asynchronous communication. The timeline of this overlapped communication is shown in Fig. 4.
+
+As detailed in Algorithm 2, if the current round requires synchronization, the model averaging process is initiated without waiting (Line 7). In the next round, the model averaging can be overlapped with the forward and backward propagation processes. During model updating, workers wait for the previous round’s synchronization to be completed. The new model parameters are then updated using the averaged model and the new gradients. Note that this approach introduces a trade-off, where we trade precise gradient estimation for the benefit of overlapping communication. We show the empirical effect on eliminating the model divergence in Appendix D.
+
+![Figure 4: Overlapped synchronization with training. The figure contains two subplots, (a) and (b), showing 'Model divergence' on the y-axis and 'Time' on the x-axis. A legend at the top indicates: Computation (grey), Update (dark grey), All-Reduce Gradients (orange), and Parameter Sync (blue). Subplot (a) shows 'Distributed training with gradient inconsistency', where model divergence increases over time. Subplot (b) shows 'Distributed training with PAFT', where model divergence is significantly reduced due to overlapping synchronization and training processes.](797231cfee084ca299de599340240401_img.jpg)
+
+Figure 4: Overlapped synchronization with training. The figure contains two subplots, (a) and (b), showing 'Model divergence' on the y-axis and 'Time' on the x-axis. A legend at the top indicates: Computation (grey), Update (dark grey), All-Reduce Gradients (orange), and Parameter Sync (blue). Subplot (a) shows 'Distributed training with gradient inconsistency', where model divergence increases over time. Subplot (b) shows 'Distributed training with PAFT', where model divergence is significantly reduced due to overlapping synchronization and training processes.
+
+Figure 4: Overlapped synchronization with training.
+
+### 4.4 EXTENSION TO OTHER OPTIMIZERS
+
+The analysis in Section 3 is mainly built on the SGD, while the most of current DL models and LLMs are optimized with SGD momentum and Adam (Kingma & Ba, 2015). However, in the noised distributed training, the intrinsic characteristics of these optimizers are similar to the SGD. Specifically, the inconsistent gradients  $\tilde{g}_t^m$  also lead to diverge updating directions of the model parameters, and the accumulated model divergence. Differently, the SGD momentum and Adam introduce extra terms including the momentum and precondition, which are updated according to the gradients. Thus, there is divergence existing in these extra terms. However, the divergence on them may not be accumulated as the model parameters as they are updated with moving averaging. Nevertheless, we can consider to synchronize these extra terms with the model parameters to ensure
+
+{7}------------------------------------------------
+
+the convergence of the model. To this end, we provides results of synchronizing the momentum and precondition in Appendix D.
+
+## 5 EXPERIMENTAL STUDIES
+
+In this section, we conduct experiments on distributed training with varying degrees of noise to verify our method. We compare basic distributed training without gradient inconsistency (Oracle), distributed training with gradient inconsistency (Noised), PAFT-Sync with different  $H$  values, and PAFT.
+
+![Figure 5: Test Accuracy (%) vs # EPOCHS for different noise degrees. (a) Training ResNet-18 with 4 workers. (b) Training ResNet-50 with 4 workers. (c) Training ResNet-50 with 32 workers. Each plot shows performance for Oracle, Noised, and PAFT with noise levels sigma^2 = {0.0001, 0.001, 0.01, 0.1}.](ecb25d766719ce041cf4cc390791a098_img.jpg)
+
+Figure 5: Test Accuracy (%) vs # EPOCHS for different noise degrees. (a) Training ResNet-18 with 4 workers. (b) Training ResNet-50 with 4 workers. (c) Training ResNet-50 with 32 workers. Each plot shows performance for Oracle, Noised, and PAFT with noise levels sigma^2 = {0.0001, 0.001, 0.01, 0.1}.
+
+(a) Training ResNet-18 with 4 workers.
+
+(b) Training ResNet-50 with 4 workers.
+
+(c) Training ResNet-50 with 32 workers.
+
+Figure 5: Different noise degrees.
+
+![Figure 6: Test Accuracy (%) vs # EPOCHS for different synchronization frequency H. (a) Training ResNet-18 with 4 workers. (b) Training ResNet-50 with 4 workers. (c) Training ResNet-50 with 32 workers. Each plot shows performance for Oracle, Noised, PAFT-Sync with H=5, 10, 50, and PAFT.](f5e70cbe66e71e65b4ae4aa7816d266a_img.jpg)
+
+Figure 6: Test Accuracy (%) vs # EPOCHS for different synchronization frequency H. (a) Training ResNet-18 with 4 workers. (b) Training ResNet-50 with 4 workers. (c) Training ResNet-50 with 32 workers. Each plot shows performance for Oracle, Noised, PAFT-Sync with H=5, 10, 50, and PAFT.
+
+(a) Training ResNet-18 with 4 workers.
+
+(b) Training ResNet-50 with 4 workers.
+
+(c) Training ResNet-50 with 32 workers.
+
+Figure 6: Different Synchronization frequency.
+
+**Cluster Configuration.** We have two testbeds including an 8-node GPU cluster, each of which installs 4 Nvidia RTX2080Ti GPU connected with PCIe3.0x16 with 10Gbps bandwidth, and a single GPU machine equipped with 8 Nvidia A6000 GPUs.
+
+**DL Models and Datasets.** We train ResNet-18 (He et al., 2016) with CIFAR-10 (Krizhevsky et al., 2010), ResNet-50 (He et al., 2016) with CIFAR-100 with 120 epochs, and GPT-2 (Radford et al., 2019) with OpenWebText (Gokaslan et al., 2019) with 3K iterations. We also finetune pretrained LLaMA-2 (Touvron et al., 2023) and GPT-2 on Alpaca (Taori et al., 2023) using LoRA (Hu et al., 2021) with 1 epoch. ResNet-18 and ResNet-50 are optimized with SGDm (Bottou et al., 2016) with learning rate of 0.1 and momentum of 0.9. GPT-2 is trained with Adam (Kingma & Ba, 2015) with learning rate of 0.001,  $\beta_1$  as 0.9 and  $\beta_2$  as 0.99.
+
+**Simulation of Gradient Inconsistency.** We simulate the noise with different degrees by adjusting  $\sigma$  with range  $\{0.0001, 0.001, 0.01, 0.1\}$ . The small noise degree  $\{0.0001, 0.001\}$  can represent the small communication noises. While the larger noise  $\{0.01, 0.1\}$  can simulate the bit corruptions or the large communication noise, which appears less during training.
+
+### 5.1 MAIN RESULTS
+
+Table 1: Test Accuracy of ResNet-18.
+
+| Noise degree $\sigma^2$ | 0.0001 | 0.001 | 0.01 | 0.1 |
+|-|-|-|-|-|
+| DSGD | 94.0 | 94.0 | 94.0 | 94.0 |
+| Noised DSGD | 93.7 | 91.1 | 60.5 | 13.5 |
+| PAFT-Sync $H = 5$ | 93.8 | 93.3 | <b>85.2</b> | 32.8 |
+| PAFT-Sync $H = 10$ | <b>93.9</b> | <b>93.6</b> | 84.7 | 31.9 |
+| PAFT-Sync $H = 50$ | <b>93.9</b> | 93.4 | 84.3 | 28.5 |
+| PAFT | <b>93.9</b> | 93.4 | <b>85.2</b> | <b>33.2</b> |
+
+Table 2: Test Accuracy of ResNet-50.
+
+| Noise degree<br># of workers | $\sigma^2 = 0.0001$ |  | $\sigma^2 = 0.001$ |  | $\sigma^2 = 0.01$ |  | $\sigma^2 = 0.1$ |  |
+|-|-|-|-|-|-|-|-|-|
+|  | 4 | 32 | 4 | 32 | 4 | 32 | 4 | 32 |
+| DSGD | 75.0 | 65.1 | 75.0 | 65.1 | 75.0 | 65.1 | 75.0 | 65.1 |
+| Noised DSGD | 74.9 | 64.8 | 68.8 | 44.5 | 11.3 | 3.8 | 1.3 | 1.2 |
+| PAFT-Sync $H = 5$ | <b>75.1</b> | 63.3 | 74.0 | 63.7 | 53.7 | <b>44.4</b> | 1.3 | 3.2 |
+| PAFT-Sync $H = 10$ | <b>75.1</b> | 63.9 | 74.0 | 63.2 | 53.5 | 41.8 | 1.2 | 2.2 |
+| PAFT-Sync $H = 50$ | 74.7 | 64.9 | 73.8 | 63.2 | 49.5 | 17.2 | 1.1 | 1.1 |
+| PAFT | 74.3 | <b>64.9</b> | 74.1 | <b>63.9</b> | <b>54.0</b> | 40.9 | <b>1.4</b> | <b>4.2</b> |
+
+{8}------------------------------------------------
+
+Fig. 5(a) and 5(b) show convergence of noised distributed training on ResNet-18 and ResNet-50 with 4 workers. Fig. 5(c) show training resnet-50 of noised distributed training with 32 workers. All results show that as noise degree increases, the accuracy of model declines correspondingly. While PAFT can successfully illuminate the small noise influence and mitigate the large noise influence.
+
+The results in all figures show that the PAFT can successfully defend against noise and improve the convergence of noised training when  $\sigma^2 = 0.0001$  or  $0.001$ . Note that there is still gap between the normal training (Oracle) and PAFT when  $\sigma^2 \geq 0.01$ . The reason is that the noise not only introduces gradient inconsistency, but also the noised gradient direction that influences gradient descend. This is the inherent problem of the noise, like the Byzantine Fault-tolerance problem (Guerraoui et al., 2024).
+
+#### Training and Finetuning LLMs.
+
+Fig. 7, 8(a) and 8(b) show the loss curves of pretraining and fine-tuning LLMs. The results show that the PAFT can successfully defend against noise and improve the convergence. While the model size increases from ResNet50 to LLMs like GPT-2 and LLaMA-2, the PAFT can significantly improve over baselines. When the noise degree  $\sigma^2 = 0.0001$  or  $0.001$ , the PAFT can almost ensure the convergence as similar to the training without noise. While for the larger noise  $\sigma^2 = 0.01$ , the PAFT can improve the convergence compared with the noised training. The exiting performance gap between PAFT and the normal training without noise comes from the noisy gradient itself, which leads to an incorrect updating direction. Future works should consider combining both synchronization and voting mechanisms like the Byzantine Fault-tolerance problem (Guerraoui et al., 2024) to address this problem.
+
+#### **Accidental Large Noise.** We simulate accidental large noise
+
+like bit corruptions. Specifically, in each round, the noise is sampled from  $\mathcal{N}(0, 0.0001)$  to simulate the normal small noises. However, after each 500 iterations, the noise is sampled from a  $\mathcal{N}(0, 0.1)$  or  $\mathcal{N}(0, 1.0)$  as simulated accidental large noise. The Fig. 9(a) shows training with large noise sampled from  $\mathcal{N}(0, 0.1)$  while Fig. 9(b) shows  $\mathcal{N}(0, 1.0)$ . The convergence curves clearly demonstrate the influence of this accidental noise. In each iteration that the noise happens, the test accuracy instantly drops a lot and is pulled back by PAFT from the valley. However, for a large noise with variance of 1.0, it is hard to pull it back. Interestingly, we observe that the learning rate decay at the late stage helps the model defend against the noise. Less learning rate results in less model update and divergence, which aligns with our theoretical analysis (Lemma 3.1 and Theorem 3.2).
+
+#### **Wall-clock Iteration Time** We provide a comparison of the average iteration wall-clock time (in seconds) during the training of the ResNet-50 model, using different numbers of workers ranging from 4 ~ 32 in Table 3. By dynamic adjusted synchronization frequency and overlapped communication, the PAFT reduces the extra cost than PAFT-Sync for around up to 11.0% efficiency improvement for 32 workers. And the extra cost of PAFT than DSGD is around 18.9% for 32 workers.
+
+![Figure 4: Two line graphs showing training loss vs. number of iterations. (a) Different noise degrees: Noise = 0.05, 0.1, 0.2, 0.3. (b) Different Sync. frequency: M = 10, 20, 50, 100. Both graphs show that higher noise and lower sync frequency lead to higher training loss.](0d5fdb87a392819c7d2e3b6230912a0b_img.jpg)
+
+Figure 4: Two line graphs showing training loss vs. number of iterations. (a) Different noise degrees: Noise = 0.05, 0.1, 0.2, 0.3. (b) Different Sync. frequency: M = 10, 20, 50, 100. Both graphs show that higher noise and lower sync frequency lead to higher training loss.
+
+Figure 7: Training GPT-2 with OpenWebText.
+
+![Figure 4: Two line graphs showing Train Loss vs. # Iters for Alpaca dataset. (a) GPT-2 with Alpaca: Train loss decreases from ~0.65 to ~0.4 over 1500 iterations. (b) LLaMA-2 with Alpaca: Train loss decreases from ~1.25 to ~0.85 over 1500 iterations. Both graphs compare Do=0.001, Do=0.01, Do=0.03, and Do=0.05. Higher dropout leads to lower final loss.](4495fbec19aac6861f1a0b35c4dc38bc_img.jpg)
+
+Figure 4: Two line graphs showing Train Loss vs. # Iters for Alpaca dataset. (a) GPT-2 with Alpaca: Train loss decreases from ~0.65 to ~0.4 over 1500 iterations. (b) LLaMA-2 with Alpaca: Train loss decreases from ~1.25 to ~0.85 over 1500 iterations. Both graphs compare Do=0.001, Do=0.01, Do=0.03, and Do=0.05. Higher dropout leads to lower final loss.
+
+Figure 8: Finetuning LLMs with different noise degrees.
+
+![Figure 1: Two line graphs showing Test Accuracy (%) vs. # EPOCHS for MNIST. (a) sigma^2_noise = 0.1. (b) sigma^2_noise = 1.0. Both graphs compare 'Oracle' (blue), 'Noise' (orange), and 'PMT-Sync' (various colored lines) for different noise levels (sigma^2_sync = 0.1, 0.5, 1.0, 5.0). In both cases, PMT-Sync methods achieve higher accuracy than the Noise baseline, with sigma^2_sync = 0.1 performing best.](ca5f2304ffe22946414ffab54cd3fd93_img.jpg)
+
+Figure 1: Two line graphs showing Test Accuracy (%) vs. # EPOCHS for MNIST. (a) sigma^2\_noise = 0.1. (b) sigma^2\_noise = 1.0. Both graphs compare 'Oracle' (blue), 'Noise' (orange), and 'PMT-Sync' (various colored lines) for different noise levels (sigma^2\_sync = 0.1, 0.5, 1.0, 5.0). In both cases, PMT-Sync methods achieve higher accuracy than the Noise baseline, with sigma^2\_sync = 0.1 performing best.
+
+Figure 9: Training ResNet-18 with accidental large noise.
+
+Table 3: Average iteration wall-clock time (seconds) during training ResNet-50.
+
+| # of workers | 4 | 8 | 16 | 32 |
+|-|-|-|-|-|
+| DSGD | 0.201 | 0.212 | 0.228 | 0.333 |
+| PAFT-Sync | 0.243 | 0.254 | 0.276 | 0.411 |
+| PAFT | 0.237 | 0.244 | 0.253 | 0.373 |
+
+{9}------------------------------------------------
+
+ers. For more workers, PAFT-Sync shows better improvement, which means the good scalability of PAFT-Sync.
+
+## 6 RELATED WORKS
+
+Due to the limited space, we introduce the concise related works here, and leave detailed discussions in Appendix A.
+
+**Parallelism at Scale** Distributed large model (LM) training (Narayanan et al., 2021) employs hybrid parallelism techniques, including data parallelism (DP), tensor model parallelism (TP), and pipeline parallelism (PP). DP (Krizhevsky et al., 2017; Chen et al., 2016; Cui et al., 2016; Zhang et al., 2017; Tang et al., 2020; 2022), which replicates models for parallel training, is central in hybrid parallelism. It scales the training effectively by increasing the batch size to accelerate model convergence. TP (Or et al., 2020; Narayanan et al., 2021) and PP (Narayanan et al., 2019; Rasley et al., 2020; Tang et al., 2023) complement DP by addressing memory limitations when models exceed a single device’s memory capacity. PAFT tackles GA errors and has been generalized to hybrid parallel training frameworks like DeepSpeed (Rasley et al., 2020) and Megatron (Narayanan et al., 2021) towards large-scale LLM training.
+
+**Safety and Reliability of Distributed Training** Many studies focus on system reliability concerning node failures, using checkpointing (Wang et al., 2023b; 2024; Narayanan et al., 2021) and elasticity (Thorpe et al., 2022; Harlap et al.; He et al., 2023a) optimizations for rapid recovery. These optimizations enhance system robustness and enable quick restarts. Also, there are many efforts against Byzantine faults (El-Mhamdi et al., 2020; Damaskinos et al., 2018; Guerraoui et al., 2024) by malicious node behavior. However, silent errors, represented by GA errors in the scope of this paper, arise from unintentional issues like hardware errors or communication errors, leading to inaccuracies in gradient updates. Unlike the other types of errors, GA errors are particularly challenging due to their subtlety and variability, making them more difficult and resource-intensive to detect and mitigate. To the best of our knowledge, PAFT is the first effort to improve system reliability against GA errors at scale.
+
+## 7 LIMITATIONS
+
+**Performance gap between PAFT and the oracle.** In this work, as illustrated in the experiments 5, we do not completely close the performance gap when the noise degree is large. Future works should consider combining both parameter synchronization and voting mechanisms like the Byzantine Fault-tolerance problem (Guerraoui et al., 2024) to address this problem.
+
+**Extra communication overheads.** PAFT introduces extra communication overheads due to the parameter synchronization. And the synchronizing optimizer states also introduce extra overheads. While we have shown that the overheads are acceptable in the experiments, the overheads may be significant in some scenarios like the low-bandwidth environments. Future works should consider optimizing the synchronization frequency to reduce the overheads.
+
+## 8 CONCLUSION
+
+In this work, we address GA errors in distributed training caused by hardware issues like bit corruptions and communication noise, which are challenging to capture and mitigate for fault tolerance. We first mathematically formulate and generalize these errors as gradient inconsistency. Then, we theoretically analyze how they lead to accumulated model divergence and failed convergence. To address this issue, we propose PAFT, a fault-tolerant distributed training system incorporating dynamic and asynchronous parameter synchronization optimizations. The two components of PAFT-Sync and PAFT-Dyn work synergistically to mitigate the negative impact of GA errors. PAFT-Sync maintains model convergence by periodically synchronizing parameters, while PAFT-Dyn minimizes overhead by adjusting synchronization frequency based on the profiled error degrees. Our implementation of PAFT on PyTorch Distributed, evaluated on ResNet-18, ResNet-50, GPT-2, and LLaMA-2 models across 32 GPUs, demonstrates the systems robustness against a wide range of GA errors. The evaluation results indicate that, unlike vanilla distributed training, PAFT effectively maintains fault tolerance without compromising training throughput.
+
+ Rest of paper (reference and Appendix) is removed.

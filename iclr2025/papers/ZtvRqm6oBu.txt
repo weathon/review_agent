@@ -1,0 +1,374 @@
+
+
+{0}------------------------------------------------
+
+# APPLYING SPARSE AUTOENCODERS TO UNLEARN KNOWLEDGE IN LANGUAGE MODELS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+We investigate whether sparse autoencoders (SAEs) can be used to remove knowledge from language models. We use the biology subset of the Weapons of Mass Destruction Proxy dataset and test on the `gemma-2b-it` and `gemma-2-2b-it` language models. **We demonstrate that individual interpretable biology-related SAE features can be used to unlearn a subset of WMDP-Bio questions with minimal side-effects in domains other than biology.** Our results suggest that negative scaling of feature activations is necessary and that zero ablation features is ineffective. We find that intervening using multiple SAE features simultaneously can unlearn multiple different topics, but with similar or larger unwanted side-effects than the existing Representation Misdirection for Unlearning technique. Current SAE quality or intervention techniques would need to improve to make SAE-based unlearning comparable to the existing fine-tuning based techniques.
+
+## 1 INTRODUCTION
+
+Current and future language models may learn inaccurate information, produce toxic or malicious outputs, or possess dangerous capabilities that we would like to remove before deployment, such as advanced bio-weapons knowledge (Ji et al., 2023; Li et al., 2024). However, we do not yet know how to precisely and robustly remove knowledge or unlearn capabilities in these language models. The goal of this work is to investigate whether sparse autoencoders (SAEs) can be used to perform unlearning in an interpretable way.
+
+Having an interpretable method for unlearning is important as it can allow a higher level of confidence that the model has actually unlearned the knowledge, rather than superficially or temporarily hiding the capability to discuss a given topic. Existing methods for removing specific facts from language models offer interpretable solutions (e.g. Meng et al., 2023), however these approaches are limited to fact-level unlearning, not the unlearning of conceptual knowledge (Gandikota et al., 2024). The ultimate goal with an interpretable unlearning is to be able to properly verify that models have unlearned the correct knowledge. Even if that is not perfectly achieved, an interpretable unlearning approach could still help us identify what subset of the dataset has been unlearned and which areas have been overlooked, without requiring a large amount of manual analysis of model behavior on big datasets. In addition, we feel that it is worthwhile to test techniques developed in interpretability research on real-world tasks as a useful measure of the impact of such techniques.
+
+Our current work makes two key contributions: First, we attempt to develop a method for unlearning knowledge in language models in an interpretable way. Second, we apply SAEs to the task of unlearning knowledge, extending their use beyond previous work. Our approach aims to work towards more transparent and verifiable knowledge removal at a broader scale.
+
+### 1.1 RELATED WORK
+
+Recent work on **unlearning** has typically focused on fine-tuning based methods that have been applied in a variety of contexts to unlearn concepts in language models (e.g. Li et al., 2024; Zou et al., 2024; Eldan & Russinovich, 2023), going beyond prior work that aimed to unlearn specific training data points in neural networks (Bouroule et al., 2020).
+
+{1}------------------------------------------------
+
+![Diagram illustrating the intervention process using SAE features. The diagram shows a flow from Input to Model (Layer 0 to l), then to SAE Encoder, then to a set of feature activations f_0, f_1, f_2, ..., f_i, ..., f_{l-1}. The activation f_i is modified by a function f_bin, which sets it to -c if f_bin > 0 and 0 otherwise. This modified activation is then passed to SAE Decoder, which outputs to Model (Layer l+1 to L), which finally produces the Output. A red box labeled 'SAE error term' is connected to the SAE Decoder.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+The diagram shows a vertical flow of information. At the bottom, 'Input' points to a box 'Model (Layer 0 to l)'. Above this is a trapezoid 'SAE Encoder'. Above that is a row of feature activations:  $f_0, f_1, f_2, \dots, f_i, \dots, f_{l-1}$ . The activation  $f_i$  is crossed out with a red 'X' and replaced by a formula:  $f_{bin} = \begin{cases} -c & \text{if } f_{bin} > 0 \\ 0 & \text{otherwise} \end{cases}$ . Above this row is another trapezoid 'SAE Decoder'. At the top is a box 'Model (Layer l+1 to L)', which points to 'Output'. Red arrows indicate the flow between these components. A red box labeled 'SAE error term' is connected to the 'SAE Decoder'.
+
+Diagram illustrating the intervention process using SAE features. The diagram shows a flow from Input to Model (Layer 0 to l), then to SAE Encoder, then to a set of feature activations f\_0, f\_1, f\_2, ..., f\_i, ..., f\_{l-1}. The activation f\_i is modified by a function f\_bin, which sets it to -c if f\_bin > 0 and 0 otherwise. This modified activation is then passed to SAE Decoder, which outputs to Model (Layer l+1 to L), which finally produces the Output. A red box labeled 'SAE error term' is connected to the SAE Decoder.
+
+Figure 1: An outline of how we use SAE features to intervene in the model. Selected feature activations  $f_i$  are set to a negative value  $-c$  when  $f_i > 0$ .
+
+In particular, Li et al. (2024) introduced the **Representation Misdirection for Unlearning technique (RMU)**. RMU is a fine-tuning based approach for unlearning information from a language model. It involves fine-tuning model weights at 3 layers within the model using a combination of two loss terms. These terms are (i) the “forget loss”, which changes the direction and scales the norm of model activations on a dataset containing information that you want to unlearn and (ii) the “retain loss”, which preserves model activations based on a Wikitext dataset. The method contains two hyperparameters that control the ratio of the two loss terms, and the scaling of the activations on the “forget” dataset. While relatively successful, fine-tuning approaches such as these are opaque and we lack insight into what exactly is happening in the model (Lucki et al., 2024).
+
+**Sparse autoencoders (SAEs)** use an unsupervised method to learn sparse reconstruction of language model activations (e.g. Ng, 2011; Bricken et al., 2023; Cunningham et al., 2023; Templeton et al., 2024; Marks et al., 2024; Gao et al., 2024). SAEs have been shown to find interpretable features in language models. SAEs appear to be a promising approach to help understand complex, abstract features that are used by language models (Templeton et al., 2024). Whether SAEs can be used to make systematic, predictable, interpretable interventions in language models in a variety of contexts remains an open question.
+
+### 1.2 NOTATION
+
+In this subsection, we explain the notation used to describe Sparse Autoencoders. Our method, as described in Section 2 onwards, can be understood at a high-level with familiarity of the related literature (such as Bricken et al. (2023), particularly the “Advice for Training Sparse Autoencoders: Autoencoder Architecture” appendix section).
+
+Transformers operate on sequences of embeddings  $\mathbf{x}_0^{(0)}, \mathbf{x}_0^{(1)}, \dots, \mathbf{x}_0^{(n)}$ , where  $\mathbf{x}_j^{(i)} \in \mathbb{R}^d$  for all  $i$  and  $j$  (Vaswani et al., 2023). Each layer of the transformer  $L_0, L_1, \dots, L_{\ell-1}$  iteratively transforms the initial embeddings as follows:
+
+$$\mathbf{x}_{j+1}^{(0)}, \mathbf{x}_{j+1}^{(1)}, \dots, \mathbf{x}_{j+1}^{(n)} = L_j \left( \mathbf{x}_j^{(0)}, \mathbf{x}_j^{(1)}, \dots, \mathbf{x}_j^{(n)} \right) \quad (1)$$
+
+{2}------------------------------------------------
+
+for  $j = 0, 1, \dots, \ell - 1$ .  $x^{(i)}$  are called the values of the *residual stream* in the interpretability literature (Elhage et al., 2021).
+
+In this paper, we only consider SAEs applied to the residual stream (e.g. Cunningham et al. (2023); Templeton et al. (2024); Gao et al. (2024)), though they are often applied to other activations inside models and work in a similar way, e.g. MLP activations (Bricken et al., 2023) and attention layers (Kissane et al., 2024). SAEs are trained to reconstruct the residual stream as a sparse sum of dictionary elements (Elad, 2010). Specifically, each  $x^{(i)}$  is approximated as a sparse sum of the dictionary unit vectors  $w_0, w_1, \dots, w_{D-1} \in \mathbb{R}^d$ , where  $D > d$ . We write<sup>1</sup>
+
+$$x^{(i)} = \text{Error}(x^{(i)}) + \sum_{k=0}^{D-1} f_k w_k \quad (2)$$
+
+where  $f_k \geq 0$ , and only few of the  $f_k$  are greater than 0 for each  $x^{(i)}$ . The average number of nonzero  $f_k$  is called the *L0* in SAE literature (e.g. Rajamanoharan et al. (2024)). We use an SAE with L0  $\approx 59$  in Section 4.1, which is far smaller than  $d = 2304$  for `gemma-2-2b-it`. The error term  $\text{Error}(x^{(i)})$  is important to our results: we include this term when doing interventions, as early experiments suggested this increased language modelling loss too much when excluded, in line with Gao et al. (2024).
+
+As shown in Figure 1, in our mainline results we replace  $f_k$  with  $-c$  to unlearn biology knowledge for specially chosen  $k$  and  $c > 0$  (Section 3 and 4.1).
+
+## 2 METHOD
+
+Figure 1 presents an outline of how we use the SAE features to intervene in the language model. At a high level, our method performs interventions dependent on token positions and SAE features. For each feature being considered, at position in the context, we set the feature activation equal to a fixed negative value if the feature activates, otherwise we leave it unchanged (i.e. equal to 0). Our method avoids the extra loss when inserting the SAE by adding back the error term caused by the SAE in the forward pass, such that if no modifications are made to the feature activations, there is no impact on the model output. In Section 3 we provide a detailed explanation of our methodology when applied to a single feature.
+
+### 2.1 MODELS AND DATASET
+
+We focus primarily on two language models, `gemma-2b-it` (Gemma Team, 2024a) and `gemma-2-2b-it` (Gemma Team, 2024b). These two models are large enough to contain a significant amount of knowledge related to the bio-weapons dataset that we are using, but small enough to allow for rapid iteration. We trained SAEs at several intermediate layers (layers 3, 5, 7, 9, 11 and 13, we discuss results for layer 9) of the residual stream in `gemma-2b-it` using similar techniques to Templeton et al. (2024). We will open source the training code upon successful publication. We also used open-source SAEs Lieberum et al. (2024) on `gemma-2-2b-it`. Further details are available in Sec. B.
+
+We use the biology subset of the Weapons of Mass Destruction Dataset (WMDP-bio), which consists of 1273 multiple choice questions related to hazardous knowledge in biosecurity (Li et al., 2024). This subset was chosen as models performed weaker on the cyber and chemistry subsets. WMDP-bio was developed as both an evaluation for hazardous knowledge in language models, and also as a benchmark for unlearning techniques. The questions relate to bioweapons and bioterrorism, genetics, viral vector research, dual-use virology and enhanced potential pandemic pathogens. `gemma-2b-it` achieves a base score of 560/1273 (44.0%) on the WMDP-bio dataset. With four multiple choice options, one can expect the model to get  $\sim 25\%$  of the multiple choice questions correct by random chance, without actually having the knowledge to obtain the correct answer. However, as we aim to unlearn this information, we want to be as sure as we can that the model
+
+<sup>1</sup>The exact details of how the  $f_k$  are computed at SAE inference time are not important to understand our method: see Appendix B and the Gemma Scope SAEs as described in Lieberum et al. (2024) for completeness.
+
+{3}------------------------------------------------
+
+![Figure 2: A plot showing the distribution of activations for OpenWebText (blue) and WMDP-bio prompts (green) for a selected representative SAE feature #9163 in gemma-2b-it at layer 9. The x-axis is 'Activation' (0 to 10) and the y-axis is 'Number' (log scale, 1 to 1000). The WMDP-bio distribution is shifted to the right, indicating higher activation values. To the right of the plot, text explains the biological analogy: 'Dissociation is an adaptive defense to a lack of genetic drift in that human activities exert selective pressure that Stochastic mutation and selection Natural selection favoring mutations that enhance'.](e94f3bbb6f7501b9a1344dd0210e5dd8_img.jpg)
+
+162
+
+163
+
+164
+
+165
+
+166
+
+167
+
+168
+
+169
+
+170
+
+171
+
+172
+
+173
+
+174
+
+175
+
+176
+
+Figure 2: A plot showing the distribution of activations for OpenWebText (blue) and WMDP-bio prompts (green) for a selected representative SAE feature #9163 in gemma-2b-it at layer 9. The x-axis is 'Activation' (0 to 10) and the y-axis is 'Number' (log scale, 1 to 1000). The WMDP-bio distribution is shifted to the right, indicating higher activation values. To the right of the plot, text explains the biological analogy: 'Dissociation is an adaptive defense to a lack of genetic drift in that human activities exert selective pressure that Stochastic mutation and selection Natural selection favoring mutations that enhance'.
+
+Figure 2: Max-activating prompts from OpenWebText (blue) and the WMDP-bio dataset (green) for a selected representative SAE feature #9163 in `gemma-2b-it` at layer 9. The left panel shows the distribution of activations over 176k tokens from each dataset.
+
+177 actually has the information in the first place. To address this, we only test unlearning on questions  
+ 178 for which the model gets the right answer under all 24 permutations of the 4 multiple choice op-  
+ 179 tions, resulting in 172/1273 (13.5%) questions in the WMDP-bio dataset for `gemma-2b-it` and  
+ 180 522/1273 (41.0%) questions for `gemma-2-2b-it`.
+
+###### 182 2.2 UNLEARNING METRICS
+
+183  
+ 184 The goal of an unlearning technique is to remove knowledge from the model, while limiting the  
+ 185 damage to the model’s performance in all other domains. Therefore, there are two key factors  
+ 186 that need to be quantified; the amount of knowledge removed, and the side-effects caused by the  
+ 187 modification to the model.
+
+188  
+ 189 The primary metric for unlearning that we consider is the number of correct answers out of the  
+ 190 subset of questions that the base model gets correct under all 24 permutations. We also looked at  
+ 191 the probabilities assigned to the correct answers and the impact of re-ordering the 4 multiple choice  
+ 192 options. In addition, we performed some specific case studies of the model’s completion, with  
+ 193 non-multiple choice based prompts, based on the same information as tested in the questions.
+
+194  
+ 195 We quantified the side effect for the model in two different ways, (i) the accuracy on an unrelated  
+ 196 multiple choice dataset (Measuring Massive Multitask Language Understanding, MMLU) and (ii)  
+ 197 the loss added over 50k tokens of OpenWebText. The multiple choice dataset contained questions  
+ 198 related to high school US history, geography, college computer science and human aging. These  
+ 199 questions allowed us to both check for the removal of specific unrelated knowledge, and also to en-  
+ 200 sure that we were not simply damaging the multiple-choice answering ability of the model. Similar  
+ 201 to the WMDP-bio dataset, we only select the questions that the base model gets correct answers  
+ 202 for under 24 permutations, resulting in 97 questions for `gemma-2b-it` and 300 questions for  
+ 203 `gemma-2-2b-it`.
+
+204  
+ 205 We also compare our unlearning results to an existing technique, the Representation Misdirection for  
+ 206 Unlearning (RMU, Li et al. 2024). Applying the RMU technique to `gemma-2b-it` shows that it is  
+ 207 very successful at lowering the number of WMDP-bio questions that are answered correctly, without  
+ 208 impacting unrelated MMLU questions, and little loss added (more detailed results are presented in  
+ 209 Fig. 5). Interestingly, the model modified using RMU answers option “A” on 62% of questions,  
+ 210 compared to 25% for the base model.
+
+###### 212 2.3 INTERVENTION METHODS
+
+213  
+ 214 We explored various approaches to intervene on the model using SAE features. Our primary in-  
+ 215 tervention method involves clamping the feature activation to a specific negative value whenever it  
+ 216 activates. We also experimented with alternative methods, including (i) scaling the feature activation  
+ 217 by a constant negative multiplier, and (ii) clamping the activation to a multiple of the feature’s max-  
+ 218 imum activation in the dataset, similar to the steering approach used by Templeton et al. (2024). We  
+ 219 found that clamping feature activations to a fixed negative value produces similar unlearning results  
+ 220 with fewer side effects compared to scaling, especially when intervening on multiple features.
+
+{4}------------------------------------------------
+
+216 The following are multiple choice questions (with answers) about biology.  
+ 217 In the study of bat microbiota, what is the significance of the finding that captive bats harbor a lower level of  
+ 218 antibiotic resistance compared to those living in close contact with human activities?  
+ 219 A. It suggests that human activities exert **selective pressure** that increases the potential for bats to carry emerging  
+ 220 resistant bacteria  
+ 221 B. It indicates that captive bats are exposed to higher levels of antibacterial drugs  
+ 222 C. It demonstrates that captive bats are more susceptible to infections due to their lower resistance to antibiotics  
+ 223 D. It confirms that antibiotic resistance in bats is not influenced by their living conditions  
+ 224 Answer:
+
+226 Figure 3: Content of question #841 from the WMDP-bio dataset with highlights indicating the  
+ 227 strength of the activation of feature #9163 on each token in the prompt  
+ 228
+
+### 2.4 HOW TO SELECT RELEVANT SAE FEATURES
+
+231 Selecting the most effective set of sparse autoencoder features is difficult. One simple approach is  
+ 232 to create a “forget” and “retain” dataset, as in the RMU technique, and compute feature sparsities on  
+ 233 each dataset. The WMDP-bio forget dataset (Li et al., 2024) contains bio-weapon related content,  
+ 234 and the retain dataset contains WikiText (Merity et al., 2016). In our procedure, we first calculate  
+ 235 the feature sparsities on both datasets. We then discard features that have a sparsity on the retain  
+ 236 dataset larger than a given threshold (e.g. 0.01). Finally, we sort the remaining features by their  
+ 237 sparsity on the forget dataset. The top  $N$  features are selected as the bio-weapon related features. In  
+ 238 Fig. 8, we plot the sparsities of each feature in the retain and forget datasets for an SAE at layer 3  
+ 239 of the residual stream of `gemma-2-2b-it`.  
+ 240
+
+## 3 UNLEARNING USING A SINGLE FEATURE
+
+243 We first present a case study of using an individual bio-related feature for unlearning. This feature  
+ 244 serves as a simple proof of concept that some unlearning can be achieved using a bio-related feature  
+ 245 from an SAE trained on OpenWebText.  
+ 246
+
+### 3.1 A REPRESENTATIVE FEATURE (#9163)
+
+249 Figure 2 presents an example of a bio-related feature (Feature #9163) relevant to the WMDP-bio  
+ 250 dataset at layer 9 of the residual stream (out of a total of 18 layers) in `gemma-2b-it`. The left  
+ 251 panel shows the distribution of the activations of feature #9163 over 176k tokens in the WMDP-bio  
+ 252 dataset (green) compared to the 176k tokens in OpenWebText (blue), and the corresponding max  
+ 253 activating prompts. The feature is relatively monosemantic, and fires on text related to evolution,  
+ 254 natural selection, selective pressure, mutations, fitness and adaptation, with a max activation of  
+ 255 10.88. In OpenWebText data, the feature fires on text related to similar topics, including adaptation,  
+ 256 survival and advantages, with a max activation of 2.6.  
+ 257
+
+### 3.2 IMPACT OF CLAMPING FEATURE ACTIVATION
+
+260 To investigate the impact of clamping feature #9163, we select a representative question from the  
+ 261 WMDP-bio dataset (question #841). Figure 3 shows the content of question #841 of the WMDP-  
+ 262 bio dataset, with highlighted text indicating the strength of the activation of feature #9163 on each  
+ 263 token within the prompt. Note that the content of the question is similar in topic to the typical max  
+ 264 activations of feature #9163. It activates mainly on answer A, which is the correct answer for this  
+ 265 question.
+
+266 We now perform an experiment, where we clamp the activation of feature #9163 to negative values  
+ 267 ranging from 0 to  $-200$ , and compute the probabilities assigned to answers A, B, C and D with  
+ 268 these clamps applied. Figure 4 shows the probability of answer A, B, C or D for question #841, with  
+ 269 feature #9163 clamped to different values. The loss added over 50k tokens of OpenWebText is also  
+ plotted in gray.
+
+{5}------------------------------------------------
+
+![Figure 4: A line graph showing the probability of answering A, B, C, or D for question #841 as a function of the clamped activation value of feature #9163. The x-axis is 'Clamped Value' from 0 to 100. The y-axis is 'Probability' on a log scale from 10^-6 to 1. The legend indicates: A (correct answer) in blue, B in orange, C in green, D in red, and Loss added in grey dashed line. The graph shows that as the clamped value increases from 0 to -10, the probability for A remains high (near 1). As the clamped value increases further to -15, the probability for A decreases and the probability for C increases. The probability for C reaches its peak around a clamped value of -18 to -20. The loss added increases significantly for clamped values between -10 and -20.](c54b3ca7603d65d4589151bc3a49d054_img.jpg)
+
+Figure 4: A line graph showing the probability of answering A, B, C, or D for question #841 as a function of the clamped activation value of feature #9163. The x-axis is 'Clamped Value' from 0 to 100. The y-axis is 'Probability' on a log scale from 10^-6 to 1. The legend indicates: A (correct answer) in blue, B in orange, C in green, D in red, and Loss added in grey dashed line. The graph shows that as the clamped value increases from 0 to -10, the probability for A remains high (near 1). As the clamped value increases further to -15, the probability for A decreases and the probability for C increases. The probability for C reaches its peak around a clamped value of -18 to -20. The loss added increases significantly for clamped values between -10 and -20.
+
+Figure 4: Probabilities of answering A, B, C or D for question #841 (with correct answer A) as a function of the clamped activation value of feature #9163. Loss added is calculated over 50k tokens of OpenWebText. Question #841 is presented in Figure 3.
+
+We find that a clamped value of 0 (i.e. “ablating” the feature), results in no noticeable modification to the model. The model still provides “A” as the correct answer with probability  $> 0.99$ . As the magnitude of the clamped value increased from 0 to  $-5$ , we still see very little change in the probabilities assigned to A, B, C or D. As the clamped value reaches the range of  $-10$  to  $-15$ , the probability and logits assigned to the correct answer “A” begin to decrease, and the probability and logits for answer “C” increase in proportion, until a clamped value of around  $-18$  to  $-20$ , where the probability for answer “C” is  $> 0.99$ . Throughout this range, the loss added is very small.
+
+For larger magnitudes of the clamped value, the probabilities of A, B, C and D remain approximately constant, but the loss added increases by several orders of magnitude (although the absolute value is very low in this case). There is no drop in performance on the unrelated MMLU datasets up to a clamped value of  $-30$ .
+
+To investigate the importance of the particular feature that we selected, we performed the same ablation on a variety of features that activate on this prompt, chosen at random (see Section G for examples). Some of these randomly chosen features do not result in any unlearning, and some do result in unlearning but with large unwanted side-effects. Only the bio-related features have significant unlearning with minimal side-effects.
+
+### 3.3 PERMUTATIONS
+
+We can also examine whether this unlearning is effective for different permutations of the options in the multiple choice prompt. In this particular case, we find that it unlearns 19 of the 24 prompts. We find later that this number varies significantly and depends on the feature and prompt, ranging from 2 to 24. A perfectly unlearned model should achieve a score of  $\leq 6$  out of 24 permutations. This outcome might depend on whether the intervention simply destroys the knowledge that was previously available, in which case we might expect it to start guessing at random and not provide a consistent answer over all 24 permutations, or whether it exchanges the old information for new information and thus has an incorrect answer but is consistent about which answer it chooses. These two unlearning scenarios are quite different, and for now, it does not seem completely clear to us which is easier or more desirable to achieve.
+
+{6}------------------------------------------------
+
+## 4 EVALUATION OF SAE UNLEARNING
+
+### 4.1 RESULTS
+
+Below, we present our results for unlearning with multiple features on `gemma-2-2b-it` by selecting features using feature sparsities on both “forget” and “retain” datasets, and compare them to the existing RMU technique. We evaluate three key metrics. The first is the “WMDP-bio Accuracy” is the number of questions the modified model gets correct divided by the number of questions the original model gets correct, only considering questions which the original model gets correct for all permutations (i.e. those for which we can be most sure that the model contains information related to the answer). Lower WMDP-bio accuracy indicates a higher level of unlearning. The second is the cross-entropy loss in the modified model minus the cross-entropy loss in the original model, calculated over the same 50k tokens of OpenWebText. Finally, we also present the selected MMLU Accuracy; the combined score across a subset of MMLU questions related to high school US history, geography, college computer science and human aging, considering only the questions which the original model gets correct for all permutations.<sup>2</sup> Higher MMLU accuracy suggests fewer side effects.
+
+Figure 5 presents the results for `gemma-2-2b-it` using a Gemma Scope SAE at layer 3 with 16k features and  $L0 \approx 59$ . The top panel shows the loss added on OpenWebText against WMDP-bio accuracy. Different lines represent interventions on varying numbers of features with different multipliers. Gray dots indicate RMU techniques with various hyper-parameters (with values for the steering coefficient,  $c$ , of 100/200/400, the weight on the retain loss,  $\alpha$ , of 100/300/500, and layer 3/7/11). Intervening on 10 features appears to be most effective, exhibiting lower loss added compared to using 20 or 50 features. The bottom panel shows the selected MMLU accuracy against the WMDP-bio accuracy. Here, the number of features intervened does not demonstrate clear improvements in this context. Although both methods achieve similar levels of unlearning in terms of the score on the WMDP-bio dataset, SAE-based unlearning has higher side effects on unrelated multiple-choice questions compared to RMU techniques. However, the SAE-based unlearning approach appears to have lower loss added on OpenWebText.
+
+### 4.2 IMPACT OF ENCODER VS DECODER IN UNLEARNING
+
+Investigating the mechanism of the RMU technique, Arditi & Chughtai (2024) found that by projecting out a single direction from all intermediate activations, it is possible to recover a significant fraction of the original knowledge. They suggested that some of the unlearning with RMU is achieved by first detecting harmful prompts and then modifying the model’s internal computation by adding a large vector that overwrites the existing residual streams.
+
+In our SAE-based unlearning method, we inject a large vector (i.e. the decoder vector multiplied by a constant) when the selected features activate. It is possible that the SAE encoder acts as a classifier for the undesired knowledge, the model’s internal representations are pushed out of distribution by the injection of the decoder vector, and that this explains the decrease in accuracy on multiple-choice questions.
+
+To test this possibility, and understand the impact of the SAE encoder and decoder in unlearning, we used the original SAE encoder to determine feature activations of the selected features. For each feature, we selected a random feature and clamped this random feature to a large negative value whenever the original feature had a non-zero activation. Figure 6 shows the results on `gemma-2-2b-it`. When using the random decoder vectors, the unlearning performance dropped substantially as compared to the standard approach, with higher loss added. This suggests that the specific decoder vectors contribute significantly to the unlearning process, rather than simply disrupting the model’s internal representations. Interestingly, we repeat this experiment on `gemma-2b-it` and found contrasting results. Replacing the decoder vectors with some random decoder vectors did not diminish the unlearning performance, suggesting that for this model and SAE, the specific directions of the injected vectors may not be as critical (see Figure 10 in Appendix).
+
+<sup>2</sup>We randomly choose some subsets that are unrelated to biology, and remove the subsets that model did poorly on (e.g. abstract algebra).
+
+{7}------------------------------------------------
+
+![Figure 5: Two plots comparing unlearning performance for SAEs. The top plot shows 'Loss Added + 5 x 10^-3' vs 'WMDP-Bio Accuracy' for 10, 20, 50 features, and RMU, with 1x, 10x, 50x, and 100x labels. The bottom plot shows 'Selected MMLU Accuracy' vs 'WMDP-Bio Accuracy' for the same configurations, with annotations for 'smaller side effect' and 'more unlearning'.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+The figure contains two plots. The top plot shows 'Loss Added +  $5 \times 10^{-3}$ ' on the y-axis (logarithmic scale from  $10^{-4}$  to  $10^{-1}$ ) against 'WMDP-Bio Accuracy' on the x-axis (linear scale from 0.3 to 1.0). The bottom plot shows 'Selected MMLU Accuracy' on the y-axis (linear scale from 0.99 to 1.0) against 'WMDP-Bio Accuracy' on the x-axis (linear scale from 0.3 to 1.0). Both plots compare four feature sets: 10 Features (blue), 20 Features (green), 50 Features (red), and RMU (grey). Data points are labeled with '1x', '10x', '50x', and '100x' to indicate the negative of the clamped feature activation values. In the bottom plot, an arrow points left labeled 'smaller side effect' and another arrow points right labeled 'more unlearning'.
+
+Figure 5: Two plots comparing unlearning performance for SAEs. The top plot shows 'Loss Added + 5 x 10^-3' vs 'WMDP-Bio Accuracy' for 10, 20, 50 features, and RMU, with 1x, 10x, 50x, and 100x labels. The bottom plot shows 'Selected MMLU Accuracy' vs 'WMDP-Bio Accuracy' for the same configurations, with annotations for 'smaller side effect' and 'more unlearning'.
+
+Figure 5: Unlearning performance comparison for SAEs with different numbers of intervened features (10, 20, 50) and RMU on `gemma-2-2b-it`. The 1x, 10x, 50x and 100x labels indicate the negative of the clamped feature activation values. Top: Loss added ( $+ 0.005$  for clarity) vs. WMDP-bio Accuracy. Bottom: Selected MMLU Accuracy vs. WMDP-bio Accuracy. MMLU and WMDP-bio accuracies are only calculated on the subset of questions that the base model gets correct for all 24 permutations.
+
+{8}------------------------------------------------
+
+![Figure 6: A line graph showing WMDP-Bio Accuracy (x-axis, 0.3 to 1.0) versus Loss Added + 5 x 10^-3 (y-axis, logarithmic scale from 10^-4 to 0.1). Two lines are plotted: 'Actual decoder vector' (blue) and 'Random decoder vector' (green). Both lines show a decrease in accuracy as loss is added, but the 'Actual decoder vector' line drops much more sharply than the 'Random decoder vector' line. Data points are labeled with scaling factors: 50x, 100x, 200x, 50x, 10x for the blue line and 50x, 100x, 50x, 10x, 3x for the green line.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+| Line Color | Label | WMDP-Bio Accuracy (x) | Loss Added + $5 \times 10^{-3}$ (y) |
+|-|-|-|-|
+| Blue | 50x | 0.32 | 0.2 |
+| Blue | 100x | 0.38 | 0.04 |
+| Blue | 50x | 0.58 | 0.001 |
+| Blue | 10x | 0.95 | 0.00015 |
+| Blue | 3x | 0.98 | 0.001 |
+| Blue | 1x | 0.99 | 0.002 |
+| Green | 50x | 0.32 | 0.2 |
+| Green | 100x | 0.58 | 0.08 |
+| Green | 50x | 0.88 | 0.02 |
+| Green | 10x | 0.98 | 0.008 |
+| Green | 3x | 0.99 | 0.006 |
+
+Figure 6: A line graph showing WMDP-Bio Accuracy (x-axis, 0.3 to 1.0) versus Loss Added + 5 x 10^-3 (y-axis, logarithmic scale from 10^-4 to 0.1). Two lines are plotted: 'Actual decoder vector' (blue) and 'Random decoder vector' (green). Both lines show a decrease in accuracy as loss is added, but the 'Actual decoder vector' line drops much more sharply than the 'Random decoder vector' line. Data points are labeled with scaling factors: 50x, 100x, 200x, 50x, 10x for the blue line and 50x, 100x, 50x, 10x, 3x for the green line.
+
+Figure 6: WMDP-bio accuracy vs loss added on OpenWebText using random decoder vector and actual decoder vector. Using the layer 3 SAE in *gemma-2-2b-it* top 10 features.
+
+## 5 CONCLUSION
+
+In this study, we investigated whether features in SAEs can be used to unlearn knowledge from language models. Our main contributions are:
+
+1. We demonstrated that individual SAE features can be used to unlearn knowledge using the WMDP-bio dataset (Section 3).
+2. Negative scaling of feature activations is necessary and zero ablating features is ineffective (Section 3.2).
+3. We showed that intervening on *gemma-2-2b-it* using 10 - 20 SAE features could unlearn significant proportions of the WMDP-bio dataset (Section 4)
+4. We found that SAE-based unlearning results in similar or larger unwanted side-effects than the existing Representation Misdirection for Unlearning technique (Section 4).
+
+Our SAE-based unlearning method only modifies the model’s activations, without modifying the model weights. Future work may be able to extend this approach to directly modify the weights. For now, it means that only the output of the model is changed and the original knowledge is still contained in the weights. However, this approach may still be useful to to prevent harmful outputs when models can be accessed only by API (Li et al., 2024; Greenblatt & Shlegeris, 2024).
+
+Our research suggests that a large change needs to be made to either the SAE training process, or our intervention method, in order for SAE-based unlearning to be successful. We propose three key directions for future research to address this shortcoming: (1) Examine how SAE quality and width impact unlearning effectiveness. Wider SAEs with specific features may improve performance. (2) Compare SAE-based unlearning to activation steering using bio-related and non-bio-related prompt pairs. (3) Investigate how SAE interventions affect related features in subsequent layers to better understand the unlearning mechanism.
+
+{9}------------------------------------------------
+
+## REFERENCES
+
+- 486  
+487  
+488 Andy Arditi and Bilal Chughtai. Unlearning via rmu is mostly shallow. 2024.  
+489 URL [https://www.lesswrong.com/posts/6QYpXEscd8GuE7BgW/](https://www.lesswrong.com/posts/6QYpXEscd8GuE7BgW/unlearning-via-rmu-is-mostly-shallow)  
+490 [unlearning-via-rmu-is-mostly-shallow](https://www.lesswrong.com/posts/6QYpXEscd8GuE7BgW/unlearning-via-rmu-is-mostly-shallow).  
+491  
+492 Lucas Bourtoule, Varun Chandrasekaran, Christopher A. Choquette-Choo, Hengrui Jia, Adelin  
+493 Travers, Baiwu Zhang, David Lie, and Nicolas Papernot. Machine unlearning. 2020. URL  
+494 <https://arxiv.org/abs/1912.03817>.  
+495  
+496 Trenton Bricken, Adly Templeton, Joshua Batson, Brian Chen, Adam Jermyn, Tom Con-  
+497 nerly, Nick Turner, Cem Anil, Carson Denison, Amanda Askell, Robert Lasenby, Yifan Wu,  
+498 Shauna Kravec, Nicholas Schiefer, Tim Maxwell, Nicholas Joseph, Zac Hatfield-Dodds, Alex  
+499 Tamkin, Karina Nguyen, Brayden McLean, Josiah E Burke, Tristan Hume, Shan Carter,  
+500 Tom Henighan, and Christopher Olah. Towards monosemanticity: Decomposing language  
+501 models with dictionary learning. *Transformer Circuits Thread*. 2023. [https://transformer-](https://transformer-circuits.pub/2023/monosemantic-features/index.html)  
+502 [circuits.pub/2023/monosemantic-features/index.html](https://transformer-circuits.pub/2023/monosemantic-features/index.html).  
+503  
+504 Hoagy Cunningham, Aidan Ewart, Logan Riggs, Robert Huben, and Lee Sharkey. Sparse autoen-  
+505 coders find highly interpretable features in language models. 2023. URL [https://arxiv.](https://arxiv.org/abs/2309.08600)  
+506 [org/abs/2309.08600](https://arxiv.org/abs/2309.08600).  
+507  
+508 Michael Elad. *Sparse and Redundant Representations: From Theory to Applications in Signal*  
+509 *and Image Processing*. Springer, New York, 2010. ISBN 978-1-4419-7010-7. doi: 10.1007/  
+510 978-1-4419-7011-4.  
+511  
+512 Ronen Eldan and Mark Russinovich. Who’s harry potter? approximate unlearning in llms. 2023.  
+513 URL <https://arxiv.org/abs/2310.02238>.  
+514  
+515 Nelson Elhage, Neel Nanda, Catherine Olsson, Tom Henighan, Nicholas Joseph, Ben Mann,  
+516 Amanda Askell, Yuntao Bai, Anna Chen, Tom Conerly, Nova DasSarma, Dawn Drain, Deep Gan-  
+517 guli, Zac Hatfield-Dodds, Danny Hernandez, Andy Jones, Jackson Kernion, Liane Lovitt, Kamal  
+518 Ndousse, Dario Amodei, Tom Brown, Jack Clark, Jared Kaplan, Sam McCandlish, and Chris  
+519 Olah. A mathematical framework for transformer circuits. *Transformer Circuits Thread*. 2021.  
+520 URL <https://transformer-circuits.pub/2021/framework/index.html>.  
+521  
+522 Rohit Gandikota, Sheridan Feucht, Samuel Marks, and David Bau. Erasing conceptual knowledge  
+523 from language models. 2024. URL <https://arxiv.org/abs/2410.02760>.  
+524  
+525 Leo Gao, Tom Dupré la Tour, Henk Tillman, Gabriel Goh, Rajan Troll, Alec Radford, Ilya Sutskever,  
+526 Jan Leike, and Jeffrey Wu. Scaling and evaluating sparse autoencoders. 2024. URL [https:](https://arxiv.org/abs/2406.04093)  
+527 [//arxiv.org/abs/2406.04093](https://arxiv.org/abs/2406.04093).  
+528  
+529 Gemma Team. Gemma: Open models based on gemini research and technology, 2024a. URL  
+530 <https://arxiv.org/abs/2403.08295>.  
+531  
+532 Gemma Team. Gemma 2: Improving open language models at a practical size, 2024b. URL  
+533 <https://arxiv.org/abs/2408.00118>.  
+534  
+535 Ryan Greenblatt and Buck Shlegeris. Managing catastrophic misuse without robust ais,  
+536 2024. URL [https://www.alignmentforum.org/posts/KENTuXySHJgxsh2Qk/](https://www.alignmentforum.org/posts/KENTuXySHJgxsh2Qk/managing-catastrophic-misuse-without-robust-ais)  
+537 [managing-catastrophic-misuse-without-robust-ais](https://www.alignmentforum.org/posts/KENTuXySHJgxsh2Qk/managing-catastrophic-misuse-without-robust-ais).  
+538  
+539 Ziwei Ji, Nayeon Lee, Rita Frieske, Tiezheng Yu, Dan Su, Yan Xu, Etsuko Ishii, Ye Jin Bang,  
+540 Andrea Madotto, and Pascale Fung. Survey of hallucination in natural language generation. *ACM*  
+541 *Computing Surveys*, 55(12):1–38, March 2023. ISSN 1557-7341. doi: 10.1145/3571730. URL  
+542 <http://dx.doi.org/10.1145/3571730>.  
+543  
+544 Connor Kissane, Robert Krzyzanowski, Joseph Isaac Bloom, Arthur Conmy, and Neel Nanda. Inter-  
+545 preting attention layer outputs with sparse autoencoders. 2024. URL [https://arxiv.org/](https://arxiv.org/abs/2406.17759)  
+546 [abs/2406.17759](https://arxiv.org/abs/2406.17759).  
+547
+
+ Rest of paper (reference and Appendix) is removed.

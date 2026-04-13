@@ -1,0 +1,257 @@
+
+
+{0}------------------------------------------------
+
+# TRAJGPT: IRREGULAR TIME-SERIES REPRESENTATION LEARNING FOR HEALTH TRAJECTORY ANALYSIS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+In many domains, such as healthcare, time-series data is often irregularly sampled with varying intervals between observations. This poses challenges for classical time-series models that require equally spaced data. To address this, we propose a novel time-series Transformer called **Trajectory Generative Pre-trained Transformer (TrajGPT)**. TrajGPT employs a novel Selective Recurrent Attention (SRA) mechanism, which utilizes a data-dependent decay to adaptively filter out irrelevant past information based on contexts. By interpreting TrajGPT as discretized ordinary differential equations (ODEs), it effectively captures the underlying continuous dynamics and enables time-specific inference for forecasting arbitrary target timesteps. Experimental results demonstrate that TrajGPT excels in trajectory forecasting, drug usage prediction, and phenotype classification without requiring task-specific fine-tuning. By evolving the learned continuous dynamics, TrajGPT can interpolate and extrapolate disease risk trajectories from partially-observed time series. The visualization of predicted health trajectories shows that TrajGPT forecasts unseen diseases based on the history of clinically relevant phenotypes (i.e., contexts).
+
+## 1 INTRODUCTION
+
+Time-series representation learning plays a crucial role in various domains, as it facilitates the extraction of generalizable temporal patterns from large-scale, unlabeled data, which can then be adapted for diverse tasks (Ma et al., 2023). However, a major challenge arises when dealing with irregularly-sampled time series, in which observations occur at uneven intervals (Li & Marlin, 2020). This irregularity poses challenges for classical time-series models that are restricted to regular sampling (Ayala Solares et al., 2020; Zhang et al., 2022). This issue is particularly significant in the healthcare domain, since longitudinal electronic health records (EHRs) are updated sporadically during outpatient visits or inpatient stays (Zhang et al., 2022). Moreover, individual medical histories often span a limited timeframe due to a lack of historical digitization, incomplete insurance coverage, and fragmented healthcare systems (Wornow et al., 2023). These challenges make it difficult for time-series models to capture the underlying trajectory dynamics (Amirahmadi et al., 2023). Addressing these challenges requires the development of novel representation learning techniques that can extract generalizable temporal patterns from irregularly-sampled data through next-token prediction pre-training. The pre-trained model is then applied to forecast trajectories based on the learned transferable patterns, even when patient data is only partially observed.
+
+Recent advances in modeling irregularly-sampled time series have been achieved through specialized deep learning architectures (Che et al., 2018; Horn et al., 2020; Rubanova et al., 2019; Shukla & Marlin, 2021; Zhang et al., 2022). However, these models fall short in pre-training generalizable representations. While time-series Transformer models have gained attention, they are primarily designed for consecutive data and fail to account for irregular intervals between observations (Nie et al., 2023; Zhou et al., 2021; Wu et al., 2021). To handle both regular and irregular time series, TimelyGPT incorporates relative position embedding to capture positional information in varying time gaps (Song et al., 2024a). BiTimelyGPT extends this by pre-training bidirectional representations for discriminative tasks (Song et al., 2024b). Despite these improvements, both models rely on a data-independent decay, which is not content-aware and thus cannot fully capture complex temporal dependencies in healthcare data. The key challenge remains to develop an effective representation learning approach that extracts meaningful patterns from irregularly-sampled data.
+
+{1}------------------------------------------------
+
+In this study, we propose **Trajectory Generative Pre-trained Transformer (TrajGPT)** for irregular time-series representation learning. Our research offers four major contributions: First, it introduces a **Selective Recurrent Attention (SRA)** mechanism with a data-dependent decay, enabling the model to adaptively forget irrelevant past information based on contexts. Second, by interpreting TrajGPT as discretized ODEs, it effectively captures the continuous dynamics in irregularly-sampled data; This enables TrajGPT to perform interpolation and extrapolation in both directions, allowing for a novel time-specific inference for accurate forecasting. Third, TrajGPT demonstrates strong zero-shot performance across multiple tasks, including trajectory forecasting, drug usage prediction, and phenotype classification. Finally, TrajGPT offers interpretable health trajectory analysis, enabling clinicians to align the extrapolated disease progression trajectory with underlying patient conditions.
+
+## 2 RELATED WORKS
+
+### 2.1 TIME-SERIES TRANSFORMER MODELS
+
+Time-series Transformer models have demonstrated strong performance in modeling temporal dependencies through attention mechanisms (Wen et al., 2023). Informer introduces ProbSparse self-attention to extract key information by halving cascading layer input (Zhou et al., 2021). Autoformer utilizes Auto-Correlation to capture series-wise temporal dependencies (Wu et al., 2021). FEDformer adopts Fourier-enhanced attention to capture frequency-domain relationships (Zhou et al., 2022). PatchTST compresses time series into patches and forecasts all timesteps using a linear layer (Nie et al., 2023). Despite their effectiveness, these methods fail to account for irregular time intervals. TimelyGPT and BiTimelyGPT address this limitation by encoding irregular time gaps with relative position embedding (Song et al., 2024a;b). However, these models rely on a data-independent decay, whereas TrajGPT introduces a data-dependent decay to adaptively forget irrelevant information based on contexts. **PrimeNet designs a time-sensitive contrastive learning and a masking-and-reconstruction task for irregular time-series representation learning** (Chowdhury et al., 2023). ContiFormer integrates ODEs into attention’s key and value matrices to model continuous dynamics (Chen et al., 2024). However, it demands significantly more computing resources than a standard Transformer with quadratic complexity, due to the slow process of solving ODEs. In contrast, TrajGPT models continuous dynamics by pre-training on irregularly-sampled data with efficient linear training complexity and constant inference complexity.
+
+### 2.2 ALGORITHMS DESIGNED FOR IRREGULARLY-SAMPLED TIME SERIES
+
+Various techniques have been developed to model irregular temporal dependencies through specialized architectures. GRU-D captures temporal dependencies by applying exponential decay to hidden states (Che et al., 2018). SeFT adopts a set function based approach, where each observation is modeled individually and then pooled together (Horn et al., 2020). RAINDROP captures irregular temporal dependencies by representing data as separate sensor graphs (Zhang et al., 2022). mTAND employs a multi-time attention mechanism to learn irregular temporal dependencies (Shukla & Marlin, 2021). In continuous-time approaches, neural ODEs use neural networks to model complex ODEs, offering promising interpolation and extrapolation solutions (Chen et al., 2018). ODE-RNN further enhances this by updating RNN hidden states with new observations (Rubanova et al., 2019). HeTVAE addresses sparse input with an uncertainty-aware multi-time attention network and represents variable uncertainty through a heteroscedastic output layer. (Shukla & Marlin, 2022). MGP-TCN combines multi-task Gaussian Process to manage non-uniform sampling frequencies with temporal convolution network to capture temporal dependencies (Moore et al., 2019). However, these methods lack a representation learning paradigm and often struggle to capture evolving dynamics in partially-observed data. In contrast, our TrajGPT can be interpreted as discretized ODEs, allowing it to learn continuous dynamics via large-scale pre-training. Moreover, TrajGPT utilizes interpolation and extrapolation techniques from the neural ODE family to predict accurate trajectories.
+
+## 3 METHODOLOGY
+
+We denote an irregularly-sampled time series as  $x = \{(x_1, t_1), \dots, (x_N, t_N)\}$ , where  $N$  is the total number of samples. Each sample  $(x_n, t_n)$  consists of an observation  $x_n$  (e.g., a structured diagnosis code) and its associated timestamp  $t_n$ . The notations of variables are defined in Appendix A.
+
+{2}------------------------------------------------
+
+![Figure 1: TrajGPT overview. (a) TrajGPT architecture showing the flow from irregularly-sampled time series from longitudinal EHRs through an Input Layer, Input Embedding, SRA Layer, and Output Layer to Next-token Prediction. (b) Selective Recurrent Retention showing the internal structure of an SRA layer with SRA and Feed-Forward modules, and a detailed view of the SRA module operating in Recurrent and Parallel forms.](1b7d539e02a202c2cf2d97698b911447_img.jpg)
+
+**a. TrajGPT Architecture**
+
+Irregularly-sampled time series from longitudinal EHRs (e.g., CHD, diabetes, insulin, CHF) are processed through an Input Layer, then Input Embedding (producing  $L \times N$  tokens), followed by a RoPE module and an SRA Layer. The output is passed to an Output Layer for Next-token Prediction.
+
+**b. Selective Recurrent Retention**
+
+Each SRA layer consists of an SRA module and a Feed-Forward module, each followed by a residual connection. The SRA module can operate in Recurrent or Parallel forms. In the Recurrent form, the state  $S_n$  is updated as  $S_n = \gamma_n S_{n-1} + K_n^T V_n$ , and the output is  $O_n = Q_n S_n$ . In the Parallel form, the output is  $O = (QK^T \odot D)V$ , where  $D_{nm} = b_n/b_m$  for  $n \geq m$  and 0 otherwise.
+
+Figure 1: TrajGPT overview. (a) TrajGPT architecture showing the flow from irregularly-sampled time series from longitudinal EHRs through an Input Layer, Input Embedding, SRA Layer, and Output Layer to Next-token Prediction. (b) Selective Recurrent Retention showing the internal structure of an SRA layer with SRA and Feed-Forward modules, and a detailed view of the SRA module operating in Recurrent and Parallel forms.
+
+Figure 1: TrajGPT overview. (a). TrajGPT processes irregularly-sampled time series by embedding an input sequence with RoPE. (b). Each SRA layer comprises an SRA module and a feed-forward layer, with the SRA module capable of operating in both recurrent and parallel forms.
+
+### 3.1 TRAJGPT METHODOLOGY
+
+In the TrajGPT architecture illustrated in Fig. 1.a, each input sequence  $x$  is first projected onto a token embedding  $X \in \mathbb{R}^{N \times d}$ , where  $N$  and  $d$  denote the number of tokens and embedding size, respectively. A Rotary Position Embedding (RoPE) is then added to the token embedding, encoding relative positional information between tokens  $n$  and  $m$  (Su et al., 2022). Specifically, RoPE handles varying time intervals by encoding its relative distance  $t_n - t_m$ :
+
+$$Q_n = X_n W_Q e^{i\theta t_n}, \quad K_m = X_m W_K e^{-i\theta t_m}, \quad V_m = X_m W_V. \quad (1)$$
+
+The resulting input embedding is then passed through  $L$  SRA layers, each comprising an SRA module and a feed-forward layer. SRA module operates in either parallel or recurrent forms. In the *recurrent* forward pass, SRA computes the output representation  $O_n$  based on a state variable  $S$ :
+
+$$S_n = \gamma_n S_{n-1} + K_n^T V_n, \quad O_n = Q_n S_n, \quad \text{where } \gamma_n = \text{Sigmoid}(X_n w_\gamma^T)^{\frac{1}{\tau}}. \quad (2)$$
+
+The *data-dependent* decay  $\gamma_n \in (0, 1]$  and learnable decay vector  $w_\gamma \in \mathbb{R}^{1 \times d}$  enable SRA to selectively forget irrelevant past information based on contexts. For chronic diseases, TrajGPT assigns higher  $\gamma_n$  values to slow down forgetting and capture long-term dependencies. Conversely, lower  $\gamma_n$  values accelerate decay and prioritize recent events, making it more responsive to acute conditions. To avoid rapid decay from small  $\gamma_n$  values, we introduce a temperature parameter  $\tau = 20$  to help preserve information over long sequences. Given an initial state  $S_0 = 0$ , we can rewrite the recurrent form in Eq. 2 in a *parallel* form as:
+
+$$O = (QK^T \odot D)V, \quad D_{nm} = \begin{cases} \frac{b_n}{b_m}, & n \geq m \\ 0, & n < m \end{cases} \quad (3)$$
+
+where  $b_n = \prod_{i=1}^n \gamma_i$  indicates the cumulative decay term for token  $n$ , and  $b_n/b_m$  captures the relative decay between tokens  $n$  and  $m$ . We detail the equivalence between recurrence and parallelism in Appendix B. To capture a broader range of contexts, We extend the single-head SRA in Eq. 2 to a multi-head SRA:
+
+$$O_n^h = Q_n^h S_n^h, \quad S_n^h = \gamma_n^h S_{n-1}^h + K_n^{hT} V_n^h, \quad \text{where } \gamma_n^h = \text{Sigmoid}(X_n w_\gamma^{hT})^{\frac{1}{\tau}}, \quad (4)$$
+
+Head-specific decay  $\gamma_n^h$  adjusts the influence of past information based on contexts, with  $w_\gamma^h$  encoding different aspects of medical expertise.
+
+### 3.2 TRAJGPT AS DISCRETIZED ODES
+
+In this section, we establish theoretical connection between our proposed SRA module and ODEs. The recurrent form of SRA in Eq. 2 is a discretization of continuous-time ODE using zero-order
+
+{3}------------------------------------------------
+
+![Figure 2: TrajGPT as discretized ODEs. (a) TrajGPT performs interpolation and extrapolation by modeling continuous dynamics as discretized ODEs. (b) Time-specific inference directly predicts irregular samples using previous hidden states and target timesteps.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 2 consists of two diagrams. Diagram (a) shows a continuous-time ODE model represented by a circle with 'Continuous-time' and 'Discrete-time' labels. Inside the circle, 'TrajGPT' and 'ODE' are shown. Below the circle, a timeline shows 'Past', 'Observed horizons', and 'Future'. Arrows indicate 'Extrapolation' (dashed lines) and 'Interpolation' (solid lines) within the observed horizons. Diagram (b) shows 'Time-specific Inference'. It features a sequence of hidden states  $h_{t_0}, h_{t_1}, \dots, h_{t_N}$  and target timesteps  $t_{N+2}, t_{N+3}, \dots, t_{t-1}$ . Arrows from the hidden states point to the target timesteps, indicating direct prediction. A 'TrajGPT' block is shown below the hidden states.
+
+Figure 2: TrajGPT as discretized ODEs. (a) TrajGPT performs interpolation and extrapolation by modeling continuous dynamics as discretized ODEs. (b) Time-specific inference directly predicts irregular samples using previous hidden states and target timesteps.
+
+Figure 2: TrajGPT as discretized ODEs. (a). TrajGPT performs interpolation and extrapolation by modeling continuous dynamics as discretized ODEs. (b). Time-specific inference directly predicts irregular samples using previous hidden states and target timesteps.
+
+hold (ZOH) rule (Gu et al., 2022). Appendix C provides a detailed proof establishing the theoretical connection that our model represents a discretized ODE. Appendix D provides a mathematical derivation of the ZOH discretization of continuous-time ODE, leading to our recurrent SRA module.
+
+Given a first-order ODE, we can derive our recurrent SRA (Eq. 2) using a ZOH discretization with a discrete step size  $\Delta$ :
+
+$$\begin{aligned} S'(t) &= AS(t) + BX(t), \quad O(t) = CS(t) \\ \text{where } A &= \frac{\ln(\Lambda_t)}{\Delta}, \quad B = A(e^{\Delta A} - I)^{-1} K_t^\top, \quad C = Q_t, \quad \Lambda_t = \text{diag}(1/\gamma_t). \end{aligned} \quad (5)$$
+
+This ODE naturally models the continuous dynamics underlying irregularly-sampled data, with  $\Delta$  corresponding to the varying time intervals between observations. Since the parameters  $(A, B, C)$  depend on the  $t$ -th observation  $X(t)$ , this continuous-time model becomes a neural ODE,  $S'(t) = f(S(t), t, \theta_t)$ , with a differentiable neural network  $f$  and data-dependent parameters  $\theta_t = (A, B, C)$  (Chen et al., 2018). Consequently, a single-head SRA serves as a discretized ODE with data-dependent parameters (i.e., neural ODE). TrajGPT with multi-head SRA operates as discretized ODEs, where each head corresponds to its own ODE and captures distinct dynamics.
+
+As illustrated in Fig. 2.a, TrajGPT functions as discretized ODEs, enabling both interpolation and extrapolation of irregular time-series data. By capturing the underlying continuous dynamics, TrajGPT handles irregular input through discretization with varying step sizes. For interpolation, it simply evolves the dynamics within the observed timeframe using a unit discretization step size. For extrapolation, it evolves the dynamics forward or backward in time beyond the observed timeframe. Additionally, TrajGPT estimates disease risk trajectories by computing token probabilities at specific timesteps and evolving the dynamics through interpolation and extrapolation. A detailed trajectory analysis is provided in Section 5.3.
+
+At inference time, we explore two strategies for forecasting irregularly-sampled time series: auto-regressive and time-specific inference (Fig. 2.b). Auto-regressive inference, commonly used by standard Transformer models, makes sequential predictions at equal intervals and selects the target timesteps accordingly. Given that TrajGPT functions as discretized ODEs, we introduce a novel *time-specific inference* to predict at arbitrary timesteps. To forecast a target time point  $(x_{n'}, t_{n'})$ , TrajGPT utilizes both the target timestep  $t_{n'}$  and the last observation  $(x_n, t_n)$  to predict the corresponding observation  $x_{n'}$ . It calculates the target output representation  $O_{n'} = Q_{n'} S_{n'}$ , taking into account the discrete step size  $\Delta_{t_{n'}, n} = t_{n'} - t_n$  and the updated state  $S_{n'} = D_{\Delta_{t_{n'}, n}} S_n + K_{n'}^\top V_n$ .
+
+### 3.3 COMPUTATIONAL COMPLEXITY
+
+TrajGPT with its efficient SRA mechanism achieves linear training complexity of  $O(N)$  and constant inference complexity of  $O(1)$  with respect to sequence length  $N$ . In contrast, standard Transformer models incur quadratic training complexity of  $O(N^2)$  and linear inference complexity of  $O(N)$  (Katharopoulos et al., 2020). This computational bottleneck arises from the vanilla self-attention mechanism, where  $\text{Attention}(X) = \text{Softmax}(QK^\top)V$ , resulting in a training complexity of  $O(N^2d)$ . When dealing with long sequences (i.e.,  $N \gg d$ ), the quadratic term  $O(N^2)$  becomes a bottleneck for standard Transformer models.
+
+{4}------------------------------------------------
+
+As a variant of linear attention (Katharopoulos et al., 2020), the SRA mechanism in TrajGPT overcomes this quadratic bottleneck of standard Transformer, achieving linear training complexity for long sequences. In recurrent SRA,  $O_n = Q_n S_n$ ,  $S_n = \gamma_n S_{n-1} + K_n^\top V_n$ , both  $Q_n, S_n$  and  $K_n^\top V_n$  have  $O(d^2)$  complexity. By recursively updating over  $N$  tokens, the total complexity becomes  $O(Nd^2)$ . For inference, TrajGPT proposes auto-regressive and time-specific methods. The auto-regressive inference sequentially generates sequences with equally spaced time intervals like the GPT model, incurring linear complexity of  $O(N)$ . In contrast, time-specific inference directly predicts the target time point with constant complexity of  $O(1)$ . Thus, TrajGPT achieves  $O(N)$  training complexity and  $O(1)$  inference complexity, making it computationally efficient for long sequences.
+
+## 4 EXPERIMENTAL DESIGN
+
+### 4.1 DATASET AND PRE-PROCESSING
+
+Population Health Record (PopHR) database hosts massive amounts of longitudinal claim data from the provincial government health insurer in Quebec, Canada on health service use (Shaban-Nejad et al., 2016; Yuan et al., 2018). In total, there are approximately 1.3 million participants in the PopHR database, representing a randomly sampled 25% of the population in the metropolitan area of Montreal between 1998 and 2014. Cohort memberships are maintained dynamically by removing deceased residents and actively enrolling newborns and immigrants. We extracted irregularly-sampled time series from the PopHR database. Specifically, we converted ICD-9 diagnostic codes to integer-level phenotype codes (PheCodes) using the PheWAS catalog (Denny et al., 2013; 2010). We selected 194 unique PheCodes, each with over 50,000 occurrences. We excluded patients with fewer than 50 PheCode records, resulting in a final dataset of 489,000 patients, with an average of 112 records per individual. The dataset was then split into training (80%), validation (10%), and testing (10%) sets.
+
+The eICU Collaborative Research Database is a multi-center intensive care unit (ICU) database containing over 200,000 admissions from ICUs monitored by eICU programs in the United States. It offers de-identified EHR data, encompassing patient demographics, diagnoses, treatments, and interventions. To extract irregularly-sampled time series, we convert ICD-9 codes to 288 integer-level PheCodes. We harmonized drugs with the same identity but differing names and dosages, resulting in 228 unique drugs. We performed representation learning with a 15-minute interval for clinical events (diagnosis and drug). This resulted in a final dataset of 139,367 patients, with an average of 19 drugs and 3 ICD codes per patient.
+
+### 4.2 POPHR EXPERIMENT DESIGN
+
+**Forecast irregular diagnostic codes** We evaluated the long-term forecasting task using a look-up window of 50 time points (e.g., diagnosis codes) to predict the remaining codes in the forecasting windows. We measured model performance using the top- $K$  recall with  $K = \{5, 10, 15\}$ . This metric mimics the behavior of doctors conducting differential diagnosis, where they list the most probable diagnoses based on a patient’s symptoms Choi et al. (2016). Since next-token prediction is inherently forecasting, TrajGPT enables zero-shot forecasting without requiring fine-tuning.
+
+**Drug usage prediction** In this application, we predict whether each diabetic patient started insulin treatment within 6 months of their initial diabetes diagnosis. Following the preprocessing from previous work (Song et al., 2021), we extracted 78,712 diabetic patients with PheCode 250, where 11,433 patients were labeled as positive. Due to class imbalance, we use the area under precision-recall curve (AUPRC) as the evaluation metric. To avoid information leakage, we truncated sequence representations at the first diabetes record. To assess generalizability, we performed zero-shot classification, few-shot classification with 5 samples, and fine-tuning on the full dataset.
+
+**Phenotype classification** PopHR database provides rule-based labels for congestive heart failure (CHF), with 3.2% of the total population labeled as positive. Given the class imbalance, we utilize the AUPRC metric to evaluate performance on the rare positive class. To assess the generalizability of the pre-trained TrajGPT, we conducted zero-shot classification, few-shot classification with 5 samples, and fine-tuning on the entire dataset.
+
+{5}------------------------------------------------
+
+### 4.3 EICU EXPERIMENT DESIGN
+
+**Forecast irregular diagnoses and drugs** We conducted the forecasting task using a look-up window of 10 time points to predict the remaining codes in the forecasting windows. We assessed forecasting performance using the top- $K$  recall with  $K = (10, 20)$ .
+
+**Early Detection of Sepsis** We defined a 72-hour observation period following ICU admission. We identified patients without sepsis during the first 8 hours and predict sepsis onset in the remaining windows. This task was performed using both zero-shot learning and fine-tuning on the full dataset.
+
+### 4.4 BASELINES
+
+For **PopHR dataset**, we compared our model against several time-series transformer baselines, including TimelyGPT (Song et al., 2024a), BiTimelyGPT (Song et al., 2024b), Informer (Zhou et al., 2021), Fedformer (Zhou et al., 2022), AutoFormer (Wu et al., 2021), PatchTST (Nie et al., 2023), TimesNet (Wu et al., 2023), ContiFormer (Chen et al., 2024), PrimeNet (Chowdhury et al., 2023), and Mamba (Gu & Dao, 2024; Dao & Gu, 2024). BiTimelyGPT and PatchTST are encoder-only models that require fine-tuning for forecasting tasks, while other Transformer models with decoders can forecast without additional fine-tuning. We also evaluated models designed for irregularly-sampled time series, including mTAND (Shukla & Marlin, 2021), GRU-D (Che et al., 2018), RAINDROP (Zhang et al., 2022), SeFT (Horn et al., 2020), ODE-RNN (Rubanova et al., 2019), HeTVAE (Shukla & Marlin, 2022), and MGP-TCN (Moor et al., 2019). For **eICU dataset**, we compared TrajGPT against efficient models from Section 5.2, including TimelyGPT, PatchTST, TimesNet, ContiFormer, PrimeNet, Mamba-2, MTand, and SeFT. Since these models do not have a pre-training method, they were trained from scratch on the training set. We followed previous works to set Transformer parameters to about 7.5 million (Table 5).
+
+**Transformer Pre-training paradigm** With a cross-entropy loss, TrajGPT employs a next-token prediction task to pre-train generalizable temporal representations from unlabeled data (Radford et al., 2019). Given a sequence with a [SOS] token, TrajGPT predicts subsequent tokens by shifting the sequence to the right. The output representation of each token is fed into a linear layer for next-token prediction. For other models without an established pre-training paradigm, we employed a masking-based method by randomly masking 40% of timesteps with zeros (Zerveas et al., 2021). All Transformer models performed 20 epochs of pre-training with cross-entropy loss. When fine-tuning was applicable, we performed 5 epochs of end-to-end fine-tuning on the entire model.
+
+![Figure 3: Visualization of token embeddings and sequence representations. (a) Visualization of learned token embedding and clusters. (b) Clustering of patients with Insulin usage.](ed2fa033a401564314cdc32fe9732935_img.jpg)
+
+Figure 3 consists of two plots. Plot (a) is a scatter plot titled "Visualization of learned token embedding and clusters". The x-axis is labeled "Dimension 1" and ranges from 2 to 6. The y-axis is labeled "Dimension 2" and ranges from 4 to 10. The plot shows various clusters of points, each labeled with a disease category: mental disorders, neurological, respiratory, sense organs, dermatologic, genitourinary, neoplasms, digestive, endocrine, and musculoskeletal. There are also labels for "428 CHF" and "259 diabetes". Plot (b) is a scatter plot titled "Clustering of patients with Insulin usage". The x-axis ranges from 2.5 to 6.5 and the y-axis ranges from 6 to 9. The plot shows two distinct clusters of points: orange points labeled "Positive" and grey points labeled "Negative". A legend at the bottom of the figure lists 15 disease categories: infectious diseases, neoplasms, endocrinometabolic, hematopoietic, mental disorders, neurological, sense organs, circulatory, respiratory, digestive, dermatologic, genitourinary, musculoskeletal, congenital anomalies, and others.
+
+Figure 3: Visualization of token embeddings and sequence representations. (a) Visualization of learned token embedding and clusters. (b) Clustering of patients with Insulin usage.
+
+Figure 3: Visualization of token embeddings and sequence representations. (a). Visualization of token embeddings across 15 disease categories, where token nodes are colored and clustered by categories. (b). Visualization of sequence representations for diabetic patients, highlighting insulin usage within six months of diagnosis. The distinction of two classes enables zero-shot classification.
+
+{6}------------------------------------------------
+
+## 5 RESULTS
+
+### 5.1 QUALITATIVE ANALYSIS OF EMBEDDINGS
+
+In this section, we provided a qualitative analysis of the token embeddings and sequence representations learned by our TrajGPT on the PopHR database (Fig. 3). We applied Uniform Manifold Approximation and Projection (UMAP) to visualize the global token embedding, with nodes colored and clustered by disease categories. The results reveal 12 clearly separated clusters. Some nodes are projected into other categories but still reflect meaningful clinical relationships; for instance, the mental disorders cluster (in green color) includes a black dot representing adverse drug events and drug allergies, implying high risk of opioid usage among the psychiatric group (Zhu et al., 2021). Related disease categories with clinical relevance tend to cluster near each other. For example, mental disorders are closely clustered with neurological diseases, and circulatory diseases are adjacent to endocrine/metabolic diseases. We visualized the projected head-specific decay vectors  $w_i^h$  in Eq. 4 using the UMAP techniques (Fig. ??). It shows that the eight decay vectors are projected into distinct 2-D vectors, indicating that they capture different patterns.
+
+In Fig. 3.b, we visualize the sequence representations to demonstrate TrajGPT’s ability to perform zero-shot classification of initial insulin usage among diabetic patients. To prevent information leakage, the sequence representations were truncated at the first diabetes record. These sequence representations were projected onto the same scale as the token embeddings in Fig. 3.a, allowing for direct comparison with the disease clusters. Patients taking future insulin treatment have embeddings closely aligned with the endocrine/metabolic cluster, indicating a strong association with diabetes-related conditions. In contrast, non-insulin patients are dispersed across various clusters, suggesting less severe diabetes histories. The clear separation between these groups highlights TrajGPT’s ability to perform zero-shot classification, showcasing the generalizability of its learned representations.
+
+### 5.2 QUANTITATIVE RESULTS ON POPHR DATASET
+
+TrajGPT with time-specific inference achieves the highest recall at  $K = 10$  and  $K = 15$ , with scores of 71.7% and 84.1%, respectively (Table 1). At  $K = 5$ , TrajGPT achieves the second-highest recall with 57.4%. Notably, time-specific inference outperforms the auto-regressive inference approach, demonstrating its effectiveness in forecasting based on the learned continuous dynamics. These results highlight TrajGPT’s strength in pre-training on underlying dynamics from sparse and irregular time-series data, facilitating accurate trajectory forecasting over irregular time intervals.
+
+We then examined the distributions of top-10 recall across three forecast windows, comparing the two inference methods of TrajGPT as well as TimelyGPT, PatchTST, and mTAND (Fig. 6). TrajGPT’s time-specific inference consistently outperforms auto-regressive inference as the forecasting window increases, as it accounts for evolving states and query timesteps over irregular intervals. As expected, all models experience a performance decline as the forecast window increases, reflecting the increased uncertainty in long-term trajectory prediction. Despite this, TrajGPT achieves superior and more stable performance within the first 100 steps. In comparison, PatchTST shows a drastic decline as the window size increases, reflecting its difficulty with extrapolation. Therefore, TrajGPT excels in forecasting health trajectories through its time-specific inference.
+
+We evaluated two classification tasks—insulin usage prediction and CHF phenotype classification—under three settings: zero-shot learning, few-shot learning with  $S = 5$  samples, and fine-tuning on the entire dataset. Notably, non-Transformer models designed for irregularly-sampled time series (i.e., the last five methods in Table. 1) were trained from scratch. The results are summarized in Table. 1. For classification tasks, TrajGPT achieves the highest zero-shot results, with 67.2% for insulin and 72.8% for CHF. This success can be attributed to TrajGPT’s ability to learn distinct clusters of sequence representations, as discussed in Section 5.1. For 5-shot classification, TrajGPT achieves the second-best performance in both tasks. For fine-tuning, it obtains the second best performance of 83.9% in insulin prediction, only 0.3% behind the best-performing BiTimelyGPT. We also compared TrajGPT with algorithms specifically designed for irregularly-sampled time series. These methods generally perform worse in insulin usage prediction, likely due to their difficulty in capturing meaningful temporal dependencies from truncated sequences. However, mTAND outperforms all models in the CHF task, achieving the best result at 85.4%.
+
+{7}------------------------------------------------
+
+Table 1: The quantitative results on the diagnosis forecasting, insulin usage, and CHF classification. performance on PopHR dataset. **Metrics are reported as average (standard error) from a bootstrap evaluation of variance.** The bold and underline indicate the best and second best results, respectively. *S* indicates the number of few-shot examples. — indicates non-applicable.
+
+| Methods / Tasks (%) | Forecasting |  |  | Diabetes-Insulin |  |  | CHF |  |  |
+|-|-|-|-|-|-|-|-|-|-|
+|  | K = 5 | 10 | 15 | S = 0 | 5 | all | S = 0 | 5 | all |
+| TrajGPT (Time-specific) | <u>57.4 (3.2)</u> | <b>71.7 (2.6)</b> | <b>84.1 (2.4)</b> | <b>67.2 (3.1)</b> | <b>70.2 (3.0)</b> | <b>75.5 (2.6)</b> | <b>72.8 (2.4)</b> | <b>75.9 (2.1)</b> | 83.9 (2.0) |
+| TrajGPT (Auto-regressive) | 55.3 (3.9) | 65.5 (3.4) | 77.2 (2.7) | — | — | — | — | — | — |
+| TimelyGPT | <b>58.2 (3.7)</b> | 70.3 (3.1) | 82.1 (2.5) | 58.2 (2.8) | 64.4 (2.5) | 70.7 (2.6) | 66.9 (2.3) | 71.0 (2.2) | 81.2 (2.0) |
+| BitMimicGPT | 48.2 (3.3) | 63.3 (3.2) | 70.5 (2.8) | 65.3 (3.1) | <b>70.8 (2.9)</b> | <b>75.8 (3.0)</b> | 70.4 (2.4) | 74.5 (2.3) | 83.8 (2.1) |
+| Informer | 46.4 (2.9) | 60.1 (2.8) | 71.2 (2.6) | 62.1 (4.6) | 66.2 (4.5) | 71.5 (3.8) | 62.9 (4.2) | 67.4 (3.9) | 80.8 (3.5) |
+| Autoformer | 42.9 (2.9) | 57.4 (2.7) | 68.6 (2.4) | 63.5 (3.8) | 66.8 (3.6) | 72.7 (3.4) | 65.3 (3.5) | 69.6 (3.7) | 81.6 (3.2) |
+| Fedformer | 43.3 (2.7) | 58.3 (2.5) | 69.6 (2.4) | 64.2 (4.3) | 68.4 (4.2) | 73.1 (3.8) | 68.2 (3.8) | 69.8 (3.5) | 81.9 (2.9) |
+| PatchTST | 48.2 (2.7) | 65.5 (2.4) | 73.3 (2.2) | 66.8 (2.6) | 69.7 (2.7) | 75.1 (2.4) | 72.2 (2.3) | <b>76.3 (1.9)</b> | 84.2 (2.1) |
+| TimesNet | 46.5 (3.7) | 64.3 (3.0) | 71.5 (2.5) | 64.2 (3.2) | 67.9 (2.8) | 72.8 (2.9) | 67.8 (3.1) | 72.5 (3.0) | 82.6 (2.8) |
+| ContiFormer | 52.8 (3.1) | 67.2 (2.8) | 76.9 (2.5) | 63.5 (3.3) | 68.0 (3.1) | 75.0 (2.9) | 68.4 (2.4) | 74.9 (2.2) | 83.1 (2.3) |
+| PrimeNet | 52.5 (3.2) | 69.7 (2.8) | 81.8 (2.3) | 65.6 (3.0) | 69.5 (2.9) | 73.8 (2.7) | 71.5 (2.7) | 75.5 (2.9) | 84.0 (2.4) |
+| Mamba-1 | 46.5 (3.6) | 62.4 (3.1) | 73.6 (2.6) | 61.5 (3.6) | 67.4 (3.2) | 72.5 (3.0) | 65.2 (3.1) | 70.1 (2.9) | 81.4 (2.4) |
+| Mamba-2 | 51.4 (3.2) | 69.8 (2.9) | 80.7 (2.5) | 64.6 (3.1) | 69.9 (2.8) | 74.8 (2.4) | 69.6 (2.7) | 73.9 (2.8) | 83.4 (2.3) |
+| MTand | 52.6 (2.8) | 70.2 (2.5) | 83.7 (1.9) | — | — | 74.6 (3.1) | — | — | <b>85.4 (2.5)</b> |
+| GRU-D | 54.2 (4.0) | 69.5 (3.4) | 80.5 (3.1) | — | — | 72.1 (3.2) | — | — | 79.9 (2.7) |
+| RAINDROP | 46.5 (2.9) | 67.2 (2.5) | 72.2 (2.2) | — | — | 70.5 (2.8) | — | — | 82.4 (2.4) |
+| SeFT | 49.3 (2.6) | 68.1 (2.2) | 79.4 (1.7) | — | — | 71.7 (2.6) | — | — | 83.4 (2.3) |
+| ODE-RNN | 54.7 (4.2) | 70.6 (3.5) | 78.6 (2.8) | — | — | 73.5 (3.6) | — | — | 82.9 (3.0) |
+| HeTVAE | 51.1 (3.9) | 70.1 (3.4) | 83.2 (3.2) | — | — | 71.4 (3.6) | — | — | 81.6 (3.2) |
+| MGP-TCN | 43.5 (3.5) | 57.2 (3.1) | 69.1 (2.9) | — | — | 73.9 (3.6) | — | — | 82.4 (3.5) |
+
+### 5.3 TRAJECTORY ANALYSIS
+
+In this analysis, we aimed to demonstrate TrajGPT’s effectiveness in trajectory modeling and provide insights into its classification performance. To achieve this, we conducted case studies on two patients: one diagnosed with diabetes and another with CHF. We visualized the observed and predicted disease trajectories for both patients, along with estimated risk trajectories over their lifetimes. As discussed in Section 3.2, we interpolated risks within the observed timeframe and extrapolated beyond it in both directions, computing risk as the token probability at each timestep. We also calculated risk growth by comparing each timestep to the previous one, identifying the ages with high risk growth as well as the associated phenotypes. By comparing disease and risk trajectories, we evaluated phenotype progression, disease comorbidity, and long-term risk development.
+
+In Fig. 4.a, TrajGPT with time-specific inference achieves a top-10 recall of 90.1% for this diabetic patient. TrajGPT accurately predicts most diseases in the endocrine/metabolic and circulatory systems. Although this patient has no prior diabetes diagnosis in the observed data, TrajGPT successfully forecasts diabetes onset by identifying related metabolic and circulatory symptoms. Fig. 4.b illustrates the predicted risk trajectory for this patient, indicating a gradual increase in diabetes risk with age. We highlight specific phenotypes that contribute to the noticeable high risk growth between ages 59 and 62, including chronic IHD, hypothyroidism, obesity, and arrhythmia (Biondi et al., 2019). These conditions are common comorbidities of diabetes, substantially elevating the likelihood of diabetes onset over time. In Fig. 4.c, we visualize the disease trajectory of a CHF patient, for whom TrajGPT produces a top-10 recall of 84.7%. TrajGPT accurately predicts a broad range of circulatory, respiratory, and endocrine/metabolic diseases. Despite the absence of prior CHF diagnosis, TrajGPT successfully predicts the onset of CHF based on a series of related circulatory conditions Corralejo et al. (2020). In Fig. 4.d, the predicted risk trajectory reveals two spikes in risk growth at ages 65 and 74, corresponding to successive occurrences of circulatory diseases (Khan et al., 2020). This analysis demonstrates TrajGPT’s ability to forecast unseen phenotypes based on disease comorbidity and the rising risk with age. As a result, TrajGPT’s ability to model health trajectories and capture disease progression enhances its classification performance.
+
+The ability to forecast diagnostic codes highlights the potential of Transformer models for health trajectory analysis. These codes can serve a broad range of administrative purposes, such as estimating the diagnostic related group (DRG) for inpatients to improve the efficiency and quality of inpatient care (Renc et al., 2024). They also hold significant potential for informing clinical care, including directing the need for preventive care and identifying potential complications (Shankar et al., 2023).
+
+{8}------------------------------------------------
+
+![Figure 4: Predicted health trajectories for a diabetic patient (top) and a CHF patient (bottom).](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 4 consists of four panels (a, b, c, d) showing health trajectories for two patients. Panels (a) and (b) are for a diabetic patient, while (c) and (d) are for a CHF patient. Panels (a) and (c) show disease trajectories with PhenoCodes on the y-axis and Age on the x-axis. Panels (b) and (d) show risk trajectories with Risk (%) on the y-axis and Age on the x-axis. The legend indicates: Observations (x), Matched Prediction (solid circle), Matched Diabetes Prediction (open circle), Mismatched Prediction (open circle), Extrapolation (30-50) (dashed line), Interpolation (50-70) (solid line), Extrapolation (70-90) (dashed line), and Inference from related endocrine and circulatory diseases (shaded area). Panels (a) and (b) show a diabetic patient's trajectory, with key diseases like Arrhythmia (cardiac), Chronic IHD, Hypothyroidism, and Obesity. Panels (c) and (d) show a CHF patient's trajectory, with key diseases like a series of circulatory and endocrine (diabetes) diseases, respiratory diseases, and metabolic diseases. Panels (b) and (d) show the risk growth over time, with key risk factors like Obesity, Arrhythmia (cardiac), Chronic IHD, and Hypothyroidism.
+
+Figure 4: Predicted health trajectories for a diabetic patient (top) and a CHF patient (bottom).
+
+Figure 4: Predicted health trajectories for a diabetic patient (top) and a CHF patient (bottom). **Panels (a) and (b)** show the inferred disease trajectories with look-up and forecast windows. Matched predictions (solid circles) occur when the top 10 predicted PhenoCodes match the ground-truth. Larger solid circles indicate correctly predicted diabetes or CHF. **Panels (c) and (d)** display the predicted risk trajectories, showing increasing risks with age. For a target disease, TrajGPT computes risk as the token probability at each timestep and calculates risk growth as the difference between consecutive values. We highlight key timesteps to indicate significant risk growth and the associated phenotypes.
+
+Table 2: We evaluate TrajGPT and baselines on the eICU dataset for the event forecasting and sepsis prediction. TrajGPT achieves top performance in both clinical event forecasting tasks and zero-shot classification of sepsis. Metrics are reported as average (standard error) from a bootstrap evaluation of variance. The bold and underline indicate the best and second best results, respectively. *S* indicates the number of few-shot examples. — indicates non-applicable.
+
+| Methods / Tasks (%) | Forecasting |  | Sepsis |  |
+|-|-|-|-|-|
+|  | K = 10 | 20 | S=0 | All |
+| TrajGPT (Time-specific) | <b><u>57.8 (2.9)</u></b> | <b><u>69.3 (2.1)</u></b> | <b><u>45.1 (2.7)</u></b> | 51.3 (2.4) |
+| TrajGPT (Auto-regressive) | 54.1 (3.2) | 64.9 (2.3) | — | — |
+| TimelyGPT | 56.9 (3.2) | 67.1 (2.4) | 42.0 (2.5) | 48.5 (2.2) |
+| PatchTST | 55.2 (2.7) | 66.0 (1.7) | 44.5 (2.2) | 51.8 (1.8) |
+| TimesNet | 52.9 (3.1) | 60.3 (2.3) | 41.2 (3.1) | 47.5 (2.6) |
+| ContiFormer | 57.1 (2.2) | 66.8 (2.2) | 41.7 (2.5) | 50.6 (2.8) |
+| PrimeNet | 53.4 (2.3) | 67.5 (2.0) | 44.0 (2.3) | 51.2 (1.9) |
+| Mamba-2 | 55.7 (2.8) | 65.2 (2.3) | 43.6 (2.8) | 49.5 (2.3) |
+| MTand | 53.9 (2.4) | 67.4 (1.6) | — | <b><u>52.5 (2.1)</u></b> |
+| ODE-RNN | 55.7 (3.4) | <b><u>67.8 (2.8)</u></b> | — | 49.2 (2.9) |
+
+### 5.4 QUANTITATIVE RESULTS ON EICU DATASET
+
+For the eICU datasets, we evaluated TrajGPT on irregular clinical event forecasting (diagnoses and drugs) and early detection of sepsis, with results summarized in Table. 2. Note that the recall values for the joint prediction of diagnoses and drugs are lower due to the larger hypothesis space for this task Choi et al. (2016). Despite the increased complexity compared to predicting diagnoses alone, TrajGPT with time-specific inference achieved superior performance over baseline models, resulting in a top-10 recall of 57.8% and a top-20 recall of 69.3%. This superior performance can be attributed to the effectiveness of time-specific inference, which improve top-10 and top-20 recall rates by 3.7% and 4.4% respectively, compared to auto-regressive inference. The representation learning methods designed specifically for irregularly-sampled time series demonstrated better overall performance. Additionally, ODE-RNN achieves the second-best performance with a 67-20 recall of 67.8%. These findings highlight that both TrajGPT’s time-specific inference and ODE-RNN leverage the strengths
+
+{9}------------------------------------------------
+
+Table 3: Ablation results of TrajGPT by selectively removing components and comparing inference methods. Performance is evaluated on forecasting task with a the of top-10 recall.
+
+| Forecast irregular diagnosis codes ( $K=10$ ) | Time-specific inference | Auto-regressive inference |
+|-|-|-|
+| TrajGPT | <b>71.7</b> | 65.5 |
+| w/o decay gating (i.e., fixed $\gamma$ ) | <u>70.3</u> | 64.0 |
+| w/o RoPE (i.e., absolute PE) | <u>67.8</u> | 63.2 |
+| w/o linear attention (i.e., GPT-2) | — | 61.2 |
+| TrajGPT (without Pre-training) | 67.1 | ? |
+
+of modeling underlying dynamics to enhance forecasting accuracy. For the sepsis prediction task, TrajGPT outperforms all baselines in the zero-shot setting, achieving an AUPRC of 45.1%. While MTand performs best when trained from scratch, its reliance on a bespoke shallow model targeting a single outcome limits its scalability and applicability in clinical settings. In summary, TrajGPT leverages pre-trained generalizable patterns to enable zero-shot learning, effectively detecting early sepsis without additional training.
+
+### 5.5 ABLATION STUDY
+
+To evaluate the contributions of key components in TrajGPT, we performed ablation studies by selectively removing components such as decay gating, RoPE, and the linear attention module. We compared the time-specific inference and auto-regressive inference under different ablation setups. Notably, removing all components results in a vanilla GPT-2, which can only perform auto-regressive inference. The ablation studies were assessed on the forecasting task using the top-10 recall metric.
+
+As shown in Table 3, removing the data-dependent decay and RoPE results in performance declines of 1.4% and 2.5%, respectively. This highlights the critical role of these modules in handling irregular time intervals by prioritizing recent data while attenuating the influence of distant ones. Replacing time-specific inference with auto-regressive inference leads to performance drops ranging from 4.6% to 6.2%, with the most significantly drop in TrajGPT. Furthermore, vanilla GPT-2 with auto-regressive inference produces the lowest performance, falling behind TrajGPT with time-specific inference by 10.5%. Time-specific inference uses varied time intervals for a single inference, reducing both computational steps and error accumulation for better performance.
+
+## 6 CONCLUSION AND FUTURE WORK
+
+The current paradigm in clinical practice relies on bespoke shallow models targeting single outcomes, highlighting the need for models capable of predicting diverse patient outcomes with minimal or no refinement (Moor et al., 2023). Developing such models for healthcare has to account for the irregular sampling of medical records, as improper modeling can lead to faculty inferences (Agniel et al., 2018). Our research proposes a novel architecture, TrajGPT, designed for irregular time-series representation learning and health trajectory analysis. To achieve this, TrajGPT introduces an SRA mechanism with a data-dependent decay, allowing the model to selectively forget irrelevant past information based on contexts. By interpreting TrajGPT as discretized ODEs, it effectively captures the continuous dynamics underlying irregularly-sampled time series, enabling both interpolation and extrapolation. For the forecasting task, TrajGPT provides an effective time-specific inference by evolving the dynamics according to varying time intervals. TrajGPT demonstrates strong zero-shot performance across multiple tasks, including diagnosis forecasting, drug usage prediction, and phenotype classification. TrajGPT also provides interpretable trajectory analysis, aiding clinicians in understanding the extrapolated disease progression along with risk growth.
+
+To further validate generalizability, we will compare TrajGPT with foundation LLMs, such as GPT-based (Wang et al., 2024) and Llama-based (Rasul et al., 2024) models. Our work currently focuses on irregularly-sampled time series with discrete data (i.e., diagnoses and drugs); we plan to expand this to continuous multivariate time series, such as ICU measurements Johnson et al. (2023). While we focus on in-domain data, we will explore representation learning and trajectory analysis on out-of-distribution data as future works.
+
+ Rest of paper (reference and Appendix) is removed.

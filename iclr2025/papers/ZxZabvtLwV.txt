@@ -1,0 +1,488 @@
+
+
+{0}------------------------------------------------
+
+# PROTEX: A RETRIEVAL-AUGMENTED APPROACH FOR PROTEIN FUNCTION PREDICTION
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Mapping a protein sequence to its underlying biological function is a critical problem of increasing importance in biology. In this work, we propose *ProtEx*, a retrieval-augmented approach for protein function prediction that leverages exemplars from a database to improve accuracy and robustness and enable generalization to unseen classes. Our approach relies on a novel multi-sequence pretraining task, and a fine-tuning strategy that effectively conditions predictions on retrieved exemplars. Our method achieves state-of-the-art results across multiple datasets and settings for predicting Enzyme Commission (EC) numbers, Gene Ontology (GO) terms, and Pfam families. Our ablations and analysis highlight the impact of conditioning predictions on exemplar sequences, especially for classes and sequences less well represented in the training data.
+
+## 1 INTRODUCTION
+
+Proteins perform a wide array of functions within organisms, captured by biologists using ontologies such as Gene Ontology (GO) terms (Ashburner et al., 2000), Enzyme Commission (EC) numbers (Tipton & Boyce, 2000), and Pfam families (Bateman et al., 2004). Mapping proteins to such functional annotations can address key problems in biology, medicine, and chemistry (Price et al., 2018; Durairaj et al., 2023). However, given the expense of wet lab experiments, and the rapid growth of protein sequence databases (Uniprot, 2023), it is critical to extend coverage using computational protein function predictions. Protein function prediction techniques largely fall into two categories, with different strengths and weaknesses. Homology-based approaches align the query protein to annotated sequences via methods such as BLAST (Altschul et al., 1997) or profile hidden Markov models (Eddy, 1998) allowing propagation of a label to the query. More recently, deep learning approaches directly predict a protein’s function from its amino acid sequence.
+
+While these approaches have been successful, key obstacles remain. A critical challenge is out-of-distribution generalization across both label and sequence space. For example, recent expansions of the Pfam database were driven by the identification of new classes (Mistry et al., 2021), for which there are few annotated sequences. Moreover, a substantial number of proteins belong to the “dark matter” of the protein universe (Durairaj et al., 2023), *i.e.* their sequences are dissimilar from those of any characterized proteins, posing considerable challenges for both homology-based and deep learning methods.
+
+In this work, we propose *ProtEx*, a method for Protein function prediction via retrieved Exemplars. *ProtEx* is a semiparametric approach that combines aspects of non-parametric similarity search based methods and parametric deep learning models to achieve increased accuracy and robustness. *ProtEx* is inspired by retrieval augmented methods in natural language processing and vision, *e.g.* (Lewis et al., 2020; Pasupat et al., 2021; Izacard et al., 2023; Yu et al., 2023a; Long et al., 2022), which show advantages over fully parametric models in capturing tail information (Kandpal et al., 2023) and performing few-shot tasks through conditioning on task exemplars (Min et al., 2022; Chen et al., 2022).
+
+As shown in Figure 1, given a query protein and candidate label, *ProtEx* first uses a homology-based retriever (such as BLAST) to obtain a class-conditioned set of positive and negative exemplars from the training set. Our neural model is trained to make a task-based comparison across the set of exemplars and the query to output a binary decision of whether the query sequence has the same label as the positive exemplars. To enable the model to efficiently learn the relationship between
+
+{1}------------------------------------------------
+
+![Diagram illustrating the Method Overview. A sequence to classify (MENFPEKVILETV...) and a candidate label (EC:1.2.3.4) are input to a Retriever. The Retriever outputs positive and negative exemplar sequences for the candidate label (e.g., MENFTEV... ✓, MFTPKE... ✓, MNFTPKE... ✗, MTPKEVKI... ✗). These are concatenated with the input sequence and passed through a Transformer Model to produce a binary prediction for the candidate label: Yes (97%) or No (3%).](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+054                    Sequence to classify    Candidate label
+
+055                    MENFPEKVILETV...    EC:1.2.3.4
+
+056                                                            Retriever
+
+057                                                            Positive and negative
+
+058                                                            exemplar sequences for
+
+059                                                            candidate label
+
+060                    MENFTEV... ✓ MFTPKE... ✓ MNFTPKE... ✗ MTPKEVKI... ✗
+
+061                                                            Concatenate Inputs
+
+062                                                            Transformer Model
+
+063                    Binary prediction for
+
+064                    candidate label    Yes (97%)    No (3%)
+
+Diagram illustrating the Method Overview. A sequence to classify (MENFPEKVILETV...) and a candidate label (EC:1.2.3.4) are input to a Retriever. The Retriever outputs positive and negative exemplar sequences for the candidate label (e.g., MENFTEV... ✓, MFTPKE... ✓, MNFTPKE... ✗, MTPKEVKI... ✗). These are concatenated with the input sequence and passed through a Transformer Model to produce a binary prediction for the candidate label: Yes (97%) or No (3%).
+
+065 Figure 1: **Method Overview.** Our proposed method, ProtEx, predicts the relevance of various
+
+066 functional annotations for a given query sequence. First, for a given candidate label, positive and
+
+067 negative exemplar sequences are retrieved from the training data. Second, a pre-trained neural model
+
+068 jointly conditions on the query sequence and retrieved exemplars to make a prediction.
+
+069 query and exemplar sequences, we propose a novel multi-sequence pretraining objective (Figure 3).
+
+070 Our formulation allows us to effectively generalize to rare and unseen classes at test time and better
+
+071 classify sequences that have low sequence similarity with the training data.
+
+072
+
+073
+
+074 We evaluate our approach, ProtEx, on EC number, GO term, and Pfam family prediction tasks,
+
+075 showing that it achieves state-of-the-art performance across multiple settings, and consistently
+
+076 outperforms both existing traditional homology-based approaches and deep learning models. Our
+
+077 stratified analysis shows that ProtEx brings most notable improvements on rare classes and sequences
+
+078 that are far from the training set. We also demonstrate generalization to labels not seen at training
+
+079 time. Finally, our ablations and analyses highlight the efficacy of our pretraining strategy and the
+
+080 model’s ability to leverage exemplar sequences for improved classification accuracy.<sup>1</sup>
+
+###### 081 2 BACKGROUND AND RELATED WORK
+
+082
+
+083
+
+084 We review traditional methods for protein similarity search, neural models for protein function
+
+085 prediction, and related work on retrieval-augmented models from other domains.
+
+086
+
+087 **Protein Similarity Search** Proteins with similar sequences often perform similar functions, and
+
+088 for a given query sequence, *homologous* sequences can be retrieved from a database using a variety
+
+089 of similarity-based search methods (Altschul et al., 1997; Johnson et al., 2010; Remmert et al., 2012).
+
+090 These enable *homology-based inference* (Loewenstein et al., 2009), where functional labels from
+
+091 retrieved homologs are transferred to the query. ProtEx can be seen as performing homology-based
+
+092 inference where information from the homologs is aggregated using a learned, non-linear model. A
+
+093 ubiquitous tool for similarity search is BLAST (Altschul et al., 1990; 1997), which identifies and
+
+094 scores local sequence alignments using an empirically-derived substitution cost matrix (Henikoff
+
+095 & Henikoff, 1992). Our method leverages BLAST and BLAST-inspired techniques to retrieve
+
+096 exemplars (see §4). BLAST also serves as a strong baseline for homology-based inference when
+
+097 used in isolation.
+
+098 **Neural Models for Protein Function Prediction** Recent work has shown that deep models map-
+
+099 ping a protein sequence to functional predictions can outperform traditional alignment-based tech-
+
+100 niques. Models can be fit from scratch (Kulmanov et al., 2018; Ryu et al., 2019; Cao & Shen, 2021;
+
+101 Bileschi et al., 2022; Fan et al., 2022; Sanderson et al., 2023) or fine-tuned from a model pretrained on
+
+102 unlabeled protein sequences (Strodthoff et al., 2020; Dohan et al., 2021; Villegas-Morcillo et al., 2021;
+
+103 Yuan et al., 2023; Dickson & Mofrad, 2023). The amino acid sequence largely specifies a protein’s
+
+104 structure and function (Anfinsen, 1973), and hence is often used as input to models. However, other
+
+105 approaches also encode protein structures (Sokolov & Ben-Hur, 2010; Roy et al., 2012; Konc et al.,
+
+106 2013; Gligorijević et al., 2021; Zhang et al., 2022; Lai & Xu, 2022), with broad coverage due to
+
+107 advancements in protein structure prediction (Jumper et al., 2021; Baek et al., 2021). Using structures
+
+<sup>1</sup>Code and model predictions are available at <http://anonymized>.
+
+{2}------------------------------------------------
+
+in addition to or instead of protein sequences, either for prediction or retrieval, is largely orthogonal to the contributions of this paper, and future extensions to ProtEx could incorporate such techniques. Disordered proteins, which are not well characterized by a static structure would need to be handled carefully, however (Ruff & Pappu, 2021). We do not consider prediction approaches based on protein interaction networks (Mostafavi et al., 2008; You et al., 2019; Zhang et al., 2019; Kulmanov et al., 2024), which have demonstrated high accuracy where such networks are already established, but have limited overall coverage.
+
+Particularly relevant are recent methods combining neural models and retrieval for protein function prediction. Notin et al. (2022) combines likelihood scores from a protein language model and an MSA to predict the functional effects of mutations. Hamamsy et al. (2023) distills a protein similarity function into a neural network, and Dickson & Mofrad (2023) fine-tunes a retrieval model for homology-based inference. The ProtR method of Zhang et al. (2024) uses transductive learning where predictions from a retriever and neural classifier are iteratively updated towards agreement. In contrast to retrieval methods, which form predictions by aggregating pairwise similarity scores over sequences, ProtEx predicts conditioned on multiple labeled exemplar sequences. This also differs from methods that use the correlation structure in aligned sets of homologous sequences (MSAs), without accompanying annotations of their function, to inform, e.g., structure prediction (Marks et al., 2011; Jumper et al., 2021; Baek et al., 2021) or representation learning (Rao et al., 2021).
+
+**Retrieval-Augmented Models and In-Context Fine-tuning** Retrieval augmented neural models have shown success for a variety of text generation and classification tasks, with particular strength in recalling long tail knowledge, where even large parametric language models (LMs) struggle (Kandpal et al., 2023). Examples include retrieval-augmented language models, and models for machine translation, question answering, semantic parsing, and text classification (Khandelwal et al., 2020; 2021; Karpukhin et al., 2020; Guu et al., 2020; Lewis et al., 2020; Izacard et al., 2023; Pasupat et al., 2021; Yu et al., 2023a; Chalkidis & Kementchedjhieva, 2023). Retrieved context or exemplars come from large-scale unlabeled collections or labeled sets for supervised learning (Wang et al., 2022; Lewis et al., 2021). Computer vision and multimodal models also benefit from retrieval augmentation (Long et al., 2022; Ramos et al., 2023). A focus in NLP have been methods to adapt a pretrained parametric language model into one that can integrate information from retrieved sequences, and joint training of a retriever and generation model. In this work, we use pre-existing protein similarity models for retrieval and pre-train a protein sequence model to make inferences from multiple proteins.
+
+ProtEx is also related to in-context tuning methods for few-shot tasks (Min et al., 2022; Chen et al., 2022), where pretrained language models are meta-trained to make predictions given an input and task-relevant exemplars. These works show strong performance on unseen tasks, enabled by the LM’s ability to make predictions from an input and a few in-context exemplars. Similarly, ProtEx can be seen as meta-training on multiple binary classification tasks with in-context exemplars and, as shown in Section 4.5, can adapt to new labels without additional fine-tuning.
+
+## 3 PROPOSED METHOD
+
+Given a protein represented as a sequence of amino acids,  $x$ , our goal is to predict a set of associated labels,  $y \subset \mathcal{L}$ , where  $\mathcal{L}$  is a set of protein function labels, such as EC numbers, GO terms, or Pfam labels. Core to our approach is to condition model predictions on a set of annotated exemplar sequences, which are retrieved from a training set, as visualized in Figure 2.
+
+### 3.1 OVERVIEW
+
+To predict a set of labels  $y$  given  $x$ , we first determine a set of candidate labels,  $\hat{\mathcal{L}}_x \subseteq \mathcal{L}$ , and then make an independent binary prediction for each candidate label  $l \in \hat{\mathcal{L}}_x$ , conditioning on exemplars that are selected based on both  $x$  and  $l$ . Due to our model’s limited context window, we can only condition on a limited number of exemplars per prediction. Therefore, our approach has several advantages compared to generating  $y$  based on  $x$  and a single limited set of exemplars. First, we can focus each prediction on the exemplars that are most relevant towards understanding the class boundary of a specific label  $l$ . Second, we can consider a larger and more diverse set of candidate labels than those corresponding to a limited number of exemplars. Finally, our approach can be seen
+
+{3}------------------------------------------------
+
+![Figure 2: Inference Procedure flowchart. The process starts with 'Query Sequence' and 'Annotated Training Sequences'. 'Query Sequence' leads to 'Similarity Search (e.g. BLAST)' and 'Generate Input'. 'Annotated Training Sequences' lead to 'Similarity Search (e.g. BLAST)'. 'Similarity Search (e.g. BLAST)' leads to 'Similar Annotated Sequences'. 'Similar Annotated Sequences' lead to 'Extract Candidate Labels'. 'Extract Candidate Labels' leads to 'Candidate Label'. 'Candidate Label' leads to 'Select Exemplars'. 'Select Exemplars' leads to 'Threshold and Aggregate'. 'Generate Input' leads to 'Model Input'. 'Model Input' leads to 'Run Transformer'. 'Run Transformer' leads to 'Predicted Score'. 'Predicted Score' leads to 'Threshold and Aggregate'. 'Threshold and Aggregate' leads to 'Predicted Labels'.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+```
+
+graph TD
+    QS[Query Sequence] --> SS[Similarity Search  
+e.g. BLAST]
+    ATS[Annotated Training Sequences] --> SS
+    SS --> SAS[Similar Annotated Sequences]
+    SAS --> ECL[Extract Candidate Labels]
+    ECL --> CL[Candidate Label]
+    CL --> SE[Select Exemplars]
+    SE --> TA[Threshold and Aggregate]
+    TA --> PL[Predicted Labels]
+    QS --> GI[Generate Input]
+    GI --> MI[Model Input]
+    MI --> RT[Run Transformer]
+    RT --> PS[Predicted Score]
+    PS --> TA
+  
+```
+
+Figure 2: Inference Procedure flowchart. The process starts with 'Query Sequence' and 'Annotated Training Sequences'. 'Query Sequence' leads to 'Similarity Search (e.g. BLAST)' and 'Generate Input'. 'Annotated Training Sequences' lead to 'Similarity Search (e.g. BLAST)'. 'Similarity Search (e.g. BLAST)' leads to 'Similar Annotated Sequences'. 'Similar Annotated Sequences' lead to 'Extract Candidate Labels'. 'Extract Candidate Labels' leads to 'Candidate Label'. 'Candidate Label' leads to 'Select Exemplars'. 'Select Exemplars' leads to 'Threshold and Aggregate'. 'Generate Input' leads to 'Model Input'. 'Model Input' leads to 'Run Transformer'. 'Run Transformer' leads to 'Predicted Score'. 'Predicted Score' leads to 'Threshold and Aggregate'. 'Threshold and Aggregate' leads to 'Predicted Labels'.
+
+Figure 2: **Inference Procedure.** Overview of procedure for computing a set of predicted labels given a protein sequence and a set of training sequences with annotated function.
+
+as meta-training on multiple binary classification tasks with in-context exemplars, which we show enables ProtEx to adapt to new labels without additional fine-tuning.<sup>2</sup>
+
+The inference procedure for predicting a set of functional labels,  $y$ , given a protein sequence,  $x$ , is shown in Figure 2. We review each step of this procedure below.
+
+**Similarity Search** Given a query sequence,  $x$ , the first step in Figure 2 is to retrieve a ranked list of relevant sequences with known functional annotations, denoted  $\mathcal{N}_x$ , from the training set. We adopt standard methods based on efficiently computing local alignments between sequences. We use BLAST (Altschul et al., 1997) for most experiments, which has shown strong performance and is computationally feasible to run on most of the datasets we study.<sup>3</sup> Specifically, we run `blastp` to retrieve up to the 100 most similar sequences in the training set, and rank these sequences based on the BLAST alignment score. (See Appendix B.5 for details.)
+
+**Candidate Labels** We determine the set of candidate labels,  $\hat{\mathcal{L}}_x$ , as the union of the labels corresponding to sequences in  $\mathcal{N}_x$ . This simple approach ensures that we have at least one positive exemplar sequence for every candidate label.
+
+**Selecting Exemplars** We select a set of positive exemplars,  $\mathcal{E}_{x,l}^p$ , as the top- $k^p$  sequences in  $\mathcal{N}_x$  that are annotated with the candidate label  $l$ . Similarly, we select a set of negative exemplars,  $\mathcal{E}_{x,l}^n$ , as the top- $k^n$  sequences in  $\mathcal{N}_x$  that are *not* annotated with  $l$ . The hyperparameters  $k^p$  and  $k^n$  are discussed in Section 4 and selected such that the exemplars fit within the model’s context window.
+
+**Model Input** As visualized in Figure 1, we form a retrieval-augmented input sequence by concatenating the query sequence,  $x$ , the candidate label  $l$ , and the positive and negative exemplars,  $\mathcal{E}_{x,l}^p$  and  $\mathcal{E}_{x,l}^n$ , with a character denoting whether each exemplar is positive or negative.<sup>4</sup>
+
+**Transformer Model** As the focus of our study is the pre-training and fine-tuning recipe for our model, we use the general encoder-decoder Transformer (Vaswani et al., 2017) architecture of T5 (Raffel et al., 2020). As demonstrated in Raffel et al. (2020), this allows for flexibility in defining different pre-training and fine-tuning tasks without changes to the underlying architecture. We evaluate Small (60M) and Base (220M) sized models, using the Base size for our main results. We also evaluated Transformer variants that offer more efficient handling of long context. See Appendix C.2 for these comparisons. Similarly to Raffel et al. (2020), to apply our encoder-decoder model as a binary classifier, our model predicts single character sequences corresponding to either positive (p) or negative (n) predictions. We define the model score  $s_\theta(x, l, \mathcal{E}_{x,l}^p, \mathcal{E}_{x,l}^n)$  with trainable parameters  $\theta$  as the probability the model assigns to the positive character sequence p, i.e.  $s_\theta(x, l, \mathcal{E}_{x,l}^p, \mathcal{E}_{x,l}^n) := \log P_\theta(p|x, l, \mathcal{E}_{x,l}^p, \mathcal{E}_{x,l}^n)$ . Since we consider separate exemplars for each candidate label, this requires running the model up to  $|\hat{\mathcal{L}}_x|$  (the number of candidate labels) times for each input sequence. We analyze the computational cost of inference in Appendix B.3.
+
+<sup>2</sup>While such a capability is theoretically also possible if generating a set of labels, e.g., by anonymizing labels (Pasupat et al., 2021), this would be conceptually less straightforward.
+
+<sup>3</sup>For the Pfam task, which requires retrieval from a larger training set, we use a similar but alternative approach discussed in Section 4.4.
+
+<sup>4</sup>See Appendix A.1 for further details. We also ablate inclusion of the candidate label in Section 4.5.
+
+{4}------------------------------------------------
+
+![Diagram of the pretraining task. A 'Sample Sequence Pair from UniRef' (MENFTPKVEVMEN... and KEVKMEFVPK...) is processed through 'Randomly Mask Residues' to become 'MENFT1KEVZEN...' and 'KE3KMEF4PK...'. These are then passed through a 'Transformer Model' to produce a 'Similarity between sequences' of 68 and 'Masked residues' of 1P2M3V4V...](690fce4fb5c9cbb8beb560cb2a3fcbeb_img.jpg)
+
+```
+
+graph LR
+    A[Sample Sequence Pair from UniRef] --> B1[MENFTPKVEVMEN...]
+    A --> B2[KEVKMEFVPK...]
+    B1 --> C[Randomly Mask Residues]
+    B2 --> C
+    C --> D1[MENFT1KEVZEN...]
+    C --> D2[KE3KMEF4PK...]
+    D1 --> E[Transformer Model]
+    D2 --> E
+    E --> F1[Similarity between sequences]
+    E --> F2[Masked residues]
+    F1 --> F1a[68]
+    F2 --> F2a[1P2M3V4V...]
+  
+```
+
+Diagram of the pretraining task. A 'Sample Sequence Pair from UniRef' (MENFTPKVEVMEN... and KEVKMEFVPK...) is processed through 'Randomly Mask Residues' to become 'MENFT1KEVZEN...' and 'KE3KMEF4PK...'. These are then passed through a 'Transformer Model' to produce a 'Similarity between sequences' of 68 and 'Masked residues' of 1P2M3V4V...
+
+Figure 3: **Pretraining task.** We sample a pair of unlabeled sequences, and the model is tasked with predicting masked residues and a similarity score between the two sequences.
+
+**Aggregating Predictions** For multilabel prediction tasks (e.g. EC and GO), we can determine a predicted label set,  $\hat{y}$ , based on a score threshold  $t$ :
+
+$$\hat{y} = \{l \mid l \in \hat{\mathcal{L}}_x \wedge s_\theta(x, l, \mathcal{E}_{x,l}^p, \mathcal{E}_{x,l}^n) > t\},$$
+
+and varying  $t$  produces a tradeoff between precision and recall. For multiclass prediction tasks (e.g. Pfam) where  $y$  is always a singleton, we can determine the class with the highest score:
+
+$$\hat{y} = \{\arg \max_{l \in \hat{\mathcal{L}}_x} s_\theta(x, l, \mathcal{E}_{x,l}^p, \mathcal{E}_{x,l}^n)\}.$$
+
+### 3.2 TRAINING
+
+Model training consists of two stages. First, we pre-train using unlabeled sequence pairs. Then, we fine-tune for a specific task by constructing positive and negative examples given a set of labeled sequences. In both stages, models are trained to maximize the likelihood of a target sequence given an input sequence, given our generic encoder-decoder architecture (Raffel et al., 2020).
+
+**Pre-training** Our pre-training task shown in Figure 3. Prior work has primarily pre-trained on single unlabeled sequences, then fine-tuned with a single sequence as input to improve protein function prediction (Dohan et al., 2021; Lin et al., 2023). In contrast, our goal is to train models that implicitly compare a query sequence with exemplar sequences. We thus propose a new pre-training objective over *multiple sequences*. We sample pairs of sequences from UniRef90 (Suzek et al., 2015), approximating a uniform distribution over sequence similarity buckets. We then implement a version of the span denoising objective of Raffel et al. (2020). We mask the sequences by randomly replacing approximately 10% of residues with a placeholder index. The prediction target consists of predicting the masked residues as well as the similarity score between the two sequences. As a simple and easy to compute measure of sequence similarity, we use Levenshtein distance normalized by the sequence length, bucketed to the nearest multiple of 5. Intuitively, the prediction target encourages the model to learn to approximately align and compare the two input sequences. We then expect the model to implicitly learn a more task-specific notion of similarity during fine-tuning. Pre-trained checkpoints are shared across all tasks that we study. See Appendix A.2 for details and §4 for analysis.
+
+**Fine-tuning** For each sequence  $x$  and corresponding set of annotated labels  $y \subset \mathcal{L}$  in the training set, we create both positive and negative examples, with targets  $p$  and  $n$ , respectively. We generate a positive example for every label  $\in y$ , and negative examples corresponding to labels  $\notin y$ .<sup>5</sup> We determine the retrieval-augmented input sequence as described in §3.1. The only difference is how we select positive and negative exemplars,  $\mathcal{E}_{x,l}^p$  and  $\mathcal{E}_{x,l}^n$ , from the ranked list of related sequences,  $\mathcal{N}_x$ .<sup>6</sup> We evaluated top- $k$  (as used at inference time), uniform, and geometric sampling (Pasupat et al., 2021).<sup>7</sup> Uniform or geometric sampling leads to greater diversity in the training data compared to training for multiple epochs over data generated using deterministic top- $k$  selection. Also, for cases where the training and evaluation sequences are not from the same distribution, such sampling can better align the distribution between query sequences and exemplar sequences seen at training time with the distribution seen at inference time. More analysis is given in §4.5.
+
+<sup>5</sup>See Appendix B.6 for details of how negative examples are sampled, and a discussion of class imbalance.
+
+<sup>6</sup>At training time we also need to ensure the query sequence  $x$  is excluded from the ranked list of related sequences.
+
+<sup>7</sup>Geometric sampling samples the  $j$ th element with probability  $\propto p(1-p)^{(j-1)}$ , where parameter  $p$  provides interpolation between top- $k$  and uniform sampling.
+
+{5}------------------------------------------------
+
+## 4 EXPERIMENTS AND ANALYSIS
+
+We compare the performance of ProtEx with other approaches (§4.2) across several EC, GO, and Pfam classification tasks (§4.1), with results reported in §4.3 and §4.4. Finally, in §4.5, we report additional analysis and ablations. Further details and results can be found in Appendices B and C.
+
+### 4.1 TASKS AND DATASETS
+
+Table 1: **Dataset Statistics.** We consider prediction of EC numbers, GO terms, and Pfam families across several settings proposed in prior work. We report the number of unique classes among the training sequences, and the average number of classes per sequence.
+
+| Name | Labels | Training Sequences | Classes | Avg. # Classes Per Seq. |
+|-|-|-|-|-|
+| Random EC | EC | 438,522 | 4,862 | 1.89 |
+| Random GO | GO | 438,522 | 31,365 | 45.49 |
+| Clustered EC | EC | 182,965 | 3,411 | 1.90 |
+| Clustered GO | GO | 182,965 | 26,538 | 45.57 |
+| NEW-392 | EC | 227,362 | 5,242 | 1.06 |
+| Price-149 | EC | 227,362 | 5,242 | 1.06 |
+| PDB EC | EC | 15,551 | 538 | 1.67 |
+| Clustered Pfam | Pfam | 1,296,280 | 17,929 | 1 |
+
+We consider several EC number, GO term, and Pfam prediction tasks summarized in Table 1. Some additional details are provided in Appendix B.
+
+For EC and GO prediction, we adopt the random and clustered splits from Sanderson et al. (2023). These splits consist of proteins and their corresponding annotations from Swiss-Prot, the manually curated portion of UniProt (Consortium, 2015). For the random split, approximately 80% of proteins were reserved for training, with 10% each assigned to the development and test sets. For the more challenging clustered split, proteins were divided evenly into train, development, and test sets based on UniRef50 clusters (Suzek et al., 2015), such that proteins in the development and test sets have lower sequence similarity with those in the training set than a random split.
+
+To better compare our results on EC prediction with prior work, we also consider several other evaluations. First, we evaluate EC prediction on the setting proposed in Yu et al. (2023b). Similarly to Sanderson et al. (2023), this setting uses sequences from Swiss-Prot for training. There are two evaluation sets, NEW-392 and Price-149. While the training data contains sequences added to Swiss-Prot prior to April 2022, New-392 consists of 392 enzyme sequences added after this date, forming a temporal split. Price-149, originally curated by Sanderson et al. (2023), consists of 149 sequences with EC numbers determined experimentally by Price et al. (2018). These sequences were inconsistently labeled by automated annotation methods, indicating a challenging setting. Second, we also adopt the PDB-based dataset proposed by Gligorijević et al. (2021). In contrast to the other EC splits based on sequences from Swiss-Prot, this dataset focuses on proteins with experimentally determined structures in PDB (Berman et al., 2000). Therefore, the training set is considerably smaller. Notably, our method does not require structural information, but we nevertheless evaluate on this setting to compare with prior work.
+
+Finally, we also evaluate on the Pfam seed dataset (Finn et al., 2014) where the goal is to map each protein sequence to one of 17,929 families. We use the clustered split as defined by Bileschi et al. (2022) where sequences in the development and test sets have less than 25% sequence identity to those in the training set.
+
+### 4.2 BASELINES
+
+For each task we consider three types of baselines. First, we consider the strongest performing neural models and other methods from prior work. Second, to determine the impact of retrieving and conditioning on exemplars, we evaluate ProtEx when no exemplars are included during fine-tuning and inference. Third, we report results for BLAST, following the setting of Sanderson et al. (2023), which imputes the labels from the most similar sequence returned by BLAST if the score is above
+
+{6}------------------------------------------------
+
+Table 2: Max F1 scores for EC and GO prediction on the random and clustered SwissProt-based splits proposed by Sanderson et al. (2023).
+
+| Method | EC |  | GO |  |
+|-|-|-|-|-|
+|  | Random | Clustered | Random | Clustered |
+| ProteinInfer | 0.977 | 0.914 | 0.885 | 0.782 |
+| ProteinInfer (ensemble) | 0.981 | 0.930 | 0.899 | 0.811 |
+| BLAST | 0.984 | 0.950 | 0.902 | 0.824 |
+| ProtEx | <b>0.987</b> | <b>0.958</b> | <b>0.917</b> | <b>0.854</b> |
+| ProtEx (no exemplars) | 0.977 | 0.944 | 0.786 | 0.754 |
+
+an alignment score threshold. In some cases, our BLAST results are stronger than those reported by prior work due to this thresholding. Notably, this BLAST baseline frequently outperforms the strongest neural methods from prior work, highlighting the importance of including such baselines, as well as motivating methods such as ProtEx that can combine the strengths of similarity-search methods such as BLAST with pre-trained neural models.
+
+### 4.3 EC AND GO MAIN RESULTS
+
+Here we report results on several EC and GO classification tasks. We used up to 2 positive and 2 negative exemplars. See Appendix B for further details and Appendix C.1 for the statistical significance of key comparisons (tested differences are significant with  $p$ -values  $< 0.01$ ).
+
+First, we report results in Table 2 for the random and clustered EC and GO splits proposed by Sanderson et al. (2023). We follow Sanderson et al. (2023) and report the maximum micro-averaged F1 score. We compare with a single-model and ensembled versions of ProteinInfer (Sanderson et al., 2023), a CNN-based model. Our BLAST result reproduces that of Sanderson et al. (2023), which outperforms ProteinInfer. ProtEx also improves over BLAST, with performance dropping considerably if exemplars are not included in the input during fine-tuning and inference. The precision and recall curves of ProtEx relative to BLAST are shown in Figure 4, demonstrating improvements in precision at all recall values.
+
+Second, we report in Table 3 results on the NEW-392 and Price-149 evaluations proposed by Yu et al. (2023b), and compare with their proposed method, CLEAN. As there is no development set provided in this setting, we used the hyperparameters determined for the clustered EC task, and compare results based on the weighted AUC metric reported by Yu et al. (2023b), which does not require selecting a score threshold. We see that ProtEx improves over both CLEAN and BLAST. Again, ablating exemplars leads to a drop in performance. Additionally, we report F1 results in Appendix C.3.3.
+
+Finally, we also report results on the PDB-based split proposed by Gligorijević et al. (2021) in Table 4. Following prior work, we report the maximum protein-centric F1 score (i.e.  $F_{\max}$ ), and stratify results by the maximum similarity between test sequences and training sequences. Table 4 includes results for the strongest methods from prior work. We report results for DeepFRI from Gligorijević et al. (2021), ESM-1b (Rives et al., 2021) and GearNet from Zhang et al. (2022), ESM-GearNet from Zhang et al. (2023), PromptProtein from Wang et al. (2023), ProtST from Xu et al. (2023), and
+
+Table 3: Weighted AUC for EC prediction for NEW-392 and Price-149.
+
+| Method | NEW-392 | Price-149 |
+|-|-|-|
+| CLEAN | 0.740 | 0.733 |
+| BLAST | 0.788 | 0.691 |
+| ProtEx | <b>0.932</b> | <b>0.842</b> |
+| ProtEx (no ex.) | 0.926 | 0.839 |
+
+Table 4: Max protein-centric F1 for EC prediction on PDB-based split.
+
+| Method | PDB EC |  |  |
+|-|-|-|-|
+|  | 30% | 50% | 95% |
+| DeepFRI | 0.470 | 0.545 | 0.631 |
+| ESM-1b | 0.737 | 0.797 | 0.864 |
+| GearNet MVC | 0.744 | 0.808 | 0.874 |
+| ESM-GearNet | — | — | 0.890 |
+| PromptProtein | 0.765 | 0.823 | 0.888 |
+| ProtST (ESM-2) | — | — | 0.878 |
+| ESM-2 (adapter) | — | — | 0.892 |
+| PST (ESM-2) | — | — | 0.899 |
+| BLAST | 0.801 | 0.848 | 0.900 |
+| ProtEx | <b>0.820</b> | <b>0.862</b> | <b>0.909</b> |
+| ProtEx (no ex.) | 0.717 | 0.777 | 0.849 |
+
+{7}------------------------------------------------
+
+![Figure 4: Precision and recall of ProtEx and BLAST on the clustered EC and GO tasks. The figure contains two line plots. The left plot is for 'Clustered EC' and the right plot is for 'Clustered GO'. Both plots show Precision on the y-axis (ranging from 0.80 to 1.00) and Recall on the x-axis (ranging from 0.80 to 1.00). Two lines are plotted: a solid blue line for 'Ours' (ProtEx) and a dashed orange line for 'BLAST'. In both plots, the 'Ours' line starts at a precision of 1.00 and remains high until recall approaches 1.00, where it drops sharply. The 'BLAST' line starts at a lower precision (around 0.98 for EC and 0.88 for GO) and remains relatively flat until recall approaches 1.00, where it also drops sharply. In the 'Clustered GO' plot, the 'Ours' line is consistently above the 'BLAST' line for most recall values.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 4: Precision and recall of ProtEx and BLAST on the clustered EC and GO tasks. The figure contains two line plots. The left plot is for 'Clustered EC' and the right plot is for 'Clustered GO'. Both plots show Precision on the y-axis (ranging from 0.80 to 1.00) and Recall on the x-axis (ranging from 0.80 to 1.00). Two lines are plotted: a solid blue line for 'Ours' (ProtEx) and a dashed orange line for 'BLAST'. In both plots, the 'Ours' line starts at a precision of 1.00 and remains high until recall approaches 1.00, where it drops sharply. The 'BLAST' line starts at a lower precision (around 0.98 for EC and 0.88 for GO) and remains relatively flat until recall approaches 1.00, where it also drops sharply. In the 'Clustered GO' plot, the 'Ours' line is consistently above the 'BLAST' line for most recall values.
+
+Figure 4: Precision and recall of ProtEx and BLAST on the clustered EC and GO tasks.
+
+ESM-2 (Lin et al., 2023) with a classifier head and PST from Chen et al. (2024). Perhaps surprisingly, we see that BLAST with an alignment score threshold achieves a very competitive result on this setting. Regardless, ProtEx outperforms BLAST and other previously reported results on this setting, including ESM-2 (a 15B parameter model), other models based on ESM-2 (ESM-GearNet, ProtST, and PST), and approaches that explicitly consider structural information. Ablating exemplars again demonstrates the significance of conditioning on exemplars. For future work, improvements from pre-training scale (e.g. ESM-2) and incorporating structural information and other resources (e.g., GearNet, ProtST, PST, PromptProtein) could be complementary to our retrieval-augmented approach.
+
+### 4.4 PFAM MAIN RESULTS
+
+For the Pfam dataset, we use an alternative to BLAST for selecting similar sequences, detailed in Appendix B.5. The Pfam dataset is considerably larger than the other datasets (see Table 1), and running BLAST for all examples in the training set can take considerable time. Moreover, BLAST does not achieve as strong of a result for Pfam classification as it does for the EC and GO tasks. Therefore, we implemented an alternative retrieval system that can be more easily parallelized and customized than BLAST. For every sequence, we select a set of similar sequences for each class independently. For efficiency, we randomly select up to a maximum number of sequences per class in the training set, and then rank these sequences according to a local alignment score that is similar to the one computed by BLAST. Based on analysis of the effect of restricting the number of classes (see Appendix C.4.1), we opted to consider all classes as candidate labels. We also evaluated this strategy for EC prediction although it did not perform as well as our BLAST-based approach (see Appendix C.3.2). We use 4 positive exemplars and zero negative exemplars, since we found in our early experiments that additional positive exemplars added more benefit.
+
+Table 5: **Results on the Pfam clustered split.** Sequences in the test set have less than 25% sequence identity to the training set.
+
+| Method | Family Accuracy | Lifted Clan Accuracy | Avg. Per-Family Accuracy |
+|-|-|-|-|
+| Top pick HMM | 81.9 | 88.1 | 82.9 |
+| BLAST | 64.1 | 70.1 | 63.7 |
+| ProtENN | 87.8 | 89.0 | 80.4 |
+| ProtNLM | 87.4 | 90.7 | 80.6 |
+| ProtTNN | 88.4 | 90.5 | 83.4 |
+| ProtTNN (ensemble) | 89.7 | 91.7 | 85.0 |
+| <b>ProtEx</b> | <b>92.6</b> | <b>93.3</b> | <b>91.7</b> |
+| ProtEx (no exemplars) | 76.3 | 80.2 | 65.7 |
+
+We compare ProtEx with two strong homology-based approaches (BLAST and Top pick HMM, as described in Dohan et al. (2021)), ProtENN (Bileschi et al., 2022) a convolutional neural network ensemble, and ProtNLM (Gane et al., 2022) and ProtTNN (Dohan et al., 2021), which are pretrained Transformer models. For the no exemplar ablation, we found that predicting a binary label without exemplars generalizes poorly when the number of classes is large, and so we instead finetune our pretrained checkpoint to predict the class label as a string given the sequence, which we found performed better. See Appendix § C.4.2 for further discussion.
+
+{8}------------------------------------------------
+
+432  
+433  
+434  
+435  
+436  
+437  
+438  
+439  
+440  
+441  
+442  
+443  
+444  
+445  
+446  
+447  
+448  
+449  
+450  
+451  
+452  
+453  
+454  
+455  
+456  
+457  
+458  
+459  
+460  
+461  
+462  
+463  
+464  
+465  
+466  
+467  
+468  
+469  
+470  
+471  
+472  
+473  
+474  
+475  
+476  
+477  
+478  
+479  
+480  
+481  
+482  
+483  
+484  
+485
+
+Results are shown in Table 5. We report family accuracy, lifted clan accuracy that groups families into higher level clans (Dohan et al., 2021), and the average per-family accuracy, which gives equal weight to all classes, including rare classes. Our approach achieves state-of-the-art performance by a considerable margin. Additionally, as shown in Figure 5, while other methods typically show lower performance for examples with rare labels, ProtEx demonstrates more consistent performance across training set family sizes, showcasing large improvements for examples belonging to rare families. See Appendix C.4.3 for further stratified performance analysis, showing that our method performs well across sequences that have low similarity with the closest sequence in the training data, and that similar trends are observed at the lifted clan level.
+
+![Figure 5: A line graph titled 'Test set family accuracy by training family size'. The x-axis is 'Training set family size (ticks are bin boundaries)' with values 1, 17, 29, 42, 58, 79, 104, 149, 237, 402, 2197. The y-axis is 'family accuracy' from 0.7 to 1.0. Four methods are plotted: ProtEx (Ours) (blue squares), ProTNN (orange diamonds), ProtENN (green triangles), and Top pick HMM (red circles). ProtEx maintains high accuracy (~0.9) across all family sizes. ProTNN and ProtENN show lower accuracy, especially at smaller family sizes, and fluctuate. Top pick HMM shows the lowest accuracy, generally below 0.85.](bedcca5cdf168e3508ef511d94ec514c_img.jpg)
+
+Figure 5: A line graph titled 'Test set family accuracy by training family size'. The x-axis is 'Training set family size (ticks are bin boundaries)' with values 1, 17, 29, 42, 58, 79, 104, 149, 237, 402, 2197. The y-axis is 'family accuracy' from 0.7 to 1.0. Four methods are plotted: ProtEx (Ours) (blue squares), ProTNN (orange diamonds), ProtENN (green triangles), and Top pick HMM (red circles). ProtEx maintains high accuracy (~0.9) across all family sizes. ProTNN and ProtENN show lower accuracy, especially at smaller family sizes, and fluctuate. Top pick HMM shows the lowest accuracy, generally below 0.85.
+
+Figure 5: **Pfam stratified family accuracy.** ProtEx shows considerably improved performance for sequences belonging to rare labels.
+
+### 4.5 ANALYSIS AND ABLATIONS
+
+Table 6: **Generalization to Unseen Labels.** Max F1 on clustered EC and GO when a randomly selected subset of labels are not included during fine-tuning.
+
+| Method | EC |  | GO |  |
+|-|-|-|-|-|
+|  | Seen | Unseen | Seen | Unseen |
+| BLAST | 0.953 | 0.964 | 0.826 | 0.816 |
+| ProtEx | <b>0.960</b> | <b>0.970</b> | <b>0.849</b> | <b>0.839</b> |
+
+Table 7: **Pre-training Ablations.** We report F1 on Clustered EC development split for different pre-training strategies.
+
+| Pre-training | F1 |
+|-|-|
+| Sequence pair w/ score | <b>0.958</b> |
+| Sequence pair | 0.956 |
+| Single sequence | 0.952 |
+| No pre-training | 0.912 |
+
+**Generalization to New Labels** We tested the ability of ProtEx to make predictions for new classes not seen during fine-tuning. On the EC and GO clustered splits we randomly removed 10% of classes during fine-tuning, while retaining the ability to retrieve sequences annotated with these classes at inference time. As shown in Table 6, ProtEx performs comparably or better than BLAST even on classes it has not seen during training. Relatedly, we also found that there is only a minimal performance decrease when candidate labels are not included in the model input (see Appendix C.3.1), further indicating that the model is conditioning its predictions on the exemplar sequences as opposed to directly representing the sequence to class relationship in the model parameters.
+
+**Pre-training Analysis** We show results for ablating the key elements of our pre-training recipe in Table 7. Notably, there is a drop in end task performance when pre-training with only a single sequence as input, as commonly done in prior work, as opposed to pre-training over sequence pairs. This indicates that our pre-training task is useful for retrieval-augmented models that are fine-tuned to make comparisons across multiple sequences. See Appendix B.4 for further details.
+
+**Model Architectures and Scaling** In Appendix C.2 we compare Small and Base sized models, finding that there is a modest benefit to increasing model size from Small to Base. We also compare the Fusion-in-Decoder (FiD) approach introduced by Izacard & Grave (2021) with a standard Transformer, finding that this may be viable path towards scaling to more exemplars, but that there is a performance drop, indicating that cross-attention between exemplar sequences is beneficial.
+
+{9}------------------------------------------------
+
+**Exemplar Distribution and Sampling** As described in §3, we study different sampling strategies to select exemplars during training. This adds diversity to the training data, and can also help align the distribution of similarities between query and exemplar sequences seen during training with those seen during inference, which is especially useful for non-random splits. We highlight this capability on the Pfam task, which features the largest distributional shift between training and inference due to the split restricting inference sequences to have <25% sequence similarity to the training set. Figure 6 shows the corresponding distribution of similarities between query and exemplar sequences and its impact on out-of-distribution generalization as measured by family accuracy on development set.
+
+![Figure 6: Pfam Exemplar Sampling Strategies. A line graph showing the fraction of exemplars with an alignment score greater than a threshold (y-axis, 0.00 to 1.00) versus the alignment score threshold (x-axis, 10^2 to 10^3 on a log scale). Five curves are shown: Train top-k (solid blue), Train geometric (p=0.5) (dashed orange), Train geometric (p=0.1) (dash-dot green), Train uniform (dashed red), and Eval top-k (solid purple). The Eval top-k curve is the highest, followed by Train top-k, then Train geometric (p=0.1), Train geometric (p=0.5), and Train uniform which is the lowest.](7801d00a216dc4dc8a7d210dcb5fe3c5_img.jpg)
+
+| Split | Sampling | Family Acc. |
+|-|-|-|
+| Train | top-k | 89.39 |
+| Train | geometric (p=0.5) | 89.18 |
+| Train | geometric (p=0.1) | 91.45 |
+| Train | uniform | 91.85 |
+| Eval | top-k | - |
+
+Figure 6: Pfam Exemplar Sampling Strategies. A line graph showing the fraction of exemplars with an alignment score greater than a threshold (y-axis, 0.00 to 1.00) versus the alignment score threshold (x-axis, 10^2 to 10^3 on a log scale). Five curves are shown: Train top-k (solid blue), Train geometric (p=0.5) (dashed orange), Train geometric (p=0.1) (dash-dot green), Train uniform (dashed red), and Eval top-k (solid purple). The Eval top-k curve is the highest, followed by Train top-k, then Train geometric (p=0.1), Train geometric (p=0.5), and Train uniform which is the lowest.
+
+Figure 6: **Effect of exemplar sampling strategy on Pfam.** We visualize how different sampling strategies can mitigate the distribution shift between training and evaluation. Uniform sampling leads to the training distribution most similar to the evaluation distribution, and also leads to the highest family accuracy on the development set.
+
+## 5 LIMITATIONS AND DISCUSSION
+
+**Computational Requirements** While we use a model size and number of pre-training steps comparable to or less than prior work (Appendix B.3), the cost of inference with our method is potentially larger due to encoding multiple protein sequences and making independent predictions for each class. To mitigate these factors, we have considered the FiD architecture (Appendix C.2) and a candidate label generator (§3), which offer a path towards more efficient inference. Regardless, improvements in accuracy and robustness can justify an increase in computational cost for some applications, given the much greater cost of running wet-lab experiments to annotate protein function.
+
+**Scope and Future Work** In this work we focused on training and inference procedures that can effectively condition predictions on retrieved exemplars, using a general-purpose Transformer architecture and standard methods for retrieval (e.g. BLAST). Going forward, our approach could potentially be further improved using enhanced similarity search techniques such as those based on protein structure (Zhang et al., 2022; Hamamsy et al., 2023; Van Kempen et al., 2024) and more specialized architectures. Finally, we focused on predicting EC, GO, and Pfam labels. Other tasks such as fitness prediction (Romero et al., 2013) or generating free-text descriptions of protein function (Gane et al., 2022; Abdine et al., 2024) could be of interest for future work.
+
+**Broader Impact and Ethical Considerations** Our method enables more accurate and robust prediction of protein functional annotations. Any computationally derived annotation should be verified by wet lab experiments where possible, especially for critical applications. Our method extends a long history of prior work that develops such tools and the community’s safeguards for how to apply them in an ethical manner applies here as well.
+
+## 6 CONCLUSION
+
+We proposed ProtEx, a semiparametric approach that combines aspects of homology-based similarity search with pre-trained neural models. ProtEx achieves state-of-the-art results on EC, GO, and Pfam classification tasks. Our work highlights the potential of retrieval-augmented methods for improving the accuracy and robustness of protein function prediction.
+
+ Rest of paper (reference and Appendix) is removed.

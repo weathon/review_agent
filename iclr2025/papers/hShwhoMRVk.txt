@@ -1,0 +1,290 @@
+
+
+{0}------------------------------------------------
+
+# STOCHASTIC PROCESS LEARNING VIA OPERATOR FLOW MATCHING
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Using neural operators, we propose a novel framework for stochastic process learning across arbitrary domains. In particular, we develop operator flow matching for learning stochastic process priors on function spaces. Operator flow matching provides the probability density of any finite collection of points, and enables mathematically tractable functional regression at new points with mean and density estimation. Our method outperforms state of the art models at stochastic process learning, functional regression, and prior learning.
+
+## 1 INTRODUCTION
+
+Stochastic processes are foundational to many domains, from functional regression and physics reanalysis, to financial markets, geophysics, and black box optimization. These processes inherently involve stochasticity, can serve as prior distributions over functions, and provide the density of any finite collection of points. Conventionally, priors over processes are hand-designed from predefined Gaussian processes (GP) and their variants tuned against data, only allowing for GP regression. This is despite the fact that phenomena modeled in the natural world often do not follow Gaussianity Fig 1. Consequently, this hinders the flexibility and generalizability of these stochastic processes in real-world applications, leaving behind significant challenges for more general stochastic process learning (SPL).
+
+In SPL, the prior over the stochastic process is learned from data, i.e., historical point evaluation of past experiments. Learning the prior over the process is crucial for universal functional regression(UFR) which is a [recently proposed](#) Bayesian method for functional regression and takes GP-regression as its special case when the prior is Gaussian (Shi et al., 2024a). UFR is important to scientific and engineering domains, including reanalysis, data completion, and uncertainty quantification, as well as black box optimization, to name a few.
+
+In this paper, we introduce a new operator learning framework for learning stochastic process priors and performing efficient UFR, based on a generalization of marginal optimal-transport flow matching (Tong et al., 2024), subsequently referred to as operator flow matching (OFM). To achieve this, we extend neural operators (Azizzadenesheli et al., 2024)—designed initially to map functions between infinite-dimensional spaces—to maps between collections of points by leveraging their functional convergence properties. These serve as the main architecture blocks in OFM. We propose to generalize marginal optimal transport flow matching to arbitrary collections of points, allowing us to learn probability priors over the stochastic process, ergo, sampling [the value](#) of any collection points with their associated density.
+
+After learning the prior and having access to densities, OFM can be used for UFR, where given any collection of points of the underlying function, we estimate the mean value of any new collection of points and efficiently sample from their posterior values using stochastic gradient Langevin dynamics (SGLD) (Welling & Teh, 2011). We show that OFM outperforms previous state of the art methods, including deep GPs, neural processes, and the state-of-the-art operator flow (OpFlow) (Salimbeni & Deisenroth, 2017; Jankowiak et al., 2020; Garnelo et al., 2018; Kim et al., 2019; Shi et al., 2024a).
+
+In the preliminary section3, we explain the SPL problem setup, define UFR, and generalize the flow matching formulation to stochastic processes. In the method section 4, we propose marginal optimal transport flow matching, generalized to stochastic processes, and we show how this model can be used for SPL, distributional informed UFR, and also as a functional generative model.
+
+{1}------------------------------------------------
+
+![Figure 1: Operator Flow Matching (OFM) regression on Navier-Stokes functional data. The figure consists of five subplots: (a) Partial observations showing 32 random observations as black dots on a 2D grid; (b) Ground Truth showing a smooth velocity field; (c) OFM mean showing the predicted mean velocity field; (d) OFM sample showing one posterior sample from OFM; (e) GP sample showing one posterior sample from best fitted GP. Each heatmap (b-e) has a color bar on its right indicating values from -1.5 to 1.5.](49ad3a646d84bcfeac02bdf2b3792a3e_img.jpg)
+
+Figure 1: Operator Flow Matching (OFM) regression on Navier-Stokes functional data. The figure consists of five subplots: (a) Partial observations showing 32 random observations as black dots on a 2D grid; (b) Ground Truth showing a smooth velocity field; (c) OFM mean showing the predicted mean velocity field; (d) OFM sample showing one posterior sample from OFM; (e) GP sample showing one posterior sample from best fitted GP. Each heatmap (b-e) has a color bar on its right indicating values from -1.5 to 1.5.
+
+Figure 1: Operator Flow Matching (OFM) regression on Navier-Stokes functional data with resolution  $64 \times 64$ . (a) 32 random observations. (b) Ground truth sample (c) Predicted mean from OFM. (d) One posterior sample from OFM. (e) One posterior sample from best fitted GP.
+
+To summarize, OFM is the first simulation-free ODE framework that transports a Gaussian process to a target stochastic process for functional regression purpose, enabling likelihood estimation for any collection of points. Compared to existing baselines in functional regression, OFM enjoys greater expressiveness without the model constraints seen in deep GPs or OpFlow, and avoids the theoretical limitations associated with neural processes (see Appendix A.8). We empirically show that regression with OFM outperforms existing baselines, matches classical GP Regression on GP examples, and delivers exceptional performance on highly non-Gaussian functional datasets, such as those from Navier-Stokes equations and black hole simulations.
+
+## 2 RELATED WORK
+
+**Neural operators.** Neural operators constitute a new paradigm in machine learning for learning maps between function spaces, a generalization of conventional neural networks that map between finite dimensional spaces (Li et al., 2021; Kovachki et al., 2023). Among neural operator architectures, Fourier neural operators (FNO) (Li et al., 2021) enable convolution in the spectral domain and have been shown effective in operator learning (Pathak et al., 2022; Wen et al., 2023; Yang et al., 2021; 2023; Sun et al., 2023; Li et al., 2023). In this work, we use this as our choice of neural operators architecture.
+
+**Direct function samples.** There is a body of work on generative models dedicated to learning distributions over functions, such that direct sampling on the function space is possible. For example, generative adversarial neural operators (GANO) generalize generative adversarial nets on finite dimensional spaces to function spaces (Rahman et al., 2022; Shi et al., 2024b), yielding a neural operator generative model that maps Gaussian random fields (GRF) to data functions (Azizzadenesheli et al., 2024). Other works in this area have followed the success of diffusion models (Song et al., 2021; Ho et al., 2020) in finite dimensional spaces, e.g., denoising diffusion operators generalize diffusion models to function spaces by using GRF as a mean of noisification and use neural operators to learn the score operator on function valued data (Lim et al., 2023; Pidstrigach et al., 2023; Kerrigan et al., 2023a). Moreover, the same principle has been deployed to generalize flow matching (Lipman et al., 2023) to functional spaces (Kerrigan et al., 2023b), an approach closely related to our work. However, these works on learning generative models on function spaces do not support UFR the way GP-regression does because they (i) focus solely on generating function samples, (ii) do not clarify how to model a stochastic process on point value sequential generation, and (iii) do not provide point evaluation of probability density.
+
+**Stochastic processes.** Earlier works on SPL have focused on hand-tuned methods in the style of GP-regression. In these cases, an expert tunes the GP parameters given a set of experimental samples. More advanced methods rely on deep GPs, in which a network of GPs is stacked on top of each other. The parameters of deep GPs are commonly optimized by minimizing the variational free energy, which serves as a bound on the negative log marginal likelihood. (Damianou & Lawrence, 2013; Liu et al., 2020). Deep GPs have limitations in terms of learnability, expressivity, and computational complexity. Warped GPs (Kou et al., 2013) and transforming GP (Maroñas et al., 2021) methods use historical data to learn a pointwise transformation of GP values and achieve on par performance compared to deep GP type methods. The pointwise nature of such approaches limits their generality.
+
+Another attempt to address limitations in SPL is neural processes (Garnelo et al., 2018), inspired by variational inference method and designed for sampling from function spaces. This method trains a model to map any collection of points and their values to a vector, used as an input to a decoder that
+
+{2}------------------------------------------------
+
+maps any collection of points to their values. The architectures used in these modes are not consistent as the number of points grows, and same with the decoder, making the approach limited to finite dimensions. The diffusion based variants (Dutordoir et al., 2023) also use uncorrelated Gaussian noise, and the results do not exist in function spaces (Rahman et al., 2022; Lim et al., 2023). In the end, methods based on neural processes still are unable to provide density estimation for collections of points, as needed for UFR.
+
+Finally, OFLOW introduced invertible neural operators that are trained to map any collection of points sampled from a GP to a new collection of points in the data space (Shi et al., 2024a), using the maximum likelihood principle. This method is consistent as the resolution grows, captures likelihood of any collection of points, and allows for UFR using SGLD. However, similar to normalizing flow (Papamakarios et al., 2021) methods in finite dimensional domains, the use of invertible deep learning models makes their training a challenge, particularly with regards to expressiveness.
+
+## 3 PRELIMINARY
+
+### 3.1 STOCHASTIC PROCESS LEARNING
+
+Let  $(\Omega, \mathcal{F}, \mathbb{P})$  denote a probability space and let  $(\mathbb{R}^d, \mathcal{B}(\mathbb{R}^d))$  denote a measurable space where  $\mathcal{B}(\mathbb{R}^d)$  is the Borel space. Following the standard definition of stochastic processes, a stochastic process  $\mathcal{P}$  on a domain  $D$  is a collection of  $\mathbb{R}^d$ -valued random variables indexed by members of  $D$ , i.e.,
+
+$$\{a(x) : x \in D\}$$
+
+jointly following the probability law  $\mathbb{P}$ . In the special case of Gaussian processes, e.g., Wiener process, following the Gaussian law for  $\mathcal{P}$ , for any collection points  $\{x_1, x_2, \dots, x_n\}$ , the random variables  $\{a(x_1), a(x_2), \dots, a(x_n)\}$  are jointly Gaussian, resulting in a function  $a$  to be drawn from a Gaussian random field (GRF). Once again, we need to emphasize,  $\{a(x_1), a(x_2), \dots, a(x_n)\}$  is not a dataset but a discretized observation of one function  $a$ . In practice, the joint probability distribution of the collection of the random variables is unknown a priori, and needs to be learned.
+
+In SPL, we aim to learn an operator  $\mathcal{G}$  that maps a base stochastic process  $\mathcal{P}$  to another stochastic process  $\mathcal{Q}$  that represents the data. That is, for any collection of points  $\{x_1, x_2, \dots, x_n\}$ , and for any  $n$ , the operator  $\mathcal{G}$  maps the law on  $\{a(x_1), a(x_2), \dots, a(x_n)\}$  to  $\{u(x_1), u(x_2), \dots, u(x_n)\}$ , where  $u(x)$  is a pointwise evaluation of function data sample, i.e.,
+
+$$\{u(x_1), u(x_2), \dots, u(x_n)\} = \mathcal{G}(\{a(x_1), a(x_2), \dots, a(x_n)\}).$$
+
+It is convenient to use a GP as the base stochastic process  $\mathcal{P}$  for mathematical tractability, i.e.,
+
+$$\{a(x_1), a(x_2), \dots, a(x_n)\} \sim \mathcal{N}(\mathbf{0}, K(\{x_1, x_2, \dots, x_n\}))$$
+
+where  $K(\{x_1, x_2, \dots, x_n\})$  is a  $n \times n$  covariance matrix with entries described by kernel function  $k(x_i, x_j)$ . Then, the probability of  $\{u(x_1), u(x_2), \dots, u(x_n)\}$ , at evaluation points  $\{x_1, x_2, \dots, x_n\}$ , for any  $n$  and collection of points on  $D$  is given by,
+
+$$\mathbb{P}(\{u(x_1), u(x_2), \dots, u(x_n)\}) = \mathbf{JG}^{\big|_{\{a(x_1), a(x_2), \dots, a(x_n)\}}} \mathbb{P}(\{a(x_1), a(x_2), \dots, a(x_n)\}).$$
+
+where with abuse of notation  $\mathbb{P}(u(x))$  denotes the density of  $u(x)$  at point  $x$ , same for  $\mathbb{P}(a(x))$ , and similarly  $\mathbf{JG}^{\big|_{\{a(x_1), a(x_2), \dots, a(x_n)\}}}$  is the Jacobian of the map from the collection of random variables  $\{a(x_1), a(x_2), \dots, a(x_n)\}$  at points  $\{x_1, x_2, \dots, x_n\}$  to random variables  $\{u(x_1), u(x_2), \dots, u(x_n)\}$ . It's trivial to verify that  $\mathcal{Q}$  is indeed a valid stochastic process via Kolmogorov Extension Theorem (KET) (Kolmogorov & Bharucha-Reid, 2018) with a proof provided in Appendix. A.2. In SPL, we aim to learn a neural operator  $\mathcal{G}_\theta$  such that the resulting  $\mathcal{Q}$  matches the data process under the true  $\mathcal{G}$ .
+
+### 3.2 UNIVERSAL FUNCTIONAL REGRESSION
+
+UFR is concerned with Bayesian regression on function spaces (Shi et al., 2024a), where it can be used to infer the posterior of an unknown function on a domain  $D$  from a collection of point-wise observations. The observations are often corrupted with noise of variance  $\sigma^2$ , denoted as
+
+{3}------------------------------------------------
+
+$\{\hat{u}(x_1), \hat{u}(x_2), \dots, \hat{u}(x_n)\}$  or  $\{\hat{u}(x_i)\}_{i=1}^n$ . More specifically, for  $m \geq n$  points at which the function is to be inferred,
+
+$$\mathbb{P} \left( \{u(x_1), u(x_2), \dots, u(x_m)\} \mid \{\hat{u}(x_1), \hat{u}(x_2), \dots, \hat{u}(x_n)\} \right)$$
+
+Note that when the prior over the function space is Gaussian, UFR reduces to the celebrated GP regression. Following Bayes rule, and maps between stochastic processes, we obtain the log posterior as follows,
+
+$$\begin{aligned} \log \mathbb{P} \left( \{u(x_i)\}_{i=1}^m \mid \{\hat{u}(x_i)\}_{i=1}^n \right) &= -\frac{1}{2} \sum_i \frac{(\hat{u}(x_i) - u(x_i))^2}{\sigma^2} - n \log(\sigma) - \frac{n}{2} \log(2\pi) \\ &\quad + \log \mathbb{P} \left( \{u(x_i)\}_{i=1}^m \right) - \log \mathbb{P} \left( \{\hat{u}(x_i)\}_{i=1}^n \right) \end{aligned}$$
+
+This equality holds for any collection of points. It is worth noting that the posterior is exact up to constants, i.e., the second, third, and last terms are constant. Therefore, they do not contribute in MAP estimation, mean estimation, and functional regression in general, and there is no need to compute them.
+
+### 3.3 GENERALIZING FLOW MATCHING TO STOCHASTIC PROCESSES
+
+For any  $n$ , and points  $\{x_1, x_2, \dots, x_n\}$ , consider an ODE system in which a vector of random variables  $u_0 \in \mathbb{R}^n$  is gradually transformed into  $u_1$ , for which, the  $i$ th entry is equal to  $u(x_i)$ , via a smooth, time-varying vector field, denoted by  $\mathcal{G}_t$ ,
+
+$$u_t := \phi_t(u_0) = u_0 + \int_0^t \mathcal{G}_s(u_s) ds. \quad (1)$$
+
+Given the density of  $p_0 := \mathbb{P}(\{a(x_1), a(x_2), \dots, a(x_n)\})$  where  $u_0 \sim p_0$ , the time-varying density  $p_t$  induced by the diffeomorphism  $\phi_t$  or  $\mathcal{G}_t$  can be computed using the well-known transport equation (Lipman et al., 2023; Fjelde et al., 2024),
+
+$$\frac{\partial p_t(u_t)}{\partial t} = -(\nabla \cdot (\mathcal{G}_t p_t))(u_t) \quad (2)$$
+
+Eq. 2 shows that constructing  $p_t$  is equivalent to constructing  $\mathcal{G}_t$  for finite dimensional spaces for which the analysis carries to finite collection of random variables. In the following, we refer to  $p_t$  as the marginal probability path induced by  $\mathcal{G}_t$  for the given collection of points. From Eq. 2, the log density can be computed through integration,
+
+$$\log p_t(u_t) = \log p_0(u_0) - \int_0^t (\nabla \cdot \mathcal{G}_s)(u_s) ds. \quad (3)$$
+
+In this formulation, we are seeking a specific vector field that transports density  $q_0$  to target density  $q_1$  for any  $n$  and any collection of points  $\{x_1, x_2, \dots, x_n\}$  with boundary conditions  $p_0 = q_0, p_1 = q_1$ . We propose to extend flow matching (Lipman et al., 2023) to stochastic processes and parameterize a potential vector field  $\mathcal{G}_t$  with a neural operator  $\mathcal{G}_\theta$ , which can be optimized through the flow matching objective for SPL,
+
+$$\mathcal{L}_{\text{FM}}(\theta) := \sup_n \sup_{\{x_1, x_2, \dots, x_n\}} \mathbb{E}_{t \sim \mathcal{U}(0,1), u_t \sim p_t} \|\mathcal{G}_\theta(t, u_t) - \mathcal{G}_t(u_t)\|^2 \quad (4)$$
+
+Note that  $p_t$  and  $u_t$  depend on the collocation points. In the above equation, the suprema are intractable and we replace them with expectation as a soft approximation. Moreover, the true  $\mathcal{G}_t$  is usually unknown and to address it, one can derive a probability path conditioned on latent variable  $z$  of the same alphabet size as the collection. Consequently, the marginal probability path  $p_t(u_t)$  is a mixture of conditional probability paths  $p_t(u_t|z)$ ,
+
+$$p_t(u_t) = \int p_t(u_t|z) q(z) dz \quad (5)$$
+
+$$\mathcal{G}_t(u_t) = \mathbb{E}_{q(z)} \left[ \frac{\mathcal{G}_t(u_t|z) p_t(u_t|z)}{p_t(u_t)} \right]. \quad (6)$$
+
+{4}------------------------------------------------
+
+Given Eq. 6, the conditional flow matching (CFM) objective is defined as
+
+$$\mathcal{L}_{\text{CFM}}(\theta) := \mathbb{E}_{z, \mathbb{E}_{x_1, x_2, \dots, x_n} \mathbb{E}_{t, q(z), p_t(u_t|z)}} \|\mathcal{G}_\theta(t, u_t) - \mathcal{G}_t(u_t|z)\|^2 \quad (7)$$
+
+Equations 4, when suprema are replaced with expectations, and 7 have identical gradient for  $\theta$ , which indicates  $\nabla_\theta \mathcal{L}_{\text{FM}}(\theta) = \nabla_\theta \mathcal{L}_{\text{CFM}}(\theta)$ . In Flow Matching, the variable  $z$  is chosen as a single data point  $u_1 \sim q_1$ . Considering the class of Gaussian conditional probability paths  $p_t(u_t|u_1) = \mathcal{N}(u_t|\mu_t(u_1), \sigma_t(u_1)^2 K(\{x_1, x_2, \dots, x_n\}))$ , with conditional flow  $\phi_t(u_t|u_1) = \sigma_t u_0 + \mu_t$ . Specially, we choose  $\mu_t = tu_1$  and  $\sigma_t = 1 - (1 - \sigma)t$ , where  $\sigma > 0$  is a small constant. Then we can derive a closed-form expression for both the conditional probability and corresponding vectorfield (Tong et al., 2024). Detailed derivation provided in Appendix A.1
+
+$$p_t(u_t|u_1) = \mathcal{N}(u_t|tu_1, (t\sigma - t + 1)^2 K(\{x_1, x_2, \dots, x_n\})) \quad (8)$$
+
+$$\mathcal{G}_t(u_t|u_1) = \frac{u_1 - (1 - \sigma)u_t}{1 - (1 - \sigma)t} \quad (9)$$
+
+While the conditional vector field  $\mathcal{G}_t(u_t|u_1)$  induces an optimal transport path from  $p_0(u_t|u_1)$  to  $p_1(u_t|u_1)$ , the induced marginal path  $p_t(u_t)$  is curved and not an optimal-transport path from prior distribution  $q_0(u_t)$  to the data distribution  $q_1(u_t)$  in general. To address this, Tong et al. (2024) introduced marginal optimal-transport flow matching in finite-dimensional spaces, which takes the conditional variable  $z$  from a joint distribution  $\pi(u_0, u_1)$  combined with minibatch optimal transport to approximate true marginal (or dynamic) optimal transport. This marginal optimal transport path is a simpler trajectory, resulting in faster training and inference, as well as higher-quality samples compared to the path defined in flow matching approach. In this work, establishing the above formulation, we extend the above-developed flow matching formulation on the stochastic process to their marginal optimal transport one as well as to SPL.
+
+## 4 METHODS
+
+In this section, we first introduce the framework of OFM, which extends marginal optimal transport flow matching (Tong et al., 2024) to infinite-dimensional function spaces. Then, we show how to model a stochastic process and efficiently evaluate exact and tractable likelihoods for any point evaluation of functions with OFM. Lastly, we demonstrate how to use OFM for the UFR setting.
+
+### 4.1 FRAMEWORK OF OPERATOR FLOW MATCHING
+
+For a real separable Hilbert space  $(\mathcal{H}, \langle \cdot, \cdot \rangle, \|\cdot\|)$ , equipped with the Borel  $\sigma$ -algebra of measurable sets denoted by  $\mathcal{B}(\mathcal{H})$ , we introduce two measures on  $\mathcal{B}(\mathcal{H}) : \nu_0$  as the reference measure and  $\nu_1$  as the data measure. Consider a function  $h_0$  sampled from  $\nu_0$ , such that  $h_0 \sim \nu_0$ . A smooth time-varying functional vector field  $\mathcal{G}_t : \mathcal{H} \rightarrow \mathcal{H}$  then defines an ordinary differential equation
+
+$$\frac{\partial \phi_t(h)}{\partial t} = \mathcal{G}_t(\phi_t(h)), \quad (10)$$
+
+with initial condition  $\phi_0(h_0) = h_0$ , where  $\phi_t(h)$  the solution of Eq. 10, and  $t \in [0, 1]$ . Thus,  $\phi_t(h)$  represents a function  $h$  transported along a vector field from time 0 to time  $t$ . The diffeomorphism  $\phi_t$  induces a pushforward measure  $\mu_t := [\phi_t]_\#(\mu_0)$ , with  $\mu_0 = \nu_0$ , and we refer to  $\mu_t$  as the path of probability measure. The goal is to construct a path of probability measure such that at  $t = 1$ ,  $\mu_1 \approx \nu_1$ . The dynamic relationship between the time varying measure  $\mu_t$  and vector field  $\mathcal{G}_t$  can be characterized by the continuity equation:
+
+$$\frac{\partial \mu_t}{\partial t} = -\nabla \cdot (\mu_t \mathcal{G}_t) \quad (11)$$
+
+In practice, we use Eq. 11 in its weak form (Ambrosio et al., 2008; Kerrigan et al., 2023b) to check whether a given vector field  $\mathcal{G}_t$  generates the target  $\mu_t$ :
+
+$$\int_0^1 \int_{\mathcal{H}} \frac{\partial \varphi(g, t)}{\partial t} + \langle \mathcal{G}_t(g), \nabla_g \varphi(g, t) \rangle d\mu_t(g) dt = 0, \quad \forall \varphi \in \mathcal{C}_c^\infty(\mathcal{H} \times [0, 1]) \quad (12)$$
+
+Suppose that the time-varying vector field  $\mathcal{G}_t$  and induced  $\nu_t$ , which satisfy Eq. 12, are known. We can parameterize  $\mathcal{G}_t$  with neural operator  $\mathcal{G}_\theta : [0, 1] \times \mathcal{H} \rightarrow \mathcal{H}$ . We can regress  $\mathcal{G}_\theta$  to target  $\mathcal{G}_t$  through flow matching objective.
+
+$$\mathcal{L}_{\text{FM}}^\dagger = \mathbb{E}_{t \sim \mathcal{U}[0, 1], g \sim \mu_t} \|\mathcal{G}_\theta(t, g) - \mathcal{G}_t(g)\|^2 \quad (13)$$
+
+{5}------------------------------------------------
+
+However, similar to its finite-dimensional counterpart,  $\mathcal{G}_t$  is typically unknown. Moreover, there are infinitely many paths of probability measures that satisfy the Eq. 12 and ensure  $\mu_1 \approx \nu_1$ . Therefore, it is necessary to specify a path of probability measures to effectively guide the learning of  $\mathcal{G}_\theta$ .
+
+### 4.2 CONDITIONAL PROBABILITY MEASURES AND GAUSSIAN MEASURES
+
+Consider a joint probability measure  $\pi(\nu_0, \nu_1)$  on  $\mathcal{H} \times \mathcal{H}$ , where the reference measure  $\nu_0$ , is chosen as a Gaussian measure, whose absolute continuity is well-studied (Bogachev, 1998). We characterize  $\nu_0$  by a Gaussian process with trace-class covariance operator. e.g.  $\nu_0 = \mathcal{N}(m_0, C_0)$ , where  $m_0$  is the mean,  $C_0$  is the covariance operator. With the joint measure  $\pi(\nu_0, \nu_1)$ , we sample a function pair  $z := (h_0, h_1)$ .
+
+Assuming  $\nu_1$  has full support on the Cameron-Martin space associated with  $\nu_0$ , we construct a conditional probability measure  $\mu_t(\cdot|z)$  as a Gaussian measure with trace-class covariance operator and small operator norm to approximate Dirac measures in the sense of weak convergence. Such that, at  $t = 0$  and  $t = 1$ ,  $\mu_t(\cdot|z)$  is centered around  $h_0, h_1$ , approximating  $\delta_{h_0}, \delta_{h_1}$  respectively; Subsequently, we can construct a new marginal probability measure by mixing these approximated Dirac measures:
+
+$$\mu_t(A) = \int \mu_t(A|z) d\pi(z), \quad \forall A \in \mathcal{B}(\mathcal{H}) \quad (14)$$
+
+Due to  $d\pi(z)$  being always positive, the conditional probability measure (Dirac measure approximated by Gaussian measure) is absolutely continuous with respect to  $\mu_t$ . Eq. 14 indicates that  $\mu_0 = \int \delta_{h_0} d\pi(z) \approx \nu_0$ , and  $\mu_1 = \int \delta_{h_1} d\pi(z) \approx \nu_1$ . This formulation suggests that  $\mu_0, \mu_1$  represent convolutions of  $\nu_0, \nu_1$  with Gaussian measures. For a more detailed discussion on convolution with Gaussian measures, we refer the readers to Appendix B.1 of (Lim et al., 2023).
+
+Suppose  $\int_{\mathcal{H}} \int_{\mathcal{H}} \int_{\mathcal{H} \times \mathcal{H}} |\mathcal{G}_t(g)| d\mu_t(g|z) d\pi(z)$  is finite to guarantee the vector field is sufficiently regular. Under this condition, the vector field that generates  $\mu_t$  as specified in Eq. 14 and Eq. 12 can be expanded as follows :
+
+$$\mathcal{G}_t(g) = \int_{\mathcal{H} \times \mathcal{H}} \mathcal{G}_t(g|z) \frac{d\mu_t(\cdot|z)}{d\mu_t}(g) d\pi(z) \quad (15)$$
+
+Eq. 15 is a straightforward extension of the Theorem 1 as detailed in Kerrigan et al. (2023b), we direct readers to Appendix A.1 of Kerrigan et al. (2023b) for more details. We note that  $\mu_t(\cdot|z)$  is a Gaussian measure and can be expressed as  $\mu_t(\cdot|z) = \mathcal{N}(m_t, C_t)$ , with mean  $m_t$  and trace-class covariance operator  $C_t$ . Inspired by Tong et al. (2024), we choose  $m_t$  and  $C_t$  to have the following forms:
+
+$$m_t = t \cdot h_1 + (1 - t) \cdot h_0 \quad (16)$$
+
+$$C_t = \sigma_{\min}^2 C_0 \quad (17)$$
+
+where  $C_0$  is the same Gaussian covariance operator defined for  $\mu_0$  and  $\sigma_{\min}$  is a small constant. Further, similar to finite-dimensional flow matching, we only consider the simplest vector field that applies a canonical transformation for Gaussian measures, such that the flow has the form:  $\phi_t(h|z) = m_t + \sigma_{\min} h_0 \approx t \cdot h_1 + (1 - t) \cdot h_0$ . From Eq. 10, we can get  $\mathcal{G}_t(h|z) = h_1 - h_0$ , indicating  $\mathcal{G}_t(h|z)$  is independent of the time  $t$  and the path from  $h_0$  to  $h_1$  is a direct, straight line. Equipped with well-constructed conditional vector field and probability measures, we can train a neural operator  $\nu_\theta$  with the conditional flow matching loss
+
+$$\mathcal{L}_{\text{CFM}}^\dagger = \mathbb{E}_{t \sim \mathcal{U}[0,1], g \sim \mu_t, z \sim \pi(\nu_0, \nu_1)} \|\mathcal{G}_\theta(t, g) - \mathcal{G}_t(g|z)\|^2. \quad (18)$$
+
+Next, we explore how to approximate the true optimal transport plan from optimal coupling of the joint measure  $\pi(\nu_0, \nu_1)$ . A common way for measuring the distance between two probability measure is 2-Wasserstein distance, which a special case of static Kantorovich formulation (Kantorovich & Rubinshtein, 1958). The static 2-Wasserstein distance is defined as follows
+
+$$W_{\text{sa}}(\nu_0, \nu_1)_2^2 = \inf_{\pi \in \Pi} \int_{\mathcal{H} \times \mathcal{H}} \|h_0 - h_1\|^2 d\pi(h_0, h_1) \quad (19)$$
+
+In the ODE framework, we also care about the dynamic form of the 2-Wasserstein distance to estimate the cost along the transport trajectory, which also is a special case of dynamic Kantorovich
+
+{6}------------------------------------------------
+
+formulation (Chizat et al., 2018).
+
+$$W_{\text{dyn}}(\nu_0, \nu_1)_2^2 = \inf_{\mu_t, \mathcal{G}_t} \int_{\mathcal{H}} \int_0^1 \|\mathcal{G}_t(g)\|^2 d\mu_t(g) dt \quad (20)$$
+
+As stated in Step 3 of Proof of Theorem 4.3 of Chizat et al. (2018), for general measures  $\nu_0, \nu_1$ , we have  $W_{\text{sta}} \leq W_{\text{dyn}}$ . However, within the OFM framework, the marginal probability measure is a sum of Dirac measures as described in Eq. 14, and we selected  $\nu_0$  as a Gaussian measure and assumed  $\nu_1$  has full support on the Cameron-Martin space associated with  $\nu_0$ . Furthermore, the cost function of 2-Wasserstein distance is squared  $L^2$  norm, which is continuous by nature. According to Lemma 4.4 of (Chizat et al., 2018),  $W_{\text{sta}} = W_{\text{dyn}}$  for our specifically constructed  $\mu_t$  and  $\mathcal{G}_t$  in the sense of weak convergence. Therefore, to get the dynamic optimal transport plan, we only need to find a joint measure  $\pi(\nu_0, \nu_1)$  that achieves the infimum in Eq. 19. In practice, we use a minibatch approximation of optimal coupling between  $\nu_0$  and  $\nu_1$ . The above approach extends the dynamic (marginal) optimal transport framework of (Tong et al., 2024) to infinite-dimensional function space.
+
+### 4.3 LIKELIHOOD ESTIMATION AND BAYESIAN UNIVERSAL FUNCTIONAL REGRESSION
+
+We parameterize  $\mathcal{G}_\theta$  with FNO (Li et al., 2021) to ensure our model is resolution agnostic, and assume  $\mathcal{G}_\theta$  learns the map from  $\nu_0$  to  $\nu_1$ , which serves as the prior. In practice, we deal with discretized evaluations of functions that may have different sampling rate and resolution. For instance, consider a function  $u$  sampled from  $\mu_1$ , observed on a collection of points  $f_1 := \{u(x_1), u(x_2), \dots, u(x_m)\}$ ; thus we have a density function  $\mathbb{P}(f_1)$  defined on collection of points  $\{x_1, x_2, \dots, x_m\}$ , where  $\mathbb{P}(f_1)$  is derived from measure  $\mu_1$ . This is similar to how a multivariate Gaussian distribution can be derived from a Gaussian measure characterized by a Gaussian process. Therefore, we can rewrite Eq. 3 as:
+
+$$\log \mathbb{P}(f_1) = \log \mathbb{P}(f_0) - \int_0^1 (\nabla \cdot \mathcal{G}_\theta)(f_t) dt, \quad (21)$$
+
+where  $f_0$  and  $f_t$  are drawn from the reference Gaussian measure  $\nu_0$  and  $\nu_t$ , respectively, which are also defined on the collection of point  $\{x_1, x_2, \dots, x_m\}$ . Thus  $\mathbb{P}(f_0)$  is a multivariate Gaussian with a tractable density function. Furthermore, with the probability density function  $\mathbb{P}(f_1)$ , we can evaluate the precise likelihood of any  $f_1$  from  $\mathbb{P}(f_1)$  via Eq. 21. However, following a similar argument to Grathwohl et al. (2018), the computation of  $\nabla \cdot \mathcal{G}_\theta(f)$  incurs a cost of  $\mathcal{O}(D^2)$  where  $D$  is cardinality of set  $\{x_1, x_2, \dots, x_m\}$ . This quadratic time complexity renders the likelihood calculation prohibitively expensive. To address this issue, we adopt the strategy proposed in Grathwohl et al. (2018), utilizing the unbiased Skilling-Hutchinson trace estimator (Hutchinson, 1989; Skilling, 1989) to approximate the divergence term. This technique reduces the computation cost to  $\mathcal{O}(D)$ , which is the same as the cost of inference, thereby streamlining the evaluation process. The estimator is implemented as follows:
+
+$$\nabla \cdot \mathcal{G}_\theta(f) = \mathbb{E}_{p(\varepsilon)} \left[ \varepsilon^T \frac{\partial \mathcal{G}_\theta(f, t)}{\partial f} \varepsilon \right] \quad (22)$$
+
+In the unbiased trace estimator, the random variable  $\varepsilon$  is characterized by  $\mathbb{E}(\varepsilon) = 0$  and  $\text{Cov}(\varepsilon) = I$ . The gradient computation in Eq. 22 can be efficiently handled with reverse-mode automatic differentiation, allowing for precise estimation with arbitrary error by averaging over a sufficient number of runs, which can benefit from parallel computing of GPUs.
+
+With the efficient tool established for estimating the likelihood of any discretized function samples, we now turn our attention to Bayesian functional regression. Consider a collection of pointwise observations of the underlying unknown function drawn from  $\mu_1$ , that is corrupted with Gaussian noise, denoted as  $\{\hat{u}(x_1), \hat{u}(x_2), \dots, \hat{u}(x_n)\}$  or  $\{\hat{u}(x_i)\}_{i=1}^n$ . We specifically focus on Gaussian white noise characterized by  $\epsilon \sim \mathcal{N}(0, \sigma^2)$ , such that  $\hat{u}(x_i) = u(x_i) + \epsilon_i$  for  $i \in \{1, \dots, n\}$ . In UFR setting, we are interested in the posterior distribution on new  $m \geq n$  points that include the  $n$  observation points. With Bayes rule, we have the posterior:
+
+$$\mathbb{P} \left( \{u(x_i)\}_{i=1}^m \mid \{\hat{u}(x_i)\}_{i=1}^n \right) = \frac{\mathbb{P} \left( \{\hat{u}(x_i)\}_{i=1}^n \mid \{u(x_i)\}_{i=1}^m \right) \cdot \mathbb{P} \left( \{u(x_i)\}_{i=1}^m \right)}{\mathbb{P} \left( \{\hat{u}(x_i)\}_{i=1}^n \right)} \quad (23)$$
+
+{7}------------------------------------------------
+
+Taking the logarithm of Eq. 23, we have:
+
+$$\begin{aligned} \log \mathbb{P} \left( \{u(x_i)\}_{i=1}^m \mid \{\hat{u}(x_i)\}_{i=1}^n \right) &= \log \mathbb{P} \left( \{\hat{u}(x_i)\}_{i=1}^n \mid \{u(x_i)\}_{i=1}^m \right) + \log \mathbb{P} (\{u(x_i)\}_{i=1}^m) \\ &\quad - \log \mathbb{P} (\{\hat{u}(x_i)\}_{i=1}^n) \end{aligned} \quad (24)$$
+
+Given  $\epsilon_i \sim \mathcal{N}(0, \sigma^2)$  and  $\{\epsilon_i\}_{i=1}^n$  is a multivariate Gaussian, then  $\{\hat{u}(x_i)\}_{i=1}^n \mid \{u(x_i)\}_{i=1}^n$  is a shifted multivariate Gaussian with mean  $\{u(x_i)\}_{i=1}^n$  translated from the original multivariate Gaussian  $\{\epsilon_i\}_{i=1}^n$ . Due to the translation invariance property of Gaussian distribution, We have :
+
+$$\log \mathbb{P} \left( \{\hat{u}(x_i)\}_{i=1}^n \mid \{u(x_i)\}_{i=1}^n \right) = \log \mathbb{P} (\{\epsilon_i\}_{i=1}^n) = -\frac{\sum_{i=1}^n \|\hat{u}(x_i) - u(x_i)\|^2}{2\sigma^2} - \frac{n}{2} \log(2\pi\sigma^2) \quad (25)$$
+
+We notice  $m > n$  and  $\{\hat{u}(x_i)\}_{i=1}^n$  only depends on  $\{u(x_i)\}_{i=1}^n$ , and doesn't depend on  $\{u(x_i)\}_{i=n+1}^m$ . Thus  $\log \mathbb{P} (\{\hat{u}(x_i)\}_{i=1}^n \mid \{u(x_i)\}_{i=1}^m) = \log \mathbb{P} (\{\hat{u}(x_i)\}_{i=1}^n \mid \{u(x_i)\}_{i=1}^n)$ .
+
+For evaluating  $\log \mathbb{P} (\{u(x_i)\}_{i=1}^m)$ , which is the second part on the right-hand side of Eq. 24, we can efficiently calculate it with the likelihood estimation tool described above. The third part on the right hand side of Eq. 24 ( $\log \mathbb{P} (\{\hat{u}(x_i)\}_{i=1}^n)$ ) represents the evidence and is constant. Thus the posterior distribution of Eq 24 can be simplified as:
+
+$$\log \mathbb{P} \left( \{u(x_i)\}_{i=1}^m \mid \{\hat{u}(x_i)\}_{i=1}^n \right) = -\frac{\sum_{i=1}^n \|\hat{u}(x_i) - u(x_i)\|^2}{2\sigma^2} + \log \mathbb{P} (\{u(x_i)\}_{i=1}^m) + C \quad (26)$$
+
+Where the constant  $C = -\frac{n}{2} \log(2\pi\sigma^2) - \log \mathbb{P} (\{\hat{u}(x_i)\}_{i=1}^n)$ . Given the closed-form posterior distribution, we adopt SGLD (Welling & Teh, 2011) to efficiently sample from the posterior, and then derive statistical features of interest, e.g. mean and variance, from the posterior samples. More specifically, we implement the posterior sampling strategy developed by Shi et al. (2024a), which suggests that given an invertible framework, sampling within the Gaussian process space (where the Gaussian measure  $\nu_0$  is defined) and then mapping to the data function space (where data measure  $\nu_1$  defined) yields better performance compared to direct sampling in the data function space. In all experiments, we use the dopri5 ODE solver provided by torchdiffeq Chen et al. (2019) with atol=1e-5 and rtol=1e-5. Detailed posterior sampling algorithm is provided in Appendix A.5
+
+## 5 EXPERIMENTS
+
+In this section, we demonstrate the superior regression performance compared to several baselines across a variety of function datasets, including both Gaussian and highly non-Gaussian Process. As baselines, we employ standard Gaussian Process Regression (Williams & Rasmussen, 2006), Deep GPs (Salimbeni & Deisenroth, 2017; Jankowiak et al., 2020), Neural Processes (Kim et al., 2019; Garnelo et al., 2018), and Operator Flow (Shi et al., 2024a).
+
+For our function dataset, we analyze: (1) Gaussian and non-Gaussian with known posterior, including 1D Gaussian Processes, 2D Gaussian Random Fields (GRF), and 1D Truncated Gaussian Processes (TGP). (2) Highly non-Gaussian process datasets with unknown posterior, such as those derived from Navier-Stokes equations, black hole dataset from expensive Monte Carlo simulation, and 2D Signed Distance Functions extracted from MNIST digits (MNIST-SDF) (Sitzmann et al., 2020). During regression, we assume that the prior  $\mathcal{G}_0$  is always successfully trained and remains frozen. Details about the learning process for priors are provided in the Appendix A.6.
+
+**Gaussian Processes.** This experiment replicates the results of classical GPR, wherein the posterior distributions are precisely known in a closed form. The process involves generating a single new realization from the data measure  $\nu_1$ . We then select observations at 6 randomly chosen positions, incorporating a predefined noise level. The posterior is inferred across 128 positions, which includes estimating noise-free values at the observation points. We evaluate our results with two commonly used quantities in the GP literature (1) Standardized Mean Squared Error (SMSE) that normalizes the mean squared error by the variance of the ground truth; and (2) Mean Standardized Log Loss (MSLL), originally introduced by Williams & Rasmussen (2006), defined as:
+
+$$- \log p(y_* \mid \{\hat{u}(x_i)\}_{i=1}^n, x_*) = \frac{1}{2} \log(2\pi\sigma_*^2) + \frac{(y_* - \bar{y})^2}{2\sigma_*^2} \quad (27)$$
+
+{8}------------------------------------------------
+
+![Figure 2: OFM regression on GP data. (a) Ground truth GP regression with observed data and predicted samples. (b) OFM regression with observed data and predicted samples. (c) Standard deviation comparison between true GP and OFM predictions.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 2 consists of three subplots. Subplot (a) shows the ground truth GP regression with observed data (blue dots) and predicted samples (dashed lines). Subplot (b) shows the OFM regression with observed data (blue dots) and predicted samples (dashed lines). Subplot (c) compares the standard deviation of the true GP (solid blue line) and OFM predictions (dashed orange line) against the ground truth (dashed green line).
+
+Figure 2: OFM regression on GP data. (a) Ground truth GP regression with observed data and predicted samples. (b) OFM regression with observed data and predicted samples. (c) Standard deviation comparison between true GP and OFM predictions.
+
+Figure 2: OFM regression on GP data. (a) Ground truth GP regression with observed data and predicted samples. (b) OFM regression with observed data and predicted samples. (c) Standard deviation comparison between true GP and OFM predictions.
+
+![Figure 3: OFM regression on TGP data. (a) Ground truth TGP regression with observed data and predicted samples. (b) OFM regression with observed data and predicted samples. (c) Standard deviation comparison between true TGP and OFM predictions. (d) prior GP regression with observed data and predicted samples. (e) Standard deviation comparison between true TGP and GP prior predictions.](bedcca5cdf168e3508ef511d94ec514c_img.jpg)
+
+Figure 3 consists of five subplots. Subplots (a), (b), and (c) are similar to Figure 2 but for TGP data. Subplot (d) shows the prior GP regression with observed data (blue dots) and predicted samples (dashed lines), with a red dashed line representing the upper bound. Subplot (e) compares the standard deviation of the true TGP (solid blue line) and GP prior predictions (dashed orange line) against the ground truth (dashed green line).
+
+Figure 3: OFM regression on TGP data. (a) Ground truth TGP regression with observed data and predicted samples. (b) OFM regression with observed data and predicted samples. (c) Standard deviation comparison between true TGP and OFM predictions. (d) prior GP regression with observed data and predicted samples. (e) Standard deviation comparison between true TGP and GP prior predictions.
+
+Figure 3: OFM regression on TGP data. (a) Ground truth TGP regression with observed data and predicted samples. (b) OFM regression with observed data and predicted samples. (c) Standard deviation comparison between true TGP and OFM predictions. (d) prior GP regression with observed data and predicted samples. (e) Standard deviation comparison between true TGP and GP prior predictions.
+
+where  $\{\hat{u}(x_i)\}_{i=1}^n$  represents observations,  $x_*, y_*$  indicate the new positions queried, and the test data (true posterior samples). Meanwhile,  $\bar{y}_*, \sigma_*^2$  are predicted mean and variances from the model. We average out SMSE and MSLL over a test dataset contains 1000 true GP posterior samples for all models. The performance of each model is detailed in Table 1. From Fig. 2, the regression with OFM matches the analytical solution very well and provides realistic posterior samples.
+
+**Truncated Gaussian Processes.** In this experiment, we analyze the regression performance of OFM for tractable non-Gaussian processes. Specifically, we work on truncated Gaussian Process (Swiler et al., 2020; Shi et al., 2024a), which constrains the function amplitude within a specified range. This is achieved by applying a sampling-rejection strategy on samples from the GP prior. We set the bounds of our TGP to  $[-1.2, 1.2]$  and perform regression using observations only at three points, while estimating the posterior across 128 points. Subsequently, we sample 1000 true TGP posteriors from the GP prior to calculate the mean and standard deviation. Traditional metrics like MSLL and SMSE, which assume a Gaussian posterior, are not suitable for TGP. Therefore, we evaluate performance using the mean squared error for both the predicted mean and standard deviation. The results are reported in Table. 1, and illustrated in Fig. 3. OFM accurately learns the specified bounds and provides accurate estimations of mean and standard deviation, along with realistic posterior samples. In contrast, directly applying GP regression exceeds the bounds and yields unrealistic posterior samples.
+
+**Gaussian Random Fields.** Similar to the 1D GP example, we extend our regression analysis to 2D GRF. As shown in Fig. 5 and detailed in Table 1, OFM provide accurate posterior estimation. The relative error shown in Fig. 5 is the absolute error normalized by the maximum absolute value of the mean prediction derived from the ground truth GP regression.
+
+{9}------------------------------------------------
+
+**Navier-Stokes, Black hole and MNIST-SDF datasets.** We collected a 2D Navier-Stokes dataset and applied OFM for the regression. Unlike Gaussian Process, where MSLL and SMSE score serve as standard benchmarks, evaluating the performance of models on general non-Gaussian processes presents a significant challenge due to the difficulty or impossibility of determining the true posterior and lack of benchmarks. Therefore, we present the predicted mean, and a posterior sample in Fig. 1 for visual comparison with the ground truth. The predicted mean, along with the posterior sample, are closely aligned with the ground truth. In contrast, traditional GP regression failed to accurately capture the dynamics of the Navier-Stokes data. In Fig. 4, we conduct a similar analysis using a simulated black hole dataset. Here, OFM provides a more realistic mean and posterior sample that capture the density and swirling patterns of the black hole. Once again, GPR fails to capture these key statistics. Next, we observe similar outcomes when applying OFM to the MNIST-SDF example (Fig 7), where OFM correctly recognizes the number "7" while GPR does not.
+
+![Figure 4: OFM regression on black hole data. (a) Partial observations: a scatter plot of 32 random points. (b) Ground Truth: a heatmap of the true black hole density. (c) OFM mean: the predicted mean density from OFM. (d) OFM sample: one posterior sample from OFM. (e) GP sample: one posterior sample from a Gaussian Process. The OFM results (c, d) are visually closer to the ground truth (b) than the GP result (e).](7801d00a216dc4dc8a7d210dcb5fe3c5_img.jpg)
+
+Figure 4: OFM regression on black hole data. (a) Partial observations: a scatter plot of 32 random points. (b) Ground Truth: a heatmap of the true black hole density. (c) OFM mean: the predicted mean density from OFM. (d) OFM sample: one posterior sample from OFM. (e) GP sample: one posterior sample from a Gaussian Process. The OFM results (c, d) are visually closer to the ground truth (b) than the GP result (e).
+
+Figure 4: OFM regression on black hole data with resolution  $64 \times 64$ . (a) 32 random observations. (b) Ground truth sample. (c) Predicted mean from OFM. (d) One posterior sample from OFM. (e) One posterior sample from best fitted GP.
+
+| Dataset $\rightarrow$<br>Algorithm $\downarrow$ Metric $\rightarrow$ | 1D GP |  | 2D GRF |  | 1D TGP |  |
+|-|-|-|-|-|-|-|
+|  | SMSE | SMLL | SMSE | SMLL | $\mu$ | $\sigma$ |
+| GP prior | - | - | - | - | $6.4 \cdot 10^{-2}$ | $1.6 \cdot 10^{-2}$ |
+| OpFlow | $5.0 \cdot 10^{-1}$ | $2.0 \cdot 10^{-1}$ | $1.4 \cdot 10^{-1}$ | <b><math>1.1 \cdot 10^{-1}</math></b> | $1.3 \cdot 10^{-2}$ | $3.9 \cdot 10^{-3}$ |
+| NP | $6.1 \cdot 10^{-1}$ | $4.5 \cdot 10^0$ | $1.7 \cdot 10^{-1}$ | $2.1 \cdot 10^0$ | $1.0 \cdot 10^{-1}$ | $1.9 \cdot 10^{-2}$ |
+| ANP | $5.1 \cdot 10^{-1}$ | $9.8 \cdot 10^{-1}$ | $1.6 \cdot 10^{-1}$ | $1.1 \cdot 10^0$ | $1.4 \cdot 10^{-1}$ | $1.7 \cdot 10^{-2}$ |
+| DGP | $4.1 \cdot 10^{-1}$ | $6.8 \cdot 10^{-2}$ | $1.8 \cdot 10^0$ | $4.2 \cdot 10^0$ | $4.9 \cdot 10^{-1}$ | $1.4 \cdot 10^{-2}$ |
+| DSPP | $4.7 \cdot 10^{-1}$ | $6.5 \cdot 10^0$ | $1.9 \cdot 10^{-1}$ | $6.6 \cdot 10^0$ | $1.1 \cdot 10^{-2}$ | $1.3 \cdot 10^{-2}$ |
+| OFM | <b><math>4.1 \cdot 10^{-1}</math></b> | <b><math>5.5 \cdot 10^{-2}</math></b> | <b><math>1.3 \cdot 10^{-1}</math></b> | <b><math>1.6 \cdot 10^{-1}</math></b> | <b><math>5.2 \cdot 10^{-3}</math></b> | <b><math>9.5 \cdot 10^{-4}</math></b> |
+
+Table 1: Comparison of OFM with baseline models: GPR; OpFlow (Shi et al., 2024a); Neural Processes (Garnelo et al. (2018), NP); Attentive NP (Kim et al. (2019), ANP); Deep variational GP (Salimbeni & Deisenroth (2017), DGP); Deep Sigma Point Process (Jankowiak et al. (2020), DSPP); Datasets contain 1D GP, 2D GRF, and 1D TGP examples. Metrics SMSE and SMLL used for 1D GP and 2D GRF example. Mean squared error for the predicted mean ( $\mu$ ) and predicted standard deviation ( $\sigma$ ) are used for TGP example. Performance of GP regression for 1D GP and 2D GRF are removed (marked with ‘-’), which are taken as the ground truth. Best performance in bold.
+
+## 6 CONCLUSION
+
+In this paper, we proposed Operator Flow Matching (OFM) for stochastic process learning, which generalizes finite-dimensional marginal optimal transport flow matching model to infinite-dimensional function space. OFM efficiently computes the probability density for any finite collection of points and supports mathematically tractable functional regression. We extensively tested OFM across a diverse range of datasets, including those with closed-form GP and non-GP data, as well as highly non-GP such as Navier-Stokes and black hole data. In comparative evaluations, OFM consistently outperformed all baseline models, establishing new standards in stochastic process learning and regression.
+
+ Rest of paper (reference and Appendix) is removed.

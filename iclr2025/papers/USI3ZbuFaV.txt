@@ -1,0 +1,335 @@
+
+
+{0}------------------------------------------------
+
+# CERTIFYING LANGUAGE MODEL ROBUSTNESS WITH FUZZED RANDOMIZED SMOOTHING: AN EFFICIENT DEFENSE AGAINST BACKDOOR ATTACKS
+
+Bowei He<sup>1\*</sup>, Lihao Yin<sup>2</sup>, Hui-Ling Zhen<sup>2</sup>, Jianping Zhang<sup>3</sup>, Lanqing Hong<sup>2</sup>,  
+Mingxuan Yuan<sup>2</sup>, Chen Ma<sup>1†</sup>
+
+<sup>1</sup> City University of Hong Kong, <sup>2</sup> Huawei, Hong Kong, <sup>3</sup> The Chinese University of Hong Kong
+
+## ABSTRACT
+
+The widespread deployment of pre-trained language models (PLMs) has exposed them to textual backdoor attacks, particularly those planted during the pre-training stage. These attacks pose significant risks to high-reliability applications, as they can stealthily affect multiple downstream tasks. While certifying robustness against such threats is crucial, existing defenses struggle with the high-dimensional, interdependent nature of textual data and the lack of access to original poisoned pre-training data. To address these challenges, we introduce **Fuzzed Randomized Smoothing (FRS)**, a novel approach for efficiently certifying language model robustness against backdoor attacks. FRS integrates software robustness certification techniques with biphasic model parameter smoothing, employing Monte Carlo tree search for proactive fuzzing to identify vulnerable textual segments within the Damerau-Levenshtein space. This allows for targeted and efficient text randomization, while eliminating the need for access to poisoned training data during model smoothing. Our theoretical analysis demonstrates that FRS achieves a broader certified robustness radius compared to existing methods. Extensive experiments across various datasets, model configurations, and attack strategies validate FRS’s superiority in terms of defense efficiency, accuracy, and robustness.
+
+## 1 INTRODUCTION
+
+Pre-trained language models (PLMs) have become the cornerstone of numerous natural language processing tasks, with fine-tuning being the most common approach for adapting these models to customized downstream applications (Kenton & Toutanova, 2019; Liu et al., 2019; Touvron et al., 2023). However, the widespread adoption of PLMs also has new vulnerabilities, especially textual backdoor attacks. These attacks involve injecting malicious knowledge into PLMs, either through poisoned training data or direct modification of model parameters, compromising their reliability and trustworthiness (Cheng et al., 2024; Zhao et al., 2024). Different from the ordinary poisoning data attack, textual backdoor attacks are particularly insidious because they do not significantly impact model performance on benign inputs, making them difficult to detect through standard evaluation methods. The attacked PLMs only exhibit malicious behavior when presented with specific trigger inputs, allowing them to evade human inspection.
+
+In the PLM pre-training and fine-tuning phases, there are two backdoor planting paradigms (Guo et al., 2022): 1) embedding backdoors in the pre-trained model by poisoning training before model weights are published for downstream use; 2) embedding backdoors in the downstream model during the fine-tuning phase via poisoning the fine-tuning data. Note that the second paradigm is fundamentally the same as the backdoor attacks to conventional standalone models. Considering the more widespread and potentially more harmful nature of pre-training phase attacks, which can simultaneously affect multiple downstream applications, we focus on the pre-training backdoor attack.
+
+Though different backdoor attack strategies for PLMs have been investigated, the effective defense schemes against them are less explored. As steganography techniques for ensuring trigger invisibility
+
+\*Work done as an intern in Huawei Noah’s Ark Lab, Hong Kong, boweihe2-c@my.cityu.edu.hk
+
+†Corresponding author, chenma@cityu.edu.hk
+
+{1}------------------------------------------------
+
+constantly evolve, conventional *empirical defense* methods (Qi et al., 2021a; Yang et al., 2021b; Yan et al., 2023) find it increasingly challenging to consistently and effectively detect triggers. Besides, many existing methods (Chen & Dai, 2021; Cui et al., 2022) are restricted to addressing backdoor attacks on the downstream model during the fine-tuning phase, leaving a gap in our focus. In this work, we delve into the *certified defense* approach with the theoretical guarantee against backdoor attacks on PLMs, which offers more robust and provable effectiveness compared to empirical methods.
+
+Randomized smoothing has been widely regarded as an effective approach for certified robustness against the evasion attacks (Cohen et al., 2019), like the adversarial attacks. Recently, a few pioneering works (Xie et al., 2021; Weber et al., 2023) have also explored its potentials against backdoor attacks and are attracting increasing attention. However, almost all of these methods are limited to conventional vision and tabular scenarios with continuous numeric inputs, and face challenges when directly applied to PLMs with discrete natural language inputs. Furthermore, training from scratch in such scenarios means defense methods can have access to poisoned data and protect the model during the poisoning training phase (*in-attack*). However, in our setting where backdoor attack happens during the pre-training phase, the protectors have no access to the original poisoned training data, thus the corresponding defense methods can only be *post-attack*. Most critically, the traditional randomized smoothing methods do not investigate the potential model “bugs” –malicious knowledge introduced during the poisoning phase, resulting in poison-agnostic passive defense. This seriously hinders the further enhancement of defense efficacy and language model robustness. Meanwhile, the success of software verification techniques like *fuzzing* in program robustness certification makes it inspiring to improve the PLM defense efficiency, output accuracy, and extend the certified robustness radius by probing the PLM bugs proactively via iterating over mutated or generated testing samples.
+
+Based on the above motivations, we propose the **Fuzzed Randomized Smoothing (FRS)** framework. We first formulate the randomized smoothing framework against the textual backdoor attacks for PLMs, which can accommodate various types of triggers in the Damerau-Levenshtein space (Damerau, 1964; Levenshtein et al., 1966). Second, we propose the biphased model parameter smoothing to conduct the post-attack defense during the fine-tuning and inference phases. The direct smoothing on model parameters instead of fine-tuning data helps avoid the huge resource overhead. Then, we develop the fuzzed text randomization which employs Monte Carlo tree search to identify the vulnerable areas containing triggers, thus concentrating randomization probability on identified areas. In addition to theoretically proving the broader certified robustness radius and higher defense efficiency, we also conduct extensive experiments to empirically demonstrate our approach’s advantages and discuss its scalability to future larger language models.
+
+## 2 RELATED WORK
+
+**Textual Backdoor Attacks and Defenses** Different from the previous evasion attacks to the language models, the textual backdoor attacks take effect in both training and inference phases via poisoning training data/model parameters and perturbing inputs with triggers respectively, which make them more covert and difficult to defend against. Some pioneering works (Dai et al., 2019; Chen & Dai, 2021) discussed how to toxify the training corpus to attack the LSTM-based language models. Due to the prevalence of *pre-training* and *fine-tuning* paradigm for transform-structure language models, more recent works (Zhao et al., 2023; Chen et al., 2021a;b; Shen et al., 2021; Yang et al., 2021a; Li et al., 2021; Zhang et al., 2021; Guo et al., 2022; Qi et al., 2021b;c) explored how to inject the lethal backdoor attacks to pre-trained models, making them vulnerable in various downstream tasks. Correspondingly, to alleviate the harms brought by such kinds of textual backdoor attacks, some empirical defense methods (Qi et al., 2021b;c;a) have also been proposed. Nevertheless, most of them are based on heuristic rules, lacking the enough theoretical guarantees though achieving acceptable performance in some specific scenarios. Our focus in this paper is to equip language models with certified robustness against textual backdoor attacks, regardless of the attack strategies and forms.
+
+**Certified Robustness of Language Models** Though many *empirical defense* methods (Qi et al., 2021a; Cui et al., 2022; Yan et al., 2023) against various textual attacks have been proposed and widely deployed in industrial applications, the *certified defense* approaches with theoretical guarantees are still being regarded as the *Holy Grail* of research in this direction. Among existing attacks to language models, the *evasion attacks* and *backdoor attacks* are two kinds of most common and impactful ones. Concretely, interval bound propagation (Jia et al., 2019; Huang et al., 2019; Ye et al., 2020;
+
+{2}------------------------------------------------
+
+Wang et al., 2023), abstract interpretation (Bonaert et al., 2021; Du et al., 2021) and randomized smoothing (Zhang et al., 2023; Zhao et al., 2022; Zeng et al., 2021; Wang et al., 2021; Cohen et al., 2019; Ji et al., 2024; Zhang et al., 2024b; Lou et al., 2024) are the most representative schemes to achieve certified defense against the evasion attacks. However, for the more challenging and harmful backdoor attacks which directly injects the malicious information into the language model parameters, certified robustness solutions are still lacking. How to adapt the successful methods against evasion attacks like randomized smoothing to the textual backdoor attacks is interesting and also meaningful, which is the focus of this work. Fortunately, some preliminary works (Wang et al., 2020; Xie et al., 2021; Weber et al., 2023) have explored the related foundational techniques in computer vision scenarios, which can shed some insights for our method design.
+
+## 3 PRELIMINARIES
+
+In this section, we provide the formulation of the textual backdoor attack on PLMs and the corresponding goal of defense. In our scenario, the language model (LM)  $f(\cdot)$  parameterized by  $\theta$  is first pre-trained with the mixture of clean and poisoned corpus to plant the back patterns by the malicious attackers. The pre-trained model parameter checkpoints are then uploaded to the open-source repositories like Hugging Face<sup>1</sup>. The users download the attacked pre-trained model parameters  $\theta'_P$  and fine-tune them to  $\theta'_F$  on the local downstream data  $D_F$  with  $\mathbf{x} = [x_1, x_2, \dots, x_L]$  as the textual input and  $y \in \mathcal{Y}$  as the output label. We introduce the **normalized Damerau-Levenshtein distance** (Damerau, 1964; Levenshtein et al., 1966)  $d_{DL}(\mathbf{x}, \mathbf{x}')$  to measure the edit distance between the original benign input  $\mathbf{x}$  and the perturbed input  $\mathbf{x}'$  by the triggers, which allows the operations like token insertion, deletion, substitution, and transposition. Thus, due to the above flexibility, the normalized Damerau-Levenshtein distance can be applied to almost all trigger patterns of existing textual backdoor attack methods, including character-level, word-level, and sentence-level ones.
+
+The goal of the defense is to guarantee that the model prediction of  $f(\mathbf{x}'; \theta'_F)$  can be consistent with that of  $f(\mathbf{x}; \theta_F)$  whose training procedure is not attacked by the poisoned corpus. The LM  $f(\cdot)$  is **certified robust** against the backdoor attack if it satisfies the following criterion: for any input  $\mathbf{x}$ ,
+
+$$f(\mathbf{x}'; \theta'_F) = f(\mathbf{x}; \theta_F), \forall \mathbf{x}' \text{ s.t. } d_{DL}(\mathbf{x}, \mathbf{x}') \leq R_r L. \quad (1)$$
+
+, where  $R_r (0 \leq R_r \leq 1)$  denotes the robustness radius. A certified robust LM is expected to generate the robust prediction, given that at most  $R_r L$  tokens in the input  $\mathbf{x}$  are perturbed.
+
+## 4 METHODOLOGY
+
+### 4.1 RANDOMIZED SMOOTHING DEFENSE
+
+Randomized smoothing was originally proposed to achieve the **certified robustness** effect against evasion attacks in computer vision scenario (Cohen et al., 2019). We first extend its basic framework to the textual backdoor attacks which have not been thoroughly explored before. Generally, randomized smoothing introduces a **smoothed model**  $\tilde{f}$  based on the base model  $f(\cdot)$  by exerting the random noise on the fine-tuning data and test samples. In essence, the rationale behind leveraging the randomized smoothing defense lies in the observation that the inclusion of noise mitigates the prevalence of decision boundaries with pronounced curvature, thereby reducing the susceptibility to backdoor attacks. Thus, we denote the noiseification operator as  $\oplus$  and define the smoothed model  $\tilde{f}$  as:
+
+$$\tilde{f}(\mathbf{x}') = \arg \max_{y \in \mathcal{Y}} \mathbb{P}_{u, \epsilon} (f(\mathbf{x}' \oplus u; \Omega(\theta'_P, D_F \oplus \epsilon)) = y), \quad (2)$$
+
+where random noise variables  $u \sim \mathbb{P}_u, \epsilon \sim \mathbb{P}_\epsilon$  follow the independent random distributions and are added to the perturbed test samples and fine-tuning data, respectively. Here, the  $\Omega$  indicates the fine-tuning procedure which takes the poisoned pre-trained model parameters  $\theta'_P$  and randomized fine-tuning data  $D_F \oplus \epsilon$  (notes as  $\tilde{D}_F$ ) as inputs and returns the smoothed fine-tuned parameters  $\theta_F$ .
+
+In practice, considering the complexity of LM  $f(\cdot)$  itself, Monte Carlo simulation is an effective approach to approximate the above probability  $\mathbb{P}_{u, \epsilon} (f(\mathbf{x}' \oplus u; \Omega(\theta'_P, D_F \oplus \epsilon)) = y)$  in Eq 2.
+
+<sup>1</sup><https://huggingface.co/>
+
+{3}------------------------------------------------
+
+Therefore, we employ a number of base models  $f(\cdot; \hat{\theta}_{F,k}) (1 \leq k \leq K)$  with parameters  $\hat{\theta}_{F,k}$  fine-tuned on the sampled randomized datasets  $\tilde{D}_{F,k} = D_F \oplus \epsilon_k$  to vote on the final result. Therefore, the Eq. 2 can be transformed to following:
+
+$$\hat{f}(\mathbf{x}'; \hat{\theta}_F) = \arg \max_{y \in \mathcal{Y}} \sum_{k=1}^K \mathbb{1}(f(\tilde{\mathbf{x}}_k; \hat{\theta}_{F,k}) = y), \quad (3)$$
+
+$$\tilde{\mathbf{x}}_k = \mathbf{x}' \oplus u_k, \hat{\theta}_{F,k} = \Omega(\theta'_F, D_F \oplus \epsilon_k),$$
+
+where  $\hat{\theta}_F = [\hat{\theta}_{F,1}, \hat{\theta}_{F,2}, \dots, \hat{\theta}_{F,K}]$  indicates the parameters of the smoothed model  $\hat{f}$  which is actually the ensemble of base models. The distribution of randomness applied on the fine-tuning dataset is controllable, often the isotropic Gaussian noise  $\epsilon \sim \mathcal{N}(0, \sigma^2 \mathbf{I})$ . Naturally, according to the properties of Monte Carlo simulation, as the number of the above base models increases, the voted results become more reliable and the scope of the robustness region becomes larger.
+
+Randomized smoothing can guarantee that, when the perturbation scale is less than the robustness radius  $R_r$ , the prediction  $\hat{f}(\mathbf{x}'; \hat{\theta}_F)$  of the smoothed model for the perturbed input  $\mathbf{x}'$  aligns with the prediction  $f(\mathbf{x}; \theta_F)$  of the model trained on the completely clean dataset for benign input  $\mathbf{x}$ , within a confidence level of  $1 - \alpha$ . Based on this framework, we develop the practical schemes for model parameter smoothing as described in Section 4.2 and test sample randomization in Section 4.3, respectively. Finally, we elaborate on the theoretical analysis in Section 4.4 and Appendix A.
+
+### 4.2 BIPHASED MODEL PARAMETER SMOOTHING
+
+If directly following the approach described in Section 4.1, one might consider fine-tuning  $K$  pre-trained language models on  $K$  distinct, randomized downstream datasets. However, this approach would impose a considerable computational burden. As a result, it becomes an unrealistic strategy for practical scenarios. Therefore, there exists an urgent need for post-attack defense mechanisms that not only have certified robustness guarantees but also provide efficient execution. Thus, we propose the **biphased model parameter smoothing** as a targeted solution particularly for large language models, which is performed during both the fine-tuning and inference phases. This biphased approach notably diminishes data storage requirements for different versions of randomized fine-tuning datasets and drastically reduces the computational overhead associated with training. Besides, this strategy advocates for the selective smoothing of parameters in  $H$  layers proximal to the output — those most vulnerable to backdoor attacks, as highlighted in the literature (Kurita et al., 2020). The detailed smoothing procedures in such two phases are as follows:
+
+**Fine-tuning Phase:** In iteration  $i (1 \leq i \leq I)$  of fine-tuning process, the model parameter smoothing is performed as follows:
+
+$$\hat{\theta}_F^i = \text{Clip}_\rho(\hat{\theta}_F^{i-1} - \eta g(\hat{\theta}_F^{i-1}; B_i)) + \epsilon_{\text{iop}, H}^i, \quad (4)$$
+
+where  $\eta$  and  $\rho$  indicate the learning rate of the fine-tuning process and the norm bound, respectively.  $g(\cdot)$  denotes the gradient function and  $B_i$  is the mini-batch in iteration  $i$ . Especially,  $\hat{\theta}_F^0 = \theta'_F$ .
+
+**Inference Phase:** When completing the model fine-tuning, we conduct the parameter smoothing to the finally obtained  $\hat{\theta}_F^I$  independently for  $K$  times:
+
+$$\hat{\theta}_{F,k} = \text{Clip}_\rho(\hat{\theta}_F^I) + \epsilon_{k, \text{iop}, H}, k = 1, 2, \dots, K, \quad (5)$$
+
+Once the  $K$  smoothed copies of LMs are generated at the beginning of the inference phase, they are fixed and employed for every test sample during the whole inference phase.
+
+### 4.3 FUZZED TEXT RANDOMIZATION
+
+Traditional text randomization in randomized smoothing relies on uniform randomization in the text input, suffering from low efficiency and limited certified robustness radius. Motivation by the fuzzing technique in the software verification research, we design the Monte Carlo tree search (MCTS)-based **fuzzed text randomization** to first proactively identify the vulnerable areas containing the triggers in the input text. We choose MCTS for its ability to efficiently explore high-dimensional discrete textual spaces and adaptively focus on promising areas. Then, such areas will be imposed more possibilities to conduct the text randomization operations. In such a way, the obtained randomized samples are
+
+{4}------------------------------------------------
+
+more likely to remove the information related to the backdoor or damage the triggers' dedicated structure while keeping genuine features intact, which means backdoored texts can be reverted back to their corresponding benign versions. Thus, a broader certified robustness radius can be successfully achieved with the majority voting process over the same number of randomized samples.
+
+#### 4.3.1 VULNERABLE AREA IDENTIFICATION
+
+The primary objective of this MCTS-based fuzzing approach is to efficiently identify potential vulnerable areas in the input text that may contain backdoor triggers. Thus, we first define  $S$  as a search tree, with nodes  $n \in S$  corresponding to segments  $Seg(\mathbf{x}', i, j)$  of the perturbed text  $\mathbf{x}'$  from  $i$ -th token to  $j$ -th token. Each node  $n$  is associated with a score  $V(n)$ , reflecting the potential of the corresponding segment to exhibit trigger impacts. The detailed fuzzing process is as follows:
+
+**Initialization** Initialize  $S$  with a root node  $n_{root}$  representing the original input  $\mathbf{x}'$ . Set  $V(n_{root}) = 0$ .
+
+**MCTS Iterations** Then, in each iteration of MCTS, the following steps are executed:
+
+- **Step 1: Selection** Traverse from the root to a leaf node  $n_l$  using the Upper Confidence Bound (UCB) applied to trees policy:
+
+$$UCB(n_l) = V(n_l) + C \sqrt{\frac{\ln(N_{parent})}{N_{n_l}}}, \quad (6)$$
+
+where  $C$  is an exploration constant,  $N_{n_l}$  signifies the number of visits to node  $n_l$ , and  $N_{parent}$  is the number of visits to  $n_l$ 's parent node.
+
+- **Step 2: Expansion** Upon reaching a leaf node  $n_l$  at the conclusion of the Selection phase, we evaluate whether the text segment corresponding to  $n_l$ , denoted as  $Seg(\mathbf{x}, i, j)$ , can be further divided. This evaluation is based on the linguistic features of the segment, such as phrase boundaries, clause demarcations, or named entities contained within. If the further subdivision is viable, a child node  $n_{new}$  for  $n_l$  will be generated, which represents a subdivision of  $Seg(\mathbf{x}', i, j)$ . The generation of  $n_{new}$  is thus expressed as:
+
+$$\begin{aligned} n_{new} &= Seg(\mathbf{x}', i, k) \text{ or } Seg(\mathbf{x}', k+1, j), \\ k &= i+1, \dots, j-1. \end{aligned} \quad (7)$$
+
+- **Step 3: Simulation** Select a mutation operation  $m$  from a predefined mutation set  $M$ , which includes insertion, deletion, substitution, and transposition operations in the Damerau-Levenshtein space. Next, apply  $m$  to  $n_{new}$ , thus generating a new textual variant  $\tilde{\mathbf{x}}$  of original  $\mathbf{x}'$ . Then,  $\tilde{\mathbf{x}}$  is evaluated to ascertain the deviation in LM's response. Here, we utilize an evaluation criterion  $E(\tilde{\mathbf{x}}, \mathbf{x}')$  based on KL divergence (Kullback & Leibler, 1951) to quantify this deviation:
+
+$$E(\tilde{\mathbf{x}}, \mathbf{x}') = D_{KL}(P_f(y|\tilde{\mathbf{x}}) \| P_f(y|\mathbf{x}')), \quad (8)$$
+
+where  $P_f(y|\mathbf{x})$  indicates the probability distribution of LM  $f$  on different outputs  $y$ .
+
+- **Step 4: Backpropagation** Update scores of all nodes  $n$  from  $n_{new}$  up to  $n_{root}$  based on  $E(\tilde{\mathbf{x}}, \mathbf{x}')$ , thus refining the selection process in subsequent iterations:
+
+$$V_i(n) = \frac{N_n - 1}{N_n} V_{i-1}(n) + \frac{E(\tilde{\mathbf{x}}, \mathbf{x}')}{N_n}, \quad (9)$$
+
+Upon reaching a predefined number of iterations or a termination criterion, we identify segments corresponding to nodes with the highest scores  $V(n)$  as the most likely vulnerable areas  $T(\mathbf{x}')$  with the greatest potential to contain backdoor triggers.
+
+#### 4.3.2 TEXT RANDOMIZATION
+
+Building upon the established MCTS-based fuzzing framework, we proceed to employ text randomization while maintaining the normalized Damerau-Levenshtein distance within a specified threshold. This constraint ensures the semantic and structural integrity of the text by limiting the number and type of textual transformations, thereby preserving the original meaning and syntactic structure.
+
+**Randomization Process:** After identifying vulnerable areas  $T(\mathbf{x}')$  that potentially contain triggers, we apply a targeted randomization strategy which employs differential probabilities for textual segments within and outside  $T(\mathbf{x}')$ . The process consists of the following key steps:
+
+{5}------------------------------------------------
+
+- **Step 1: Damerau-Levenshtein Compliance** We begin by setting a distance threshold  $\Lambda$ . This threshold defines the maximum allowable modification to the original text, measured using the normalized Damerau-Levenshtein distance. Specifically, any alteration to the text must satisfy:
+
+$$d_{DL}(\tilde{\mathbf{x}}, \mathbf{x}') \leq \Lambda, \quad (10)$$
+
+where  $d_{DL}(\tilde{\mathbf{x}}, \mathbf{x}')$  represents the normalized Damerau-Levenshtein distance between the original and mutated text variants.
+
+- **Step 2: Probability-Weighted Randomization Strategy** We formulate a probability weighting function  $\mathcal{W} : \text{Seg}(\mathbf{x}', i, j) \rightarrow [\omega_L, \omega_H]$  to differentially allocate randomization probabilities across the text:
+
+$$\mathcal{W}(\text{segment}) = \begin{cases} \omega_H, & \text{if } \text{segment} \subseteq T(\mathbf{x}'), \\ \omega_L, & \text{otherwise,} \end{cases} \quad (11)$$
+
+where  $\omega_H > \omega_L$  signify higher and lower randomization probabilities, correspondingly. Especially, let  $\omega_M$  denote the traditional uniform randomization probability for each segment. Here, to ensure the equal overall randomization probability for the whole  $\mathbf{x}'$ , we have  $\omega_L < \omega_M < \omega_H$ .
+
+- **Step 3: Randomization Implementation** For each identified segment  $\text{Seg}(\mathbf{x}', i, j)$ , we determine whether to apply a mutation based on a Bernoulli distribution with parameter  $\omega$ , which represents the allocated weight for that segment:
+
+$$B \sim \text{Bernoulli}(\mathcal{W}(\text{Seg}(\mathbf{x}', i, j))). \quad (12)$$
+
+If a mutation is to be applied ( $B = 1$ ), we randomly select a mutation operation  $m$  from the mutation operation set  $M$ . The mutation is then applied as follows:
+
+$$\tilde{\mathbf{x}}_{(i,j)} = \begin{cases} m(\text{Seg}(\mathbf{x}', i, j)), & \text{if } B = 1, \\ \text{Seg}(\mathbf{x}', i, j), & \text{otherwise.} \end{cases} \quad (13)$$
+
+Finally, we consolidate all  $\tilde{\mathbf{x}}_{(i,j)}$  to obtain the randomized version  $\tilde{\mathbf{x}}$ .
+
+- **Step 4: Post-Randomization Validation** Verify the randomized text  $\tilde{\mathbf{x}}$  to ensure compliance with  $d_{DL}$  criteria:
+
+$$\text{Validate } d_{DL}(\tilde{\mathbf{x}}, \mathbf{x}') \text{ s.t. } d_{DL}(\tilde{\mathbf{x}}, \mathbf{x}') \leq \Lambda. \quad (14)$$
+
+Discard any  $\tilde{\mathbf{x}}$  that does not satisfy this condition.
+
+- **Step 5: Aggregation for Randomized Smoothing** Collect all validated  $\tilde{\mathbf{x}}$  instances to create a comprehensive sample set for conducting randomized smoothing. Subsequent model predictions and majority vote processes utilize this set to achieve resilient model decisions with an enlarged certified robustness radius  $R_r$ .
+
+This approach enhances the effectiveness of trigger neutralization in vulnerable areas while reducing unnecessary variations and maintaining linguistic coherence. By constraining randomization within defined perturbation limits, it balances text modification with preservation of original meaning.
+
+### 4.4 THEORETICAL ROBUSTNESS BOUND
+
+**Assumption 1** (Effective Parameter Smoothing). *The output of the smoothed model  $\tilde{f}(\mathbf{x}, \tilde{\theta}_F)$  on the benign input  $\mathbf{x}$  is consistent with that of the clean fine-tuned model  $f(\mathbf{x}, \theta_F)$ , which is also denoted as  $y^*$ :*
+
+$$\tilde{f}(\mathbf{x}, \tilde{\theta}_F) = f(\mathbf{x}, \theta_F). \quad (15)$$
+
+*This assumption can be approximately guaranteed with the biphasic parameter smoothing introduced in Sec. 4.2 as long as  $\eta$  in Eq. 4 is set small enough.*
+
+**Theorem 1** (Model Robustness Condition). *Based on the Assumption 1, the lower bound of the probability that the smoothed model  $\tilde{f}$  returns the  $y^*$  for perturbed input  $\mathbf{x}'$  after the randomized smoothing  $p_{y^*}(\mathbf{x}') = \text{Beta}(\alpha; K_{y^*}, K - K_{y^*} + 1)$ , where  $\text{Beta}(\alpha; \cdot, \cdot)$  is the  $\alpha$ -th quantile of a beta distribution.  $K_{y^*}$  is the voting count for  $y^*$  in  $K$  voters, and  $1 - \alpha$  indicates the confidence level (Zeng et al.). Then, if*
+
+$$\underline{p_{y^*}(\mathbf{x}')} - \beta\Delta > 0.5, \quad (16)$$
+
+{6}------------------------------------------------
+
+, with probability at least  $1 - \alpha$ :  $\tilde{f}(\mathbf{x}') = y^*$ . Here,  $\Delta$  denotes the probability upper bound that trigger segment (with the maximum length of  $R_r L$ ) is not completely randomized:
+
+$$\Delta = 1 - \omega^{R_r L}, \quad (17)$$
+
+where  $\omega$  indicates the randomization probability in the trigger segment (subset of identified vulnerable area).  $\beta = 1$  as long as the model is fully trained to the convergence during the fine-tuning phase.
+
+**Corollary 1** (Broader Robustness Radius). To meet the same level of robustness condition in Eq. 16 and provide the same output probability lower bound  $\underline{p}_{y^*}(\mathbf{x}')$ , under the same number of base models  $K$ , our new robustness radius is as follows:
+
+$$R_r^{\text{new}} = \frac{\log(\omega_M)}{\log(\omega_H)} R_r^{\text{old}}, \quad (18)$$
+
+where  $R_r^{\text{old}}$  is the old radius for traditional randomized smoothing which does not employ our proposed fuzzed text randomization. Considering that  $\omega_M < \omega_H$ ,  $\frac{\log(\omega_M)}{\log(\omega_H)} > 1$ , which means our  $R_r^{\text{new}}$  is larger than  $R_r^{\text{old}}$ . Especially, with more MCTS iteration budget, the confidence that the trigger is successfully captured can be higher, which means we can set  $\omega_L \rightarrow 0, \omega_H \rightarrow 1$ . Thus, the enlargement of the robustness radius can be more obvious.
+
+From Corollary 1, the stronger efficiency of our FRS method on certifying robust language models against backdoors is proved theoretically.
+
+## 5 EXPERIMENTS
+
+When conducting the experiments, we focus on answering following questions to deeply analyze the advantages of our proposed approach: 1) **RQ1**: Can our method achieve better backdoor defense performance compared with other empirical defense and randomized smoothing-based certified defense strategies? 2) **RQ2**: Can our method achieve broader certified robustness radius? 3) **RQ3**: Can our proposed biphased model parameter smoothing and fuzzed text randomization modules both contribute to the defense performance positively? 4) **RQ4**: Can our method achieve consistent defense performance over different victim models?
+
+### 5.1 EXPERIMENT SETUP
+
+**Victim Language Models:** To demonstrate the effectiveness of our approach on PLMs of different configurations, we conduct extensive experiments on a group of diverse PLMs. These include BERT (Kenton & Toutanova, 2019), a pioneering encoder-structured model with hundreds of millions of parameters, RoBERTa (Liu et al., 2019), a more robust PLM of similar size trained on larger dataset with dynamic masking, and the recently developed LLaMA3 (Dubey et al., 2024), a decoder-structured model with billions of parameters which has been pre-trained on colossal corpus.
+
+**Attack Methods:** Based on the assumptions regarding different degrees of attacker knowledge about the target downstream task, the existing pre-training phase textual backdoor attack schemes can be classified into three types: *full data knowledge*, *domain shift*, and *data free*. To comprehensively validate the defense effectiveness against different types of attacks, we adopt RIPPLE<sub>u</sub> (Kurita et al., 2020), LWP (Li et al., 2021), and BadPre (Chen et al., 2021a) to instantiate such three kinds of methods, respectively.
+
+**Defense Baselines:** We compare our proposed FRS with both *empirical defense* and *certified defense* methods. The first category includes methods working on different phases: inference-time defense: RIPPLE<sub>d</sub> (Kurita et al., 2020), ONION (Qi et al., 2021a), RAP (Yang et al., 2021b), Bite (Yan et al., 2023), PSIM (Zhao et al., 2024); training-time defense: BKI (Chen & Dai, 2021), R-Adaptor (Zhu et al., 2022). As for the *certified defense*, we adopt the recently proposed TextGuard (Pei et al., 2023).
+
+**Evaluation Tasks and Datasets:** Following previous literature (Pei et al., 2023), we evaluate the performance of different defense methods on several representative downstream tasks with corresponding datasets: sentiment analysis: SST-2 (Socher et al., 2013); toxicity detection: OffensEval (Zampieri et al., 2019); topic classification: AG'News (Zhang et al., 2015). When conducting *domain shift* poisoning pre-training, we utilize the IMDB (Maas et al., 2011), Twitter (Founta et al., 2018), and 20
+
+{7}------------------------------------------------
+
+Table 1: Results of different defense strategies under various pre-training textual backdoor attack approaches on SST-2, OffensEval, and AG’s News datasets. BERT-base is taken as the victim model. Higher CA, PA, and lower ASR indicate more satisfying defense performance. \* indicates the statistical significance for  $p < 0.01$  on  $t$ -test.
+
+| Dataset | Method | RIPPLE <sub>ca</sub> |  |  | LWP |  |  | BadPre |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|
+|  |  | CA↑ | PA↑ | ASR↓ | CA↑ | PA↑ | ASR↓ | CA↑ | PA↑ | ASR↓ |
+| SST-2 | RIPPLE <sub>ca</sub> | 81.19% | 54.95% | 82.31% | 83.25% | 65.90% | 71.46% | <b>91.74%</b> | 78.19% | 58.83% |
+|  | ONION | 75.28% | 59.64% | 62.30% | 78.46% | 62.17% | 59.82% | 83.72% | 79.82% | 55.73% |
+|  | RAP | 72.82% | 56.41% | 68.41% | 74.34% | 59.65% | 65.37% | 84.74% | 76.24% | 61.37% |
+|  | Bite | 78.06% | 62.32% | 57.80% | 80.19% | 68.29% | 52.47% | 89.25% | 82.98% | 42.16% |
+|  | PSIM | 75.72% | 59.81% | 60.22% | 79.02% | 66.70% | 58.93% | 87.19% | 81.43% | 46.03% |
+|  | BKI | 70.47% | 53.01% | 76.93% | 71.95% | 58.28% | 68.33% | 74.28% | 77.35% | 52.78% |
+|  | R-Adaptor | 72.45% | 55.22% | 71.36% | 74.38% | 60.74% | 62.13% | 82.67% | 76.72% | 48.64% |
+|  | TextGuard | 74.95% | 65.24% | 52.62% | 76.12% | 71.45% | 47.83% | 85.60% | 84.12% | 33.56% |
+|  | FRS | <b>72.36%*</b> | <b>73.25%*</b> | <b>45.12%*</b> | <b>85.67%*</b> | <b>82.91%*</b> | <b>34.25%*</b> | <b>91.64%</b> | <b>91.02%*</b> | <b>18.64%*</b> |
+| OffensEval | RIPPLE <sub>ca</sub> | 83.25% | 72.34% | 61.71% | 85.39% | 75.76% | 59.08% | 93.08% | 81.32% | 54.26% |
+|  | ONION | 78.24% | 68.75% | 59.24% | 79.51% | 71.16% | 62.54% | 82.67% | 77.41% | 51.78% |
+|  | RAP | 79.71% | 57.48% | 68.23% | 82.63% | 61.82% | 68.92% | 85.01% | 76.89% | 56.23% |
+|  | Bite | 82.98% | 72.79% | 53.04% | 83.86% | 73.92% | 59.78% | 92.06% | 84.21% | 48.75% |
+|  | PSIM | 82.75% | 70.51% | 54.92% | 83.17% | 71.95% | 58.53% | 92.31% | 81.80% | 50.39% |
+|  | BKI | 72.46% | 58.50% | 67.39% | 74.54% | 63.37% | 65.29% | 76.18% | 75.94% | 52.78% |
+|  | R-Adaptor | 75.16% | 59.08% | 65.71% | 76.08% | 67.24% | 63.42% | 78.84% | 78.47% | 49.52% |
+|  | TextGuard | 77.31% | 74.08% | 52.14% | 78.42% | 78.58% | 50.17% | 81.56% | 85.83% | 45.42% |
+|  | FRS | <b>85.61%*</b> | <b>79.38%*</b> | <b>42.59%*</b> | <b>87.63%*</b> | <b>85.70%*</b> | <b>41.24%*</b> | <b>94.05%*</b> | <b>91.43%*</b> | <b>38.86%*</b> |
+| AG’s News | RIPPLE <sub>ca</sub> | 76.24% | 47.26% | 68.29% | 80.25% | 56.26% | 62.37% | 91.07% | 74.32% | 45.29% |
+|  | ONION | 68.35% | 58.19% | 56.27% | 72.40% | 63.58% | 54.61% | 83.82% | 71.25% | 42.62% |
+|  | RAP | 62.27% | 53.20% | 65.38% | 69.73% | 61.85% | 60.52% | 85.54% | 73.25% | 48.65% |
+|  | Bite | 73.48% | 61.75% | 48.24% | 77.80% | 66.09% | 49.78% | 91.32% | 76.41% | 42.57% |
+|  | PSIM | 72.13% | 61.24% | 51.09% | 75.32% | 65.14% | 50.91% | 90.87% | 74.93% | 41.98% |
+|  | BKI | 64.20% | 44.64% | 74.18% | 69.48% | 49.83% | 70.56% | 78.36% | 65.38% | 51.72% |
+|  | R-Adaptor | 65.98% | 45.27% | 71.01% | 72.07% | 52.68% | 65.25% | 80.79% | 68.49% | 51.23% |
+|  | TextGuard | 65.47% | 64.29% | 45.98% | 71.52% | 69.34% | 44.17% | 85.75% | 83.81% | 41.03% |
+|  | FRS | <b>79.84%*</b> | <b>72.36%*</b> | <b>37.04%*</b> | <b>83.76%*</b> | <b>80.84%*</b> | <b>38.16%</b> | <b>92.25%*</b> | <b>89.34%*</b> | <b>36.93%*</b> |
+
+Newsgroups (Lang, 1995) as the proxy dataset for sentiment analysis, toxicity detection, and topic classification task, respectively.
+
+**Evaluation Metrics:** We evaluate different defense methods on three metrics: clean accuracy (CA), poisoned accuracy (PA), and attack success rate (ASR). The higher CA indicates that the defense strategy does not influence the model performance obviously on benign inputs, implying it does not fall into the overcaution. Meanwhile, the higher PA and lower ASR show that the backdoor attacks can be effectively defended and the PLM output accuracy can still be guaranteed under attacks.
+
+**Implementation Details:** We run each experiment five times with different random seeds and take the average as the final result. The experiments are conducted on 8 NVIDIA RTX A6000 GPUs with 48GB memory. We set the base model number  $K = 20$ , the variance of Gaussian noise applied to the parameter smoothing  $\sigma = 0.01$ .  $H$  is set as 10. We download the *uncased* version of BERT and RoBERTa models, as well as *pre-trained* version of LLaMA3-8B model from HuggingFace.
+
+To enhance the reproducibility, we provide more details regarding the experiment setup in Appendix B.
+
+### 5.2 EXPERIMENT RESULTS AND ANALYSIS
+
+#### 5.2.1 DEFENSE PERFORMANCE (RQ1)
+
+To demonstrate that our method can achieve better backdoor defense performance compared with baselines, we provide the performance of different empirical defense baselines, certified defense baseline TextGuard, and our FRS under above three backdoor attack approaches in Table 1. We can first observe that the certified method TextGuard and our FRS outperform empirical defense baselines on both PA and ASR metrics on three datasets, which verifies the advantage of this scheme. Second, the poor performance of TextGuard on CA can be noticed, which is due to that it breaks the syntactic and semantic integrity of the original texts during the word hashing assignment. Third, our FRS almost outperforms all empirical defense baselines and certified defense baseline TextGuard on CA, PA, and ASR metrics among three datasets, which demonstrates that it can not only effectively mitigate the negative impact brought by backdoor attacks on perturbed samples, but also minimize the
+
+{8}------------------------------------------------
+
+performance drop on benign samples resulted from the over-caution of defense methods themselves. It should be noted that we adopt the same number of base models here in TextGuard and FRS for fair comparison. The superiority of FRS over Textguard on various metrics further verifies its relative robustness certification efficiency.
+
+#### 5.2.2 CERTIFIED ROBUSTNESS RADIUS (RQ2)
+
+To validate that our FRS method can indeed bring broader certified robustness radius, we directly calculate the robustness radius value achieved by our method. In detail, for each test sample, we find the maximum percentage of tokens that can be perturbed while the model still maintains correct prediction with high probability (e.g., 95% confidence) as the robustness radius. For ensuring comprehensiveness, we calculate the average and maximum of these robustness radii across all test samples. We compare the results of FRS with the best -performing baseline, TextGuard, which is also the only *certified defense* baseline. According to the results presented in Table 2, we can obtain the following observations: First, our FRS method consistently outperforms TextGuard across all datasets in both average and maximum robustness radius. Second, FRS achieves notably higher average robustness radius compared to TextGuard. The improvements range from 25.72% (OffensEval) to 34.87% (AG’s News), indicating substantially better average-case robustness across various downstream tasks. Third, FRS also extends the maximum achievable robustness radius across all datasets, with improvements ranging from 11.82% (AG’s News) to 20.30% (OffensEval). This demonstrates FRS’s ability to provide certified robustness against more severe perturbations. All these observations align with our theoretical expectations of a broader certified robustness radius as discussed in Section 4.4. Besides, more results on certified accuracy provided in Appendix C also demonstrate the broadened robustness radius by our FRS. Thus, the Corollary 1 is persuasively validated with empirical results.
+
+Table 2: Robustness radius results on SST-2, OffensEval, and AG’s News datasets.
+
+| Dataset | Method | Avg. radius | Max radius |
+|-|-|-|-|
+| SST-2 | TextGuard | 27.51% | 43.20% |
+|  | FRS | 34.87% | 48.63% |
+| OffensEval | TextGuard | 29.39% | 44.72% |
+|  | FRS | 36.95% | 53.80% |
+| AG’s News | TextGuard | 21.68% | 37.91% |
+|  | FRS | 29.24% | 42.39% |
+
+Table 3: Ablation study on SST-2, OffensEval, and AG’s News datasets, with BERT-base as victim.
+
+| Dataset | Method | RIPPLE <sub>α</sub> |  |  | LWP |  |  | BadPre |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|
+|  |  | CA↑ | PA↑ | ASR↓ | CA↑ | PA↑ | ASR↓ | CA↑ | PA↑ | ASR↓ |
+| SST-2 | -BMPS | 82.48% | 68.62% | 51.09% | 85.82% | 74.95% | 44.52% | 91.60% | 85.25% | 27.87% |
+|  | -FTR | 82.08% | 70.97% | 48.73% | 85.45% | 78.83% | 38.64% | 91.43% | 88.27% | 23.15% |
+|  | FRS | 82.36% | 73.25% | 45.12% | 85.67% | 82.91% | 34.25% | 91.64% | 91.02% | 18.64% |
+| OffensEval | -BMPS | 85.52% | 76.46% | 49.53% | 87.69% | 80.62% | 47.25% | 87.79% | 42.07% |  |
+|  | -FTR | 85.30% | 77.21% | 45.47% | 87.51% | 83.29% | 44.48% | 93.98% | 89.68% | 40.85% |
+|  | FRS | 85.61% | 79.38% | 42.59% | 87.63% | 85.70% | 41.24% | 94.05% | 91.43% | 38.86% |
+| AG’s News | -BMPS | 79.91% | 66.46% | 42.02% | 84.02% | 74.19% | 42.27% | 92.44% | 84.91% | 39.84% |
+|  | -FTR | 79.60% | 68.25% | 39.94% | 83.24% | 78.36% | 39.50% | 92.12% | 87.63% | 38.12% |
+|  | FRS | 79.84% | 72.36% | 37.04% | 83.76% | 80.84% | 38.16% | 92.25% | 89.34% | 36.93% |
+
+#### 5.2.3 ABLATION STUDY (RQ3)
+
+To validate that our proposed biphased model parameter smoothing (BMPS) module and fuzzed text randomization (FTR) module are both meaningful for the ultimate performance, we remove them from the overall method framework, respectively and conduct the experiments on above three datasets. The corresponding results are provided in Table 3. First, we can find that removing such two modules will indeed result in the performance drop on PA and ASR metrics under different attack approaches among three datasets. This phenomenon can be even more obvious on the AG’s News dataset which is more fragile. This effectively demonstrates that the contribution brought by the BMPS and FTR are both positive. Besides, performance on CA metric of -FTR version and original FRS version are similar, which indicates the influence of FTR to model performance on benign samples is weak. Interestingly, removing the BMPS module leads to the slight improvement on CA metric, which can
+
+{9}------------------------------------------------
+
+Table 4: Results of TextGuard and our FRS over different victim models with various architectures and sizes on SST-2, OffensEval, and AG’s News datasets. Higher CA, PA, and lower ASR indicate more satisfying defense performance. \* indicates the statistical significance for  $p < 0.01$  on  $t$ -test.
+
+| Dataset | Method | SST-2 |  |  | OffensEval |  |  | AG’s News |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|
+|  |  | CA $\uparrow$ | PA $\uparrow$ | ASR $\downarrow$ | CA $\uparrow$ | PA $\uparrow$ | ASR $\downarrow$ | CA $\uparrow$ | PA $\uparrow$ | ASR $\downarrow$ |
+| BERT-base | TextGuard | 74.95% | 65.24% | 52.62% | 77.31% | 74.08% | 52.14% | 65.47% | 64.29% | 45.98% |
+|  | FRS | <b>82.36%*</b> | <b>73.25%*</b> | <b>45.12%*</b> | <b>85.61%*</b> | <b>79.38%*</b> | <b>42.59%*</b> | <b>79.84%*</b> | <b>72.36%*</b> | <b>37.04%*</b> |
+| BERT-large | TextGuard | 78.83% | 70.56% | 47.35% | 80.95% | 77.73% | 47.89% | 70.23% | 68.85% | 41.76% |
+|  | FRS | <b>84.92%*</b> | <b>77.43%*</b> | <b>41.87%*</b> | <b>87.24%*</b> | <b>82.56%*</b> | <b>39.41%*</b> | <b>82.59%*</b> | <b>76.81%*</b> | <b>34.29%*</b> |
+| RoBERTa-base | TextGuard | 82.21% | 74.89% | 43.18% | 83.37% | 80.15% | 44.26% | 73.86% | 72.12% | 38.45% |
+|  | FRS | <b>86.47%*</b> | <b>80.15%*</b> | <b>38.54%*</b> | <b>88.78%*</b> | <b>84.92%*</b> | <b>36.75%*</b> | <b>84.92%*</b> | <b>79.57%*</b> | <b>30.86%*</b> |
+| RoBERTa-large | TextGuard | 82.89% | 75.63% | 42.37% | 84.48% | 81.25% | 42.91% | 75.29% | 73.74% | 37.42% |
+|  | FRS | <b>87.36%*</b> | <b>81.27%*</b> | <b>37.21%*</b> | <b>89.32%*</b> | <b>85.84%*</b> | <b>35.67%*</b> | <b>85.86%*</b> | <b>80.39%*</b> | <b>31.18%*</b> |
+| LLaMA3-8B | TextGuard | 86.74% | 79.62% | 29.95% | 88.62% | 85.39% | 31.03% | 79.54% | 77.93% | 29.82% |
+|  | FRS | <b>89.83%*</b> | <b>84.76%*</b> | <b>26.82%*</b> | <b>92.15%*</b> | <b>89.04%*</b> | <b>24.28%*</b> | <b>89.17%*</b> | <b>84.25%*</b> | <b>23.73%*</b> |
+
+be explained that smoothing model parameter can break the model comprehension capability to benign samples, though enhancing the robustness against the perturbed samples containing the triggers. Further ablation study concerning the effect of each phase in BMPS is provided in Appendix D.
+
+#### 5.2.4 CONSISTENCY OVER DIFFERENT VICTIMS (RQ4)
+
+To further explore whether our FRS’s advantage remains against other baselines when the model size increases or structure varies, we extend the experiments in Section 5.2.1. In detail, we compare the empirical defense performance of our FRS with the strongest baseline, TextGuard against the most powerful attack method,  $\text{RIPPLE}_d$ , under different victim language models with various architectures and sizes. The language model here include BERT-base, BERT-large, RoBERTa-base, RoBERTa-large, and LLaMA3-8B, which cover both encoder-based and decoder-based architectures with model parameter numbers ranging from 110 million to 8 billion.
+
+The results provided in Table 4 illustrate the performance of our FRS method compared with TextGuard across various language models of different sizes and architectures. Several key observations can be made: 1) FRS consistently outperforms TextGuard across all model configurations and datasets. This is evident in the higher CA and PA, as well as lower ASR achieved by FRS. 2) As we move from BERT-base to BERT-large, and from RoBERTa-base to RoBERTa-large, both FRS and TextGuard show improved performance. This suggests that larger models generally exhibit better robustness against backdoor attacks, even without specialized defenses. 3) The performance difference between FRS and TextGuard remains substantial for both encoder-based (BERT, RoBERTa) and decoder-based (LLaMA3) architectures, indicating that FRS’s effectiveness is not limited to a specific model structure. 4) While FRS maintains its advantage over TextGuard even for the largest model (LLaMA3-8B), the relative improvement is less pronounced compared to smaller models. For instance, on the SST-2 dataset, the ASR reduction from TextGuard to FRS for BERT-base is 7.50 percentage points, while for LLaMA3-8B, it’s 3.13 percentage points. This suggests that as language models grow in size and capability, they may become inherently more robust to certain backdoor attacks, potentially reducing the marginal benefit of defenses like FRS. Supplementary results compared with the defense-free baseline can be seen in Appendix E. More discussions on enhancing FRS’s scalability for future larger language models are provided in Appendix F.
+
+## 6 CONCLUSION
+
+In this paper, we have presented fuzzed randomized smoothing (FRS), a novel defense strategy to enhance the robustness of pre-trained language models against textual backdoor attacks injected during the pre-training phase. Our approach integrates fuzzing techniques with randomized smoothing, introducing fuzzed text randomization to proactively identify and focus on vulnerable areas in the input text. This innovation, combined with our biphased model parameter smoothing, enables FRS to achieve a broader certified robustness radius and superior performance across diverse datasets, victim models, and attack methods. While we observed diminishing returns for very large models, our work significantly advances PLM robustness against backdoors and opens new avenues for research in language model security, particularly for increasingly large and complex models.
+
+ Rest of paper (reference and Appendix) is removed.

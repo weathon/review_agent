@@ -1,0 +1,311 @@
+
+
+{0}------------------------------------------------
+
+# ADAPTIVE CAUSAL EXPERIMENTAL DESIGN: AMORTIZING SEQUENTIAL BAYESIAN EXPERIMENTAL DESIGN FOR CAUSAL MODELS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Interventions are essential for causal discovery and causal reasoning. Acquiring interventional data, however, is often costly, especially in real-world systems. A careful experimental design can therefore bring substantial savings. In a sequential experimental design setting, most existing approaches seek the best interventions in a greedy (myopic) manner that does not account for the synergy from yet-to-come future experiments. We propose Adaptive Causal Experimental Design (ACED), a novel sequential design framework for learning a design policy capable of generating non-myopic interventions that incorporate the effect on future experiments. In particular, ACED maximizes the Expected Information Gain (EIG) on flexible choices of causal quantities of interest (e.g., causal graph structure, and specific causal effects) directly, bypassing the need for computing intermediate posteriors in the experimental sequence. Leveraging a variational lower bound estimator for the EIG, ACED trains an amortized policy network that can be executed rapidly during deployment. We present numerical results demonstrating ACED’s effectiveness on synthetic datasets with both linear and nonlinear structural causal models, as well as on in-silico single-cell gene expression datasets.
+
+## 1 INTRODUCTION
+
+Identifying and modeling causal relationships are of fundamental importance across various scientific disciplines, including biology (Tejada-Lapuerta et al., 2023), medicine (Sanchez et al., 2022), economics (Varian, 2016), and social science (Sobel, 2000; Imbens, 2024). A key step of this process involves learning the underlying causal model, often represented as a Structural Causal Model (SCM). A SCM consists of a directed acyclic graph (DAG) that captures the causal connections among variables, and a set of conditional distributions that quantifies their probabilistic dependencies. When the causal graph is unknown, causal discovery aims to learn the causal structure from data. With only observational data and no assumption about the data-generating process, causal discovery methods can only recover DAGs up to their Markov equivalence class (MEC) (Verma & Pearl, 2022). This limitation has motivated the use of interventional data that can disambiguate causal relationships and improve the causal graph’s identifiability (Pearl, 2009). However, interventional experiments are often time-consuming, expensive, and sometimes ethically problematic. It is therefore desirable to systematically design these experiments in order to maximize their value. Bayesian optimal experimental design (BOED) has emerged as a powerful framework to achieve this goal (Lindley, 1956b; Chaloner & Verdinelli, 1995; Rainforth et al., 2024; Huan et al., 2024).
+
+Most existing BOED methods for causal models (Cho et al., 2016; Ness et al., 2018; Agrawal et al., 2019; Tigas et al., 2022; 2023) essentially perform active learning on SCMs (Figure 1a). This active learning procedure involves iteratively designing interventions with the highest expected information gain (EIG), acquiring interventional data under the selected design, and performing Bayesian inference over the SCM. While effective, these methods have three significant limitations. (1) *Myopic intervention design*: they optimize the next intervention without accounting for future experiments yet to come, leading to suboptimal intervention decisions over the entire design horizon. (2) *High computational costs at deployment*: at each experiment, they require online computations of the posterior update and intervention optimization. (3) *Inefficiency and suboptimality in learning a full causal model for targeted causal queries*: when only specific causal effects are of interest, targeting
+
+{1}------------------------------------------------
+
+![Figure 1: Comparison of existing active causal BOED and proposed ACED. (a) Existing active causal BOED based on a myopic formulation. (b) ACED trains a policy π offline, which can be deployed for fast online usage to produce adaptive, non-myopic interventions.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 1 consists of two diagrams, (a) and (b), illustrating different active causal BOED approaches.
+
+(a) Existing active causal BOED based on a myopic formulation. The process starts with a Bayesian Causal Discovery step using data  $D$  at time  $t=0$ . The initial beliefs are  $P(Y_1) = 1/3$ ,  $P(Y_2) = 1/3$ , and  $P(Y_3) = 1/3$ . At time  $t=T$ , the beliefs have updated to  $P(Y_1) = 0.4$ ,  $P(Y_2) = 0.4$ , and  $P(Y_3) = 0.2$ . The process involves an iterative loop: Update SCM Posterior, Optimize Intervention Design, and Real-world Intervention. The Optimize Intervention Design step uses a utility function  $V_{max} \cdot \text{Target}$  to select an intervention. The Real-world Intervention step uses data  $D_{int}$  to update the SCM Posterior.
+
+(b) ACED trains a policy  $\pi$  offline, which can be deployed for fast online usage to produce adaptive, non-myopic interventions. The process starts with a Bayesian Causal Discovery step using data  $D$ . The initial beliefs are  $P(Y_1) = 1/3$ ,  $P(Y_2) = 1/3$ , and  $P(Y_3) = 1/3$ . The Offline Training phase involves  $T$  iterations of In-parallel Intervention. The Policy Network  $\pi$  takes inputs  $\mathcal{I}$  (Intervention set) and  $\mathcal{E}$  (Evidence) and outputs a Target (0 or 1) and a Value. The policy is defined as  $\pi^* = \arg\max_{\mathcal{I}, \mathcal{E}} V_{\pi}(\mathcal{I}, \mathcal{E})$ . The policy is then deployed for Real-world Intervention, which uses data  $D_{int}$  to update the SCM Posterior. The final beliefs are  $P(Y_1) = 0.8$ ,  $P(Y_2) = 0.1$ , and  $P(Y_3) = 0.1$ .
+
+Figure 1: Comparison of existing active causal BOED and proposed ACED. (a) Existing active causal BOED based on a myopic formulation. (b) ACED trains a policy π offline, which can be deployed for fast online usage to produce adaptive, non-myopic interventions.
+
+(b) ACED trains a policy  $\pi$  offline, which can be deployed for fast online usage to produce adaptive, non-myopic interventions.
+
+Figure 1: Comparison of existing active causal BOED and proposed ACED. Here  $\mathcal{D}$  denotes the observation data before performing interventions, at each experimental stage  $t$ , a set of intervention data  $\mathcal{D}_{int}$  could be collected for belief update.
+
+experiments to learn the entire causal graph becomes inefficient and leads to suboptimal intervention decisions (Smith et al., 2023). Indeed, the ultimate goal often is to enable causal reasoning on specific quantities of interest (QoI)—answering causal queries, estimating treatment effects, and addressing counterfactual questions—instead of the causal graph itself. For example in biology, breast cancer experiments are usually motivated by causal relationships between specific oncogenes and tumor suppressor genes, rather than the entire gene regulatory network.
+
+To overcome these limitations, we propose Adaptive Causal Experimental Design (ACED), a novel approach that employs a transformer-based policy network that takes designs and data from completed experiments as inputs, and outputs the intervention design for the next experiment (Figure 1b). ACED provides three key contributions.
+
+- **Non-myopic intervention designs.** The policy network is trained by maximizing the total EIG of the entire sequence of experiments rather than only on the upcoming experiment. Notably, under ACED, the total EIG can be estimated without evaluating intermediate posteriors, thus sidestepping the need for repeated Bayesian inference.
+- **Real-time adaptive decision-making.** By training a single amortized policy network offline, ACED enables rapid, real-time decision-making, significantly reducing online computational needs at deployment.
+- **Flexible causal queries.** ACED can accommodate a wide range of causal-related design goals, including causal discovery and causal reasoning, allowing experiments to focus on improving specific causal QoIs.
+
+## 2 RELATED WORK
+
+BOED (Lindley, 1956a; Foster et al., 2019; Rainforth et al., 2024; Huan et al., 2024) seeks to identify experiments that generate the most informative data, often measured by the EIG of model parameters (equivalently, mutual information between model parameters and data). The EIG is generally intractable and needs to be estimated numerically, for example via nested Monte Carlo (Ryan, 2003; Huan & Marzouk, 2013) and variational lower bounds (Foster et al., 2019; Kleinengesse & Gutmann, 2020). In the context of causal discovery, BOED has been specifically applied to identify intervention targets and values, which serve as experimental conditions. This has been
+
+{2}------------------------------------------------
+
+explored in several works (Cho et al., 2016; Ness et al., 2018; Agrawal et al., 2019; Tigas et al., 2022), demonstrating its utility in selecting interventions that improve the identifiability of causal structures. More recently, Reinforcement Learning (RL) based methods have been used to learn non-myopic policies that maximize the EIG over an entire sequence of experiments (Foster et al., 2021; Ivanova et al., 2021; Blau et al., 2022; Shen & Huan, 2023), and have also been applied for sequential causal discovery (Annadani et al., 2024a; Gao et al., 2024a). While most BOED approaches focus on maximizing the EIG of the model parameters, it has been shown that when the goal is to answer specific causal queries—such as predicting causal effects or reasoning about counterfactuals—optimizing the EIG for the quantities of interest (QoI) directly can lead to better outcomes (Bernardo, 1979; Attia et al., 2018; Wu et al., 2021; Smith et al., 2023). Toth et al. (2022) demonstrated the effectiveness of this approach for various causal tasks, including causal discovery, causal inference, and causal reasoning, in a myopic design setting. We include additional details on the related work in Appendix 9.
+
+## 3 BACKGROUND
+
+### 3.1 STRUCTURAL CAUSAL MODEL
+
+Let  $V = \{1, \dots, d\}$  be the vertex set of a graph  $G = \{V, E\}$  and  $X = \{X_1, \dots, X_d\} \subseteq \mathcal{X}$  be the associated random variables. A SCM includes  $G$  and associated parameters  $\theta = \{\theta_1, \dots, \theta_d\}$  is defined by:
+
+$$X_i = f_i(X_{\text{par}(i)}, \theta_i; \epsilon_i), \quad \forall i \in V, \quad (1)$$
+
+where  $f_i$  is the causal mechanisms from the parent nodes of  $X_i$ , denoted by  $X_{\text{par}(i)}$ , to  $X_i$  with parameters  $\theta_i$  governing the relationship between  $X_{\text{par}(i)}$  and  $X_i$ , and  $\epsilon_i$  are exogenous noise variables.
+
+A perfect intervention on  $X_i$  is denoted by  $\text{do}(X_i = s_i)$  (Pearl, 2009), which sets the node  $X_i = s_i$ . We encode the intervention as design variable  $\xi = \{\mathcal{I}, s_{\mathcal{I}}\}$  where  $\mathcal{I}$  is the intervention node index. Assuming causal sufficiency and independent noise (Spirtes et al., 2000), the likelihood of data  $X$  given  $\theta$  follows the Markov factorization:
+
+$$p(X | G, \theta, \xi) = \prod_{j \in V \setminus \mathcal{I}} p(X_j | X_{\text{par}(j)}, \theta_j, \text{do}(X_{\mathcal{I}} = s_{\mathcal{I}})). \quad (2)$$
+
+### 3.2 BAYESIAN OPTIMAL EXPERIMENTAL DESIGN FOR TARGETED CAUSAL QUERIES
+
+While causal discovery and reasoning are typically handled as separate, consecutive processes, we present a unified framework to design the most informative sequence of interventions targeting causal QoIs under a fixed budget of  $T$  experiments in an adaptive, non-myopic manner. We denote the general QoIs based on the causal model as  $Z = H(G, \theta; \epsilon_{\mathcal{Z}})$ . Here,  $Z$  is a specific predictive quantity based on  $G$  and  $\theta$ , and we assume  $Z$  is conditionally independent to  $X$  given  $G$  and  $\theta$ . For example, selecting  $Z = G$  corresponds to *causal discovery*, and  $Z = X_i^{\text{do}(X_j = \psi_j)}$  represents *causal reasoning* which refers to the effect on  $X_i$  by setting  $X_j = \psi_j$ , potentially with random  $\psi_j \sim p(\psi_j)$ . Let  $\mathcal{D}$  denote the pre-existing data (if any) before performing any experiment, and let  $h_t = \{\xi_{1:t}, x_{1:t}\}$  denote the completed designs and interventions so far in the current sequence of experiments. Then, the belief on  $G$  and  $\theta$  are updated following Bayes' rule:
+
+$$p(G | \mathcal{D}, h_t) = \frac{p(G | \mathcal{D}, h_{t-1}) p(x_t | \mathcal{D}, G, \theta, h_{t-1}, \xi_t)}{p(x_t | \mathcal{D}, h_{t-1})}, \quad (3)$$
+
+$$p(\theta | \mathcal{D}, G, h_t) = \frac{p(\theta | \mathcal{D}, G, h_{t-1}) p(x_t | \mathcal{D}, G, \theta, h_{t-1}, \xi_t)}{p(x_t | \mathcal{D}, G, h_{t-1})}, \quad (4)$$
+
+where  $p(x_t | \mathcal{D}, G, \theta, h_{t-1}, \xi_t) = \int_{\theta} p(x_t | \mathcal{D}, G, \theta, h_{t-1}, \xi_t) p(\theta) d\theta$  involves marginalization over  $\theta$ . The corresponding prior-predictive and posterior-predictive densities for  $z$  are respectively:
+
+$$p(z | \mathcal{D}, h_{t-1}) = \sum_G \int_{\theta} p(z | G, \theta, h_{t-1}) p(G | \mathcal{D}, h_{t-1}) p(\theta | \mathcal{D}, G, h_{t-1}) d\theta, \quad (5)$$
+
+$$p(z | \mathcal{D}, h_{t-1}, x_t, \xi_t) = \sum_G \int_{\theta} p(z | G, \theta, h_t) p(G | \mathcal{D}, h_t) p(\theta | \mathcal{D}, G, h_t) d\theta. \quad (6)$$
+
+{3}------------------------------------------------
+
+Therefore, the belief about QoI  $Z$  is updated indirectly through belief updates about  $G$  and  $\theta$  based on new data. When  $Z$  is a one-to-one mapping of  $G$  and  $\theta$ , the EIG on  $Z$  equals the EIG on  $G$  and  $\theta$  Bernardo (1979). In more general non-invertible cases, directly maximizing EIG on  $Z$  could be more efficient, as it focuses on resolving uncertainty relevant to  $Z$  only while avoiding unnecessary complexity from  $G$  and  $\theta$ . To quantify the informativeness of provided by an experiment, we adopt the EIG on  $Z$ :
+
+$$I_t(\xi_t) = \mathbb{E}_{p(x_t|D, h_{t-1}, \xi_t)p(z|D, h_{t-1}, x_t, \xi_t)} \left[ \log \frac{p(z|D, h_{t-1}, x_t, \xi_t)}{p(z|D, h_{t-1})} \right]. \quad (7)$$
+
+## 4 ADAPTIVE CAUSAL EXPERIMENTAL DESIGN
+
+We introduce ACED, which trains a policy  $\pi$  to map from  $h_{t-1}$  to  $\xi_t$  in order to maximize the total EIG over the entire sequence of experiments.
+
+**Proposition 1.** *The total EIG of a policy  $\pi$  on QoI over a sequence of  $T$  experiments is*
+
+$$\begin{aligned} \mathcal{I}_T(\pi) &= \mathbb{E}_{p(G, \theta|D)p(h_T|D, G, \theta, \pi)} \left[ \sum_{t=1}^T I_t(\xi_t) \right] \\ &= \mathbb{E}_{p(G, \theta|D)p(h_T|D, G, \theta, \pi)p(z|D, G, \theta)} \left[ \log \frac{p(z|D, h_T)}{p(z|D)} \right]. \end{aligned} \quad (8)$$
+
+A proof is provided in Appendix 7.1. As shown in Shen et al. (2023), for the optimal policy,  $\mathcal{I}_T(\pi^*) \geq \mathcal{I}_T(\pi_{\text{greedy}})$ , where  $\mathcal{I}_T(\pi_{\text{greedy}})$  refers to the greedy design policy. Notably, intermediate posteriors do not appear in this objective. Since the total EIG generally cannot be evaluated in close form, we approach it via a lower bound estimator. Denoting  $\mathcal{M} = \{G, \theta\}$  for simplicity, the lower bound is formed by replacing the true posterior  $p(z|D, \pi, h_T)$  with  $q_\chi(z|D, \pi, f_\phi(h_T))$  parameterized by  $\lambda$ , which is known as the Barber-Agakov lower bound Barber & Agakov (2004):
+
+$$\mathcal{I}_{T,L}(\pi) = \mathbb{E}_{p(\mathcal{M}|D)p(h_T|D, \mathcal{M}, \pi)p(z|D, \mathcal{M})} \left[ \log \frac{q_\chi(z|D, f_\phi(h_T))}{p(z|D)} \right]. \quad (9)$$
+
+**Theorem 1.** *(Variational Lower Bound) For any policy  $\pi$ , variational parameter  $\lambda$  and data embedding parameter  $\phi$ ,  $\mathcal{I}_T(\pi) \geq \mathcal{I}_{T,L}(\pi)$ . The bound is tight if and only if  $p(z|D, \pi, h_T) = q_\chi(z|D, \pi, f_\phi(h_T))$  for all  $\{z, h_T\}$  and  $\pi$ .*
+
+A proof is provided in Appendix 7.1. Here  $f_\phi(h_T)$  is an embedding of  $h_T$ . Thus the lower bound of EIG on a policy can be tightened via maximizing  $\mathcal{I}_{T,L}(\pi)$  with respect to  $\lambda$  and  $\phi$ . As the denominator is constant with respect to  $\lambda$  and  $\pi$ , it can be omitted, leading to a simplified objective
+
+$$\pi^*, \lambda^*, \phi^* = \arg \max_{\pi, \lambda, \phi} \mathcal{R}_T(\pi), \quad (10)$$
+
+where  $\mathcal{R}_T(\pi) = \mathbb{E}_{p(\mathcal{M}|D)p(h_T|D, \mathcal{M}, \pi)} [\log q_\chi(z|D, f_\phi(h_T))]$  is an EIG lower bound shifted by the constant denominator.
+
+### 4.1 VARIATIONAL POSTERIOR FOR TARGETED CAUSAL QUERIES
+
+To select an appropriate variational family for  $q_\chi(z|D, f_\phi(h_T))$ , we base our choice on the support of specific  $Z$ , considering whether it is continuous, discrete, or bounded. For example, when dealing with causal discovery  $Z = G$ , we follow Lorch et al. (2022) and model the existence of an edge  $G_{i,j}$  using independent Bernoulli distribution, that is
+
+$$q_\chi(G|D, f_\phi(h_T)) = \prod_{i,j} q_\chi(G_{i,j}|D, f_\phi(h_T)) \quad \text{with } G_{i,j} \sim \text{Bernoulli}(\lambda_{i,j}). \quad (11)$$
+
+For causal reasoning  $Z = X^{\text{do}(X_j=\psi_j)}$ , since the posterior belief on  $Z$  captures belief on multiple graphs, and thus could be potentially multi-modal. Therefore, we adopt Normalizing Flows (NFs), which is a type of generative model that uses a series of invertible mappings to transform from a simple distribution (i.e., standard normal) to a general target distribution. Specifically, we use the real NVP (Dinh et al., 2016) architecture for representing  $q_\chi(z|D, f_\phi(h_T))$ , with details in Appendix 7.2.
+
+{4}------------------------------------------------
+
+![Figure 2: Policy network architecture diagram. The input h_{t-1} is processed through a series of Transformer Blocks. The first block is labeled 'Attending over axis d' and shows a 3D tensor of shape n x d x 2. The second block is labeled 'Attending over axis n' and shows the same tensor. This is followed by 'Max-pool over axis n', which results in a representation e^1, e^2, ..., e^d. These representations are then processed by two feed-forward neural networks. The first network outputs the intervention target vector I, with values 0, 1, ..., 0. The second network outputs the intervention value vector S, with values 0.3, 0.5, ..., 1.2.](690fce4fb5c9cbb8beb560cb2a3fcbeb_img.jpg)
+
+Figure 2: Policy network architecture diagram. The input h\_{t-1} is processed through a series of Transformer Blocks. The first block is labeled 'Attending over axis d' and shows a 3D tensor of shape n x d x 2. The second block is labeled 'Attending over axis n' and shows the same tensor. This is followed by 'Max-pool over axis n', which results in a representation e^1, e^2, ..., e^d. These representations are then processed by two feed-forward neural networks. The first network outputs the intervention target vector I, with values 0, 1, ..., 0. The second network outputs the intervention value vector S, with values 0.3, 0.5, ..., 1.2.
+
+Figure 2: Policy network architecture. Our model maps the input to a three-dimensional tensor of shape  $n \times d \times 2$  and remains permutation in- and equivariant over axes  $n$  and  $d$ , respectively. Each of the  $L$  layers first self-attends over axis  $d$  and then over  $n$ , sharing parameters across the other axis.
+
+### 4.2 POLICY NETWORK AND EMBEDDING ARCHITECTURE
+
+The policy network  $\pi$  is summarized in Figure 2 and is designed to satisfy key symmetries inherent to BOED and causal structure learning: permutation invariance across  $n$  history samples and permutation equivariance across  $d$  variables. The core of  $\pi$  consists of  $L$  identical layers, each comprising four residual sublayers: two multi-head self-attention sublayers alternating with two position-wise feed-forward network sublayers, resembling the Transformer encoder architecture (Vaswani, 2017). To enable information flow across all  $n \times d$  tokens, the model alternates attention over observation and variable dimensions (Kossen et al., 2021). The first self-attention sublayer attends over the variable axis  $d$ , while the second attends over the sample axis  $n$ , ensuring representation equivariance (Lee et al., 2019). After building the representation tensor, max-pooling over the observation axis  $n$  yields a representation  $(e^1, \dots, e^d)$ , where each  $e^i \in \mathbb{R}^k$  represents the representation of a causal variable. Two feed-forward neural networks then output the intervention target vector  $\mathcal{I} \in \{0, 1\}^d$  and the intervention value vector  $S \in \mathbb{R}^d$ , with the Gumbel-softmax trick employed for discrete intervention target vector.
+
+### 4.3 TRAINING AND INFERENCE
+
+The overall algorithm is summarized in Algorithm 1. The details for the prior  $p(G|\mathcal{D})$  and  $p(\theta|\mathcal{D}, G)$  are given in section 8. Training involves iterative optimization of  $\mathcal{R}_{\mathcal{T}}(\pi)$  following Equation 10. We simulate interventional data  $x_t \sim p(X | G, \theta, \xi_t)$  for samples  $(G, \theta)$  drawn from the prior. The process involves training the variational posteriors to tighten the lower bound for a fixed policy, followed by improving the policy network via stochastic gradient ascent. At deployment, one only requires a forward pass of the policy network for each experiment, eliminating the need for any intermediate Bayesian inference.
+
+## 5 EXPERIMENTS
+
+In our experiments, we aim to answer two questions empirically: (1) How does our amortized policy network perform across a sequence of interventions compared to methods that select the next best intervention myopically? (2) Can our method generate better interventions for specific causal quantities of interest, as opposed to methods that aim to learn the full causal model? To answer the first question, we compare our method with baselines in the general causal discovery task (Section 5.1). Next, we evaluate its ability to handle targeted causal queries in specific causal reasoning tasks (Section 5.2). A brief overview of the experimental settings is provided below, with further details in Appendix 8.
+
+**Datasets** We evaluate our method on both linear and nonlinear synthetic ground-truth SCM and realistic gene regulatory network (GRN) datasets. Specifically, we use two types of synthetic datasets
+
+{5}------------------------------------------------
+
+#### **Algorithm 1** The ACED algorithm.
+
+- 
+- ```
+
+1: Input: prior  $p(G|D)$ ,  $p(\theta|D, G)$ ; likelihood  $p(x|D, G, \theta, \xi)$ ,  $H$ ,  $p(\psi)$ ; number of stages  $T$ 
+2: Initialize policy  $\pi$  parameterized with  $\gamma$ , variational parameters  $\lambda$ , embedding parameters  $\phi$ ,
+ $h_0 = \{D\}$ ;
+3: for  $l = 1, \dots, n_{\text{step}}$  do
+4:   Simulate  $n_{\text{env}}$  samples of graphs  $G$ ,  $\theta$ ,  $\psi$  and  $z$ ;
+5:   for  $t = 0, \dots, T$ , do
+6:     Compute  $\xi_t = \pi(h_{t-1})$ , then sample  $x_t \sim p(x|G, \theta, \xi_t)$ ;
+7:   end for
+8:   update  $\gamma$ ,  $\phi$  and  $\lambda$  following gradient ascent, where gradient can be obtained from auto-grad
+on  $\mathcal{R}_T(\pi)$ 
+9: end for
+10: Output: Optimized policy  $\pi_{\gamma^*}$ ; updated variational parameters  $\lambda^*$ , embedding parameter  $\phi^*$ 
+
+```
+- 
+
+generated from Erdős-Rényi (ER) (Erdős & Rényi, 1959) and Scale-Free (SF) graphs with both linear and nonlinear additive noise models (ANM) with various [numbers of nodes](#). Additionally, for the causal discovery task, we use two realistic datasets simulated from DREAM (Greenfield et al., 2010) to evaluate our method’s performance on real-world problems. We initialize all cases with  $n_{\text{obs}} = 50$  observational data  $D$ , and we set  $n_{\text{int}} = 5$  for the number of interventional samples at each stage.
+
+**Baselines** We compare our method with three baselines in the causal discovery task: **Random-Policy**: Selects both intervention targets and values based on a randomly initialized policy network. **Soft-CBED** (Tigas et al., 2022): Using Bayesian optimization to select intervention targets and values by maximizing EIG at each stage. **DiffCBED** (Tigas et al., 2023): Select intervention targets and values based on a non-adaptive policy network with gradient-based optimization. For the causal reasoning task, we compare our method against the **Random-Policy** and the variational posterior  $q_\chi(z|h_T, D)$  is optimized for each policy.
+
+**Metrics** We use  $\log q$  to denote the estimates of the shifted EIG lower bound  $\mathcal{R}_T(\pi)$ . A higher expectation of  $\log q$  corresponds to a higher EIG lower bound, aligning with the problem objective., we use two performance-based metrics to evaluate posterior samples after performing interventions: the expected structural Hamming distance (de Jongh & Druzdzel, 2009) ( $\mathbb{E}$ -SHD) between samples from the posterior model and the ground-truth causal graph, and  $F_1$ -score for predicting the presence/absence of all edges. We use the learned  $q_\chi(G|D, f_\phi(h_t))$  for our method and Random-Policy and use DiBS (Lorch et al., 2021), a variational posterior inference method based on Stein variational gradient descent (SVGD) (Liu & Wang, 2016a) for other intervention strategies. For the causal reasoning task, while it is feasible to estimate the shifted EIG on QoI via Nested Monte Carlo (NMC) as proposed in Toth et al. (2022), we first demonstrate an example where NFs could be [more](#) efficient for estimating the shifted EIG than NMC. Therefore, we just plot the estimates of the shifted lower bound  $\log q$  for reference in synthetic cases.
+
+### 5.1 EXPERIMENTAL RESULTS ON CAUSAL DISCOVERY TASK
+
+#### 5.1.1 RESULTS ON SYNTHETIC DATASETS
+
+We evaluate ACED against baselines on both linear and nonlinear SCMs, using Erdős-Rényi (ER) and scale-free (SF) graphs with varying node sizes (10, 20, and 30). We present results for ER graphs in the linear SCM setting and SF graphs in the nonlinear SCM setting. Additional experimental results are provided in Appendix 10.
+
+**Results on Linear synthetic SCMs** Figure 3 illustrates the performance of different methods across evaluation metrics. In Figure 3(a), ACED achieves a tighter EIG lower bound compared to the random policy, demonstrating that the interventions generated by ACED are likely to more informative in identifying the underlying causal structure. Furthermore, as shown in Figures 3(b) and (c), ACED significantly reduces the expected structural Hamming distance ( $\mathbb{E}$ -SHD) and improves the  $F_1$ -score compared to other methods. These improvements highlight the effectiveness of ACED in designing interventions that improve the identifiability of the true causal structure. Notably, while
+
+{6}------------------------------------------------
+
+![Figure 3: Results of different causal experimental design methods on 10, 20, and 30-node Erdős-Rényi (ER) graphs with linear additive noise models. The figure consists of three rows (a, b, c) for 10, 20, and 30 nodes respectively. Each row contains three plots: log q (EIG lower bound), E-SHD, and F1 Score. Methods compared: ACED (red line with circles), Random Policy (orange line with circles), DiBSHD (green line with triangles), and SuSHED (blue line with diamonds). ACED consistently outperforms the baselines, especially as the number of stages increases.](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+Figure 3 displays the results of different causal experimental design methods (ACED, Random Policy, DiBSHD, SuSHED) across three graph sizes: 10-node (a), 20-node (b), and 30-node (c) Erdős-Rényi (ER) graphs with linear additive noise models. The methods are evaluated based on three metrics:  $\log q$  (EIG lower bound),  $\mathbb{E}\text{-SHD}$ , and  $F_1$  Score, plotted against the Number of stages (2 to 10).
+
+- Row (a) 10-node ER Graph:** ACED achieves a higher  $\log q$  (EIG lower bound) and a lower  $\mathbb{E}\text{-SHD}$  compared to the baselines. The  $F_1$  Score for ACED is also higher than the baselines.
+- Row (b) 20-node ER Graph:** ACED continues to outperform the baselines across all metrics. The gap between ACED and the baselines is more pronounced than in the 10-node case.
+- Row (c) 30-node ER Graph:** ACED achieves the highest  $\log q$  and  $F_1$  Score, and the lowest  $\mathbb{E}\text{-SHD}$ . The performance advantage of ACED over the baselines is significant, especially as the number of stages increases.
+
+Figure 3: Results of different causal experimental design methods on 10, 20, and 30-node Erdős-Rényi (ER) graphs with linear additive noise models. The figure consists of three rows (a, b, c) for 10, 20, and 30 nodes respectively. Each row contains three plots: log q (EIG lower bound), E-SHD, and F1 Score. Methods compared: ACED (red line with circles), Random Policy (orange line with circles), DiBSHD (green line with triangles), and SuSHED (blue line with diamonds). ACED consistently outperforms the baselines, especially as the number of stages increases.
+
+Figure 3: Results of different causal experimental design methods on 10, 20, and 30-node Erdős-Rényi (ER) graphs with linear additive noise models. ACED achieves a tighter EIG lower bound, significantly reducing  $\mathbb{E}\text{-SHD}$  and improving the  $F_1$ -score compared to the baselines, especially as the number of stages increases.
+
+ACED initially performs worse than the baselines, it surpasses them as the number of stages increases. This suggests that ACED focuses on designing interventions that are globally optimal across multiple stages, rather than optimizing the next-step intervention. Although some baselines achieve a low  $\mathbb{E}\text{-SHD}$  as the number of nodes increases, this is likely due to the posterior inference model DiBS converging to low-entropy solutions, which tend to predict only a few edges. When considering both  $\mathbb{E}\text{-SHD}$  and  $F_1$ -score, ACED outperforms the baselines significantly.
+
+**Results on Nonlinear synthetic SCMs** We next consider the more challenging setting of nonlinear SCMs, where SF graphs are used due to their more informative prior compared to ER graphs. Figure 4 also demonstrates that ACED consistently outperforms the baselines across all metrics. However, the improvements become marginal compared to the linear SCM setting, especially with the random policy. Furthermore, results on ER graphs are presented in Figure 10 in the Appendix, where the random policy achieves performance comparable to ACED. These findings suggest that more extensive training data and more informative priors may be required to improve the training and amortization of the policy network in complex nonlinear settings.
+
+#### 5.1.2 RESULTS ON REALISTIC GRN DATASETS
+
+In addition to synthetic datasets, we consider two more realistic GRN datasets, Yeast and Ecoli with 10 nodes, and the results are presented in Table 1. ACED’s performance gap widens further on these realistic datasets, demonstrating its effectiveness when the prior is more informative. On the Ecoli dataset, ACED achieves near-perfect performance across all metrics, significantly outperforming
+
+{7}------------------------------------------------
+
+![Figure 4: Results of different causal experimental design methods on 10, 20, and 30-node scale-free (SF) graphs with nonlinear additive noise models. The figure consists of three rows (a, b, c) for 10, 20, and 30 nodes respectively, and three columns for log q (?), E-SHD (?), and F1 Score (?). Methods compared: ACED (red), Random Policy (orange), DIFFED (green), and SuSHED (blue). ACED generally shows better performance, especially in E-SHD and F1 Score.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 4: Results of different causal experimental design methods on 10, 20, and 30-node scale-free (SF) graphs with nonlinear additive noise models. The figure consists of three rows (a, b, c) for 10, 20, and 30 nodes respectively, and three columns for log q (?), E-SHD (?), and F1 Score (?). Methods compared: ACED (red), Random Policy (orange), DIFFED (green), and SuSHED (blue). ACED generally shows better performance, especially in E-SHD and F1 Score.
+
+Figure 4: Results of different causal experimental design methods on 10, 20, and 30-node scale-free (SF) graphs with nonlinear additive noise models. ACED maintains a tighter EIG lower bound and superior performance on E-SHD and  $F_1$ -score, though improvements are less consistent in this more challenging nonlinear setting.
+
+all baselines. Interestingly, the Random-Policy baseline performs surprisingly well on the Yeast dataset, suggesting that this particular graph structure might be easier to learn. However, ACED still outperforms it consistently across all metrics.
+
+### 5.2 EXPERIMENTAL RESULTS ON CAUSAL REASONING TASK
+
+For causal reasoning, we first illustrate that though it is feasible to find the optimal policy on general QoI via Nested Monte Carlo (NMC) estimator as explained in Appendix 7.1, NMC might have high bias and variance compared with estimating EIG lower bound via Normalizing Flows. Consider a fixed graph with 4 nodes, where QoI is the effect on node 3 and node 4 under the fixed do operation  $\text{do}(X_2 = 2)$ , and the node for intervention is node 1. The overall setup is given in Figure 5, where all observations are associated with noise  $\epsilon_j \sim N(0, 0.3^2)$ .
+
+| Method | Yeast-10 |  | Ecoli-10 |  |
+|-|-|-|-|-|
+|  | SHD ( $\downarrow$ ) | $F_1$ -score ( $\uparrow$ ) | SHD ( $\downarrow$ ) | $F_1$ -score ( $\uparrow$ ) |
+| Random-Policy | $4.30 \pm 4.80$ | $0.896 \pm 0.20$ | $15.8 \pm 5.78$ | $0.403 \pm 0.29$ |
+| Soft-CBED | $9.44 \pm 7.38$ | $0.578 \pm 0.44$ | $20.62 \pm 4.38$ | $0.184 \pm 0.22$ |
+| DifCBED | $8.78 \pm 9.08$ | $0.784 \pm 0.25$ | $18.37 \pm 2.99$ | $0.298 \pm 0.20$ |
+| <b>ACED</b> | <b><math>1.90 \pm 3.59</math></b> | <b><math>0.916 \pm 0.16</math></b> | <b><math>1.10 \pm 0.83</math></b> | <b><math>0.979 \pm 0.06</math></b> |
+
+Table 1: Performance comparison on 10-node Yeast and Ecoli Gene Regulatory Networks. Values show mean  $\pm$  standard deviation over 10 random seeds. Best results in bold.
+
+{8}------------------------------------------------
+
+![Figure 5: Causal graph showing nodes X1, X2, X3, and X4. X1 is the root node, influenced by an intervention (hammer icon). X1 points to X2 and X3. X2 points to X3 and X4. X3 points to X4. Conditional distributions are: X1 ~ N(1, 0.5^2), X2 | X1 ~ N(0, 0.5^2), X3 | X1, X2 ~ N(2, 1), X4 | X2, X3 ~ N(0.5, 0.2^2). An intervention do(X2 = 2) is applied to node X2.](acfc53eca625d62b38aa2563efa95c3e_img.jpg)
+
+432  
+433  
+434  
+435  
+436  
+437  
+438  
+439  
+440  
+441  
+442  
+443  
+444  
+445  
+446  
+447  
+448  
+449  
+450  
+451  
+452  
+453  
+454  
+455  
+456  
+457  
+458  
+459  
+460  
+461  
+462  
+463  
+464  
+465  
+466  
+467  
+468  
+469  
+470  
+471  
+472  
+473  
+474  
+475  
+476  
+477  
+478  
+479  
+480  
+481  
+482  
+483  
+484  
+485
+
+Figure 5: Causal graph showing nodes X1, X2, X3, and X4. X1 is the root node, influenced by an intervention (hammer icon). X1 points to X2 and X3. X2 points to X3 and X4. X3 points to X4. Conditional distributions are: X1 ~ N(1, 0.5^2), X2 | X1 ~ N(0, 0.5^2), X3 | X1, X2 ~ N(2, 1), X4 | X2, X3 ~ N(0.5, 0.2^2). An intervention do(X2 = 2) is applied to node X2.
+
+Figure 5: Intervention on node 1 with *integrers* from  $[-5, -4, \dots, 5]$ . QoIs are node 3 and 4 under the intervention  $\text{do}(X_2 = 2)$ .
+
+![Figure 6: Shifted EIG estimates from NFs and NMC. The plot shows EIG values for different intervention values from -5 to 5. The y-axis ranges from -0.17 to -0.14. The x-axis is 'Intervention Value'. The legend includes: Shifted EIG (blue line), NMC-1e4 (orange line), NMC-1e5 (green line), NMC-1e6 (purple line), NMC-1e7 (cyan line), and NFs-1e4 (red line). The NFs-1e4 line is relatively flat around -0.145. The NMC lines show a V-shape, with NMC-1e4 being the lowest (most negative) and NMC-1e7 being the highest (least negative). Shaded areas represent one standard error.](bedcca5cdf168e3508ef511d94ec514c_img.jpg)
+
+Figure 6: Shifted EIG estimates from NFs and NMC. The plot shows EIG values for different intervention values from -5 to 5. The y-axis ranges from -0.17 to -0.14. The x-axis is 'Intervention Value'. The legend includes: Shifted EIG (blue line), NMC-1e4 (orange line), NMC-1e5 (green line), NMC-1e6 (purple line), NMC-1e7 (cyan line), and NFs-1e4 (red line). The NFs-1e4 line is relatively flat around -0.145. The NMC lines show a V-shape, with NMC-1e4 being the lowest (most negative) and NMC-1e7 being the highest (least negative). Shaded areas represent one standard error.
+
+Figure 6: Shifted EIG estimates from NFs and NMC. The lines represent the mean of 4 initializations of  $\lambda$  for NFs and 4 replicates with different random seeds for NMC, with the shaded areas indicating one standard error.
+
+Considering uniform interventions on node 1 with values  $[-5, -4, \dots, 5]$ , the corresponding shifted EIG estimated with NMC under outer and inner sample size being 10000, 20000 40000, respectively. For NFs, we optimize the EIG lower bound with respect to  $\lambda$  using 20000 samples. The comparison is shown in Figure 6.
+
+![Figure 7: Shifted EIG lower bound for QoI on an Erdos Renyi graph with 10 nodes. The figure contains two plots. The left plot is for a linear mechanism with log q(t) - ER (Linear) on the y-axis (ranging from -25 to -5) and Number of Stages on the x-axis (ranging from 2 to 10). The right plot is for a non-linear mechanism with log q - ER (Nonlinear) on the y-axis (ranging from -6 to -2). Both plots compare three policies: ACED-CR (red line with circles), ACED-CD (orange line with squares), and Random Policy (green line with triangles). In both cases, ACED-CR and ACED-CD show higher EIG lower bounds than the Random Policy. ACED-CR generally achieves the highest EIG lower bound, especially in the non-linear case. Shaded areas represent one standard error.](0f3e3ea50bcceb86f6c524ab2b6f3e7a_img.jpg)
+
+Figure 7: Shifted EIG lower bound for QoI on an Erdos Renyi graph with 10 nodes. The figure contains two plots. The left plot is for a linear mechanism with log q(t) - ER (Linear) on the y-axis (ranging from -25 to -5) and Number of Stages on the x-axis (ranging from 2 to 10). The right plot is for a non-linear mechanism with log q - ER (Nonlinear) on the y-axis (ranging from -6 to -2). Both plots compare three policies: ACED-CR (red line with circles), ACED-CD (orange line with squares), and Random Policy (green line with triangles). In both cases, ACED-CR and ACED-CD show higher EIG lower bounds than the Random Policy. ACED-CR generally achieves the highest EIG lower bound, especially in the non-linear case. Shaded areas represent one standard error.
+
+Figure 7: Shifted EIG lower bound for QoI on an Erdos Renyi graph with 10 nodes. The left figure plots the results on a linear mechanism with  $[X_1, X_6]^{\text{do}(X_1=\psi)}, \psi \sim N(3, 0.5^2)$ . The right plots the results on a non-linear mechanism with  $[X_3, X_9]^{\text{do}(X_3=\psi)}, \psi \sim N(3, 0.5^2)$ . Mean and standard deviation (shaded) of 4 replicates with different random seeds for initializing parameters, each replicate evaluated on 500 graphs.
+
+From Figure 6, NMC exhibits a large bias and variance especially near the boundary values, and while increasing the sample size for NMC leads to smaller variance and higher estimates at the boundaries, NMC still struggles to identify the optimal interventions at these points. While NFs theoretically provide a lower bound estimator for EIG, the NFs estimates are only upper bounded by NMC estimates in the middle range, where NMC shows low bias and variance. Remarkably, NFs not only identify the optimal EIG at the boundary with far fewer samples but also surpasses all NMC estimates at the boundaries. This suggests that NFs could be significantly more efficient in identifying the optimal design, even in this simple case with a small number of nodes and a fixed graph. Thus, for the remaining comparisons, we focus on plotting the NFs estimates for the EIG lower bound.
+
+The more complicated causal reasoning tasks are implemented on an Erdős-Rényi graph with 10 nodes, under both linear and nonlinear mechanisms, and the results are plotted in Figure 7. In the
+
+{9}------------------------------------------------
+
+linear model, the policy trained for causal discovery performs comparably to the policy optimized for reasoning. This is potentially because the uncertainty on graph has been effectively reduced by the policy and the relationship between graph and QoI is relatively straightforward. However, in the nonlinear case, the policy trained for causal reasoning significantly outperforms other policies, demonstrating the advantage of a tailored policy when the causal mechanism is complex.
+
+## 6 DISCUSSION
+
+In this paper, we introduced Adaptive Causal Experimental Design (ACED), a novel approach to Bayesian optimal experimental design for flexible causal queries. ACED addresses three key limitations of existing methods: (1) myopic design—by learning a policy considering future experiments; (2) high computational costs at deployment—by training an amortized design policy network, allowing rapid decisions given interventional data at each stage; and (3) inefficiency in learning the full causal model for specific queries—by targeting flexible QoIs instead of focusing on learning the entire causal graph. Our theoretical contributions include deriving variational lower bounds for policy EIG on general causal queries and developing a framework for learning non-myopic, adaptive strategies. Empirical evaluations on both synthetic and real-world-inspired datasets demonstrated ACED’s superior performance across various graph sizes and structures, consistently outperforming existing baselines in terms of accuracy and computational efficiency.
+
+**Limitations and future work** While ACED demonstrates significant effectiveness, several limitations and opportunities for future research remain. While the independent Bernoulli distribution can produce high-quality posterior graphs, its inherent independence assumption introduces bias in EIG estimation. Besides, the probability of producing cyclic graphs increases as the number of nodes approaches to 30, which hampers the overall sampling process and motivates a careful incorporation of acyclic constraints. Moreover, while the policy has theoretical guarantees, its robustness against changes in the design horizon—such as budget cuts or extensions—remains unclear. Similarly, the need to adjust the model structure midway through the intervention stages also requires further exploration and testing. Further efforts could also focus on extending this framework to multi-target settings, where interventions can be jointly performed on multiple nodes at each stage.
+
+ Rest of paper (reference and Appendix) is removed.

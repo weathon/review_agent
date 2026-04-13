@@ -1,0 +1,335 @@
+
+
+{0}------------------------------------------------
+
+# DIRECT ADVANTAGE ESTIMATION IN PARTIALLY OBSERVABLE ENVIRONMENTS
+
+###### Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Direct Advantage Estimation (DAE) was recently shown to improve sample-efficiency of deep reinforcement learning algorithms. However, DAE assumes full observability of the environment, which may be restrictive in realistic settings. In the present work, we first show that DAE can be extended to partially observable domains with minor modifications. Secondly, we address the increased computational cost due to the need to approximate the transition probabilities through the use of discrete latent dynamics models. Finally, we empirically evaluate the proposed method using the Arcade Learning Environments, and show that it is scalable and sample-efficient.
+
+## 1 INTRODUCTION
+
+Real-world decision-making problems often involve incomplete information, where observations received by the agents are not enough to fully determine the underlying state of the system. For example, a robot navigating a building may only have a local view of its surroundings; a doctor has to decide the course of treatment for a patient based on a limited set of test results. The Partially Observable Markov Decision Process (POMDP) framework (Kaelbling et al., 1998) provides a generalization of the fully observable MDP framework (Puterman, 2014) to tackle these problems.
+
+While reinforcement learning (RL) (Sutton and Barto, 2018) paired with deep neural networks (deep RL) has achieved unprecedented results in various domains (Mnih et al., 2015; Berner et al., 2019; Schrittwieser et al., 2020; Ouyang et al., 2022; Wurman et al., 2022), it is known to be challenging to train and often requires millions or billions of samples (Henderson et al., 2018). Approximating the state(-action) value functions ( $Q^\pi$  or  $V^\pi$ ) is a crucial part of training deep RL agents. However, these functions often depend strongly on the policy, making them highly non-stationary and difficult to learn. Recently, Pan et al. (2022) demonstrated that the advantage function is more stable under policy variations, proposing Direct Advantage Estimation (DAE) to learn the advantage function directly for on-policy settings. DAE demonstrated strong empirical performance, but is restricted to on-policy settings. Later, Pan and Schölkopf (2024) observed that the return of a trajectory can be decomposed into two different advantage functions, which enabled a natural generalization of DAE to off-policy settings (Off-policy DAE). Off-policy DAE was reported to further improve the sample efficiency of DAE; however, the method suffers from significantly increased computational complexity due to the need to learn a high dimensional generative model to approximate the transition probabilities.
+
+The present work explores the feasibility of DAE in partially observable domains, and ways to reduce its computational complexity. More specifically, the contributions are:
+
+- We show that Off-policy DAE can be applied to POMDPs with minor modifications to the constraints of the objective.
+- We address the problem of increased computational cost of Off-policy DAE by modeling transitions in a low dimensional embedding space, which circumvents the need to model high dimensional observations.
+- We show that truncating trajectories, a common technique for reducing the computational cost of training POMDP agents, can lead to confounding and degrade performance.
+- We evaluate our method empirically using the Arcade Learning Environment (Bellemare et al., 2013), and perform an extensive ablation study to show the contributions of various corrections and hyperparameters.
+
+{1}------------------------------------------------
+
+## 2 BACKGROUND
+
+In the present work, we consider a discounted POMDP defined by the tuple  $(\mathcal{S}, \mathcal{A}, T, \Omega, \mathcal{O}, r, \gamma)$  (Kaelbling et al., 1998), where  $\mathcal{S}$  is the state space,  $\mathcal{A}$  is the action space,  $T(s, a, s')$  denotes the transition probability from state  $s$  into state  $s'$  after taking action  $a$ ,  $\Omega$  is the observation space,  $\mathcal{O}(s, o)$  denotes the probability of observing  $o \in \Omega$  in state  $s$ ,  $r(s, a)$  denotes the reward received by the agent after taking action  $a$  in state  $s$ , and  $\gamma \in [0, 1)$  denotes the discount factor. When the context is clear, we shall simply denote  $T(s, a, s')$  by  $p(s'|s, a)$ , and  $\mathcal{O}(s, o)$  by  $p(o|s)$ . In this work, we shall consider the case where  $\mathcal{S}$ ,  $\mathcal{A}$ , and  $\Omega$  are finite. An agent in a POMDP cannot directly observe the states, but only the observations emitted from the state through  $\mathcal{O}$ . We consider the infinite-horizon discounted setting, where the goal of an agent is to find a policy  $\pi$ , which maximizes the expected cumulative reward, i.e.,  $J(\pi) = \mathbb{E}_\pi [\sum_{t=0}^{\infty} \gamma^t r(s_t, a_t)]$ .
+
+In fully observable environments, one can estimate the state-(action) value function  $V^\pi(s)$  (or  $Q^\pi(s, a)$ ) as the states are observed directly. In POMDPs, however, agents do not observe states directly, and have to estimate the values based on the observed history (information vector)  $h_t = (o_0, a_0, r_0, o_1, \dots, o_t)$  (Bertsekas, 2012). Similar to their counterparts in MDPs, we can define the value functions by:
+
+$$V^\pi(h_t) = \mathbb{E}_\pi \left[ \sum_{t'=0}^{\infty} \gamma^{t'} r_{t+t'} \mid h_t \right], \quad Q^\pi(h_t, a_t) = \mathbb{E}_\pi \left[ \sum_{t'=0}^{\infty} \gamma^{t'} r_{t+t'} \mid h_t, a_t \right]. \quad (1)$$
+
+### 2.1 DIRECT ADVANTAGE ESTIMATION
+
+Aside from  $Q$  and  $V$ , another function of interest is the advantage function defined by  $A^\pi(s, a) = Q^\pi(s, a) - V^\pi(s)$  (Baird, 1995). Recently, Pan et al. (2022) proposed Direct Advantage Estimation (DAE) to estimate the advantage function by minimizing
+
+$$\mathcal{L}(\hat{A}, \hat{V}) = \mathbb{E}_\pi \left[ \left( \sum_{t=0}^{n-1} \gamma^t (r_t - \hat{A}_t + \gamma^n \hat{V}_{\text{target}}(s_n) - \hat{V}(s_0)) \right)^2 \right] \quad \text{s.t.} \quad \sum_{a \in \mathcal{A}} \hat{A}(s, a) \pi(a|s) = 0, \quad (2)$$
+
+where  $\hat{V}_{\text{target}}$  is a given bootstrapping target,  $r_t = r(s_t, a_t)$ , and  $\hat{A}_t = \hat{A}(s_t, a_t)$ . The constraint ensures the centering property of the advantage function (i.e.,  $\mathbb{E}_\pi [A^\pi(s, a)|s] = 0$ ). The minimizer of  $\mathcal{L}(\hat{A}, \hat{V})$  can be viewed as a multi-step estimate of  $(A^\pi, V^\pi)$ . One limitation of DAE is that it is on-policy, that is, the behavior policy ( $\mathbb{E}_\pi$ ) has to be the same as the target policy ( $\pi$  in the constraint).
+
+Pan and Schölkopf (2024) extended DAE to off-policy settings (Off-policy DAE), by showing that if we view stochastic transitions as actions from an imaginary agent (nature), then the return of a trajectory can be decomposed using the advantage functions from both agents as
+
+$$\sum_{t=0}^{\infty} \gamma^t r(s_t, a_t) = \sum_{t=0}^{\infty} \gamma^t (A^\pi(s_t, a_t) + B^\pi(s_t, a_t, s_{t+1})) + V^\pi(s_0), \quad (3)$$
+
+where  $B^\pi(s_t, a_t, s_{t+1}) = \gamma V^\pi(s_{t+1}) - \gamma \mathbb{E}_{s' \sim p(\cdot|s_t, a_t)} [V^\pi(s')|s_t, a_t]$  is the advantage function of nature, which was referred to as *luck* as it quantifies how much of the return is caused by nature. This decomposition admits a natural generalization of DAE into off-policy settings by incorporating  $\hat{B}$  into the objective function (Equation 2):
+
+$$\mathcal{L}(\hat{A}, \hat{B}, \hat{V}) = \mathbb{E}_\mu \left[ \left( \sum_{t=0}^{n-1} \gamma^t (r_t - \hat{A}_t - \hat{B}_t + \gamma^n \hat{V}(s_n) - \hat{V}(s_0)) \right)^2 \right] \quad (4)$$
+
+subject to  $\begin{cases} \mathbb{E}_{a \sim \pi(\cdot|s)} [\hat{A}(s, a)] = 0 \\ \mathbb{E}_{s' \sim p(\cdot|s, a)} [\hat{B}(s, a, s')] = 0 \end{cases}$ .
+
+Contrary to Equation 2, the behavior policy ( $\mathbb{E}_\mu$ ) and the target policy ( $\pi$  in the constraint) need not be equal. Intuitively,  $\hat{A}$  and  $\hat{B}$  can be viewed as corrections for stochasticity originating from the policy and the transitions, respectively. Under mild assumptions, one can show that  $(A^\pi, B^\pi, V^\pi)$  is
+
+{2}------------------------------------------------
+
+the unique minimizer of this objective function, suggesting that we can perform off-policy policy evaluation by minimizing the empirical version of this objective function. However, Off-policy DAE has some limitations:
+
+- The method assumes fully observable MDPs, which can be restrictive in realistic settings.
+- Enforcing the  $\hat{B}$  constraint in Equation 4 requires estimating the transition probability  $p(s'|s, a)$ , which can be difficult when the state space is high-dimensional (e.g., images). Pan and Schölkopf (2024) reported that learning the transition probability can drastically increase the computational complexity ( $\sim 7$  fold increase in runtime).
+
+We address these issues in Section 3.
+
+## 3 RETURN DECOMPOSITION IN POMDPs
+
+The key observation of Pan and Schölkopf (2024) is that the return can be decomposed using two different advantage functions (Equation 3). Here, we show that such a decomposition also exists in POMDPs.
+
+Firstly, we can define the advantage function in POMDPs by
+
+$$A^\pi(h_t, a_t) = Q^\pi(h_t, a_t) - V^\pi(h_t) = \mathbb{E}_\pi \left[ \sum_{t'=0}^{\infty} \gamma^{t'} r_{t+t'} \middle| h_t, a_t \right] - \mathbb{E}_\pi \left[ \sum_{t'=0}^{\infty} \gamma^{t'} r_{t+t'} \middle| h_t \right]. \quad (5)$$
+
+Similar to its counterpart in MDPs, this function also satisfies the centering property, namely  $\sum_{a \in \mathcal{A}} \pi(a|h_t) A^\pi(h_t, a) = 0$ . The next question is how we can similarly define the luck function  $B^\pi$  such that the return can be decomposed, and whether this function also satisfies the centering condition.
+
+We proceed by examining the difference between the return and the sum of the advantage function along a given trajectory  $(o_0, a_0, r_0, o_1, a_1, r_1, \dots)$
+
+$$\sum_{t=0}^{\infty} \gamma^t r_t - \left( \sum_{t=0}^{\infty} \gamma^t A^\pi(h_t, a_t) + V^\pi(h_0) \right) = \sum_{t=0}^{\infty} \gamma^t (r_t + \gamma V^\pi(h_{t+1}) - Q^\pi(h_t, a_t)). \quad (6)$$
+
+This equation suggests that we can define the luck function as
+
+$$B^\pi(h_t, a_t, h_{t+1}) = r_t + \gamma V^\pi(h_{t+1}) - Q^\pi(h_t, a_t) \quad (7)$$
+
+Remember that  $h_{t+1}$  is simply the concatenation of  $h_t$  and  $(a_t, r_t, o_{t+1})$ , meaning that we can rewrite  $B^\pi(h_t, a_t, h_{t+1})$  as  $B^\pi(h_t, a_t, r_t, o_{t+1})$ . We thus see that the  $B^\pi$  defined this way also satisfies a (slightly different) centering property, namely,
+
+$$\mathbb{E}_{(r_t, o_{t+1}) \sim p(\cdot|h_t, a_t)} [B^\pi(h_t, a_t, r_t, o_{t+1})|h_t, a_t] = 0. \quad (8)$$
+
+Essentially, this equation differs from its MDP counterpart by the variables that are being integrated. In POMDPs, since the agent does not observe the underlying state, we simply integrate the variables being observed after taking an action (i.e., the immediate reward and the next observation).
+
+Finally, we arrive at the following generalization:
+
+**Proposition 1** (Off-policy DAE for POMDPs). *Given behavior policy  $\mu$ , target policy  $\pi$ , and backup length  $n \geq 0$ .  $(\hat{A}^\pi, \hat{B}^\pi, \hat{V}^\pi)$  is a minimizer of*
+
+$$\mathcal{L}(\hat{A}, \hat{B}, \hat{V}) = \mathbb{E}_\mu \left[ \sum_{t'=0}^{n-1} \gamma^{t'} (r_{t+t'} - \hat{A}_{t+t'} - \hat{B}_{t+t'}) + \gamma^n \hat{V}(h_{n+t}) - \hat{V}(h_t) \right]^2 \quad (9)$$
+
+$$\text{subject to } \begin{cases} \mathbb{E}_{a \sim \pi(\cdot|h)} [\hat{A}(h, a)|h] = 0 & \forall h \in \mathcal{H} \\ \mathbb{E}_{(r, o') \sim p(\cdot|h, a)} [\hat{B}(h, a, r, o')|h, a] = 0 & \forall (h, a) \in \mathcal{H} \times \mathcal{A} \end{cases}$$
+
+where  $\mathcal{H}$  is the set of all trajectories of the form  $(o_0, a_0, r_0, \dots, o_t)$ ,  $\hat{A}_t = \hat{A}(h_t, a_t)$ , and  $\hat{B}_t = \hat{B}(h_t, a_t, r_t, o_{t+1})$ . Furthermore, the minimizer is unique if, for any trajectory  $h \in \mathcal{H}$ ,  $p_\mu(h) > 0$ .
+
+{3}------------------------------------------------
+
+![Diagram of the latent dynamics model architecture. It shows a sequence of observations (represented by small images of a car) o_{t-3}, o_{t-2}, o_{t-1}, o_t, and o_{t+1} being processed by an encoder (enc) to produce latent vectors x_{t-3}, x_{t-2}, x_{t-1}, x_t, and x_{t+1}. These vectors are then processed by an RNN to produce information vectors h_{t-3}, h_{t-2}, h_{t-1}, and h_t. At time t, the model generates multiple predictions for the next latent vector x_{t+1} based on the current information vector h_t and different actions a_t. These predictions are labeled as the 'prior' and include x_{t+1,1} with probability p_phi(1|h_t, a_t), x_{t+1,2} with probability p_phi(2|h_t, a_t), and so on. A red arrow labeled 'posterior' points to one of these predictions, specifically x_{t+1,z} with probability p_phi(z|h_t, a_t), where z is the arg min_i |x_{t+1,i} - x_{t+1}|. The final output for o_{t+1} is shown on the right.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Diagram of the latent dynamics model architecture. It shows a sequence of observations (represented by small images of a car) o\_{t-3}, o\_{t-2}, o\_{t-1}, o\_t, and o\_{t+1} being processed by an encoder (enc) to produce latent vectors x\_{t-3}, x\_{t-2}, x\_{t-1}, x\_t, and x\_{t+1}. These vectors are then processed by an RNN to produce information vectors h\_{t-3}, h\_{t-2}, h\_{t-1}, and h\_t. At time t, the model generates multiple predictions for the next latent vector x\_{t+1} based on the current information vector h\_t and different actions a\_t. These predictions are labeled as the 'prior' and include x\_{t+1,1} with probability p\_phi(1|h\_t, a\_t), x\_{t+1,2} with probability p\_phi(2|h\_t, a\_t), and so on. A red arrow labeled 'posterior' points to one of these predictions, specifically x\_{t+1,z} with probability p\_phi(z|h\_t, a\_t), where z is the arg min\_i |x\_{t+1,i} - x\_{t+1}|. The final output for o\_{t+1} is shown on the right.
+
+Figure 1: The latent dynamics model first embeds observations ( $o_t$ ) into low dimensional vectors ( $x_t$ ), which are then processed by an RNN to capture the information vectors  $h_t$  (for illustrative purpose, we omit conditioning on previous actions and rewards). At each time-step,  $|\mathcal{Z}|$  predictions of the embeddings  $\hat{x}_{t+1}$ , along with their probabilities  $p_\phi(\cdot|h_t, a_t)$  are generated to capture the distribution of  $x_{t+1}$ . During training, gradients only propagate through one of the predictions determined by the posterior, which, in this case, is a one-hot vector.
+
+See Appendix A for a proof. Again, we remind the reader that Proposition 1 differs from its MDP counterpart (Equation 4) by simply replacing states with histories, and transition probabilities with conditional densities of the observed variables (in the  $\tilde{B}$  constraint). This is a consequence of the fact that POMDPs can be reformulated as MDPs using information vectors (Bertsekas, 2012). Like DAE, this can be seen as an off-policy multi-step method for value approximation, as the objective function includes  $n$ -step rewards. Deploying this method in practice, however, can be computationally heavy, and we discuss methods to reduce its computational complexity below.
+
+### 3.1 PRACTICAL CONSIDERATIONS — ENFORCING CONSTRAINTS
+
+We first discuss how to (approximately) enforce the two centering constraints in the objective function (Equation 9) by reparameterizing the function approximators.
+
+The  $\tilde{A}$  constraint can be easily enforced upon a given function approximator  $\tilde{f}(h, a)$  for a given policy  $\pi$  by constructing  $\tilde{A}(h, a) = \tilde{f}(h, a) - \sum_{a \in \mathcal{A}} \tilde{f}(h, a) \pi(a|h)$  (Wang et al., 2016). The  $\tilde{B}$  constraint, on the other hand, is much more challenging, as it requires knowledge of the transition probabilities  $p(\cdot|h, a)$ . In the original Off-policy DAE implementation (Pan and Schölkopf, 2024), this was achieved by encoding transitions  $(h, a, r, o')$  into a small discrete latent space  $z \in \mathcal{Z}$  using a conditional variational autoencoder (Kingma and Welling, 2013; Sohn et al., 2015), and constructing  $\tilde{B}(h, a, r, o')$  from a given function approximator  $\tilde{g}(h, a, z)$  by
+
+$$\tilde{B}(h, a, r, o') = \mathbb{E}_{z \sim q_\phi(\cdot|h, a, r, o')} [\tilde{g}(h, a, z)|h, a, r, o'] - \mathbb{E}_{z \sim p_\phi(\cdot|h, a)} [\tilde{g}(h, a, z)|h, a], \quad (10)$$
+
+where  $q_\phi(\cdot|h, a, r, o')$  is the approximated posterior (encoder),  $p_\phi(\cdot|h, a)$  is the prior, and  $\phi$  are the parameters of the CVAE<sup>1</sup>. In practice, the expectations can be computed efficiently since  $\mathcal{Z}$  is discrete. It then follows that  $\mathbb{E}_{(r, o') \sim p(\cdot|h, a)} [\tilde{B}(h, a, r, o')|h, a] \approx 0$ . This approach, however, can be computationally heavy if observations are high dimensional due to the need to reconstruct observations.
+
+To reduce computational complexity, we propose to learn a discrete dynamics model purely in the embedding space<sup>2</sup> (see Figure 1). This is achieved by first embedding observations into a low dimensional vector  $x = \text{enc}(o) \in \mathbb{R}^d$  (with  $d \ll \dim(\Omega)$ ), where  $\text{enc}$  denotes the encoder (e.g., a
+
+<sup>1</sup>We adapt the POMDP setting here for clarity, but note that this was originally developed for  $\tilde{B}(s, a, s')$ .
+
+<sup>2</sup>We will refer to the space of encoded observations as the embedding space, and  $\mathcal{Z}$  as the latent space of the CVAE to avoid confusion.
+
+{4}------------------------------------------------
+
+convolutional network), and learning to predict  $x_{t+1} = \text{enc}(o_{t+1})$  from the observed history  $(h_t, a_t)$ . This approach is similar to the self-predictive representation (SPR) (Schwarzer et al., 2020); however, SPR only produces a single prediction, which cannot capture the stochasticity of transitions. We address this by combining SPR with the Winner-Takes-All (WTA) loss (Lee et al., 2015; Guzman-Rivera et al., 2012), which was shown to be useful for modeling stochastic predictions. More specifically, we combine them by: (1) making  $|\mathcal{Z}|$  predictions of the next embedding (note that  $|\mathcal{Z}|$  is an integer since we are using discrete latent variables), and (2) minimizing only the best prediction. More specifically, the objective function is:
+
+$$\mathcal{L}_{\text{rec}} = \sum_{z \in \mathcal{Z}} w(\hat{x}_{t+1,z}, x_{t+1}) |\hat{x}_{t+1,z} - \text{sg}(x_{t+1})|^2, \quad (11)$$
+
+$$w(\hat{x}_{t+1,z}, x_{t+1}) = \begin{cases} 1, & z = \arg \min_i |\hat{x}_{t+1,i} - x_{t+1}| \\ 0, & \text{otherwise} \end{cases}, \quad (12)$$
+
+where  $\text{sg}$  denotes stop-gradient. Intuitively, this can be seen as performing  $k$ -means clustering (with  $k = |\mathcal{Z}|$ ) in the embedding space with centroids  $\hat{x}_{t,z}$  (Ruppertrecht et al., 2017). Next, note that the objective (Equation 11) is equivalent to a conditional vector-quantized VAE (VQ-VAE) (Van Den Oord et al., 2017), with posterior  $q_\phi(z|h_t, a_t, x_{t+1}) = w(\hat{x}_{t+1,z}|h_t, a_t, x_{t+1})$ , and codebook  $\hat{x}_{t+1,z}(h_t, a_t)$  that are dependent on the information vector  $h_t$ . Consequently, we can learn the prior by minimizing the KL-divergence between the prior  $p_\phi(z|h_t, a_t)$  and the posterior  $q_\phi(z|h_t, a_t, x_{t+1})$ . Once we learn a conditional VQ-VAE, we can approximate the  $\hat{B}$  constraint using Equation 10. The constraint in the objective (Equation 9) indicates that we should also consider stochasticity of the rewards, which can be similarly achieved by making multiple reward predictions and adding a reward reconstruction term to the objective function.
+
+In practice, we found that using shallow MLPs to model the dynamics already achieves strong empirical performance with negligible computational cost compared to other parts of the system. In addition, we found it possible to learn the RL objective (Equation 9) and the dynamics model jointly end-to-end to further reduce computational complexity compared to learning them separately as done by Pan and Schölkopf (2024).
+
+### 3.2 PRACTICAL CONSIDERATIONS — TRUNCATING SEQUENCES & CONFOUNDING
+
+As states are now replaced by histories, we have to process sequences of observations instead of singular states. In modern deep RL, this is typically achieved by using recurrent neural networks (RNNs), such as LSTMs or GRUs (Hochreiter and Schmidhuber, 1997; Hausknecht and Stone, 2015; Mnih et al., 2016; Kapturowski et al., 2018; Gruslys et al., 2018; Cho et al., 2014; Hafner et al., 2023). This can be computationally heavy during training when trajectories extend to thousands of steps. Instead, it is common to truncate histories by sampling random segments of trajectories from the replay buffer, and initialize the hidden recurrent state with the first few steps (burn-in) before updating the values (Kapturowski et al., 2018), as demonstrated below:
+
+$$\underbrace{(o_0, a_0, r_0, \dots, o_{t-k-1}, a_{t-k-1})}_{\text{truncated}}, \underbrace{(o_{t-k-1}, r_{t-k-1}, o_{t-k}, \dots, o_t, a_t, r_t, \dots, o_{t+n})}_{\text{burn in (initialize RNN state) \quad value updates}}$$
+
+Here, we highlight a problem that is commonly overlooked due to confounding (Pearl, 2009). Confounding can bias our estimates when the unobserved variables (the truncated part of the trajectory  $h_{0:t-k-1}$ ) simultaneously influence both the input variables (the remaining part of the trajectory  $h_{t-k:t}$ ) and the output variables (the future rewards  $r_{t'}$  for  $t' \geq t$ ). We illustrate this problem with a toy example (see Figure 2). In this environment, the optimal policy is  $\pi^*(\text{up}|o_0) = p \in [0, 1]$  (arbitrary), and  $\pi^*(a|o_0, a_0=a, o_1) = 1$  (repeat previous actions). Now, let us consider the case where the behavior policy is the optimal policy with  $\pi^*(\text{up}|o_0) = 0.5$ , but the truncation length is 0 (i.e., memoryless) for the target policy. In this case, we will incorrectly infer that  $V^\pi(o_1) = Q^\pi(o_1, \cdot) = 1$  for any target policy  $\pi$ , since all the collected trajectories receive a reward 1 irrespective of the action  $a_1$ . This is a classic example of confounding, where the unobserved variable  $a_0$  behaves as a confounder that biases our estimates.
+
+In the online setting, we can partially eliminate confounding by conditioning both the behavior policy and the target policy on the same set of variables (i.e., same memory capacity). This then breaks the
+
+{5}------------------------------------------------
+
+270  
+271  
+272  
+273  
+274  
+275  
+276  
+277  
+278  
+279  
+280  
+281  
+282  
+283  
+284  
+285  
+286  
+287  
+288  
+289  
+290  
+291  
+292  
+293  
+294  
+295  
+296  
+297  
+298  
+299  
+300  
+301  
+302  
+303  
+304  
+305  
+306  
+307  
+308  
+309  
+310  
+311  
+312  
+313  
+314  
+315  
+316  
+317  
+318  
+319  
+320  
+321  
+322  
+323
+
+![Figure 2: Left: A toy POMDP with 4 states (s0, s1, s2, s3) and 2 actions (up, down). s0 is the starting state, s3 is the terminal state. s1 and s2 emit the same observation o1. Right: A causal graph showing relationships between a0, a1, and r1.](a7d78d22e465dea388b31d0739f9d0cd_img.jpg)
+
+The diagram consists of two parts. The left part shows a state transition diagram for a POMDP. State  $s_0$  is the initial state, and  $s_3$  is a terminal (absorbing) state. There are two actions: 'up' and 'down'. From  $s_0$ , the 'up' action leads to state  $s_1$  and the 'down' action leads to state  $s_2$ . Both  $s_1$  and  $s_2$  lead to state  $s_3$ . Transitions from  $s_1$  and  $s_2$  to  $s_3$  are labeled with  $r=0$ . Transitions from  $s_0$  to  $s_1$  and  $s_0$  to  $s_2$  are labeled with  $r=0$ . States  $s_1$  and  $s_2$  are enclosed in a dashed box and both emit observation  $o_1$ . State  $s_0$  emits observation  $o_0$ . State  $s_3$  is a terminal state with self-loops labeled  $r=1$ . The right part shows a causal graph with three nodes:  $a_0$ ,  $a_1$ , and  $r_1$ .  $a_0$  is a dashed circle,  $a_1$  and  $r_1$  are solid circles. Arrows point from  $a_0$  to  $a_1$  and from  $a_0$  to  $r_1$ . An arrow also points from  $a_1$  to  $r_1$ .
+
+Figure 2: Left: A toy POMDP with 4 states (s0, s1, s2, s3) and 2 actions (up, down). s0 is the starting state, s3 is the terminal state. s1 and s2 emit the same observation o1. Right: A causal graph showing relationships between a0, a1, and r1.
+
+Figure 2: **Left:** A toy POMDP with 4 states and 2 actions. The nodes and the arrows represent the states and the actions (up, down), respectively.  $s_0$  is the starting state and  $s_3$  is the terminal (absorbing) state. The agent does not observe the underlying state but only the emitted observation at each time step,  $o_0$  and  $o_1$ , where both  $s_1$  and  $s_2$  emit the same observation  $o_1$ . **Right:** The causal relationship between  $a_0$ ,  $a_1$ , and  $r_1$ . We ignore other variables as they do not influence  $r_1$ . The variable  $a_0$  can act as a confounder during training when the target policy is memoryless.
+
+causal influence from  $h_{0:t-k-1}$  to  $a_{t'}$  for all  $t' \geq t$ . While this does not fully eliminate confounding since  $h_{t-k:t}$  and  $r_t$  can still be influenced by  $h_{0:t-k-1}$ , we empirically show that this simple change can have non-trivial effects on the agent’s performance (see Section 4). Finally, we remind the reader that this is not a limitation of the proposed method, but a common issue due to partial observability.
+
+## 4 EXPERIMENTS
+
+We examine the performance of the proposed method using the Arcade Learning Environment (ALE) (Bellemare et al., 2013), which includes environments with diverse dynamics and various degrees of partial observability. More specifically, we use the five environments subset (Battle Zone, Double Dunk, Name This Game, Phoenix, Qbert) suggested by Aitchison et al. (2023) because it was found that the learning performance in this subset strongly correlates with the overall performance of an algorithm. We use the same environment setting as the Dopamine baselines (Castro et al., 2018), which largely follows the protocols proposed by Machado et al. (2018), including the use of sticky actions (repeat previous action with a certain probability) and discarding end-of-life signals. Note that while sticky actions were originally proposed to inject stochasticity into the environments, they also introduce additional partial observability due to its dependency on previous actions.
+
+We evaluate our method using a DQN-like (Mnih et al., 2015) agent with some modifications, which we briefly summarize below. (1) **Recurrent Architecture:** We do not use frame-stacking, but simply use an LSTM after the convolutional encoder to process sequences of observations. Aside from image inputs, we also feed previous actions and rewards into the LSTM. (2) **DAE objective:** We replace the 1-step Q-learning objective with our multi-step DAE objective (Equation 9), and use three separate MLPs on top of the LSTM to model  $\hat{A}$ ,  $\hat{B}$ , and  $\hat{V}$ . (3) **Discrete Latent Dynamics Model:** We use three additional MLPs on top of the LSTM to estimate the next observation embedding  $\hat{x}_{t+1}(h_t, a_t, z_t)$ , the immediate reward  $p(r_t|h_t, a_t)$ , and the prior probability  $p(z_t|h_t, a_t)$ . (4) **Exponential Moving Average:** Similar to SPR, we use an exponential moving average of the online network as the target network to generate the next observation embeddings for the dynamics model. This target network is also used to construct smoothly changing target policies and value bootstrapping targets for the DAE objective. (5) **Deeper Network:** We use the deep residual network proposed by Espeholt et al. (2018) instead of the shallow three-layer convolutional network, which we found to enjoy better scalability and improved sample efficiency. In our implementation, we use a CNN-LSTM backbone with MLP heads on top to model the value functions  $(\hat{A}, \hat{B}, \hat{V})$  and the dynamics  $(\hat{x}, p(\cdot|h, a))$ . For more details, we refer the reader to Appendix C.
+
+In the following experiments, we train the agents for 20 million frames (5 million environment steps due to frame-skipping), and evaluate the agent every 1 million frames by averaging the cumulative scores of 50 episodes.
+
+{6}------------------------------------------------
+
+![Figure 3: Comparing scalability and sample efficiency with off-policy correction (top row) and without it (bottom row). The figure consists of 10 subplots arranged in a 2x5 grid. The top row shows results with off-policy correction, and the bottom row shows results without it. Each row contains five plots for the games: BattleZone, DoubleDunk, NameThisGame, Phoenix, and Qbert. The x-axis for all plots is 'Frames (millions)' ranging from 0 to 20. The y-axis is 'Score'. Each plot shows the performance of different models: m=1 (blue solid line), m=2 (orange solid line), m=4 (green solid line), m=8 (red solid line), DreamerV2 (black dashed line), DreamerV3 (black dotted line), and Rainbow (black dash-dot line). Shadings around the lines represent 1 standard error. In general, the top row (with correction) shows higher scores and better scalability than the bottom row (without correction).](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+Figure 3: Comparing scalability and sample efficiency with off-policy correction (top row) and without it (bottom row). The figure consists of 10 subplots arranged in a 2x5 grid. The top row shows results with off-policy correction, and the bottom row shows results without it. Each row contains five plots for the games: BattleZone, DoubleDunk, NameThisGame, Phoenix, and Qbert. The x-axis for all plots is 'Frames (millions)' ranging from 0 to 20. The y-axis is 'Score'. Each plot shows the performance of different models: m=1 (blue solid line), m=2 (orange solid line), m=4 (green solid line), m=8 (red solid line), DreamerV2 (black dashed line), DreamerV3 (black dotted line), and Rainbow (black dash-dot line). Shadings around the lines represent 1 standard error. In general, the top row (with correction) shows higher scores and better scalability than the bottom row (without correction).
+
+Figure 3: Comparing scalability and sample efficiency with off-policy correction (top row) and without it (bottom row). Results are aggregated over 10 random seeds. Lines and shadings represent the mean and 1 standard error, respectively.  $m$ : width multiplier of the convolutional layers.
+
+Table 1: Effect of model capacity and off-policy correction on the final evaluation score. Scores were aggregated over 10 random seeds after 20M training frames. Values represent (mean) $\pm$ (1 standard error).  $O$ : Off-policy correction.  $m$ : width multiplier. RBW: Rainbow (200M frames). DV2: DreamerV2 (20M frames). DV3: DreamerV3 (20M frames).
+
+| $O$ | $m$ | BattleZone | DoubleDunk | NameThisGame | Phoenix | Qbert |
+|-|-|-|-|-|-|-|
+| ✓ | 1 | 35044 $\pm$ 986 | 8.80 $\pm$ 2.13 | 10977 $\pm$ 441 | 5666 $\pm$ 54 | 15313 $\pm$ 56 |
+|  | 2 | 38164 $\pm$ 603 | 17.68 $\pm$ 1.15 | 14308 $\pm$ 289 | 8010 $\pm$ 270 | 15831 $\pm$ 146 |
+|  | 4 | 40098 $\pm$ 900 | 21.17 $\pm$ 0.45 | 18682 $\pm$ 580 | 13593 $\pm$ 1036 | 19697 $\pm$ 599 |
+|  | 8 | 39262 $\pm$ 763 | 21.49 $\pm$ 0.38 | 19638 $\pm$ 633 | 18127 $\pm$ 1075 | 23451 $\pm$ 415 |
+| ✗ | 1 | 27700 $\pm$ 433 | 7.59 $\pm$ 1.55 | 6066 $\pm$ 74 | 5366 $\pm$ 94 | 14944 $\pm$ 124 |
+|  | 2 | 31310 $\pm$ 554 | 11.00 $\pm$ 0.95 | 8090 $\pm$ 246 | 5835 $\pm$ 189 | 15599 $\pm$ 239 |
+|  | 4 | 30600 $\pm$ 490 | 11.16 $\pm$ 1.22 | 10171 $\pm$ 270 | 8838 $\pm$ 515 | 17529 $\pm$ 794 |
+|  | 8 | 32438 $\pm$ 752 | 11.46 $\pm$ 0.90 | 11007 $\pm$ 186 | 9641 $\pm$ 408 | 19868 $\pm$ 732 |
+|  | RBW | 40061 $\pm$ 1866 | 22.12 $\pm$ 0.34 | 9026 $\pm$ 193 | 8545 $\pm$ 1286 | 17383 $\pm$ 543 |
+|  | DV2 | 21225 $\pm$ 743 | 12.95 $\pm$ 1.31 | 12145 $\pm$ 87 | 9117 $\pm$ 2151 | 3441 $\pm$ 969 |
+|  | DV3 | 37818 $\pm$ 3979 | 22.46 $\pm$ 0.35 | 20652 $\pm$ 1002 | 56889 $\pm$ 3402 | 23540 $\pm$ 1976 |
+
+**Off-policy correction is crucial for scaling** In value-based deep RL, it is common to use biased multistep value targets by ignoring off-policy corrections (Hessel et al., 2018; Hernandez-Garcia and Sutton, 2019; Kapturowski et al., 2018; Horgan et al., 2018). However, as we will demonstrate, ignoring off-policy corrections can hurt the agent’s scalability and final performance. Following Pan and Schölkopf (2024), we partially disable off-policy corrections by setting  $\tilde{B} \equiv 0$ , which can be seen as ignoring corrections for the stochasticity of the environment (this is due to  $B^\pi \equiv 0$  for arbitrary  $\pi$  if the environment is deterministic<sup>3</sup>). We also remind the reader that the widely used biased  $n$ -step method is more aggressive and equivalent to enforcing both  $\tilde{A} \equiv 0$  and  $\tilde{B} \equiv 0$ . For scaling, we simply multiply the width of the convolutional layers in the encoder by a multiplier  $m$ . As a comparison, we include both model-based (DreamerV2 (Hafner et al., 2020) and DreamerV3 (Hafner et al., 2023)), and model-free (Rainbow (Castro et al., 2018)) algorithms as baselines. For DreamerV2 and DreamerV3, we report their scores evaluated at 20 million training frames as their model capacities ( $\sim$  20M and  $\sim$  200M parameters, respectively) are similar to ours (the  $m = 8$  model has  $\sim$ 50M parameters), but also note that both Dreamer methods were originally trained for 200M frames. For Rainbow, we simply report its score at 200 million training frames, since it uses a much smaller model. Figure 3 and Table 1 summarize the results. Firstly, we find that scaling up can substantially improve the sample efficiency of our method, and we see efficiency comparable to DreamerV3 in 3
+
+<sup>3</sup>Based on the observed transition probability  $p(r, o'|h, a)$  instead of the state transition probability  $p(s'|s, a)$ .
+
+{7}------------------------------------------------
+
+![Figure 4: Effect of backup length n. Five line plots for BattleZone, DoubleDunk, NameThisGame, Phoenix, and Qbert showing Score vs Frames (millions) for n=4, 8, and 16.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 4 displays five line plots showing the performance (Score) of a DAE agent across five Atari environments (BattleZone, DoubleDunk, NameThisGame, Phoenix, and Qbert) as a function of training frames (in millions). The x-axis represents Frames (millions) from 0 to 20. The y-axis represents the Score. Three lines are plotted for each environment, corresponding to different backup lengths  $n$ :  $n=4$  (blue),  $n=8$  (orange), and  $n=16$  (green). Shaded regions around the lines represent 1 standard error. In general, performance increases with  $n$ , though the effect is less pronounced in BattleZone and NameThisGame.
+
+Figure 4: Effect of backup length n. Five line plots for BattleZone, DoubleDunk, NameThisGame, Phoenix, and Qbert showing Score vs Frames (millions) for n=4, 8, and 16.
+
+Figure 4: Effect of backup length  $n$ . Results are aggregated over 10 random seeds. Lines and shadings represent the mean and 1 standard error, respectively.
+
+![Figure 5: Comparing LSTM to frame-stacking. Five line plots for BattleZone, DoubleDunk, NameThisGame, Phoenix, and Qbert showing Score vs Frames (millions) for LSTM and Frame Stack.](d864789b0d8384da1d22fd6a5d76bbdf_img.jpg)
+
+Figure 5 displays five line plots comparing the performance of an LSTM agent (blue line) and a frame-stacking agent (orange line) across the same five Atari environments as in Figure 4. The axes and shading are identical to Figure 4. In BattleZone, NameThisGame, and Qbert, the LSTM agent achieves a higher score than the frame-stacking agent. In DoubleDunk and Phoenix, the two agents perform similarly.
+
+Figure 5: Comparing LSTM to frame-stacking. Five line plots for BattleZone, DoubleDunk, NameThisGame, Phoenix, and Qbert showing Score vs Frames (millions) for LSTM and Frame Stack.
+
+Figure 5: Comparing LSTM to frame-stacking. Results are aggregated over 10 random seeds. Lines and shadings represent the mean and 1 standard error, respectively.
+
+out of 5 environments with our  $m = 8$  model, and better efficiency compared to DreamerV2 in most environments with our smaller model  $m = 2$ . Comparisons with Rainbow also demonstrate that our method can achieve similar performance while using only 10% of the training frames. Secondly, we see that disabling off-policy corrections can drastically degrade the performance and limit the benefit of scaling. These results also suggest that the learned latent dynamics model can indeed capture the stochasticity of the environments, as approximating the  $\bar{B}$  constraint hinges on the dynamics model.
+
+Next, we perform ablation studies to better understand the contribution of each part. For the following experiments, we use the  $m = 4$  model to reduce the computational cost.
+
+**Effect of backup length.** Multi-step learning allow reward information to propagate faster and reduce dependencies on the bootstrapping target, and it was found to stabilize and speedup training (Hernandez-Garcia and Sutton, 2019; Van Hasselt et al., 2018). However, it can also increase the variance of value updates, and choosing the backup length  $n$  can be seen as a bias-variance tradeoff (Kearns and Singh, 2000). Figure 4 summarizes the effect of  $n$  for our DAE agent. In general, we find using larger  $n$  to be beneficial, except for Battle Zone and Name This Game, where we see that increasing the backup length beyond 8 can hurt the performance.
+
+**Frame-stacking can be suboptimal.** Frame-stacking has been the standard approach to approximate the ALE environments as MDPs since its introduction by Mnih et al. (2015). Here, we examine the effect of our proposed POMDP correction compared to approximating the environment as an MDP via frame-stacking.<sup>4</sup> This can also be seen as a comparison between the POMDP version of DAE and its MDP counterpart. For fair comparison, we set the truncation length of the LSTM agent to 4 (this also applies to action selection), such that both agents have the same context length during action selection, and differ only in how the values are learned. In Figure 5, we see the LSTM agent to perform at least on par with the frame-stacking agent, while being significantly better in three of the environments. This indicates that our POMDP correction is indeed effective when the underlying environments are POMDPs.
+
+**Confounding can degrade performance.** As pointed out in Section 3.2, truncating sequences is essential to reducing computational cost, but naively truncating sequences without adjusting the behavior policy can lead to bias in value estimations due to confounders. Here, we test the impact of truncation length and the confounding bias in the ALE. To test this, we compare two different
+
+<sup>4</sup>For easier comparison, we use a different frame-stacking implementation. See Appendix C.4 for details.
+
+{8}------------------------------------------------
+
+Table 2: Effect of confounding and truncation length on the final evaluation score. Scores were aggregated over 10 random seeds after 20M training frames. Values represent (mean  $\pm$  1 standard error).  $k$ : truncation length. R: recurrent behavior policy. diff: relative difference of the score.
+
+| $k$ | R | BattleZone | DoubleDunk | NameThisGame | Phoenix | Qbert |
+|-|-|-|-|-|-|-|
+| 4 | $\times$ | $39404 \pm 899$ | $19.88 \pm 0.58$ | $21283 \pm 412$ | $12945 \pm 590$ | $19825 \pm 559$ |
+|  | $\checkmark$ | $36762 \pm 887$ | $17.67 \pm 1.43$ | $19760 \pm 800$ | $12234 \pm 379$ | $18718 \pm 493$ |
+|  | diff(%) | -6.70% | -11.12% | -7.15% | -5.49% | -5.58% |
+| 8 | $\times$ | $40098 \pm 900$ | $21.17 \pm 0.45$ | $18682 \pm 580$ | $13593 \pm 1036$ | $19697 \pm 599$ |
+|  | $\checkmark$ | $37224 \pm 803$ | $18.86 \pm 1.21$ | $17104 \pm 579$ | $13486 \pm 735$ | $19355 \pm 555$ |
+|  | diff(%) | -7.17% | -10.90% | -8.45% | -0.79% | -1.74% |
+
+sampling strategies: (1) fully recurrent behavior policy (no truncation), which causes confounding by conditioning on variables that are being truncated during training; (2) behavior policy with same truncation length as the target policy (see also Figure 6 for the causal graph). It is noteworthy that the confounded approach is actually widely used by popular algorithms (e.g., DRQN (Hausknecht and Stone, 2015)). We summarize the results in Table 2. Surprisingly, we find that this simple change leads to small, yet consistent performance degradation across all five environments and two truncation lengths. This suggests that the ALE may be more partially observable than previously believed, and confounding should be considered when designing sampling strategies.
+
+In Appendix C.5, we also examine the effect of the latent space size  $|\mathcal{Z}|$  on the performance, and find it to be relative robust above a certain level. This suggests that while the environments are stochastic, the stochasticity can be well approximated by a small number of latent variables.
+
+## 5 RELATED WORK
+
+**Advantage Estimation** Estimating the advantage function is an important part of policy optimization (Kakade and Langford, 2002). Schulman et al. (2015) proposed Generalized Advantage Estimation (GAE), which utilizes  $TD(\lambda)$  (Sutton, 1988) to perform on-policy multi-step estimates of the advantage function. Wang et al. (2016) proposed dueling network to parametrize  $Q_\theta$  into  $V_\theta + A_\theta$  and showed that it can improve the performance of the original DQN. Tang et al. (2023) proposed VA learning to estimate  $V$  and  $A$  separately, and showed that it can outperform the dueling architecture. Pan et al. (2022) proposed DAE to perform on-policy multi-step estimation of the advantage function. This was later generalized to the off-policy setting by Pan and Schölkopf (2024). The present work extends off-policy DAE to partially observable environments and improves its computational efficiency.
+
+**POMDP** POMDPs provide a general framework for studying decision making with incomplete states (Åström, 1965). In RL, POMDPs are usually solved by first converting them into MDPs either using belief states (Kaelbling et al., 1998) or information vectors (Bertsekas, 2012). In deep RL, partial observability is usually addressed using frame-stacking (Mnih et al., 2015), or by modeling the histories directly (Kapturowski et al., 2018; Gruslys et al., 2018; Hafner et al., 2023; Hausknecht and Stone, 2015; Mnih et al., 2016).
+
+**Latent Dynamics Model** Learning dynamics models in the latent space is a promising approach to model-based RL (Ha and Schmidhuber, 2018; Han et al., 2019; Schrittwieser et al., 2020; Hafner et al., 2023; Antonoglou et al., 2021). It is, however, still common to rely on reconstructing observations to learn meaningful latent representations (Anand et al., 2021). In the present work, we combine ideas from self-supervised learning methods (Schwarzer et al., 2020; Grill et al., 2020) and the WTA loss (Makansi et al., 2019; Rupprecht et al., 2017) to estimate the transition probabilities purely in the latent space, and found it to be beneficial.
+
+**Causality** The problem of inferring the effect of an action under partial observability dates at least back to Splawa-Neyman et al. (1990); Rubin (1974), and is a central topic in the study of causal inference (Pearl, 2009; Peters et al., 2017). In RL, these problems have been studied in the bandit setting (Bareinboim et al., 2015; Tennenholz et al., 2021) and the sequential setting (Tennenholz
+
+{9}------------------------------------------------
+
+et al., 2020; Pace et al., 2023). We showed that the confounding problem can also have negative impacts when training with recurrent policies.
+
+## 6 DISCUSSION
+
+In the present work, we showed how to extend DAE for POMDPs and addressed the computational cost issue by using discrete latent dynamics models. Through experiments in the ALE, we demonstrated that DAE is sample efficient and scalable, and that the proposed corrections are effective.
+
+One limitation of our method is the need to approximate the transition probabilities through the use of latent dynamics. This introduces additional hyperparameters (e.g., network architectures of the dynamics model), and renders our method closer to model-based than model-free, although we do not explicitly use the model for rollouts. One direction for future work is to explore model-free approaches to approximate the constraints. Another limitation is that, while we can partially mitigate the problem of confounding caused by using truncated trajectories, our approach is only applicable in the online setting, where we can control the behavior policy. An important direction is to develop computationally efficient methods for eliminating the confounding bias for broader settings.
+
+## REFERENCES
+
+- R. Agarwal, M. Schwarzer, P. S. Castro, A. Courville, and M. G. Bellemare. Deep reinforcement learning at the edge of the statistical precipice. *Advances in Neural Information Processing Systems*, 2021.
+- M. Aitchison, P. Sweetser, and M. Hutter. Atari-5: Distilling the arcade learning environment down to five games. In *International Conference on Machine Learning*, pages 421–438. PMLR, 2023.
+- A. Anand, J. Walker, Y. Li, E. Vérites, J. Schrittwieser, S. Ozair, T. Weber, and J. B. Hamrick. Procedural generalization by planning with self-supervised world models. *arXiv preprint arXiv:2111.01587*, 2021.
+- I. Antonoglou, J. Schrittwieser, S. Ozair, T. K. Hubert, and D. Silver. Planning in stochastic environments with a learned model. In *International Conference on Learning Representations*, 2021.
+- K. J. Åström. Optimal control of markov processes with incomplete state information i. *Journal of mathematical analysis and applications*, 10:174–205, 1965.
+- J. L. Ba, J. R. Kiros, and G. E. Hinton. Layer normalization. *arXiv preprint arXiv:1607.06450*, 2016.
+- L. Baird. Residual algorithms: Reinforcement learning with function approximation. In *Machine Learning Proceedings 1995*, pages 30–37. Elsevier, 1995.
+- E. Bareinboim, A. Forney, and J. Pearl. Bandits with unobserved confounders: A causal approach. *Advances in Neural Information Processing Systems*, 28, 2015.
+- M. G. Bellemare, Y. Naddaf, J. Veness, and M. Bowling. The arcade learning environment: An evaluation platform for general agents. *Journal of Artificial Intelligence Research*, 47:253–279, 2013.
+- C. Berner, G. Brockman, B. Chan, V. Cheung, P. Dębiak, C. Dennison, D. Farhi, Q. Fischer, S. Hashme, C. Hesse, et al. Dota 2 with large scale deep reinforcement learning. *arXiv preprint arXiv:1912.06680*, 2019.
+- D. Bertsekas. *Dynamic programming and optimal control: Volume I*, volume 4. Athena scientific, 2012.
+- P. S. Castro, S. Moitra, C. Gelada, S. Kumar, and M. G. Bellemare. Dopamine: A Research Framework for Deep Reinforcement Learning. 2018. URL <http://arxiv.org/abs/1812.06110>.
+- K. Cho, B. Van Merriënboer, D. Bahdanau, and Y. Bengio. On the properties of neural machine translation: Encoder-decoder approaches. *arXiv preprint arXiv:1409.1259*, 2014.
+
+ Rest of paper (reference and Appendix) is removed.

@@ -1,0 +1,335 @@
+
+
+{0}------------------------------------------------
+
+# HYPERAGENT: GENERALIST SOFTWARE ENGINEERING AGENTS TO SOLVE CODING TASKS AT SCALE
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Large Language Models (LLMs) have transformed software engineering (SE), exhibiting exceptional abilities in various coding tasks. Although recent advancements have led to the development of autonomous software agents using LLMs for end-to-end development tasks, these systems are often tailored to specific SE tasks. We present HYPERAGENT, a novel generalist multi-agent system that addresses a broad spectrum of SE tasks across multiple programming languages by emulating the workflows of human developers. HYPERAGENT consists of four specialized agents—Planner, Navigator, Code Editor, and Executor—capable of managing the full lifecycle of SE tasks, from initial planning to final verification. HYPERAGENT achieves state-of-the-art results on diverse SE tasks, including GitHub issue resolution on the well-known SWE-Bench benchmark, surpassing strong baselines. Additionally, HYPERAGENT excels in repository-level code generation (RepoExec) and fault localization and program repair (Defects4J), frequently outperforming SOTA baselines.
+
+## 1 INTRODUCTION
+
+In recent years, Large Language Models (LLMs) have demonstrated remarkable capabilities in assisting with various coding tasks, ranging from code generation and completion to bug fixing and refactoring. These models have transformed the way developers interact with code, providing powerful tools that can understand and generate human-like code snippets with impressive accuracy. However, as software engineering tasks grow in complexity, there is an emerging need for more sophisticated solutions that can handle the intricacies of real-world software development.
+
+Software agents built on LLMs have emerged as a promising solution to automate complex software engineering tasks, leveraging the advanced reasoning and generative abilities of LLMs. These agents can handle tasks such as code generation, bug localization, and orchestrating multi-step development processes. However, most current agents are limited in scope, typically focused on a **specific SE task**, such as resolving GitHub issues (Jimenez et al., 2023; Chen et al., 2024; Arora et al., 2024; Xia et al., 2024; Zhang et al., 2024a; Yang et al., 2024) using benchmarks like SWE-bench (Jimenez et al., 2023), or tackling competitive code generation tasks like APPS (Hendrycks et al., 2021), HumanEval (Chen et al., 2021a), and MBPP (Austin et al., 2021). Other agents (Qian et al., 2024; Hong et al., 2023; Nguyen et al., 2024) focus on generating complex software based on requirements. While these specialized agents excel in their domains, their claim of addressing general software engineering tasks is often overstated, as real-world SE challenges require more versatility across tasks, languages, and development scenarios.
+
+To address such drawbacks, we propose HYPERAGENT, a generalist multi-agent system designed to resolve a broad spectrum of SE tasks. Our design philosophy is rooted in the workflows that software engineers typically follow in their daily routines—whether it’s implementing new features in an existing codebase, localizing bugs in a large project, or providing fixes for reported issues and so on. While developers may use different tools or approaches to tackle these tasks, they generally adhere to consistent workflow patterns. We illustrate this concept through a workflow that represents how developers typically resolve coding tasks. Although different SE tasks require varied approaches, they all follow a similar workflow.
+
+Figure 1 illustrates a typical workflow for a software engineer when resolving a task from the backlog, which is a list of tasks to be completed within a specific period.
+
+{1}------------------------------------------------
+
+![Figure 1: Illustration of a Developer's Workflow for Resolving a Software Engineering Task. The diagram shows a flow from a 'Task Backlog' to a specific task, then through four iterative phases: Analysis & Plan, Feature Localization, Edition, and Execution, which loops back to Analysis & Plan.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+The diagram illustrates a developer's workflow for resolving a software engineering task. It begins with a 'Task Backlog' containing four items: 'Add a "Dark Mode" feature to a web application.', 'Localize a root cause of an issue reported by a user.', 'Fix a reported GitHub issue where a form submission doesn't validate email addresses correctly.', and a fourth, empty box. Below the backlog, a task is selected: 'Task: Add a "Dark Mode" feature to a web application.' This task is then processed through four iterative phases, each represented by a colored box with an icon and title:
+
+- Analysis & Plan: Draft a plan to solve the task** (Blue box):
+ - Reviews the design document or user story for the "Dark Mode" feature.
+ - Plans to create a toggle button, update CSS styles, and store user preferences in local storage or a database.
+ - Draft a high-level plan that includes updating the CSS/SCSS files, modifying the user settings page, and adding a toggle switch for Dark Mode in the UI.
+- Feature Localization: Localize contexts in the repository** (Green box):
+ - Searchs for the existing settings page code to find where user preferences are stored.
+ - Explore the stylesheet files to identify where the color schemes are defined.
+ - Locate the main layout components to understand where the toggle for Dark Mode should be placed.
+- Edition: Make changes to the code** (Purple box):
+ - Add a new Dark Mode CSS class with the appropriate color scheme.
+ - Modify the settings page to include a toggle switch for Dark Mode.
+ - Update the layout components to apply the Dark Mode class when the user toggles the switch.
+- Execution: Execute the results to verify the results** (Yellow box):
+ - Run the application locally and toggle Dark Mode to see if the new styles are applied correctly.
+ - Ensure that the setting persists between sessions by checking the stored preferences.
+ - Conduct a code review and run automated tests to verify that the new feature does not introduce any regressions.
+
+A dashed arrow loops from the 'Execution' phase back to the 'Analysis & Plan' phase, indicating an iterative process.
+
+Figure 1: Illustration of a Developer's Workflow for Resolving a Software Engineering Task. The diagram shows a flow from a 'Task Backlog' to a specific task, then through four iterative phases: Analysis & Plan, Feature Localization, Edition, and Execution, which loops back to Analysis & Plan.
+
+Figure 1: Illustration of a Developer's Workflow for Resolving a Software Engineering Task. The diagram outlines the key phases a developer typically follows when implementing a new feature, such as adding a "Dark Mode" to a web application.
+
+- 1. Analysis & Plan:** The developer starts by understanding the task requirements through documentation review and stakeholder discussions. A working plan is then formulated, outlining key steps, potential challenges, and expected outcomes. This plan remains flexible, adjusting as new insights are gained or challenges arise.
+- 2. Feature Localization:** With a plan in place, the developer navigates the *repository* to identify relevant components, known as feature localization (Michelon et al., 2021; Martinez et al., 2018; Castro et al., 2019). This involves locating classes, functions, libraries, or modules pertinent to the task. Understanding dependencies and the system's overall design is crucial to make informed decisions later.
+- 3. Edition:** The developer edits the identified code components, implementing changes or adding new functionality. This phase also involves ensuring smooth integration with the existing code-base, maintaining code quality, and adhering to best practices.
+- 4. Execution:** After editing, the developer tests the modified code to verify it meets the plan's requirements. This includes running unit and integration tests, as well as conducting manual testing or peer reviews. If issues are found, the process loops back to previous phases until the task is fully resolved.
+
+These four steps are repeated until the developer confirms task completion. The exact process may vary depending on the task and the developer's skill level; some tasks are completed in one phase, while others require multiple iterations—if the developer is unsatisfied after the Execution step, the entire process may repeat. In HYPERAGENT, the framework is organized around four primary agents: *Planner*, *Navigator*, *Code Editor*, and *Executor*, as illustrated in Figure 2. Each agent corresponds to a specific step in the workflow shown in Figure 1, though their workflows may differ slightly from how a human developer might approach similar tasks<sup>1</sup>. Our design emphasizes three main advantages over existing methods: (1) Generalizability, the framework adapts easily to various tasks with minimal configuration, requiring little additional effort to incorporate new modules, (2) Efficiency, agents are optimized for processes with varying complexity, employing lightweight LLMs for tasks like navigation and more advanced models for code editing and execution and (3) Scalability, the system scales effectively in real-world scenarios with numerous subtasks, handling complex tasks efficiently.
+
+Experimental results (See Section 5) highlight HYPERAGENT 's unique position as the first system capable of working off-the-shelf across diverse software engineering tasks and programming
+
+<sup>1</sup>Details about each agent, along with how these advantages are achieved, are provided in Sections 4
+
+{2}------------------------------------------------
+
+languages, often exceeding specialized systems’ performance. Its versatility positions HYPERAGENT as a transformative tool for real-world software development. In summary, the key contributions of this work include:
+
+- Introduction of HYPERAGENT, a generalist multi-agent system that closely mimics typical software engineering workflows and is able to handle a broad spectrum of software engineering tasks across different programming languages.
+- Extensive evaluation demonstrating superior performance across various software engineering benchmarks, including Github issue resolution (SWE-Bench-Python), repository-level code generation (RepoExec-Python), and fault localization and program repair (Defects4J-Java). To our knowledge, HYPERAGENT is the first system designed to work off-the-shelf across diverse SE tasks in multiple programming languages without task-specific adaptations.
+- Insights into the design and implementation of scalable, efficient, and generalizable software engineering agent systems, paving the way for more versatile AI-assisted development tools that can seamlessly integrate into various stages of the software lifecycle.
+
+## 2 RELATED WORK
+
+### 2.1 DEEP LEARNING FOR AUTOMATED PROGRAMMING
+
+In recent years, applying deep learning to automated programming has captured significant interest within the research community (Balog et al., 2016; Bui & Jiang, 2018; Bui et al., 2021; Feng et al., 2020; Wang et al., 2021; Allamanis et al., 2018; Bui et al., 2023; Guo et al., 2020; 2022b). Specifically, Code Large Language Models (CodeLLMs) have emerged as a specialized branch of LLMs, fine-tuned for programming tasks (Wang et al., 2021; 2023; Feng et al., 2020; Allal et al., 2023; Li et al., 2023; Lozhkov et al., 2024; Guo et al., 2024; Pinnaparaju et al., 2024; Zheng et al., 2024; Roziere et al., 2023; Nijkamp et al., 2022; Luo et al., 2023; Xu et al., 2022; Bui et al., 2022). These models have become foundational in building AI-assisted tools for developers, aiming to solve competitive coding problems from benchmarks such as HumanEval (Chen et al., 2021b), MBPP (Austin et al., 2021), APPs (Hendrycks et al., 2021) and CRUXEval Gu et al. (2024).
+
+### 2.2 AUTONOMOUS CODING AGENTS
+
+The rise of open-source development tools based on large language models (LLMs) has transformed autonomous coding by enabling planning, self-critique, and functionality extension through function calls. Integrating these tools into workflows has significantly improved code generation performance on benchmarks like HumanEval (Chen et al., 2021b). Notable contributions include Huang et al. (2023), Chen et al. (2023), Shinn et al. (2024), Islam et al. (2024), Chen et al. (2022), and To et al. (2024). Additionally, research on generating complex software systems from requirements has led to MetaGPT (Hong et al., 2023), AgileCoder (Nguyen et al., 2024), and ChatDev (Qian et al., 2024), aiming to automate broader aspects of software development beyond single-file generation.
+
+Recently, there has been growing interest in using coding agents to automatically resolve GitHub issues, addressing real-world software engineering challenges. Key works in this area include SWE-Agent (Yang et al., 2024), SWE-bench (Jimenez et al., 2023), AutoCodeRover (Zhang et al., 2024b), and agentless approaches (Xia et al., 2024). This shift towards agent-based models bridges academic benchmarks with practical software engineering, fostering more sophisticated AI-assisted development tools that mimic human problem-solving in coding tasks.
+
+## 3 HYPERAGENT: A GENERALIST SOFTWARE AGENT FRAMEWORK
+
+Figure 2 illustrates the HYPERAGENT framework. The key design principle of HYPERAGENT is the centralization of advanced reasoning in the *Planner* agent, with delegation of computationally intensive but conceptually simpler tasks to specialized child agents. This approach optimizes inference costs and overall performance by eliminating redundant information processing outside the *Planner’s* context.
+
+{3}------------------------------------------------
+
+![Figure 2: Overview of HYPERAGENT. The diagram shows four agents: PLANNER, NAVIGATOR, CODE EDITOR, and EXECUTOR, connected via a central MESSAGE QUEUE. The PLANNER agent sends a request to the NAVIGATOR to search for 'server' in the codebase. The NAVIGATOR returns the file 'server.py' as the root cause. The PLANNER then asks the CODE EDITOR to change the flag 'enable_server' to True. The CODE EDITOR generates a test file 'test_server.py' and validates the change. Finally, the PLANNER asks the EXECUTOR to run the test file, which is successfully executed, indicating the issue is resolved. The agents interact with the MESSAGE QUEUE, which in turn interacts with the CODE REPO containing files like server.py, test_server.py, and user.py.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+The diagram illustrates the HYPERAGENT workflow. It features four main agents: **PLANNER**, **NAVIGATOR**, **CODE EDITOR**, and **EXECUTOR**, each with a distinct role and interaction pattern. All agents communicate through a central **MESSAGE QUEUE**.
+
+- PLANNER**: The central decision-making unit. It processes prompts, generates resolution strategies, and coordinates child agent activities. It iterates through planning, delegating subtasks, and processing feedback.
+- NAVIGATOR**: Specializes in information retrieval. It uses tools like `code_search` and `go_to_definition` to traverse codebases and identify relevant settings or files.
+- CODE EDITOR**: Handles code modification and generation. It uses `auto_repair_editor`, `code_search`, and `open_file` to generate code patches and validate changes.
+- EXECUTOR**: Validates solutions and reproduces issues. It uses `interactive_bash_shell` for environment setup and `open_file` for accessing documentation. It manages the execution of test cases.
+
+The workflow example shows the **PLANNER** identifying a missing interface trigger, asking the **NAVIGATOR** to find the relevant settings, then the **CODE EDITOR** to change a flag and generate a test, and finally the **EXECUTOR** to run the test and confirm resolution. The **CODE REPO** contains files such as `server.py`, `test_server.py`, and `user.py`.
+
+Figure 2: Overview of HYPERAGENT. The diagram shows four agents: PLANNER, NAVIGATOR, CODE EDITOR, and EXECUTOR, connected via a central MESSAGE QUEUE. The PLANNER agent sends a request to the NAVIGATOR to search for 'server' in the codebase. The NAVIGATOR returns the file 'server.py' as the root cause. The PLANNER then asks the CODE EDITOR to change the flag 'enable\_server' to True. The CODE EDITOR generates a test file 'test\_server.py' and validates the change. Finally, the PLANNER asks the EXECUTOR to run the test file, which is successfully executed, indicating the issue is resolved. The agents interact with the MESSAGE QUEUE, which in turn interacts with the CODE REPO containing files like server.py, test\_server.py, and user.py.
+
+Figure 2: Overview of HYPERAGENT: A scalable, multi-agent system for software engineering tasks. The workflow illustrates the central *Planner* agent coordinating with specialized child agents (*Navigator*, *Editor*, and *Executor*) through an asynchronous Message Queue. This architecture enables parallel processing of subtasks, dynamic load balancing, and efficient handling of complex software engineering challenges.
+
+### 3.1 CENTRALIZED MULTI-AGENT SYSTEM
+
+The HYPERAGENT framework comprises four primary agents:
+
+**Planner** The *Planner* agent serves as the central decision-making unit. It processes human task prompts, generates resolution strategies, and coordinates child agent activities. The *Planner* operates iteratively, generating plans, delegating subtasks, and processing feedback until task completion or a predefined iteration limit is reached.
+
+**Navigator** The *Navigator* agent specializes in efficient information retrieval within the codebase. Equipped with IDE-like tools such as `go_to_definition` and `code_search`, it traverses codebases rapidly, addressing challenges associated with private or unfamiliar code repositories. The *Navigator* is designed for speed and lightweight operation, utilizing a combination of simple tools to yield comprehensive search results.
+
+**Editor** The *Editor* agent is responsible for code modification and generation across multiple files. It employs tools including `auto_repair_editor`, `code_search`, and `open_file`. Upon receiving target file and context information from the *Planner*, the *Editor* generates code patches, which are then applied using the `auto_repair_editor`.
+
+**Executor** The *Executor* agent validates solutions and reproduces reported issues. It utilizes an `interactive_bash_shell` for maintaining execution states and `open_file` for accessing relevant documentation. The *Executor* manages environment setup autonomously, facilitating efficient testing and validation processes.
+
+### 3.2 AGENT COMMUNICATION AND SCALABILITY
+
+Inter-agent communication in HYPERAGENT is optimized to minimize information loss, enable efficient task delegation, and support scalable parallel processing for complex software engineering
+
+{4}------------------------------------------------
+
+tasks. This is achieved using an asynchronous communication model based on a distributed Message Queue. The *Planner* communicates with child agents via a standardized message format with two fields: Context (background and rationale) and Request (actionable instructions). Tasks are broken down into subtasks and published to specific queues. Child agents, such as *Navigator*, *Editor*, and *Executor* instances, monitor these queues and process tasks asynchronously, enabling parallel execution and significantly improving scalability and efficiency. For example, multiple *Navigator* instances can explore different parts of a large codebase in parallel, the *Editor* can apply changes across multiple files simultaneously, and the *Executor* can run tests concurrently, accelerating validation.
+
+A lightweight *LLM summarizer*<sup>2</sup> compiles and condenses execution logs from child agents, ensuring minimal information loss. Summaries, including key details like code snippets and explored objects, are sent back to the *Planner* via the Message Queue for aggregation. The Message Queue provides several advantages: (1) Parallel task execution increases throughput, (2) Dynamic task distribution optimizes resources, (3) Failed tasks are requeued for reliability, (4) Easy scalability through additional agents, and (5) The decoupled architecture allows independent scaling of the *Planner* and agents. This scalable, asynchronous model allows HYPERAGENT to handle complex SE tasks in distributed environments, adapting to fluctuating workloads and task complexities, making it ideal for real-world software development.
+
+### 3.3 TOOL DESIGN
+
+The effectiveness of HYPERAGENT is enhanced by its specialized tools, designed with a focus on feedback format, functionality, and usability. Tools provide succinct, LLM-interpretable output and are optimized for their roles in the SE process. Input interfaces are intuitive, reducing the risk of errors. The *Navigator* uses a suite of tools, including the code\_search tool, which employs a trigram-based search engine (Zoekt)<sup>3</sup> with symbol ranking. IDE-like features such as go\_to\_definition, get\_all\_references, and get\_all\_symbols enhance code navigation, while get\_tree\_structure visualizes code structure and open\_file integrates keyword search. A proximity search algorithm helps address LLM limitations in providing precise positional inputs. The *Editor* uses the repair\_editor tool for applying and refining code patches, automatically handling syntax and indentation issues, and employs navigation tools for context-aware editing. The *Executor* leverages an interactive\_shell to maintain execution states for command sequences, along with open\_file and get\_tree\_structure for accessing testing and setup documentation. Further details about the tools like tool format, functionalities and input parameters can be found in Appendix A.3.
+
+### 3.4 SOFTWARE ENGINEERING TASKS UNIVERSALITY
+
+HYPERAGENT is designed to have modularity and adaptability via multi-agent configuration and task backlog. We categorize Software Engineering tasks into two types: Patch and Prediction. The former task type requires editing and the later does not require editing. We removed *Editor* in task resolving flow in Prediction task to have more robust execution flow. A task can be defined via a task template which will contain necessary information about that task (e.g Github issue text for Github Issue Resolution task or message error trace for Defects4j Fault Localization task) and overall instruction about that task. Then, the task template will be populated with real information for each instance, and put into overall HYPERAGENT system. This is demonstrated in the top of Figure. 1 and example task templates can be seen in Appendix. A.1
+
+## 4 IMPLEMENTATION DETAILS
+
+To examine the flexibility of our framework and measure robustness, we employed a variety of language models (LMs) across different configurations. We tested four main configurations of HYPERAGENT, each utilizing different combinations of LLMs for the Planner, Navigator, Editor, and Executor roles (See the configurations in Appendix A.2, Table 7). An advantage of our design is the ability to select the most suitable LLMs for each agent type, optimizing performance and accuracy. The *Planner*, as the system’s brain, requires a powerful model with superior reasoning to
+
+<sup>2</sup>We used LLaMa-3.1-8B-Instruct (Dubey et al., 2024) for summarization in our experiments.
+
+<sup>3</sup><https://github.com/google/zoekt>
+
+{5}------------------------------------------------
+
+manage complex tasks, while the *Editor* needs robust coding capabilities for accurate code editing and generation. In contrast, the *Navigator* and *Executor* can use less powerful models with faster inference times since their tasks are more straightforward. This flexible architecture enables efficient allocation of computational resources, balancing model capability and cost, and allows for easier updates to individual components without overhauling the entire system. As a result, we can implement various configurations of HYPERAGENT as shown in Table 7 (Appendix A.2), utilizing both open-source and closed-source models.
+
+## 5 EVALUATIONS
+
+We conducted comprehensive evaluations of HYPERAGENT across a diverse set of benchmarks to assess its effectiveness in various software engineering tasks. The selection of SE tasks and benchmarks was driven by both complexity and real-world applicability. Each task required multiple reasoning steps, including retrieving relevant context from the repository, making code edits, and executing tests.
+
+### 5.1 GITHUB ISSUE RESOLUTION
+
+#### 5.1.1 SETUP
+
+We evaluated HYPERAGENT on the SWE-bench benchmark (Jimenez et al., 2023), which consists of 2,294 task instances from 12 popular Python repositories. SWE-bench measures a system’s ability to automatically resolve GitHub issues using Issue-Pull Request (PR) pairs, with verification based on unit tests. Due to the benchmark’s size and occasional underspecified issue descriptions, we used two refined subsets: SWE-bench-Lite (300 instances) and SWE-bench-Verified (500 instances). The Lite version filters instances based on heuristics, while the Verified version includes samples manually validated by professional annotators, ensuring a more reliable and focused evaluation. We compared HYPERAGENT against several strong baselines, including SWE-Agent (Yang et al.), AutoCodeRover (Zhang et al., 2024b), Agentless (Xia et al., 2024). These baselines span a range of approaches to software engineering tasks, ensuring comprehensive comparison. To evaluate performance, we used three key metrics: (1) the percentage of resolved instances, indicating the proportion of tasks where the system produced a solution that passed all unit tests; (2) average time cost and (3) average token cost, reflecting computational resource usage. These metrics provide a balanced evaluation of success rate, time efficiency, and resource consumption in addressing real-world software engineering problems.
+
+#### 5.1.2 RESULTS
+
+| Method | Verified (%) | Lite (%) | Avg Time | Avg Cost (\$) |
+|-|-|-|-|-|
+| AutoCodeRover + GPT-4o | 28.80 | 22.7 | 720 | 0.68 |
+| SWE-Agent + Claude 3.5 Sonnet | 33.60 | 23.00 | — | 1.79 |
+| SWE-Agent + GPT-4o | 23.20 | 18.33 | — | 2.55 |
+| Agentless + GPT-4o | 33.20 | 24.30 | — | 0.34 |
+| HYPERAGENT-Lite-1 | 30.20 | 25.33 | 106 | 0.45 |
+| HYPERAGENT-Lite-2 | 16.00 | 11.00 | 108 | 0.76 |
+| HYPERAGENT-Full-1 | <b>33.00</b> | <b>26.00</b> | 320 | 1.82 |
+| HYPERAGENT-Full-2 | 31.40 | 25.00 | 210 | 2.01 |
+| HYPERAGENT-Full-3 | 18.33 | 12.00 | 245 | 0.89 |
+
+Table 1: Performance comparison on SWE-Bench datasets. Verified (%) and Lite (%) columns show the percentage of resolved instances (out of 500 for Verified, 300 for Lite). Avg Time is in seconds, and Avg Cost is in US dollars.
+
+The results presented in Table 1 demonstrate the competitive performance of HYPERAGENT across different configurations on the SWE-Bench datasets. The results in Table 1 highlight the strong and competitive performance of HYPERAGENT on the SWE-Bench datasets. HYPERAGENT-Full-1
+
+{6}------------------------------------------------
+
+achieves a 33.00% success rate on the Verified dataset, closely matching top methods like SWE-Agent + Claude 3.5 Sonnet (33.60%) and Agentless + GPT-4o (33.20%). On the Lite dataset, HYPERAGENT-Full-1 leads with a 26.00% success rate, outperforming Agentless + GPT-4o (24.30%) and SWE-Agent + Claude 3.5 Sonnet (23.00%).
+
+In terms of efficiency, HYPERAGENT-Lite-1 and Lite-2 demonstrate faster average processing times (106 and 108 seconds, respectively), significantly faster than AutoCodeRover + GPT-4o, which averages 720 seconds. Additionally, HYPERAGENT-Lite-1 stands out for its cost-effectiveness, offering strong performance on both the Verified and Lite datasets (25.33% on Lite) at a cost of just \$0.45, making it far more cost-efficient than methods like SWE-Agent + GPT-4o (\$2.55).
+
+### 5.2 REPOSITORY-LEVEL CODE GENERATION
+
+#### 5.2.1 SETUP
+
+We evaluate our approach using RepoExec (Hai et al., 2024), a benchmark for repository-level Python code generation that emphasizes executability and correctness. RepoExec contains 355 samples with 96.25% test coverage and provides gold contexts of varying richness levels, including full, medium, and small contexts, based on static analysis. However, for our evaluation, we exclude these contexts to test HYPERAGENT’s ability to independently navigate codebases and extract relevant information. We compare HYPERAGENT against several state-of-the-art retrieval-augmented generation (RAG) baselines, including WizardLM2 and GPT-3.5-Turbo combined with both standard RAG and Sparse RAG (using BM25 retriever). The context was parsed with a chunking size of 600 using Langchain’s Python code parser<sup>4</sup>. Additionally, we report results from CodeLlama (34b and 13b) and StarCoder when provided with full context, serving as performance upper bounds. We use pass@1 and pass@5 as our primary evaluation metrics, measuring the percentage of instances where all tests pass after applying the model-generated code patches.
+
+#### 5.2.2 RESULTS
+
+| Model | Context Used | Pass@1 | Pass@5 | Cost (\$) |
+|-|-|-|-|-|
+| CodeLlama-34b-Python | Full | <b>42.93%</b> | 49.54% | — |
+| CodeLlama-13b-Python | Full | 38.65% | 43.24% | — |
+| StarCoder | Full | 28.08% | 33.95% | — |
+| WizardLM2 + RAG | Auto-retrieved | 33.00% | 49.16% | 0.04 |
+| GPT-3.5-Turbo + RAG | Auto-retrieved | 24.16% | 35.00% | 0.02 |
+| WizardLM2 + Sparse RAG | Auto-retrieved | 34.16% | 51.23% | 0.05 |
+| GPT-3.5-Turbo + Sparse RAG | Auto-retrieved | 25.00% | 35.16% | 0.03 |
+| HYPERAGENT-Lite-3 | Auto-retrieved | 38.33% | <b>53.33%</b> | 0.18 |
+
+Table 2: RepoExec Results Comparison: HYPERAGENT-Lite-3 achieves comparable or superior performance to models provided with full context, particularly in Pass@5 (53.33%)
+
+As shown in Table 2, the RepoExec benchmark results reveal insightful comparisons between different code generation approaches. CodeLlama-34b-Python, given full context, achieves the highest Pass@1 rate at 42.93%. Notably, our HYPERAGENT-Lite-3, which automatically retrieves relevant contexts, outperforms all models in Pass@5 at 53.33%, demonstrating its effective codebase navigation. In contrast, RAG-based models show limited effectiveness in capturing complex code relationships, underperforming both HYPERAGENT and full-context models. These findings highlight the potential of end-to-end solutions like HYPERAGENT for real-world scenarios where manual context provision is impractical.
+
+<sup>4</sup><https://github.com/langchain-ai/langchain>
+
+{7}------------------------------------------------
+
+### 5.3 FAULT LOCALIZATION AND PROGRAM REPAIR
+
+#### 5.3.1 SETUP
+
+We evaluated HYPERAGENT on the Defects4J dataset (Sobrevilla et al., 2018; Just et al., 2014), focusing on all 353 active bugs from version 1.0, a standard benchmark for fault localization and program repair tasks for fault localization, and include additional bugs from version 2.0 for program repair. To assess performance, we compared HYPERAGENT against several strong baselines for fault localization, including strong deep learning-based baselines like including DeepFL (Li et al. (2019), AutoFL (Kang et al., 2024), Grace (Lou et al., 2021) DStar (Wong et al., 2012), and Ochiai (Zou et al., 2019). While for program repair, we compare HYPERAGENT-Lite-1 against state-of-the-art baselines: RepairAgent, SelfAPR, and ITER. While ITER and SelfAPR are learning-based approaches, RepairAgent is a multi-agent system leveraging large language models (LLMs) for autonomous bug fixing, integrating information gathering, repair generation, and fix validation.
+
+For fault localization evaluation, we adopted the acc@k metric, which measures the number of bugs where the buggy location is within the top k suggestions. We also employed the ordinal tiebreaker method to handle ranking ties, as it better aligns with how developers interact with fault localization tools. For program repair metrics, we report both plausible and correct patch counts, consistent with prior studies.
+
+A patch is deemed plausible if it passes all test cases, although this does not ensure correctness. To confirm correctness, we verify if the syntax of the generated fix exactly matches the developer’s original fix by comparing Abstract Syntax Trees (ASTs).
+
+#### 5.3.2 RESULTS
+
+The fault localization results in Table 3 on the Defects4J dataset demonstrate HYPERAGENT superior performance, achieving an Acc@1 of 59.70%. This significantly outperforms all other methods, surpassing the next best performer, AutoFL, by 8.7 percentage points (51.00%) and more than doubling the accuracy of traditional methods like Ochiai (20.25%). HYPERAGENT’s ability to correctly identify the buggy location on its first attempt for nearly 60% of the bugs suggests a potentially substantial reduction in debugging time and effort in real-world scenarios. The wide performance range across methods (20.25% to 59.70%) highlights both the challenges in fault localization and the significant improvement HYPERAGENT represents.
+
+| Method | Acc@1 | Cost (\$) |
+|-|-|-|
+| Ochiai (Zou et al., 2019) | 20.25% | – |
+| DeepFL (Li et al., 2019) | 33.90% | – |
+| Dstar (Wong et al., 2012) | 33.90% | – |
+| Grace (Zou et al., 2019) | 49.36% | – |
+| AutoFL (Kang et al., 2024) | 51.00% | – |
+| <b>HYPERAGENT-Lite-1</b> | <b>59.70%</b> | 0.18 |
+
+Table 3: Comparison of Acc@1 across Different Fault Localization Methods on the Defects4J dataset.
+
+| Dataset | Tool | Total Bugs | Correct Fixes | Correct % |
+|-|-|-|-|-|
+| Defects4J v1.2 | HYPERAGENT | 395 | <b>82</b> | <b>20.8%</b> |
+|  | RepairAgent |  | 74 | 18.7% |
+|  | ITER |  | 57 | 14.4% |
+|  | SelfAPR |  | 64 | 16.2% |
+| Defects4J v2 | HYPERAGENT | 440 | <b>110</b> | <b>25.0%</b> |
+|  | RepairAgent |  | 90 | 20.5% |
+|  | SelfAPR |  | 46 | 10.5% |
+
+Table 4: Comparison of repair tools on Defects4J v1.2 and v2 datasets. HYPERAGENT achieves the best performance on both versions (highlighted in blue).
+
+The results in Table 4 and the detailed breakdown in the Table 10 (Appendix A.5) showcase HYPERAGENT’s superior performance across multiple benchmarks. In the main results, HYPERAGENT consistently outperforms all competing tools on both Defects4J v1.2 and v2 datasets. For Defects4J v1.2, HYPERAGENT achieves 82 correct fixes (20.8%), outperforming RepairAgent (74
+
+{8}------------------------------------------------
+
+fixes, 18.7%), ITER (57 fixes, 14.4%), and SelfAPR (64 fixes, 16.2%). Similarly, on Defects4J v2, HYPERAGENT further solidifies its position with 110 correct fixes (25.0%), significantly ahead of RepairAgent’s 90 fixes (20.5%) and SelfAPR’s 46 fixes (10.5%).
+
+Table 10 (Appendix A.5) provides further granularity, showing HYPERAGENT’s dominance across individual projects. HYPERAGENT delivers the highest number of both plausible and correct fixes for nearly every project, including key benchmarks like Jackson (21 correct fixes), Jsoup (24 correct fixes), and Math (32 correct fixes). Overall, HYPERAGENT achieves 249 plausible fixes and 192 correct fixes, corresponding to an impressive 29.8% plausible fix rate and a 22.9% correct fix rate, significantly outperforming RepairAgent (19.64%), SelfAPR (13.17%), and ITER (6.82%) across the board.
+
+## 6 ANALYSIS
+
+### 6.1 ABLATION STUDIES ON AGENT ROLES
+
+We conducted experiments using SWE-bench Tiny to evaluate the contribution of each agent role to overall performance. This was done by replacing each child agent with the planner itself, requiring the planner to directly utilize the eliminated agent’s toolset. Table 5 illustrates a significant cost increase for all configurations when any agent role is removed. The resolving rate also decreases, with the magnitude varying based on which role is eliminated. Removing the *Navigator* causes the most substantial performance drop, followed by the *Editor* and the *Executor*, respectively.
+
+Additionally, when a medium-long context length LLM acts as the *Planner* and replaces the role of *Editor* or *Navigator*, we observe a more severe drop in the resolving rate. This is attributed to these roles requiring continuous interaction with the environment, necessitating a long context.
+
+### 6.2 ANALYSIS OF TOOL DESIGN
+
+We investigated the improvements brought by our major design choices in the tool’s interface and functionality. An ablation study was conducted on the mostly used tools with SWE-bench Tiny dataset which consists of 100 random instances inside SWE-bench Lite and run configuration HyperAgent-Lite-1 on this subset.
+
+For each tool, we evaluated the overall performance when the tool is utilized versus when it is not, as shown in Table 6.
+
+|  | go_to_definition |  | open_file |  | code_search |  | auto_repair_editor |  |
+|-|-|-|-|-|-|-|-|-|
+| Used | 9.00 <sub>16.0</sub> | Used | 9.00 <sub>16.0</sub> | Used | 8.00 <sub>16.0</sub> | Used | 8.00 <sub>17.0</sub> | Used |
+| w/ search | 15.00 | w/ annotated lines | 11.00 <sub>14.0</sub> | w/ preview | 11.00 <sub>13.0</sub> | w/ linting feedback | 11.00 <sub>14.0</sub> |  |
+| No usage | 12.0 <sub>13.0</sub> | w/ keyword summary | 15.00 | w/ ranking | 14.00 | w/ repairing | 15.00 |  |
+|  |  | No usage | 4.0 <sub>11.0</sub> | No usage | 3.0 <sub>11.0</sub> | No usage | 1.0 <sub>14.0</sub> |  |
+
+Table 6: Ablation result on resolving performance on SWE-Bench Tiny with different key tool designs
+
+A crucial finding for `go_to_definition` is that the LLM agent struggles to effectively use this IDE-like feature. It requires exact line and column numbers and the precise symbol name, which demands precise localization of character positions. Despite supporting annotated line numbers, the agent often fails and retries multiple times. However, in-
+
+{9}------------------------------------------------
+
+incorporating a proximity-based search process, allowing the agent to approximate specifications, significantly improves performance (from 9% without search to 15% with search). For open\_file, small LLMs like Claude Haiku tend to scroll up and down multiple times to find desired snippets by continuously increasing start\_line and end\_line, leading to out-of-context length issues. We addressed this by adding an additional input field keywords, allowing the LLM to search keywords inside the file. This enables the tool to quickly localize the positions of keywords inside the file and display the surrounding lines, increasing the resolving rate by 3%. Without code\_search,
+
+the *Navigator* faces significant challenges in swiftly identifying necessary objects, resulting in a substantially lower performance rate of 3% compared to 8% when the tool is employed. Enhancing the output to include partial surrounding context around the keyword enables the *Navigator* to make more informed decisions, improving performance from 8% to 11%. Prioritizing search results for key objects such as functions and classes, and re-ranking these results further enhances overall performance, increasing it from 11% to 14%.
+
+![Figure 3: Error Analysis pie chart showing the distribution of error types.](f519a5be118c846f631c992412353fb9_img.jpg)
+
+A pie chart titled "Error Analysis" showing the distribution of error types. The data is as follows:
+
+| Error Type | Percentage |
+|-|-|
+| Resolved | 26.0% |
+| Execution Failed | 13.0% |
+| Wrong Fix | 26.0% |
+| Wrong Edit Location Identify Wrong Context | 8.0% |
+| Edit Failed Loop | 13.0% |
+| Exit | 9.0% |
+
+Figure 3: Error Analysis pie chart showing the distribution of error types.
+
+Figure 3: Error Analysis
+
+### 6.3 AGENT BEHAVIOR
+
+We analyzed the frequency of each agent role requested by the *Planner* throughout the issue resolution process. Figure 4 illustrates a typical pattern where the *Planner* is most active at the beginning of the resolution process, gathering relevant information about the codebase environment. Subsequently, the *Editor* is frequently used to generate patches, often immediately following the *Navigator*, with notable peaks at Iterations 4 and 8. Finally, the *Executor* is requested more frequently in the later iterations to verify the results by executing tests. It is noteworthy that, in the first iteration, there is a small peak indicating that the *Executor* is requested to reproduce the issue.
+
+![Figure 4: Bar chart showing the frequency of agent role requests by the Planner throughout the issue resolution process.](7c2f0efb2c5d10a52ce19ba33d9d3cec_img.jpg)
+
+A bar chart titled "Frequency of agent role requests by the Planner throughout the issue resolution process". The x-axis represents "Iterations" from 1 to 10. The y-axis represents "Frequency" from 0 to 50. The legend indicates three agents: Navigator (blue), Editor (red), and Executor (green). The chart shows the frequency of requests for each agent role across 10 iterations. The Navigator is most active in the first few iterations, while the Editor and Executor become more active in later iterations.
+
+| Iterations | Navigator | Editor | Executor |
+|-|-|-|-|
+| 1 | 40 | 1 | 1 |
+| 2 | 42 | 1 | 1 |
+| 3 | 40 | 1 | 1 |
+| 4 | 25 | 15 | 1 |
+| 5 | 15 | 10 | 1 |
+| 6 | 10 | 10 | 1 |
+| 7 | 10 | 10 | 1 |
+| 8 | 10 | 15 | 1 |
+| 9 | 5 | 10 | 1 |
+| 10 | 5 | 10 | 1 |
+
+Figure 4: Bar chart showing the frequency of agent role requests by the Planner throughout the issue resolution process.
+
+Figure 4: Frequency of agent role requests by the *Planner* throughout the issue resolution process.
+
+### 6.4 ERROR ANALYSIS
+
+We fetch related information, groundtruth patch about an instance in SWE-Bench Lite and HYPERAGENT resolving trajectory to Claude-3.5-Sonnet and ask it to categorize trajectory fault into types demonstrated in Figure 3. HYPERAGENT has lower Edit failed loop error ratio compared to SWE-Agent Jimenez et al. (2023) due to use automatic code repair. HYPERAGENT also has a problem of early exit (due to hallucination that the task has been solved) and exit timeout. Hallucination could be appeared in the framework since the communication between agents can lose details about real execution result or context location making *Planner* hard to be grounded with main task.
+
+## 7 CONCLUSION
+
+In this paper, we introduced HYPERAGENT, a generalist multi-agent system designed to address diverse software engineering tasks by mimicking typical workflows. HYPERAGENT performs well across benchmarks like GitHub issue resolution, code generation, fault localization, and program repair, often surpassing specialized systems. Its versatility, efficiency, and scalability make it a valuable tool for real-world development scenarios.
+
+ Rest of paper (reference and Appendix) is removed.

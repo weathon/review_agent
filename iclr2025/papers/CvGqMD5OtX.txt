@@ -1,0 +1,313 @@
+
+
+{0}------------------------------------------------
+
+# CHASE-SQL: MULTI-PATH REASONING AND PREFERENCE OPTIMIZED CANDIDATE SELECTION IN TEXT-TO-SQL
+
+Mohammadreza Pourreza<sup>1\*</sup>, Hailong Li<sup>1\*</sup>, Ruoxi Sun<sup>1</sup>, Yeounoh Chung<sup>1</sup>, Shayan Talaei<sup>2</sup>,  
+Gaurav Tarlok Kakkar<sup>1</sup>, Yu Gan<sup>1</sup>, Amin Saberi<sup>2</sup>, Fatma Özcan<sup>1</sup>, Sercan Ö. Arik<sup>1</sup>
+
+<sup>1</sup>Google Cloud, Sunnyvale, CA, USA
+
+<sup>2</sup>Stanford University, Stanford, CA, USA
+
+{pourreza, hailongli, ruoxis, yeounoh}@google.com
+
+{gkakkar, gany, fozcan, soarik}@google.com
+
+{stalaiei, saberi}@stanford.edu
+
+\*Equal contribution
+
+## ABSTRACT
+
+We present CHASE-SQL, a novel framework addressing large language model (LLM) performance challenges for Text-to-SQL tasks by leveraging multi-agent modeling and test-time compute for improved candidate generation and selection. CHASE-SQL uses LLMs to generate diverse SQL candidates with: (1) a divide-and-conquer approach to break down complex queries, (2) chain-of-thought reasoning based on query execution plans, and (3) instance-aware synthetic example generation for tailored few-shot demonstrations. A selection agent ranks candidates via pairwise comparisons using a fine-tuned binary selection LLM, offering robust performance. This framework improves SQL query quality and diversity, achieving state-of-the-art execution accuracy of 73.0% on the BIRD Text-to-SQL benchmark test set, topping the leaderboard at the time of submission.
+
+## 1 INTRODUCTION
+
+Text-to-SQL, as a bridge between human language and machine-readable structured query languages, is crucial for many use cases, converting natural language questions into executable SQL commands (Androutsopoulos et al., 1995; Hristidis et al., 2003; Li & Jagadish, 2014; Li et al., 2024c; Yu et al., 2018). By enabling users to interact with complex database systems without requiring SQL proficiency, Text-to-SQL empowers users to extract valuable insights, perform streamlined data exploration, make informed decisions, generate data-driven reports and mine better features for machine learning (Wang et al., 2019; Pourreza & Rafiei, 2024a; Sun et al., 2023; Chen et al., 2023; Pourreza et al., 2024; Pérez-Mercado et al., 2023; Xie et al., 2023). Furthermore, Text-to-SQL systems play a pivotal role in automating data analytics with complex reasoning and powering conversational agents, expanding their applications beyond traditional data retrieval (Sun et al., 2023; Xie et al., 2023). As data continues to grow exponentially, the ability to query databases efficiently without extensive SQL knowledge becomes increasingly vital for a broad range of applications.
+
+Text-to-SQL can be considered a specialized form of code generation, with the contextual information potentially including the database schema, its metadata and along with the values. In the broader code generation domain, utilizing LLMs to generate a wide range of diverse candidates and select the best one has proven to be effective (Li et al., 2022; Ni et al., 2023; Chen et al., 2021). However, it is non-obvious what leads to most effective candidate proposal and winner selector mechanisms. A straightforward yet effective approach involves generating candidates using zero-/few-shot or open-ended prompting, followed by selecting the best options utilizing self-consistency (Wang et al., 2022), which entails clustering candidates based on their execution outputs. This approach has demonstrated promising results in several studies (Maamari et al., 2024; Talaei et al., 2024; Lee et al., 2024; Wang et al., 2023). However, a single prompt design might not fully unleash the extensive Text-to-SQL knowledge of LLMs, and self-consistency methods might not be always effective.
+
+{1}------------------------------------------------
+
+In fact, as illustrated in Table 1, the most consistent answers would not always be the correct ones, with an upper-bound performance 14% higher than that achieved through self-consistency. This substantial gap highlights the potential for significant improvement by implementing more effective selection methods to identify the best answer from the pool of candidate queries.
+
+Building on the challenges outlined in the previous section, we propose novel approaches to improve LLM performance for Text-to-SQL by leveraging judiciously-designed test-time computations in an agentic framework. As indicated by the upper bound in Table 1, utilizing LLMs’ intrinsic knowledge offers significant potential for improvement. We propose methods that generate a diverse set of high-quality candidate responses and apply a selection mechanism to identify the best answer. Achieving both high-quality and diverse candidate responses is critical for the success of scoring-based selection methods. Low diversity limits improvement potential and reduces the difference between self-consistency and scoring-based approaches. While techniques like increasing temperature or reordering prompt contents can boost diversity, they often compromise the quality of the candidates. To address this, we introduce effective candidate generators designed to enhance diversity while maintaining high-quality outputs. Specifically, we propose three distinct candidate generation approaches, each capable of producing high-quality responses. The first is inspired by the divide-and-conquer algorithm, which breaks down complex problems into smaller, manageable parts to handle difficult queries. The second employs a query execution-plan-based chain-of-thought strategy, where the reasoning process mirrors the steps a database engine takes during query execution. Lastly, we introduce a novel online synthetic example generation method, which helps the model better understand the underlying data schema of the test database. These methods, when used independently, can produce highly-accurate SQL outputs. To effectively select the best answer among candidates, we introduce a selection agent, trained with a classification objective, that assigns scores based on pairwise comparisons between candidate queries. With this agent, we construct a comparison matrix for all candidates and select the final response based on the highest cumulative score. By combining these candidate generation methods with the proposed scoring model, we create an ensemble approach that leverages the strengths of each strategy to significantly improve overall performance.
+
+We present comprehensive evaluations on the efficacy of proposed methodologies of CHASE-SQL. Our innovative candidate generation approaches demonstrate superior performance compared to traditional generic CoT prompts, illustrating their capability in guiding LLMs through the decomposition of complex problems into manageable intermediate steps. Furthermore, the proposed selection agent significantly outperforms conventional consistency-based methods, contributing to the state-of-the-art results. Specifically, CHASE-SQL reaches an execution accuracy of **73.01%** and **73.0%** on the development set and test set of the challenging BIRD Text-to-SQL dataset which outperforms all of the published and undisclosed methods on this benchmark, by a large margin. Moreover, by leveraging entirely open-source models—Mistral Large Model (AI, 2024) as the candidate generator and a fine-tuned Qwen-2.5-coder model (Team, 2024) as the selector—our method achieved a state-of-the-art performance of 70.33 on the BIRD development set with open-source models.
+
+## 2 METHODS
+
+### 2.1 OVERALL FRAMEWORK
+
+This section outlines the proposed CHASE-SQL framework, which consists of four primary components: 1) Value retrieval, 2) Candidate generator, 3) Query fixer, and 4) Selection agent. As illustrated in Fig. 1. The proposed framework begins by retrieving relevant database values. Subsequently, all contextual information, including retrieved values, database metadata, and schema, is provided to an LLM to generate candidate queries. These candidate queries then undergo a fixing loop, and finally, all candidates are compared in a pairwise way using the trained selection agent to pick the correct answer. The following sections delve into the details of each component.
+
+{2}------------------------------------------------
+
+![Figure 1: Overview of the proposed CHASE-SQL framework for Text-to-SQL, with value retrieval and using a selection agent for improve picking of the answers among the generated candidates along with a fixer to provide feedback for refinement of the outputs.](1b7d539e02a202c2cf2d97698b911447_img.jpg)
+
+The diagram illustrates the CHASE-SQL framework. It begins with a **USER** providing a question: "What is the eligible free rate of the 90th and 10th schools with the highest enrollment for students in grades 1 through 12?". A **LLM VISUAL RETRIEVER** interacts with **DATABASES** to retrieve relevant information. This is followed by **CANDIDATE GENERATORS** (consisting of **rec corr** and **gr corr** components) that produce multiple SQL candidates. These candidates are then processed by a **FIXER** module, which includes steps like "SELECT (Free Meal Count (N-12) / Enrollment (N-12)) FROM trpm", "SELECT Percent (%) Eligible Free (N-12) FROM trpm", and "WITH Free Rates (SELECT Percent (%) Eligible Free (N-12) FROM trpm)". Finally, a **SELECTION AGENT** (step 3) uses a selection mechanism (represented by a diamond and stars) to pick the best candidate, resulting in the **FINAL RESPONSE**: "SELECT (Free Meal Count (N-12) / Enrollment (N-12)) FROM trpm".
+
+Figure 1: Overview of the proposed CHASE-SQL framework for Text-to-SQL, with value retrieval and using a selection agent for improve picking of the answers among the generated candidates along with a fixer to provide feedback for refinement of the outputs.
+
+Figure 1: Overview of the proposed CHASE-SQL framework for Text-to-SQL, with value retrieval and using a selection agent for improve picking of the answers among the generated candidates along with a fixer to provide feedback for refinement of the outputs.
+
+### 2.2 VALUE RETRIEVAL
+
+Databases might contain very high number of rows, with often only a few being relevant to a query. Retrieving relevant values is crucial as they can be used in various SQL clauses like ‘WHERE’ and ‘HAVING’. Similar to the approach in (Talaei et al., 2024), we begin by extracting keywords from the given question using an LLM prompted with few-shot examples. For each keyword, we employ locality-sensitive hashing (LSH) (Datar et al., 2004) to retrieve the most syntactically-similar words, and re-rank them based on embedding-based similarity and edit distance. This approach is robust to typos in the question and considers keyword semantics during retrieval.
+
+### 2.3 MULTI-PATH CANDIDATE GENERATION
+
+As shown in Table 1, relying solely on consistency among responses can lead to sub-optimal performance. Therefore, we prioritize diversity in generation of multiple response candidates to increase the likelihood of generating at least one correct answer. Among the diverse responses generated by the candidate generators, we select one as the final response using a selection agent that compares candidates pairwise. To generate diverse responses, we increase the next token sampling temperature, and also shuffle the order of columns and tables in the prompt.
+
+Chain-of-Thought (CoT) prompting (Wei et al., 2022) has been proposed to enhance LLMs’ reasoning abilities by conditioning their final responses on a step-by-step chain of reasoning. Most CoT prompting approaches rely on few-shot examples in the prompt to guide LLMs on thinking step-by-step, following the format  $M = (q_i, r_i, s_i)$ , where  $q_i$  is the example question,  $r_i$  is the reasoning path, and  $s_i$  is the ground truth SQL query for  $q_i$ . We employ two distinct reasoning methods and an online synthetic example generation approach. As shown in Fig. 3a, different generators can yield different outputs, indicating their effectiveness for specific questions and databases.
+
+**Divide and Conquer CoT:** Divide-and-conquer perspective brings breaking down complex problems into smaller sub-problems, solving each individually, and then combining the solutions to obtain the final answer. Along these lines, we propose a CoT prompting approach that first decomposes the given question into smaller sub-problems using pseudo-SQL queries. In the ‘conquer’ step, the solutions to these sub-problems are aggregated to construct the final answer. Finally, an optimization step is applied to the constructed query to remove redundant clauses and conditions. This approach is particularly powerful handling complex scenarios that involve nested queries, e.g. intricate WHERE or HAVING conditions, and queries requiring advanced mathematical operations. In Appendix Fig. 18, we exemplify a question and its corresponding SQL query that was successfully solved using this generator, a scenario the other methods considered in this paper could not address due to the query’s complex conditions and SQL clauses. For a more detailed view of the divide-and-conquer prompt, please see Appendix Fig. 17. Additionally, Alg. 1 outlines the step-by-step process of this strategy to generate the final SQL output using a single LLM call.
+
+**Query Plan CoT:** A query (execution) plan is a sequence of steps that the database engine follows to access or modify the data described by a SQL command. When a SQL query is executed, the database management systems’ query optimizers translate the SQL text into a query plan that the database engine can execute. This plan outlines how tables are accessed, how they are joined, and
+
+{3}------------------------------------------------
+
+#### **Algorithm 1** Divide and Conquer Chain-of-Thought (CoT) Strategy for Text-to-SQL.
+
+**Require:** Set of human-annotated few-shot examples  $M$ , user question  $Q_u$ , target database  $D$  associated with the question, and a large language model (LLM)  $\theta$ .
+
+**Divide:**  
+ 1:  $S_q \leftarrow \theta(M, D, Q_u)$  // Decompose the original question  $Q_u$  into a set of sub-questions  $S_q$   
+ 2:  $S_{sql} \leftarrow \emptyset$  // Initialize an empty set  $S_{sql}$  to store partial SQL queries for each sub-question
+
+**Conquer:**  
+ 3: for each sub-question  $q_i$  in  $S_q$  do  
+ 4:   // Generate a partial SQL query for each sub-question  $q_i$   
+ 5:    $S_{sql} \leftarrow S_{sql} \cup \{\theta(M, D, Q_u, q_1, \dots, q_i, sql_1, \dots, sql_{i-1})\}$   
+ 6: end for
+
+**Assemble:**  
+ 7:  $S_f \leftarrow \theta(M, D, Q_u, S_q, S_{sql})$  // Assemble the final SQL query  $S_f$  from all sub-queries in  $S_{sql}$   
+ 8: return  $S_f$
+
+the specific operations performed on the data (see Appendix Fig. 20 as an example). Inspired by the step-by-step process that database engines use to execute SQL queries, we propose a reasoning strategy to construct the final SQL output. Query plans for any given SQL query can be obtained using the “EXPLAIN” command, which provides a detailed breakdown of execution steps. However, this output is often presented in a format that is difficult to interpret by LLMs (e.g. in SQLite). To address this, we convert the output of “EXPLAIN” command into a human-readable text format that aligns more closely with the pretraining data of LLMs. The human-readable version of query plans consists of three key steps: (1) identifying and locating the relevant tables for the question, (2) performing operations such as counting, filtering, or matching between tables, and (3) delivering the final result by selecting the appropriate columns to return. This reasoning method complements the divide-and-conquer CoT strategy. While the divide-and-conquer approach is better suited for decomposing complex questions, the query plan approach excels when questions require more reasoning over the relationships between different parts of the question and the database schema. It systematically explains which tables to scan, how to match columns, and how to apply filters. Appendix Fig. 21 shows an example of a question that was answered correctly only by this method. Appendix Fig. 19 provides the prompt used for this reasoning strategy.
+
+**Online Synthetic Example Generation:** Using a set of human-annotated demonstrations for few-shot in-context learning has shown promising results on various related tasks (Pourreza & Rafiei, 2024a). Besides using a few select demonstrations helping with specifying the task and illustrate the step-by-step process deriving the output, question and SQL example pairs are also used for few-shot in-context learning for text-to-SQL (Liu et al., 2022; Nan et al., 2023). While prior works focused on selecting a few handful of relevant examples from existing example pools (e.g., training dataset), we synthesize many example pairs using different schema elements and SQL features per incoming question. Unlike prior few-shot in-context learning approaches, we generate many more than just a few (3-5) examples (Pourreza & Rafiei, 2024a; Li et al., 2024b), as we observe that many-shot learning consistently outperforms few-shot learning (Agarwal et al., 2024).
+
+#### **Algorithm 2** Online Synthetic example generation strategy for Text-to-SQL.
+
+**Require:** User question  $Q_u$ , additional user hint  $H_u$ , target database  $D$  and filtered relevant table columns  $t$  associated with the question, LLM  $\theta$ , guidelines  $R_f$  for generating examples by SQL features, guidelines  $R_t$  for generating examples with filtered schema, and the numbers of examples to generate  $n_f, n_t$  respectively
+
+1:  $P \leftarrow \emptyset$  //  $\{(q_i, s_i) \mid q_i, s_i \in \Sigma^*\}$ , where  $q_i$  is input question,  $s_i$  is output SQL for the  $i$ -th example  
+ 2:  $P \leftarrow P \cup \{\theta(D, R_f, n_f)\}$  // Generate  $n$  examples with entire database by common SQL features  
+ 3:  $P \leftarrow P \cup \{\theta(t, R_t, n_t)\}$  // Generate examples with filtered columns to highlight correct schema usage  
+ 4: return  $P$
+
+Algorithm 2 outlines the online synthetic example generation approach with two LLM generation steps. The first step focuses on generating illustrative examples with common SQL features described in the guideline  $R_f$ . The SQL features include equality and non-equality predicates, single table and multi-table JOIN, nested JOIN, ORDER BY and LIMIT, GROUP BY and HAVING, various aggregation functions. These are widely applicable SQL clauses and functions – the generated example SQL queries, incorporating these features, follow the BIRD SQL feature distribution (Appendix Fig 25a). The second step focuses on generating examples highlighting correct interpretation of the underlying data schema – the model  $\theta$  is asked to generate examples using  $t_i$  (column selec-
+
+{4}------------------------------------------------
+
+tion using an approach similar to (Talebi et al., 2024)) and that are similar to the examples outlined in  $R_t$ . Appendix A.13 provides the prompts used for the example generation).
+
+While a relevant example (e.g. showing a nested JOIN query with multiple tables) can be helpful for questions that require complex JOIN queries, it might also mislead the LLM for overuse (e.g. when a simple single table query is sufficient). This and the inherent ambiguity of natural language query  $q_i$ , for which we draw the examples by relevance, make the example selection challenging. Thus, we generate and inject the examples to the prompt online per  $q_i$ . We ask the LLM to generate many input-output pairs for in-context learning. The final set of synthetic examples for  $q_i$  contains examples generated with both  $R_f$  and  $R_t$ . This ensures that the example set is diverse both in SQL features/clauses and the choice of relevant tables/columns used. The diversity of the example set is desirable to avoid over-fitting the output to certain patterns (e.g., the model always writes a SQL with JOIN if shown mostly JOIN examples). Mixing various examples for various SQL features and database tables with and without column filtering is observed to result in better generation quality overall (see Appendix Table 8). The generated synthetic examples can guide the model for more accurate text-to-SQL generation. In Appendix A.13, Table 9, we discuss how our synthetic example generation performs compared to selecting examples from often limited examples pools (e.g., training dataset and cross-domain data augmentation (Li et al., 2024b)).
+
+### 2.4 QUERY FIXER
+
+In some cases, LLMs might generate queries that are syntactically incorrect. These queries are clear candidates for correction, as they fail to provide the correct answers. To address this, we apply an LLM-based query fixer that leverages the self-reflection (Shinn et al., 2024) method. The fixer reflects on the previously generated query, using feedback such as syntax error details or empty result sets to guide the correction process. We continue this iterative fixing approach up to a specified number of attempts,  $\beta$  (set to three in this paper). Appendix Fig. 22 demonstrates the prompt used for this query fixing step. Additionally, Appendix section A.4 provides a detailed algorithm of the query fixing step.
+
+### 2.5 SELECTION AGENT
+
+With three different methods for generating SQL queries, we can generate a set of candidate queries for any given question. The key challenge in this step is selecting the correct SQL query from this pool of candidates. A naive approach would be to measure consistency among the candidates by executing them, grouping them based on their execution results, and selecting a query from the largest group as the most likely correct answer. However, this would assume that the most consistent answer is always the best one, which is not always the case. Instead, we propose a more refined picking strategy, Algorithm 3, that relies on a selection agent. Given a set of candidates SQL queries  $C = \{c_1, c_2, \dots, c_n\}$ , the final responses are selected by finding the candidate that has the highest score assigned by the selection model. This model  $\theta_p$  can take  $k$  candidates and rank them based on how accurately each of them answers the given question. Concretely, we formulate the selection of the final response as:
+
+$$c_f = \arg \max_{c \in C} \left( \sum_{i=1}^{\binom{n}{k}} \theta_p(c_{i_1}, \dots, c_{i_k} \mid Q_u, H_u, D) \right), \quad (1)$$
+
+where  $Q_u$  refers to the user’s question,  $H_u$  is the provided hint, and  $D$  is the target database from which the question is being asked. In Eq. 1, we pass  $k$  candidates to the selection model to be ranked, with  $k$  being between 1 and  $n$ . In the extreme case of  $k = 1$ , the model is unable to make comparisons between candidates, which complicates the evaluation process for the model. As  $k$  increases, comparing more candidates makes the process more challenging for the model, as it needs to consider different aspects simultaneously. Consequently, we set  $k = 2$  and train a model with a classification objective to compare only two candidates at a time.
+
+Having a set of high-quality and diverse candidates, the most straightforward solution is to employ off-the-shelf LLMs to make pairwise selections. However, experiments with Gemini-1.5-pro showed that using the LLM without fine-tuning resulted in only 58.01% binary classification accuracy. This is primarily due to the candidates being very similar to one another, requiring a fine-tuned
+
+{5}------------------------------------------------
+
+model to learn the nuances and make more accurate decisions. To train the selection agent, we first generate candidate SQL queries on the training set (of Text-to-SQL benchmarks), and group them into clusters based on their execution results. For cases where at least one cluster contains correct queries and others contains incorrect ones, we create training examples in the form of tuples  $(Q_u, C_i, C_j, D_{ij}, y_{ij})$ , where  $Q_u$  is the user’s question,  $C_i$  and  $C_j$  are the two candidate queries being compared,  $D_{ij}$  is the database schema used by both candidates (Using the union of candidate schemas is important as it reduces cost and eliminates unnecessary information during comparison.), and  $y_{ij} \in \{0, 1\}$  is the label indicating whether  $C_i$  or  $C_j$  is the correct query. To avoid order bias during training, we randomly shuffle the order of correct and incorrect queries in each pair. Since the number of cases with both correct and incorrect candidates is limited, for instances where no correct candidate exists, we include the ground truth SQL query in the prompt as a hint to guide the model in generating correct candidates.
+
+#### --- **Algorithm 3** Picking the final SQL query from a pool of candidates. ---
+
+**Require:** Set of candidate SQL queries  $C = \{c_1, c_2, \dots, c_n\}$ , user question  $Q_u$ , hint  $H_u$ , target database  $D$ , and a selection model  $\theta_p$ ,  $er(c_i, D)$  as the execution result of  $c_i$  on  $D$
+
+```
+
+1:  $r_i \leftarrow 0$  for all  $c_i \in C$  // Initialize the score  $r_i$  for each candidate query to zero
+2: for each distinct pair  $(c_i, c_j)$  where  $i \neq j$  do
+3:   if  $er(c_i, D) = er(c_j, D)$  then
+4:      $w \leftarrow 1$  //  $c_i$  is the winner if the execution results match
+5:   else
+6:      $S_{i,j} \leftarrow \text{schema\_union}(c_i, c_j, D)$  // Construct union of schemas used in  $c_i$  and  $c_j$ 
+7:      $w \leftarrow \theta_p(S_{i,j}, Q_u, H_u, c_i, c_j) \in \{i, j\}$  // Use binary classifier  $\theta_p$  to select the winner,  $w \in \{i, j\}$ 
+8:   end if
+9:    $r_w \leftarrow r_w + 1$  // Increase the score of the winner  $c_w$  by 1
+10: end for
+11:  $c_j \leftarrow \arg \max_{c_i \in C} r_i$  // Select the candidate with the highest score as the final SQL query  $c_j$ 
+12: return  $c_j$ 
+
+```
+
+---
+
+In the pseudo-code for Algorithm 3, we begin by initializing a score of zero for each candidate query. Then, for every distinct pair of queries  $(c_i, c_j)$ , we compare both  $(c_i, c_j)$  and  $(c_j, c_i)$  to mitigate any order bias, ensuring that both candidates in a pair are fairly evaluated (ignoring the both side comparison will reduce the final performance by roughly 2%). If both queries produce the same execution result on the database, we mark one as the winner and increment its score, as these results suggest consistency. If the execution results differ, we generate a union of the schema used by both queries and use the binary classifier to determine which query is more likely to be correct. The classifier takes into account the question, the two candidate queries, and the combined schema to make its decision. The winner’s score is then updated accordingly. After all comparisons, the candidate with the highest score is selected as the final query. In the rare case of a tie in the final scores, we break the tie by selecting one of the candidates arbitrarily.
+
+## 3 EXPERIMENTS
+
+**Datasets and Models** We evaluate the performance of the proposed CHASE-SQL framework on two widely-recognized cross-domain datasets: BIRD (Li et al., 2024c) and Spider (Yu et al., 2018). BIRD contains over 12,751 unique question-SQL pairs from 95 large databases, spanning more than 37 professional domains, with databases designed to resemble real-world scenarios, featuring messy data rows and complex schemas. Spider consists of 10,181 questions and 5,693 unique complex SQL queries across 200 databases, covering 138 domains. The Spider dataset is divided into non-overlapping training, development, and test sets similar to BIRD. For both, we use execution accuracy (EX), the official metric for their respective leaderboard, as the primary evaluation metric to compare methods. Details of the models and their hyperparameters are provided in Appendix section A.3.
+
+**BIRD results** We present the end-to-end Text-to-SQL performance of the proposed CHASE-SQL framework using Claude-3.5-sonnet, Gemini 1.5 pro, and Mistral Large models on the BIRD development set, and Gemini 1.5 pro on the BIRD test set. We compare with both published methods (either with an available codebase and/or paper) and undisclosed methods. For a fair comparison with Gemini 1.5 pro, all LLM calls in the Claude-3.5-sonnet setting, except for the selection model, are made using Claude-3.5-sonnet (previously-trained selection model is reused). To evaluate the
+
+{6}------------------------------------------------
+
+performance of fully open-source models, we used a fine-tuned Qwen2.5-coder model (Team, 2024) as the selection model for the Mistral Large model. As shown in Table 2, CHASE-SQL with Gemini 1.5 pro achieves 73.01% accuracy on the BIRD development set and 73.0% on the BIRD holdout test set, outperforming all previous works and setting a new state-of-the-art performance.
+
+Table 2: Performance Comparison of different Text-to-SQL methods on BIRD benchmark.
+
+| Method | EX (Dev) | EX (Test) |
+|-|-|-|
+| <b>Published</b> |  |  |
+| CHASE-SQL + Gemini 1.5 (Ours) | <b>73.01</b> | <b>73.0</b> |
+| CHASE-SQL + Claude 3.5 Sonnet (Ours) | <b>69.53</b> | <b>–</b> |
+| CHASE-SQL + Mistral Large (Ours) | <b>70.33</b> | <b>–</b> |
+| Distillery + GPT-4o<br>(Mamari et al., 2024) | 67.21 | 71.83 |
+| CHESS<br>(Talaei et al., 2024) | 65.00 | 66.69 |
+| MCS-SQL + GPT-4<br>(Lee et al., 2024) | 63.36 | 65.45 |
+| SuperSQL<br>(Li et al., 2024a) | 58.5 | 62.66 |
+| <b>Undisclosed</b> |  |  |
+| Insights AI | 72.16 | 70.26 |
+| AskData + GPT-4o | 72.03 | 72.39 |
+| OpenSearch-v2 + GPT-4o | 69.3 | 72.28 |
+| PURPLE-RED + GPT-4o | 68.12 | 70.21 |
+| Arxivise + GPT-4o | 67.99 | 66.21 |
+| ExSL + granite-34b-code | 67.47 | 67.76 |
+
+Table 3: Performance Comparison of different Text-to-SQL methods on Spider test set.
+
+| Method | EX | Training with Spider |
+|-|-|-|
+| MCS-SQL + GPT-4<br>(Lee et al., 2024) | 89.6 | ✓ |
+| CHASE-SQL + Gemini 1.5 (Ours) | <b>87.6</b> | ✗ |
+| CHESS<br>(Talaei et al., 2024) | 87.2 | ✗ |
+| DAIL-SQL + GPT-4<br>(Gao et al., 2023) | 86.6 | ✓ |
+| DIN-SQL + GPT-4<br>(Pourreza & Rafiei, 2024a) | 85.3 | ✓ |
+| C3 + ChatGPT<br>(Dong et al., 2023) | 82.3 | ✓ |
+| RESDSQL 3B<br>(Li et al., 2023a) | 79.9 | ✓ |
+| DIN-SQL + CodeX<br>(Pourreza & Rafiei, 2024a) | 78.2 | ✓ |
+| T5-3B+NatSQL<br>(Rai et al., 2023) | 78.0 | ✓ |
+| Graphix-3B+PICARD<br>(Li et al., 2023b) | 77.6 | ✓ |
+
+**Spider results** We assess the generalizability of the proposed CHASE-SQL by evaluating it in an end-to-end way on the Spider test set without modifying the few-shot samples in the prompts or training a new selection model, i.e. without using and data from the target distribution. This approach allows us to test the performance of CHASE-SQL on different unseen query and database distributions compared to the data from training distributions. Table 3 demonstrates that CHASE-SQL achieves an execution accuracy of 87.6% on the Spider test set, placing it second among methods that have undergone specific training or prompt optimization for the Spider dataset. This highlights the strong generalizability of CHASE-SQL and its potential for generating high quality Text-to-SQL for unseen samples coming from very different distributions and unique challenges.
+
+### 3.1 GENERATOR AND SELECTION PERFORMANCE
+
+**Generator + Fixer:** To reveal performance of generators, we conducted an ablation study to evaluate the performance of each candidate generation method before and after applying the query fixer using two models of Gemini-1.5-pro and Mistral Large (AI, 2024). We compare the performance of the proposed generators in producing a single candidate query against the original BIRD prompt (Li et al., 2024c), augmented with zero-shot CoT reasoning (Kojima et al., 2022), which serves as the baseline for assessing the quality of prompts. The results, shown in Table 4, indicate that the proposed methods significantly improve SQL generation performance, compared to the naive baseline, towards the goal of producing high-quality candidates while maintaining diversity. Among the candidate generators, the online synthetic data generation approach produced an impressive performance of 68.02% with Gemini-1.5-pro model, demonstrating its effectiveness in leveraging test-time compute to improve LLM performance by generating high-quality synthetic examples. Furthermore, the query fixer proved crucial, enhancing the quality of the candidate pool and increasing performance by nearly 2% across all candidate generators.
+
+Table 4: Ablation studies on single candidate generation performance of the candidate generators compared with original BIRD prompt + zero-shot CoT with Gemini 1.5 pro and Mistral Large on the BIRD dev set.
+
+| Method | Gemini 1.5 pro |  | Mistral Large |  |
+|-|-|-|-|-|
+|  | EX (%) | Δ(%) | EX (%) | Δ(%) |
+| Baseline | 57.75 | - | 54.88 | - |
+| QP CoT | 63.62 | +5.87 | 59.64 | 4.76 |
+| DC CoT | 63.92 | +6.17 | 58.99 | 4.11 |
+| OS ICL | 67.09 | +9.34 | 56.32 | 1.44 |
+| Baseline w Query Fixer | 61.58 | +3.83 | 60.03 | 5.15 |
+| QP CoT w Query Fixer | 65.51 | +7.76 | 62.64 | 7.76 |
+| DC CoT w Query Fixer | 65.77 | +8.02 | 63.75 | 8.87 |
+| OS ICL w Query Fixer | 68.02 | +10.27 | 61.47 | 6.59 |
+
+{7}------------------------------------------------
+
+**Selection:** We conducted an analysis on the binary selection accuracy of the selection agent for cases where, in a pairwise comparison, one candidate is correct and the other is incorrect. We exclude cases where both candidates are either correct or incorrect, as the selection would not affect the outcome since both candidates have the same label. We compare the performance of Claude-3.5-sonnet and Gemini-1.5-pro (both out-of-the-box without fine-tuning) with two fine-tuned models: 1) Gemma 2 9B and 2) Gemini-1.5-flash. As shown in Table 5, both fine-tuned models achieve higher accuracy than the untuned counterparts, demonstrating the importance of fine-tuning to teach the model about the specific preferences.
+
+**Candidate Generation Analysis:** We analyze the performance of each candidate generator method individually. To better understand the performance potential when effectively selecting the correct SQL query from the candidate pool, we generate seven candidate SQL queries from each generator method (21 candidates in total) for all samples in the BIRD development set. We determine this number of candidates based on the observation that increasing the candidate pool beyond 20 did not yield significant improvements, as illustrated in Fig. 2d. By assuming access to an oracle selection model that always selects the correct SQL query from the seven candidates, we calculate the upper-bound performance achievable for each generator. Conversely, by assuming an adversarial selection model that always selects the wrong SQL query, we determine the lower-bound performance. Fig. 2 illustrates the upper-bound and lower-bound performance for all three methods together with the performance of our selection agent. As shown, the upper-bound performance of the two different CoT methods is generally higher than that of the synthetic example generation method for different number of candidates. However, their lower-bound performance is also lower than the synthetic method. Lower-bound accuracy reflects cases where all candidates are correct, reducing the noise in the selection process since it doesn’t matter which candidate is chosen, so a higher lower-bound is preferred. This is evident in the selection agent’s performance, where a drop in the lower bound leads to diminishing returns from increasing the upper bound, causing the selection agent’s performance to plateau. Additionally, the upper-bound performance of combining all three methods reaches **82.79%**, highlighting the significant room for improvement through better candidate picking methods. This demonstrates that the LLM’s parametric knowledge already contains the information needed to solve most questions, highlighting the need for ensemble approaches to effectively extract and utilize this knowledge.
+
+Table 5: Evaluating the binary selection accuracy of the different selection models.
+
+| Selection Model | Binary Acc. (%) |
+|-|-|
+| Claude-3.5-sonnet | 60.21 |
+| Gemini-1.5-pro | 63.98 |
+| Tuned Gemma 2 9B | 64.28 |
+| Tuned Gemini-1.5-flash | <b>71.01</b> |
+
+Additionally, we evaluate the upper-bound performance by combining all candidates from three candidate generation methods across the simple, moderate, and challenging difficulty levels for the BIRD development set. These difficulty categories are assigned by human experts during the creation of the BIRD development set. Fig. 2d shows that, as expected, the upper-bound performance increases with the number of candidates across all difficulty levels. However, for the challenging and moderate classes, the improvement plateaus earlier than in the simple class, suggesting that generating more samples does not further improve the upper-bound performance for these two difficulty levels.
+
+Fig. 2 presents a Venn diagram showcasing the performance of three generation methods: Query Plan, Divide and Conquer, and with Synthetic Examples. The numbers within the intersecting regions represent the instances where multiple methods generated at least one correct candidate. This diagram visually highlights the unique contributions of each method, which indicates the necessity of using all three generators. Additionally, in Fig. 3b, we compare the number of correct queries generated by each SQL generation method that are not correct by the other generators. The divide-and-conquer approach outperforms the others on challenging questions, while the query plan method excels on moderately difficult queries. To further analyze the performance of the generators across different domains and varying numbers of columns and tables, we compare the number of correct queries generated for each database, as shown in Appendix Fig. 5. As illustrated, both CoT methods generally perform similarly across databases, while the online synthetic example generation method significantly increases diversity, resulting in more correct answers overall across different databases.
+
+{8}------------------------------------------------
+
+![Figure 2: Comparison of the upper- and lower-bound performance of different candidate generators. The figure contains four line charts: (a) Divide and Conquer Examples, (b) Online Synthetic Examples, (c) Query Plan Examples, and (d) Accuracy on Level for Different Classes. Each chart plots Execution Accuracy against the Number of Candidates (1 to 5).](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 2 consists of four line charts showing the performance of different candidate generators. Each chart plots Execution Accuracy (y-axis, 0.40 to 0.80) against the Number of Candidates (x-axis, 1 to 5). The legend for all charts is: Upper Bound (blue line with circles), Selection Acc (orange line with circles), and Lower Bound (red dashed line with circles). A shaded gray area represents the range between the Upper Bound and Selection Acc.
+
+- (a) Divide and Conquer Examples: The Upper Bound increases from ~0.65 to ~0.75. Selection Acc increases from ~0.60 to ~0.65. Lower Bound decreases from ~0.65 to ~0.45.
+- (b) Online Synthetic Examples: The Upper Bound increases from ~0.65 to ~0.75. Selection Acc increases from ~0.60 to ~0.65. Lower Bound decreases from ~0.65 to ~0.45.
+- (c) Query Plan Examples: The Upper Bound increases from ~0.65 to ~0.75. Selection Acc increases from ~0.60 to ~0.65. Lower Bound decreases from ~0.65 to ~0.45.
+- (d) Accuracy on Level for Different Classes: This chart shows the Upper-bound performance across difficulty levels (0.5 to 3.0). The legend is: Simple (yellow line with circles), Moderate (orange line with circles), and Challenging (red line with circles). All three series show an increasing trend in accuracy as the difficulty level increases.
+
+Figure 2: Comparison of the upper- and lower-bound performance of different candidate generators. The figure contains four line charts: (a) Divide and Conquer Examples, (b) Online Synthetic Examples, (c) Query Plan Examples, and (d) Accuracy on Level for Different Classes. Each chart plots Execution Accuracy against the Number of Candidates (1 to 5).
+
+Figure 2: Comparison of the upper- and lower-bound performance of different candidate generators.
+
+![Figure 3: Comparison of SQL generation methods. The left part is a Venn diagram showing the overlap of correct answers between Query Plan, Synthetic Example, and Divide and Conquer methods. The right part is a bar chart showing the number of correct queries across different complexity levels (simple, moderate, challenging) for the same three methods.](bedcca5cdf168e3508ef511d94ec514c_img.jpg)
+
+Figure 3 compares SQL generation methods. The left part is a Venn diagram illustrating the number of instances for which each method produces correct answers. The right part is a bar chart showing the performance across different complexity levels.
+
+(a) Venn diagram illustrating the number of instances for which each method: Query Plan, Synthetic Example, Divide and Conquer, produces at least one correct candidate. The overlap regions represent multiple methods generating correct candidates. The counts are: Query Plan only: 35, Synthetic Example only: 38, Divide and Conquer only: 38, Query Plan and Synthetic Example overlap: 33, Query Plan and Divide and Conquer overlap: 72, Synthetic Example and Divide and Conquer overlap: 23, All three methods overlap: 1045. There are also 258 unresolved questions.
+
+(b) Number of correct queries across different complexity levels that were answered by each method. The x-axis shows Difficulty Level (simple, moderate, challenging). The y-axis shows Number of Correct Samples (0 to 20). The legend is: Query Plan CoT (yellow bars), Online Synthetic CoT (orange bars), and Divide and Conquer CoT (red bars).
+
+| Difficulty Level | Query Plan CoT | Online Synthetic CoT | Divide and Conquer CoT |
+|-|-|-|-|
+| simple | ~16 | ~11 | ~22 |
+| moderate | ~14 | ~12 | ~8 |
+| challenging | ~3 | ~4 | ~8 |
+
+Figure 3: Comparison of SQL generation methods. The left part is a Venn diagram showing the overlap of correct answers between Query Plan, Synthetic Example, and Divide and Conquer methods. The right part is a bar chart showing the number of correct queries across different complexity levels (simple, moderate, challenging) for the same three methods.
+
+Figure 3: Comparison of SQL generation methods: Venn diagram showing unique and overlapping correct answers (left) and the performance across different complexity levels (right).
+
+**Selection Agent Analysis:** We evaluate the query-picking performance by comparing the Text-to-SQL execution accuracy of the selection agent with the self-consistency method (using majority voting) Wang et al. (2022), an oracle model (upper bound), and an adversarial model (lower bound). To conduct the evaluation, we generate 10 samples from each candidate generation method using two different sampling temperatures: 0.5 and 1.8. The results, shown in Table 6, demonstrate that the selection agent significantly outperforms the self-consistency method with a large margin, roughly **6%**. As expected, increasing the sampling temperature raises the upper bound but also lowers the lower bound. This effect is more pronounced for the synthetic data generation method compared to the two CoT methods, mainly because LLMs generate reasoning steps before producing the final SQL query, which helps mitigate the randomness introduced by high-temperature sampling. The performance with self-consistency method generally decreases as temperature increases, since the
+
+{9}------------------------------------------------
+
+majority cluster becomes smaller with more random queries. However, the proposed trained selection agent is less affected by temperature scaling and, in two cases, even improved its performance with a more diverse pool of samples.
+
+Table 6: Performance comparison of different picking methods on the candidates generated by the candidate generators on BIRD development set with two different temperatures. QP refers to query plan COT, DC refers to divide and conquer COT, and OS is the online synthetic example generation method.
+
+| Picking Method | QP (T=0.5) | QP (T=1.8) | DC (T=0.5) | DC (T=1.8) | OS (T=0.5) | OS (T=1.8) |
+|-|-|-|-|-|-|-|
+| Lower Bound | 50.46 | 48.63 | 51.37 | 47.39 | 60.43 | 50.98 |
+| Upper Bound | 78.55 | 80.44 | 78.42 | 79.34 | 74.77 | 79.66 |
+| Self-consistency | 65.78 | 65.51 | 66.43 | 64.41 | 67.34 | 66.88 |
+| Our Selection Agent | 71.7 | 71.73 | 71.31 | 70.53 | 70.4 | 71.38 |
+
+### 3.2 ABLATION STUDIES
+
+In the previous sections, we evaluate the importance of the selection agent and each candidate generation method. Next, we focus on the analysis of the remaining components of CHASE-SQL: LSH for value retrieval, the query fixer, and three reasoning strategies (QP, OS, and DC). Table 7 shows the performance of CHASE-SQL without each of these steps, highlighting their significance in achieving higher-quality performance. The results demonstrate the contribution of each component, where removing LSH, the query fixer, or any of the candidate generators leads to a reduction in execution accuracy, further validating the importance of these components of CHASE-SQL. Moreover, the table compares the performance of our binary selection agent with two other selection methods: self-consistency (Wang et al., 2022) and a ranker agent. The ranker agent receives all candidates generated by our three candidate generators in a single prompt, compares them, and produce a ranking for each. For the ranker agent, we select the query with the lowest rank as the best answer. The binary selection agent significantly outperforms both the self-consistency and ranker agents, demonstrating the effectiveness of the proposed method.
+
+Table 7: Ablation studies on the performance of CHASE-SQL after removing the query fixer, LSH for value retrieval, and reasoning strategies, i.e., QP, OS, and DC.
+
+| Method | Execution Accuracy (%) | $\Delta(\%)$ |
+|-|-|-|
+| CHASE-SQL All | 73.01 | - |
+| CHASE-SQL w self-consistency | 68.84 | -4.17 |
+| CHASE-SQL w ranker agent | 65.51 | -7.5 |
+| CHASE-SQL w/o LSH | 70.09 | -2.92 |
+| CHASE-SQL w/o Query Fixer | 69.23 | -3.78 |
+| CHASE-SQL w/o QP | 72.36 | -0.65 |
+| CHASE-SQL w/o OS | 72.16 | -0.85 |
+| CHASE-SQL w/o DC | 71.77 | -1.24 |
+
+## 4 CONCLUSION
+
+We introduce a novel agentic framework, CHASE-SQL, to leverage test-time compute for generating diverse, high-quality SQL queries and accurately selecting the correct one. We propose multiple chain-of-thought prompting methods and an online synthetic example generation technique, along with a query selection mechanism that scores candidates based on pairwise comparisons. Our framework, CHASE-SQL, sets a new state-of-the-art in the notable public Text-to-SQL leaderboard (at the time of the submission), demonstrating the effectiveness of test-time computation for both generating diverse queries and selecting the most accurate response. CHASE-SQL addresses key issues like query diversity and selection optimization, paving the way for further improvements in complex reasoning tasks encountered at real-world Text-to-SQL challenges.
+
+## REFERENCES
+
+Rishabh Iyer, Avni Singh, Lei M Zhang, Bernd Bohnet, Luis Rosias, Stephanie C.Y. Chan, Biao Zhang, Aleksandra Faust, and Hugo Larochelle. Many-shot in-context learning. In *ICML 2024 Workshop on In-Context Learning*, 2024. URL <https://openreview.net/forum?id=goi7DFH1qS>.
+
+Mistral AI. Mistral large 2407. <https://mistral.ai/news/mistral-large-2407/>, 2024. Accessed: 2024-11-16.
+
+ Rest of paper (reference and Appendix) is removed.

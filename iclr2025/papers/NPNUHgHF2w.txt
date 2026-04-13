@@ -1,0 +1,280 @@
+
+
+{0}------------------------------------------------
+
+# CBRAMOD: A CRISS-CROSS BRAIN FOUNDATION MODEL FOR EEG DECODING
+
+Jiquan Wang<sup>1,2</sup>, Sha Zhao<sup>1,2</sup>, Zhiling Luo<sup>3</sup>, Yangxuan Zhou<sup>1,2</sup>, Haiteng Jiang<sup>4,5,1</sup>,  
+Shijian Li<sup>1,2</sup>, Tao Li<sup>4,5,1\*</sup>, Gang Pan<sup>1,2,5\*</sup>
+
+<sup>1</sup>State Key Laboratory of Brain-machine Intelligence, Zhejiang University
+
+<sup>2</sup>College of Computer Science and Technology, Zhejiang University
+
+<sup>3</sup>Alibaba Group
+
+<sup>4</sup>Department of Neurobiology, Affiliated Mental Health Center & Hangzhou  
+Seventh People’s Hospital, Zhejiang University School of Medicine
+
+<sup>5</sup>MOE Frontier Science Center for Brain Science and Brain-machine Integration,  
+Zhejiang University
+
+{wangjiquan, szhao, zyangxuan, h.jiang}@zju.edu.cn;  
+{shijianli, litaozjusc, gpan}@zju.edu.cn;  
+godot.lzl@alibaba-inc.com
+
+## ABSTRACT
+
+Electroencephalography (EEG) is a non-invasive technique to measure and record brain electrical activity, widely used in various BCI and healthcare applications. Early EEG decoding methods rely on supervised learning, limited by specific tasks and datasets, hindering model performance and generalizability. With the success of large language models, there is a growing body of studies focusing on EEG foundation models. However, these studies still leave challenges: Firstly, most of existing EEG foundation models employ full EEG modeling strategy. It models the spatial and temporal dependencies between all EEG patches together, but ignores that the spatial and temporal dependencies are heterogeneous due to the unique structural characteristics of EEG signals. Secondly, existing EEG foundation models have limited generalizability on a wide range of downstream BCI tasks due to varying formats of EEG data, making it challenging to adapt to. To address these challenges, we propose a novel foundation model called CBraMod. Specifically, we devise a criss-cross transformer as the backbone to thoroughly leverage the structural characteristics of EEG signals, which can model spatial and temporal dependencies separately through two parallel attention mechanisms. And we utilize an asymmetric conditional positional encoding scheme which can encode positional information of EEG patches and be easily adapted to the EEG with diverse formats. CBraMod is pre-trained on a very large corpus of EEG through patch-based masked EEG reconstruction. We evaluate CBraMod on up to 10 downstream BCI tasks (12 public datasets). CBraMod achieves the state-of-the-art performance across the wide range of tasks, proving its strong capability and generalizability. The source code is publicly available at <https://github.com/wjq-learning/CBraMod>.
+
+## 1 INTRODUCTION
+
+Brain-Computer Interface (BCI) refers to a system that allows direct communication between the brain and external devices or computers (Schalk et al., 2004; Wu et al., 2013; Zhang et al., 2019b). Electroencephalography (EEG) is a technique used to measure and record electrical activity in the brain, where electrodes are placed on the scalp to detect and amplify the brain’s electrical signals. EEG plays a crucial role in BCI as it provides a non-invasive and real-time measure of brain activity that can be used to decode and interpret user’s intentions or commands. By analyzing the patterns and features in EEG signals, algorithms and models have been developed to decode specific brain
+
+\*Corresponding authors: Sha Zhao and Gang Pan.
+
+{1}------------------------------------------------
+
+![Figure 1: EEG patches and different EEG modeling strategies. (a) EEG Patches: A plot showing 8 EEG channels (P4, P3, C4, C3, F4, F3, FP2, FP1) over time (0 to 8). The channels are color-coded and show distinct waveforms. (b) Full EEG Modeling: A plot showing the same 8 EEG channels over time (0 to 8). The channels are color-coded and show a more complex, overlapping waveform. (c) Criss-Cross EEG Modeling: A plot showing the same 8 EEG channels over time (0 to 8). The channels are color-coded and show a more complex, overlapping waveform, with a vertical orange bar highlighting a specific time interval.](49ad3a646d84bcfeac02bdf2b3792a3e_img.jpg)
+
+Figure 1: EEG patches and different EEG modeling strategies. (a) EEG Patches: A plot showing 8 EEG channels (P4, P3, C4, C3, F4, F3, FP2, FP1) over time (0 to 8). The channels are color-coded and show distinct waveforms. (b) Full EEG Modeling: A plot showing the same 8 EEG channels over time (0 to 8). The channels are color-coded and show a more complex, overlapping waveform. (c) Criss-Cross EEG Modeling: A plot showing the same 8 EEG channels over time (0 to 8). The channels are color-coded and show a more complex, overlapping waveform, with a vertical orange bar highlighting a specific time interval.
+
+Figure 1: EEG patches and different EEG modeling strategies.
+
+states, including but not limited to emotion recognition (Dadabayev et al., 2022; Gao et al., 2024), motor imagery classification (Althareri et al., 2021; Dai et al., 2020), seizure detection (Ahmad et al., 2022; Yildiz et al., 2022) and sleep staging (Phan & Mikkelsen, 2022; Wang et al., 2024b; Zhou et al., 2024a).
+
+Early studies on EEG decoding predominantly employed traditional machine learning methods (Lotte et al., 2007). With the rapid advancement of deep learning (LeCun et al., 2015), various deep neural networks have been developed to decode EEG signals (Craik et al., 2019) and perform downstream BCI tasks (Pan et al., 2018; Sekkal et al., 2022). These deep learning-based EEG models include Convolution Neural Network (CNN) (Lawhern et al., 2018; Ding et al., 2022), Long Short-Term Memory (LSTM) (Wang et al., 2018; Phan et al., 2019), CNN-LSTM (Zhang et al., 2019a; Wang et al., 2023a), Transformer (Song et al., 2021; Phan et al., 2022), CNN-Transformer (Song et al., 2022; Peh et al., 2022), Graph Neural Networks (GNN) (Jia et al., 2020; Ding et al., 2023) and etc. However, most of deep learning models employ supervised learning methods tailored for specific tasks or datasets, and lack generalization ability. There are still significant challenges in improving the generalizability and performance due to many factors, such as limited data amounts and substantial differences in EEG signal formats. The EEG is usually collected for specific BCI tasks, and the amount is relatively small, because collecting and labeling EEG is expensive and time-consuming. Meanwhile, the EEG signal formats significantly differ across different datasets, such as channel configurations and time lengths.
+
+Impressed by self-supervised learning (SSL) (Liu et al., 2021c) on computer vision (CV) and natural language processing (NLP), some studies (Kostas et al., 2021; Chien et al., 2022; Yang et al., 2023; Foumani et al., 2024; Jiang et al., 2024; Wang et al., 2024a) propose EEG foundation models which are pre-trained on a vast amount of EEG data with self-supervised learning and fine-tuned on downstream datasets for some clinical or BCI applications. Most of these methods segment the original EEG signals into patches of EEG channels to ensure that the neural network can deal with EEG signals with diverse channels and time length, shown in Figure 1(a). Consistent with the approach of handling image patches used in ViT (Dosovitskiy et al., 2020), they flatten the EEG patches and feed them into transformers to model the dependencies among all EEG patches, called full EEG modeling strategy shown in Figure 1(b). Meantime, they adopted absolute positional encoding based on electrode numbering as a channel embedding to encode positional information. However, existing methods ignore two characteristics of EEG signals: **Unique structural characteristics:** EEG signals have different structural characteristics compared to image. It contain heterogeneous spatial and temporal dependencies, but images contain only spatial dependencies. And the dependencies among EEG patches within the same channel or time interval could be stronger than those among patches from different channels and time intervals, but such a prior assumption may not be valid in image. The full EEG modeling strategy models the dependencies among all EEG patches together, ignoring the unique structural characteristics of EEG signals. **Channel variation:** EEG channels are not solely defined by electrode position but are also influenced by the referencing scheme used (e.g., earlobe, average, REST, or bipolar references). Existing EEG foundation models, such as LaBraM (Jiang et al., 2024), employ absolute positional encoding based on electrode numbering as a channel embedding, but this method assumes a fixed relationship between EEG channels and electrode positions. As a result, absolute positional encodings tied directly to electrode numbering may limit the model’s adaptability across tasks and datasets that vary in spatial and reference properties.
+
+{2}------------------------------------------------
+
+To address these issues, we first propose a criss-cross EEG modeling strategy to thoroughly leverage the structural characteristics of EEG signals, inspired by some studies (Huang et al., 2019; Dong et al., 2022) which adopt similar strategies on vision modeling. Based on this strategy, we then propose an EEG foundation model, which can model spatial and temporal dependencies in parallel, as shown in Figure 1(c). Meantime, we propose asymmetric conditional positional encoding (ACPE) as a more flexible approach to positional encoding. ACPE employs a convolutional network to dynamically learn spatial relationships among patches, allowing the model to capture relative positional information from various channel format. This dynamic position learning enhances the model’s adaptability, making it better suited for downstream tasks with varying spatial configurations and reference contexts. Our detailed contributions are as follows:
+
+- We propose a **novel EEG foundation model**, called **CBraMod**, for EEG decoding on various clinical and BCI application. CBraMod is pre-trained on **Temple University Hospital EEG Corpus (TUEG)** for learning generic representations from both **time-domain** and **frequent-domain** EEG signals through patch-based masked EEG reconstruction. To the best of our knowledge, TUEG is the largest public EEG corpus so far.
+- For modeling effective **spatial-temporal dependencies** among EEG patches and adapting to various downstream datasets, we firstly devise a **criss-cross transformer**, based on **criss-cross EEG modeling** strategy, as the backbone of CBraMod. It models spatial and temporal dependencies separately through two parallel attention mechanisms, spatial and temporal attentions. Meanwhile, we utilize an **asymmetric conditional positional encoding (ACPE)** scheme to encode positional information. ACPE can dynamically generate positional encoding, which can well be adapted to **arbitrary EEG formats** of different downstream datasets.
+- We evaluate the performance of CBraMod on up to **10 downstream BCI tasks** using **12 public datasets**. The majority of downstream datasets are sourced from institutions different from the pretraining dataset. The experimental results demonstrate that CBraMod achieves state-of-the-art performance across all the tasks, highlighting its successful **generalizability**. To the best of our knowledge, this is the first study to comprehensively evaluate EEG foundation models **across such a broad range of downstream BCI tasks**.
+
+![Figure 2: CBraMod pre-training overview. The diagram illustrates the pre-training pipeline of CBraMod. It starts with raw EEG data (channels P4, C4, C3, F3, FP2, FP1 over time 0-7). This is processed through 'Patching & Masking' to create a grid of patches with some masked. These are then 'Patch Encoding' to produce 'Learned EEG Representations' (a grid of blue and grey squares). An 'ACPE' (Asymmetric Conditional Positional Encoding) block is shown above the representations. The representations are then passed through a series of 'Criss-Cross Transformer Block' units (labeled 1, 2, ..., M). Finally, a 'Masked EEG Reconstruction' head is applied to the learned representations to reconstruct the original EEG signal.](69edc2887e907309499ac95b47ab6905_img.jpg)
+
+Figure 2: CBraMod pre-training overview. The diagram illustrates the pre-training pipeline of CBraMod. It starts with raw EEG data (channels P4, C4, C3, F3, FP2, FP1 over time 0-7). This is processed through 'Patching & Masking' to create a grid of patches with some masked. These are then 'Patch Encoding' to produce 'Learned EEG Representations' (a grid of blue and grey squares). An 'ACPE' (Asymmetric Conditional Positional Encoding) block is shown above the representations. The representations are then passed through a series of 'Criss-Cross Transformer Block' units (labeled 1, 2, ..., M). Finally, a 'Masked EEG Reconstruction' head is applied to the learned representations to reconstruct the original EEG signal.
+
+Figure 2: CBraMod pre-training overview.
+
+## 2 METHOD
+
+The pre-training framework of CBraMod is shown in Figure 2. Firstly, we segment EEG samples into patches using a fixed time window and randomly mask some patches with a mask token. Next, each EEG patch is fed into a patch encoding network to obtain corresponding patch embedding. Spatial-temporal positional embeddings are obtained through an asymmetric conditional positional encoding (ACPE) scheme and added to the patch embeddings. Then, the patch embeddings are fed into criss-cross transformer blocks with criss-cross attention mechanism to learn EEG representations. Finally, a reconstruction head is utilized to reconstruct the masked EEG patches from the learned representations. We will provide a detailed description of CBraMod.
+
+{3}------------------------------------------------
+
+**Patching & Masking** We denote an EEG sample as  $S \in \mathbb{R}^{C \times T}$ , where  $C$  is the number of electrode channels and  $T$  is the number of timestamps. In order to ensure that the neural network can deal with EEG signals with diverse channels and time length, we **segment the original EEG sample into patches of EEG channels through a fixed-length time window**. Specifically, we divide  $S$  with time window length  $t$  to get a set of patches  $X \in \mathbb{R}^{C \times n \times t}$ , where  $n = \lfloor \frac{T}{t} \rfloor$  is the number of patches in each channel, or sequence length. Thus an EEG patch can be denoted as  $x \in \mathbb{R}^t$  and we can get  $X = \{x_{i,j} | i \in [1, 2, \dots, C], j \in [1, 2, \dots, n]\}$ . The total number of patches in  $X$  is  $|X| = Cn$ . After EEG patching, we randomly generate a **mask**  $\mathcal{M} = \{m_{i,j} | i \in [1, 2, \dots, C], j \in [1, 2, \dots, n]\}$  from a Bernoulli distribution of  $r$  proportion, where  $m_{i,j} \in \{0, 1\}$  denotes the mask indicator of  $x_{i,j}$ . Then we mask the EEG patches of  $X$  by replacing the EEG patch  $x_{i,j}$  with  $x_M$  as follows:
+
+$$\tilde{x}_{i,j} = \begin{cases} x_{i,j}, & m_{i,j} = 0 \\ x_M, & m_{i,j} = 1 \end{cases} \quad (1)$$
+
+$$\tilde{X} = \{\tilde{x}_{i,j} | i \in [1, 2, \dots, C], j \in [1, 2, \dots, n]\} \quad (2)$$
+
+where  $x_M \in \mathbb{R}^t$  is the mask token and  $\tilde{X} \in \mathbb{R}^{C \times n \times t}$  is the set of all EEG patches after masking.
+
+**Time-Frequency Patch Encoding** In order to extract the local features from each patch  $\tilde{x}_{i,j}$  of  $\tilde{X}$ , we devise a patch encoder applied to each patch. Our patch encoder consists of two branches, **time-domain branch** and **frequency-domain branch**. The **time-domain branch** comprises multiple convolution blocks designed to extract time-domain features within each patch. A convolution block consists of an one-dimensional convolution layer, a group normalization layer, and a GELU activation function. We feed each EEG patch  $\tilde{x}_{i,j}$  into the time-domain branch to obtain the time-domain embedding  $e_{i,j}^t \in \mathbb{R}^d$ , where  $d$  is the dimension of the embedding. The **frequency-domain branch** comprises fast Fourier transform (FFT) and a fully-connected layer to extract frequency-domain features from each patch. Specifically, we leverage FFT to extract an energy vector for each patch  $\tilde{x}_{i,j}$  where every dimension indicates the energy of a specific frequency. Then we feed the energy vector into a fully-connected layer to get frequency-domain embedding  $e_{i,j}^f \in \mathbb{R}^d$ . Afterwards, we add each time-domain embedding and the corresponding frequency-domain embedding as follows:
+
+$$e_{i,j} = e_{i,j}^t + e_{i,j}^f \quad (3)$$
+
+$$E = \{e_{i,j} | i \in [1, 2, \dots, C], j \in [1, 2, \dots, n]\} \quad (4)$$
+
+where  $e_{i,j} \in \mathbb{R}^d$  represents the patch embedding,  $E \in \mathbb{R}^{C \times n \times d}$  is the set of patch embeddings.
+
+**Asymmetric Conditional Positional Encoding** Differing from existing EEG foundation models that primarily utilize an absolute positional encoding (APE) scheme, we employ an asymmetric conditional positional encoding (ACPE) scheme to encode spatial and temporal positional information of EEG patches. This is a modification upon conditional positional encoding (CPE) (Chu et al., 2021) that is applied to encode positional information of image patches. Compared to APE, ACPE can dynamically encode the temporal and spatial positional information of each EEG patch, improving adaptation to diverse channel configurations and time lengths. Compared to CPE, ACPE is designed in an asymmetric fashion to encode short-range temporal positional information and long-range spatial positional information. It is because EEG signals are multi-channels sequential neural signals, requiring the model to encode different-range positional information in spatial and temporal dimension.
+
+Specifically, we devise a **convolution layer as positional encoder** to dynamically generate ACPE from the spatial-temporal neighborhoods of an EEG patch, shown in Figure 2. The convolution network is composed of a depthwise two-dimension convolution layer with kernel  $(k_s, k_t)$  and  $(\frac{k_s-1}{2}, \frac{k_t-1}{2})$  zero paddings, where  $k_s$  is the kernel size of spatial (channel) dimension and  $k_t$  is the kernel size of temporal dimension. Differing from CPE, we utilize an **asymmetric convolution kernel**  $(k_s > k_t)$  to encode spatial-temporal positional information. The longer side in spatial dimension is used to encode longer-range spatial positional information, and the shorter in temporal dimension is used to encode shorter-range temporal positional information. We feed patch embeddings  $E$  into the positional encoder to generate the ACPE  $E^p = \{e_{i,j}^p | i \in [1, 2, \dots, C], j \in [1, 2, \dots, n]\}$ , where  $E^p \in \mathbb{R}^{C \times n \times d}$  and  $e_{i,j}^p \in \mathbb{R}^d$ . Then we add ACPE to patch embeddings:
+
+$$E^o = E + E^p = \{e_{i,j} + e_{i,j}^p | i \in [1, 2, \dots, C], j \in [1, 2, \dots, n]\} \quad (5)$$
+
+{4}------------------------------------------------
+
+![Figure 3: Criss-Cross Transformer Block. (a) Criss-Cross Transformer Block: A vertical stack of components: Add, Feed Forward, Layer Norm, Add, Criss-Cross Attention, Layer Norm. (b) Criss-Cross Attention Mechanism: A detailed view of the Criss-Cross Attention block. It shows an input grid of size n x h_k being processed through a 'Split Head' mechanism. The input is divided into spatial stripes (S-Attention) and temporal stripes (T-Attention). The S-Attention part shows a grid with a black square (query) and a vertical orange stripe (key). The T-Attention part shows a grid with a black square (query) and a horizontal purple stripe (key). The outputs from S-Attention and T-Attention are concatenated (Concat) to produce the final output grid.](690fce4fb5c9cbb8beb560cb2a3fcbeb_img.jpg)
+
+Figure 3: Criss-Cross Transformer Block. (a) Criss-Cross Transformer Block: A vertical stack of components: Add, Feed Forward, Layer Norm, Add, Criss-Cross Attention, Layer Norm. (b) Criss-Cross Attention Mechanism: A detailed view of the Criss-Cross Attention block. It shows an input grid of size n x h\_k being processed through a 'Split Head' mechanism. The input is divided into spatial stripes (S-Attention) and temporal stripes (T-Attention). The S-Attention part shows a grid with a black square (query) and a vertical orange stripe (key). The T-Attention part shows a grid with a black square (query) and a horizontal purple stripe (key). The outputs from S-Attention and T-Attention are concatenated (Concat) to produce the final output grid.
+
+Figure 3: Criss-Cross Transformer Block.
+
+where  $E^o \in \mathbb{R}^{C \times n \times d}$  is the set of EEG patch embeddings with positional information.
+
+**Criss-Cross Transformer** We propose criss-cross transformer to capture the heterogeneous spatial and temporal dependencies among EEG patches, whose architecture is shown in Figure 3.
+
+**Criss-Cross Transformer Block.** As shown in Figure 3(a), a criss-cross transformer block consists of layer normalization layer, criss-cross attention, addition component, and feed forward layer. In order to ensure the stability and efficiency of the transformer training process, we utilize the pre-norm strategy. We incorporate layer normalization to the queries and keys prior to the attention mechanism to prevent the occurrence of excessively large values in attention logits. This approach helps to maintain more consistent gradients across layers, resulting in better convergence during the training process (Xiong et al., 2020; Dehghani et al., 2023). Here, we feed EEG patch embeddings  $E^o$  into layer normalization to get normalized patch embedding  $\tilde{E} \in \mathbb{R}^{C \times n \times d}$ . Then we feed  $\tilde{E}$  into the criss-cross attention to get spatial-temporal dependencies among EEG patches.
+
+**Criss-Cross Attention Mechanism.** The **criss-cross attention** is shown in Figure 3(b). It consists of parallel **spatial attention (S-Attention)** and **temporal attention (T-Attention)**. The S-Attention is used to capture spatial dependencies among EEG patches within the same time interval and the T-Attention is used to capture temporal dependencies among EEG patches within the same channel. Based on the multi-head self-attention mechanism, the input embeddings  $\tilde{E} \in \mathbb{R}^{C \times n \times d}$  will undergo an initial linear projection to  $K$  heads, and each head will subsequently apply either S-Attention or T-Attention. For S-Attention, we can partition  $\tilde{E}$  into  $n$  spatial stripes as  $\tilde{E} = [\tilde{E}^1, \tilde{E}^2, \dots, \tilde{E}^n]$ , where  $\tilde{E}^1, \dots, \tilde{E}^n \in \mathbb{R}^{C \times d}$ . We suppose the projected queries, keys and values of the  $k$ -th head all have dimension  $d_k$ , then the process of S-Attention for the  $k$ -th head is as follows:
+
+$$F_k^j = \text{Attention}(\tilde{E}^j W_k^Q, \tilde{E}^j W_k^K, \tilde{E}^j W_k^V) \quad (6)$$
+
+$$\text{S-Attention}_k(\tilde{E}) = [F_k^1, F_k^2, \dots, F_k^n] \quad (7)$$
+
+where  $j \in [1, 2, \dots, n]$  represents the  $j$ -th spatial stripes,  $W_k^Q, W_k^K, W_k^V \in \mathbb{R}^{d \times d_k}$  is the linear projection matrices of queries, keys and values for the  $k$ -th head respectively, and  $d_k = d/K$ . The process of T-Attention closely resembles that of S-Attention. Then we concatenate the outputs of S-Attention and T-Attention as follows:
+
+$$\text{Criss-Cross-Attention}(\tilde{E}) = \text{Concat}(\text{head}_1, \text{head}_2, \dots, \text{head}_K) \quad (8)$$
+
+$$\text{head}_k = \begin{cases} \text{S-Attention}_k(\tilde{E}), & k \in [1, 2, \dots, K/2] \\ \text{T-Attention}_k(\tilde{E}), & k \in [K/2 + 1, K/2 + 2, \dots, K] \end{cases} \quad (9)$$
+
+where  $\text{head}_k$  represents the output of the  $k$ -th head.
+
+There are  $M$  criss-cross transformer blocks in CBraMod. The output of criss-cross transformer is denoted as  $E^r = \{e_{i,j}^r | i \in [1, 2, \dots, C], j \in [1, 2, \dots, n]\}$ , where  $e_{i,j}^r \in \mathbb{R}^d$  is an EEG patch representation, and  $E^r \in \mathbb{R}^{C \times n \times d}$  is the set of EEG patch representations.
+
+{5}------------------------------------------------
+
+**Masked EEG Reconstruction** In order to learn powerful generic representations from unlabeled EEG data, we need to utilize the task of self-supervised representation learning to pre-train CBraMod. Masked autoencoder (MAE) has been proved to be a simple and effective self-supervised pre-training approach in the fields of natural language understanding, computer vision, and time series forecasting (Devlin et al., 2018; He et al., 2022; Nie et al., 2022). We utilize **patch-based masked EEG reconstruction** to learn generic representation from EEG. Specifically, a reconstruction head, composed of a fully-connected layer, is used to project learned EEG representations  $E^r$  into predicted EEG patches  $\hat{X} = \{\hat{x}_{i,j} | i \in [1, 2, \dots, C], j \in [1, 2, \dots, n]\}$ , where  $\hat{x}_{i,j} \in \mathbb{R}^t$  is the predicted EEG patch corresponding to one original EEG patch  $x_{i,j}$ , and  $\hat{X} \in \mathbb{R}^{C \times n \times t}$  is the set of predicted EEG patches corresponding to the set of original EEG patches  $X$ .
+
+Consistent with most of existing MAE studies (He et al., 2022; Xie et al., 2022), we only reconstruct the masked EEG patches. Given the mentioned mask  $\mathcal{M} = \{m_{i,j} | i \in [1, 2, \dots, C], j \in [1, 2, \dots, n]\}$ , we get the set of the masked predicted EEG patches  $\hat{X}^M$  and the set of the masked original EEG patches  $X^M$  as follows:
+
+$$\hat{X}^M = \{\hat{x}_{i,j} | m_{i,j} = 1, i \in [1, 2, \dots, C], j \in [1, 2, \dots, n]\} \quad (10)$$
+
+$$X^M = \{x_{i,j} | m_{i,j} = 1, i \in [1, 2, \dots, C], j \in [1, 2, \dots, n]\} \quad (11)$$
+
+where  $m_{i,j} \in \{0, 1\}$  denotes the mask indicator of  $x_{i,j}$ .
+
+Finally, we use the **mean square error (MSE)** as reconstruction loss function:
+
+$$\mathcal{L} = \|\hat{X}^M - X^M\|^2 \quad (12)$$
+
+## 3 EXPERIMENTS
+
+### 3.1 PRE-TRAINING
+
+**Pre-training Dataset** CBraMod is pre-trained on a very large public dataset, Temple University Hospital EEG corpus (TUEG) (Obeid & Picone, 2016). The TUEG dataset consists of a diverse archive of 69,652 clinical EEG recordings from 14,987 subjects across 26,846 sessions, with a total duration of 27,062 hours. The archive has over 40 different channel configurations and varying duration of recordings. Most of the recordings are sampled at 256 Hz. Unfortunately, the TUEG dataset suffers from significant data contamination, including a substantial amount of unmarked noise, artifacts, and faulty channels. Manual removal of these interference factors presents considerable challenges. Thus we utilize a range of automated techniques to preprocess the data.
+
+**Preprocessing** Firstly, the recordings with a total duration of no more than 5 minutes are removed, then the first one minute and last one minute of each recording are also discarded, so that we can remove low-quality data as much as possible. Next, we select 19 common EEG channels (Fp1, Fp2, F7, F3, Fz, F4, F8, T3, C3, Cz, C4, T4, T5, P3, Pz, P4, T6, O1, O2) that meet a subset of the 10-20 international electrode placement system standards to obtain clean and uniformly formatted pre-training data. Then a band-pass filtered (0.3 Hz–75 Hz) is applied to remove the low-frequency and high-frequency noise. A notch filter (60 Hz) is used to remove the power line noise. All EEG signals are **resampled to 200Hz and segmented to 30-second non-overlapping EEG samples**. However, the aforementioned preprocessing still cannot completely solve the quality issues of EEG data. Therefore, we adopt a simple and automated EEG bad sample removal scheme to obtain clean pre-training EEG data. Specifically, we regard EEG samples as bad samples in which any data point has an absolute amplitude exceeding 100  $\mu\text{V}$ , and remove them from the dataset. Finally, we normalize EEG by setting the unit to 100  $\mu\text{V}$  to guarantee the value mainly between -1 to 1, consistent with LaBraM (Jiang et al., 2024). To sum up, there are 1,109,545 EEG samples retained for pre-training and longer than 9000 hours in total, significantly exceeding the amount of EEG samples used for pretraining LaBraM (2,534.78hours) (Jiang et al., 2024).
+
+**Pre-training Settings** We implemented CBraMod based on the Python 3.11.7 and PyTorch 2.1.2 + CUDA 12.1. **We set the time duration of each EEG patch as 1 second (200 data points)**, and one 30-second EEG sample is segmented to  $19 \times 30 = 570$  EEG patches. For the model configurations, the patch encoder consists of 3-layer 1D convolution with group normalization and GELU activation. The positional encoder is an one-layer 2D depthwise CNN. **The backbone of CBraMod is a 12-layer**
+
+{6}------------------------------------------------
+
+**criss-cross transformer with 200 hidden dimensions, 800 inner dimensions (feed-forward), and 8-head criss-cross attention (4 heads for S-Attention and 4 heads for V-Attention)**, 50% of mask ratio is used to randomly mask the patches. The batch size was set to 128 and the number of epochs was set to 40. The model is trained using the AdamW optimizer with default settings, the learning rate is set to 5e-4 and the weight decay is set to 5e-2. CosineAnnealingLR was used to dynamically adjust the learning rate during the pre-training. CBraMod was pre-trained on one machine with Intel Xeon Gold 6226R CPU and four NVIDIA RTX A5000 GPU for about 5 days. More details can be found in Appendix B.
+
+### 3.2 EXPERIMENT SETUP OF DOWNSTREAM BCI TASKS
+
+**Downstream BCI Tasks and Datasets** To comprehensively evaluate the performance of our method, we select up to 10 downstream BCI tasks. All the downstream BCI tasks with the corresponding datasets are presented in Table 1 and Appendix D.1. For all the downstream datasets, **we resampled the EEG signals into 200 Hz and set the time duration of each EEG patch as 1 second (200 data points)**, consistent with the pre-training data. More details of each dataset and its preprocessing are introduced in Section 3.3 and Appendix E.
+
+Table 1: Overview of downstream BCI tasks and datasets.
+
+| BCI Tasks | Datasets | Rate | # Channels | Duration | # Samples | Label |
+|-|-|-|-|-|-|-|
+| I. Emotion Recognition | FACED | 250Hz | 32 | 10s | 10,332 | 9-class |
+|  | SEED-V | 1000Hz | 62 | 1s | 117,744 | 5-class |
+| II. Motor Imagery Classification | PhysioNet-MI | 160Hz | 64 | 4s | 9,837 | 4-class |
+|  | SHU-MI | 250Hz | 32 | 4s | 11,988 | 2-class |
+| III. Sleep Staging | ISRIC | 200Hz | 6 | 30s | 89,240 | 5-class |
+|  | CHB-MIT | 256Hz | 16 | 10s | 326,993 | 2-class |
+| IV. Seizure Detection | CHB-MIT | 256Hz | 64 | 3s | 6,000 | 5-class |
+| V. Imagined Speech Classification | BCIC2020-3 | 256Hz | 19 | 5s | 7,143 | 2-class |
+| VI. Mental Disorder Diagnosis | Mumtaz2016 | 256Hz | 17 | 8s | 20,355 | regression |
+| VII. Vigilance Estimation | SEED-VIG | 500Hz | 20 | 5s | 1,707 | 2-class |
+| VIII. Mental Stress Detection | MentalArithmetic | 250Hz | 16 | 5s | 112,491 | 6-class |
+| IX. Event Type Classification | TUEV | 250Hz | 16 | 10s | 409,455 | 2-class |
+| X. Abnormal Detection | TUAB | 250Hz | 16 | 10s | 409,455 | 2-class |
+
+**Baselines** We compare CBraMod with both non-foundation-model and foundation-model baseline on all the downstream BCI tasks, for comprehensive evaluation. We adopt the following methods as non-foundation-model baselines: **EEGNet** (Lawhern et al., 2018), **EEGConformer** (Song et al., 2022), **SPaRCNet** (Jing et al., 2023), **ContraWR** (Yang et al., 2021), **CNN-Transformer** (Peh et al., 2022), **FFCL** (Li et al., 2022), and **ST-Transformer** (Song et al., 2021). We re-implemented above baselines based on the public code provided by BIOT (Yang et al., 2023) unless their experimental results have already been reported in existing studies. Besides, we use **BIOT** (Yang et al., 2023) and **LaBraM** (Jiang et al., 2024) as the foundation-model baselines. We fine-tune BIOT and LaBraM based on their public code and pre-trained weights, unless their experimental results have already been reported in the original papers. Notably, LaBraM has three different configurations, LaBraM-Base, LaBraM-Large and LaBraM-Huge, but **only the pre-trained weights of LaBraM-Base are opened publicly**. We only fine-tune the LaBraM-Base in our experiments.
+
+**Metrics** We adopt **Balanced Accuracy**, **AUC-PR** and **AUROC** as evaluation metrics for *binary classification*, where **AUROC** is set as the monitor score. For *multi-class classification*, we use **Balanced Accuracy**, **Cohen’s Kappa** and **Weighted F1** for evaluation, where **Cohen’s Kappa** is set as the monitor score. **Pearson’s Correlation**, **R2 Score** and **RMSE** are used as evaluation metrics for *regression*, where **R2 score** is utilized as the monitor score. We obtain all the results with five different random seeds and report the mean and standard deviation values. Appendix D shows more.
+
+### 3.3 RESULTS
+
+For proving the capability and generalizability of CBraMod, we evaluate CBraMod and baselines on up to 10 downstream BCI tasks using 12 publicly available datasets, listed in Table 1. In all the experiments, **we ensure strict consistency in the splits of training, validation, and test sets for every method**. In this section, we show the experimental results on downstream BCI tasks of emotion recognition and motor imagery classification on 4 datasets. More results are shown in Appendix E.
+
+**Performance Comparison with Baselines** We compare CBraMod with the baselines as follows:
+
+{7}------------------------------------------------
+
+Table 2: The results of different methods on emotion recognition.
+
+| Methods | FACED, 9-class |  |  | SEED-V, 5-class |  |  |
+|-|-|-|-|-|-|-|
+|  | Balanced Accuracy | Cohen’s Kappa | Weighted F1 | Balanced Accuracy | Cohen’s Kappa | Weighted F1 |
+| EEGNet | 0.4090 $\pm$ 0.0122 | 0.3342 $\pm$ 0.0251 | 0.4124 $\pm$ 0.0141 | 0.2961 $\pm$ 0.0102 | 0.1006 $\pm$ 0.0143 | 0.2749 $\pm$ 0.0098 |
+| EEGConformer | 0.4559 $\pm$ 0.0125 | 0.3858 $\pm$ 0.0186 | 0.4514 $\pm$ 0.0107 | 0.3337 $\pm$ 0.0112 | 0.1772 $\pm$ 0.0174 | 0.3487 $\pm$ 0.0136 |
+| SPaRCNet | 0.4673 $\pm$ 0.0155 | 0.3978 $\pm$ 0.0289 | 0.4729 $\pm$ 0.0133 | 0.2949 $\pm$ 0.0078 | 0.1121 $\pm$ 0.0139 | 0.2979 $\pm$ 0.0083 |
+| ContraWR | 0.4887 $\pm$ 0.0078 | 0.4231 $\pm$ 0.0151 | 0.4884 $\pm$ 0.0074 | 0.3546 $\pm$ 0.0105 | 0.1905 $\pm$ 0.0188 | 0.3544 $\pm$ 0.0121 |
+| CNN-Transformer | 0.4697 $\pm$ 0.0132 | 0.4017 $\pm$ 0.0168 | 0.4720 $\pm$ 0.0125 | 0.3678 $\pm$ 0.0078 | 0.2072 $\pm$ 0.0183 | 0.3642 $\pm$ 0.0088 |
+| FFCL | 0.4673 $\pm$ 0.0158 | 0.3987 $\pm$ 0.0383 | 0.4699 $\pm$ 0.0145 | 0.3641 $\pm$ 0.0092 | 0.2078 $\pm$ 0.0201 | 0.3643 $\pm$ 0.0132 |
+| ST-Transformer | 0.4810 $\pm$ 0.0079 | 0.4137 $\pm$ 0.0133 | 0.4795 $\pm$ 0.0096 | 0.3052 $\pm$ 0.0072 | 0.1083 $\pm$ 0.0121 | 0.2833 $\pm$ 0.0105 |
+| BIOT | 0.5118 $\pm$ 0.0118 | 0.4476 $\pm$ 0.0254 | 0.5136 $\pm$ 0.0112 | 0.3837 $\pm$ 0.0187 | 0.2261 $\pm$ 0.0262 | 0.3856 $\pm$ 0.0203 |
+| LaBraM-Base | 0.5273 $\pm$ 0.0107 | 0.4698 $\pm$ 0.0188 | 0.5288 $\pm$ 0.0102 | 0.3976 $\pm$ 0.0138 | 0.2386 $\pm$ 0.0209 | 0.3974 $\pm$ 0.0111 |
+| <b>CBraMod</b> | <b>0.5509 <math>\pm</math> 0.0089</b> | <b>0.5041 <math>\pm</math> 0.0122</b> | <b>0.5618 <math>\pm</math> 0.0093</b> | <b>0.4091 <math>\pm</math> 0.0097</b> | <b>0.2569 <math>\pm</math> 0.0143</b> | <b>0.4101 <math>\pm</math> 0.0108</b> |
+
+**Emotion Recognition.** We use FACED (Chen et al., 2023) and SEED-V<sup>1</sup> (Liu et al., 2021b) as the evaluation datasets of emotion recognition. FACED is a large finer-grained affective computing EEG dataset recording 32-channel EEG signals at 250 Hz sampling rate from 123 subjects, which covers nine emotion categories including amusement, inspiration, joy, tenderness, anger, fear, disgust, sadness, and neutral emotion. The EEG signals are segmented into 10,332 10-second samples and resampled to 200 Hz. We use subject 1 to 80 for training, 81 to 100 for validation, and 101 to 123 for test in FACED. SEED-V is an emotion EEG dataset containing five emotion categories (happy, sad, neutral, disgust, and fear), consisting of EEG signals (62 channels, 1000 Hz) from 16 subjects through three sessions per subject, where one session has fifteen trials. The EEG signals are segmented into 117,744 1-second samples and resampled to 200 Hz. We divide the fifteen trials of each session into three equal parts (5:5:5) as the training, validation and test sets, respectively. The experimental results of emotion recognition are presented in Table 2. CBraMod achieves the state-of-the-art performance on both FACED and SEED-V. Specifically, CBraMod obtains a great performance improvement compared to the best baseline LaBraM (0.5041 v.s. 0.4698 in Cohen’s Kappa on FACED and 0.2569 v.s. 0.2386 in Cohen’s Kappa on SEED-V).
+
+Table 3: The results of different methods on motor imagery classification.
+
+| Methods | PhysioNet-MI, 4-class |  |  | SHU-MI, 2-class |  |  |
+|-|-|-|-|-|-|-|
+|  | Balanced Accuracy | Cohen’s Kappa | Weighted F1 | Balanced Accuracy | AUC-PR | AUROC |
+| EEGNet | 0.5814 $\pm$ 0.0125 | 0.4468 $\pm$ 0.0199 | 0.5796 $\pm$ 0.0115 | 0.5889 $\pm$ 0.0177 | 0.6311 $\pm$ 0.0142 | 0.6283 $\pm$ 0.0152 |
+| EEGConformer | 0.6049 $\pm$ 0.0104 | 0.4736 $\pm$ 0.0171 | 0.6062 $\pm$ 0.0095 | 0.5900 $\pm$ 0.0107 | 0.6370 $\pm$ 0.0093 | 0.6351 $\pm$ 0.0101 |
+| SPaRCNet | 0.5932 $\pm$ 0.0152 | 0.4564 $\pm$ 0.0234 | 0.5937 $\pm$ 0.0147 | 0.5978 $\pm$ 0.0097 | 0.6510 $\pm$ 0.0062 | 0.6431 $\pm$ 0.0082 |
+| ContraWR | 0.5892 $\pm$ 0.0133 | 0.4527 $\pm$ 0.0248 | 0.5918 $\pm$ 0.0116 | 0.5873 $\pm$ 0.0128 | 0.6313 $\pm$ 0.0105 | 0.6273 $\pm$ 0.0113 |
+| CNN-Transformer | 0.6053 $\pm$ 0.0118 | 0.4725 $\pm$ 0.0223 | 0.6041 $\pm$ 0.0105 | 0.5975 $\pm$ 0.0169 | 0.6412 $\pm$ 0.0076 | 0.6323 $\pm$ 0.0082 |
+| FFCL | 0.5726 $\pm$ 0.0092 | 0.4323 $\pm$ 0.0182 | 0.5701 $\pm$ 0.0079 | 0.5692 $\pm$ 0.0252 | 0.5943 $\pm$ 0.0172 | 0.6014 $\pm$ 0.0168 |
+| ST-Transformer | 0.6035 $\pm$ 0.0081 | 0.4712 $\pm$ 0.0199 | 0.6053 $\pm$ 0.0075 | 0.5992 $\pm$ 0.0206 | 0.6394 $\pm$ 0.0122 | 0.6431 $\pm$ 0.0111 |
+| BIOT | 0.6153 $\pm$ 0.0154 | 0.4875 $\pm$ 0.0272 | 0.6158 $\pm$ 0.0197 | 0.6179 $\pm$ 0.0183 | 0.6770 $\pm$ 0.0119 | 0.6609 $\pm$ 0.0127 |
+| LaBraM-Base | 0.6173 $\pm$ 0.0122 | 0.4912 $\pm$ 0.0192 | 0.6177 $\pm$ 0.0141 | 0.6166 $\pm$ 0.0192 | 0.6761 $\pm$ 0.0083 | 0.6604 $\pm$ 0.0091 |
+| <b>CBraMod</b> | <b>0.6417 <math>\pm</math> 0.0091</b> | <b>0.5222 <math>\pm</math> 0.0169</b> | <b>0.6427 <math>\pm</math> 0.0100</b> | <b>0.6370 <math>\pm</math> 0.0151</b> | <b>0.7139 <math>\pm</math> 0.0088</b> | <b>0.6988 <math>\pm</math> 0.0068</b> |
+
+**Motor Imagery Classification.** We use PhysioNet-MI (Goldberger et al., 2000; Schalk et al., 2004) and SHU-MI (Ma et al., 2022) for evaluation on motor imagery classification. PhysioNet-MI is an EEG motor imagery dataset collected from 109 subjects with 64 channels and 160 Hz sampling rate. It covers four motor imagery classes including left fist, right fist, both fists and both feet. The EEG signals are divided into 9,837 4-second samples and resampled to 200 Hz. Subject 1–70, 71–89, 90–109 are used for training, validation and test, respectively. SHU-MI is an EEG motor imagery dataset with two categories (left hand and right hand). It consists of 32-channel EEG signals with 250 Hz sampling rate, collected from 25 subjects. The EEG signals are segmented into 11,988 samples and resampled to 200 Hz. We use subject 1 to 15 for training, subject 16 to 20 for validation, and 21 to 25 for test. The results are shown in Table 3. CBraMod achieves the best performance on both datasets. Specifically, CBraMod achieves a significant performance gain compared to the best baseline LaBraM (0.5222 v.s. 0.4912 in Cohen’s Kappa) on PhysioNet-MI. On SHU-MI, CBraMod obtains a better performance compared to the best baseline BIOT (0.6988 v.s. 0.6609 in AUROC).
+
+<sup>1</sup>We used the open-source version of SEED-V with 16 subjects, rather than the private version with 20 subjects used in LaBraM (Jiang et al., 2024).
+
+{8}------------------------------------------------
+
+All the above results indicate that CBraMod can learn powerful EEG representations which are helpful to the downstream BCI tasks of emotion recognition and motor imagery classification.
+
+![Figure 4: The results of attention mechanism comparison. This figure consists of eight bar charts arranged in a 2x4 grid. Each chart compares four attention mechanisms: 'Ours' (light blue), 'full attention' (dark blue), 'axial attention' (light green), and 'attention (CCNet)' (dark green). The tasks and metrics are: 1) FACED, 9-class: Balanced Accuracy, Cohen's Kappa; 2) FACED, 9-class: Weighted F1; 3) FACED, 9-class: Weighted F1; 4) SEED-V, 5-class: Balanced Accuracy; 5) SEED-V, 5-class: Cohen's Kappa; 6) SEED-V, 5-class: Weighted F1; 7) PhysioNet-MI, 4-class: Balanced Accuracy; 8) PhysioNet-MI, 4-class: Cohen's Kappa. In all cases, 'Ours' and 'axial attention' generally outperform 'full attention', while 'attention (CCNet)' shows mixed performance.](91be14371a97fb5ce9eeb29ae18d07c3_img.jpg)
+
+Figure 4: The results of attention mechanism comparison. This figure consists of eight bar charts arranged in a 2x4 grid. Each chart compares four attention mechanisms: 'Ours' (light blue), 'full attention' (dark blue), 'axial attention' (light green), and 'attention (CCNet)' (dark green). The tasks and metrics are: 1) FACED, 9-class: Balanced Accuracy, Cohen's Kappa; 2) FACED, 9-class: Weighted F1; 3) FACED, 9-class: Weighted F1; 4) SEED-V, 5-class: Balanced Accuracy; 5) SEED-V, 5-class: Cohen's Kappa; 6) SEED-V, 5-class: Weighted F1; 7) PhysioNet-MI, 4-class: Balanced Accuracy; 8) PhysioNet-MI, 4-class: Cohen's Kappa. In all cases, 'Ours' and 'axial attention' generally outperform 'full attention', while 'attention (CCNet)' shows mixed performance.
+
+Figure 4: The results of attention mechanism comparison.
+
+**Attention Mechanism Comparison** In order to prove the effectiveness of criss-cross attention mechanism, we compare it with other attention mechanism such as full attention (Vaswani et al., 2017; Dosovitskiy et al., 2020), axial attention (Ho et al., 2019) and the criss-cross attention module in CCNet (Huang et al., 2019). Full attention mechanism equally models the spatial-temporal dependencies among all EEG patches in one transformer block. Axial attention mechanism models the dependencies along specific axial dimensions of EEG patches in one transformer block. It can sequentially model spatial or temporal dependencies among EEG patches in different blocks. In our experiment, the axial attention only models the spatial dependencies in transformer block 1–6 and models the temporal dependencies in transformer block 7–12. The criss-cross attention mechanism in CCNet is based on the affinity operation, using a single attention map to achieve criss-cross modeling. We pre-trained and fine-tuned the models based on the three attention mechanisms with the same settings as CBraMod. The performance comparison on emotion recognition and motor imagery classification is shown in Figure 4. Full attention achieves the worst performance across all datasets. It indicates that full attention equally models the dependencies among all EEG patches, ignoring the unique structural characteristics of EEG signals. Meanwhile, there are more than 570 EEG patches in one EEG sample (19 channels, 30 seconds) in the pre-training dataset, which exceeds the appropriate modeling range for full attention. Axial attention outperforms full attention because it prioritizes directly modeling specific axial dimensions of EEG patches, which can effectively capture the spatial-temporal dependencies among EEG patches. But it performs worse than criss-cross attention in CBraMod. It indicates that the criss-cross attention can model spatial and temporal dependencies among EEG patches in parallel, which are more effective than sequential modeling of axial attention for EEG modeling. The attention in CCNet performs slightly better than full attention but significantly worse than our attention mechanism, indicating that the single-map criss-cross attention designed for image in CCNet may be not suitable for EEG modeling. EEG signals contain heterogeneous spatial and temporal dependencies. Our method employs dual parallel spatial and temporal attentions to capture spatial and temporal dependencies, which is more suitable for EEG modeling.
+
+![Figure 5: The results of positional encoding comparison. This figure consists of eight bar charts arranged in a 2x4 grid, similar to Figure 4. Each chart compares four positional encoding settings: 'Ours' (light blue), 'w/o PE' (dark blue), 'w/ APE' (light green), and 'w/ CPE' (dark green). The tasks and metrics are the same as in Figure 4. In all cases, 'Ours' and 'w/ CPE' generally outperform 'w/o PE' and 'w/ APE', with 'Ours' often achieving the highest performance.](925f55ce69802b9d3b00546382663ee2_img.jpg)
+
+Figure 5: The results of positional encoding comparison. This figure consists of eight bar charts arranged in a 2x4 grid, similar to Figure 4. Each chart compares four positional encoding settings: 'Ours' (light blue), 'w/o PE' (dark blue), 'w/ APE' (light green), and 'w/ CPE' (dark green). The tasks and metrics are the same as in Figure 4. In all cases, 'Ours' and 'w/ CPE' generally outperform 'w/o PE' and 'w/ APE', with 'Ours' often achieving the highest performance.
+
+Figure 5: The results of positional encoding comparison.
+
+**Positional Encoding Comparison** We conduct the positional encoding comparison to evaluate the effectiveness of asymmetric conditional positional encoding (ACPE). Specifically, we compare ACPE with following settings: 1) without positional encoding (w/o PE): do not use positional encoding to encode positional information; 2) with absolute positional encoding (w/ APE): replace ACPE with
+
+{9}------------------------------------------------
+
+APE; 3) with conditional positional encoding (w/ CPE): replace ACPE with CPE. The results are shown in Figure 5. CBraMod without PE performs the worst, indicating that positional encoding is important in EEG modeling. APE performs better than w/o PE but worse than CPE and ACPE, indicating that APE is not so effective as CPE in adapting to different EEG formats. CPE, usually used for image patches, performs slightly worse compared to ACPE in CBraMod, indicating that the asymmetric designs are slightly better than symmetric designs in EEG modeling. It may be because that EEG patches exhibit different dependencies in spatial (channel) and temporal dimension, which are different from the dependencies between image patches.
+
+Table 4: The results of ablation study on pre-training.
+
+| Settings | FACED, 9-class |  |  | SEED-V, 5-class |  |  |
+|-|-|-|-|-|-|-|
+|  | Balanced Accuracy | Cohen’s Kappa | Weighted F1 | Balanced Accuracy | Cohen’s Kappa | Weighted F1 |
+| clean pre-training | <b>0.5509</b> $\pm$ 0.0089 | <b>0.5041</b> $\pm$ 0.0122 | <b>0.5618</b> $\pm$ 0.0093 | <b>0.4091</b> $\pm$ 0.0097 | <b>0.2569</b> $\pm$ 0.0143 | <b>0.4101</b> $\pm$ 0.0108 |
+| dirty pre-training | 0.5319 $\pm$ 0.0245 | 0.4768 $\pm$ 0.0348 | 0.5397 $\pm$ 0.0219 | 0.3914 $\pm$ 0.0217 | 0.2224 $\pm$ 0.0318 | 0.3894 $\pm$ 0.0243 |
+| w/o pre-training | 0.5232 $\pm$ 0.0216 | 0.4615 $\pm$ 0.0289 | 0.5304 $\pm$ 0.0187 | 0.3902 $\pm$ 0.0241 | 0.2211 $\pm$ 0.0384 | 0.3879 $\pm$ 0.0225 |
+
+  
+
+| Settings | PhysioNet-MI, 4-class |  |  | SHU-MI, 2-class |  |  |
+|-|-|-|-|-|-|-|
+|  | Balanced Accuracy | Cohen’s Kappa | Weighted F1 | Balanced Accuracy | AUC-PR | AUROC |
+| clean pre-training | <b>0.6417</b> $\pm$ 0.0091 | <b>0.5222</b> $\pm$ 0.0169 | <b>0.6427</b> $\pm$ 0.0100 | <b>0.6370</b> $\pm$ 0.0151 | <b>0.7139</b> $\pm$ 0.0088 | <b>0.6988</b> $\pm$ 0.0068 |
+| dirty pre-training | 0.6245 $\pm$ 0.0153 | 0.5063 $\pm$ 0.0256 | 0.6223 $\pm$ 0.0167 | 0.6301 $\pm$ 0.0189 | 0.7026 $\pm$ 0.0176 | 0.6895 $\pm$ 0.0131 |
+| w/o pre-training | 0.6196 $\pm$ 0.0145 | 0.4994 $\pm$ 0.0289 | 0.6157 $\pm$ 0.0145 | 0.6289 $\pm$ 0.0179 | 0.7032 $\pm$ 0.0145 | 0.6878 $\pm$ 0.0166 |
+
+**Ablation Study on Pre-training** To further evaluate the effectiveness of pre-training, we conduct an ablation study on pre-training. The pre-training ablation experiment is designed as follows: 1) w/o pre-training: directly training CBraMod on downstream datasets; 2) dirty pre-training: pre-training CBraMod on TUEG corpus without bad samples dropping. 3) clean pre-training: pre-training CBraMod on TUEG corpus with bad samples dropping. The results are presented in Table 4. Obviously, clean pre-training achieves the best performance, obtaining significant performance increases compared to dirty pre-training and w/o pre-training. Besides, the performance has a smaller variance compared to dirty pre-training and w/o pre-training. These indicate that our pre-training strategy can help CBraMod learn generic representations from EEG, which can improve the generalizability and stability of CBraMod on downstream datasets. Dirty pre-training performs slightly better than w/o pre-training, indicating that a large amount of dirty data in the original dataset can weaken the effectiveness of pre-training.
+
+## 4 CONCLUSION
+
+In this paper, we propose an EEG foundation model called CBraMod, which can learn generic representations of EEG signals through patch-based masked EEG reconstruction. Specifically, we devise a criss-cross transformer as the backbone of CBraMod to model the spatial and temporal dependencies between EEG patches in parallel, and an asymmetric convolutional positional encoding scheme to encode spatial-temporal positional information of EEG signals with diverse formats. CBraMod is pre-trained on TUEG, a very large corpus of EEG. CBraMod achieves the state-of-the-art performance across up to 10 downstream BCI tasks (12 public datasets), proving its strong capability and generalizability. We hope that the proposed modeling approach and positional encoding scheme can provide meaningful insights for building EEG foundation models, thereby advancing the development of real-world BCI systems.
+
+## ACKNOWLEDGMENTS
+
+This work was supported by STI 2030 Major Projects (2021ZD0200400), Natural Science Foundation of China (No. 61925603) and the Key Program of the Natural Science Foundation of Zhejiang Province, China (No. LZ24F020004). The corresponding authors are Dr. Sha Zhao and Dr. Gang Pan.
+
+## REFERENCES
+
+Ahmed Abdelhameed and Magdy Bayoumi. A deep learning approach for automatic seizure detection in children with epilepsy. *Frontiers in Computational Neuroscience*, 15:650050, 2021.
+
+ Rest of paper (reference and Appendix) is removed.

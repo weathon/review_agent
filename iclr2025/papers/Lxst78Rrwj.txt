@@ -1,0 +1,280 @@
+
+
+{0}------------------------------------------------
+
+# CAUSAL GRAPH LEARNING VIA DISTRIBUTIONAL INVARIANCE OF CAUSE-EFFECT RELATIONSHIP
+
+**Anonymous authors**
+
+Paper under double-blind review
+
+## ABSTRACT
+
+This paper introduces a new framework for recovering causal graphs from observational data, leveraging the fact that the distribution of an effect, conditioned on its causes, remains invariant to changes in the prior distribution of those causes. This insight enables a direct test for potential causal relationships by checking the variance of their corresponding effect-cause conditional distributions across multiple downsampled subsets of the data. These subsets are selected to reflect different prior cause distributions, while preserving the effect-cause conditional relationships. Using this invariance test and exploiting an (empirical) sparsity of most causal graphs, we develop an algorithm that efficiently uncovers causal relationships with quadratic complexity in the number of observational features/variables, reducing the processing time by up to 25x compared to state-of-the-art methods. Our empirical studies on a diverse benchmark of large-scale datasets demonstrate that the developed algorithm consistently performs better or comparable to existing works while generally achieving better scalability. Our code is publicly accessible at <https://anonymous.4open.science/r/GLIDE-DC57>.
+
+## 1 INTRODUCTION
+
+A core challenge in causal learning is finding a directed acyclic graph (DAG) that captures the cause-effect relationships between variables in an observational dataset (Zanga et al., 2022). A direct approach to uncover these causal links is through intervention which conducts more experiments to confirm whether changes in one set of variables will consequently affect the outcome distribution of another variable (Peters et al., 2016; Guo et al., 2024). However, such interventional experiments can be prohibitively expensive. Furthermore, recovering the entire causal graph requires running intervention on an exponential number of candidate cause-effect relationships among subsets of variables, thus rendering this approach both costly and impractical (Pearl, 2009).
+
+To sidestep such expensive interventions, numerous approximation approaches have been developed to instead find an equivalence class of DAGs (Pearl et al., 2016; Peters et al., 2017), all of which are compatible with a set of statistical evidence or constraints derived from the observational data<sup>1</sup>. Most of these approaches are formulated as graph searches that proceed either by finding statistical evidence to eliminate incompatible graph candidates (Spirtes & Glymour, 1991; Spirtes, 2001) or by optimizing for a heuristic score defined on graphs (Hauser & Bühlmann, 2012; Rolland et al., 2022; Montagna et al., 2023). Such approaches however are either (a) not scalable due to the expensive computation cost of running statistical tests on an exponentially large number of cause-effect relationship candidates (i.e., subsets of variables); or (b) less accurate due to the heuristic nature of the score function defined over the graph space.
+
+For examples, Spirtes & Glymour (1991) and Spirtes (2001) required performing local conditional independence tests between effect variables and their corresponding sets of causes across all candidate causal relationships, incurring a process that scales exponentially with the number of features/variables. In contrast, Hauser & Bühlmann (2012), Rolland et al. (2022), and Montagna et al. (2023) proposed direct optimization of a global heuristic score on graphs, avoiding the need to solve such constraint satisfaction problems involving an exponentially large set of local constraints. There are also other approaches in this direction which further impose simplified assumptions on the
+
+<sup>1</sup>Finding the true causal graph is not possible without running intervention since the empirical distribution over the observational data might admit different sets of statistical constraints entailed by different graphs.
+
+{1}------------------------------------------------
+
+functional structure of the causal relationship (e.g., linear relationship between effects and causes perturbed with Gaussian noises). Based on those assumptions, the problem of causal learning can be formulated as a continuous optimization task and can be solved by more effective solution techniques (Kalainathan et al., 2022; Lachapelle et al., 2019; Ng et al., 2022; 2019). However, these approaches often perform less robustly when the heuristic scores or modeling assumptions do not fit well with the nature of the observational data (see Section 5).
+
+To mitigate the aforementioned limitations of existing causal learning methods, we propose a new solution perspective based on a new causal test. Such a method that avoids imposing additional assumptions on the effect-cause data generation process while also achieving better performance with affordable computational costs. Our approach leverages the invariance of the effect-cause conditional distribution  $P(\text{effect} \mid \text{cause})$  to changes in the prior cause distribution  $P(\text{cause})$ . This inspires a principled test for causal relationships via estimating the variance of  $P(X \mid Z)$  across synthetic data augmentations that reflect different cause distributions  $P(Z)$ . That is,  $(Z \rightarrow X)$  represents a causal relationship if the data-induced  $P(X \mid Z)$  does not change much<sup>2</sup> across different choices of  $P(Z)$ . This test can then be integrated with a systematic search that identifies candidates for the causal parents of all variables with quadratic complexity, achieving improved scalability and performance over previous methods. In particular, our technical contributions that substantiate the above include:
+
+1. An invariance test that reliably determines if  $Z = \text{Pa}[X]$  for each effect variable  $X$  and a candidate set of causes  $Z$  via checking the variance of  $P(X \mid Z)$  against changes in  $P(Z)$ . In particular, the invariance test identifies and constructs the most informative data augmentations to reliably approximate the variance of  $P(X \mid Z)$  across potential changes to  $P(Z)$ . This is achieved via a downsampling scheme of the observational data that modifies  $P(\text{cause})$  without changing the conditional  $P(\text{effect} \mid \text{cause})$  for true (cause, effect) tuples (Section 4.2).
+2. A practical parent-finding algorithm that (i) adopts a previous approach (Edera et al., 2014) to find the Markov blankets of all variables using observational data; and (ii) uses this information to construct an augmented bidirectional graph for each variable whose maximal cliques correspond to its most plausible candidate parent sets. Due to the sparsity of such augmented graphs, the number of maximal cliques is quadratic in the number of variables and an effective depth-first search (DFS) algorithm can be devised to enumerate through all these cliques and hence, the corresponding parent candidates (Section 4.3). The developed invariance test (Section 4.2) can then be used to find the true parent set among the plausible candidates for each variable, thus recovering the true causal graph.
+3. An extensive empirical evaluation of our proposed causal discovery framework on a variety of diverse benchmark datasets including both synthetic and large-scale real-world datasets. The reported results consistently show that our framework performs better or comparable to prior work in terms of causal discovery performance while achieving generally better scalability, with an average of up to 73.3% reduction in spurious rate and (up to)  $25\times$  reduction in processing time (Section 5).
+
+## 2 RELATED WORKS
+
+Existing causal discovery methods that aim to recover causal graphs from observational data without using interventional data can be categorized in three main groups (Glymour et al., 2019):
+
+First, constraint-based methods aim to recover an equivalence class of causal graphs via deriving statistical evidence from the observational data to eliminate incompatible candidates as much as possible. Their main goal is to minimize the chance of mistaking correlation for causation and hence, maximizing the reliability of the output graph. For example, Peter-Clark (PC) (Spirtes & Glymour, 1991) and Fast Causal Inference (FCI) (Spirtes, 2001; Spirtes et al., 2013) run all possible conditional independence tests between all potential (effect, cause) tuples to find the most reliable relationship candidates that pass all tests. In practice, while such approaches often produce reliable results, they do not scale well to high-dimensional datasets since the number of (effect, cause) candidate tuples often grows exponentially in the number of variables/features (Spirtes et al., 2001).
+
+<sup>2</sup>The variance of the true effect-cause conditional distribution  $P(\text{effect} \mid \text{cause})$  with respect to changes in  $P(\text{cause})$  is theoretically zero but in practice,  $P(\text{effect} \mid \text{cause})$  has to be estimated using observational data which causes (small) additional variance due to (slight) variations in its estimation across augmented datasets.
+
+{2}------------------------------------------------
+
+![Figure 1: Overall workflow of the proposed GLIDE framework. The diagram is divided into two main parts. Part I: Section 4.2 Invariance Test Preparation involves three steps: Section 4.2.1 Finding Source Variables, Section 4.2.2 Resampling Data, and Section 4.2.3 Choosing Source Priors. This part shows a graph with nodes X and B, and source priors P1(B), P2(B), ..., Pm(B) being chosen from Original Data D. Part II: Section 4.3 Finding Plausible Parent Sets shows a 'Plausible Parent Sets' box containing Zm, ..., Z2, Z1. An 'Effect-Cause Distributional Invariance Test' is performed on the graph, leading to the final 'Causal Graph' which shows node X with its parents Z1, Z2, ..., Zm.](1b7d539e02a202c2cf2d97698b911447_img.jpg)
+
+Figure 1: Overall workflow of the proposed GLIDE framework. The diagram is divided into two main parts. Part I: Section 4.2 Invariance Test Preparation involves three steps: Section 4.2.1 Finding Source Variables, Section 4.2.2 Resampling Data, and Section 4.2.3 Choosing Source Priors. This part shows a graph with nodes X and B, and source priors P1(B), P2(B), ..., Pm(B) being chosen from Original Data D. Part II: Section 4.3 Finding Plausible Parent Sets shows a 'Plausible Parent Sets' box containing Zm, ..., Z2, Z1. An 'Effect-Cause Distributional Invariance Test' is performed on the graph, leading to the final 'Causal Graph' which shows node X with its parents Z1, Z2, ..., Zm.
+
+Figure 1: Overall workflow of our proposed GLIDE framework which comprises two main steps: (a) an algorithmic configuration –the key effect-cause distributional invariance test that helps test potential parent-child relationships (Section 4.2); and (b) a graph search algorithm exploiting prior knowledge of each node’s Markov blanket and an (empirically verified) sparsity of causal graphs to provably reduces the number of tests to recover the true causal graph (Section 4.3).
+
+Alternatively, score-based methods instead use heuristic scores defined on graphs to reformulate causal learning as an optimization task which associate true causal graphs with those that maximize the score (Heckerman et al., 1995; Chickering, 2002; Teyssier & Koller, 2012; Solus et al., 2021). Thus, unlike constraint-based methods which cast causal learning as a constraint satisfaction task that involves an exponentially large set of local constraints, scored-based methods recast it as a global optimization task, which often admits more scalable solutions. As a result, existing score-based methods (Hauser & Bühlmann, 2012; Rolland et al., 2022; Montagna et al., 2023) often scale better to larger datasets. However, the heuristic design of the score function imposes implicit assumptions on the causal structure of data which are often violated in practice. Consequently, the reliability (i.e., not mistaking correlation for causation) of methods in this group is relatively lower than those of constraint-based methods. This is also verified in Section 5.1 (see Figures 2 and 3).
+
+To reconcile the above conflicting goals of reliability and scalability, model-based methods adopt additional assumptions on the effect-cause generation model of the observed data (e.g., linear relationship perturbed with Gaussian noise (Zheng et al., 2018)). This often allows a provable reformulation of the true causal structure as an optimal solution to a continuous optimization task that can be solved efficiently with numerous modern and scalable machine learning algorithms (Scanagatta et al., 2015; Zheng et al., 2018; 2020). However, their performance is often not stable in scenarios where such assumptions on the data generation process do not hold, e.g., non-linear effect-cause relationships perturbed with non-Gaussian noises.
+
+**Existing Limitations.** Overall, existing methods are either limited by expensive processing costs (as seen in constraint-based approaches), unreliable performance due to the use of a heuristic score function and greedy nature of the optimization algorithms (as with score-based methods), or inapplicable to scenarios involving unknown data-generation models (as is the case with model-based approaches). To mitigate these limitations, we investigate an alternative approach to causal learning by exploiting the invariance of the effect-cause conditional distribution across different data augmentations that induce changes to the prior distribution of causes. This, in turn, inspires a highly scalable graph search for effective causal discovery, as detailed in Section 4.
+
+## 3 PROBLEM FORMULATION AND BACKGROUND
+
+Let  $D$  denote a dataset comprising  $n$  observations  $\mathbf{X}^{(1)}, \dots, \mathbf{X}^{(n)}$  of a set  $\mathbf{X} = (X_1, X_2, \dots, X_d)$  of  $d$  random variables. Suppose these observations are drawn independently from an unknown distribution  $P(\mathbf{X}) = P(X_1, X_2, \dots, X_d)$ , we want to learn from  $D$  a DAG  $G = (\mathbf{X}, \mathbf{E})$  over  $(X_1, X_2, \dots, X_d)$  which is a causal model of  $P(\mathbf{X})$  following Definition 1.
+
+**Definition 1 (Causal Model).** A direct acyclic graph  $G = (\mathbf{X}, \mathbf{E})$  is a causal model of  $P(\mathbf{X})$  if every conditional independence derived from  $P(\mathbf{X})$  can be derived from  $G$ , and vice versa.
+
+{3}------------------------------------------------
+
+A conditional independence  $X \perp\!\!\!\perp_P Y \mid Z$  derived from  $P(\mathbf{X})$  means  $P(X \mid Y, Z) = P(X \mid Z)$  where  $P(X \mid Y, Z)$  and  $P(X \mid Z)$  are marginal likelihoods derived from  $P(\mathbf{X})$ . On the other hand, a conditional independence  $X \perp\!\!\!\perp_G Y \mid Z$  derived from  $G$  means given  $Z$ ,  $X$  and  $Y$  are  $d$ -separated following the below definition of  $d$ -separation.
+
+**Definition 2** ( $D$ -separation). Given two variables  $X, Y \in \mathbf{X}$  and a set of variables  $Z \subseteq \mathbf{X} \setminus \{X, Y\}$ ,  $X$  and  $Y$  are  $d$ -separated given  $Z$  (i.e.,  $X \perp\!\!\!\perp_G Y \mid Z$ ) if any path between them contains either: (a) a fork  $A \leftarrow B \rightarrow C$  with  $B \in Z$ , (b) a chain  $A \rightarrow B \rightarrow C$  such that  $B \in Z$ ; and (c) a collider  $A \rightarrow B \leftarrow C$  such that  $B$  or any of its descendants  $\text{Desc}[B]$  is not in  $Z$ .
+
+Definition 1 implies  $G$  is a causal model of  $P(\mathbf{X})$  when  $X \perp\!\!\!\perp_P Y \mid Z \Leftrightarrow X \perp\!\!\!\perp_G Y \mid Z$ . Thus, suppose  $G$  is a causal model of  $P(\mathbf{X})$ ,  $X \perp\!\!\!\perp_P (\mathbf{X} \setminus \text{Desc}[X]) \mid \text{Pa}[X]$  since  $X \perp\!\!\!\perp_G (\mathbf{X} \setminus \text{Desc}[X]) \mid \text{Pa}[X]$  due to  $d$ -separation – see Definition 2 – where  $\text{Pa}[X]$  denote the set of parents of  $X$  in  $G$ .
+
+**Local Markov Conditions.** The above means each node  $X$  is independent of its non-descendants  $\mathbf{X} \setminus \text{Desc}[X]$  given its parents  $\text{Pa}[X]$  according to  $P(\mathbf{X})$ , resulting in the following factorization:
+
+$$\text{(I)} \quad P(\mathbf{X}) = \prod_{i=1}^d P(X_i \mid \text{Pa}[X_i]) \quad \text{which implies} \quad \text{(II)} \quad X \perp\!\!\!\perp_P (\mathbf{X} \setminus \mathbb{M}(X)) \mid \mathbb{M}(X),$$
+
+where  $\mathbb{M}(X)$  denotes the Markov blanket of a variable  $X$  that consists of its immediate parents, its children, and its children’s other parents. (II) can also be verified via checking  $d$ -separation on  $G$ .
+
+**Core Idea.** Suppose the Markov blanket in condition (II) is known, an augmented bidirectional graph for each variable  $X$  can be constructed such that each of its maximal cliques corresponds to a plausible candidate  $Z$  of the true causal parents  $\text{Pa}[X]$ . We can leverage this representation to develop an effective DFS procedure that systematically enumerates through each candidate with a quadratic time complexity in the number of features/variables (Section 4.3). Each candidate can be tested using the developed causal test via synthetic data augmentation (Section 4.2). The feasibility of this approach is enabled by adopting an existing algorithm that can recover the Markov blankets for all  $X \in G$  from  $D$  with  $O(d^2)$  complexity (Edera et al., 2014). This is guaranteed under the causal sufficient assumption (Pearl et al., 2016) that there is no unobserved variables (i.e., confounders) that affect the causal mechanism that generate the observational data.
+
+## 4 INVARIANCE OF EFFECT-CAUSE CONDITIONAL DISTRIBUTION
+
+Here, we first present a bird’s eye view on our proposal in Section 4.1, and then navigate into the details of the method in Sections 4.2 and 4.3, as depicted in Figure 1.
+
+### 4.1 AN OVERVIEW
+
+The core idea of our causal discovery framework is based on the invariance of the (marginal) effect-cause conditional distribution  $P(X \mid \text{Pa}[X])$  induced from  $P(\mathbf{X})$  across different choices of the prior  $P(\mathbf{B})$  over the source variables  $\mathbf{B} \triangleq \{B \mid B \in \mathbf{X}, \text{Pa}[B] = \emptyset\} \subseteq \mathbf{X}$  of the true causal graph  $G = (\mathbf{X}, \mathbf{E})$  – see Theorem 1 below (a detailed proof is provided in Appendix A.1).
+
+**Theorem 1** (Effect-Cause Distributional Invariance). Let  $P_1(\mathbf{B}), P_2(\mathbf{B}), \dots, P_m(\mathbf{B})$  denote a set of  $m$  different priors over  $\mathbf{B}$ . Let  $P_i(\mathbf{X}) = P_i(\mathbf{B}) \cdot P(\mathbf{X} \setminus \mathbf{B} \mid \mathbf{B})$  denote the corresponding augmentation of the true data distribution  $P(\mathbf{X})$  when we replace its marginal prior  $P(\mathbf{B})$  with  $P_i(\mathbf{B})$ . For each variable  $X \in \mathbf{X} \setminus \mathbf{B}$ , its true causal parents  $\text{Pa}[X]$  and a candidate  $Z$ , we have
+
+$$\mathbb{V}_{P_+(\mathbf{X})} \sim P \left[ P_+ \left( X \mid Z \right) \right] > 0 \Rightarrow Z \neq \text{Pa}[X], \quad (1)$$
+
+regardless of how  $P_+(\mathbf{X})$  is drawn from  $\mathcal{P} \triangleq (P_1(\mathbf{X}), P_2(\mathbf{X}), \dots, P_m(\mathbf{X}))$ . Here,  $P_+(X \mid Z)$  is induced from  $P_+(\mathbf{X})$ .
+
+This result reveals a principled test of whether a subset  $Z \subseteq \mathbf{X}$  is the parent set of  $X \in \mathbf{X}$  according to the true causal graph  $G$ . The intuition is if we can re-sample  $D_i$  from  $D \sim P(\mathbf{X})$  such that  $D_i \sim P_i(\mathbf{X})$ , we can test whether  $Z = \text{Pa}[X]$  via checking whether the sample variance of the empirical conditional  $P_i(X \mid Z)$  is distinguishably small. This is formalized below:
+
+**A. Effect-Cause Invariance Test.** Given  $m$  augmented datasets  $D_1, D_2, \dots, D_m$  which are resampled from  $D \sim P(\mathbf{X})$  such that  $D_i \sim P_i(\mathbf{X})$ , then  $Z = \text{Pa}[X]$  when
+
+$$\frac{1}{m} \sum_{i=1}^m \left\| P_i(X \mid Z) - \bar{P}(X \mid Z) \right\|^2 \simeq 0 \quad \text{where} \quad \bar{P}(X \mid Z) = \frac{1}{m} \sum_{i=1}^m P_i(X \mid Z). \quad (2)$$
+
+{4}------------------------------------------------
+
+This test will become more accurate with more source priors. When  $m$  is infinitely large, the implication in Eq. (1) becomes bi-directional and  $\mathbb{V}[P_+(X | \mathbf{Z})] = 0$  definitively implies  $\mathbf{Z} = \text{Pa}[X]$ . Otherwise, when  $m$  is sufficiently large and  $\{P_i(\mathbf{B})\}_{i=1}^m$  are sufficiently representative of the entire space of source priors, the test might not be perfect but remains highly accurate (see Section 5).
+
+For more convenience, we note that the above test can also be rephrased as a selection criteria to find the true causal parents  $\text{Pa}[X]$  for each variable  $X$  as detailed next.
+
+**B. Parent-Finding via Effect-Cause Invariance.** Given  $m$  augmented datasets  $D_1, D_2, \dots, D_m$  which are resampled from  $D \sim P(\mathbf{X})$  such that  $D_i \sim P_i(\mathbf{X})$ . Let  $\mathbf{Z}_1, \mathbf{Z}_2, \dots, \mathbf{Z}_p$  denote the set of plausible parent candidates containing the true parent set, then  $\text{Pa}[X]$  can be determined via
+
+$$\text{Pa}[X] = \mathbf{Z}_r \quad \text{where } r \triangleq \arg \min_t \left( \frac{1}{m} \sum_{i=1}^m \left\| P_i(X | \mathbf{Z}_t) - \bar{P}(X | \mathbf{Z}_t) \right\|^2 \right), \quad (3)$$
+
+when the number  $m$  of augmented datasets is sufficiently large and diversified (see Section 4.2).
+
+**C. High-Level Framework.** Suppose we know how to generate  $D_1, D_2, \dots, D_m$  (see Section 4.2) for which  $D_i \sim P_i(\mathbf{X})$  as required in Theorem 1, optimizing Eq. (3) can be achieved via exhaustively checking all subsets  $\mathbf{Z}$  as candidates for  $\text{Pa}[X]$ . Repeating this for all  $X$  allows us to recover the causal graph. This process is however impractical since its complexity is exponential in  $d$ .
+
+Fortunately, this can be avoided using the local Markov condition (II) (see Section 3) which implies that (i)  $\mathbf{Z} \subseteq \mathbb{M}(\mathbf{X})$  if  $\mathbf{Z} = \text{Pa}[X]$  and (ii) there are at most  $p = O(d)$  candidates for  $\text{Pa}[X]$  which can be provably identified via finding maximum cliques on augmented bidirectional graphs. Under an empirically verified assumption on causal graph sparsity, this can be achieved with a customized DFS procedure with  $O(d^2)$  complexity (see Theorem 7, Section 4.3). This results in an effective  $O(d^2)$  total complexity for our causal discovery framework as detailed below.
+
+**D. Time Complexity.** As there are  $d$  observational variables, our framework needs to make  $d$  calls to the parent-finding routine in part (B). As each routine will consider at most  $p = O(d)$  plausible parent candidates, the per-call complexity is  $O(md)$ . This amounts to a total cost of  $O(md^2)$  to recover the full causal graph. This can be enabled with (a) an  $O(d^2)$  overhead to find the Markov blankets for all variables following the prior work of [Ederra et al. \(2014\)](#); and (b) another  $O(d^2 + m|D| + m|\mathbf{B}|)$  overhead to construct  $D_1, \dots, D_m$  for Eq. (3) (Section 4.2.4). The overall complexity (including overhead) is therefore  $O(md^2 + m|D| + m|\mathbf{B}|)$ .
+
+To substantiate the above high-level framework, we need to (i) choose representative variants of the source priors to improve the test reliability (Section 4.2); and (ii) find all plausible sets of candidate for  $\text{Pa}[X]$  for all  $X \in \mathbf{X}$  which are guaranteed to have sizes at most  $O(d)$  (Section 4.3).
+
+### 4.2 AUGMENTING SOURCE PRIOR
+
+To enable practical use of the parent-finding routine in Eq. (3), we need to (i) find the set  $\mathbf{B}$  of sources, (ii) choose a representative set of source priors  $P_1(\mathbf{B}), \dots, P_m(\mathbf{B})$  so that the invariance test is reliable; and (iii) re-sample  $D_i$  from  $D$  so that  $D_i \sim P_i(\mathbf{X}) = P_i(\mathbf{B}) \cdot P(\mathbf{X} \setminus \mathbf{B} | \mathbf{B})$ .
+
+The above (iii) is essential because we do not have direct access to  $P(\mathbf{X} \setminus \mathbf{B} | \mathbf{B})$ . This means we cannot compute  $P_i(\mathbf{X})$  and induce  $P_i(\mathbf{X} | \mathbf{Z})$  to assess its variance directly. However, as  $P(\mathbf{X} \setminus \mathbf{B} | \mathbf{B})$  can be simulated using the original data  $D$ , we can re-sample  $D_i$  from  $D$  so that  $D_i \sim P_i(\mathbf{X})$ , which then allows us to use  $D_i$  to estimate  $P_i(\mathbf{X} | \mathbf{Z})$  and consequently, its variance.
+
+To achieve the above, we will develop an algorithm to find the source variables  $\mathbf{B}$  (Section 4.2.1). We will then derive a re-sampling procedure to obtain a downsampled dataset  $D_i$  from  $D$  such that  $D_i \sim P_i(\mathbf{X})$  (Section 4.2.2). Last, we will detail a criterion to choose informative  $P_i(\mathbf{B})$  (for the invariance test) based on the above re-sampling procedure and how to determine a set of representative source priors (Section 4.2.3).
+
+#### 4.2.1 FINDING SOURCE VARIABLES
+
+To find the set of source variables (i.e., those with no parent in the true causal graph), we introduce below the concept of a basis of a DAG.
+
+{5}------------------------------------------------
+
+**Definition 3.** A basis  $\mathbf{B} \subseteq \mathbf{X}$  of a DAG  $G = (\mathbf{X}, \mathbf{E})$  is a set of mutually  $d$ -separated (independent) variables (see Definition 2) such that for each  $X \notin \mathbf{B}$ , there exists  $X' \in \mathbf{B}$  and  $X' \not\perp\!\!\!\perp X$ .
+
+As finding the true sources is not possible without intervention, we will use a basis set as a surrogate. This is because the basis has similar properties to the set of sources. First, similar to source variables, basis variables are mutually independent. Second, each source variable  $X$  is either in the basis  $\mathbf{B}$  or shares the same dependence set  $\Phi(X) \equiv \Phi(X')$  – as defined in Theorem 3 – with another basis variable  $X' \in \mathbf{B}$  (see Appendix B.1). Furthermore, Theorem 2 confirms that the maximum size of a basis set is equal to the number of sources in the true causal graph. This means changing the prior over basis variables will have similar effect to changing prior over source variables. Hence, we can use the priors over basis variables instead of priors over sources to test the effect-cause invariance.
+
+**Theorem 2.** *The maximum size of a basis set of a DAG is equal to the number of its sources.*
+
+The proof of Theorem 2 is deferred to Appendix A.2. Another advantage of the maximum basis set is that it can be provably identified with  $O(d^2)$  complexity following the procedure detailed in Theorem 3 below. See its detailed proof in Appendix A.3.
+
+**Theorem 3.** *Let  $\mathbf{V} = \mathbf{X}$  and  $\Phi(X) \triangleq \{Y \mid Y \in \mathbf{V} \setminus \{X\} : Y \not\perp\!\!\!\perp X\}$ . The maximum basis can be constructed via continually (i) selecting  $X$  in  $\mathbf{V}$  with lowest  $|\Phi(X)|$ ; (ii) setting  $\mathbf{V} \leftarrow \mathbf{V} \setminus (\Phi(X) \cup \{X\})$ ; and (iii) stopping when  $\mathbf{V} = \emptyset$ . The selected  $X$  forms the maximum basis.*
+
+Computing  $\Phi(X)$  requires checking  $Y \not\perp\!\!\!\perp X$  which can be practically achieved using existing reliable pairwise independence tests provided by the causal-learn open library (Zheng et al., 2024).
+
+#### 4.2.2 RE-SAMPLING OBSERVATIONAL DATA
+
+Given a target  $P_i(\mathbf{B})$ , we want to find a resampled dataset  $D_i$  from the original observation data  $D$  such that  $D_i \sim P_i(\mathbf{X})$ . To guarantee this,  $D_i$  must be a downsampled version of  $D$  via sampling with no replacement to avoid introducing duplicates and hence, false causal biases into  $D_i$ .
+
+On the other hand, among valid downsamples  $D_i \sim P_i(\mathbf{X})$ , we want to choose the one that has the minimal downsampled rate  $|D|/|D_i|$  to preserve (as much as possible) observations of the effect-cause conditionals in  $P(\mathbf{X} \setminus \mathbf{B} \mid \mathbf{B})$ . Interestingly, it can be shown that given the target  $P_i(\mathbf{B})$ , the minimum downsampling rate can be computed and achieved via the following results.
+
+**Theorem 4.** *Suppose  $D_i$  is the downsampled dataset with minimum downsampling rate that satisfies the condition  $D_i \sim P_i(\mathbf{X})$ . Then, it follows that*
+
+$$|D|/|D_i| = \gamma_i^{-1}, \quad \text{where } \gamma_i = \min_{\mathbf{b}} \left( P(\mathbf{B} = \mathbf{b}) / P_i(\mathbf{B} = \mathbf{b}) \right). \quad (4)$$
+
+Given the (computable) optimal downsampling rate in Theorem 4, the corresponding downsampling procedure that achieves it can be derived via Theorem 5 below.
+
+**Theorem 5.** *Let  $\gamma_i$  be defined in Theorem 4. Suppose  $D_i$  is created via sampling without replacement  $P_i(\mathbf{B} = \mathbf{b}) \cdot |D| \cdot \gamma_i$  points from  $D$  where  $\mathbf{B} = \mathbf{b}$ . Then,  $|D|/|D_i| = 1/\gamma_i$  and  $D_i \sim P_i(\mathbf{X})$ .*
+
+The derivations of Theorems 4 and 5 are deferred to Appendices A.4 and A.5. For a practical implementation, we associate  $P(\mathbf{B} = \mathbf{b})$  with its empirical estimate  $\hat{P}(\mathbf{B} = \mathbf{b}) = |D[\mathbf{B} = \mathbf{b}]|/|D|$ . To accommodate for continuous data, we use binning with fixed bin width to make the data categorical.
+
+#### 4.2.3 CHOOSING SOURCE PRIORS
+
+We can now leverage the insight of Theorem 4 to choose the most informative source priors to enhance the reliability of the invariance test in Eq. (3). Intuitively, we want  $D_i \neq D$  so  $\gamma_i$  should not be too large. Otherwise, as  $\gamma_i \rightarrow 1$ ,  $D_i \rightarrow D$  and  $P_i(\mathbf{B}) \rightarrow P(\mathbf{B})$  which cannot be used to test the effect-cause invariance against changes in  $P(\mathbf{B})$ . On the other hand, if  $\gamma_i$  is too small,  $D_i$  might drop too much information from  $D$  which might obscure some effect-cause relationship.
+
+As such, we want to choose  $P_i(\mathbf{B})$  such that its inverse downsampling rate  $\gamma_i$  (see Theorem 4) is above a certain threshold  $\gamma_0$  where  $\gamma_0 \in (0, 1)$  is an adjustable parameter that we can experiment with. Our ablation studies in Section 5 shows the impact of  $\gamma_0$  on the overall causal discovery performance. The question is now how to sample representative  $P_i(\mathbf{B})$  from the subspace of source priors whose (inverse) optimal downsampling rate  $\gamma_i \geq \gamma_0$ . To answer this question, we establish Theorem 6 below which characterizes its convex hull (see a detailed derivation in Appendix A.6).
+
+{6}------------------------------------------------
+
+**Theorem 6.** Let  $r \triangleq |\text{Dom}(\mathbf{B})|$  denote the number of (categorical) candidate values of  $\mathbf{B}$ . The subspace of  $P_i(\mathbf{B})$  that satisfies  $\gamma_i \geq \gamma_o$  is a convex subspace  $C_r(\gamma_o)$  of the  $r$ -dimensional simplex  $\Delta_r$  over  $\text{Dom}(\mathbf{B})$  which cuts  $\Delta_r$  at  $r$  points  $P^{(1)}(\mathbf{B}), \dots, P^{(r)}(\mathbf{B})$  representing its convex hull:
+
+$$\begin{aligned} P^{(k)}(\mathbf{B}) &= \alpha_k \cdot P(\mathbf{B}) + (1 - \alpha_k) \cdot \delta_k(\mathbf{B}), \quad \text{where} \\ \alpha_k &= \left(1 - P(\mathbf{B} = \mathbf{b}^{(k)})\gamma_o^{-1}\right) / \left(1 - P(\mathbf{B} = \mathbf{b}^{(k)})\right), \end{aligned} \quad (5)$$
+
+$\delta_k(\mathbf{B})$  is a point mass function that assigns 1 when  $\mathbf{B} = \mathbf{b}^{(k)}$  and 0 otherwise. Here,  $\mathbf{b}^{(k)}$  is the  $k$ -th candidate value in  $\text{Dom}(\mathbf{B})$ .
+
+Each source prior  $P_i(\mathbf{B})$  with  $\gamma_i \geq \gamma_o$  belongs to this convex set and can be represented as a linear combination of the above points:
+
+$$P_i(\mathbf{B}) = \sum_{k=1}^r a_k \cdot P^{(k)}(\mathbf{B}), \quad \text{where} \quad \sum_{k=1}^r a_k = 1 \quad \text{and} \quad a_k \geq 0. \quad (6)$$
+
+Hence,  $P_i(\mathbf{B})$  can be sampled via drawing  $\mathbf{a} = (a_1, a_2, \dots, a_r)$  from  $\Delta_r$  and using Eq. (6).
+
+#### 4.2.4 PRACTICAL IMPLEMENTATION
+
+The parent-finding procedure involves three main steps: finding basis variables, sampling source priors, and re-sampling observational data. First, finding the basis variables has a time complexity of  $O(d^2)$ . Next, we sample  $\mathbf{a}$  from a Dirichlet distribution to compute  $P_i(\mathbf{B})$ , with  $10^4$  samples clustered using  $K$ -means. The  $K = m$  centroids are selected as source priors, with a complexity of  $O(mr) = O(mc|\mathbf{B}|)$  where  $c$  is the maximum number of candidate values of a single variable. To avoid exponential costs in  $|\mathbf{B}|$ , we resample for each basis variable individually, reducing the complexity to  $O(mc|\mathbf{B}|)$ . Finally, generating the augmented dataset for each  $P_i(\mathbf{B})$  incurs a cost of  $O(m|D|)$  via Theorem 5. This amounts to  $O(d^2 + mc|\mathbf{B}| + m|D|)$  total complexity.
+
+### 4.3 FINDING PLAUSIBLE PARENT SETS
+
+To ensure the parent-finding routine is scalable, we customize a DFS algorithm which leverages prior work in Markov blanket identification to provably find  $O(d)$  candidate parent sets for each effect variable  $X$ . The true causal graph can then be recovered via solving Eq. (3) for each  $X$  with respect to the discrete set of  $O(d)$  plausible parents found above.
+
+As previous work in Markov blanket identification incurs an  $O(d^2)$  cost (Ederra et al., 2014), the total cost of our parent finding phase is also  $O(d^2)$ . This helps avoid the brute-force search through all subsets of variables as candidates for  $\text{Pa}[X]$  whose complexity is otherwise exponential in  $d$  (Peters et al., 2016). To achieve this, we will leverage the following result which relates candidate sets of causal parents to maximal cliques on an augmented bidirectional graph.
+
+**Theorem 7** (Plausible Parent Sets). For each variable  $X$ , let  $G'(X) = (\mathbf{V}, \mathbf{E}')$  denote a bidirectional graph where  $\mathbf{V} = \mathbb{M}(X)$  and  $(U, V) \in \mathbf{E}$  iff  $V \in \mathbb{M}(U)$  and  $U \in \mathbb{M}(V)$ . Then,  $\text{Pa}[X] \subseteq \mathbb{M}(X)$  corresponds to a clique in  $G'(X)$ .
+
+See Appendix A.7 for a detailed proof. Leveraging Theorem 7, we can find all plausible parent sets of  $X$  as subsets in  $\mathbb{M}(X)$ , each corresponding to a clique in  $G'(X)$ . Restricting the set of plausible parent sets to that of maximal cliques in  $G'$ , we can reduce the task of finding plausible parent sets to finding maximal cliques in a bidirectional graph. For a sparse graph  $G'(X)$  with a low degeneracy constant  $p$  (see Definition 4), this can be achieved effectively via a customized version of the DFS-based Bron-Kerbosch (Bron & Kerbosch, 1973) algorithm (see Appendix B.2) which finds all maximal cliques with  $O(dp3^{p/3})$  time complexity.
+
+**Definition 4** (Degeneracy). A bidirectional graph is  $p$ -degenerate if every subgraph has at least one node with degree  $\leq p$ . The graph's degeneracy is the smallest  $p$  for which it is  $p$ -degenerate.
+
+Consider  $p$  as a small constant compared to  $d$ , the cost of finding all plausible parent sets for each variable  $X$  is effectively  $O(d)$ . Hence, the total cost of finding all plausible parent sets for all variables is  $O(d^2)$ . Furthermore, it is also established in Bron & Kerbosch (1973) that the (worst-case) number of maximum cliques is  $O((d - p) \cdot 3^{p/3})$ . Our empirical studies in fact show that
+
+{7}------------------------------------------------
+
+Table 1: **Baselines and Data Models.** The table indicates the applicability of each baseline to each data models. Applicability is determined based on the baseline’s empirical effectiveness on recovering the causal graph from observational data under the corresponding data model.
+
+| Data Models | PC | GIES | FCI | Notears | MLP-Notears | DAS | SCORE | GLIDE(Ours) |
+|-|-|-|-|-|-|-|-|-|
+| Linear, Gaussian ( <b>L-G</b> ) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Non-linear, non-Gaussian ( <b>nL-nG</b> ) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Categorical, Synthetic | ✓ | ✓ |  |  |  |  |  | ✓ |
+| Categorical, Real-world | ✓ | ✓ |  |  |  |  |  | ✓ |
+
+$p \leq 13$  across all benchmark datasets even for the largest graphs, confirming that the set of maximal cliques in  $G'(X)$  is practically  $O(d)$  with a constant factor smaller than  $3^{13/3} < 117$ . Our additional ablation studies in Appendix C.2.3 also show that for a variety of graph topologies, random DAGs with an increasing number of causal edges, the sparsity constant  $p$  of the corresponding augmented (bidirectional) graph remains insignificant compared to  $d$ . Exploiting this, our proposed method is able to scale efficiently on these large graphs where previous methods fail to do so.
+
+## 5 EXPERIMENT
+
+This section evaluates and compares the performance of our proposed method, Causal Graph Learning via Distributional Invariance of Cause-Effect Relationship (**GLIDE**), against existing state-of-the-art baselines in causal graph learning.
+
+**Baselines.** Our empirical evaluations are conducted with respect to a variety of data models as summarized in Table 1<sup>3</sup> and a diverse suite of both classical and recent baselines, including PC (Spirtes & Glymour, 1991), GIES (Hauser & Bühlmann, 2012), FCI (Spirtes, 2001), NOTEARS (Zheng et al., 2018), MLP-NOTEARS (Zheng et al., 2020), DAS (Montagna et al., 2023), and SCORE (Roland et al., 2022). Each baseline is configured with its best hyper-parameters (see Appendix C.1).
+
+**Datasets.** Our experiments are based on both synthetic and real-world datasets. For synthetic experiments (Sections 5.1 and 5.2), we follow the commonly used protocols in previous work to generate observational data based on the Erdos-Renyi (Zheng et al., 2018; Heinze-Deml et al., 2018), bipartite and scale-free (Zheng et al., 2020) classes of causal graphs. Due to limited space, we only present the empirical results on synthetic data generated from the Erdos-Renyi class of graphs. Our other experiments with the bipartite and scale-free classes of graphs are deferred to Appendix C.2. For real-world experiments (Section 5.3), we use the datasets provided in the bnlearn package (Scutari, 2009), which includes Sachs, Insurance, Water, Alarm, Barley, Pathfinder, and Munin. Notably, the Munin dataset features observational data from a large-scale graph comprising 1041 variables.
+
+**Evaluation Metrics.** We use the structural Hamming distance (SHD), spurious rate (percentage), and running time (minutes) to measure both the effectiveness and scalability of our proposed method. The SHD and running time metrics are commonly used in the evaluation of existing causal discovery methods (Zheng et al., 2018; Montagna et al., 2023). The spurious rate measures the ratio of the number of false causal relationships among all causal relationships discovered by each algorithm. This helps compare the reliability of causal prediction across baselines. All performance metrics are reported with their mean and confidence interval 95% averaged over 10 independent runs.
+
+### 5.1 SYNTHETIC CONTINUOUS DATA
+
+We consider two experiment settings. First, in the normal setting, the graph’s number of edges is the same as its number of nodes, which varies from 100 to 500. Second, in the extreme setting, we fix the number of nodes at 500 and increase the number of edges from 600 to 1000. In each setting, we further consider two data-generation models for the effect-cause relationship: (1) linear relationship perturbed with Gaussian noise (annotated as **L-G**); and (2) non-linear and non-Gaussian relationship (annotated as **nL-nG**). Such data generation mechanism is implemented using the public code in (Zheng et al., 2018; 2020). In each experiment, we first generate a random Erdos-Renyi DAGs and then simulate (synthetic) observational data from it using the above mechanisms. Our reported results and observations in each setting are detailed below.
+
+<sup>3</sup>Note that except for our versatile method, most other baselines are not applicable to all data models (i.e., producing very poor performance that is not meaningful for comparison).
+
+{8}------------------------------------------------
+
+![Figure 2: Baseline performance in normal setting (continuous data). The figure consists of a 3x4 grid of line plots. The columns represent four graph settings: L-G, nL-nG, L-G, and nL-nG. The rows represent three metrics: SHD (x10^3), Spurious Rate (%), and Runtime (x10^2 mins). The x-axis for the first two columns is 'Number of nodes' (100 to 500), and for the last two columns is 'Number of edges' (600 to 1000). Seven methods are compared: NOTEARS (blue circle), MLPNOTEARS (green triangle), DAS (red square), SCORE (orange diamond), GIES (yellow cross), FCI (cyan plus), and GLIDE (black star). In general, GLIDE achieves lower SHD and Spurious Rates, and lower Runtime compared to most baselines.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 2: Baseline performance in normal setting (continuous data). The figure consists of a 3x4 grid of line plots. The columns represent four graph settings: L-G, nL-nG, L-G, and nL-nG. The rows represent three metrics: SHD (x10^3), Spurious Rate (%), and Runtime (x10^2 mins). The x-axis for the first two columns is 'Number of nodes' (100 to 500), and for the last two columns is 'Number of edges' (600 to 1000). Seven methods are compared: NOTEARS (blue circle), MLPNOTEARS (green triangle), DAS (red square), SCORE (orange diamond), GIES (yellow cross), FCI (cyan plus), and GLIDE (black star). In general, GLIDE achieves lower SHD and Spurious Rates, and lower Runtime compared to most baselines.
+
+Figure 2: Baseline performance in normal setting (continuous data). Lower metrics are better.
+
+Figure 3: Baseline performance in extreme setting (continuous data). Lower metrics are better.
+
+**Normal Setting.** Figure 2 reports the performance of our method **GLIDE** in comparison to those of other baselines. In the **L-G** cases, **GLIDE**, **NOTEARS**, and **MLP-NOTEARS** outperform the rest of the baselines significantly in terms of both SHD and spurious rate. Notably, **GLIDE** achieves a remarkable 64.17% reduction rate on SHD over **FCI**. Furthermore, **GLIDE** incurs much less computational cost than both **NOTEARS** and **MLP-NOTEARS** (see the runtime plots) while achieving comparable or better performance. For example, **GLIDE** runs 96.54 $\times$  and 15.66 $\times$  faster than both **NOTEARS** and **MLP-NOTEARS** in in 100- and 500-node graphs while being second to **MLP-NOTEARS** in terms of SHD (with a small gap of 16.2%) and achieving best spurious rate in the largest graph setting with 500 nodes (4.2% vs the second best of 11.75% of **NOTEARS** and third best of 13.19% of **MLP-NOTEARS**). In the **nL-nG** cases, we also have a similar observations where **GLIDE** is again the second best in SHD and best in spurious rate (in the largest graph settings) while being much more scalable than the best and second best baselines in SHD and spurious rate, respectively. Our reported results also confirm our intuition earlier that score-based methods, despite being more scalable than constraint-based approaches, tend to perform much less robustly in large graph settings where the score function becomes less accurate. For example, both **SCORE** and **DAS** reach over 30% of false causal detection rate (i.e., spurious rate) in 500-node graphs.
+
+**Extreme Setting.** Figure 3 reports the performance of **GLIDE** in comparison to other baselines in this setting. In the **L-G** cases, it is observed that **GLIDE** achieves the best performance in both SHD and spurious rate while also achieving the fastest running time in most graph settings. In terms of SHD, the performance gaps between **GLIDE** and the second best (**NOTEARS**) and worst baselines (**SCORE**) are 11.74% and 108.5%, respectively. In terms of spurious rate, **GLIDE** also improves over the baselines with substantial performance gaps ranging from 5.46% and 48.61% against the second best and worst baselines, respectively. In the **nL-nG** cases, **GLIDE** and **MLP-NOTEARS** perform comparably as best baselines in SHD but **GLIDE** outperforms it by a gap of 8.23% in term of spurious rate. Furthermore, against the most high-performing baselines in this case, **NOTEARS** and **MLP-NOTEARS**, **GLIDE** achieve 9.6 $\times$  and 25.52 $\times$  faster processing time, respectively.
+
+### 5.2 SYNTHETIC CATEGORICAL DATA
+
+Categorical data are generated in the same manner as continuous data in Section 5.1. The only difference is that instead of using Gaussian models, we first randomize conditional probabilities
+
+{9}------------------------------------------------
+
+Table 2: **Performance on real-world datasets.** N/A denotes no results within 48 hours.
+
+| Metrics | Method | Sachs (11) | Insurance (27) | Water (32) | Alarm (37) | Barley (48) | Pathfinder (86) | Munin (1041) |
+|-|-|-|-|-|-|-|-|-|
+| <b>SHD</b> | GIES | $14.0 \pm 0.0$ | $36.0 \pm 0.0$ | $49.0 \pm 0.0$ | $44.0 \pm 0.0$ | $65.0 \pm 0.0$ | $1156.0 \pm 0.0$ | $1235.0 \pm 0.0$ |
+|  | PC | $10.3 \pm 0.7$ | $33.7 \pm 0.7$ | $54.3 \pm 0.7$ | $35.7 \pm 2.4$ | $58.3 \pm 1.7$ | N/A | N/A |
+|  | <b>GLIDE</b> | <b><math>5.2 \pm 0.4</math></b> | <b><math>18.0 \pm 2.8</math></b> | <b><math>41.6 \pm 1.8</math></b> | <b><math>27.8 \pm 2.0</math></b> | <b><math>45.8 \pm 2.4</math></b> | <b><math>59.1 \pm 1.9</math></b> | <b><math>883.2 \pm 21.8</math></b> |
+| <b>Spurious rate (%)</b> | GIES | $34.8 \pm 0.0$ | $31.9 \pm 0.0$ | $35.8 \pm 0.0$ | $44.3 \pm 0.0$ | $35.8 \pm 0.0$ | $87.0 \pm 0.0$ | $42.4 \pm 0.0$ |
+|  | PC | $4.2 \pm 4.1$ | <b><math>0.0 \pm 0.0</math></b> | <b><math>17.1 \pm 2.1</math></b> | $27.7 \pm 3.6$ | $17.8 \pm 1.9$ | N/A | N/A |
+|  | <b>GLIDE</b> | <b><math>0.0 \pm 0.0</math></b> | $3.6 \pm 2.7$ | $23.0 \pm 0.9$ | <b><math>13.1 \pm 0.9</math></b> | <b><math>8.2 \pm 1.1</math></b> | <b><math>1.9 \pm 0.5</math></b> | <b><math>1.8 \pm 0.2</math></b> |
+| <b>Runtime (seconds)</b> | GIES | <b><math>1.5 \pm 0.4</math></b> | <b><math>2.7 \pm 0.6</math></b> | <b><math>3.1 \pm 0.6</math></b> | <b><math>3.3 \pm 0.4</math></b> | <b><math>3.4 \pm 0.8</math></b> | <b><math>19.3 \pm 0.4</math></b> | <b><math>61.5 \pm 15.2</math></b> |
+|  | PC | $52.0 \pm 1.8$ | $450.3 \pm 19.4$ | $573.8 \pm 16.1$ | $503.2 \pm 21.2$ | $761.1 \pm 9.5$ | N/A | N/A |
+|  | <b>GLIDE</b> | $23.0 \pm 1.1$ | $34.2 \pm 0.9$ | $49.1 \pm 3.3$ | $43.3 \pm 0.4$ | $61.7 \pm 2.0$ | $197.0 \pm 21.2$ | $6200.3 \pm 88.7$ |
+
+![Figure 4: Reported performance of the baselines across two cases: (1) E = 3V and (2) E = 4V. The figure consists of six line plots arranged in a 2x3 grid. The columns represent metrics: SHD (x10^3), Spurious Rate (%), and Runtime (x10^2 mins). The rows represent two cases: E = 3V and E = 4V. The x-axis for all plots is |V|, ranging from 100 to 500. Three methods are compared: PC (blue line with circles), GIES (green line with triangles), and GLIDE (black line with diamonds). In all plots, GLIDE consistently shows the best performance, achieving the lowest SHD and Spurious Rate, and the fastest Runtime. GIES shows the highest SHD and Spurious Rate, while PC shows intermediate performance.](f519a5be118c846f631c992412353fb9_img.jpg)
+
+Figure 4: Reported performance of the baselines across two cases: (1) E = 3V and (2) E = 4V. The figure consists of six line plots arranged in a 2x3 grid. The columns represent metrics: SHD (x10^3), Spurious Rate (%), and Runtime (x10^2 mins). The rows represent two cases: E = 3V and E = 4V. The x-axis for all plots is |V|, ranging from 100 to 500. Three methods are compared: PC (blue line with circles), GIES (green line with triangles), and GLIDE (black line with diamonds). In all plots, GLIDE consistently shows the best performance, achieving the lowest SHD and Spurious Rate, and the fastest Runtime. GIES shows the highest SHD and Spurious Rate, while PC shows intermediate performance.
+
+Figure 4: Reported performance of the baselines across two cases: (1)  $E = 3V$  and (2)  $E = 4V$ 
+
+for each node and then use Gibbs sampling to simulate the data. The number of categories are randomly chosen from 2 to 5 for each variable. We compare our proposal with two competitive baselines, GIES and PC, while excluding the rest since they fail to produce meaningful results for comparison (i.e., very poor performance). To focus on settings where the PC baseline can produce results within the time limit of 48 hours, we restrict our evaluation to two classes of graphs where the number of edges is (i)  $3\times$ , and (ii)  $4\times$  the number of nodes, which ranges between 100 and 500.
+
+The results are reported in Figure 4 which shows that **GLIDE** consistently outperforms the baselines in terms of SHD with substantial gaps of 10.49% and 27.95% in the  $(E = 3V)$  case; and 11.56% and 13.3% in the  $(E = 4V)$  case. In both cases, **GLIDE** is the second best in terms of spurious rate, increasing the false causal detection (spurious) rate of the best baseline (PC) by a mere margin of 4%. In exchange, **GLIDE** achieves a  $30\times$  faster processing time than PC. In contrast, GIES achieves the fastest running time but incurs 40% spurious rate (i.e., low reliability). Overall, **GLIDE** has the best trade-off between scalability (processing time) and performance (SHD, spurious rate).
+
+### 5.3 REAL-WORLD CATEGORICAL DATA
+
+Table 2 reported the performance of PC, GIES, and **GLIDE** on 7 real-world datasets. Note that GIES is a deterministic method and has zero deviation across different seeds on the same test case. It is observed that **GLIDE** achieves the best SHD performance across 7/7 datasets and also achieves the best spurious rate in 5/7 datasets, especially on large datasets such as Barley, Pathfinder, and Munin. On the largest dataset (Munin), **GLIDE** achieves a spurious rate of 1.8% which is remarkably better than GIES’ (42.36%). Again, **GLIDE** has the best balance between performance and scalability.
+
+## 6 CONCLUSION
+
+This paper presents a new perspective of causal learning via a new invariance test for causality that inspires a reliable and scalable algorithm for recovering causal graphs from observational data. Our approach explores a key insight that the effect-cause conditional distribution remain invariant under changes in the prior cause distribution, leading to a parent-finding procedure for each variable via synthetic data-augmentation. This procedure is further coupled with an effective search algorithm that exploits prior knowledge of each effect variable’s Markov blanket and an (empirically verified) sparsity of the causal graphs to significantly reduces the overall complexity. The reduction in complexity and the marked improvements in both speed and accuracy, as demonstrated on large-scale benchmark datasets, highlight the potential for this approach to outperform existing methods. These findings suggest that our framework offers a promising direction for further research and practical applications in causal inference, especially in scenarios involving large and complex datasets.
+
+ Rest of paper (reference and Appendix) is removed.

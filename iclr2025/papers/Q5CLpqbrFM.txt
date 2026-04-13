@@ -1,0 +1,441 @@
+
+
+{0}------------------------------------------------
+
+# LEARNING REPRESENTATIONS OF INSTRUMENTS FOR PARTIAL IDENTIFICATION OF TREATMENT EFFECTS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Reliable estimation of treatment effects from observational data is important in many disciplines such as medicine. However, estimation is challenging when unconfoundedness as a standard assumption in the causal inference literature is violated. In this work, we leverage arbitrary (potentially high-dimensional) instruments to estimate bounds on the conditional average treatment effect (CATE). Our contributions are three-fold: (1) We propose a novel approach for partial identification through a mapping of instruments to a discrete representation space so that we yield valid bounds on the CATE. This is crucial for reliable decision-making in real-world applications. (2) We derive a two-step procedure that learns tight bounds using a tailored neural partitioning of the latent instrument space. As a result, we avoid instability issues due to numerical approximations or adversarial training. Furthermore, our procedure aims to reduce the estimation variance in finite-sample settings to yield more reliable estimates. (3) We show theoretically that our procedure obtains valid bounds while reducing estimation variance. We further perform extensive experiments to demonstrate the effectiveness across various settings. Overall, our procedure offers a novel path for practitioners to make use of potentially high-dimensional instruments (e.g., as in Mendelian randomization).
+
+## 1 INTRODUCTION
+
+Estimating the conditional average treatment effect (CATE) from observational is an important task for personalized decision-making in medicine (Feuerriegel et al., 2024). For example, a common question in medicine is to estimate the effect of alcohol consumption on the onset of cardiovascular diseases (Holmes et al., 2014). There are many reasons, including costs and ethical concerns, why CATE estimation is often based on observational data (such as, e.g., electronic health records, clinical registries).
+
+However, identifying the CATE from observational data is challenging as it typically requires *strong* assumptions in the form of *unconfoundedness* (Rubin, 1974). Unconfoundedness assumes there exist no additional unobserved confounders  $U$  between treatment  $A$  and outcome  $Y$ . If the unconfoundedness assumption is violated, a common strategy is to leverage **instrumental variables (IVs)**  $Z$ . IVs affect only the treatment  $A$  but exclude unobserved confounding between  $Z$  and  $Y$ , which often can be ensured by design such as for randomized studies with non-compliance (Imbens & Angrist, 1994). The causal graph for the IV setting is shown in Fig. 1.
+
+**Motivational example: Mendelian randomization.** Mendelian randomization (Pierce et al., 2018) refers to the use of genetic information as instruments  $Z$  to estimate the effect of a treatment or exposure  $A$  (e.g., alcohol consumption) on some medical outcome  $Y$  (e.g., cardiovascular diseases). In this setting, there are further patient characteristics that are observed ( $X$ ) but also unobserved ( $U$ ), which one accounts for through the instrument. Yet, common challenges are that (i)
+
+![Causal graph for the IV setting. A yellow node Z (instrument) points to a blue node A (treatment). A red node X (observed confounder) points to both A and a green node Y (outcome). A purple node U (unobserved confounder) points to both A and Y. A DNA icon is shown next to Z, and a small image of a DNA helix is shown next to X.](868ef3e0abb37916a7af1e923995f329_img.jpg)
+
+```
+graph LR; Z((Z)) --> A((A)); X((X)) --> A; X --> Y((Y)); U((U)) --> A; U --> Y; A --> Y;
+```
+
+Causal graph for the IV setting. A yellow node Z (instrument) points to a blue node A (treatment). A red node X (observed confounder) points to both A and a green node Y (outcome). A purple node U (unobserved confounder) points to both A and Y. A DNA icon is shown next to Z, and a small image of a DNA helix is shown next to X.
+
+Figure 1: Overview of the IV setting. We consider complex instruments  $Z$  (e.g., gene data, text, images), observed confounders  $X$ , unobserved confounders  $U$ , a binary treatment  $A$ , and an outcome  $Y$ .
+
+{1}------------------------------------------------
+
+154 instruments with genetic information are often *high-dimensional* and (ii) involve *complex, non-linear*  
+155 *relationships between instruments and treatment intake or exposure*.
+
+156  
+157 However, existing IV methods using machine learning for point estimation of the CATE rely on  
+158 *strong simplifying assumptions* ( $\rightarrow$  violating (ii) from above). For example, some methods assume  
+159 linearity in some feature space in the CATE and make other, strict parametric assumptions on the  
+160 unobserved confounders such as additivity or homogeneity (Hartford et al., 2017; Singh et al., 2019;  
+161 Xu et al., 2021). Yet, such simplifying assumptions are often *not* realistic and can even lead to  
+162 unreliable and false conclusions by the mis-specification of the CATE.
+
+163  
+164 A potential remedy is to use IVs for **partial identification** of the CATE where one circumvents any  
+165 hard parametric assumptions by estimating upper and lower bounds of the CATE (Manski, 1990).  
+166 This is usually sufficient in medical practice when one is merely interested in whether a treatment  
+167 variable (e.g., exposure as in Mendelian randomization) has a positive or a negative effect. So far,  
+168 methods for partial identification of the CATE in IV settings are rare. There exist closed-form bounds  
+169 (i.e., via a fixed target estimand that can be learned), yet only for the setting with both *discrete*  
+170 instruments and *discrete* treatments (Balke & Pearl, 1997).
+
+171  
+172 Existing machine learning methods for partial identification are typically designed for *simple* in-  
+173 struments that are binary or discrete ( $\rightarrow$  violating (i) from above). Alternatively, methods that  
+174 extend partial identification for continuous instruments require *unstable* training paradigms such as  
+175 adversarial learning (Kilbertus et al., 2020; Padh et al., 2023) which becomes even more unstable  
+176 for more complex instruments. In contrast, there is a scarcity of methods that can deal robustly with  
+177 continuous, as well as *complex* and potentially high-dimensional instruments such as, e.g., gene  
+178 expressions as in Mendelian randomization but also text, images, or graphs.<sup>1</sup>
+
+179  
+180 **Our paper:** In this work, we leverage complex instruments for partial identification of the CATE.  
+181 Specifically, we allow for instruments that can be continuous and potentially high-dimensional (such  
+182 as gene information) and, on top of that, we explicitly allow for complex, non-linear relationships  
+183 between instruments and treatment intake or exposure. In the rest of this paper, we refer to this setting  
+184 as “complex” instruments.
+
+185  
+186 To this end, we proceed as follows. (1) We propose a novel approach for partial identification through  
+187 a mapping of complex instruments to a discrete representation space so that we yield valid bounds on  
+188 the CATE. We motivate our approach in Fig. 2. (2) We derive a two-step procedure that learns tight  
+189 bounds using a neural partitioning of the latent instrument space. As a result, we avoid instability  
+190 issues due to numerical approximations or adversarial training, which is a key limitation of prior  
+191 works. We further improve the performance of our procedure by explicitly reducing the estimation  
+192 variance in finite-sample settings to yield more reliable estimates. (3) We provide a theoretical  
+193 analysis of our procedure and perform extensive experiments to demonstrate the effectiveness across  
+194 various settings.
+
+195  
+196 **Contributions:**<sup>2</sup> (1) To the best of our knowledge, this is the first IV method for partial identification  
+197 of the CATE based on complex instruments. (2) We derive a two-step procedure to learn tight bounds.  
+198 (3) We demonstrate the effectiveness of our method both theoretically and numerically.
+
+## 2 RELATED WORK
+
+199  
+200 **Machine learning for CATE estimation with IV:** Existing works have different objectives. One  
+201 literature stream leverages IVs for CATE estimation but focuses on settings where the treatment effect  
+202 can be identified from the data. This includes work that extends the classical two-stage least-squares  
+203 estimation to non-linear settings by learning non-linear feature spaces (Singh et al., 2019; Xu et al.,  
+204 2021), deep conditional density estimation in the first stage (Hartford et al., 2017), or using moment  
+205 conditions (Bennett et al., 2019). Another literature stream aims at new machine learning methods  
+206 with favorable properties such as being doubly robust (Kennedy et al., 2019; Ogburn et al., 2015;  
+207 Semenenova & Chernozhukov, 2021; Syrgkanis et al., 2019) or multiply robust (Frauen & Feuerriegel,  
+208 2023).
+
+---
+
+105 <sup>1</sup>In Appendix B, we provide an extended discussion about the real-world relevance of our method.
+
+106 <sup>2</sup>Both codes and data are available via [https://anonymous.4open.science/r/](https://anonymous.4open.science/r/ComplexPartialIdentification-2500/)  
+107 [ComplexPartialIdentification-2500/](https://anonymous.4open.science/r/ComplexPartialIdentification-2500/).
+
+{2}------------------------------------------------
+
+Recently, researchers started applying machine learning methods to IVs from Mendelian randomization (Legault et al., 2024; Malina et al., 2022), which is our motivational example from above. However, these works aim at point-identified CATE estimation with IVs. As a result, these rely on *hard* and generally untestable assumptions on some effects in the causal graph, such as linearity, monotonicity, additivity, or homogeneity (Wang & Tchetgen Tchetgen, 2018). This is unlike our method for partial identification that does *not* require such hard assumptions and that is non-parametric.
+
+**Partial identification:** Partial identification aims to identify and learn upper and lower bounds of some causal quantity (e.g., the CATE) when the causal quantity itself cannot be point identified from the data and assumptions. In a general setting with binary treatments, Robins (1989) and Manski (1990) derived closed-form bounds on the ATE for bounded outcomes  $Y$ . Further work extended these ideas to settings with binary instrumental variables, binary treatments, and binary outcomes (Balke & Pearl, 1994; 1997) to derive tighter bounds. Newer approaches for discrete variables include the works of Duarte et al. (2023) and Guo et al. (2022). Swanson et al. (2018) provide an extensive overview of partial identification in this setting. Other works focus on how to leverage additional observed confounders to further tighten bounds on the ATE (see, e.g., Levis et al., 2023). However, these works do *not* focus on efficiently leveraging continuous or even high-dimensional instruments for learning tight bounds, unlike our work that is tailored to such complex instruments.
+
+Another literature stream focuses on partial identification under general causal graphs (Balazadeh et al., 2022), including IV settings with continuous variables such as continuous treatments (Gunsilius, 2020; Hu et al., 2021; Kibertus et al., 2020; Padh et al., 2023). However, these methods either make strong assumptions about the treatment response functions or require unstable optimization via adversarial training and/or generative modeling such as through using GANs. This can easily result in *unreliable* estimates of bounds for finite data, especially with high-dimensional instruments. Further, these methods are *not* directly tailored for binary treatments, unlike our method.
+
+**Research gap:** To the best of our knowledge, reliable machine learning methods for partial identification of the CATE with complex instruments are missing. To draw conclusions about CATEs (as in, e.g., Mendelian randomization), our method is the first to: (i) make use of the complex instrument information (e.g., continuous or high-dimensional), (ii) avoid making strong parametric assumptions by focusing on partial identification, and (iii) avoid unstable training procedures such as adversarial learning.
+
+## 3 PROBLEM SETUP
+
+**Setting:** We focus on the standard IV setting (Angrist et al., 1996; Wooldridge, 2013). Hence, we consider instruments (e.g., gene data, text, images) given by  $Z \in \mathcal{Z} \subseteq \mathbb{R}^d$  but, unlike previous research, allow the instruments to be complex. As such, we allow the instruments to be continuous and potentially high-dimensional. We further have access to an observational dataset  $\mathcal{D} = \{z_i, x_i, a_i, y_i\}_{i=1}^n$  of size  $n$ . The data is sampled i.i.d. from a population  $(Z, X, A, Y) \sim \mathbb{P}$ , with observed confounders  $X \in \mathcal{X} \subseteq \mathbb{R}^p$ , binary treatments  $A \in \mathcal{A} \subseteq \{0, 1\}$ , and bounded outcomes  $Y \in \mathcal{Y} \subseteq [s_1, s_2] \subseteq \mathbb{R}$ . Additionally, we allow for unobserved confounders  $U$  of arbitrary form between  $A$  and  $Y$ .
+
+We further assume a causal structure as shown in Fig. 1. In particular, we assume that  $Z$  is an instrumental variable that has an effect on the treatment  $A$  but no direct effect on the outcome  $Y$  except through  $A$ . Further, we assume that  $Z$  is independent of  $X$ , e.g., by randomization. In Appendix B, we provide an extended discussion to show the real-world relevance and validity of our assumptions in different settings.
+
+![Figure 2: Leveraging complex instruments for partial identification of the CATE through discrete representations of Z. The diagram illustrates two paths: Naive partitioning of Z leads to wide bounds, while Representation learning phi(Z) leads to tight bounds. A causal graph shows Z influencing A, which influences Y, with X as a confounder and U as an unobserved confounder.](7a1dee155822446f7828dcb055c465c3_img.jpg)
+
+The diagram illustrates the process of leveraging complex instruments for partial identification. It is divided into three main columns: 'Complex IV Z', 'Discrete clustering of Z', and 'Partial identification of tau'.  
+- In the 'Complex IV Z' column, there is a plot of  $\tau(x) \in [l, u]$  against  $x$ , showing a shaded region representing the bounds. Below it is a causal graph with nodes  $Z$ ,  $A$ ,  $Y$ ,  $X$ , and  $U$ . Arrows indicate  $Z \rightarrow A$ ,  $A \rightarrow Y$ ,  $X \rightarrow A$ ,  $X \rightarrow Y$ , and  $U \rightarrow Y$ .  
+- The 'Discrete clustering of Z' column shows two paths. The top path, 'Naive partitioning  $\psi$ ', shows a scatter plot of  $Z$  in an 'Instrument space' being discretized into bins, leading to 'Wide bounds'  $[l_w, u_w]$ . The bottom path, 'Representation learning  $\phi$ ', shows the same scatter plot being transformed into a 'Representation space' where it is more effectively clustered, leading to 'Tight bounds'  $[l_t, u_t]$ .  
+- The 'Partial identification of tau' column shows the final output for both paths. The top path results in a plot with a wide shaded region, while the bottom path results in a plot with a much narrower, tighter shaded region around the true function.
+
+Figure 2: Leveraging complex instruments for partial identification of the CATE through discrete representations of Z. The diagram illustrates two paths: Naive partitioning of Z leads to wide bounds, while Representation learning phi(Z) leads to tight bounds. A causal graph shows Z influencing A, which influences Y, with X as a confounder and U as an unobserved confounder.
+
+Figure 2: Leveraging complex instruments for partial identification of the CATE through discrete representations of  $Z$ . Naïve discretization on the IV input space leads to wide, and thus non-informative, bounds. Our method learns a latent representation  $\phi(Z)$  to yield tight bounds.
+
+{3}------------------------------------------------
+
+**Notation:** Throughout our work, we denote the *response function* by  $\mu^a(x, z) := \mathbb{E}[Y|X = x, A = a, Z = z]$  and the *propensity score* by  $\pi(x, z) := \mathbb{P}(A = 1|X = x, Z = z)$ .
+
+**CATE:** We use the potential outcomes framework (Rubin, 1974) to formalize our causal inference problem. Let  $Y(a) \in \mathcal{Y}$  denote the potential outcome under treatment  $A = a$ . We are thus interested in the CATE  $\tau(x) = \mathbb{E}[Y(1) - Y(0)|X = x]$ .
+
+**Identifiability:** We make the following standard assumptions from the literature in partial identification with IVs (Angrist et al., 1996). **Assumption 1 (Consistency):**  $Y(A) = Y$ . **Assumption 2 (Exclusion):**  $Z \perp\!\!\!\perp Y(A) | (X, A, U)$ . **Assumption 3 (Independence):**  $Z \perp\!\!\!\perp (U, X)$ .
+
+Note that, however, Assumptions 1–3 from the standard IV setting are *not* sufficient to ensure identifiability of the CATE (Gunsilius, 2020). To ensure identifiability, one would require additional assumptions, such as linearity or, more generally, additive noise assumptions (Hartford et al., 2017; Wang & Tchetgen Tchetgen, 2018). Yet, such assumptions are highly restrictive and are neither testable nor typically ensured in real-world scenarios. Hence, this motivates our objective to perform partial identification instead.
+
+**Objective:** We frame our objective as a *partial identification* problem and thus focus on estimating *valid* bounds ( $b^-(x), b^+(x)$ ) for the CATE  $\tau(x)$  such that  $b^-(x) \leq \tau(x) \leq b^+(x)$  holds for all possible  $x \in \mathcal{X}$ . Furthermore, the bounds should be *informative*, i.e., we would like to minimize the expected bound width  $\mathbb{E}_X[b^+(X) - b^-(X)]$ , while still ensuring validity. Formally, we aim to solve
+
+$$b^-, b^+ \in \arg \min_{b^-, b^+} \mathbb{E}_X[b^+(X) - b^-(X)] \quad \text{s.t.} \quad b^-(x) \leq \tau(x) \leq b^+(x) \quad \text{for all } x \in \mathcal{X}. \quad (1)$$
+
+## 4 PARTIAL IDENTIFICATION OF CATE WITH COMPLEX INSTRUMENTS
+
+### 4.1 OVERVIEW
+
+We now present our proposed method to solve the partial identification problem from Eq. (1). Solving Eq. (1) directly is *infeasible* because it involves the unknown CATE  $\tau(x)$ . Hence, we propose the following approach:
+
+**Outline:** ① We learn a discretized representation (also called partitioning)  $\phi(Z)$  of the instrumental variable  $Z$ . ② We then derive closed-form bounds given the discrete representation  $\phi$ . ③ We transform the closed-form bounds back to our original bounding problem and, in particular, express all quantities involved as quantities that can be estimated from observational data.
+
+Below, we first explain why existing closed-form bounds are *not* directly applicable and why deriving such bounds is non-trivial. We then proceed by providing the corresponding theory for the above method. Specifically, we first take a population view to show theoretically that our bounds are valid (Sec. 4.2). Then, we take a finite-sample view and present an estimator (Sec. 4.3).
+
+**Limitations of existing bounds:** There exist different approaches for bounding treatment effects (see Sec. 2) using continuous instruments, yet these either require additional assumptions or can easily become unstable, especially for high-dimensional  $Z$ . Furthermore, these bounds consider continuous treatments but are *not tailored* for binary treatments (e.g., whether a drug is administered). Hence, we derive custom bounds for our setting.
+
+**Why is the derivation non-trivial?** For binary treatments, it turns out that there exist closed-form solutions for bounds whenever the instrument  $Z$  is discrete. That is, the existing bounds for the average treatment effect (ATE) with continuous bounded outcome proposed in (Manski, 1990) can be extended to non-parametric closed-form bounds for the CATE (Schweishthal et al., 2024). While these bounds are useful in a setting with discrete instruments  $Z$ , they are *not* directly applicable to continuous or even high-dimensional  $Z$  due to two main reasons: (1) The bounds need to be evaluated for *all* combinations  $l, m \in \mathbb{Z}^2 \subseteq \mathbb{R}^d \times \mathbb{R}^d$ , which is *intractable*. (2) Evaluating the bounds only on a random subset of combinations  $l, m$  can result in *arbitrary high* estimation variance for regions with a low joint density of  $p(X = x, Z = l)$  or  $p(X = x, Z = m)$ . Hence, we must derive a novel method for estimating bounds based on complex instruments (that are, e.g., continuous or high-dimensional), yet this is a highly *non-trivial* task.
+
+{4}------------------------------------------------
+
+### 4.2 POPULATION VIEW
+
+In the following theorem, we provide a novel theoretical result of how to obtain valid bounds based on discrete representations  $\phi(Z)$  of the instrument  $Z$ .
+
+**Theorem 1** (Bounds for arbitrary instrument discretizations). *Let  $\phi : \mathcal{Z} \rightarrow \{0, 1, \dots, k\}$  be an arbitrary mapping from the high-dimensional instrument  $Z$  to a discrete representation. We define*
+
+$$\mu_\phi^a(x, \ell) = \int_Z \frac{\mu^a(x, z)\mathbb{P}(\phi(Z) = \ell|Z = z)}{\mathbb{P}(A = a, \phi(Z) = \ell)} \mathbb{P}(A = a|Z = z) \mathbb{P}(Z = z) dz \quad \text{and} \quad (2)$$
+
+$$\pi_\phi(x, \ell) = \int_Z \frac{\pi(x, z)\mathbb{P}(\phi(Z) = \ell|Z = z)}{\mathbb{P}(\phi(Z) = \ell)} \mathbb{P}(Z = z) dz. \quad (3)$$
+
+Then, under Assumptions 1, 2, and 3, the CATE  $\tau(x)$  is bounded by
+
+$$b_\phi^-(x) \leq \tau(x) \leq b_\phi^+(x), \quad (4)$$
+
+with
+
+$$b_\phi^+(x) = \min_{l, m} b_{\phi, l, m}^+(x) \quad \text{and} \quad b_\phi^-(x) = \max_{l, m} b_{\phi, l, m}^-(x) \quad (5)$$
+
+where
+
+$$b_{\phi, l, m}^+(x) = \pi_\phi(x, l)\mu_\phi^1(x, l) + (1 - \pi_\phi(x, l))s_2 - (1 - \pi_\phi(x, m))\mu_\phi^0(x, m) - \pi_\phi(x, m)s_1, \quad (6)$$
+
+$$b_{\phi, l, m}^-(x) = \pi_\phi(x, l)\mu_\phi^0(x, l) + (1 - \pi_\phi(x, l))s_1 - (1 - \pi_\phi(x, m))\mu_\phi^1(x, m) - \pi_\phi(x, m)s_2. \quad (7)$$
+
+*Proof.* See Appendix A.  $\square$
+
+Theorem 1 states that, in population, we yield valid closed-form bounds for  $\tau(x)$  for arbitrary representations  $\phi$ . In particular, we can relax the optimization problem from Eq. (1) and obtain valid bounds  $b_{\phi^*}^+(X) \geq b_\phi^+(X)$  and  $b_{\phi^*}^-(X) \leq b_\phi^-(X)$  by solving
+
+$$\phi^* \in \arg \min_{\phi \in \Phi} \mathbb{E}_X [b_\phi^+(X) - b_\phi^-(X)]. \quad (8)$$
+
+Here, we highlight the dependence of variables on the representation  $\phi$  in green to show the differences to Eq. (1). Note the following differences: In contrast to Eq. (1), we do not impose any validity constraints in Eq. (8) because Theorem 1 automatically ensures the validity of our bounds. Furthermore, in contrast to Eq. (1), the objective from Eq. (8) only depends on identifiable quantities that can be estimated from observational data.
+
+**Implications of Theorem 1:** A naïve implementation minimizing the bounds following Eq. (8) would require alternating learning. The reason is that, after every update step of  $\phi(z)$ , the quantities  $\mu_\phi^a(x, l)$  and  $\pi_\phi^a(x, l)$  are not valid for the updated  $\phi$  anymore and would need to be retrained to ensure valid bounds. This is computationally highly expensive and causes unstable training as well as convergence problems. However, our method circumvents these issues: by using our novel Theorem 1, we show that, while training  $\phi(z)$ , the quantities  $\mu_\phi^a(x, l)$  and  $\pi_\phi(x, l)$  can be directly calculated. For that, we can simply evaluate the nuisance functions, which only need to be trained once in the first stage. This holds because our derivation of closed-forms bounds for arbitrary discrete representations of complex  $Z$  comes with an important additional benefit: The bounds only depend on (i) discrete probabilities, (ii) quantities which are independent of  $\phi$  and thus do not change for different  $\phi$ , and (iii) the discrete representation mapping to be learned itself. As a result, this allows us to *directly* learn  $\phi$  wrt. Eq. (8). As such, we circumvent the need for adversarial or alternating training, which results in more robust estimation.
+
+### 4.3 FINITE-SAMPLE VIEW
+
+In practice, we have to estimate the bounds from Theorem 1 from finite observational data. For this purpose, we start with arbitrary initial estimators:  $\hat{\pi}(x, z)$  is the estimator of the propensity score  $\pi(x, z)$ ,  $\hat{\mu}^a(x, z)$  of the response function  $\mu^a(x, z)$ , and  $\hat{\eta}(z)$  of  $\eta(z) = \mathbb{P}(A = 1 | Z = z)$ .
+
+Once the initial estimators are obtained, we can estimate our second-stage nuisance functions defined in Eq. (23) and (24) via
+
+$$\hat{\mu}_\phi^a(x, \ell) = \frac{1}{\sum_{j=1}^n \mathbb{1}\{\phi(z_j) = \ell, a_j = a\}} \sum_{j=1}^n \hat{\mu}^a(x, z_j) \mathbb{1}\{\phi(z_j) = \ell\} (a\hat{\eta}(z_j) + (1-a)(1-\hat{\eta}(z_j))), \quad (9)$$
+
+{5}------------------------------------------------
+
+$$\hat{\pi}_\phi(x, \ell) = \frac{1}{\sum_{j=1}^n \mathbb{1}\{\phi(z_j) = \ell\}} \sum_j^n \hat{\pi}(x, z_j) \mathbb{1}\{\phi(z_j) = \ell\}. \quad (10)$$
+
+Finally, we can directly ‘plug in’ these estimators into Eq. (5) to compute estimates of the upper and lower bound  $\hat{b}_\phi^-(x), \hat{b}_\phi^+(x)$ .
+
+A naïve approach would now directly use  $(\hat{b}_\phi^-(x), \hat{b}_\phi^+(x))$  to solve the optimization in Eq. (8). However, for finite samples, it turns out this is infeasible without restricting the complexity of the representation function. The reason is outlined in the following theoretical results.
+
+**Lemma 1** (Tightness-bias-variance trade-off). *Let  $\mathbb{E}_n$  and  $\text{Var}_n$  denote the expectation and variance with respect to the observational data (of size  $n$ ). Then, it holds*
+
+$$\mathbb{E}_n \left[ \left( b_*^+(x) - \hat{b}_\phi^+(x) \right)^2 \right] \leq \underbrace{2 \left( \left( b_*^+(x) - b_\phi^+(x) \right)^2 \right)}_{(i) \text{ Population tightness}} + \underbrace{\mathbb{E}_n \left[ b_\phi^+(x) - \hat{b}_\phi^+(x) \right]^2}_{(ii) \text{ Estimation bias}} + \underbrace{\text{Var}_n(\hat{b}_\phi^+(x))}_{(iii) \text{ Estimation variance}}. \quad (11)$$
+
+*Proof.* See Appendix A.  $\square$
+
+**Interpretation of Lemma 1:** Lemma 1 shows that the mean squared error (MSE) between the estimated representation-based bound  $\hat{b}_\phi^+(x)$  and the ground-truth optimal bound  $b_*^+(x)$  can be decomposed into the following three components: (i) *population tightness*, (ii) *estimation bias*, and (iii) *estimation variance*. • Term (i) describes the discrepancy between the representation-based bound in population  $b_\phi^+(x)$  and the ground-truth optimal bound  $b_*^+(x)$ . It will *decrease* if we allow for more complex representations  $\Phi$ , for example by increasing the number of partitions  $k$ . • Term (ii) describes the estimation bias due to using finite-sample estimators for estimating the bounds. It will generally depend on the type of estimators we employ for  $\hat{\pi}(x, z)$ ,  $\hat{\mu}^a(x, z)$ , and  $\hat{\eta}(z)$ . • Finally, term (iii) characterizes the variance due to using finite-sample estimators. In contrast to term (i), it will *increase* when we allow the representation to be more complex.<sup>3</sup>
+
+To make point (iii) more explicit, we derive the asymptotic distributions of the estimators from Eq. (9) and Eq. (10) that are used during training of  $\phi$  to estimate the final bounds.
+
+**Theorem 2** (Asymptotic distributions of estimators). *It holds that*
+
+$$\sqrt{n} \hat{\mu}_\phi^a(x, \ell) \xrightarrow{d} \mathcal{N} \left( \mu_\phi^a(x, \ell), \frac{1}{p_{\ell, \phi}} \left( \frac{\text{Var}(g(Z) \mid \phi(Z) = \ell)}{c} + d \right) \right) \quad (12)$$
+
+$$\sqrt{n} \hat{\pi}_\phi(x, \ell) \xrightarrow{d} \mathcal{N} \left( \pi_\phi(x, \ell), \frac{1}{p_{\ell, \phi}} \text{Var}(h(Z) \mid \phi(Z) = \ell) \right) \quad (13)$$
+
+for  $c = q_{\ell, \phi}^2, d = \frac{\theta_\ell^2(1-p_{\ell, \phi}q_{\ell, \phi})}{q_{\ell, \phi}^2}$ , such that  $c, d > 0$  and where  $p_{\ell, \phi} = \mathbb{P}(\phi(Z) = \ell)$ ,  $q_{\ell, \phi} = \mathbb{P}(A = a \mid \phi(Z) = \ell)$ ,  $g(Z) = \hat{\mu}^a(x, Z)(a\hat{\eta}(Z) + (1-a)(1-\hat{\eta}(Z)))$ ,  $h(Z) = \hat{\pi}(x, Z)$ , and  $\theta_{\ell, \phi} = \mathbb{E}[g(Z) \mid \phi(Z) = \ell]$ .
+
+*Proof.* See Appendix A.  $\square$
+
+We observe that the variance of the estimators (and, thus, of the estimated bounds) explodes for small values of  $p_{\ell, \phi} = \mathbb{P}(\phi(Z) = \ell)$ . Hence, to reduce the estimation variance, we aim to learn a representation  $\phi$  that avoids low  $p_{\ell, \phi}$  for some  $\ell$ , e.g., by limiting the number of partitions  $k$ .  $\Rightarrow$  Altogether, as a consequence of Lemma 1 and Theorem 2, we obtain an *inherent trade-off between tightness of the bounds in populations and estimation variance in finite-samples*.
+
+**Learning objective for the representation  $\phi$ :** Due to the inherent trade-off between tightness of the bounds and estimation variance, the aim for learning the representation  $\phi$  is two-fold. On the one hand, we **(a)** aim to learn tight bounds, which is given in the objective in Eq. (8). On the other hand, we **(b)** also have to account for controlling the variance in finite-sample settings, especially for high-dimensional  $Z$ . Motivated by Theorem 2, we ensure  $p_{\ell, \phi} > \varepsilon$  for some  $\varepsilon > 0$ , where  $p_{\ell, \phi}$  is an estimator of  $p_{\ell, \phi} = \mathbb{P}(\phi(Z) = \ell)$ . Combining both **(a)** and **(b)** yields the following objective:
+
+<sup>3</sup>Note that Lemma 1 and Theorem 2 hold for arbitrary  $\phi$  and the corresponding bound estimators  $\hat{b}_\phi^+(x)$ . This allows us to ensure more stable update steps during training by reducing the estimation variance of the estimators. However, this implies that Lemma 1 and Theorem 2 and the following properties also directly hold for some finally learned or optimal  $\phi^*$  which results in reduced variance of final estimates.
+
+{6}------------------------------------------------
+
+$$\phi^* = \arg \min_{\phi \in \Phi} \mathbb{E}_X [\hat{b}_\phi^+(X) - \hat{b}_\phi^-(X)] \quad \text{s.t.} \quad \hat{p}_{\ell, \phi} > \varepsilon, \quad (14)$$
+
+for some  $\varepsilon > 0$  and all  $\ell \in \{1, \dots, k\}$ .
+
+Notably, the main motivation of Theorem 2 is *not* to construct confidence intervals or to provide theoretical results on the width of the finally learned bounds. Instead, we aim to yield valid final bound estimates by already ensuring valid bound estimates during training for robustly updating  $\phi$ . For that, we want to ensure that all nuisance functions are estimated with low variance at every update step to guarantee stable training. As a consequence, the final bounds built on top of these nuisance functions after training will also yield reliable estimates.
+
+We next present a neural method to learn tight bounds using the above objective.
+
+## 5 NEURAL METHOD FOR LEARNING CATE BOUNDS WITH COMPLEX INSTRUMENTS
+
+In this section, we propose a neural method for our objective to learn tight and valid bounds. Our method consists of two separate stages (see Algorithm 1): ① we learn initial estimators of the three nuisance functions, and ② we learn an optimal representation  $\phi^*$ , so that the width of the bounds is minimized. Note that our method is completely model-agnostic. Hence, arbitrary machine learning models can be used in the first and second stages in order to account for the properties of the data. For example, for instruments with gene data, one could use pre-trained encoders to further optimize the downstream performance. We give an overview of the workflow of our method in Fig. 3 (see Algorithm 1 for pseudocode).
+
+![Figure 3: Workflow of the second stage of our method for calculating bounds on the CATE. The diagram shows a flow from a 'Complex instrument Z' (represented by a DNA double helix) through a 'Representation network phi_phi' (a neural network) to produce a latent representation phi(z). This is then processed by '2nd stage nuisance calculation' (which uses pre-trained 1st stage nuisance functions) to produce 'Bounds on CATE' (shown as a plot of tau(x) with a confidence interval).](0236eff05bcb8f3a343ea7933aaa306b_img.jpg)
+
+The diagram illustrates the workflow of the second stage of the method. It starts with a 'Complex instrument Z' (represented by a DNA double helix icon). This is input into a 'Representation network  $\phi_\phi$ ' (a neural network diagram). The network outputs a latent representation  $\phi(z)$ . This is then processed by a '2nd stage nuisance calculation' block, which uses 'pre-trained 1st stage nuisance functions' (specifically  $\pi_{\phi_\phi}^a(x, \phi_1(z))$ ,  $\pi_{\phi_\phi}^a(x, \phi_2(z))$ ,  $\hat{\mu}_{\phi_\phi}^a(x, \phi_1(z))$ , and  $\hat{\mu}_{\phi_\phi}^a(x, \phi_2(z))$ ). The final output is 'Bounds on CATE', shown as a plot of  $\tau(x)$  with a shaded confidence interval.
+
+Figure 3: Workflow of the second stage of our method for calculating bounds on the CATE. The diagram shows a flow from a 'Complex instrument Z' (represented by a DNA double helix) through a 'Representation network phi\_phi' (a neural network) to produce a latent representation phi(z). This is then processed by '2nd stage nuisance calculation' (which uses pre-trained 1st stage nuisance functions) to produce 'Bounds on CATE' (shown as a plot of tau(x) with a confidence interval).
+
+Figure 3: Workflow of the second stage of our method for calculating bounds on the CATE: The representation network  $\phi_\phi$  learns discrete latent representations of the complex  $Z$  (e.g., continuous or high-dimensional). By employing the pre-trained  $\hat{\mu}$ ,  $\hat{\pi}$ , and  $\hat{\eta}$ , we can directly calculate the nuisance estimates conditional on the latent representation  $\phi(z)$  by using Eq. (9) and Eq. (10) to yield the bounds.
+
+① **Initial nuisance estimation:** In the first stage, we can use arbitrary machine learning models (e.g., feed-forward neural network) to learn the first-stage nuisance functions  $\hat{\mu}^a(x, z) = \mathbb{E}[Y | X = x, A = a, Z = z]$ ,  $\hat{\pi}(x, z) = \mathbb{P}(A = 1 | X = x, Z = z)$ , and  $\hat{\eta}(z) = \mathbb{P}(A = 1 | Z = z)$ .
+
+Recall that we consider  $Z$  and  $X$ , which are both potentially high-dimensional. Hence, for  $\hat{\mu}^a(x, z)$  and  $\hat{\pi}(x, z)$ , we use network architectures that have (i) different encoding layers for  $X$  and  $Z$ , so that we capture structured information within the variables and (ii) shared layers on top of the encoding to learn common structures. Further, for  $\hat{\mu}^a(x, z)$ , we use two outcome heads for both treatment options  $A \in \{0, 1\}$  to ensure that the influence of the treatment on the outcome prediction does not ‘get lost’ in the high-dimensional space of  $X$  and  $Z$  (Shalit et al., 2017).
+
+② **Representation learning:** In the second stage, we train a neural network to learn discrete representations of the instruments with the objective of obtaining tight bounds but with constraints on the estimation variance. To learn the function  $\phi(z)$ , we use a neural network  $\phi_\phi$  with trainable parameters  $\theta$ . Then, on top of the final layer of the encoder, we leverage the Gumbel-softmax trick (Jang et al., 2017), which allows us to learn  $k$  discrete representations of the latent space of the instruments, where  $k$  can be flexibly chosen as a hyperparameter.
+
+{7}------------------------------------------------
+
+**Custom loss function:** We further transform our objective into a loss function to train the network  $\phi_\theta$ . For that, we design a compositional loss consisting of three terms:
+
+① A *bound-width minimization loss* that aims at our objective in Eq. (14), defined via
+
+$$\mathcal{L}_b(\theta) = \frac{1}{n} \sum_{i=1}^n \hat{b}_{\phi_\theta}^+(x_i) - \hat{b}_{\phi_\theta}^-(x_i) \quad (15)$$
+
+② A *regularization loss* to enforce the constraints in Eq. (14), i.e., enforcing that  $\hat{p}_{\ell,\phi} = \mathbb{P}(\phi_\theta(Z) = \ell) > \varepsilon, \forall \ell \in 1, \dots, k$ , for some  $\varepsilon > 0$ . For that, we aim to penalize the negative log-likelihood  $-\sum_{j=1}^k \log(\mathbb{P}(\phi_\theta(Z) = j))$ , which we can estimate via
+
+$$\mathcal{L}_{\text{reg}}(\theta) = - \sum_{j=1}^k \log \left( \frac{1}{n} \sum_{i=1}^n \mathbb{1}\{\phi_\theta(z_i) = j\} \right). \quad (16)$$
+
+③ An *auxiliary guidance loss*  $\mathcal{L}_{\text{aux}}(\theta)$ , which enforces more heterogeneity between  $\mathbb{P}(Z \mid \phi_\theta(Z) = l)$  and  $\mathbb{P}(Z \mid \phi_\theta(Z) = m)$ , for all  $l, m$ . To achieve this, we add an additional linear classification head  $p_c$  with weights  $\zeta$  on top of the last hidden layer of  $\phi_\theta$  before the discretization. The auxiliary guidance loss is explicitly defined as the cross-entropy loss via
+
+$$\mathcal{L}_{\text{aux}}(\theta) = - \frac{1}{n} \sum_{i=1}^n \sum_{j=1}^k \mathbb{1}\{\phi_\theta(z_i) = j\} \log(p_c(z_i)), \quad (17)$$
+
+where  $p_c(z_i)$  is the predicted probability of assigning  $z_i$  to discrete representation  $j$  by the additional classification head. While  $\mathcal{L}_{\text{aux}}(\theta)$  is not strictly necessary for our objective, we empirically observed that it helps stabilize training by avoiding convergence to non-informative local minima. Hence, we yield our final training loss
+
+$$\mathcal{L}(\theta) = \mathcal{L}_b(\theta) + \lambda \mathcal{L}_{\text{reg}}(\theta) + \gamma \mathcal{L}_{\text{aux}}(\theta), \quad (18)$$
+
+with hyperparameters  $\lambda$  and  $\gamma$ . Here,  $\lambda$  controls the trade-off between bound tightness and estimation variance, and can thus be tailored depending on the application. The hyperparameter  $\gamma$  can be simply tuned as usual.
+
+The main benefit of our method is that it is particularly efficient and robust compared to other learning procedures (such as alternating learning procedure or adversarial training). In the second stage, we solely update the parameters  $\theta$  of the discretization network  $\phi_\theta$  to minimize  $\mathcal{L}_\theta$ . In contrast, the networks of the first-stage nuisance estimators have frozen weights. In the second stage, networks of the first-stage nuisance estimators are only evaluated but are *not* updated. This allows us to re-use the trained first-stage networks for different training settings of the second-stage network (e.g., varying  $k$ ). Thus, this results in a training procedure that is computationally more effective and robust.
+
+**Robustness across  $k$ :** Our method is directly designed to be robust across the choice of the number of partitions  $k$ . This is due to its neural backbone and custom loss that encourages learning flexible representations that minimize the bound width already for low  $k$  while ensuring robust estimation also for higher  $k$  through regularization. This is particularly advantageous in real-world causal inference tasks, where model evaluation and selection are challenging due to the lack of oracle performance metrics. In the following experiments section, we demonstrate such robustness empirically. Further, we provide an extended discussion including practical guidelines in Appendix F.
+
+## 6 EXPERIMENTS
+
+**Baselines:** Existing methods (see Sec. 2) focus either on (a) point identification with strong assumptions, (b) partial identification with continuous treatment variables, or (c) discrete instruments. We instead focus on a setting with complex instruments and binary treatments. Hence, existing methods are **not** tailored to our setting, because of which a fair comparison is precluded. Instead, we thus demonstrate the validity and tightness of our bounds. Further, for comparison, we propose an additional NAIVE baseline, which first learns a discretization of the instruments (via  $k$ -means clustering) and then learns the nuisance functions wrt. to the discretized instruments to apply the existing bounds for discrete instruments from Lemma 2 on top.
+
+{8}------------------------------------------------
+
+| Metric | Dataset 1 |  |  | Dataset 2 |  |  |
+|-|-|-|-|-|-|-|
+|  | Naive | Ours | Rel. Improvement | Naive | Ours | Rel. Improvement |
+| Coverage[ $\uparrow$ ] | $1.00 \pm 0.00$ | $1.00 \pm 0.00$ | 0.00% | $1.00 \pm 0.00$ | $1.00 \pm 0.00$ | 0.00% |
+| Width[ $\downarrow$ ] | $1.22 \pm 0.05$ | <b><math>1.05 \pm 0.01</math></b> | 13.9% | $1.31 \pm 0.16$ | <b><math>1.14 \pm 0.16</math></b> | 13.0% |
+| MSD[ $\downarrow$ ] | $0.28 \pm 0.06$ | <b><math>0.03 \pm 0.03</math></b> | 89.3% | $0.09 \pm 0.06$ | <b><math>0.06 \pm 0.06</math></b> | 33.3% |
+
+Table 1: **Datasets 1 and 2:** Comparison of both methods (NAIVE vs. Ours) regarding width, and MSD. Relative performance improvements in green.
+
+**Data:** We perform experiments mimicking Mendelian Randomization but where we simulate the data to have access to the ground-truth CATE for performance evaluations, so that we can check for coverage and validity of the bounds. We consider three different realistic settings. For Datasets 1 and 2, we consider a one-dimensional continuous instrument representing a polygenic risk score (Pierce et al., 2018). Further, in Dataset 1, we model the
+
+true  $\pi(x, z)$  as a rather simple function to check if our method is already competitive in such settings. In Dataset 2, we model  $\pi(x, z)$  as a complex function to evaluate the performance in more challenging settings.
+
+We use the same CATE for Dataset 1 and Dataset 2 to allow for comparisons between both. In Dataset 3, we model high-dimensional instruments
+
+with single nucleotide polymorphisms (SNPs, i.e., genetic variants; Burgess et al., 2020) to test our method in an additional realistic and even more complex setting. In all datasets, we model the CATE to be heterogeneously conditioned on  $X$  to check whether the bounds adapt to different subpopulations. Details are in Appendix D.
+
+**Performance metrics:** We report the following metrics to assess the validity and robustness of the estimated bounds: (i) The *coverage*, i.e., how often the true CATE lies within the estimated bounds. (ii) The average *width* of bounds, where lower values indicate more informative bounds. (iii) The *mean squared difference (MSD)* of the predicted bounds over different values of  $k$ , indicating the robustness wrt. to the selection of the hyperparameter. Further, for Dataset 3, we model  $\pi(x, z)$  to be dependent on some latent discrete representation of the observed  $Z$ , such that we can approximate oracle bounds. Thus, we can evaluate (iv) the coverage wrt. to the oracle bounds and (v) the MSE to the oracle bounds. Recall that, for reliable decision-making, we would like to obtain tight bounds *but only under the constraint that they yield valid coverage*. We thus propose two new metrics, which we call *width\** and *MSE\**, which denote the corresponding metrics but where we filter for runs with coverage  $\geq 95\%$ . This allows us to properly compare the ability to learn tight bounds without distortions due to falsely overconfident predictions.
+
+**Implementation details:** For our method, we use multi-layer-perceptrons (MLPs) for the first-stage nuisance estimation and an MLP with Gumbel-softmax (Jang et al., 2017) discretization on the last layer for learning  $\phi_\theta$ . For the NAIVE baseline, we use  $k$ -means clustering in the first step to learn discretized instruments and then use MLPs with identical architecture for the nuisance estimation to ensure a fair comparison. We provide further details in Appendix C.
+
+**Results:** We present the results of our experiments in Table 1 (for Datasets 1 and 2) and in Table 2 (for Dataset 3). Therein, we compare our method against the NAIVE baseline averaged over multiple runs and over different choices of clusters  $k$ . Overall, we observe the following patterns: (I) Both methods (i.e., ours and the NAIVE baseline) almost always reach a perfect coverage of 100% for the true CATE, which shows the validity of the bounds. For Dataset 3, our method achieves better coverage wrt. to the oracle bounds, which further suggests that our method leads to a more reliable
+
+| Metric | Naive | Ours | Rel. Improve |
+|-|-|-|-|
+| Coverage (oracle)[ $\uparrow$ ] | $0.96 \pm 0.09$ | <b><math>0.99 \pm 0.01</math></b> | 3.4% |
+| Width*[ $\downarrow$ ] | $1.88 \pm 0.04$ | <b><math>1.85 \pm 0.04</math></b> | 1.8% |
+| MSE*[ $\downarrow$ ] | $0.12 \pm 0.01$ | <b><math>0.11 \pm 0.01</math></b> | 9.2% |
+| MSD[ $\downarrow$ ] | $0.10 \pm 0.10$ | <b><math>0.03 \pm 0.02</math></b> | 70.3% |
+
+Table 2: **Dataset 3:** Comparison of both methods (NAIVE vs. Ours) regarding the coverage with respect to the oracle bounds, width, and MSD. Relative performance improvements in green.
+
+![Figure 4: Two line plots showing estimated bounds on the CATE for Datasets 1 and 2. The left plot is for Dataset 1 with a simple pi(x, z), and the right plot is for Dataset 2 with a complex pi(x, z). Both plots show mean values and standard deviation bands for different values of k (hyperparameter). The y-axis represents the CATE, and the x-axis represents the observed Z. The legend indicates 'Mean', 'Upper Bound', and 'Lower Bound'.](ae21ece48844b14b230832cbb6fcf735_img.jpg)
+
+Figure 4: Two line plots showing estimated bounds on the CATE for Datasets 1 and 2. The left plot is for Dataset 1 with a simple pi(x, z), and the right plot is for Dataset 2 with a complex pi(x, z). Both plots show mean values and standard deviation bands for different values of k (hyperparameter). The y-axis represents the CATE, and the x-axis represents the observed Z. The legend indicates 'Mean', 'Upper Bound', and 'Lower Bound'.
+
+Figure 4: **Datasets 1 and 2: Estimated bounds on the CATE**, mean  $\pm$  sd over 5 runs for different  $k$ . *Left:* Dataset 1 with a simple  $\pi(x, z)$ . *Right:* Dataset 2 with a complex  $\pi(x, z)$ .
+
+{9}------------------------------------------------
+
+486  
+487  
+488  
+489  
+490  
+491  
+492  
+493  
+494  
+495  
+496  
+497  
+498  
+499  
+500  
+501  
+502  
+503  
+504  
+505  
+506  
+507  
+508  
+509  
+510  
+511  
+512  
+513  
+514  
+515  
+516  
+517  
+518  
+519  
+520  
+521  
+522  
+523  
+524  
+525  
+526  
+527  
+528  
+529  
+530  
+531  
+532  
+533  
+534  
+535  
+536  
+537  
+538  
+539
+
+estimation. (ii) As expected, on average, our method learns *tighter bounds* for Datasets 1 and 2 (lower width), and for Dataset 3 our method learns *tighter valid bounds* that are closer to the oracle bounds (lower width\* and MSE\*). This demonstrates that our method can clearly improve over a discretization that uses solely information of  $Z$  in the first step (NAIVE). (iii) Unlike the baseline, our method is robust over different values of  $k$ . This is demonstrated by a low MSD in all datasets, with improvements up to 89% over the naïve baseline.
+
+**Sensitivity over  $k$ :** To better understand the robustness as well as the source of performance gain of our method, we analyze the behavior of the methods for different parameters  $k$ . For that, we report the performance metrics for varying  $k$  in Table 3 and Table 4. Also, we plot the estimated bounds for Datasets 1 and 2 in Fig. 4, and the estimated bound width over varying  $k$  for Dataset 3 in Fig. 5. Overall, we observe robust behavior of our method but unstable behavior of the NAIVE baseline wrt.  $k$ . The latter is also clearly visible by the large differences in the learned bounds in Fig. 4 on the left, and the high variation in estimated bound width in Fig. 5. This even results in learning falsely overconfident bounds for  $k = 6$ , as also shown by low oracle coverage in Table 4.
+
+In contrast, our method yields bounds that are valid for a given  $k$  as well as over varying values of  $k$ , which is naturally encouraged by our objective of flexibly learning representations. We thus see that our method is robust regardless of the parameter  $k$ , meaning that  $k$  is not responsible for the performance gain but that this is due to our proposed learning objective. We provide an extended discussion about the role of  $k$  and a practical guideline for selection in Appendix F.
+
+**Takeaways:** Our method can successfully learn bounds that have a high coverage and a low width. Further, our method outperforms the NAIVE baseline clearly while ensuring robustness. Here, our results show that the source of the performance gain is the way how we learn the representation  $\phi$  and that the performance gain from our method becomes larger for more complex datasets.
+
+**Limitations:** Our method for partial identification allows us to relax multiple assumptions that are inherent to methods for point identification. Nevertheless, we still rely on the standard assumptions of IV settings. However, such assumptions often hold by design or can be ensured by expert knowledge such as in Mendelian randomization. We provide an extended discussion in Appendix B. Further, we show the asymptotic behavior of the nuisance estimates to motivate our regularization loss for improving training stability. Deriving asymptotic properties on final bound estimators (e.g., to derive uncertainty estimates or estimators that are efficient or multiply robust) is thus a promising direction for future research in partial identification, not only for complex IVs but even for simple discrete settings.
+
+**Conclusion:** We propose a novel method for learning tight bounds on treatment effects by making use of complex instruments (e.g., instruments that are continuous, potentially high-dimensional, and that have non-trivial relationships with the treatment intake or exposure).
+
+| Dataset | Method | $k$ | Coverage[ $\uparrow$ ] | Width[ $\downarrow$ ] |
+|-|-|-|-|-|
+| Dataset 1 | Naïve | 2 | $1.00 \pm 0.00$ | $1.62 \pm 0.06$ |
+|  |  | 3 | $1.00 \pm 0.00$ | $0.83 \pm 0.16$ |
+|  | Ours | 2 | $1.00 \pm 0.00$ | $1.01 \pm 0.05$ |
+|  |  | 3 | $1.00 \pm 0.00$ | $1.09 \pm 0.04$ |
+| Dataset 2 | Naïve | 2 | $1.00 \pm 0.00$ | $1.34 \pm 0.19$ |
+|  |  | 3 | $1.00 \pm 0.00$ | $1.28 \pm 0.20$ |
+|  | Ours | 2 | $1.00 \pm 0.00$ | $1.13 \pm 0.19$ |
+|  |  | 3 | $1.00 \pm 0.00$ | $1.15 \pm 0.31$ |
+
+Table 3: **Datasets 1 and 2:** Comparison of methods across key metrics.
+
+| Method | $k$ | Coverage[ $\uparrow$ ] | Width[ $\downarrow$ ] | Coverage (oracle)[ $\uparrow$ ] | MSE (oracle)[ $\downarrow$ ] |
+|-|-|-|-|-|-|
+| Naïve | 2 | $1.00 \pm 0.00$ | $1.96 \pm 0.05$ | $1.00 \pm 0.00$ | $0.15 \pm 0.02$ |
+|  | 4 | $1.00 \pm 0.00$ | $1.91 \pm 0.03$ | $1.00 \pm 0.00$ | $0.13 \pm 0.02$ |
+|  | 6 | $1.00 \pm 0.00$ | $1.74 \pm 0.26$ | $0.75 \pm 0.50$ | $0.09 \pm 0.05$ |
+|  | 8 | $1.00 \pm 0.00$ | $1.89 \pm 0.09$ | $1.00 \pm 0.00$ | $0.12 \pm 0.04$ |
+| Ours | 2 | $1.00 \pm 0.00$ | $1.87 \pm 0.05$ | $1.00 \pm 0.00$ | $0.12 \pm 0.02$ |
+|  | 4 | $1.00 \pm 0.00$ | $1.87 \pm 0.08$ | $1.00 \pm 0.00$ | $0.12 \pm 0.03$ |
+|  | 6 | $1.00 \pm 0.00$ | $1.85 \pm 0.06$ | $1.00 \pm 0.00$ | $0.11 \pm 0.02$ |
+|  | 8 | $1.00 \pm 0.00$ | $1.83 \pm 0.07$ | $0.99 \pm 0.01$ | $0.11 \pm 0.03$ |
+
+Table 4: **Dataset 3 (high-dimensional):** Comparison of methods across key metrics.
+
+![Figure 5: A line graph showing the average bound width for Dataset 3 (high-dimensional) across different values of k (2 to 8). The x-axis is labeled 'k' and ranges from 2 to 8. The y-axis is labeled 'Average bound width' and ranges from 1.5 to 2.0. Two lines are plotted: 'Ours' (solid blue line) and 'Naive' (dashed orange line). The 'Ours' line is relatively flat, starting around 1.85 at k=2 and slightly decreasing to about 1.8 at k=8. The 'Naive' line starts around 1.95 at k=2, decreases to about 1.8 at k=4, then drops sharply to about 1.6 at k=6, and finally increases back to about 1.8 at k=8. Shaded areas around the lines represent confidence intervals.](71d82d389da5fe06a4aefb661ea17af9_img.jpg)
+
+Figure 5: A line graph showing the average bound width for Dataset 3 (high-dimensional) across different values of k (2 to 8). The x-axis is labeled 'k' and ranges from 2 to 8. The y-axis is labeled 'Average bound width' and ranges from 1.5 to 2.0. Two lines are plotted: 'Ours' (solid blue line) and 'Naive' (dashed orange line). The 'Ours' line is relatively flat, starting around 1.85 at k=2 and slightly decreasing to about 1.8 at k=8. The 'Naive' line starts around 1.95 at k=2, decreases to about 1.8 at k=4, then drops sharply to about 1.6 at k=6, and finally increases back to about 1.8 at k=8. Shaded areas around the lines represent confidence intervals.
+
+Figure 5: **Dataset 3 (high-dimensional):** Sensitivity analysis wrt. to the number of partitions  $k$  where we show the average bound width  $\pm$  sd over 5 runs.
+
+We provide an extended discussion in Appendix B. Further, we show the asymptotic behavior of the nuisance estimates to motivate our regularization loss for improving training stability. Deriving asymptotic properties on final bound estimators (e.g., to derive uncertainty estimates or estimators that are efficient or multiply robust) is thus a promising direction for future research in partial identification, not only for complex IVs but even for simple discrete settings.
+
+ Rest of paper (reference and Appendix) is removed.

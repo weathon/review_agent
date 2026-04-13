@@ -1,0 +1,318 @@
+
+
+{0}------------------------------------------------
+
+# CERTAINLY UNCERTAIN: A BENCHMARK AND METRIC FOR MULTIMODAL EPISTEMIC AND ALEATORIC AWARENESS
+
+Khyathi Raghavi Chandu<sup>✦ \*</sup> Linjie Li<sup>✦ ✦ \*</sup>  
+ Anas Awadalla<sup>✦</sup> Ximing Lu<sup>✦</sup> Jae Sung Park<sup>✦</sup> Jack Hessel<sup>✦</sup>  
+ Lijuan Wang<sup>✦</sup> Yejin Choi<sup>✦ \*</sup>
+
+✦ Allen Institute for AI
+
+✦ University of Washington
+
+✦ Samaya AI
+
+✦ Microsoft
+
+## ABSTRACT
+
+The ability to acknowledge the inevitable uncertainty in their knowledge and reasoning is a prerequisite for AI systems to be truly truthful and reliable. In this paper, we present a taxonomy of uncertainty specific to vision-language AI systems, distinguishing between epistemic uncertainty (arising from a lack of information) and aleatoric uncertainty (due to inherent unpredictability), and further explore finer categories within. Based on this taxonomy, we synthesize a benchmark dataset, CERTAINLYUNCERTAIN, featuring 178K visual question answering (VQA) samples as contrastive pairs. This is achieved by 1) inpainting images to make previously answerable questions into unanswerable ones; and 2) using image captions to prompt large language models for both answerable and unanswerable questions. Additionally, we introduce a new metric *confidence-weighted accuracy*, that is well correlated with both accuracy and calibration error, to address the shortcomings of existing metrics. Despite the recent rapid progress in vision-language models (VLMs), evaluations on our benchmark show that they perform poorly in uncertain scenarios. Further experiments demonstrate that supervised fine-tuning with CERTAINLYUNCERTAIN enhances the performance of VLMs, and reduces the calibration error. These improvements extend beyond our benchmark to existing refusal-oriented datasets and show positive results on reducing hallucinations, while maintaining performance on standard VQA benchmarks. Our work underscores the importance of addressing uncertainty in vision-language AI systems to improve their reliability and trustworthiness in real-world applications.
+
+## 1 INTRODUCTION
+
+An AI system with intellectual integrity must know when to admit “I don’t know”, which, in turn, requires a sharp awareness of its own limitations of knowledge and reasoning, as well as the inherent uncertainty around the external world (Paul & Elder, 1992; Zhang et al., 2019; Favero et al., 2024; Zhou et al., 2023; Wang et al., 2023b; Varshney & Baral, 2023). However, current vision-language models (Davis, 2020; Miyai et al., 2024; Mahendru et al., 2017) do not exhibit such a sufficiently sharp awareness of their own mistakes, leading to overly confident, uncalibrated predictions (Whitehead et al., 2022) and hallucinations (Wang et al., 2023a; Li et al., 2023d). This is only as expected, however, given that the predominant training recipe (Liu et al., 2023b; 2024; Bai et al., 2023) does not typically encourage the models to express uncertainty or acknowledge when they do not know the answer. Rather, they are incentivized to make predictions regardless of their confidence level. Moreover, existing benchmarks focus mainly on scenarios where clear and definitive answers are available (Yue et al., 2023; Goyal et al., 2019), leaving a notable gap.
+
+Motivated by these, we introduce CERTAINLYUNCERTAIN, a dataset of approximately 178K visual question answering (VQA) instances that encompass various types of uncertainties. CERTAINLYUNCERTAIN is based on a novel taxonomy of multimodal uncertainty comprising *epistemic*
+
+---
+
+\*Equal contribution
+
+{1}------------------------------------------------
+
+![Figure 1: CERTAINLYUNCERTAIN: Taxonomy of uncertainty awareness in multimodal reasoning. The diagram shows a central 'Multimodal Uncertainty Awareness' node connected to 'Epistemic Awareness' and 'Aleatoric Awareness'. 'Epistemic Awareness' branches into Knowledge, Complexity, and Extraneous awareness. 'Aleatoric Awareness' branches into Temporal and Ambiguity awareness. Each category includes a sample question and answer.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+The diagram illustrates the taxonomy of uncertainty awareness in multimodal reasoning. At the top, a balance scale icon is labeled "Answer? I don't know!". Below it, a central box titled "Multimodal Uncertainty Awareness" contains icons for "Data", "Modeling", and "Metric". This central node connects to two main branches: "Epistemic Awareness" and "Aleatoric Awareness".
+
+- Epistemic Awareness** (represented by an INFO icon) branches into three sub-categories:
+ - Knowledge Awareness** (represented by a database icon):
+  - Q: Who is the pilot of the airplane?
+  - A: I don't know (need external data)
+ - Complexity Awareness** (represented by a network icon):
+  - Q: What objects create a juxtaposition in the image?
+  - A: Airplane and barbed wires
+ - Extraneous Awareness** (represented by a puzzle piece icon):
+  - Q: How many clouds are in the image?
+  - A: I don't know (too hard to count)
+  - Q: Could you ascertain the quantity of barbed wires observed within your field of vision?
+  - A: 2
+  - Q: What type of runway did the plane to take off from?
+  - A: I don't know (not visible)
+  - Q: What type of clouds are in the image?
+  - A: Puffy and grey
+- Aleatoric Awareness** (represented by a radar icon) branches into two sub-categories:
+ - Temporal Awareness** (represented by a clock icon):
+  - Q: Will the airplane encounter turbulence in its flight?
+  - A: I don't know (will know in the future)
+  - Q: Is the airplane ascending?
+  - A: Yes
+ - Ambiguity Awareness** (represented by a flower icon):
+  - Q: Which engine is currently working?
+  - A: I don't know (many answers)
+  - Q: What is the dominant color in the image?
+  - A: Grey
+
+At the bottom center, there is a small image of an airplane on a runway.
+
+Figure 1: CERTAINLYUNCERTAIN: Taxonomy of uncertainty awareness in multimodal reasoning. The diagram shows a central 'Multimodal Uncertainty Awareness' node connected to 'Epistemic Awareness' and 'Aleatoric Awareness'. 'Epistemic Awareness' branches into Knowledge, Complexity, and Extraneous awareness. 'Aleatoric Awareness' branches into Temporal and Ambiguity awareness. Each category includes a sample question and answer.
+
+**Figure 1:** CERTAINLYUNCERTAIN: Taxonomy of uncertainty awareness in multimodal reasoning. For simplicity, all answers in this figure are normalized to “I don’t know”, in practice the answers are more diverse, as “I don’t know” can be expressed in various ways.
+
+uncertainty (due to lack of information) and *aleatoric* uncertainty (due to inherent unpredictability), as illustrated in Figure 1. We further define more fine-grained sub-categories, including (i) Knowledge, requiring external knowledge not explicitly captured by the image; (ii) Complexity, where the question is too complex to yield an exact answer; (iii) Extraneous, where parts of the necessary context or details are missing from the image; (iv) Temporal, where future events implied by the image cannot be predicted with absolute certainty; and (v) Ambiguity, where the question itself is unclear, leading to confusion or multiple possible interpretations. We construct CERTAINLYUNCERTAIN with two methods: 1) by masking and inpainting relevant image regions to render previously answerable questions unanswerable; and 2) by presenting GPT-4 (OpenAI, 2023) with image captions and prompting it to generate both answerable and unanswerable questions about the same image. Compared to prior datasets on unanswerability (Miyai et al., 2024; Guo et al., 2023), our dataset is constructed in a more systematic way, covering more diverse and finer-grained categories of uncertainty in vision-language scenarios.
+
+With CERTAINLYUNCERTAIN, we empirically found that existing vision-language models rarely hesitate to answer even under uncertain conditions. In addition, they often overly confidently in providing an answer to unanswerable questions, while much less confident in admitting “I don’t know”. However, this issue is not reflected in popular metrics such as accuracy or F1, which do not account for model confidence. Alternative metrics, such as risk and coverage (Whitehead et al., 2022) use thresholding to binarize the equivalent of the prediction probability. The expected calibration error (ECE) (Naeini et al., 2015) evaluates the prediction probabilities but does not accurately reflect performance in terms of correctness. Therefore, we propose a new *confidence-weighted accuracy* metric, which incorporates model confidence into the accuracy computation. This metric addresses the shortcomings of existing metrics by simultaneously capturing both predictive performance and model confidence. Our proposed metric demonstrates a positive correlation with accuracy and a negative correlation with ECE.
+
+Moreover, we conduct extensive experiments using 3 training strategies with CERTAINLYUNCERTAIN: supervised fine-tuning, R-tuning (Zhang et al., 2023), and preference optimization (Rafailov et al., 2023). We evaluate the resulting models across 7 datasets covering refusal, hallucination, and standard VQA tasks. Our empirical results show that fine-tuning with CERTAINLYUNCERTAIN not only improves performance on a held-out portion of our dataset and existing refusal-based datasets but also helps reduce hallucinations while maintaining performance on standard VQA tasks. These findings underscore the effectiveness of CERTAINLYUNCERTAIN in enhancing the robustness and reliability of vision-language models.
+
+{2}------------------------------------------------
+
+## 2 CERTAINLYUNCERTAIN
+
+To train models to properly admit “I don’t know”, it is crucial to construct a large-scale dataset that covers a diverse range of uncertain situations. This is challenging, as most internet data focus on certain scenarios (e.g., alt-text description for an image), thus not readily applicable. Therefore, we develop CERTAINLYUNCERTAIN, a dataset with approximately 178K VQA instances, using an automatic data synthesis pipeline for various types of uncertainty. We begin by introducing a taxonomy of uncertainties in §2.1, where admitting uncertainty rather than providing an answer is the appropriate response in each category. Next, we describe our data creation process in §2.2. Finally, we introduce the evaluation metrics in §2.3
+
+### 2.1 TAXONOMY OF UNCERTAINTY AWARENESS
+
+Depending on whether it is due to contextual inexpressiveness or genuine incapability to answer, we broadly categorize multimodal uncertainty into 2 types, epistemic and aleatoric uncertainty.
+
+**Epistemic Uncertainty** refers to the uncertainty in a model’s predictions that arises from a lack of knowledge or complete information about the system being modeled. It is due to the model’s limited understanding or insufficient data, which can be reduced by gathering more information, improving the quality of data, or enhancing the model itself. This type of uncertainty highlights areas where the model’s predictions may be less reliable due to the lack of sufficient evidence to make accurate inferences. We further categorize the awareness of epistemic uncertainty into 3 finegrained types:
+
+- **Knowledge awareness** means understanding that some questions require information or common sense that is not shown in the image. For example, you might need specialized knowledge or up-to-date information from outside sources. Knowing when this extra information is needed helps avoid wrong answers.
+- **Complexity awareness** is recognizing when a question is difficult because it involves many parts or is hard to understand. This difficulty can come from how the question is asked or from the effort needed to understand the context and details of the question.
+- **Extraneous awareness** refers to the ability to identify and disregard elements within an image that are not relevant to the question at hand. This involves recognizing objects, attributes, or aspects that, while present in the image, do not contribute to answering the question.
+
+**Aleatoric Uncertainty** is the inherent unpredictability in a system or process that cannot be reduced or eliminated. It arises from the fundamental randomness or chaotic nature of the task itself. For example, predicting the outcome of a coin toss involves intrinsic uncertainty because the result is inherently probabilistic and cannot be determined with certainty in advance. Similarly, we define 2 sub-categories under aleatoric uncertainty:
+
+- **Temporal awareness** means understanding that we may not always have access to all relevant data required to predict specific outcomes with absolute certainty, especially when it involves reasoning about time. This includes events in the past or future that cannot be inferred from the image alone with absolute certainty. Recognizing the limitations of temporal reasoning helps manage expectations about the accuracy of predictions involving time-related aspects.
+- **Ambiguity awareness** involves recognizing situations, objects, or individuals that can be understood, interpreted, or perceived in more than one way. Ambiguity introduces uncertainty and a lack of clarity, leading to multiple possible interpretations. While ambiguity can encourage exploration of different meanings or perspectives, it can also cause confusion. It is essential to be aware of the levels of certainty in ambiguous scenarios to avoid misinterpretation and errors.
+
+### 2.2 DATASET CREATION
+
+Based on the taxonomy, we construct CERTAINLYUNCERTAIN, comprising contrastive VQA pairs for each category described above. The statistics of our dataset are summarized in Table 1. The contrastive instances in CERTAINLYUNCERTAIN are derived from two sources: images and captions. For sourcing from images, the same question that is answerable for the original image is rendered unanswerable for the perturbed image. For sourcing from captions, we prompt GPT-4 (OpenAI, 2023) to generate both an answerable and an unanswerable question based on the same caption. Below, we describe the dataset creation pipeline in detail.
+
+{3}------------------------------------------------
+
+|  |  | Epistemic |  |  | Aleatoric |  | All |
+|-|-|-|-|-|-|-|-|
+|  |  | Knowledge | Complex | Extraneous | Temporal | Ambiguous |  |
+| Train | # of images (Perturbed/Clean) | <b>/9.5K</b> | <b>/9.6K</b> | <b>38.2K/38.2K</b> | <b>/9.6K</b> | <b>/9.6K</b> | 38.2K/47.9K |
+|  | # of questions (IDK/Non-IDK) | <b>9.5K/9.5K</b> | <b>9.6K/9.6K</b> | <b>38.2K/38.2K</b> | <b>9.6K/9.6K</b> | <b>9.6K/9.6K</b> | <b>76.6K/76.6K</b> |
+| Test | # of images (Perturbed/Clean) | <b>/2.5K</b> | <b>/2.5K</b> | <b>2.3K/2.5K</b> | <b>/2.5K</b> | <b>/2.5K</b> | <b>2.3K/7.3K</b> |
+|  | # of questions (IDK/Non-IDK) | <b>2.5K/2.5K</b> | <b>2.5K/2.5K</b> | <b>2.3K/2.5K</b> | <b>2.5K/2.5K</b> | <b>2.5K/2.5K</b> | <b>12.3K/12.5K</b> |
+| Total | # of images/questions | <b>12.1K/24.2K</b> | <b>12.1K/24.2K</b> | <b>81.3K/81.3K</b> | <b>12.1K/24.2K</b> | <b>12.1K/24.2K</b> | <b>95.8K/178.1K</b> |
+
+**Table 1:** Statistics of CERTAINLYUNCERTAIN. Our dataset contains 178K questions on 95.8K images for 5 types of uncertainties. Each IDK question is accompanied with a non-IDK question to highlight contrasts between certainty and uncertainty. For extraneous testing split, we perform quality check and filter out invalid ones. Numbers in bold highlight the new images we created through our data creation pipeline.
+
+![Figure 2: Pipeline for sourcing from images. The diagram shows three steps: Step 1: Saliency Identification (Question: 'What is the spoon made of?' Answer: 'Metal'), Step 2: Masking (Image with spoon masked), and Step 3: Perturbation (LaMa Inpainting to create a perturbed image where the spoon is missing).](d3ca266c298aeb34b019960c6c36f187_img.jpg)
+
+Figure 2: Pipeline for sourcing from images. The diagram shows three steps: Step 1: Saliency Identification (Question: 'What is the spoon made of?' Answer: 'Metal'), Step 2: Masking (Image with spoon masked), and Step 3: Perturbation (LaMa Inpainting to create a perturbed image where the spoon is missing).
+
+**Figure 2:** Pipeline for sourcing from images
+
+![Figure 3: Uncertainty paradox in generative VLMs. The image shows two examples of VLM-generated questions and answers. The first example shows a crab with many bottle caps on its back, with a question about the number of bottle caps and an answer that is 'I don't know'. The second example shows a person on a snowy slope with poles, with a question about who is holding the poles and an answer that is 'I don't know'. Both examples show the VLM failing to answer its own generated questions.](af8b95b7fc833cebe89ba6c8ed839984_img.jpg)
+
+Figure 3: Uncertainty paradox in generative VLMs. The image shows two examples of VLM-generated questions and answers. The first example shows a crab with many bottle caps on its back, with a question about the number of bottle caps and an answer that is 'I don't know'. The second example shows a person on a snowy slope with poles, with a question about who is holding the poles and an answer that is 'I don't know'. Both examples show the VLM failing to answer its own generated questions.
+
+**Figure 3:** Uncertainty paradox in generative VLMs, where the question is generated from GPT-4/GPT-4V.
+
+**Sourcing from captions.** We use detailed paragraph captions to prompt questions for each category of uncertainty. Each prompt includes a definition of the category along with examples of answerable and unanswerable questions and their answers. The captions are sourced from DOCCI (Onoe et al., 2024), which are high-quality human-annotated descriptions. These descriptions are highly compositional and include world knowledge, spatial relationships, visual settings, text rendering, and object attributes. For each caption, we prompt GPT-4 to generate both an answerable and an unanswerable question, along with their corresponding answers. In total, we collected around 110K instances on  $\sim 15K$  images, spanning knowledge, complexity, temporal and ambiguity awareness categories. We follow the same train-test split as DOCCI to divide our dataset.
+
+**Sourcing from images.** Compared to sourcing from captions, we perturb images to transform an answerable question into an unanswerable one. Our data generation pipeline has 3 main steps as outlined in Figure 2. The first step is saliency identification where the goal is to identify salient objects about which meaningful questions can be asked. For VQAv2 instances, we prompt GPT-4 to identify these salient objects based on VQAv2 questions, while for GQA instances, this information is available in the annotations. The second step is masking, where we use Grounded-SAM (Ren et al., 2024) to mask out the salient objects. The final step is perturbation where we use LaMa Inpainting model (Suvorov et al., 2021) to create a perturbed contrastive image so that the salient object is missing. To avoid any spurious biases from perturbation, we experimented with masking and inpainting randomly chosen objects instead of the salient object from the answerable subset, thereby keeping the question answerable. Since the performance did not fluctuate significantly, we proceeded without random perturbation. We then prompt GPT-4V to generate a question for each pair of images that is answerable for the original image but unanswerable for the perturbed image. To increase the difficulty of the questions, we specifically instruct GPT-4V to avoid generating “yes/no” questions, as they are more likely to be answerable. In the end, we created  $\sim 30K$  samples based on VQAv2, which are split into 24K training and 6K testing samples. In addition, we leverage the GQA dataset (Hudson & Manning, 2019), which contains rule-based questions from ground truth scene graph annotations. Similarly, we perturb the images and alter the answers to “I don’t know” to create unanswerable instances from the originally answerable instances. In total, we gather 53K more instances from GQA, and use them to augment the training split.
+
+**Generative AI Paradox for generating/understanding “uncertain questions”.** While LLMs and VLMs can generate uncertain questions, they often struggle to answer them accurately. As shown in Figure 3, where we prompt GPT-4V to answer its own generated uncertain questions and it fails. Inspired by West et al. (2023), which hypothesizes that models may not understand what they create, we observe a similar pattern in generating and understanding uncertain questions.
+
+{4}------------------------------------------------
+
+| Benchmarks | Source | Dataset Size | Question Types |  |  | Types of Uncertainty/Unanswerability |  |  |  |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|
+|  |  |  | OE | Free-form | IDK | Absurd | Knowledge | Complex | Extraneous | Temporal | Ambiguous |
+| MM-Hal | Human | 96 | ✓ | ✓ | ✓ |  |  |  | ✓ |  |  |
+| POPE | Rule | 9K |  |  |  |  |  |  |  |  |  |
+| AMBER Disc. | Rule | 14K |  |  |  |  |  |  |  |  |  |
+| VizWiz | Human | 33K | ✓ | ✓ |  |  |  |  | ✓ |  |  |
+| UNK_VQA | Human | 10K | ✓ | ✓ | ✓ |  |  |  | ✓ |  | ✓ |
+| TDIUC (Absurd) | Rule | 336K | ✓ | ✓ | ✓ | ✓ |  |  |  |  |  |
+| MM-UPD | Rule | 2K |  | ✓ | ✓ | ✓ |  |  |  |  |  |
+| Ours | LLM & Rule | 178K | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+
+**Table 2:** Comparison of CERTAINLYUNCERTAIN to existing benchmarks. We mainly compare with two types of datasets: Hallucination-based datasets (top) and Refusal-based datasets (middle). CERTAINLYUNCERTAIN features 178K unanswerable (IDK) and answerable questions in open-ended (OE) setting with free-form answers, covering 5 types of finegrained types of unanswerability. Though our dataset does not explicitly cover absurd type, we show that it improves model performance on TDIUC (absurd) in experiments. Disc: Discriminative.
+
+**Contrastive pairs.** In CERTAINLYUNCERTAIN construction process, we have images that are visually similar or the same but the question-image pairs are deliberately designed to highlight contrasts between certainty and uncertainty (as shown in Figure 2). This aids in improving model robustness by learning to distinguish between visually similar but semantically distinct instances leading to real-world applicability by exposing them to subtle variations and contrasts.
+
+**Quality check and filtering.** As our data creation pipeline is model-dependent, though being efficient and saving the cost of human labor, it may suffer from model failures. Especially the pipeline to create the extraneous set, which depends on multiple models, the failure of one model at any stage (e.g., the inpainting model fails to remove the object or the segmentation model fails to predict the correct mask of the intended object) may lead to invalid samples (i.e., when the generated IDK question is still reasonably answerable for the image or vice versa). To ensure the data quality, we perform a final quality check on the extraneous testing set. Specifically, the image-question-answer tuples are presented to one of the authors, and the task is to validate whether the generated sample is valid or not. Among 6K samples, we filtered ~1.2K samples, resulting in 4.8K testing examples. For other splits, we found the valid sample rate is much higher (> 93% in Appendix Table 7). We retain the first 5K samples verified by human on DOCCI testing images to build the remaining testing splits.
+
+Table 2 presents a comparison of CERTAINLYUNCERTAIN with existing benchmarks regarding data size, question types, and uncertainty categories. Our dataset is significantly larger and covers a wider variety of question types across diverse uncertainty categories. Notably, existing datasets such as UNK-VQA (Guo et al., 2023), or TDIUC (Kafle & Kanan, 2017) mainly focus on pairing unrelated questions with image contexts to create datasets of irrelevant and unanswerable questions. In contrast, our dataset ensures contextually aligned question-image pairs. With image inpainting, we also generate more natural-looking images compared to image masking or copying in UNK-VQA.
+
+### 2.3 EVALUATION METRICS
+
+**Standard metrics.** We report model performance on CERTAINLYUNCERTAIN with standard metrics, including accuracy and F1. For accuracy, we follow (Mañas et al., 2024) to use LLM-Assisted VQA Evaluation (LAVE), which leverage instruction-tuned large language models to rate candidate answers based on their correctness relative to the question and reference answers. LAVE have shown a strong correlation with human judgment. In practice, we use LAVE with Mistral-7B (Jiang et al., 2023) as the evaluator, comparing ground truth and predictions to assign scores of 0, 0.5, or 1. This allows for more nuanced evaluation compared to traditional string-matching approaches, especially in open-ended settings. To adapt LAVE to unanswerable settings, we introduce a dual-stage judging mechanism. This approach is more reliable because refusals or IDK responses can be expressed in various ways, such as simply stating IDK, asking a follow-up question, or offering a reasonable guess. The first stage is IDK normalization, where we use LAVE to determine if either the prediction or ground truth (GT) is IDK and normalize the answer to IDK. For refusal-based benchmarks, since the unanswerability of the question is annotated, we directly rely on the ground truth label for GT answers. The second stage is to award accuracy. If either the prediction or GT is normalized to IDK,
+
+{5}------------------------------------------------
+
+![Figure 4: Correlation of confidence weighted accuracy (↑) with LAVE_idk accuracy (↑) and ECE (↓). (a) Conf-weighted Acc. vs. LAVE_idk Acc. shows a positive correlation. (b) Ours and LAVE_idk Acc. vs. ECE shows that Ours is more negatively correlated with ECE than LAVE_idk Acc.](c54b3ca7603d65d4589151bc3a49d054_img.jpg)
+
+Figure 4 consists of two scatter plots. Plot (a) shows 'Conf-weighted Acc.' on the y-axis (ranging from -40 to 40) against 'LAVE<sub>idk</sub> Acc.' on the x-axis (ranging from 0 to 70). It features a scatter of blue 'x' marks representing actual data points and a solid blue line representing the fitted line, showing a positive correlation. Plot (b) shows 'Acc.' on the y-axis (ranging from -20 to 80) against 'Expected Calibration Error' on the x-axis (ranging from 0.2 to 0.6). It compares two metrics: 'Conf-weighted Acc.' (blue line and points) which shows a negative correlation with ECE, and 'LAVE<sub>idk</sub> Acc.' (red line and points) which shows a positive correlation with ECE.
+
+Figure 4: Correlation of confidence weighted accuracy (↑) with LAVE\_idk accuracy (↑) and ECE (↓). (a) Conf-weighted Acc. vs. LAVE\_idk Acc. shows a positive correlation. (b) Ours and LAVE\_idk Acc. vs. ECE shows that Ours is more negatively correlated with ECE than LAVE\_idk Acc.
+
+(a) Conf-weighted Acc. vs. LAVE<sub>idk</sub> Acc. (b) Ours and LAVE<sub>idk</sub> Acc. vs. ECE.  
+**Figure 4:** Correlation of confidence weighted accuracy (↑) with LAVE<sub>idk</sub> accuracy (↑) and ECE (↓). The data-points in this plot are from evaluation results on extraneous split of different model variants in our experiments.
+
+we compare the strings. Otherwise, we award the standard LAVE score. Formally, the LAVE<sub>idk</sub> score is defined as
+
+$$\text{LAVE}_{\text{idk}} = \begin{cases} 1(\text{pred}_{\text{norm}} == \text{GT}_{\text{norm}}) & \text{if } \text{LAVE}(\text{pred} == \text{IDK}) \text{ or } \text{LAVE}(\text{GT} == \text{IDK}) \\ \text{LAVE}(\text{GT}, \text{pred}) & \text{else} \end{cases}. \quad (1)$$
+
+In addition, we report F1<sub>idk</sub> which is the F1 score only on the unanswerable questions.
+
+**Confidence-weighted accuracy.** Existing evaluation metrics do not comprehensively assessing both the accuracy and the confidence of model predictions. Accuracy metrics, which score binarily, ignore the probability estimates associated with predictions. Expected Calibration Error (ECE), which measures the difference between predicted confidence levels and the true likelihood of those predictions being correct, do not provide a direct measure of final accuracy. Abstention metrics(Whitehead et al., 2022) – coverage and risk – do not address model accuracy. In addition, risk metric do not directly incorporate model confidence, instead threshold values to 0 or 1.
+
+To address these issues, we introduce *Confidence-weighted accuracy* which weights the accuracy by the probability of the model’s prediction. The desiderata of this metric is to remain positively correlated with accuracy while being negatively correlated with ECE. Thus, confidence-weighted accuracy takes into account the confidence of the model’s prediction  $P(\text{pred})$ , providing a more holistic evaluation of performance. Based on the LAVE<sub>idk</sub> accuracy above, we define confidence-weighted accuracy as
+
+$$\text{confidence weighted accuracy} = \mathbb{1}(\text{LAVE}_{\text{idk}} > 0) * \text{LAVE}_{\text{idk}} * P(\text{pred}) - \mathbb{1}(\text{LAVE}_{\text{idk}} == 0) * P(\text{pred}). \quad (2)$$
+
+Similar to (Whitehead et al., 2022), we compute  $P(\text{pred})$  by prompting the model to verify if its own predicted answer is correct and extracting the probability of the “yes” token. We normalize this probability by dividing it by the sum of the token probabilities for “yes” and “no”. Our formulation penalizes incorrect predictions while rewarding correct ones, especially by encouraging higher confidence for correct predictions. As shown in Figure 4, 4a demonstrates the positive correlation of confidence-weighted accuracy with LAVE<sub>idk</sub> accuracy, and 4b illustrates that our metric is more negatively correlated with ECE compared to LAVE<sub>idk</sub> accuracy.
+
+|  | VQA Score | Standard Acc. | F1 | LLM-based Scores | ECE | Conf-w Acc. |
+|-|-|-|-|-|-|-|
+| Acc. | ✓ | ✓ | ✓ | ✓ |  | ✓ |
+| Conf. |  |  |  |  | ✓ | ✓ |
+
+**Table 3:** Our proposed Confidence-weighted Accuracy (Conf-w. Acc.) captures captures both accuracy (Acc.) and confidence (Conf.) of model predictions, in contrast to existing metrics either reflect accuracy or confidence.
+
+{6}------------------------------------------------
+
+## 3 EXPERIMENTS
+
+### 3.1 EXPERIMENTAL DETAILS
+
+We conduct experiments with the representative instruction-tuned models including variants of LLaVA (Liu et al., 2023b) -7B, 13B, 34B (Liu et al., 2024), and Qwen-VL (Bai et al., 2023), as well as evaluating the performance of GPT-4V on our CERTAINLYUNCERTAIN benchmark.
+
+We investigate 3 training strategies with our data comparing them to the base model.
+
+1. Supervised finetuning (SFT): To demonstrate the effectiveness of our data, we perform continued SFT with CERTAINLYUNCERTAIN with the instruction-tuned model and compare against LLaVA and LRV (Liu et al., 2023a) instruction-tuning datasets.
+2. R-tuning: We follow (Zhang et al., 2023) to re-annotate ground truth answers that are incorrectly predicted by the base model to reflect IDK, and use this re-annotated refusal data for supervised fine-tuning.
+3. Preference optimization: We directly adopt the two answers to the contrastive VQA pairs as the answer choices, and perform DPO (Rafailov et al., 2023). DPO is a method for aligning large language models (LLMs) with human preferences by directly optimizing a loss function based on preference data, eliminating the need for separate reward modeling or reinforcement learning steps. The DPO loss function adjusts the model’s behavior by increasing the likelihood of preferred responses and decreasing that of less favored ones.
+
+We also implement an inference-time baseline with naive selective prediction approach by marking predictions as IDK when the prediction probability falls below a threshold. We further explore adding CERTAINLYUNCERTAIN into the instruction-tuning stage for LLaVA directly after pre-training.
+
+### 3.2 EVALUATION BENCHMARKS
+
+We evaluate the models trained with our data on additional benchmarks, detailed below.
+
+**Refusal-based benchmarks.** UNK-VQA (Guo et al., 2023) contains  $10K$  instances of answerable and unanswerable questions constructed from manipulating VQA v2 instances by question perturbation like word replacement, semantic negation, and image perturbation like image replacement, object masking and copying a part of the object. We deliberately discard the *ambiguous* category from UNK-VQA as it was defined as having multiple plausible answers and simply listing them all should be correct. The “absurd” category of the TDIUC (Kafle & Kanan, 2017) data containing  $\sim 366K$  questions is constructed by compiling a list of objects that are missing from a given image and then identifying questions from the rest of TDIUC that inquire about these absent objects. In our experiments, we randomly sample  $5K$  instances from each dataset for evaluation.
+
+**Hallucination-based benchmarks.** MMHal-Bench (Sun et al., 2023) contains 96 questions in 8 hallucination categories such as object attribute, adversarial object and counting. Upon establishing the severity of object hallucinations, Li et al. (2023d) introduce POPE, which includes  $\sim 9K$  instances that sample objects randomly, adversarially, and based on popularity to check for their presence in a binary manner. This dataset aims to systematically evaluate the presence or absence of objects in images, thereby highlighting models’ susceptibility to hallucinate objects that are not present. AMBER (Wang et al., 2023a) further extends POPE by evaluating not just existence but also attribute and relation hallucinations. By incorporating these additional dimensions, AMBER provides a more comprehensive framework, enabling deeper analysis of multimodal models’ ability to generate coherent and accurate outputs across a range of hallucination scenarios.
+
+**Standard benchmarks.** While mitigating hallucination and learning to refuse is important, the goal is also to not hurt model performance on standard datasets. Therefore, we conduct evaluations on standard datasets VQAv2 (Goyal et al., 2019)<sup>1</sup> and VizWiz (Gurari et al., 2018) validation splits.
+
+<sup>1</sup>We randomly sample 5k questions from validation set that is not covered in LLaVA instruction-tuning data.
+
+{7}------------------------------------------------
+
+|  | Epistemic |  |  | Aleatoric |  |  | Total |  |  |
+|-|-|-|-|-|-|-|-|-|-|
+|  | LAVE <sub>Epist</sub> Metric |  | Conf-w.<br>Acc. | LAVE <sub>Aleat</sub> Metric |  | Conf-w.<br>Acc. | LAVE <sub>Epist</sub> Metric |  | Conf-w.<br>Acc. |
+|  | Fl <sub>lat</sub> | Acc. |  | Fl <sub>lat</sub> | Acc. |  | Fl <sub>lat</sub> | Acc. |  |
+| Qwen-VL-Chat | 65.45 | 64.22 | 11.92 | <b>67.15</b> | <b>63.35</b> | 15.71 | 66.13 | 63.87 | 13.45 |
+| LLaVA-1.5-7B | 51.31 | 44.72 | -1.01 | 54.78 | 51.51 | 2.65 | 52.71 | 47.46 | 0.47 |
+| LLaVA-1.5-13B | 52.38 | 46.14 | 2.70 | 53.35 | 50.46 | 1.81 | 52.78 | 47.88 | 2.34 |
+| LLaVA-1.6-7B | 67.61 | 53.10 | 26.61 | 51.27 | 55.51 | 11.39 | 61.02 | 54.07 | 20.47 |
+| LLaVA-1.6-13B | 69.72 | 66.88 | 28.07 | 54.61 | 56.72 | 14.29 | 63.63 | 62.78 | 22.52 |
+| LLaVA-1.6-34B | <b>74.37</b> | <b>71.06</b> | <b>40.03</b> | 58.47 | 60.01 | <b>21.27</b> | <b>67.96</b> | <b>66.60</b> | <b>32.47</b> |
+| Qwen2-VL-7B | 61.46 | 61.91 | 18.61 | 64.08 | 62.89 | 17.23 | 62.52 | 62.31 | 18.05 |
+| Qwen2-VL-72B | 67.92 | 66.72 | 23.69 | 67.90 | 65.25 | 16.35 | 67.91 | 66.13 | 20.73 |
+| LLaVA-OV-7B | 68.39 | 68.45 | 19.91 | 54.97 | 60.04 | 17.91 | 62.98 | 65.06 | 19.10 |
+| LLaVA-OV-72B | 65.52 | 67.34 | 21.61 | 53.80 | 60.46 | 18.91 | 60.79 | 64.57 | 20.59 |
+| InternVL2-8B | 64.79 | 57.54 | 14.84 | 50.61 | 44.99 | 0.45 | 59.07 | 52.48 | 9.04 |
+| InternVL2-40B | 66.38 | 59.02 | 21.12 | 46.56 | 44.53 | -0.54 | 58.39 | 53.18 | 12.39 |
+| InternVL2-76B | 62.11 | 60.46 | 20.17 | 52.23 | 47.31 | 3.95 | 58.13 | 55.16 | 13.63 |
+| GPT-4V <sup>†</sup> | 85.34 | 78.60 | - | 61.41 | 61.25 | - | 75.76 | 71.70 | - |
+| Claude-3.5 Sonnet <sup>†</sup> | 75.46 | 72.92 | - | 52.20 | 53.25 | - | 66.19 | 65.10 | - |
+
+**Table 4:** Evaluating existing VLMs on CERTAINLYUNCERTAIN. For epistemic/aleatoric category, we average the score across the 3/2 fine-grained categories. Total performance is averaged across all 5 fine-grained categories. <sup>†</sup> GPT-4V and Claude-3.5 Sonnet performance are reported on a smaller subset with 100 samples for each finegrained category.
+
+![Figure 5: Breakdown of model performance on finegrained categories. The figure contains two bar charts. The left chart, titled 'Epistemic', shows LAVE Metric Accuracy for Knowledge, Complex, and Extraneous categories across various models. The right chart, titled 'Aleatoric', shows LAVE Metric Accuracy for Temporal and Ambiguous categories across the same models. In both charts, GPT-4V consistently shows the highest accuracy across all sub-categories, while Claude-3.5 Sonnet shows the lowest accuracy in the Aleatoric categories.](d864789b0d8384da1d22fd6a5d76bbdf_img.jpg)
+
+Figure 5: Breakdown of model performance on finegrained categories. The figure contains two bar charts. The left chart, titled 'Epistemic', shows LAVE Metric Accuracy for Knowledge, Complex, and Extraneous categories across various models. The right chart, titled 'Aleatoric', shows LAVE Metric Accuracy for Temporal and Ambiguous categories across the same models. In both charts, GPT-4V consistently shows the highest accuracy across all sub-categories, while Claude-3.5 Sonnet shows the lowest accuracy in the Aleatoric categories.
+
+**Figure 5:** Breakdown of model performance on finegrained categories. We report LAVE<sub>Epist</sub> Metric Accuracy as the confidence of GPT-4V prediction is not accessible.
+
+### 3.3 RESULTS AND DISCUSSION
+
+As shown in Table 4, we observe that state-of-the-art VLMs including GPT-4V (despite the questions generated with it) perform poorly on our benchmark.<sup>2</sup> It is also worth noting that all models achieve significantly higher scores on LAVE<sub>Epist</sub> accuracy than confidence-weighted accuracy. This discrepancy suggests that the models are either over-confident in incorrect predictions or not confident enough in correct ones (*i.e.*, they are poorly calibrated), which we further examine in our fine-tuning experiments. It is worth noting that the more recent open-source VLMs, including Qwen2VL (Wang et al., 2024b), LLaVA-OneVision (Li et al., 2024) and InternVL2 (Chen et al., 2023a; 2024), despite the big leap in performance on standard benchmarks (Contributors, 2023), they perform similarly to or even worse than LLaVA-1.6 (Liu et al., 2024). These results further highlight our motivation: (1) existing benchmarks focus mainly on scenarios where clear and definitive answers are available; and (2) current VLM and the corresponding training recipe and data does not typically encourage the models to express uncertainty or acknowledge when they do not know the answer.
+
+Figure 5 presents LAVE<sub>Epist</sub> accuracy of Qwen-VL-Chat (Bai et al., 2023), LLaVA-1.5 (Liu et al., 2023b), LLaVA-1.6 (Liu et al., 2024) and GPT-V on each sub-category. The relative trends across sub-categories are consistent among the models. The extraneous category is the most challenging within epistemic uncertainty, while the ambiguous category is the hardest within aleatoric uncertainty. Performance on the temporal category is relatively similar across different model sizes, possibly due to the limited diversity of questions that can be asked about the future.
+
+<sup>2</sup>Our empirical analysis of Claude 3.5 results suggest that Claude 3.5 is overly confident in terms of temporal and ambiguous categories (*e.g.*, sometimes its response is a reasonable guess, but it is stated with certainty), making its performance on Aleatoric awareness much worse than GPT4V.
+
+{8}------------------------------------------------
+
+|  | Epistemic |  |  |  |  |  | Aleatoric |  |  |  |  |  | Total |  |  |  |  |  |  |  |  |  |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  | LAVE <sub>Ek</sub> Metric |  | Conf-w. | LAVE <sub>Ek</sub> Metric |  | Conf-w. | LAVE <sub>Ek</sub> Metric |  | Conf-w. | ECE ↓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+|  | Fl <sub>Ek</sub> | Acc. | Acc. | Fl <sub>Ek</sub> | Acc. | Acc. | Fl <sub>Ek</sub> | Acc. | Acc. | (IDK) |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Qwen-VL-Chat* | 65.45 | 64.22 | 11.92 | 67.15 | 63.35 | 15.71 | 66.13 | 63.87 | 13.45 | 0.79 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Thresholding | 74.44 | 69.86 | 19.45 | 71.84 | 62.54 | 17.04 | 73.40 | 66.91 | 18.48 | 0.62 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| LoRA-SFT | LRV | 57.30 | 57.51 | 6.69 | 50.74 | 53.41 | 0.42 | 54.65 | 55.86 | 4.16 | 0.73 |  |  |  |  |  |  |  |  |  |  |  |  |  |
+|  | LLaVA Data | 62.18 | 62.65 | 11.61 | 60.81 | 62.55 | 18.61 | 61.63 | 62.61 | 14.44 | 0.68 |  |  |  |  |  |  |  |  |  |  |  |  |  |
+|  | Ours | 84.62 | 76.70 | <b>45.00</b> | 86.76 | 81.38 | <b>55.81</b> | 85.48 | 78.59 | <b>49.35</b> | <b>0.31</b> |  |  |  |  |  |  |  |  |  |  |  |  |  |
+|  | Ours+LLaVA | <b>85.38</b> | <b>78.14</b> | 42.49 | <b>87.19</b> | 82.11 | 55.27 | <b>86.11</b> | <b>79.74</b> | 47.64 | 0.37 |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| LoRA-Rtune | LLaVA Data | 69.68 | 66.53 | 14.92 | 73.85 | 67.95 | 20.78 | 71.36 | 67.11 | 17.28 | 0.75 |  |  |  |  |  |  |  |  |  |  |  |  |  |
+|  | Ours | <b>86.10</b> | <b>78.09</b> | 41.88 | <b>85.38</b> | <b>78.52</b> | 51.07 | <b>85.81</b> | <b>78.26</b> | 45.58 | 0.37 |  |  |  |  |  |  |  |  |  |  |  |  |  |
+|  | Ours+LLaVA | 85.46 | 77.14 | <b>44.59</b> | 85.25 | 78.20 | <b>52.90</b> | 85.37 | 77.57 | <b>47.94</b> | <b>0.29</b> |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| LoRA-DPO | MMInstruction | 66.10 | 65.18 | 18.03 | 55.98 | 56.10 | 7.57 | 62.02 | 61.52 | 13.81 | <b>0.70</b> |  |  |  |  |  |  |  |  |  |  |  |  |  |
+|  | Ours | <b>74.70</b> | <b>69.79</b> | 18.81 | <b>73.70</b> | <b>68.59</b> | <b>20.38</b> | <b>74.30</b> | <b>69.30</b> | <b>19.44</b> | 0.78 |  |  |  |  |  |  |  |  |  |  |  |  |  |
+|  | Ours+MMInstruction | 71.52 | 68.46 | <b>19.70</b> | 68.51 | 64.73 | 14.60 | 70.31 | 66.95 | 17.65 | 0.75 |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| LLaVA-1.5-7B-LoRA* | 33.72 | 37.36 | 17.46 | 4.59 | 50.55 | 0.78 | 35.11 | 48.61 | 1.25 | 0.62 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Instruct-Tune | Ours | 84.40 | 78.25 | <b>53.54</b> | 42.07 | 81.32 | <b>50.33</b> | 85.31 | 78.25 | <b>42.50</b> | <b>0.41</b> |  |  |  |  |  |  |  |  |  |  |  |  |  |
+|  | Ours+LLaVA | <b>85.47</b> | <b>79.60</b> | 46.16 | <b>42.57</b> | <b>81.95</b> | 37.62 | <b>86.09</b> | <b>79.46</b> | 31.92 | 0.64 |  |  |  |  |  |  |  |  |  |  |  |  |  |
+
+**Table 5:** Comparison on different training strategies with our CERTAINLYUNCERTAIN. The best performances are highlighted with bold for each finetuning strategy. Acc: Accuracy. Conf-w.: Confidence-weighted. ECE: Expected Calibration Error.
+
+|  | Refusal |  | Hallucination |  |  |  | Standard |  |
+|-|-|-|-|-|-|-|-|-|
+|  | (LAVE <sub>Ek</sub> Acc. ↑) |  | MM-Hal |  | POPE | AMBER | (VQA score ↑) |  |
+|  | UNK-VQA | TDIUC | Overall↑ | Hall. % ↓ | FI ↑ | FI ↑ | VizWiz | VQAv2 |
+| Qwen-VL-Chat | 41.32 | 95.10 | <b>2.89</b> | 0.41 | 81.30 | <b>87.70</b> | 66.85 | 72.96 |
+| LoRA-SFT-LLaVA Data | 38.01 | 93.18 | 2.83 | 0.42 | 85.61 | 86.80 | 65.61 | 77.26 |
+| LoRA-SFT-Ours-only | <b>47.35</b> | <b>99.64</b> | 2.70 | <b>0.38</b> | <b>86.31</b> | 81.30 | <b>68.40</b> | 69.77 |
+| LoRA-SFT-Ours+LLaVA | 59.70 | 99.20 | 2.75 | 0.39 | 85.78 | 85.90 | 67.44 | <b>77.32</b> |
+| <i>Instruct-tuning</i> |  |  |  |  |  |  |  |  |
+| LLaVA-1.5-7B-LoRA | 36.57 | 47.36 | 2.56 | 0.51 | 86.06 | 84.60 | 51.87 | 76.94 |
+| Ours-only | 47.71 | 95.36 | 2.43 | 0.47 | 73.62 | 78.80 | 54.10 | 49.95 |
+| Ours+LLaVA Data | <b>49.12</b> | <b>98.70</b> | <b>2.66</b> | <b>0.45</b> | <b>88.05</b> | <b>86.60</b> | <b>54.40</b> | <b>77.37</b> |
+
+**Table 6:** Results of different model variants trained with CERTAINLYUNCERTAIN on other benchmarks. Hall. %: Hallucination ratio. ↑(↓) indicates the larger (smaller) the better.
+
+Table 5 presents comparisons among different training strategies. For the instruction-tuned Qwen-VL-Chat, we explore different continued finetuning methods with LoRA (Xu et al., 2023). For LLaVA, given the availability of their instruct-tuning data, we explore adding our data into instruct-tuning stage. Overall, we observe that SFT learns IDK better on our benchmark compared to other strategies, resulting in higher confidence-weighted accuracy. Within each training strategy—SFT, R-tuning, and DPO—we find that training on our data consistently improves performance, underscoring the quality of our dataset. Finally, SFT with our data also reduces ECE, demonstrating that models trained with CERTAINLYUNCERTAIN can express IDK more confidently.
+
+Lastly, we examine the performance of our finetuned/instruction-tuned models on other benchmarks in Table 6. The results show that our dataset effectively improves model performance on refusal-based benchmarks, including UNK-VQA and TDIUC. It also demonstrates promising trends in reducing hallucination ratios in MM-Hal and improving POPE scores. Despite CERTAINLYUNCERTAIN focusing solely on VQA-type data, when finetuned/instruction-tuned with our data only, we did not observe a significant drop in the overall score of MM-Hal, which also evaluates tasks like captioning. When augmentating the LLaVA instruction tuning data with ours, it even improves the overall score of MM-Hal for LLaVA model. On AMBER, for Qwen-VL-Chat, SFT with any data combination in our experiments led to inferior results, especially when using only our data. We speculate that the degradation on AMBER is due to the lack of IDK questions on attributes and relations about non-existent objects in our dataset, which we plan to extend upon in future work. In comparison, POPE mainly focuses on existential questions about objects, which is more similar to our extraneous split. Moreover, on standard VQA benchmarks, we observe that models trained with our data combined with LLaVA data perform on par with the VQAv2 benchmark and show improvements on VizWiz, which contains unanswerable questions.
+
+{9}------------------------------------------------
+
+## 4 RELATED WORK
+
+**Abstention.** Early studies in abstention primarily focused on the notion of confidence estimation in predictions, allowing to abstain when uncertain (Chow, 1957; De Stefano et al., 2000; El-Yaniv et al., 2010). Recent works used selective prediction approaches to particularly improve reliability under domain shift (Kamath et al., 2020) and with adversarial inputs (Varshney et al., 2022). Another promising direction involves extracting additional evidences by iteratively accumulating context (Srinivasan et al., 2024; Zeng et al., 2022; Shen et al., 2023b; You et al., 2023; Yang et al., 2023), rephrasing underspecified questions (Prasad et al., 2023), probing through code (Gupta & Kembhavi, 2023; Surís et al., 2023; Subramanian et al., 2023). Unlike our work, these approaches aim to reduce the risk of incorrect predictions despite having definitive answers, without addressing epistemic or aleatoric uncertainties.
+
+**Hallucinations.** Models tend to over-confidently hallucinate in uncertain scenarios (Zhu et al., 2024a; Kang et al., 2023; Yin et al., 2023). There are two primary techniques for hallucination detection (Luo et al., 2024) – at token-level (Liu et al., 2021; Zhou et al., 2020; Dziri et al., 2021; Cao et al., 2021) and sentence-level (Manakul et al., 2023; Zha et al., 2023; Shen et al., 2023a; Li et al., 2023a). Our work aim to reduce the confidence of hallucinatory responses at the answer-level. Similar to extracting additional evidence, hallucination mitigation strategies use retrieval-based approaches (Ji et al., 2022; Dziri et al., 2021; Shuster et al., 2021), which condition outputs on factual data by using external knowledge sources, particularly helps increase reliability on the *extraneous* category.
+
+**Evaluation Metrics.** Standard accuracy or generation metrics such as BLEU are insufficient to evaluate the confidence of open-ended answer generation. To assess the semantic possibilities the LAVE metric (Mañas et al., 2024) was introduced to fully or partially score the predicted answer based on their overlap with the ground truth. Expected Calibration Error (ECE) measures the accuracy of probability estimates in representing true correctness likelihood. More recent approaches also rely on object detection (Johnson et al., 2015; Rohrbach et al., 2018; Li et al., 2023c; Loveña et al., 2023; Gunjal et al., 2023) or entailment (Faithscore) (Jing et al., 2023) to measure hallucinations. However, none of them directly indicate the confidence of the model predictions. In this work, we introduce confidence-weighted accuracy based on LAVE accuracy, which better correlates with ECE.
+
+**Datasets.** Most standard multimodal benchmarks focus on clear, definitive answers or partial hallucinations (Gunjal et al., 2024; Bai et al., 2024) for discriminative (Li et al., 2023c; Chen et al., 2023b; Wang et al., 2024a) or generative tasks (Liu et al., 2023a; Jing et al., 2023). In contrast, CERTAINLYUNCERTAIN targets scenarios where responding with IDK is the correct response. Similar concurrent efforts for text-only benchmarks (Li et al., 2023a; Zhu et al., 2024b; Mishra et al., 2024) are widely explored. Generating counterfactual instruction text data (Yu et al., 2023) is the closest equivalent of LRV data (Liu et al., 2023a) which includes positive (or negative) instructions about objects or attributes present (or absent) in the image. We also use the MMInstruction (Li et al., 2023b) with preference annotations for helpfulness, faithfulness and ethical considerations. Finally, we generate model-dependent refusal datasets automatically which is explored by (Zhang et al., 2023) to adapt to multimodal R-tuning. Our experiments show that these datasets are insufficient for benchmarking or improving multimodal epistemic and aleatoric awareness.
+
+## 5 CONCLUSIONS AND FUTURE WORK
+
+Acknowledging uncertainty in responses and appropriately responding with “I don’t know” is crucial for the reliability and trustworthiness of AI systems. In this work, we introduce a new taxonomy of multimodal uncertainty. Based on this taxonomy, we present a new benchmark, CERTAINLYUNCERTAIN, and demonstrate that current VLMs lack self-awareness of these uncertainties. Empirical results show that fine-tuning with our data not only leads to improvements on expressing uncertainty, but also performance gains on refusal-based benchmarks, and some hallucination-based benchmarks, while not degrading on standard benchmarks. Additionally, we propose a new confidence-weighted accuracy metric that combines accuracy with the confidence of the prediction, showing strong correlations with both accuracy and ECE. Our work paves the way for future research directions in modeling uncertainties. For instance, future efforts could extend the annotations to include rationales for IDK responses, specifying which category of uncertainty is responsible. Our confidence-weighted metric holds potential for application in other unimodal and multimodal datasets and could be explored as a reward mechanism in model training.
+
+ Rest of paper (reference and Appendix) is removed.

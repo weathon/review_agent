@@ -1,0 +1,325 @@
+
+
+{0}------------------------------------------------
+
+# LATENT BAYESIAN OPTIMIZATION VIA AUTOREGRESSIVE NORMALIZING FLOWS
+
+Seunghun Lee<sup>1</sup>, Jinyoung Park<sup>1</sup>, Jaewon Chu<sup>1</sup>, Minseo Yoon<sup>1</sup>, Hyunwoo J. Kim<sup>2\*</sup>
+
+<sup>1</sup>Department of Computer Science and Engineering, Korea University
+
+<sup>2</sup>School of Computing, KAIST
+
+{l1sshh319, lpmn678, allonsy07, cooki0615}@korea.ac.kr
+
+hyunwoojkim@kaist.ac.kr
+
+## ABSTRACT
+
+Bayesian Optimization (BO) has been recognized for its effectiveness in optimizing expensive and complex objective functions. Recent advancements in Latent Bayesian Optimization (LBO) have shown promise by integrating generative models such as variational autoencoders (VAEs) to manage the complexity of high-dimensional and structured data spaces. However, existing LBO approaches often suffer from the *value discrepancy problem*, which arises from the reconstruction gap between input and latent spaces. This value discrepancy problem propagates errors throughout the optimization process, leading to suboptimal outcomes. To address this issue, we propose a Normalizing Flow-based Bayesian Optimization (NF-BO), which utilizes normalizing flow as a generative model to establish *one-to-one* encoding function from the input space to the latent space, along with its left-inverse decoding function, eliminating the reconstruction gap. Specifically, we introduce SeqFlow, an autoregressive normalizing flow for sequence data. In addition, we develop a new candidate sampling strategy that dynamically adjusts the exploration probability for each token based on its importance. Through extensive experiments, our NF-BO method demonstrates superior performance in molecule generation tasks, significantly outperforming both traditional and recent LBO approaches.
+
+## 1 INTRODUCTION
+
+Bayesian optimization (BO) (Kushner, 1962; 1964) has been broadly applied across various areas such as chemical design (Wang & Dowling, 2022), material science (Ament et al., 2021), and hyperparameter optimization (Wu et al., 2019). BO aims to probabilistically optimize an expensive and black-box objective function using a surrogate model to find an optimal solution with minimal cost. Although BO is effective in continuous spaces, its application to a discrete input space still remains challenging (Oh et al., 2019; Deshwai & Doppa, 2021). Latent Bayesian Optimization (LBO) (Gómez-Bombarelli et al., 2018; Tripp et al., 2020) addresses this challenge by performing BO in a lower-dimensional latent space learned by a generative model such as Variational AutoEncoders (VAEs) (Kingma & Welling, 2014). LBO performs optimization in a continuous space by mapping the discrete input into a continuous latent space with the VAEs (Kusner et al., 2017; Jin et al., 2018; Samanta et al., 2019).
+
+However, the reconstruction of VAE is not always perfect, leading to *value discrepancy problem*, which indicates that given a sample encoded as an embedding in the latent space, its decoding may not result in the same sample in the input space. Figure 1 shows the value discrepancy problem by presenting the distributions of objective values before and after the reconstruction using a pretrained SELFIES VAE (Maus et al., 2022), focusing on data with the top 10% of objective values.
+
+![Figure 1: Visualization of value discrepancy problem. A histogram titled 'Objective Values of Adip Task' comparing 'Original top-k data' (blue) and 'After reconstruction' (orange). The x-axis is 'Value' (0.0 to 0.6) and the y-axis is 'Density' (0 to 20). The 'Original top-k data' distribution is centered around 0.45, while the 'After reconstruction' distribution is shifted to the left, centered around 0.15, indicating a significant discrepancy in the objective values after reconstruction.](89b28c243dfed3b8f74614bc550b8dc9_img.jpg)
+
+Figure 1: Visualization of value discrepancy problem. A histogram titled 'Objective Values of Adip Task' comparing 'Original top-k data' (blue) and 'After reconstruction' (orange). The x-axis is 'Value' (0.0 to 0.6) and the y-axis is 'Density' (0 to 20). The 'Original top-k data' distribution is centered around 0.45, while the 'After reconstruction' distribution is shifted to the left, centered around 0.15, indicating a significant discrepancy in the objective values after reconstruction.
+
+Figure 1: Visualization of value discrepancy problem.
+
+\*Corresponding author
+
+{1}------------------------------------------------
+
+![Figure 2: (a) Most existing LBO approaches suffer from the value discrepancy problem. (b) Our NF-BO effectively addresses the value discrepancy problem.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 2 consists of two diagrams, (a) and (b), illustrating the value discrepancy problem in Latent Bayesian Optimization (LBO) and how the proposed Normalizing Flows-based Bayesian Optimization (NF-BO) addresses it.
+
+Diagram (a) shows the LBO process: An input  $\mathbf{x}$  is encoded by an Encoder  $q_\phi$  to produce a latent representation  $\mathbf{z}$ . This  $\mathbf{z}$  is then decoded by a Decoder  $p_\theta$  to produce a reconstructed input  $\hat{\mathbf{x}}$ . The reconstructed input  $\hat{\mathbf{x}}$  is evaluated to produce a value  $\hat{y}$ . The original input  $\mathbf{x}$  is also evaluated to produce a value  $y$ . The diagram indicates that  $y \neq \hat{y}$ , which is the value discrepancy problem.
+
+Diagram (b) shows the NF-BO process: An input  $\mathbf{x}$  is transformed by a Flow  $g$  to produce a latent representation  $\mathbf{z}$ . This  $\mathbf{z}$  is then transformed back by an Inverse flow  $g^{-1}$  to produce the original input  $\mathbf{x}$ . The input  $\mathbf{x}$  is evaluated to produce a value  $y$ . The diagram indicates that the latent representation  $\mathbf{z}$  is consistently associated with the same evaluation value  $y$ .
+
+Figure 2: (a) Most existing LBO approaches suffer from the value discrepancy problem. (b) Our NF-BO effectively addresses the value discrepancy problem.
+
+Figure 2: **(a)** Most existing LBO approaches suffer from the value discrepancy problem  $y \neq \hat{y}$  induced by the reconstruction gap,  $p_\theta(q_\phi(\mathbf{x})) \neq \mathbf{x}$ . This results in that the latent representation  $\mathbf{z}$  corresponds to different evaluation values  $y$  and  $\hat{y}$  due to the reconstruction error, where  $\mathbf{x} \neq \hat{\mathbf{x}}$ . **(b)** Our NF-BO effectively addresses the value discrepancy problem by employing a normalizing flow model that ensures one-to-one mapping between  $\mathbf{x}$  and  $\mathbf{z}$  via the invertible flow and inverse processes,  $g$  and  $g^{-1}$ , i.e.,  $g^{-1}(g(\mathbf{x})) = \mathbf{x}$ . So, the latent representation  $\mathbf{z}$  is consistently associated with the same evaluation value  $y$ .
+
+During the optimization process, these models often refine the latent space by training on newly searched data and their corresponding objective values (Maus et al., 2022; Lee et al., 2023). It requires re-encoding data points to find their latent representations, which also makes the value discrepancy problem. The previous method (Chu et al., 2024) addressed this by inverse the data with an iterative approach.
+
+To address the problems efficiently without re-evaluations/iterative procedures, we propose a Normalizing Flows-based Bayesian Optimization, referred to as NF-BO, that leverages an invertible function for discrete sequence data. This approach establishes a one-to-one encoding function from the input space to the latent space, along with its left-inverse decoding function, effectively resolving the value discrepancy problem.
+
+Figure 2 explains the value discrepancy problem in (a) and how our NF-BO model addresses it using flow and inversion (b). Apart from the value discrepancy problem, we additionally introduce token-level adaptive candidate sampling for more effective local search. The sampling scheme dynamically adjusts the sampling distribution based on the importance of each token to more focus on promising areas.
+
+The contributions of our research are as follows.
+
+- We propose NF-BO to address the value discrepancy problem, which commonly occurs in Latent Bayesian Optimization (LBO). NF-BO leverages normalizing flows to establish a one-to-one encoding function from the input space to the latent space, with its left-inverse decoding function ensuring accurate reconstruction. To the best of our knowledge, NF-BO is the first work to integrate normalizing flows into LBO.
+- We propose a Token-level Adaptive Candidate Sampling (TACS), enabling effective local search by adjusting the sampling distribution based on the token-level importance.
+- Our extensive experiments on multiple benchmarks demonstrate the superiority of the proposed method in optimizing high-dimensional and structured data, consistently outperforming existing latent Bayesian optimization and traditional optimization methods.
+
+## 2 RELATED WORKS
+
+**Latent Bayesian Optimization.** Latent Bayesian Optimization (LBO) (Gómez-Bombarelli et al., 2018; Eissman et al., 2018; Tripp et al., 2020; Griffiths & Hernández-Lobato, 2020; Grosnit et al., 2021; Siivola et al., 2021) has emerged as an effective approach to overcome the limitations of traditional Bayesian Optimization (BO), particularly in high-dimensional or discrete input spaces. By embedding discrete sequences into a continuous latent space, typically using Variational Autoencoders (VAEs) (Kingma & Welling, 2014; Higgins et al., 2017), LBO enables efficient optimization of complex problems, as discussed in (González-Duque et al., 2024) with a comprehensive review.
+
+{2}------------------------------------------------
+
+To improve this mapping, prior works have proposed novel architectures to improve reconstruction quality (Kusner et al., 2017; Jin et al., 2018; Lu et al., 2018; Samanta et al., 2019) or utilize uncertainty for increased robustness (Notin et al., 2021; Verma et al., 2022). In particular, LaMBO (Stanton et al., 2022) introduced a masked language model-based architecture, and LaMBO-2 (Gruver et al., 2024) developed a diffusion-based approach to extend prior methods.
+
+Recent LBO works, such as LOL-BO (Maus et al., 2022) have introduced the concept of trust regions (Eriksson et al., 2019) in the latent space. ROBOT (Maus et al., 2023) have emphasized the importance of incorporating diversity measures to further support diverse solutions. CoBO (Lee et al., 2023) implements a novel loss function to improve the alignment between the latent space and the objective function. However, these methods still encounter the value discrepancy problem, where the output value from the decoded input is inconsistent with the original value.
+
+**Normalizing Flows.** Normalizing Flows (NFs) (Rezende & Mohamed, 2015) are a class of generative models that transform a simple, known probability distribution into a more complex one and *vice versa*. Each layer in these models is designed to be invertible, with a tractable Jacobian determinant, which facilitates efficient computation and flexible modeling of complex data distributions. Early NF models (Dinh et al., 2015; 2017; Kingma & Dhariwal, 2018; Ho et al., 2019; Durkan et al., 2019) have demonstrated their effectiveness in generating high-quality images using coupling-based techniques, ensuring tractability and scalability.
+
+More recently, NFs have also been developed not only for generating images but also for expanding their applicability to a wider range of data types. For instance, methods like (Ziegler & Rush, 2019) specifically addressed the challenges in modeling discrete data by integrating NFs within a VAE framework, jointly learning latent distributions and improving the expressivity of the latent space. To the best of our knowledge, our work is the first work that applies NFs in the context of LBO to deal with the value discrepancy problem by introducing a new model SeqFlow in Section 4.2.
+
+## 3 PRELIMINARIES
+
+**Bayesian optimization (BO)** has widely been applied to optimize black-box (unknown) objective functions where their evaluations are expensive. Let  $\mathcal{X}$  and  $\mathbf{x}$  be the input space and a solution, respectively. The goal of BO is to find the optimal solution  $\mathbf{x}^*$  that maximizes a black-box objective function  $f$ , which can be formulated as:
+
+$$\mathbf{x}^* = \operatorname{argmax}_{\mathbf{x} \in \mathcal{X}} f(\mathbf{x}). \quad (1)$$
+
+Since  $f$  is unknown, BO typically constructs a surrogate model  $\hat{f}$  to approximate the true function  $f$ . With the surrogate model, BO searches for the optimal points with an acquisition function  $\alpha$  as follows:
+
+$$\tilde{\mathbf{x}} = \operatorname{argmax}_{\mathbf{x} \in \mathcal{X}_{\text{cand}}} \alpha(\mathbf{x}; \hat{f}, \mathcal{D}), \quad (2)$$
+
+where  $\mathcal{D} = \{(\mathbf{x}^{(i)}, y^{(i)})\}_{i=1}^N$  represents the accumulated data,  $\tilde{\mathbf{x}}$  is a data point selected based on the acquisition function, and  $\mathcal{X}_{\text{cand}} \subseteq \mathcal{X}$  is a candidate set. In trust region-based local Bayesian optimization such as TuRBO (Eriksson et al., 2019),  $\mathcal{X}_{\text{cand}}$  is selected within a trust region that is often centered at a current optimal point (e.g., anchor point). The trust region limits the search space to promising small regions, thereby easing the difficulty of optimization.
+
+**Normalizing Flows (NFs)** (Rezende & Mohamed, 2015) are a class of generative models for modeling the data distributions  $p(\mathbf{x})$  through a sequence of invertible transformations, offering exact density evaluation and sample generation. NFs are formulated as follows:
+
+$$\mathbf{z} = g(\mathbf{x}; \theta), \quad \mathbf{x} = g^{-1}(\mathbf{z}; \theta), \quad (3)$$
+
+where  $g$  and  $g^{-1}$  denote the forward and inverse transformation, parameterized by  $\theta$ , ensuring that each mapping is bijective and differentiable. The determinant of Jacobian  $|\det J_g(\mathbf{x})|^{-1}$  computes the change in volume induced by  $g$ , which is important for density calculations. The training of these flows involves minimizing the following negative log-likelihood:
+
+$$\mathcal{L} = -\mathbb{E}_{\mathbf{x} \sim \mathcal{X}} [\log p(\mathbf{x})] = -\mathbb{E}_{\mathbf{x} \sim \mathcal{X}} \left[ \log p(\mathbf{z}) + \log \left| \det \frac{\partial g}{\partial \mathbf{x}} \right| \right]. \quad (4)$$
+
+This ensures that the model accurately captures the underlying data distribution, allowing efficient generation.
+
+{3}------------------------------------------------
+
+## 4 METHODS
+
+We propose Normalizing Flow-based Bayesian Optimization (NF-BO), which leverages Normalizing Flows (NFs) as a generative model combined with adaptive candidate sampling for effective optimization. To begin with, we introduce Latent Bayesian Optimization (LBO) and the value discrepancy problem induced by incomplete reconstruction of the generative model used in LBO (Section 4.1). Next, we present an autoregressive NF model, SeqFlow, specifically tailored for sequence generation, which addresses the value discrepancy problem by accurate reconstruction (Section 4.2). Additionally, we propose Token-level Adaptive Candidate Sampling (TACS), which constructs a diverse candidate set within trust regions (Section 4.3). Finally, we delineate the overall process of our NF-BO (Section 4.4).
+
+### 4.1 PROBLEM STATEMENT
+
+Although BO has shown its effectiveness in various optimization tasks, it has difficulty performing over the discrete domain, such as chemical design (Griffiths & Hernández-Lobato, 2020; Wang & Dowling, 2022). To address this issue, recent works (Gómez-Bombarelli et al., 2018; Tripp et al., 2020) have studied Latent Bayesian Optimization (LBO) that performs BO in a continuous latent space after embedding the discrete input data into the latent space. LBO can be formulated as:
+
+$$\mathbf{z}^* = \operatorname{argmax}_{\mathbf{z} \in \mathcal{Z}} f(p_\theta(\mathbf{z})), \quad (5)$$
+
+where  $\mathcal{Z}$  is a latent space and  $p_\theta : \mathcal{Z} \mapsto \mathcal{X}$  is the decoder parameterized by  $\theta$ . LBO uses an encoder-decoder structure to map complex inputs into an effective representation in the latent space and then performs a search in this latent space. Note that the formulation assumes the decoder  $p_\theta$  is deterministic. LBO searches for the optimal points using acquisition function  $\alpha$  as follows:
+
+$$\tilde{\mathbf{x}} = p_\theta(\tilde{\mathbf{z}}), \text{ where } \tilde{\mathbf{z}} = \operatorname{argmax}_{\mathbf{z} \in \mathcal{Z}_{\text{cand}}} \alpha(\mathbf{z}; \tilde{f}, \mathcal{D}). \quad (6)$$
+
+$\mathcal{D} = \{(\mathbf{x}^{(i)}, \mathbf{z}^{(i)}, y^{(i)})\}_{i=1}^N$  represents the accumulated data,  $\tilde{\mathbf{x}}$  and  $\tilde{\mathbf{z}}$  are the next evaluation point and its corresponding latent vector in the candidate set  $\mathcal{Z}_{\text{cand}} \subseteq \mathcal{Z}$ .  $\tilde{f} : \mathcal{Z} \mapsto \mathcal{Y}$  is a surrogate model for the composite function  $f \circ p_\theta : \mathcal{Z} \mapsto \mathcal{Y}$ .
+
+**Value Discrepancy Problem.** LBOs generally learn a surrogate model in the latent space and construct the data  $\{(\mathbf{x}^{(i)}, \mathbf{z}^{(i)}, y^{(i)})\}_{i=1}^N$ , where  $y^{(i)} = f(\mathbf{x}^{(i)})$ ,  $\mathbf{z}^{(i)} = q_\phi(\mathbf{x}^{(i)})$ , with the encoder  $q_\phi$ , assuming complete reconstruction  $\mathbf{x}^{(i)} = p_\theta(q_\phi(\mathbf{x}^{(i)}))$  and identical function values, *i.e.*,  $y^{(i)} = f(\mathbf{x}^{(i)}) = f(p_\theta(\mathbf{z}^{(i)}))$  (Tripp et al., 2020; Maus et al., 2022; Lee et al., 2023; Chen et al., 2024). However, in practice, there exists a reconstruction gap in VAE and it results in the discrepancy between the function values evaluated at input data  $\mathbf{x}$  and its reconstruction  $\tilde{\mathbf{x}}$  as follows:
+
+$$\mathbf{x} \neq \tilde{\mathbf{x}} \text{ and } f(\mathbf{x}) \neq f(\tilde{\mathbf{x}}), \text{ where } \tilde{\mathbf{x}} := p_\theta(q_\phi(\mathbf{x})). \quad (7)$$
+
+This value discrepancy problem propagates errors throughout the optimization process, leading to suboptimal optimization results. To mitigate this issue, an ideal generative model in LBO should exhibit perfect reconstruction, ensuring that any point in the input space can be accurately mapped to the latent space and *vice versa*. This property resolves the value discrepancy problem by ensuring that the generated data accurately reflects the characteristics of the original data. As a result, error propagation during optimization is minimized, leading to improved optimization performance. Motivated by this, we introduce a new LBO built on normalizing flows.
+
+### 4.2 SEQFLOW
+
+To address the value discrepancy problem in existing LBOs, we propose Normalizing Flow-based Bayesian Optimization (NF-BO), leveraging NF’s ability in modeling the data distribution via a one-to-one mapping between the input space and the latent space. To efficiently perform NF-BO on a long sequence of discrete data, we propose a novel discrete **Sequence**-specialized autoregressive normalizing **Flow** model (**SeqFlow**).
+
+SeqFlow learns the distribution  $p(\mathbf{x})$  of the sequence of discrete data  $\mathbf{x} = [\mathbf{x}_1, \dots, \mathbf{x}_L]$ , where  $\mathbf{x} \in \mathbb{N}^L$  is a sequence of token indices, using two components: **(i)** a mapping function between
+
+{4}------------------------------------------------
+
+![Figure 3: Overall pipeline of SeqFlow. The diagram illustrates two main processes: encoding and decoding. In the encoding phase (top), an input sequence X is processed through a 'Token To Embedding' block to produce a continuous representation v = z^K. This is then transformed through a series of autoregressive steps, labeled 'Autoregressive Normalizing Flow', using transformations g^{K-1}, g^{K-2}, ..., g^0 to reach a latent representation z^0. Each step is accompanied by a small plot showing a distribution. In the decoding phase (bottom), the process is reversed: starting from z^0, it is transformed back through the inverse transformations (g^{K-1})^{-1}, ..., (g^0)^{-1} to produce v = z^K, which is then processed through a 'Embedding To Token' block to reconstruct the input sequence X.](690fce4fb5c9cbb8beb560cb2a3fcbeb_img.jpg)
+
+Figure 3: Overall pipeline of SeqFlow. The diagram illustrates two main processes: encoding and decoding. In the encoding phase (top), an input sequence X is processed through a 'Token To Embedding' block to produce a continuous representation v = z^K. This is then transformed through a series of autoregressive steps, labeled 'Autoregressive Normalizing Flow', using transformations g^{K-1}, g^{K-2}, ..., g^0 to reach a latent representation z^0. Each step is accompanied by a small plot showing a distribution. In the decoding phase (bottom), the process is reversed: starting from z^0, it is transformed back through the inverse transformations (g^{K-1})^{-1}, ..., (g^0)^{-1} to produce v = z^K, which is then processed through a 'Embedding To Token' block to reconstruct the input sequence X.
+
+Figure 3: **Overall pipeline of SeqFlow.** Given the input space of a sequence discrete values  $\mathbf{x}$ , SeqFlow first maps the discrete values  $\mathbf{x}$  to continuous representation  $\mathbf{v}$  and efficiently transforms them via autoregressive transformations  $\{g^i\}_{i=0}^{K-1}$  to a latent representation  $\mathbf{z}^0$  in the encoding phase (top pathway). In the decoding phase (bottom pathway), SeqFlow reconstructs  $\mathbf{x}$  from  $\mathbf{z}^0$  through the inverse of transformations. SeqFlow ensures the perfect reconstruction of the discrete input.
+
+the continuous representation  $\mathbf{v} \in \mathbb{R}^{L \times F}$  and a discrete input  $\mathbf{x}$  and (ii) a density model  $p(\mathbf{v})$  (i.e., normalizing flow). Here,  $L$  represents the number of tokens in a sequence and  $F$  is the embedding dimension. The mapping function (i) is defined as:
+
+$$\mathbf{x}_i = \arg \max_j \text{sim}(\mathbf{v}_i, \mathbf{e}_j), \quad (8)$$
+
+where  $\text{sim}(\cdot, \cdot)$  is the cosine similarity,  $\mathbf{e}_j \in \mathbb{R}^F$  is an embedding vector of  $j$ -th token. All embeddings are initialized by random vectors drawn from a normal distribution after L2 normalization, i.e.,  $\|\mathbf{e}_j\|_2 = 1$  for all  $j$ . As a result,  $\mathbf{x}_i$  is the index of the token whose embedding vector  $\mathbf{e}_j$  is most similar to the continuous representation vector  $\mathbf{v}_i$ . Based on the density model  $p(\mathbf{v})$  and the mapping function, we define the likelihood of input discrete sequence  $p(\mathbf{x})$  as follows:
+
+$$p(\mathbf{x}) = \int p(\mathbf{v}) \prod_i^L p(\mathbf{x}_i | \mathbf{v}_i) d\mathbf{v}, \quad (9)$$
+
+$$p(\mathbf{x}_i | \mathbf{v}_i) = \delta_{\mathbf{x}_i, \tilde{\mathbf{x}}_i}, \text{ where } \tilde{\mathbf{x}}_i = \arg \max_j \text{sim}(\mathbf{v}_i, \mathbf{e}_j),$$
+
+where  $\delta$  is the Kronecker delta function and  $\tilde{\mathbf{x}}_i$  is the index of the most similar embedding vector to  $\mathbf{v}_i$ . However, directly calculating Eq. (9) is intractable. So, we introduce the variational distribution  $q(\mathbf{v}_i | \mathbf{x}_i)$  (Ho et al., 2019) and optimize the likelihood  $p(\mathbf{x})$  by maximizing the evidence lower bound (ELBO), which is derived as:
+
+$$\log p(\mathbf{x}) \geq \mathbb{E}_{\mathbf{v}_1 \sim q(\mathbf{v}_1 | \mathbf{x}_1), \dots, \mathbf{v}_L \sim q(\mathbf{v}_L | \mathbf{x}_L)} \left[ \log p(\mathbf{v}) + \sum_i^L (\log p(\mathbf{x}_i | \mathbf{v}_i) - \log q(\mathbf{v}_i | \mathbf{x}_i)) \right]. \quad (10)$$
+
+We define the distribution  $q(\mathbf{v}_i | \mathbf{x}_i)$  as an isotropic Gaussian distribution centered at the embedding of  $\mathbf{x}_i$ , i.e.,  $\mathcal{N}(\mathbf{e}_{\mathbf{x}_i}, \sigma^2 I)$ . Additionally, we sample only  $\mathbf{v}_i$  from  $q(\mathbf{v}_i | \mathbf{x}_i)$  that satisfies  $p(\mathbf{x}_i | \mathbf{v}_i) = 1$ . The constrained version of  $q(\mathbf{v}_i | \mathbf{x}_i)$  is defined as:
+
+$$q'(\mathbf{v}_i | \mathbf{x}_i) = \begin{cases} \frac{q(\mathbf{v}_i | \mathbf{x}_i)}{Z}, & \text{if } p(\mathbf{x}_i | \mathbf{v}_i) = 1 \\ 0, & \text{otherwise} \end{cases}, \quad (11)$$
+
+where  $Z$  is a normalization constant. We accept a sample  $\mathbf{v}_i$  with probability  $\frac{q(\mathbf{v}_i | \mathbf{x}_i)}{q(\mathbf{v}_i | \mathbf{x}_i)/Z}$ . Through the constrained sampling within the domain where the condition holds, we effectively make the practical sampling distribution  $q(\mathbf{v}_i | \mathbf{x}_i)$  closer to  $p(\mathbf{v}_i | \mathbf{x}_i)$ . The example of the distribution  $q'$  is depicted in the Appendix G.
+
+We employ a negative log likelihood to maximize  $\log p(\mathbf{v})$ , which serves as a normalizing flow loss that enhances the model's ability to generate valid continuous representations  $\mathbf{v}$ . The Negative Log-Likelihood  $\mathcal{L}_{\text{NLL}}$  is defined as follows:
+
+$$\mathcal{L}_{\text{NLL}} = -\log p(\mathbf{v}) = -\log p(\mathbf{z}) - \sum_{k=0}^{K-1} \log \left| \det \frac{\partial g^k}{\partial \mathbf{z}^{k+1}} \right|, \quad (12)$$
+
+{5}------------------------------------------------
+
+where  $g^k$  represents  $k$ -th transformation in the flow sequence  $g$  and  $\mathbf{z}^{k+1}$  is the output of the  $k$ -th transformation.
+
+Also, we implement a simple variant of the contrastive loss to maximize the cosine similarity between  $\mathbf{v}_i$  and  $\mathbf{e}_{\mathbf{x}_i}$  for  $\mathbf{x}_i$  and distance it from other embeddings:
+
+$$\mathcal{L}_{\text{sim}}(\mathbf{v}, \mathbf{e}) = -\frac{1}{L} \sum_{i=1}^L \text{sim}(\mathbf{v}_i, \mathbf{e}_{\mathbf{x}_i}) + \frac{1}{L} \sum_{i=1}^L \sum_{j=1}^L \text{sim}(\mathbf{v}_i, \mathbf{e}_j), \quad \mathbf{e}_j \sim \text{Unif}(\mathcal{E} \setminus \{\mathbf{e}_{\mathbf{x}_i}\}), \quad (13)$$
+
+where  $\mathbf{e}_j$  is an embedding uniformly sampled from embedding set  $\mathcal{E}$  except for  $\mathbf{e}_{\mathbf{x}_i}$ , which corresponds to the token  $\mathbf{x}_i$ . The contrastive loss encourages diverse token embeddings in a given context. To train our SeqFlow model, we combine the similarity loss with the Negative Log-Likelihood (NLL) loss of normalizing flows. The final loss of our model is given by:
+
+$$\mathcal{L}_{\text{NF-BO}} = \mathcal{L}_{\text{NLL}} + \lambda \mathcal{L}_{\text{sim}}(\mathbf{v}, \mathbf{e}), \quad (14)$$
+
+where  $\lambda$  is the hyperparameter that balances the NLL loss and the similarity loss.
+
+**Autoregressive Normalizing Flows.** To effectively represent a long sequence of discrete values, we adopt an autoregressive normalizing flows (Ziegler & Rush, 2019). Our model defines the flow for encoding:
+
+$$\mathbf{v} = g^{-1}(\mathbf{z}; \theta), \quad \mathbf{z} = g(\mathbf{v}; \theta), \quad (15)$$
+
+where  $g, g^{-1}$  are entire flow and its inverse transformation, respectively. To be specific, autoregressive NF is composed of  $K$  series of autoregressive transformation blocks and each block for  $k \in \{0, \dots, K-1\}$  operates as follows:
+
+$$\mathbf{z}_i^{k+1} = (g^k)^{-1}(\mathbf{z}_i^k; \mathbf{z}_{<i}^{k+1}, \theta^k), \quad \text{and} \quad \mathbf{z}_i^k = g^k(\mathbf{z}_i^{k+1}; \mathbf{z}_{<i}^{k+1}, \theta^k), \quad (16)$$
+
+where  $\mathbf{z}_i^k$  denotes  $i$ -th token output vector of the  $k$ -th block. The initial input to the first block is  $\mathbf{z}^0 = \mathbf{z}$ , and the output of the final block is  $\mathbf{z}^K = \mathbf{v}$ . Our autoregressive block  $(g^k)^{-1}$  consists of several coupling layers, which aggregate information from the previous tokens. This helps the flow model to capture the long-range dependencies within the sequence for effective sequence modeling. More details on the architecture of the autoregressive normalizing flow model is in the Appendix H.
+
+**Injectivity of our SeqFlow.** The SeqFlow ensures injectivity through the invertibility of the transformation function  $g$ . This function maps the embedding  $\mathbf{e}_{\mathbf{x}}$  to a latent representation  $\mathbf{z}$ , and the decoding process serves as the left inverse of this encoding. As stated in Proposition 1 and Proposition 2, this guarantees that for every input  $\mathbf{x}$ , the operation  $g(\mathbf{e}_{\mathbf{x}})$  and its inverse will precisely reconstruct  $\mathbf{x}$ .
+
+**Proposition 1.** *Let  $g$  be Normalizing Flows and  $h$  is an injective function with a nonempty domain  $\mathcal{X}$ . Then,  $f := g \circ h$  is left invertible, i.e.,  $f^{-1} \circ f = \text{id}_{\mathcal{X}}$ , where  $h^{-1}$  is the left inverse of  $h$  and  $f^{-1} := h^{-1} \circ g^{-1}$ .*
+
+*Remarks.* Proposition 1 implies that our construction provides perfect reconstruction. To be specific, SeqFlow consists of two functions: (i) a function  $h$  to map a discrete sequence data to a sequence of embeddings in the continuous space and (ii) Normalizing Flows  $g$  defined in the continuous space. If the function  $h$  is injective, with its left inverse and the inverse of NFs, SeqFlow achieves the *perfect reconstruction*.
+
+**Proposition 2.** *Assume the elements of embedding set  $\mathcal{E} = \{\mathbf{e}_1, \mathbf{e}_2, \dots, \mathbf{e}_{|\mathcal{E}|}\}$  are distinct and L2-normalized, i.e.,  $\mathbf{e}_i \neq \mathbf{e}_j$ , for all  $i \neq j$  and  $\|\mathbf{e}_i\|_2 = 1$ . Given a list of  $L$  natural numbers  $\mathbf{x} = [\mathbf{x}_1, \mathbf{x}_2, \dots, \mathbf{x}_L] \in \mathbb{N}^L$ , a mapping function  $h$  is defined as  $h(\mathbf{x}) := \mathbf{e}_{\mathbf{x}}$  where  $\mathbf{e}_{\mathbf{x}} = [\mathbf{e}_{\mathbf{x}_1}, \mathbf{e}_{\mathbf{x}_2}, \dots, \mathbf{e}_{\mathbf{x}_L}]^T$ . Then,  $h$  is injective and the function  $h^{-1}(\mathbf{v}) := [\arg \max_j \text{sim}(\mathbf{v}_i, \mathbf{e}_j)]_{i=1}^L$ , where  $\text{sim}(\mathbf{e}_i, \mathbf{e}_j) = \mathbf{e}_i^T \mathbf{e}_j$ , is a left inverse of  $h$ , i.e.,  $h^{-1}(h(\mathbf{x})) = \mathbf{x}$ .*
+
+The proofs of Proposition 1 and Proposition 2 are provided in Appendix E. This approach ensures all information is preserved during encoding and decoding through a one-to-one function and its left-inverse. This is crucial for applications that demand exact input reconstruction.
+
+Moreover, the reliability of the decoding function  $h(\mathbf{z})$  ensures that any generated latent variable accurately reverts to its corresponding input sequence. This capacity is essential for resolving the value
+
+{6}------------------------------------------------
+
+discrepancy problem often observed in other latent-based optimization models, where reconstructed outputs might not match the original inputs. This enhancement increases the overall efficacy of the optimization process, making SeqFlow a robust framework for handling discrete sequence optimization tasks.
+
+### 4.3 TOKEN-LEVEL ADAPTIVE CANDIDATE SAMPLING
+
+In this section, we present a Token-level Adaptive Candidate Sampling (TACS) to improve the candidate sampling process of trust region-based local search BO methods (Eriksson et al., 2019; Maus et al., 2022; Lee et al., 2023). These local search BO methods search next query points constrained in promising areas centered around an anchor points, derived from the best input found in the data history.
+
+Most previous trust-region-based approaches utilize Thompson sampling on a finite set of candidate points  $\mathcal{Z}_{\text{cand}}$  by perturbing a subset of dimensions of an anchor point (Eriksson et al., 2019). We observe that the existing approaches select a subset of dimensions to be perturbed *uniformly*, which can lead to less effective exploration especially when it is applied to our SeqFlow. To address this, we propose Token-level Adaptive Candidate Sampling (TACS), which samples candidates regarding the importance of each latent token. Specifically, we sample a subset of latent tokens of an anchor point for perturbation from a token-level probability distribution, defined by the relative importance of each token. This allows TACS to perform a dense search over important tokens while sparsely exploring less important ones with limited resources.
+
+To identify important tokens at the anchor point  $(\mathbf{x}, \mathbf{z})$ , we utilize the Pointwise Mutual Information (PMI) between each token  $\mathbf{z}_i$  and the sequence  $\mathbf{x}$ .
+
+$$\begin{aligned} \omega_i(\mathbf{z}) &= \text{PMI}(\mathbf{x}, \mathbf{z}_i | \mathbf{z}_{-i}) = \log \frac{p(\mathbf{x} | \mathbf{z}_i)}{p(\mathbf{x} | \mathbf{z}_{-i})} = \log \frac{p(\mathbf{x} | \mathbf{z}_i)}{\mathbb{E}_{\mathbf{z}_i \sim \mathcal{N}(0, I)}(p(\mathbf{x} | \mathbf{z}_i))}, \\ p(\mathbf{x} | \mathbf{z}) &= p(\mathbf{x} | \mathbf{v}) = \prod_i^L p(\mathbf{x}_i | \mathbf{v}_i), \end{aligned} \quad (17)$$
+
+where  $\mathbf{z}_{-i} = \{\mathbf{z}_1, \mathbf{z}_2, \dots, \mathbf{z}_{i-1}, \mathbf{z}_{i+1}, \dots, \mathbf{z}_L\}$ . A Monte Carlo approximation is employed to estimate  $p(\mathbf{x} | \mathbf{z}_{-i})$ , and to stabilize computations, a small constant  $\epsilon$  is added to  $p(\mathbf{x}_i | \mathbf{v}_i)$ . This PMI score  $\omega_i(\mathbf{z})$  measures the impact of latent token  $\mathbf{z}_i$  on the sequence  $\mathbf{x}$ , enabling efficient exploration along the most important dimensions. Using the PMI score, we define the token-level sampling probability  $\pi_i(\mathbf{z})$  as:
+
+$$\pi_i(\mathbf{z}) = \min(\kappa s_i(\mathbf{z}), 1), \quad s_i(\mathbf{z}) = \frac{\exp(\omega_i(\mathbf{z})/\tau)}{\sum_j \exp(\omega_j(\mathbf{z})/\tau)}, \quad (18)$$
+
+where  $\kappa$  is a constant scaling factor, and  $\tau$  indicates the temperature. The softmax with temperature  $\tau$  allows for flexible adjustment in focusing on the importance of different tokens. For example, if  $\tau$  has a higher value, the candidate set is uniformly sampled, disregarding the token-level importance. Conversely, a lower  $\tau$  concentrates sampling more densely on the tokens with the highest importance.
+
+### 4.4 OVERALL BAYESIAN OPTIMIZATION PROCESS
+
+In this section, we present our overall NF-BO framework, which is illustrated in Figure 4. For each iteration, the NF-BO framework begins by training the SeqFlow model with the loss function  $\mathcal{L}_{\text{NF-BO}}$  as defined in Eq. (14), using the dataset  $\mathcal{D} = \{(\mathbf{x}^{(l)}, y^{(l)})\}$ . For training the SeqFlow model, we sample variational vector  $\mathbf{v}$  following the distribution  $q'$ , as described in Eq. (11). After training the SeqFlow, we construct the latent vector  $\mathbf{z}^{(l)}$  corresponding to the input  $\mathbf{x}^{(l)}$  and then use it to train the surrogate model  $\hat{f}$ . Then, we select anchor points  $\mathbf{z}_{\text{anc}}$  based on their corresponding objective values  $y$  and generate trust regions centered on them. To perform local search, the candidate set  $\mathcal{Z}_{\text{cand}}$  is drawn within the trust region, using the Token-level Adaptive Candidate Sampling (TACS) method. Finally, the acquisition function  $\alpha$  determines next query point  $\hat{\mathbf{z}}$  followed by decoding and evaluating it to update the best score. This procedure is repeated until the allocated oracle budget  $T$  is expended, continuously improving the SeqFlow model throughout the optimization process. For better understanding, the pseudocode for NF-BO is provided in the Appendix F.
+
+{7}------------------------------------------------
+
+![Figure 4: Overview of NF-BO. The diagram illustrates the workflow of the Normalizing Flow-based Bayesian Optimization (NF-BO) algorithm. At the top, a 'Dictionary' contains discrete tokens (O, N, C) and their corresponding embedding vectors (e1, e2, e3). An input set of discrete tokens {(x_i, y_i)} is processed through 'Evaluate & Add' to produce a new discrete token x-tilde. This token is mapped to its embedding vector v_i from the dictionary. The discrete input space X is shown as a matrix of token indices. The continuous latent space Z is shown as a matrix of latent representations z. The flow model g maps discrete inputs to continuous latent representations, and the inverse model g^-1 maps continuous latent representations back to discrete inputs. The surrogate model is trained on the latent representations and is used to generate candidates for the acquisition function. The acquisition function is used to select the next query points z-tilde. The inverse model g^-1 generates the embedding v-tilde and searches the most similar embedding to return the corresponding index as x-tilde. The bottom part of the diagram shows the 'Token-level Adaptive Candidate Sampling (TACS)' process. It takes the latent representation z and the surrogate model to generate candidates. The candidates are generated by perturbing tokens, sampled according to a token-level sampling probability pi, specified in Eq. (18). Given these candidates and the surrogate model, the next query points z-tilde are selected by the acquisition function. Next, the inverse model g^-1 generates the embedding v-tilde and searches the most similar embedding to return the corresponding index as x-tilde.](2ee59e629035d641140e55f4d215b0d7_img.jpg)
+
+Figure 4: Overview of NF-BO. The diagram illustrates the workflow of the Normalizing Flow-based Bayesian Optimization (NF-BO) algorithm. At the top, a 'Dictionary' contains discrete tokens (O, N, C) and their corresponding embedding vectors (e1, e2, e3). An input set of discrete tokens {(x\_i, y\_i)} is processed through 'Evaluate & Add' to produce a new discrete token x-tilde. This token is mapped to its embedding vector v\_i from the dictionary. The discrete input space X is shown as a matrix of token indices. The continuous latent space Z is shown as a matrix of latent representations z. The flow model g maps discrete inputs to continuous latent representations, and the inverse model g^-1 maps continuous latent representations back to discrete inputs. The surrogate model is trained on the latent representations and is used to generate candidates for the acquisition function. The acquisition function is used to select the next query points z-tilde. The inverse model g^-1 generates the embedding v-tilde and searches the most similar embedding to return the corresponding index as x-tilde. The bottom part of the diagram shows the 'Token-level Adaptive Candidate Sampling (TACS)' process. It takes the latent representation z and the surrogate model to generate candidates. The candidates are generated by perturbing tokens, sampled according to a token-level sampling probability pi, specified in Eq. (18). Given these candidates and the surrogate model, the next query points z-tilde are selected by the acquisition function. Next, the inverse model g^-1 generates the embedding v-tilde and searches the most similar embedding to return the corresponding index as x-tilde.
+
+Figure 4: **Overview of NF-BO.** We employ our normalizing flows, **SeqFlow**, as a mapping function between a discrete input space and a continuous latent space. Each discrete input token  $x_i$  is mapped to its corresponding embedding vector  $v_i$  from the dictionary. A surrogate model is then trained using the latent representation  $z$  encoded by the flow model  $g$  and the associated function value  $y$  to emulate the objective function. To enhance the efficiency of trust region-based local search, we propose a **Token-level Adaptive Candidate Sampling (TACS)**. In TACS, candidates for the acquisition function are generated by perturbing tokens, sampled according to a token-level sampling probability  $\pi$ , specified in Eq. (18). Given these candidates and the surrogate model, we select the next query points  $\tilde{z}$  by the acquisition function. Next, the inverse model  $g^{-1}$  generates the embedding  $\tilde{v}$  and searches the most similar embedding and return the corresponding index as a  $\tilde{x}$ .
+
+## 5 EXPERIMENTS
+
+### 5.1 TASKS
+
+We validate our NF-BO across various benchmarks focusing on *de novo* molecular design tasks. Initially, we conduct experiments on the Guacamol benchmarks (Brown et al., 2019), specifically targeting seven challenging tasks where optimal solutions are not readily found. For these benchmarks, we evaluate NF-BO and the baselines under three different settings, each varying the number of initial data points and the additional oracle budget: (100, 500), (10,000, 10,000), and (10,000, 70,000). Subsequently, we evaluate our method on the PMO benchmarks (Gao et al., 2022), which consists of 23 tasks, including albuterol similarity, and amlodipine MPO.
+
+### 5.2 BASELINES
+
+In the Guacamol benchmark, we use LSBO, TuRBO-*L* (Eriksson et al., 2019), W-LBO (Tripp et al., 2020), LOLBO (Maus et al., 2022), CoBO (Lee et al., 2023), and PG-LBO (Chen et al., 2024) as the baselines. In the PMO benchmarks, we compare our method with 25 molecular design algorithms. These include generative models (e.g., GANs and VAEs), machine learning models (e.g., Reinforcement Learning), and optimization algorithms (e.g., MCTS and GA). More detailed explanations of the baselines are in Appendix J.
+
+### 5.3 IMPLEMENTATION DETAILS
+
+We employ Thompson sampling (Eriksson et al., 2019) as the acquisition function, and our surrogate model is a sparse variational Gaussian process (Snelson & Ghahramani, 2005; Hensman et al., 2015; Matthews, 2017) enhanced with a deep kernel (Wilson et al., 2016). For the Guacamol and PMO benchmarks, we pretrain using 1.27M unlabeled Guacamol and 250K ZINC datasets, respectively,
+
+{8}------------------------------------------------
+
+![Figure 5: Optimization results of NF-BO on Guacamol benchmarks. The figure contains four line plots arranged in a 2x2 grid. The left column shows results for an oracle budget of (100, 500) and the right column shows results for an oracle budget of (10,000, 10,000). The top row shows results for the Amlodipine MPO (adip) task, and the bottom row shows results for the Median molecules 2 (med2) task. Each plot compares the 'Best Score' (y-axis) against the 'Number of Oracle' (x-axis) for seven methods: Ours (blue diamonds), LSBO (red squares), TURBO-L (purple triangles), W-LBO (green circles), LOLBO (orange diamonds), PG-LBO (cyan squares), and CoBO (yellow diamonds). Shaded regions around the lines represent the standard error over 5 trials. In all cases, the 'Ours' method achieves a higher best score faster than the other baselines.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 5: Optimization results of NF-BO on Guacamol benchmarks. The figure contains four line plots arranged in a 2x2 grid. The left column shows results for an oracle budget of (100, 500) and the right column shows results for an oracle budget of (10,000, 10,000). The top row shows results for the Amlodipine MPO (adip) task, and the bottom row shows results for the Median molecules 2 (med2) task. Each plot compares the 'Best Score' (y-axis) against the 'Number of Oracle' (x-axis) for seven methods: Ours (blue diamonds), LSBO (red squares), TURBO-L (purple triangles), W-LBO (green circles), LOLBO (orange diamonds), PG-LBO (cyan squares), and CoBO (yellow diamonds). Shaded regions around the lines represent the standard error over 5 trials. In all cases, the 'Ours' method achieves a higher best score faster than the other baselines.
+
+Figure 5: Optimization results of NF-BO on Guacamol benchmarks comparing performance with baselines under two oracle budget settings: (100, 500) (left) and (10,000, 10,000) (right). The shaded regions indicate the standard error over 5 trials.
+
+Table 1: PMO results across various methods and assembly. The table presents scores and rankings for 6 evaluation metrics illustrating the comparative performance of each method. Score is the sum of all 23 tasks constituting the PMO benchmark computed to summarize the overall performance.
+
+| Methods | Assembly | Top-1<br>Score (Rank) | Top-10<br>Score (Rank) | Top-100<br>Score (Rank) | AUC Top-1<br>Score (Rank) | AUC Top-10<br>Score (Rank) | AUC Top-100<br>Score (Rank) |
+|-|-|-|-|-|-|-|-|
+| <b>Bayesian Optimization</b> |  |  |  |  |  |  |  |
+| <b>NF-BO</b> | <b>SELFIES</b> | <b>18.095 (1)</b> | <b>17.692 (1)</b> | <b>17.037 (1)</b> | <b>15.539 (1)</b> | <b>14.737 (1)</b> | <b>13.423 (2)</b> |
+| GP BO | Fragments | 15.345 (7) | 14.940 (6) | 14.365 (6) | 13.798 (5) | 13.156 (5) | 12.122 (6) |
+| VAE BO | SELFIES | 11.423 (17) | 9.788 (19) | 7.622 (22) | 10.589 (17) | 8.887 (19) | 6.899 (22) |
+| VAE BO | SMILES | 10.926 (21) | 9.435 (21) | 7.623 (21) | 10.197 (19) | 8.587 (21) | 6.909 (21) |
+| JT-VAE BO | Fragments | 10.296 (23) | 8.671 (24) | 7.037 (24) | 9.973 (22) | 8.358 (24) | 6.740 (23) |
+| <b>Reinforcement Learning</b> |  |  |  |  |  |  |  |
+| REINVENT | SMILES | 16.772 (2) | 16.654 (2) | 16.297 (2) | 14.711 (2) | 14.196 (2) | <b>13.445 (1)</b> |
+| REINVENT | SELFIES | 16.059 (5) | 15.889 (4) | 15.377 (3) | 14.077 (4) | 13.471 (4) | 12.475 (5) |
+| MolDQN | Atoms | 7.143 (26) | 6.495 (26) | 5.435 (26) | 6.332 (26) | 5.620 (26) | 4.528 (26) |
+| <b>Genetic Algorithm</b> |  |  |  |  |  |  |  |
+| Graph GA | Fragments | 16.244 (4) | 15.946 (3) | 15.342 (4) | 14.356 (3) | 13.751 (3) | 12.696 (3) |
+| STONED | SELFIES | 14.257 (8) | 14.201 (8) | 14.017 (7) | 13.256 (7) | 13.024 (6) | 12.518 (4) |
+| SMILES GA | SMILES | 13.123 (11) | 12.997 (9) | 12.824 (9) | 12.357 (10) | 12.054 (8) | 11.598 (7) |
+| SynNet | Synthesis | 13.105 (12) | 12.279 (12) | 10.768 (15) | 12.425 (9) | 11.498 (9) | 9.914 (9) |
+| GA+D | SELFIES | 11.942 (16) | 11.696 (15) | 11.230 (13) | 9.387 (24) | 8.964 (18) | 8.280 (15) |
+| <b>Hill Climbing</b> |  |  |  |  |  |  |  |
+| LSTM HC | SMILES | 16.754 (3) | 15.880 (5) | 14.621 (5) | 13.611 (8) | 12.223 (7) | 10.365 (8) |
+| LSTM HC | SELFIES | 13.770 (9) | 12.894 (10) | 11.657 (12) | 11.441 (14) | 10.246 (15) | 8.595 (13) |
+| DoG-Gen | Synthesis | 15.633 (6) | 14.772 (7) | 13.653 (8) | 12.721 (8) | 11.456 (10) | 9.635 (12) |
+| MIMOSA | Fragments | 12.524 (15) | 12.223 (13) | 11.717 (11) | 11.378 (15) | 10.651 (13) | 9.708 (11) |
+
+following the previous settings. We employ 1,000 initial data points and an additional 9,000 oracle calls following the PMO benchmarks.
+
+### 5.4 RESULTS ON GUACAMOL BENCHMARKS
+
+We compare the optimization results of our NF-BO with six LBO baselines in two experimental settings: 500 and 10K additional oracle budgets on two Guacamol tasks. Figure 5 presents the main experimental results, while the other results on five tasks are provided in Appendix B. The experimental results demonstrate that our proposed NF-BO consistently outperforms other VAE-based LBO methods in all tasks and settings.
+
+### 5.5 RESULTS ON PMO BENCHMARKS
+
+We also conduct experiments to demonstrate the effectiveness of our NF-BO against 25 baseline models, including various generative models and optimization algorithms, across 23 PMO benchmark tasks. Our evaluation metrics included Top-1, Top-10, and Top-100 scores, as well as the Area
+
+{9}------------------------------------------------
+
+![Figure 6: Bar chart titled 'Distinct Sample Ratio with and without TACS'. The x-axis is labeled 'Task' and has two categories: 'adip' and 'med2'. The y-axis is labeled 'Ratio' and ranges from 0.85 to 0.95. For each task, there are two bars: a blue bar for 'w/ TACS' and an orange bar for 'w/o TACS'. In the 'adip' task, the 'w/ TACS' bar is approximately 0.89 and the 'w/o TACS' bar is approximately 0.86. In the 'med2' task, the 'w/ TACS' bar is approximately 0.93 and the 'w/o TACS' bar is approximately 0.89.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 6: Bar chart titled 'Distinct Sample Ratio with and without TACS'. The x-axis is labeled 'Task' and has two categories: 'adip' and 'med2'. The y-axis is labeled 'Ratio' and ranges from 0.85 to 0.95. For each task, there are two bars: a blue bar for 'w/ TACS' and an orange bar for 'w/o TACS'. In the 'adip' task, the 'w/ TACS' bar is approximately 0.89 and the 'w/o TACS' bar is approximately 0.86. In the 'med2' task, the 'w/ TACS' bar is approximately 0.93 and the 'w/o TACS' bar is approximately 0.89.
+
+Figure 6: Comparison of distinct sample ratios with and without TACS in two Guacamol tasks.
+
+![Figure 7: Line graph titled 'Amlodipine MPO (adip)'. The x-axis is labeled 'Number of Oracle' and ranges from 10K to 20K. The y-axis is labeled 'Best Score' and ranges from 0.70 to 0.85. Two data series are plotted: 'NF-BO (w/ TACS)' represented by a blue line with diamond markers and a light blue shaded region, and 'NF-BO (w/o TACS)' represented by an orange line with diamond markers and a light orange shaded region. The 'w/ TACS' series starts at approximately 0.70 and rises to about 0.82, while the 'w/o TACS' series starts at approximately 0.70 and rises to about 0.78.](f519a5be118c846f631c992412353fb9_img.jpg)
+
+Figure 7: Line graph titled 'Amlodipine MPO (adip)'. The x-axis is labeled 'Number of Oracle' and ranges from 10K to 20K. The y-axis is labeled 'Best Score' and ranges from 0.70 to 0.85. Two data series are plotted: 'NF-BO (w/ TACS)' represented by a blue line with diamond markers and a light blue shaded region, and 'NF-BO (w/o TACS)' represented by an orange line with diamond markers and a light orange shaded region. The 'w/ TACS' series starts at approximately 0.70 and rises to about 0.82, while the 'w/o TACS' series starts at approximately 0.70 and rises to about 0.78.
+
+Figure 7: Comparison of performance with and without TACS in Guacamol benchmarks. The shaded regions indicate the standard error over 5 trials.
+
+![Figure 7: Line graph titled 'Median molecules 2 (med2)'. The x-axis is labeled 'Number of Oracle' and ranges from 10K to 20K. The y-axis is labeled 'Best Score' and ranges from 0.30 to 0.40. Two data series are plotted: 'NF-BO (w/ TACS)' represented by a blue line with diamond markers and a light blue shaded region, and 'NF-BO (w/o TACS)' represented by an orange line with diamond markers and a light orange shaded region. The 'w/ TACS' series starts at approximately 0.31 and rises to about 0.38, while the 'w/o TACS' series starts at approximately 0.31 and rises to about 0.37.](8ee3b76dd49f31624d287885bc2c81ee_img.jpg)
+
+Figure 7: Line graph titled 'Median molecules 2 (med2)'. The x-axis is labeled 'Number of Oracle' and ranges from 10K to 20K. The y-axis is labeled 'Best Score' and ranges from 0.30 to 0.40. Two data series are plotted: 'NF-BO (w/ TACS)' represented by a blue line with diamond markers and a light blue shaded region, and 'NF-BO (w/o TACS)' represented by an orange line with diamond markers and a light orange shaded region. The 'w/ TACS' series starts at approximately 0.31 and rises to about 0.38, while the 'w/o TACS' series starts at approximately 0.31 and rises to about 0.37.
+
+Under the Curve (AUC) for these metrics, all based on Oracle calls. The experimental results are in Table 1.
+
+The scores for each individual task are detailed in Appendix A. The table shows that our NF-BO achieves the best performance with 1st rank on five out of six metrics. In particular, NF-BO significantly enhances the performance of VAE BO, which also uses SELFIES, improving its average rank from 19th to 1st.
+
+## 6 ANALYSIS
+
+In this section, we provide the analysis of our NF-BO on the Guacamol. Experiments were implemented with 10,000 initial data points and an additional oracle budget of 10,000.
+
+### 6.1 CANDIDATE DIVERSITY WITH TACS IMPLEMENTATION
+
+We evaluate the proportion of distinct samples within a set of 1,000 candidates generated in two different Guacamol tasks with and without TACS. Each experimental setup was subjected to Monte Carlo approximation 10 times to estimate expectation in Eq. (17), and we conducted five independent experiments averaging the results. We use a pre-trained SeqFlow model and 10 different anchor points to generate trust regions.
+
+In Figure 6, the result with TACS has a higher ratio of distinct samples compared to those without TACS, underscoring its effectiveness in enhancing the diversity of the candidate pool. This implies TACS improves the exploration capacity of the BO, which is crucial for optimization performance. We provide optimization performances with different temperatures in TACS in Appendix C.
+
+### 6.2 ABLATION STUDY
+
+Figure 7 our ablation studies that illustrates the effectiveness of our Token-level Adaptive Candidate Sampling (TACS) strategy, shows its impact on performance across these tasks in the Guacamol benchmark. From the analysis, it is evident that the incorporation of TACS significantly enhances performance, confirming its benefit in optimizing the search process.
+
+## 7 CONCLUSION
+
+In conclusion, the proposed NF-BO method, which leverages normalizing flows, makes significant improvements in the domain of Bayesian optimization, especially for handling molecular data. This approach not only addresses the value discrepancy problem through a one-to-one function from the input space to the latent space and its left-inverse function but also enhances the effectiveness of the search process with a novel token-level adaptive candidate sampling strategy. Our comprehensive evaluations across diverse benchmarks have demonstrated the superiority of NF-BO over traditional methods and other LBO techniques, confirming its potential to reshape the landscape of optimization strategies in various scientific and engineering applications.
+
+ Rest of paper (reference and Appendix) is removed.

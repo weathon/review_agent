@@ -1,0 +1,340 @@
+
+
+{0}------------------------------------------------
+
+# PROVABLY EFFICIENT AND PRACTICAL SELF-PLAY FOR BETTER LLM ALIGNMENT
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Reinforcement Learning with Human Feedback (RLHF) has gained significant attention for aligning AI behavior with human preferences. Self-play style RLHF has shown strong advantages, as highlighted by many studies. However, current self-play style RLHF approaches face several limitations, including the lack of provable sample efficiency, absence of active exploration, and limited diversity in training data. To address these challenges, we propose a novel RLHF framework that balances exploration and exploitation while providing theoretical guarantees. We introduce Two-Agent Nash Policy Optimization (TANPO) as an equivalent and easy-to-implement two-agent algorithm building on this framework. In TANPO, the two players are trained using different loss functions to ensure more diverse and informative data collection. We also propose Single-Agent Diversity-driven Optimization (SADPO), a single-agent approximation of TANPO, supported by both theoretical analysis and empirical evidence. Our theoretical analysis shows that our theoretical algorithm framework enjoys sublinear regret under general function approximation and mild structural conditions, with a detailed analysis provided for the linear case. Empirically, we implement TANPO and SADPO using Zephyr-7B-SFT as our base model, outperforming several baselines across multiple evaluation benchmarks, such as AlpacaEval 2.0, MT-Bench and various standard academic benchmarks. Our experiments also show that TANPO improves performance on AlpacaEval 2.0 over extended training epochs, demonstrating its ability to consistently improve and reduce overfitting.
+
+## 1 INTRODUCTION
+
+Large Language Models (LLMs) have shown significant proficiency in understanding and generating natural language. Reinforcement Learning with Human Feedback (RLHF) is key to improving LLMs by directly integrating human feedback into their training (Christiano et al., 2017; Ziegler et al., 2019). This process typically involves training the model using reinforcement learning techniques to maximize the reward from human-labeled data (Ouyang et al., 2022). Many RLHF algorithms treat this setup as a contextual bandit problem, where the prompt corresponds to the state, the generated response represents the action, and the feedback received acts as the reward.
+
+Another approach, in addition to modeling RLHF as a contextual bandit problem, is to utilize self-play methods. Self-play is a technique in which one or more agents learn by competing against themselves, allowing them to iteratively improve their strategies by evaluating and adapting to their own responses. This approach has proven to be a powerful method in various fields, including traditional reinforcement learning such as AlphaGo Zero (Silver et al., 2017) and generative models such as GANs (Goodfellow et al., 2020). In the context of RLHF, self-play algorithms typically involve one or multiple agents generating multiple responses for each prompt. These responses compete against each other through feedback provided either by human evaluators or AI annotators, which is then used to train the agents. Recently, a line of works (Rosset et al., 2024; Wu et al., 2024; Ye et al., 2024; Munos et al., 2023) have proposed a variety of self-play style RLHF algorithms. The goal of these algorithms is to find the Nash equilibrium strategy. These works have demonstrated the effectiveness of self-play algorithms in improving LLM performance.
+
+{1}------------------------------------------------
+
+Despite recent advances, there are several limitations in current self-play style RLHF approaches. *First*, there lacks theoretical guarantee on how these practical self-play algorithms can approximate Nash equilibrium, or there is a significant gap between theoretically guaranteed algorithms and practical implementations. *Second*, most existing algorithms lack active online exploration, which limits their ability to efficiently gather informative data during the learning process. Theoretically, active exploration can provide formal guarantees for learning efficiency (Xiong et al., 2023; Ye et al., 2024). Practically, it enhances model performance by ensuring that the training data remains diverse and novel, leading to better generalization and improved model performance (Zhang et al., 2024; Xie et al., 2024).
+
+Therefore, a key research problem is: *Can we design an easy-to-implement and provably efficient self-play RLHF algorithm that approximates Nash equilibrium with active exploration?*
+
+In this paper, we propose a new self-play RLHF algorithm. To effectively balance the trade-off between exploration and exploitation, the max-player aims to maximize the summation of (i) the expected Nash equilibrium value function and (ii) the negative estimation loss of that reward function. Similarly, the min-player seeks to maximize the summation of (i) the expected best response value function based on the max-player’s strategy and (ii) the negative estimation loss of that reward function. We provide theoretical guarantee for this framework, showing that it achieves a sublinear regret under mild structural conditions.
+
+We demonstrate that, under certain conditions, our algorithm framework is equivalent to an easy-to-implement algorithm. In this practical implementation, the max-player optimizes an MLE loss, while the min-player optimizes an MLE loss with a simple exploration bonus. The min-player’s inclination towards exploration leads to more diverse and novel outputs, whereas the max-player’s responses tend to align more closely with the reference policy. This dynamic contrast enables both players to engage with a broader range of information, ultimately improving their overall performance. Supported by both theoretical analysis and empirical evidence, we propose a single-agent algorithm that mimics the behavior of the two-agent algorithm.
+
+**Contributions.** The main contributions of our work are as follows.
+
+1. We introduce a theoretical two-player RLHF framework that effectively balances exploitation and exploration while providing a theoretical guarantee. Building on this framework, we propose a practical and easy-to-implement two-agent algorithm TANPO, where both players have simple and practical objectives. Additionally, we propose a single-agent algorithm SADPO that approximates the two-agent algorithm.
+2. We prove that our theoretical algorithm achieves sublinear regret under general function approximation and mild structural conditions. We specify this result to a linear case and then provide a detailed regret analysis, showing our theoretical algorithm achieves a sublinear regret.
+3. We implement our algorithms, along with several baselines, using Zephyr-7B-SFT (Tunstall et al., 2023) as the base model and the UltraFeedback dataset for prompts. Our algorithm outperforms several baseline methods across multiple evaluation benchmarks, including AlpacaEval 2.0, MT-Bench, PairRM win rate and various academic benchmarks. Additionally, we demonstrate that our algorithm continues to improve performance during a second epoch on the same dataset, highlighting its ability to achieve consistent gains and mitigate overfitting.
+
+**Related Works.** We refer readers to Appendix A for a detailed discussion.
+
+## 2 PRELIMINARIES
+
+**RLHF pipeline.** RLHF leverages human preferences to guide the training of a language model. A common approach is the pairwise preference model, where feedback is provided by comparing two model-generated responses to the same prompt. We define an LLM as a policy  $\pi(\cdot|\cdot)$  in policy class  $\Pi$ , where it takes a prompt  $x$  and generates a response  $a$  from distribution  $\pi(\cdot|x)$ . Given a prompt  $x$  from the state space  $\mathcal{X}$ , a language model  $\pi_\theta$  generates two candidate responses  $a^1, a^2$  from the action space  $\mathcal{A}$  according to its policy  $\pi_\theta(\cdot|x)$ . Human evaluators, or a reward model trained
+
+{2}------------------------------------------------
+
+to approximate human preferences, provide feedback in the form of a binary label  $y \in \{0, 1\}$ , indicating a preference for  $a^1 \succ a^2$  when  $y = 1$  or  $a^2 \succ a^1$  when  $y = 0$ . This preference is modelled probabilistically using BT model (Bradley & Terry, 1952)
+
+$$\mathbb{P}_r(y = 1 | x, a^1, a^2) = \frac{\exp(r(x, a^1))}{\exp(r(x, a^1)) + \exp(r(x, a^2))} = \sigma(r(x, a^1) - r(x, a^2)). \quad (1)$$
+
+Here,  $r(x, a)$  is the human-provided score or a score predicted by a reward model that reflects the quality or suitability of response  $a$  given the prompt  $x$ , and  $\sigma(z) = 1/(1 + \exp(-z))$  denotes the sigmoid function.
+
+In methods without a reward model, it has been shown that the preference loss can be expressed as a function of the policy. In preference optimization methods like DPO (Rafailov et al., 2024), the model is assumed to maximize a KL-regularized reward. Given a static dataset  $\mathcal{D} = \{(x_i, a_i^+, a_i^-)\}_{i=1}^N$  of  $N$  preference pairs, the parameterized reward model is learned by minimizing the following logistic regression loss
+
+$$\mathcal{L}(r | \mathcal{D}) = -\mathbb{E}_{(x, a^+, a^-) \sim \mathcal{D}} [\log \sigma(r(x, a^+) - r(x, a^-))]. \quad (2)$$
+
+**Two-Agent Zero-Sum Games.** In a two-agent zero-sum game, two players, termed the *max-player* and the *min-player*, engage in a competitive interaction where the gain of one player is exactly offset by the loss of the other. The game is characterized by a general value function  $V(\pi, \mu)$ , where  $\pi$  and  $\mu$  denote the mixed strategy probability distributions of the max-player and the min-player, respectively. In the Nash equilibrium, the max-player's strategy and the min-player's strategy are mutual best responses, meaning each is optimal given the strategy of the other (Nash et al., 1950). Formally, the max-player's strategy  $\pi^*$  and the min-player's strategy  $\mu^*$  solve the optimization problem given by
+
+$$(\pi^*, \mu^*) = \arg \max_{\pi \in \Pi} \min_{\mu \in \Pi} V(\pi, \mu),$$
+
+where  $V(\pi, \mu)$  is a general function that captures the payoffs based on the strategies  $\pi$  and  $\mu$ . The strategies  $\pi^*$  and  $\mu^*$  at this equilibrium are known as the Nash equilibrium strategies for the game.
+
+**Performance Metric.** The goal of our learning algorithm is to find a policy  $\pi$  for the max-player that is close enough to the Nash equilibrium. Consistent with the previous works (Ye et al., 2024; Liu et al., 2024a; Xie et al., 2020), we define the corresponding regret after  $T$  episodes as
+
+$$\text{Regret}(T) = \sum_{t=1}^T [V(\pi^*, \mu^*) - V(\pi^t, \hat{\mu})],$$
+
+where  $\pi^t$  is the policy used by the max-player in the  $t$ -th episode and  $V(\pi^t, \hat{\mu}) := \min_{\mu \in \Pi} V(\pi^t, \mu)$ . The target of sample efficient self-play style algorithm is to achieve a sublinear regret with respect to  $T$ , as this would indicate that the strategy  $\pi^t$  effectively approaches the Nash equilibrium.
+
+## 3 THEORY-MOTIVATED ALGORITHM
+
+### 3.1 SETUP
+
+We formulate the RLHF problem as a two-agent zero-sum game. Suppose that there exists a deterministic but unknown reward function  $r^*(x, a)$  that represents the quality of response  $a$  under prompt  $x$ . In practical applications, we want to ensure that the optimized policies  $\pi$  and  $\mu$  are close to a common reference policy  $\pi_{\text{ref}}$ . Therefore, we employ the following KL-regularized objective
+
+$$V(\pi, \mu) = \mathbb{E}_{x \sim d_0, a^1 \sim \pi(\cdot | x), a^2 \sim \mu(\cdot | x)} [r^*(x, a^1) - r^*(x, a^2) - \alpha \cdot D_{\text{KL}}(\pi(\cdot | x) \| \pi_{\text{ref}}(\cdot | x)) + \alpha \cdot D_{\text{KL}}(\mu(\cdot | x) \| \pi_{\text{ref}}(\cdot | x))]. \quad (3)$$
+
+{3}------------------------------------------------
+
+Suppose we have access to a hypothesis class  $\mathcal{R} \subset (\mathcal{X} \times \mathcal{A} \times \mathcal{A} \rightarrow \mathbb{R})$ , which gives us a set of candidates to approximate the true reward function  $r^*$ . We define the value function under reward function  $r$  as  $V_r(\cdot, \cdot)$ , and define  $V_r(\pi, \dagger)$  as the value function induced by  $\pi$  and its best response, i.e.,  $V_r(\pi, \dagger) = \min_{\mu} V_r(\pi, \mu)$ .
+
+## 3.2 THEORETICAL ALGORITHM FRAMEWORK
+
+Motivated by studies about exploration-exploitation trade-off from a practical perspective in traditional RL (Bellemare et al., 2016; Pathak et al., 2017), we propose our algorithm framework for online RLHF. The core idea is to optimize a single and unconstrained objective that simultaneously handles estimation and planning, thereby balancing exploration and exploitation. Specifically, the framework employs different strategies for each player: the max-player focuses on approximating the Nash equilibrium strategy, while the min-player aims to approximate the best response to the max-player's strategy. Both players plan with active exploration. In the  $k$ -th episode, the algorithm involves the following stages:
+
+**At the first stage**, the max-player chooses the reward function  $\hat{r}_t^1$  by maximizing the objective
+
+$$\hat{r}_t^1 = \arg \max_{r \in \mathcal{R}} \{V_r - \eta \cdot \mathcal{L}_{t-1}(r)\}. \quad (4)$$
+
+To balance exploitation of historical data with exploration for the future, objective (4) consists of two components: **(i)** the negative loss function  $-\mathcal{L}_{t-1}(r)$ , the negative logistic regression loss in (2) computed on the data from the first  $t - 1$  episodes for the reward function  $r$ , to encourage exploitation, and **(ii)** the Nash equilibrium value  $V_r$  associated with the reward function  $r$ , which promotes active exploration for the player. The algorithm balances the exploitation and exploration through a hyperparameter  $\eta$ .
+
+With the max-player reward function  $\hat{r}_t^1$ , the max-player policy is set to be the Nash equilibrium max-player policy with respect to  $\hat{r}_t^1$ , i.e.,
+
+$$\pi^t = \arg \max_{\pi \in \Pi} \min_{\mu \in \Pi} V_{\hat{r}_t^1}(\pi, \mu) = \arg \max_{\pi \in \Pi} \min_{\mu \in \Pi} \max_{r \in \mathcal{R}} \{V_r - \eta \cdot \mathcal{L}_{t-1}(r)\}. \quad (5)$$
+
+**At the second stage**, after obtaining the max-player policy  $\pi^t$ , the min-player chooses another reward function  $\hat{r}_t^2$  aiming to find the best response of the max-player policy. Specifically, it chooses by minimizing the target
+
+$$\hat{r}_t^2 = \arg \min_{r \in \mathcal{R}} \{V_r(\pi^t, \dagger) + \eta \cdot \mathcal{L}_{t-1}(r)\}. \quad (6)$$
+
+Objective (6) also has two components: **(i)** the loss function  $\mathcal{L}_{t-1}(r)$  computed on historical data for the reward function  $r$  to encourage exploitation, and **(ii)** the best response value  $V_r(\pi^t, \dagger)$  to encourage active exploration.
+
+With the min-player reward function  $\hat{r}_t^2$ , the min-player policy is set to be the best response of min-player policy under reward function  $\hat{r}_t^2$ , i.e.,
+
+$$\mu^t = \arg \min_{\mu \in \Pi} V_{\hat{r}_t^2}(\pi^t, \mu) = \arg \min_{\mu \in \Pi} \min_{r \in \mathcal{R}} \{V_r(\pi^t, \dagger) + \eta \cdot \mathcal{L}_{t-1}(r)\}. \quad (7)$$
+
+**At the final stage**, the max-player and min-player sample a batch of new responses  $\{(a_i^1, a_i^2)\}_{i=1}^N$  conditioned on prompts  $\{x_i\}_{i=1}^N$  from the joint policy  $(\pi^t, \mu^t)$  respectively. By querying human feedback or AI annotations  $\{y_i\}_{i=1}^N$ , we construct a new dataset  $\mathcal{D}_t = \{x_i, a_i^1, a_i^2, y_i\}_{i=1}^N$  to update the loss function  $\mathcal{L}_t(r)$ .
+
+## 4 EQUIVALENT AND IMPLEMENTATION-FRIENDLY ALGORITHMS
+
+### 4.1 TWO-AGENT NASH POLICY OPTIMIZAION
+
+In this section, we introduce easy-to-implement objectives and algorithms that are equivalent to the algorithm framework in Section 3.2.
+
+**Objective for the Max-Player.** We first examine the max-player objective in (5). If the reward function class  $\mathcal{R}$  satisfies Assumption 4, the minimax theorem applies to optimization problem (5).
+
+{4}------------------------------------------------
+
+We refer readers to Appendix C for a detailed discussion. Hence, we interchange the *max* and *min* operations in (5), yielding an equivalent objective given by
+
+$$\max_{r \in \mathcal{R}} \max_{\pi \in \Pi} \min_{\mu \in \Pi} \{V_r - \eta \cdot \mathcal{L}_{t-1}(r)\} = \max_{r \in \mathcal{R}} \left\{ \max_{\pi \in \Pi} \{F(\pi; r)\} + \min_{\mu \in \Pi} \{-F(\mu; r)\} - \eta \cdot \mathcal{L}_{t-1}(r) \right\}, \quad (8)$$
+
+where
+
+$$F(\pi; r) := \mathbb{E}_{x \sim d_0, a \sim \pi(\cdot|x)} [r(x, a) - \alpha \cdot D_{\text{KL}}(\pi(\cdot|x) \| \pi_{\text{ref}}(\cdot|x))]$$
+
+for any policy  $\pi \in \Pi$  and  $r \in \mathcal{R}$ .
+
+We first solve the inner optimization problem in (8), which enjoys the following closed-form solution as discussed in Rafailov et al. (2024):
+
+$$\pi_r(a|x) = \arg \max_{\pi \in \Pi} F(\pi; r) = \frac{1}{Z_r(x)} \cdot \pi_{\text{ref}}(a|x) \exp(r(x, a)/\alpha), \quad (9)$$
+
+where we denote the partition function of  $\pi_r$  as  $Z_r(x) = \mathbb{E}_{a \sim \pi_{\text{ref}}(\cdot|x)} [\exp(r(x, a)/\alpha)]$ . Adopting the reparametrization technique as in Rafailov et al. (2024), we express the reward function  $r$  by the optimal solution  $\pi_r$ , i.e.,
+
+$$r(x, a) = \alpha \log \left( \frac{\pi_r(a|x)}{\pi_{\text{ref}}(a|x)} \right) + \alpha \log Z_r(x). \quad (10)$$
+
+We observe that, for a fixed reward function  $r$ , the two inner optimization problems in (8) have the same structure but opposite signs, and thus they cancel each other out, leaving only negative loss function term. Consequently, the max-player only needs to minimize the loss function on the historical data. Therefore, if we adopt the negative log-likelihood loss, the max-player's objective coincides with the objective of DPO algorithm, i.e.,
+
+$$\min_{\pi \in \Pi} \left\{ \mathcal{L}_{\max}(\pi) := \eta \cdot \mathcal{L}_{t-1} \left( \alpha \log \left( \frac{\pi(a|x)}{\pi_{\text{ref}}(a|x)} \right) \right) \right\}. \quad (11)$$
+
+**Objective for the Min-Player.** The min-player optimization is a bilevel optimization problem and can be formulated as (we omit the terms independent of  $\mu$  and  $r$ )
+
+$$\begin{aligned} & \min_{\mu \in \Pi} \min_{r \in \mathcal{R}} \{V_r(\pi^t, \mu) + \eta \cdot \mathcal{L}_{t-1}(r)\} = \min_{r \in \mathcal{R}} \min_{\mu \in \Pi} \{V_r(\pi^t, \mu) + \eta \cdot \mathcal{L}_{t-1}(r)\} \\ & = \min_{r \in \mathcal{R}} \left\{ \mathbb{E}_{x \sim d_0, a \sim \pi^t(\cdot|x)} [r(x, a)] + \eta \cdot \mathcal{L}_{t-1}(r) + \min_{\mu \in \Pi} \{-F(\mu; r)\} \right\}. \end{aligned} \quad (12)$$
+
+We note that the inner optimization has the same structure as (9) and therefore enjoys the same closed-form solution. By substituting (9) into (12), using the reparametrization technique in (10) and omitting irrelevant terms, we transform (12) into a single-level optimization to obtain the following min-player objective
+
+$$\min_{\mu \in \Pi} \left\{ \mathcal{L}_{\min}(\mu) := \alpha \cdot \mathbb{E}_{x \sim d_0, a \sim \pi^t(\cdot|x)} [\log \mu(a|x)] + \eta \cdot \mathcal{L}_{t-1} \left( \alpha \log \left( \frac{\mu(a|x)}{\pi_{\text{ref}}(a|x)} \right) \right) \right\}. \quad (13)$$
+
+Hence, we summarize the Two-Agent Nash Policy Optimization (TANPO) algorithm in Algorithm 1.
+
+{5}------------------------------------------------
+
+#### **Algorithm 1** Two-Agent Nash Policy Optimization (TANPO)
+
+**Input:** Reference policy  $\pi_{\text{ref}}(\cdot)$ , baseline policies  $\pi^1(\cdot), \mu^1(\cdot)$  and parameters  $\alpha, \eta$ .
+
+- 1: **for**  $t = 1, 2, \dots, T$  **do**
+- 2:   Sample  $a_1^t \sim \pi^t(\cdot), a_2^t \sim \mu^t(\cdot)$  from updated policies for each prompt  $x_i$ .
+- 3:   Rank responses  $a_1^t, a_2^t$  to form training dataset  $\mathcal{D}_t = \{x_i, a_1^t, a_2^t\}_{i=1}^N$
+- 4:   Update max-player policy according to (14),
+
+$$\pi^{t+1} \leftarrow \arg \min_{\pi \in \Pi} \left\{ \eta \cdot \mathcal{L} \left( \alpha \log \left( \frac{\pi(\cdot|\cdot)}{\pi_{\text{ref}}(\cdot|\cdot)} \right) \middle| \mathcal{D}_t \right) \right\}. \quad (14)$$
+
+- 5:   Update min-player policy according to (15),
+
+$$\mu^{t+1} \leftarrow \arg \min_{\mu \in \Pi} \left\{ \eta \cdot \mathcal{L} \left( \alpha \log \left( \frac{\mu(\cdot|\cdot)}{\pi_{\text{ref}}(\cdot|\cdot)} \right) \middle| \mathcal{D}_t \right) + \alpha \cdot \mathbb{E}_{x \sim d_0, a \sim \pi^{t+1}(\cdot|x)} [\log \mu(a|x)] \right\}, \quad (15)$$
+
+where  $\mathcal{L}(\cdot|\cdot)$  denotes the logistic regression loss in (2).
+
+- 6: **end for**
+
+### **4.2 DATA DIVERSITY AND SINGLE-AGENT APPROXIMATION**
+
+It is observed that although the min-player in TANPO benefits from an exploration bonus term, the max-player's objective in TANPO remains identical to DPO objective. This raises a question: How does TANPO offer improvements over DPO?
+
+The key lies in the fact that TANPO generates more diverse training data. While the max-player does not have an explicit exploration bonus, it can still benefit from the increased diversity in the training data. In the original two-agent setup, both the max-player and min-player are trained on the same dataset but pursue different optimization objectives. The max-player focuses solely on minimizing the MLE loss function, aiming to maximize reward while closely approximate the reference policy  $\pi_{\text{ref}}$ . In contrast, the min-player incorporates an additional exploration bonus term  $\mathbb{E}[\log \mu(a|x)]$  into its objective, encouraging it to sample from less likely regions of the action distribution. As a result, the response pairs  $(a^1, a^2)$  exhibit greater diversity and contrast.
+
+Empirically, we demonstrate that TANPO leads to more diverse training data. To illustrate this, we sample 500 response pairs from the training datasets of online DPO and TANPO, respectively. For each response pair  $(a^1, a^2)$ , we calculate the difference in their length-normalized log probabilities under the reference policy,  $|\log \pi_{\text{ref}}(a^1) - \log \pi_{\text{ref}}(a^2)|$ , as a measure of diversity between responses. As shown in Figure 1, TANPO achieves a larger  $\log \pi_{\text{ref}}$  margin between response pairs, indicating increased diversity in the training data. These findings further confirm that TANPO enhances data diversity, thereby improving the overall performance.
+
+To simplify this setup, we propose the Single-Agent Diversity-driven Policy Optimization (SADPO) algorithm as a single-agent approximation of TANPO. The SADPO optimization objective is similar to min-player objective (13). The core idea is to use a single policy to simulate the max-player policy and min-player policy through rejection sampling. At each training iteration, the agent samples  $K$  responses from the current policy for each prompt. We then compute the probabilities  $\pi_{\text{ref}}(a)$  for each of the  $K$  samples. From the  $K$  responses, the response with the highest  $\pi_{\text{ref}}$  value is selected to approximate the behavior of the max-player, as this response is the most aligned with the reference policy. The response with the lowest  $\pi_{\text{ref}}$  value is chosen to represent the min-player's behavior, as it reflects more exploratory responses with lower likelihood under  $\pi_{\text{ref}}$ . To mitigate the effect of response length, we calculate  $\log \pi_{\text{ref}}$  by averaging the log probability over the response length. We summarize SADPO in Algorithm 2.
+
+An important feature of SADPO is that it deliberately enlarges the difference in  $\pi_{\text{ref}}$  between the selected responses. By systematically selecting the most and least
+
+![Bar chart showing the difference in log probability between response pairs for Online DPO and TANPO. The y-axis is 'Difference in log probability' ranging from 0.00 to 0.12. The x-axis shows 'Online DPO' and 'TANPO'. The bar for Online DPO is approximately 0.08, and the bar for TANPO is approximately 0.11.](eba8385d0983fbda9dc1df0812273269_img.jpg)
+
+| Method | Difference in log probability |
+|-|-|
+| Online DPO | ~0.08 |
+| TANPO | ~0.11 |
+
+Bar chart showing the difference in log probability between response pairs for Online DPO and TANPO. The y-axis is 'Difference in log probability' ranging from 0.00 to 0.12. The x-axis shows 'Online DPO' and 'TANPO'. The bar for Online DPO is approximately 0.08, and the bar for TANPO is approximately 0.11.
+
+Figure 1: Length-normalized ref. policy log probability difference between response pairs.
+
+{6}------------------------------------------------
+
+likely responses according to  $\pi_{\text{ref}}$ , SADPO increases the diversity of the training data. This helps the model explore a broader range of behaviors, ultimately improving its generalization and overall performance.
+
+#### --- **Algorithm 2** Single-Agent Diversity-driven Policy Optimization (SADPO) ---
+
+**Input:** Reference policy  $\pi_{\text{ref}}(\cdot)$ , baseline policy  $\pi^1(\cdot)$  and parameters  $\alpha, \eta, K$ .
+
+- 1: **for**  $t = 1, 2, \dots, T$  **do**
+- 2:   Sample  $K$  responses  $\{a_i^k\}_{k=1}^K \sim \pi^t(\cdot)$  for each prompt  $x_i$ .
+- 3:   For each  $a_i^k$ , compute its probability under the reference policy  $\pi_{\text{ref}}(a_i^k|x_i)$ .
+- 4:   Select two responses by
+ - $a_i^{\max} = \arg \max_k \pi_{\text{ref}}(a_i^k|x_i)$ , ▷ approximating max-player behavior
+ - $a_i^{\min} = \arg \min_k \pi_{\text{ref}}(a_i^k|x_i)$ , ▷ approximating min-player behavior
+- 5:   Rank responses  $a_i^{\max}, a_i^{\min}$  to form training dataset  $D_t = \{x_i, a_i^+, a_i^-\}_{i=1}^N$ .
+- 6:   Update the policy according to (16),
+
+$$\pi^{t+1} \leftarrow \arg \min_{\pi \in \Pi} \left\{ \eta \cdot \mathcal{L} \left( \alpha \log \left( \frac{\pi(\cdot|\cdot)}{\pi_{\text{ref}}(\cdot|\cdot)} \right) \middle| D_t \right) + \alpha \cdot \mathbb{E}_{x \sim d_0, a \sim \pi_{\text{ref}}(\cdot|x)} [\log \pi(a|x)] \right\}, \quad (16)$$
+
+where  $\mathcal{L}(\cdot|\cdot)$  denotes the logistic regression loss as defined in (2).
+
+- 7: **end for**
+- 
+
+## 5 THEORETICAL ANALYSIS
+
+In this section, we present the regret analysis for the theoretical two-player Nash RLHF algorithm introduced in Section 3.2. We first provide theoretical guarantees under the low TGEC conditions (Assumption 2). Next, we illustrate our results using a linear two-player zero-sum RLHF game as a concrete example. It is important to note that the theoretical analysis in this section also applies to TANPO (Algorithm 1), provided the reward function class  $\mathcal{R}$  meets Assumption 4 outlined in Appendix C.
+
+### 5.1 REGRET ANALYSIS FOR TWO-PLAYER NASH RLHF
+
+To derive the theorem, we first present two assumptions. The first assumption concerns the hypothesis class  $\mathcal{R}$  being finite, bounded and well-specified, meaning it contains the true hypothesis.
+
+**Assumption 1** (Realizability). *We assume that the true reward model  $r^* \in \mathcal{R}$ , and  $\mathcal{R}$  is finite, i.e.  $|\mathcal{R}| < +\infty$ . Moreover, for regularization, we assume that the reward function is bounded: for any  $r \in \mathcal{R}$  and any  $(x, a^1, a^2) \in \mathcal{X} \times \mathcal{A} \times \mathcal{A}$ , we have  $|r(x, a^1) - r(x, a^2)| \leq R_0$  for some  $R_0 > 0$ .*
+
+Moreover, we make a structural assumption on the underlying two-player game that requires the game to have a low **Two-player Generalized Eluder Coefficient** (TGEC)  $d_{\text{TGEC}}(\cdot)$ . TGEC is the generalization of Generalized Eluder Coefficient (GEC) inspired by Zhong et al. (2022). In a two-agent Markovian game with low TGEC, the two agents can minimize the in-sample prediction error on historical data, thereby decreasing the out-of-sample prediction error. See the full statement in Assumption 2 in Appendix B.
+
+With Assumptions 1 and 2, we now present our main theorem.
+
+**Theorem 1** (Online Regret of Two-agent Nash RLHF). *Under Assumptions 1 and 2, by setting*
+
+$$\eta = \frac{1}{4} \sqrt{\frac{d_{\text{TGEC}}(1/\sqrt{T})}{T \log(|\mathcal{R}|/\delta)}},$$
+
+*the regret of our theoretical algorithm framework in Section 3.2 after  $T$  episodes is bounded by*
+
+$$\text{Regret}(T) \leq 2 \left( \sqrt{d_{\text{TGEC}}(1/\sqrt{T}) \log(|\mathcal{R}|/\delta)} + \sqrt{d_{\text{TGEC}}(1/\sqrt{T})} + 1 \right) \sqrt{T}$$
+
+*with probability at least  $1 - 2\delta$ .*
+
+{7}------------------------------------------------
+
+Theorem 1 provides a theoretical guarantee for the efficiency of the algorithm’s learning process in RLHF problems that satisfy the low TGEC condition. When the iteration number  $T$  tends to infinity, the average regret  $\text{Regret}(T)/T$  tends to zero. This indicates that the resulting policy of TANPO is approximately a Nash equilibrium policy, demonstrating the sample efficiency of TANPO.
+
+As a concrete example of Theorem 1, we further analyze the case of a linear two-player Nash RLHF game. In this setting, we explicitly compute the TGEC bound and establish a sublinear regret guarantee for the max-player in Corollary 1. This demonstrates that our theoretical framework not only holds in general settings but also provides clear and provable efficiency in specific and structured cases like linear games. We refer readers to Appendix B for detailed discussion.
+
+## 6 EXPERIMENTS
+
+In this section, we conduct detailed experiments to show the performances of our practical algorithms along with other baselines. Our experiments demonstrate three key findings: (i) Our algorithms consistently outperform baseline methods across various benchmarks. (ii) Our algorithms effectively mitigate overfitting. (iii) Our algorithms enhance model performance by improving the quality and diversity of the training data.
+
+## 6.1 EXPERIMENT SETUP
+
+We use UltraFeedback (Cui et al., 2023) as our training dataset, which consists of 61k high-quality prompts and response pairs annotated by GPT-4. We split the UltraFeedback dataset into three portions, and use only one portion on each iteration. We first conduct an offline DPO training on the first portion of training dataset, and then conduct two iterations of online alignment on the other two portions. For the base model of our training, we consider Zephyr series of LLMs (Tunstall et al., 2023). We choose Zephyr-7B-SFT as our base model, since the official Zephyr-7B- $\beta$  has already been fine-tuned on the same UltraFeedback dataset. The small-sized PairRM (Jiang et al., 2023) is used as the preference model to provide AI feedback during online alignment.
+
+In TANPO, we sample one response for each prompt from each of the two models. In SADPO, we sample  $K = 4$  responses for each prompt from the current policy, and select the responses with the highest and lowest length-regularized reference policy log probability to form response pairs. We choose the base model Zephyr-7B-SFT, online DPO, Hybrid GSHF (Xiong et al., 2023) and SELM (Zhang et al., 2024) as baselines for fine-tuning LLM. For evaluation, we adopt AlpacaEval 2.0 (Dubois et al., 2024), MT-Bench (Zheng et al., 2023) and several academic benchmarks, including GSM8k (Cobbe et al., 2021), MMLU (Hendrycks et al., 2020), OpenBookQA (Mihaylov et al., 2018), HellaSwag (Zellers et al., 2019) and WinoGrande (Sakaguchi et al., 2021). All the implementation details are provided in Appendix E.
+
+## 6.2 EXPERIMENT RESULTS
+
+**Our algorithms consistently improve the performance on different benchmarks.** Our algorithms consistently improve the performance on different benchmarks. We present our main result in Table 1. Here, we report the results of TANPO based on the performance of the min-player. The full results, including the performance of both players in TANPO, are provided in Table 2 in Appendix D. On AlpacaEval 2.0 results, TANPO achieves high performance, with a length-controlled win rate of 27.66% and a win rate of 27.08%, outperforming all baseline methods. Similarly, SADPO demonstrates strong results across all baselines, achieving a length-controlled win rate of 28.43% and a win rate of 26.21%. Besides, we compare TANPO and SADPO with other online RLHF baselines on MT-Bench scores. Notably, TANPO and SADPO achieve the first and second places respectively in terms of average MT-Bench scores. Results on several academic benchmarks presented in Figure 2 show that our methods outperform the baselines on average and across the majority of academic benchmarks. The full results are reported in Table 3 in Appendix
+
+![Figure 2: Accuracy results on GSM8k, MMLU, OpenBookQA, HellaSwag and WinoGrande. The radar chart shows performance across five benchmarks for four methods: Online DPO (blue), SELM (orange), SADPO (green), and TANPO (red). TANPO consistently shows the highest accuracy across all benchmarks, particularly on MMLU and GSM8k.](2396add2849eccefcbcfbe1c7142a253_img.jpg)
+
+| Benchmark | Online DPO | SELM | SADPO | TANPO |
+|-|-|-|-|-|
+| MMLU | ~65% | ~60% | ~68% | ~75% |
+| GSM8k | ~70% | ~65% | ~72% | ~80% |
+| OpenBookQA | ~55% | ~50% | ~58% | ~65% |
+| HellaSwag | ~75% | ~70% | ~78% | ~85% |
+| WinoGrande | ~60% | ~55% | ~62% | ~70% |
+
+Figure 2: Accuracy results on GSM8k, MMLU, OpenBookQA, HellaSwag and WinoGrande. The radar chart shows performance across five benchmarks for four methods: Online DPO (blue), SELM (orange), SADPO (green), and TANPO (red). TANPO consistently shows the highest accuracy across all benchmarks, particularly on MMLU and GSM8k.
+
+Figure 2: Accuracy results on GSM8k, MMLU, OpenBookQA, HellaSwag and WinoGrande.
+
+{8}------------------------------------------------
+
+D. Furthermore, we examine the pairwise win rate among baseline models, single-agent models and two-agent models, using PairRM as the judge on 805 prompts from the AlpacaEval 2.0 dataset. The results are depicted in Figure 3.
+
+| Technique | AlpacaEval 2.0 |  | Average | MT-Bench |  |
+|-|-|-|-|-|-|
+|  | LC Win Rate | Win Rate |  | 1st Turn | 2nd Turn |
+| Zephyr-7B-SFT (ref.) | 6.59 | 3.66 | 6.14 | 6.34 | 5.95 |
+| Online DPO | 24.36 | 22.14 | 7.24 | 7.37 | 7.11 |
+| Hybrid GSHF | 25.29 | 22.61 | 7.28 | 7.26 | 7.30 |
+| SELM | 26.99 | 25.99 | 7.26 | 7.56 | 6.96 |
+| SADPO | <b>28.43</b> | 26.21 | 7.33 | <b>7.71</b> | 6.94 |
+| TANPO | 27.66 | <b>27.08</b> | <b>7.47</b> | 7.55 | <b>7.39</b> |
+
+Table 1: Results on AlpacaEval 2.0 and MT-Bench. LC Win Rate represents Length-Controlled Win Rate.
+
+**Our algorithms effectively mitigate overfitting.** To further evaluate the performance of our proposed algorithm and investigate its robustness against overfitting, we conduct a second round of experiments on the same UltraFeedback dataset. Specifically, after completing the first three iterations, we continue training the model with additional three iterations on the same dataset, while monitoring AlpacaEval 2.0 metrics. Our results are shown in Figure 4, demonstrating that the model continues to improve during the second round of training, showing no signs of overfitting. The full results are presented in Table 4 in Appendix D. This suggests that our two-agent algorithm is capable of effectively utilizing the training data, even after an extended training period. We note that our algorithm optimizes two agents using distinct strategies while having them compete against each other throughout the training process. This competition leads to a natural increase in the diversity of the training data, as each agent generates responses based on different optimization paths, resulting in more varied and comprehensive scenarios. Additionally, the algorithm’s active exploration mechanism prevents the agents from getting stuck in local minima. These findings highlight the ability of our approach in consistently improving performance and preventing overfitting.
+
+|  |  |  |  |  |
+|-|-|-|-|-|
+| TANPO<br>(min-player) | 0.500 | 0.534 | 0.596 | 0.615 |
+| SADPO | 0.466 | 0.500 | 0.530 | 0.547 |
+| TANPO<br>(max-player) | 0.404 | 0.470 | 0.500 | 0.513 |
+| Online DPO | 0.385 | 0.453 | 0.487 | 0.500 |
+|  | TANPO<br>(min-player) | SADPO | TANPO<br>(max-player) | Online DPO |
+
+Figure 3: Pairwise win rates among baseline models, single-agent models and two-agent models, using PairRM as a judge.
+
+![Figure 4: Performance of TANPO across 6 iterations (2 epochs) on win rate (W.R.) and length-controlled win rate (L.C. W.R.) judged by GPT-4-Turbo. The graph shows four data series: Max Player, W.R. (blue), Max Player, L.C. W.R. (red), Min Player, W.R. (green), and Min Player, L.C. W.R. (purple). All series show an upward trend over the iterations, with the Min Player, L.C. W.R. series reaching the highest value of approximately 30.5 at Iter6 (Epoch2).](e8ff6e66c77a8e96203c9f8db8f0986f_img.jpg)
+
+| Iterations & Epochs | Max Player, W.R. | Max Player, L.C. W.R. | Min Player, W.R. | Min Player, L.C. W.R. |
+|-|-|-|-|-|
+| Iter1 (Epoch1) | 18.5 | 19.5 | 18.5 | 19.5 |
+| Iter2 (Epoch1) | 21.5 | 24.5 | 21.5 | 25.5 |
+| Iter3 (Epoch1) | 23.5 | 25.0 | 23.5 | 27.5 |
+| Iter4 (Epoch2) | 23.5 | 24.5 | 23.5 | 26.5 |
+| Iter5 (Epoch2) | 24.5 | 25.5 | 29.5 | 30.5 |
+| Iter6 (Epoch2) | 26.0 | 27.5 | 29.5 | 30.5 |
+
+Figure 4: Performance of TANPO across 6 iterations (2 epochs) on win rate (W.R.) and length-controlled win rate (L.C. W.R.) judged by GPT-4-Turbo. The graph shows four data series: Max Player, W.R. (blue), Max Player, L.C. W.R. (red), Min Player, W.R. (green), and Min Player, L.C. W.R. (purple). All series show an upward trend over the iterations, with the Min Player, L.C. W.R. series reaching the highest value of approximately 30.5 at Iter6 (Epoch2).
+
+Figure 4: Performance of TANPO across 6 iterations (2 epochs) on win rate (W.R.) and length-controlled win rate (L.C. W.R.) judged by GPT-4-Turbo.
+
+**Our algorithms enhance model performance by improving the quality and diversity of the training data.** Our results show that TANPO (max-player) surpasses the online DPO by 0.69% and 1.34% in AlpacaEval 2.0 length-controlled win rate and win rate. Besides, TANPO (max-player) achieves a win rate of 51.3% against online DPO in pairwise comparison by PairRM. It is important to note that the max-player shares the same setup as the online DPO, with the only difference being the training data. We have shown in Figure 1 that TANPO achieves greater diversity in training
+
+{9}------------------------------------------------
+
+data than online DPO. These results suggest that our algorithm enhances model performance by increasing the diversity of responses during training. By incorporating data generated from two different policies, the model is exposed to a broader range of behaviors and strategies, which helps it generalize better across different prompts.
+
+## 7 CONCLUSION
+
+In this work, we introduce Two-Agent Nash Policy Optimization (TANPO), a two-agent algorithm that balances exploration and exploitation. Additionally, we present Single-Agent Diversity-driven Optimization (SADPO) as a simplified approximation of TANPO, supported by theoretical and empirical results. Our theoretical analysis shows sublinear regret under general conditions, while empirical evaluations demonstrate that TANPO and SADPO outperform baseline methods across multiple benchmarks, highlighting their effectiveness in improving performance and reducing overfitting. We hope our work can provide insights for future research into designing provable efficient and practical self-play RLHF methods.
+
+## REFERENCES
+
+- Yasin Abbasi-Yadkori, Dávid Pál, and Csaba Szepesvári. Improved algorithms for linear stochastic bandits. *Advances in neural information processing systems*, 24, 2011.
+- Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Florencia Leoni Aleman, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, et al. Gpt-4 technical report. *arXiv preprint arXiv:2303.08774*, 2023.
+- Mohammad Gheshlaghi Azar, Zhaohan Daniel Guo, Bilal Piot, Remi Munos, Mark Rowland, Michal Valko, and Daniele Calandriello. A general theoretical paradigm to understand learning from human preferences. In *International Conference on Artificial Intelligence and Statistics*, pp. 4447–4455. PMLR, 2024.
+- Yuntao Bai, Andy Jones, Kamal Ndousse, Amanda Askell, Anna Chen, Nova DasSarma, Dawn Drain, Stanislav Fort, Deep Ganguli, Tom Henighan, et al. Training a helpful and harmless assistant with reinforcement learning from human feedback. *arXiv preprint arXiv:2204.05862*, 2022.
+- Marc Bellemare, Sriram Srinivasan, Georg Ostrovski, Tom Schaul, David Saxton, and Remi Munos. Unifying count-based exploration and intrinsic motivation. *Advances in neural information processing systems*, 29, 2016.
+- Ralph Allan Bradley and Milton E Terry. Rank analysis of incomplete block designs: I. the method of paired comparisons. *Biometrika*, 39(3/4):324–345, 1952.
+- Daniele Calandriello, Daniel Guo, Remi Munos, Mark Rowland, Yunhao Tang, Bernardo Avila Pires, Pierre Harvey Richemond, Charline Le Lan, Michal Valko, Tianqi Liu, et al. Human alignment of large language models through online preference optimisation. *arXiv preprint arXiv:2403.08635*, 2024.
+- Shicong Cen, Jincheng Mei, Katayoon Goshvadi, Hanjun Dai, Tong Yang, Sherry Yang, Dale Schuurmans, Yuejie Chi, and Bo Dai. Value-incentivized preference optimization: A unified approach to online and offline rlhf. *arXiv preprint arXiv:2405.19320*, 2024.
+- Xiaoyu Chen, Han Zhong, Zhuoran Yang, Zhaoran Wang, and Liwei Wang. Human-in-the-loop: Provably efficient preference-based reinforcement learning with general function approximation. In *International Conference on Machine Learning*, pp. 3773–3793. PMLR, 2022.
+- Zixiang Chen, Yihe Deng, Huizhuo Yuan, Kaixuan Ji, and Quanquan Gu. Self-play fine-tuning converts weak language models to strong language models. *arXiv preprint arXiv:2401.01335*, 2024.
+- Paul F Christiano, Jan Leike, Tom Brown, Miljan Martic, Shane Legg, and Dario Amodei. Deep reinforcement learning from human preferences. *Advances in neural information processing systems*, 30, 2017.
+
+ Rest of paper (reference and Appendix) is removed.

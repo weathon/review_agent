@@ -1,0 +1,301 @@
+
+
+{0}------------------------------------------------
+
+# RESIDUAL-MPPI: ONLINE POLICY CUSTOMIZATION FOR CONTINUOUS CONTROL
+
+Pengcheng Wang<sup>1\*</sup>, Chenran Li<sup>1\*</sup>, Catherine Weaver<sup>1</sup>, Kenta Kawamoto<sup>3</sup>, Masayoshi Tomizuka<sup>1</sup>,  
+Chen Tang<sup>2†</sup>, and Wei Zhan<sup>1</sup>
+
+<sup>1</sup>Department of Mechanical Engineering, University of California, Berkeley.
+
+<sup>2</sup>Department of Computer Science, University of Texas at Austin.
+
+<sup>3</sup>Sony Research Inc., Japan.
+
+## ABSTRACT
+
+Policies developed through Reinforcement Learning (RL) and Imitation Learning (IL) have shown great potential in continuous control tasks, but real-world applications often require adapting trained policies to unforeseen requirements. While fine-tuning can address such needs, it typically requires additional data and access to the original training metrics and parameters. In contrast, an online planning algorithm, if capable of meeting the additional requirements, can eliminate the necessity for extensive training phases and customize the policy without knowledge of the original training scheme or task. In this work, we propose a generic online planning algorithm for customizing continuous-control policies at the execution time, which we call *Residual-MPPI*. It can customize a given prior policy on new performance metrics in few-shot and even zero-shot online settings, given access to the prior action distribution alone. Through our experiments, we demonstrate that the proposed Residual-MPPI algorithm can accomplish the few-shot/zero-shot online policy customization task effectively, including customizing the champion-level racing agent, Gran Turismo Sophy (GT Sophy) 1.0, in the challenging car racing scenario, Gran Turismo Sport (GTS) environment. Code for MuJoCo experiments is included in the supplementary and will be open-sourced upon acceptance. Demo videos and code are available on our website: <https://sites.google.com/view/residual-mppi>.
+
+## 1 INTRODUCTION
+
+Policy learning algorithms such as Reinforcement Learning (RL) and Imitation Learning (IL) have been widely employed to synthesize parameterized control policies for a wide range of real-world motion planning and decision-making problems (Tang et al., 2024), such as navigation (Mirowski et al., 2016; Francis et al., 2020), manipulation (Andrychowicz et al., 2020; Zhang et al., 2018; Mandelekar et al., 2021; Rajeswaran et al., 2017) and locomotion (Peng & Van De Panne, 2017a;b; Gangapurwala et al., 2022). In practice, real-world applications often impose additional requirements on the trained policies beyond those established during training, which can include novel goals (Rhinehart et al., 2018), specific behavior preferences (Ziegler et al., 2019), and stringent safety criteria (Lu et al., 2023). Retraining a new policy network whenever a new additional objective is encountered is both expensive and inefficient, as it may demand extensive training efforts. To enable flexible deployment, it is thereby crucial to develop sample-efficient algorithms for synthesizing new policies that meet additional objectives while preserving the characteristics of the original policy (Lu et al., 2023; Harmel et al., 2023).
+
+Recently, Li et al. (2024) introduced a new problem setting termed *policy customization*, which provides a principled approach to address the aforementioned challenge. In policy customization, the objective is to develop a new policy given a prior policy, ensuring that the new policy: 1) retains the
+
+\*Equal Contribution †Corresponding Author
+
+{1}------------------------------------------------
+
+![Figure 1: Overview of the proposed algorithm. The diagram shows a racing game environment with a car on a track. A blue arrow labeled 'Online Customization' points from the initial state to a customized state. Below this, a dashed box contains the 'Residual-MPPI' process. It starts with a 'Prior Policy' (represented by a red curve), which is processed by an 'Action Sampler' (represented by a blue cloud). The output is then evaluated by 'Action Evaluation' (represented by a green box with a flame icon and the formula S^{w_t}(U^T) = \log p(U^T) + r_T(a_t, u_t)). The final output is a 'Customized Policy' (represented by a blue curve).](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 1: Overview of the proposed algorithm. The diagram shows a racing game environment with a car on a track. A blue arrow labeled 'Online Customization' points from the initial state to a customized state. Below this, a dashed box contains the 'Residual-MPPI' process. It starts with a 'Prior Policy' (represented by a red curve), which is processed by an 'Action Sampler' (represented by a blue cloud). The output is then evaluated by 'Action Evaluation' (represented by a green box with a flame icon and the formula S^{w\_t}(U^T) = \log p(U^T) + r\_T(a\_t, u\_t)). The final output is a 'Customized Policy' (represented by a blue curve).
+
+Figure 1: Overview of the proposed algorithm. In each planning loop, we utilize the prior policy to generate samples and then evaluate them through both the log likelihood of the prior policy and an add-on reward to obtain the customized actions. More details are in Sec. 3. In the experiments, we demonstrate that Residual-MPPI can accomplish the online policy customization task effectively, even in a challenging GTS environment with the champion-level racing agent, GT Sophy 1.0.
+
+properties of the prior policy, and 2) fulfills additional requirements specified by a given downstream task. As an initial solution, the authors proposed the Residual Q-learning (RQL) framework. For discrete action spaces, RQL can leverage maximum-entropy Monte Carlo Tree Search (Xiao et al., 2019) to customize the policy *online*, meaning at the inference time without training. In contrast, for continuous action spaces, RQL offers a solution based on Soft Actor-Critic (SAC) (Haarnoja et al., 2018) to train a customized policy leveraging the prior policy before the real execution. While SAC-based RQL is more sample-efficient than training a new policy from scratch, the additional training steps that are required may still be expensive and time-consuming.
+
+In this work, we propose *online policy customization for continuous action spaces* that eliminates the need for additional policy training. We leverage Model Predictive Path Integral (MPPI) (Williams et al., 2017), a sampling-based model predictive control (MPC) algorithm. Specifically, we propose *Residual-MPPI*, which integrates RQL into the MPPI framework, resulting in an online planning algorithm that customizes the prior policy at the execution time. The policy performance can be further enhanced by iteratively collecting data online to update the dynamics model. Our experiments in MuJoCo demonstrate that our method can effectively achieve zero-shot policy customization with a provided offline trained dynamics model. Furthermore, to investigate the scalability of our algorithm in complex environments, we evaluate Residual-MPPI in the challenging racing game, Gran Turismo Sport (GTS), in which we successfully customize the driving strategy of the champion-level racing agent, GT Sophy 1.0 (Wurman et al., 2022), to adhere to additional constraints.
+
+## 2 PRELIMINARIES
+
+In this section, we provide a concise introduction to two techniques that are used in our proposed algorithm: RQL and MPPI, to establish the foundations for the main technical results.
+
+### 2.1 POLICY CUSTOMIZATION AND RESIDUAL Q-LEARNING
+
+We consider a discrete-time MDP problem defined by a tuple  $\mathcal{M} = (\mathcal{X}, \mathcal{U}, r, p)$ , where  $\mathcal{X} \subseteq \mathcal{R}^n$  is a continuous state space,  $\mathcal{U} \subseteq \mathcal{R}^m$  is a continuous action space,  $r : \mathcal{X} \times \mathcal{U} \rightarrow \mathbb{R}$  is the reward function, and  $p : \mathcal{X} \times \mathcal{U} \times \mathcal{X} \rightarrow [0, \infty)$  is the state transition probability density function. The prior policy  $\pi : \mathcal{X} \rightarrow \mathcal{U}$  is trained as an optimal maximum-entropy policy to solve this MDP problem.
+
+Meanwhile, the add-on task is specified by an add-on reward function  $r_R : \mathcal{X} \times \mathcal{U} \rightarrow \mathbb{R}$ . The full task becomes a new MDP defined by a tuple  $\tilde{\mathcal{M}} = (\mathcal{X}, \mathcal{U}, \omega r + r_R, p)$ , where the reward is defined as a weighted sum of the basic reward  $r$  and the add-on reward  $r_R$ . The policy customization task is to find a policy that solves this new MDP. Li et al. (2024) proposed the residual Q-learning framework to solve the policy customization task. Given the prior policy  $\pi$ , RQL is able to find this customized policy without knowledge of the prior reward  $r$ , which ensures broader applicability across different prior policies obtained through various methods, including those solely imitating demonstrations.
+
+{2}------------------------------------------------
+
+In particular, as shown in their appendix (Li et al., 2024), when we have access to the prior policy  $\pi$ , finding the maximum-entropy policy solving the full MDP problem  $\hat{\mathcal{M}} = (\mathcal{X}, \mathcal{U}, \omega r + r_R, p)$  is equivalent to solving an augmented MDP problem  $\mathcal{M}^{\text{aug}} = (\mathcal{X}, \mathcal{U}, \omega' \log \pi(\mathbf{u}|\mathbf{x}) + r_R, p)$ , where  $\omega'$  is a hyper-parameter that balances the optimality between original and add-on tasks.
+
+### 2.2 MODEL PREDICTIVE PATH INTEGRAL
+
+Model Predictive Path Integral (MPPI) (Williams et al., 2017) is a sampling-based model predictive control (MPC) algorithm, which approximates the optimal solution of an (infinite-horizon) MDP through receding-horizon planning. MPPI evaluates the control inputs  $U = (u_0, u_1, \dots, u_{T-1})$  with an accumulated reward function  $S_{\mathbf{x}_0}(U)$  defined by a reward function  $r$  and a terminal value estimator  $\phi$ :
+
+$$S_{\mathbf{x}_0}(U) = \sum_{t=0}^{T-1} r(\mathbf{x}_t, \mathbf{u}_t) + \phi(\mathbf{x}_T), \quad (1)$$
+
+where the intermediate state  $\mathbf{x}_t$  is calculated by recursively applying the transition dynamics on  $\mathbf{x}_0$ .
+
+By applying an additive noise sequence  $\mathcal{E} = (\epsilon_0, \epsilon_1, \dots, \epsilon_{T-1})$  to a nominal control input sequence  $\tilde{U}$ , MPPI obtains a disturbed control input sequence as  $U = \tilde{U} + \mathcal{E}$  for subsequent optimization, where  $\mathcal{E}$  follows a multivariate Gaussian distribution with its probability density function defined as  $p(\mathcal{E}) = \prod_{t=0}^{T-1} ((2\pi)^m |\Sigma|)^{-\frac{1}{2}} \exp(-\frac{1}{2} \epsilon_t^T \Sigma^{-1} \epsilon_t)$ , where  $m$  is the dimension of the action space.
+
+As shown by Williams et al. (2017), the optimal action distribution that solves the MDP is
+
+$$q^*(U) = \frac{1}{\eta} \exp\left(\frac{1}{\lambda} S_{\mathbf{x}_0}(U)\right) p(\mathcal{E}), \quad (2)$$
+
+where  $\eta$  is the normalizing constant and  $\lambda$  is a positive scalar variable. MPPI approximates this distribution by assigning an importance sampling weight  $\omega(\mathcal{E}^k)$  to each noise sequence  $\mathcal{E}^k$  to update the nominal control input sequence:
+
+$$\mathbf{u}_t = \hat{\mathbf{u}}_t + \sum_{k=1}^K \omega(\mathcal{E}^k) \epsilon_t^k, \quad (3)$$
+
+where  $K$  is the number of samples, and  $\omega(\mathcal{E}^k)$  could be calculated as
+
+$$\omega(\mathcal{E}^k) = \frac{1}{\mu} \left( S_{\mathbf{x}_0}(\tilde{U} + \mathcal{E}^k) - \frac{\lambda}{2} \sum_{t=0}^{T-1} \hat{\mathbf{u}}_t^T \Sigma^{-1} (\hat{\mathbf{u}}_t + 2\epsilon_t^k) \right), \quad (4)$$
+
+where  $\mu$  is the normalizing constant.
+
+## 3 METHOD
+
+Our objective is to address the policy customization challenge under the online setting for continuous control. We aim to leverage a pre-trained prior policy  $\pi$  with a dynamics model  $F$ , to approximate the optimal solution to the augmented MDP problem  $\mathcal{M}^{\text{aug}}$ , in an online manner. To address this problem, we propose a novel algorithm, *Residual Model Predictive Path Integral* (Residual-MPPI), which is broadly applicable to any maximum-entropy prior policy with a dynamics model. The proposed algorithm is summarized in Algorithm 1 and Figure 1. In this section, we first establish the theoretical foundation of our approach by verifying the maximum-entropy property of MPPI. We then refine the MPPI method with the derived formulation to approximate the solution of the  $\mathcal{M}^{\text{aug}}$ . Lastly, we discuss the dynamics learning and fine-tuning method used in implementation.
+
+### 3.1 RESIDUAL-MPPI
+
+MPPI is a widely used sampling-based MPC algorithm that has demonstrated promising results in various continuous control tasks. To achieve online policy customization, i.e., solving the augmented MDP  $\mathcal{M}^{\text{aug}}$  efficiently during online execution, we utilize MPPI as the foundation of our algorithm.
+
+{3}------------------------------------------------
+
+#### **Algorithm 1** Residual-MPPI
+
+---
+
+**Input:** Current state  $\mathbf{x}_0$ ; **Output:** Action Sequence  $\hat{U} = (\hat{\mathbf{u}}_0, \hat{\mathbf{u}}_1, \dots, \hat{\mathbf{u}}_{T-1})$ .
+
+**Require:** System dynamics  $F$ ; Number of samples  $K$ ; Planning horizon  $T$ ; Prior policy  $\pi$ ; Disturbance covariance matrix  $\Sigma$ ; Add-on reward  $r_R$ ; Temperature scalar  $\lambda$ ; Discounted factor  $\gamma$
+
+- 1: **for**  $t = 0, \dots, T - 1$  **do** ▷ Initialize the action sequence from the prior policy
+- 2:    $\hat{\mathbf{u}}_t \leftarrow \arg \max \pi(\mathbf{u}_t | \mathbf{x}_t)$
+- 3:    $\mathbf{x}_{t+1} \leftarrow F(\mathbf{x}_t, \hat{\mathbf{u}}_t)$
+- 4: **end for**
+- 5: **for**  $k = 1, \dots, K$  **do** ▷ Evaluate the sampled action sequence
+- 6:   Sample noise  $\mathcal{E}^k = \{\epsilon_0^k, \epsilon_1^k, \dots, \epsilon_{T-1}^k\}$
+- 7:   **for**  $t = 0, \dots, T - 1$  **do**
+- 8:      $\mathbf{x}_{t+1} \leftarrow F(\mathbf{x}_t, \hat{\mathbf{u}}_t + \epsilon_t^k)$
+- 9:      $S(\mathcal{E}^k) += \gamma^t \times (r_R(\mathbf{x}_t, \hat{\mathbf{u}}_t + \epsilon_t^k) + \omega' \log \pi(\hat{\mathbf{u}}_t + \epsilon_t^k | \mathbf{x}_t)) - \lambda \hat{\mathbf{u}}_t^T \Sigma^{-1} \epsilon_t^k$
+- 10:   **end for**
+- 11: **end for**
+- 12:  $\beta = \min_k S(\mathcal{E}^k)$  ▷ Update the action sequence
+- 13:  $\eta \leftarrow \sum_{k=1}^K \exp(\frac{1}{\lambda} (S(\mathcal{E}^k) - \beta))$
+- 14: **for**  $k = 1, \dots, K$  **do**
+- 15:    $\omega(\mathcal{E}^k) \leftarrow \frac{1}{\lambda} \exp(\frac{1}{\lambda} (S(\mathcal{E}^k) - \beta))$
+- 16: **end for**
+- 17: **for**  $t = 0, \dots, T - 1$  **do**
+- 18:    $\hat{\mathbf{u}}_t += \sum_{k=1}^K \omega(\mathcal{E}^k) \epsilon_t^k$
+- 19: **end for**
+- 20: **return**  $\hat{U}$
+
+---
+
+As shown in Sec. 2.1, RQL requires the planning algorithm, MPPI, to comply with the principle of maximum entropy. Note that this has been shown in Bhardwaj et al. (2020), where this result established the foundation for their Q-learning algorithm integrating MPPI and model-free soft Q-learning. In Residual-MPPI, this result serves as a preliminary step to ensure that MPPI can be employed as an online planner to solve the augmented MDP  $\mathcal{M}^{\text{aug}}$  in policy customization. To better serve our purpose, we provide a self-contained and concise notation of this observation in Proposition 1. Its step-by-step breakdown proof can be found in Appendix A.
+
+**Proposition 1.** *Given an MDP defined by  $\mathcal{M} = (\mathcal{X}, \mathcal{U}, r, p)$ , with a deterministic state transition  $p$  defined with respect to a dynamics model  $F$  and a discount factor  $\gamma = 1$ , the distribution of the action sequence  $q^*(U)$  at state  $\mathbf{x}_0$  in horizon  $T$ , where each action  $\mathbf{u}_t, t = 0, \dots, T - 1$  is sequentially sampled from the maximum-entropy policy (Haarnoja et al., 2017) with an entropy weight  $\alpha$  is*
+
+$$q^*(U) = \frac{1}{Z_{\mathbf{x}_0}} \exp \left( \frac{1}{\alpha} \left( \sum_{t=0}^{T-1} r(\mathbf{x}_t, \mathbf{u}_t) + V^*(\mathbf{x}_T) \right) \right), \quad (5)$$
+
+where  $V^*$  is the soft value function (Haarnoja et al., 2017) and  $\mathbf{x}_t$  is defined recursively from  $\mathbf{x}_0$  and  $U$  through the dynamics model  $F$  as  $\mathbf{x}_{t+1} = F(\mathbf{x}_t, \mathbf{u}_t), t = 0, \dots, T - 1$ .
+
+If we have  $\lambda = \alpha$  and let  $V^*$  be the terminal value estimator, the distribution in equation 5 is equivalent to the one in equation 2, that is the optimal distribution that MPPI tries to approximate, but under the condition that the  $p(\mathcal{E})$  is a Gaussian distribution with infinite variance, i.e. a uniform distribution. It suggests that MPPI can well approximate the maximum-entropy optimal policy with a discount factor  $\gamma$  close to 1 and a large noise variance. We can then derive Residual-MPPI straightforwardly by defining the evaluation function  $S_{\mathbf{x}_0}(U)$  in MPPI as
+
+$$S_{\mathbf{x}_0}^{\text{aug}}(U) = \sum_{t=0}^{T-1} \gamma^t \cdot (r_R(\mathbf{x}_t, \mathbf{u}_t) + \omega' \log \pi(\mathbf{u}_t | \mathbf{x}_t)), \quad (6)$$
+
+to solve the  $\mathcal{M}^{\text{aug}}$ , therefore approximates the optimal customized policy online.
+
+The performance and sample efficiency of MPPI depends on the approach to initialize the nominal input sequence  $\hat{U}$ . In policy customization, the prior policy serves as a natural source for initializing the nominal control inputs. As shown at line 1 in Algorithm 1, by recursively applying the
+
+{4}------------------------------------------------
+
+prior policy, we could initialize a nominal trajectory with a tunable exploration noise to construct a Gaussian prior distribution for sampling. During experiments, we found that including the nominal action sequence as a candidate evaluation sequence can effectively increase sampling stability.
+
+### 3.2 DYNAMICS LEARNING AND FINE-TUNING
+
+In scenarios where an effective dynamics model is unavailable in a prior, it is necessary to develop a learned dynamics model. To this end, we established a dynamics training pipeline utilizing the prior policy for data collection. In our implementation, we employed three main techniques to enhance the model’s capacity for accurately predicting environmental states, as follows. The pseudocode of the complete Residual-MPPI deployment pipeline can be found in Algorithm 2 in Appendix B.
+
+**Multi-step Error:** The prediction errors of the imperfect dynamics model accumulate over time steps. In the worst case, compounding multi-step errors can grow exponentially (Venkatraman et al., 2015). To ensure the accuracy of the dynamics over the long term, we use a multi-step error  $\sum_{t=0}^T \gamma^t (s_t - \hat{s}_t)^2$  as the loss for training, where  $s_t$  and  $\hat{s}_t$  are the ground-truth and prediction.
+
+**Exploration Noise:** The prior policy’s behavior sticks around the optimal behavior to the prior task, which means the roll-out samples collected using the prior policy concentrated to a limited region in the state space. It limits the generalization performance of the dynamics model under the policy customization setting. Therefore, during the sampling process, we add Gaussian exploration noises to the prior policy actions to enhance sample diversity.
+
+**Fine-tuning with Online Data:** Since the residual-MPPI planner solves the customized task objective, its behavior is different from the prior. Thus, the planner may encounter states not contained in the dynamics training dataset collected by prior policy, on which the learned dynamics could be inaccurate. In this case, we can iteratively collect data with Residual-MPPI and update the dynamics model using the in-distribution data. We refer to the variant with online dynamics fine-tuning as *few-shot Residual-MPPI* and the variant without fine-tuning as *zero-shot Residual-MPPI*.
+
+## 4 MUJOCo EXPERIMENTS
+
+In this section, we evaluate the performance of the proposed algorithms in different environments selected from MuJoCo (Todorov et al., 2012). In Sec. 4.1, we provide the configurations of our experiments, including the settings of policy customization tasks in different environments, baselines, and evaluation metrics. In Sec. 4.2, we present and analyze the experimental results. Please refer to the appendices for detailed experiment configurations, implementations, and visualizations.
+
+### 4.1 EXPERIMENT SETUP
+
+**Environments.** In each environment, we design the add-on rewards to illustrate a customized specifications such as behavior preference or additional task objectives in the practical application scenarios. In HalfCheetah and Swimmer, we apply an add-on penalty on the angle of a certain joint, which is a common issue in deployment if the corresponding motor is broken; In Hopper, we apply an extra reward on height; In Ant, we apply an add-on reward for moving along the y-axis. The configurations of environments and training parameters can be found in Appendix C.
+
+**Baselines.** In our experiments, we compare the performance of the proposed residual-MPPI algorithm against seven baselines, including the prior policy, four alternative MPPI variants, and two RL-based baselines. Note that except for Greedy-MPPI, the remaining MPPI baselines have access to the underlying reward or value function of the prior policy. These baselines show that Residual-MPPI is still the ideal choice, even with privileged access to additional reward or value information.
+
+- **Prior Policy:** We utilize SAC to train the prior policy on the basic task for policy customization. At test time, we evaluate its performance on the overall task without customization, which serves as a baseline to show the effectiveness of policy customization.
+- **Greedy-MPPI:** Firstly, we introduce Greedy-MPPI, which samples the action sequences from the prior policy but only optimizes the control actions for the add-on reward  $r_R$ , i.e., removing the  $\log \pi$  reward term of the proposed Residual-MPPI. Through comparison with Greedy-MPPI, we aim to show the necessity and effect of including  $\log \pi$  as a reward in Residual-MPPI.
+
+{5}------------------------------------------------
+
+- **Full-MPPI:** Next, we apply the MPPI with no prior on the MDP of the full task (i.e.,  $\omega_T + r_R$ ). We aim to compare Residual-MPPI against it to validate that our proposed algorithm can effectively leverage the prior policy to boost online planning.
+- **Guided-MPPI:** Furthermore, we introduce Guided-MPPI, which samples the control actions from the prior policy and also has privileged access to the full reward information, i.e.,  $\omega_T + r_R$ . By comparing it against Guided-MPPI, we aim to show the advantages and the necessity of Residual-MPPI even with granted access to the prior reward.
+- **Valued-MPPI:** While it is not compatible with our problem setting, we further consider the case where the value function of the prior policy is accessible. We construct a variant of Guided-MPPI with this value function as a terminal value estimator like Argenson & Dulac-Arnold (2020).
+- **Residual-SAC:** We also include the Residual-SAC as a RL-based baseline to set an upper bound performance of the policy customization task without knowing the prior reward. We used the final checkpoint (4M steps) as well as checkpoints with an equivalent amount of data to dynamics training (200K steps) to illustrate the superior sample efficiency of Residual-MPPI.
+- **Fulltask-SAC:** Finally, we report the SAC policy trained on the full task as a reference to set an upper bound for the policy customization task’s performance.
+
+**Metric.** We aim to validate a policy’s performance with total reward, i.e.,  $\omega_T + r_R$ . When the add-on task contradicts the basic task, the optimal policy may trade off its performance on the basic task to maximize the total reward. Therefore, we further measure the basic and add-on rewards separately to monitor the trade-off achieved by the customized policy, i.e., how well the performance on the basic task is maintained and how much the policy is optimized toward the add-on task.
+
+### 4.2 RESULTS AND DISCUSSIONS
+
+The experimental results, summarized in Table 1, demonstrate the effectiveness of Residual-MPPI for online policy customization. The ablation results of the planning parameters in MuJoCo and visualization can be found in Appendix F.2 and Appendix E.1. Also, we conduct experiments upon the same MuJoCo environments with IL prior policies, whose results are summarized in Table 10 in Appendix F.1. Across the tested environments, the customized policies achieve significant improvements over the prior policies in meeting the objectives of the add-on tasks while maintaining a similar level of performance in terms of the basic task objectives. In particular, we observe three key advantages of Residual-MPPI over baseline approaches.
+
+*First, Residual-MPPI demonstrates significantly higher sample-efficiency over the RL-based baselines.* While Fulltask-SAC and Residual-SAC achieve better performance than planning-based approaches through extensive online exploration (4M steps), our focus is on online policy customization. Thus, we consider their performance as upper bounds in our online setting. With a substantially smaller dataset for dynamics model training (2K steps), Residual-MPPI achieves total rewards comparable to Residual-SAC in the HalfCheetah, Hopper, and Ant environments. In contrast, Residual-SAC performs significantly worse when trained on the same limited amount of data. *Second, Residual-MPPI can strike a better trade-off between the basic and add-on rewards than Greedy-MPPI.* Greedy-MPPI optimizes the objective of a biased MDP  $\mathcal{M}^{\text{add}} = (\mathcal{X}, \mathcal{U}, r_R, \mathbf{p})$ . It relies solely on sampling from the prior policy to heuristically regularize the optimized action sequences to remain close to the prior policy. While this heuristic approach helps maintain performance on the basic task objective, it is prone to suboptimality in tasks where the add-on reward is sparse or orthogonal to the basic reward. For example, in the Ant environment, the agent is rewarded for making progress along the x-axis in the basic task, while the add-on reward encourages progress along the y-axis. Since these reward terms are orthogonal, exclusively optimizing for progress along the y-axis compromises the progress along the x-axis, leading to a noticeable performance gap for Greedy-MPPI. This limitation is further amplified in the more complex racing task, as we will demonstrate in the next section.
+
+*Finally, Residual-MPPI outperforms MPPI variants that have privileged access to the prior policy’s reward or value functions.* Despite having full reward knowledge, Full-MPPI fails to complete the task. Without sampling control actions from the prior policy, Full-MPPI suffers from poor sample efficiency and achieves subpar performance. Guided-MPPI can achieve better performance, given its access to action samples from the prior policy. However, it still underperforms Residual-MPPI
+
+{6}------------------------------------------------
+
+Table 1: Experimental Results of Zero-shot Residual-MPPI in MuJoCo
+
+| Env. | Policy | Full Task | Basic Task | Add-on Task |  |
+|-|-|-|-|-|-|
+|  |  | Total Reward | Basic Reward | $ \hat{\theta} $ | Add-on Reward |
+| Half Cheetah | Prior Policy | $1000.7 \pm 88.8$ | $2449.8 \pm 52.3$ | $0.14 \pm 0.00$ | $-1449.1 \pm 45.3$ |
+|  | Greedy-MPPI | <b><math>1939.9 \pm 134.7</math></b> | $2180.9 \pm 87.3$ | <b><math>0.02 \pm 0.01</math></b> | <b><math>-241.0 \pm 50.3</math></b> |
+|  | Full-MPPI | $-3595.1 \pm 322.7$ | $-1167.3 \pm 144.0$ | $0.24 \pm 0.03$ | $-2427.7 \pm 320.3$ |
+|  | Guided-MPPI | $1849.6 \pm 151.0$ | $2154.6 \pm 95.7$ | $0.03 \pm 0.01$ | $-305.0 \pm 58.7$ |
+|  | Valued-MPPI | $1760.7 \pm 478.8$ | <b><math>2201.8 \pm 258.3</math></b> | $0.04 \pm 0.02$ | $-441.0 \pm 222.5$ |
+|  | Residual-MPPI | <b><math>1936.2 \pm 109.3</math></b> | $2178.6 \pm 71.9$ | <b><math>0.02 \pm 0.00</math></b> | <b><math>-242.3 \pm 40.5</math></b> |
+|  | Residual-SAC (200K) | $-265.0 \pm 919.0$ | $455.4 \pm 678.6$ | $0.07 \pm 0.03$ | $720.4 \pm 251.8$ |
+|  | Residual-SAC (4M) | $2184.5 \pm 29.7$ | $2233.7 \pm 29.3$ | $0.00 \pm 0.00$ | $-49.2 \pm 1.7$ |
+|  | Fulltask-SAC | $2149.9 \pm 28.6$ | $2214.5 \pm 27.2$ | $0.01 \pm 0.00$ | $-64.5 \pm 2.4$ |
+| Env | Policy | Total Reward | Basic Reward | $ \hat{\theta} $ | Add-on Reward |
+| Swimmer | Prior Policy | $-245.2 \pm 5.6$ | $345.8 \pm 3.2$ | $0.59 \pm 0.01$ | $-591.0 \pm 5.8$ |
+|  | Greedy-MPPI | <b><math>-58.9 \pm 5.4</math></b> | $275.8 \pm 3.1$ | <b><math>0.33 \pm 0.01</math></b> | <b><math>-334.7 \pm 7.4</math></b> |
+|  | Full-MPPI | $-1686.6 \pm 106.7$ | $14.1 \pm 6.3$ | $1.70 \pm 0.11$ | $-1700.7 \pm 106.2$ |
+|  | Guided-MPPI | $-149.0 \pm 5.6$ | $292.9 \pm 3.8$ | $0.44 \pm 0.01$ | $-441.9 \pm 7.2$ |
+|  | Valued-MPPI | $-205.8 \pm 6.3$ | <b><math>335.1 \pm 1.6</math></b> | $0.54 \pm 0.01$ | $-540.9 \pm 6.3$ |
+|  | Residual-MPPI | <b><math>-60.0 \pm 5.2</math></b> | $275.8 \pm 3.4$ | <b><math>0.34 \pm 0.01</math></b> | <b><math>-335.9 \pm 7.6</math></b> |
+|  | Residual-SAC (200K) | $-209.0 \pm 67.6$ | $2.1 \pm 15.5$ | $0.21 \pm 0.07$ | $-221.1 \pm 72.7$ |
+|  | Residual-SAC (4M) | $-10.5 \pm 24.1$ | $-1.5 \pm 16.9$ | $0.01 \pm 0.02$ | $-9.0 \pm 16.6$ |
+|  | Fulltask-SAC | $-4.2 \pm 17.1$ | $2.1 \pm 17.6$ | $0.01 \pm 0.00$ | $-6.3 \pm 3.0$ |
+| Env. | Policy | Total Reward | Basic Reward | $\bar{z}$ | Add-on Reward |
+| Hopper | Prior Policy | $7252.7 \pm 49.2$ | $3574.5 \pm 9.7$ | $1.37 \pm 0.00$ | $3678.2 \pm 48.3$ |
+|  | Greedy-MPPI | <b><math>7367.0 \pm 199.4</math></b> | $3553.0 \pm 58.4$ | <b><math>1.38 \pm 0.01</math></b> | <b><math>3814.0 \pm 156.8</math></b> |
+|  | Full-MPPI | $20.5 \pm 3.0$ | $3.6 \pm 0.7$ | $1.24 \pm 0.00$ | $16.9 \pm 2.4$ |
+|  | Guided-MPPI | $6121.3 \pm 1590.1$ | $3067.8 \pm 679.0$ | $1.35 \pm 0.03$ | $3053.4 \pm 917.7$ |
+|  | Valued-MPPI | $7243.9 \pm 75.7$ | <b><math>3562.7 \pm 14.5</math></b> | $1.37 \pm 0.01$ | $3681.2 \pm 74.6$ |
+|  | Residual-MPPI | <b><math>7363.0 \pm 254.9</math></b> | $3547.6 \pm 78.0$ | <b><math>1.38 \pm 0.01</math></b> | <b><math>3815.4 \pm 186.4</math></b> |
+|  | Residual-SAC (200K) | $3543.1 \pm 478.9$ | $1019.8 \pm 94.3$ | $1.27 \pm 0.01$ | $2523.2 \pm 405.5$ |
+|  | Residual-SAC (4M) | $7682.5 \pm 178.2$ | $2310.4 \pm 106.8$ | $1.54 \pm 0.01$ | $5372.0 \pm 75.8$ |
+|  | Fulltask-SAC | $7825.3 \pm 36.9$ | $2934.5 \pm 27.6$ | $1.49 \pm 0.00$ | $4890.8 \pm 39.6$ |
+| Env | Policy | Total Reward | Basic Reward | $\bar{v}_y$ | Add-on Reward |
+| Ant | Prior Policy | $6333.7 \pm 753.9$ | $6177.1 \pm 703.7$ | $0.16 \pm 0.22$ | $156.6 \pm 200.5$ |
+|  | Greedy-MPPI | $6104.2 \pm 1532.0$ | $5092.8 \pm 1305.2$ | <b><math>1.01 \pm 0.27</math></b> | <b><math>1011.3 \pm 277.7</math></b> |
+|  | Full-MPPI | $-2767.7 \pm 154.0$ | $-2764.4 \pm 114.2$ | $-0.00 \pm 0.11$ | $-3.3 \pm 108.0$ |
+|  | Guided-MPPI | $5160.9 \pm 1963.0$ | $4999.8 \pm 1887.9$ | $0.16 \pm 0.22$ | $161.2 \pm 217.7$ |
+|  | Valued-MPPI | $6437.0 \pm 1021.9$ | <b><math>6230.7 \pm 959.0</math></b> | $0.21 \pm 0.20$ | $206.3 \pm 196.3$ |
+|  | Residual-MPPI | <b><math>6846.7 \pm 647.8</math></b> | $5984.8 \pm 541.5$ | <b><math>0.86 \pm 0.19</math></b> | <b><math>861.8 \pm 189.8</math></b> |
+|  | Residual-SAC (200K) | $-1175.5 \pm 157.3$ | $-1178.3 \pm 156.4$ | $0.00 \pm 0.00$ | $2.7 \pm 3.9$ |
+|  | Residual-SAC (4M) | $6962.9 \pm 342.9$ | $5710.2 \pm 252.0$ | $1.25 \pm 0.13$ | $1252.7 \pm 127.3$ |
+|  | Fulltask-SAC | $7408.6 \pm 312.0$ | $3100.3 \pm 184.4$ | $4.31 \pm 0.21$ | $4308.3 \pm 209.2$ |
+
+The evaluation results are in the form of mean  $\pm$  std over the 500 running episodes. The total reward is calculated on full task, whose reward is  $\omega r + r_R$ .
+
+across all tasks, as it is constrained by its limited ability to reason the long-term effects of actions within its finite planning horizons. Conversely, Residual-MPPI implicitly incorporates the original task reward through the prior policy log-likelihood. The  $\log \pi$  term also serves as a proxy of the prior policy’s Q-function, informing the planner of the impact of the action sequences beyond the planning horizon. While Valued-MPPI addresses long-term impacts by incorporating the prior Q-function, it struggles to fully align with the complete task reward. Valued-MPPI considers the long-term impact by incorporating the prior Q-function but fails to match the full task reward setting, resulting in better performance on the basic task but suboptimum on the full task.
+
+{7}------------------------------------------------
+
+![Figure 2: In-game screen shots of Policy Behavior on Different Road Sections. The figure shows two rows of four screenshots each, labeled Case 1 and Case 2. Each row compares four policies: GT Sophy 1.0, Zero-shot MPPI, Few-shot MPPI, and Residual-SAC. To the right of the screenshots is a map of the racing track with a blue line indicating the path and a small inset showing a close-up of a road section.](892f25e3d71d8e315a2a51092a8a8da7_img.jpg)
+
+Figure 2: In-game screen shots of Policy Behavior on Different Road Sections. The figure shows two rows of four screenshots each, labeled Case 1 and Case 2. Each row compares four policies: GT Sophy 1.0, Zero-shot MPPI, Few-shot MPPI, and Residual-SAC. To the right of the screenshots is a map of the racing track with a blue line indicating the path and a small inset showing a close-up of a road section.
+
+Figure 2: In-game screen shots of Policy Behavior on Different Road Sections
+
+## 5 CUSTOMIZING CHAMPION-LEVEL AUTONOMOUS RACING POLICY
+
+With the effective results in standard benchmark environments, we are further interested in whether the proposed algorithm can be applied to effectively customize an advanced policy for a more sophisticated continuous control task. Gran Turismo Sport (GTS), a realistic racing simulator that simulates high-fidelity racing dynamics, complex environments at an independent, fixed frequency with realistic latency as in real-world control systems, serves as an ideal test bed. GT Sophy 1.0 (Wurman et al., 2022), a DRL-based racing policy, has been shown to outperform the world’s best drivers among the global GTS player community. To further investigate the scalability of our algorithm and its robustness when dealing with complex environments and advanced policies, we carried out further experiments on GT Sophy 1.0 in the GTS environment.
+
+### 5.1 EXPERIMENT SETUP
+
+Though GT Sophy 1.0 is a highly advanced system with superhuman racing skills, it tends to exhibit too aggressive route selection as the well-trained policy has the ability to keep stable on the simulated grass. However, in real-world racing, such behaviors would be considered dangerous and fragile because of the time-varying physical properties of real grass surfaces and tires. Therefore, we establish the task as customizing the policy to a safer route selection. Formally, the customization goal is to help the GT Sophy 1.0 drive *on course* while maintaining its superior racing performance. This kind of customization objective could potentially be used to foster robust sim-to-real transfer of agile control policies for many related problem domains.
+
+We adopt a simple MLP architecture to design a dynamics model and train it using the techniques introduced in Sec. 3.2. The configurations of the environments and implementation details can be found in Appendix D. As the pre-trained GT Sophy 1.0 policy is constructed with complex rewards and regulations, we adopt the average lap time and number of off-course steps as the metrics. In addition to zero-shot Residual-MPPI, we also evaluate a few-shot version of our algorithm, in which we iteratively update the dynamics with the customized planner’s trajectories to further improve the performance. We also consider Residual-SAC (Li et al., 2024) as another baseline to validate the advantage of online Residual-MPPI against RL-based solutions in the challenging racing problem. Notably, we are only given access to the policy network of GT Sophy 1.0, which prevents us from evaluating Valued-MPPI, as it requires access to the critic function. Therefore, we only include Greedy-MPPI and Guided-MPPI as MPPI variants for comparison in the GTS environment.
+
+### 5.2 RESULTS AND DISCUSSIONS
+
+The experimental results, summarized in Table 2, demonstrate that Residual-MPPI significantly enhances the safety of GT Sophy 1.0 by reducing its off-course steps, albeit with a marginal increase in lap time. Further improvements are observed after employing data gathered during the customization process to fine-tune the dynamics under a few-shot setting. This few-shot version of Residual-MPPI outperforms the zero-shot version in terms of lap time and off-course steps.
+
+The ablation results of the planning parameters and visualization in GTS can be found in Appendix F.3 and Appendix E.2, which clearly demonstrates the effectiveness of the proposed method by greatly reducing the off-course steps. In the detailed route selection visualization, it can be observed that Few-shot MPPI chose a safer and faster racing line compared to Zero-shot MPPI with
+
+{8}------------------------------------------------
+
+Table 2: Experimental Results of Residual-MPPI in GTS
+
+| Policy | GT Sophy 1.0 | Zero-shot MPPI | Few-shot MPPI | Residual-SAC (80K laps) |
+|-|-|-|-|-|
+| Lap Time | $117.77 \pm 0.08$ | $123.34 \pm 0.22$ | $122.93 \pm 0.14$ | $130.00 \pm 0.13$ |
+| Off-course Steps | $93.13 \pm 1.98$ | $9.03 \pm 3.33$ | $4.43 \pm 2.39$ | $0.87 \pm 0.78$ |
+| Policy | Full-MPPI | Guided-MPPI | Greedy-MPPI | Residual-SAC (2K laps) |
+| Lap Time | *Failed | *Failed | *Failed | *Failed |
+| Off-course Steps | *Failed | *Failed | *Failed | *Failed |
+
+The evaluation results are in the form of mean  $\pm$  std over 30 laps. \*Failed baseline is not able to finish a complete lap. Valued-MPPI is not available since we only have access to the policy network of GT Sophy 1.0.
+
+![Figure 3: Guided-MPPI and Greedy-MPPI Results in GTS. (a) In-game screenshots of Greedy-MPPI showing a car going off-track at the first corner. (b) In-game screenshots of Guided-MPPI showing a car going off-track at the first corner. To the right, a plot shows the trajectories of four policies: GT-Sophy (red), Few-shot MPPI (green), Guided-MPPI (blue), and Greedy-MPPI (purple). The Greedy-MPPI trajectory (purple) goes off-track at the first corner, while the others stay on course.](891ff9b651838b7f59e9a1612a739e15_img.jpg)
+
+Figure 3: Guided-MPPI and Greedy-MPPI Results in GTS. (a) In-game screenshots of Greedy-MPPI showing a car going off-track at the first corner. (b) In-game screenshots of Guided-MPPI showing a car going off-track at the first corner. To the right, a plot shows the trajectories of four policies: GT-Sophy (red), Few-shot MPPI (green), Guided-MPPI (blue), and Greedy-MPPI (purple). The Greedy-MPPI trajectory (purple) goes off-track at the first corner, while the others stay on course.
+
+Figure 3: Guided-MPPI and Greedy-MPPI Results in GTS. (a) In-game screenshots of Greedy-MPPI; (b) In-game screenshots of Guided-MPPI. Red parts indicate off-course behaviors. Both baselines cannot drive the vehicle effectively, completely going off track at the first corner.
+
+more accurate dynamics. Though the customized policies can not eliminate all the off-course steps, it is worth noting that these violations are minor (i.e., slightly touching the course boundaries) compared to GT Sophy 1.0, making the customized policies safe enough to stay on course.
+
+**Residual-SAC**, compared with the Residual-MPPI, yields a very conservative customized policy. As shown in Figure 2, it is obvious that the Residual-SAC policy behaves sub-optimally and overly yields to the on-course constraints. It is worth noting that over 80,000 laps of roll-outs are collected to achieve the current performance of Residual-SAC. In contrast, the data used to train GTS dynamics for Residual-MPPI, along with the online data for dynamics model fine-tuning, amounted to only approximately 2,000 and 100 laps, respectively. As discussed in safe RL and curriculum learning methods (Mo et al., 2021; Anzalone et al., 2022), when training with constraints, it is easy for RL to yield to an overly conservative behavior. At the checkpoint with 2k laps of training data, Residual-SAC could not finish a lap yet, which highlights the outstanding data-efficiency of Residual-MPPI.
+
+**Guided-MPPI**, however, cannot finish the track stably, as shown in figure 3. Similar to what we have analyzed in the MuJoCo experiments, Guided-MPPI suffers from its limited ability to account for the long-term impacts of actions given the finite planning horizon. This limitation leads to more severe consequences in complex tasks that require long-term, high-level decision-making, such as route selection during racing, which leads to failure in GTS.
+
+**Greedy-MPPI**, as mentioned above, also leads to severe failure in the complex GTS task, further emphasizing the importance of the  $\log \pi$  term in Residual-MPPI’s objective function. In GTS, the Greedy-MPPI only optimizes the trajectories by not allowing the policy to be off-course, where a straightforward local optimal but undesirable solution would be just staying still. Such a trivial policy would behave better on the add-on tasks (stay on course) but not on the full task (stay on course while maintaining racing superiority). From the theoretical perspective, the significance of the  $\log \pi$  term goes far beyond a simple regularization term. It is the key factor in addressing the policy customization problem, which is inherently a part of the joint optimization objective, encoding and passing the information of the original reward in a theoretically sound manner.
+
+{9}------------------------------------------------
+
+## 6 RELATED WORKS
+
+**Model-based RL.** Many works focused on combining learning-based agents with classical planning to enhance performance, especially in various model-based RL approaches. MuZero (Schrittwieser et al., 2020) employs a learned Actor as the search policy during the MCTS process and utilizes the critic as the terminal value at the leaf nodes; TD-MPC2 (Hansen et al., 2023) follows a similar approach and extends it to continuous task by utilizing MPPI as the continuous planner. RL-driven MPPI (Qu et al., 2024) chooses the distributional SACs as the prior policy and also adopts the MPPI as the planner. However, those methods mainly address the planning within the same task and have a full reward and value function, while policy customization requires jointly optimizing an add-on reward and the underlying reward of the prior policy, which is unknown in a priori. In general cases, the prior policy may not provide a critic, as is the case with algorithms like policy gradient (Shi et al., 2019). Moreover, the value function will change with the new reward, making it infeasible to be applied. Therefore, these methods are not able to solve policy customization tasks directly.
+
+**Policy Adaptation.** There have been numerous works considering on the topic of policy adaptation. Some works require an extra demonstration dataset to adapt the policy to the new task, like Ceil (Liu et al., 2023) and Prompt-DT (Xu et al., 2022). However, such expert demonstrations are unavailable in the online policy customization settings. Some works focus on adaptation via RL fine-tuning: JSRL (Uchendu et al., 2023) uses a prior policy as the guiding policy to form a curriculum for the exploration policy; AWAC (Nair et al., 2020) combines sample-efficient dynamic programming with maximum likelihood policy updates to leverage large amounts of offline data for quickly performing online fine-tuning of RL policies. However, the main objective in RL fine-tuning is to maximize the policy return on the new task. In contrast, policy customization (Li et al., 2024) aims to find a policy that can maintain the prior performance on the basic task at the same time.
+
+**Planning with Prior Policy.** Some works address a similar problem of customizing pre-trained prior policies towards additional requirements. Efficient game-theoretic planning (Li et al., 2022) uses a planner to construct human behavior within the pre-trained prediction model. Deep Imitative Model (Rhinehart et al., 2018) aims to direct an imitative policy to arbitrary goals during online usage. However, they require full reward modeling with hand-designed features, or the add-on task is in the form of specific goals. Residual-MCTS proposed in RQL (Li et al., 2024) solves the policy customization online via planning but is limited to tasks with discrete action spaces. MBOP (Argenson & Dulac-Arnold, 2020) solves the offline RL problem through planning by learning dynamics, action prior, and values from an offline dataset. LOOP (Sikchi et al., 2022) focused on learning off-policy with samples from an online planner. However, both approaches require knowledge of the basic reward function and thus cannot be directly applied to our setting.
+
+## 7 LIMITATIONS AND FUTURE WORK
+
+In this work, we propose *Residual-MPPI*, which integrates RQL into the MPPI framework, resulting in an online planning algorithm that customizes the prior policy at the execution time. By conducting experiments in MuJoCo and GTS, we show the effectiveness of our methods against the baselines. Here, we discuss some limitations of the current method, inspiring several future research directions.
+
+**Terminal Value Estimation.** Similar to most online planning methods, our algorithm also needs a sufficiently long horizon to reduce the error brought by the absence of a terminal value estimator. Though utilizing prior policy partially addresses the problem discussed in Sec. 4.2, it can not eliminate the error entirely. Techniques like JSRL (Uchendu et al., 2023) and RL-driven MPPI (Qu et al., 2024) could be incorporated in the proposed framework in the few-shot setting by using the collected data to learn a Residual Q-function online as a terminal value estimator.
+
+**Sim2Real Transferability.** Sim2real will still face several additional challenges, which mainly comes from the suboptimal prior policy and the domain gap. Prior policies without careful modeling or sufficient training could mislead the evaluation step of the proposed algorithm and result in poor planning. Also, the proposed algorithm relies on an accurate dynamics model to correctly roll out. In the future, we can introduce more advanced methods in policies and dynamics training, such as diffusion policies (Chi et al., 2023) and world models (Micheli et al., 2022), to improve the prior policies and dynamics. We look forward to further extending residual-MPPI to achieve sim-to-sim and sim-to-real for challenging agile, continuous control tasks by addressing these limitations.
+
+ Rest of paper (reference and Appendix) is removed.

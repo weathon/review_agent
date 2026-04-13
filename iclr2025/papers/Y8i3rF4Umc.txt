@@ -1,0 +1,498 @@
+
+
+{0}------------------------------------------------
+
+# RANGE-NULL LATENT PRIOR-GUIDED CONSISTENCY MODEL FOR LOW LIGHT IMAGE ENHANCEMENT
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Low light image enhancement (LLIE) is a challenging task, with most existing models often struggling to adapt to diverse dark environments due to insufficient training datasets. In this paper, we propose a novel unsupervised model called **Range-null Latent Prior-guided Consistency Model (RLPCM)**, which integrates a latent consistency model (LCM) into low light enhancement using Retinex-based range-null space decomposition. RLPCM leverages an off-the-shelf LCM as a generative prior to improve both the latent consistency and realness of enhanced images. Meanwhile, fine-tuning a lighting decoder solely on normal-light images to ensure high fidelity in image space. A key contribution is a simple yet effective global illumination adjustment applied to the range-space component, along with a natural language guidance module to learn the null-space component. This allows for iterative generation to enhance both consistency and realness in just a few steps. Additionally, we present a new UAV low light dataset (UAV-LL) containing 300 image pairs from various UAV scenarios to support comprehensive evaluation. Extensive experiments demonstrate the superior adaptability and effectiveness of our framework across a wide range of low-light environments.
+
+## 1 INTRODUCTION
+
+Low light image enhancement (LLIE) is a long-standing problem that influences both human visual perception and related computer vision tasks, such as depth estimation Wang et al. (2021), object detection Hashmi et al. (2023), and semantic segmentation Pan et al. (2024). Current LLIE approaches are generally categorized into two types: supervised and unsupervised methods. Supervised methods Weng et al. (2024); Cai et al. (2023); Jiang et al. (2023) typically rely on paired images to train end-to-end models, but acquiring pixel-aligned image datasets is particularly challenging, especially in mobile environments. On the other hand, unsupervised methods Ma et al. (2022); Yang et al. (2023); Liang et al. (2023) have gained traction by minimizing the need for paired data. Among these, diffusion-based models Wang et al. (2024); Jiang et al. (2024a) have attracted significant attention for their powerful generative capabilities. Therefore, in this paper, we focus on diffusion-based approaches for low light image enhancement.
+
+Most diffusion-based models for the LLIE task have integrated low-light image and illumination as conditional inputs to preserve image details and enhance illumination quality, as shown in Figure 1(a). For instance, QuadPrior Wang et al. (2024) introduces an illumination-invariant prior as a conditional generative model utilizing ControlNet Zhang et al. (2023). Similarly, LightenDiffusion Jiang et al. (2024a) employs a Retinex-based diffusion model that works with unpaired images, decomposing them into reflectance and illumination maps. However, these approaches lack an effective latent prior to guide the conditional diffusion process, often resulting in suboptimal enhancement outcomes and time-consuming procedures.
+
+Recently, the denoising diffusion null-space model (DDNM) Wang et al. (2023b) incorporated range-null space decomposition Schwab et al. (2019) into diffusion models to address various image restoration (IR) tasks, such as image super-resolution, colorization, and deblurring. This method identifies appropriate null-space components to ensure realistic results, while applying a specific degradation operator to preserve range-space content for data consistency, thus achieving effective performance. However, DDNM depends on explicit degradation priors, which are challenging to obtain for LLIE task, and is often limited by slow inference speed.
+
+{1}------------------------------------------------
+
+![Figure 1: (a) Diffusion-based Model (e.g., QuadPrior) showing forward and reverse processes with conditions. (b) Schematic in Latent Space showing the range-space anchor moving closer to the ground truth (GT). (c) Range-Null Latent Prior-guided Framework (Ours) showing the inference process with a null-space component.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 1 consists of three parts: (a) Diffusion-based Model (e.g., QuadPrior), (b) Schematic in Latent Space, and (c) Range-Null Latent Prior-guided Framework (Ours). Part (a) shows a diffusion process with forward and reverse steps, conditioned on 'Low-light Image' and 'Normal Light Image'. Part (b) shows a schematic in latent space where a 'Range-space Anchor' is updated towards the 'GT' (Ground Truth) using 'Diffusion-based Results'. Part (c) shows the proposed framework where a 'Range-Null Latent Prior-guided Framework' is used for inference, combining 'Inference' (red line) and 'Difference' (blue line) components.
+
+Figure 1: (a) Diffusion-based Model (e.g., QuadPrior) showing forward and reverse processes with conditions. (b) Schematic in Latent Space showing the range-space anchor moving closer to the ground truth (GT). (c) Range-Null Latent Prior-guided Framework (Ours) showing the inference process with a null-space component.
+
+Figure 1: (a) Existing diffusion-based models, such as DiffLL, QuadPrior, and LightenDiff, require the diffusion network to be trained with specific conditions. (b) The schematic process shows that the range-space anchor serves as a more effective initial latent prior. By applying our updating rule, the result in latent space becomes closer to the ground truth (GT). (c) We introduce a range-null latent prior-guided framework for the LLIE task, featuring a training-free diffusion process.
+
+To address these issues, we propose a novel unsupervised framework called **Range-null Latent Prior-guided (RLP)** for the LLIE task, as illustrated in Figure 1(c). To accelerate the diffusion process, the latent consistency model (LCM) Song et al. (2023) is integrated into low-light enhancement by leveraging Retinex-based range-null space decomposition to identify relevant null-space content, referred to as the RLP Consistency Model (RLPCM) in Figure 2. Our approach integrates a physics-driven model, *i.e.*, Retinex theory Land & McCann (1971), with null-space decomposition to introduce global illumination degradation that guides the range-space content. RLPCM relies solely on a current off-the-shelf latent consistency model as the generative prior, fine-tuning a lighting decoder with normal light images to enhance fidelity in the image space. We introduce a simple yet effective global illumination prior that fixes the range-space component within the range-null space decomposition. Additionally, we design a natural language guidance mechanism to facilitate learning in the null-space, enabling a few-step iterative generation process that effectively and fast balances the latent consistency and the realism.
+
+In this paper, our key findings and contributions are summarized as follows: 1) To the best of our knowledge, we are the first to introduce a consistency model into the LLIE task, effectively bridging Rang-null space decomposition with the Retinex theory into the consistency model. Compared to existing diffusion methods, our approach exhibits superior flexibility and robust across diverse scenarios. 2) We propose a range-null latent prior-guided framework for the LLIE task, featuring a simple yet efficient global illumination prior that physically guarantees the reliability of range-space content. this prior can be manually adjusted during inference, thus avoiding the irreversible effects associated with fixed parameters. Additionally, we incorporate language-aware guidance mechanisms to facilitate the learning of null-space content. 3) We present a novel UAV low-light dataset (UAV-LL), comprising 300 image pairs captured in various mobile environments. This dataset allows for a comprehensive evaluation of the generalization capabilities of existing methods under previously unseen conditions. *For the related work, please refer to Appendix A.*
+
+## 2 METHODOLOGY
+
+### 2.1 PRELIMINARIES
+
+**Retinex Theory.** Among physics-driven models fundamental to LLIE, Retinex theory Land & McCann (1971) stands out as a key approach. The vanilla Retinex theory assumes that a low-light image  $y$  can be decomposed into illumination  $A$  and reflectance  $x$ . Typically,  $x$ , being an invariant physical property, is regarded as the ideal enhanced outcome. This relationship is expressed mathematically by the Retinex theory as:
+
+$$y = A \odot x, \quad (1)$$
+
+where  $\odot$  denotes the pixel-wise multiplication. But, accurately decomposing illumination  $A$  to estimate reflectance  $x$  remains a ill-posed problem. Traditional methods Guo et al. (2017), are typically Retinex-based illumination optimization problem. Most current methods Weng et al. (2024); Cai et al. (2023) aim to train end-to-end models that directly map  $x$  to  $y$ , bypassing the need for explicit illumination estimation. However, these methods often rely on hand-crafted priors or task-
+
+{2}------------------------------------------------
+
+![Figure 2: An overview of the RLP Consistency Model (RLPCM). The diagram shows a flow from a 'Low Light Image' through an encoder to a latent representation z-tilde. This is processed by a 'Consistency Model' which uses 'Cross Attn' and 'Self Attn' blocks, influenced by 'Language'. The output is a 'Range-space Latent Anchor' z. This z is then processed by a 'Range-space Content' block, which uses 'Fine-tuning', 'Swapping', 'RLP', and 'Skip connection' components to produce the final reconstructed image.](1b7d539e02a202c2cf2d97698b911447_img.jpg)
+
+Figure 2: An overview of the RLP Consistency Model (RLPCM). The diagram shows a flow from a 'Low Light Image' through an encoder to a latent representation z-tilde. This is processed by a 'Consistency Model' which uses 'Cross Attn' and 'Self Attn' blocks, influenced by 'Language'. The output is a 'Range-space Latent Anchor' z. This z is then processed by a 'Range-space Content' block, which uses 'Fine-tuning', 'Swapping', 'RLP', and 'Skip connection' components to produce the final reconstructed image.
+
+Figure 2: An overview of our RLP Consistency Model (RLPCM), based on the RLP framework in the Figure 1(c). The low-light image  $y$  and range-space content  $A^\dagger y$  are both transformed into latent space via a pre-trained encoder, producing  $\tilde{z}$  and  $z$ , respectively. Here,  $z$  serves as a range-space anchor in the latent space, while the null-space content is refined using training-free conditional consistency sampling with language-aware attention swapping. Finally, a lighting decoder is fine-tuned with skip connections to preserve high fidelity, ensuring accurate reconstruction.
+
+specific training, which limits their robustness and flexibility in diverse scenarios. Thus, integrating Retinex theory with pre-trained, off-the-shelf models presents a potentially promising solution.
+
+**Range-null Space Decomposition.** offers a promising method to integrating Retinex theory with pre-trained, off-the-shelf models. Given a non-zero linear operator  $A \in \mathbb{R}^{mn \times mn}$ , its pseudo-inverse  $A^\dagger \in \mathbb{R}^{mn \times mn}$  satisfies the equation  $AA^\dagger A = A$ . Hence, any sample  $x \in \mathbb{R}^{mn \times 1}$  can be decomposed into the range and null spaces of  $A$  as follows:
+
+$$x = A^\dagger Ax + (I - A^\dagger A)x, \quad (2)$$
+
+where the first term  $A^\dagger Ax$  represents the range-space content due to  $AA^\dagger Ax = Ax$ , and the second term represents the null-space content as  $A(I - A^\dagger A)x = 0$ . Now, we reinterpret Retinex theory in the context of range-null space for a low-light image  $y$ , aiming to derive the reflectance  $\tilde{x}$  under the following constraints:
+
+$$\text{Consistency: } A\tilde{x} = y, \quad \text{Realness: } \tilde{x} \sim p(x), \quad (3)$$
+
+where  $p(x)$  denotes the real reflectance distribution of  $x$ . The general solution for reflectance  $\tilde{x}$  that satisfies the consistency constraint is given by  $A\tilde{x} = y$ , leading to  $\tilde{x} = A^\dagger y + (I - A^\dagger A)\tilde{x}$ . The term  $\tilde{x}$  influences the realistic details in the null-space. Previous methods have sought to estimate the null-space content  $\tilde{x}$  using GANs Wang et al. (2023a) and diffusion models Wang et al. (2023b); Gandikota & Chandramouli (2024), but these methods inherit limitations such as the randomness inherent in diffusion models. In contrast, we observe that the consistency model Song et al. (2023) is more effective for generating null-space content due to its self-consistency property, while also providing faster inference speeds compared to existing diffusion models.
+
+**Consistency Models.** Consistency models Song et al. (2023) are a novel class of generative models that have shown considerable potential across various vision tasks, including image generation and editing. Unlike diffusion models Ho et al. (2020); Song et al. (2021), consistency models enable single-step iterative generation, allowing for direct mapping from any point on the Probability Flow (PF) ODE trajectory back to its origin. Specifically, given a sequence of time points  $\tau_i \in [\kappa, T]$ , where  $\tau_\kappa > \tau_{\kappa+1} > \dots > \tau_T$ , the solution trajectory  $\{\mathbf{x}_{\tau_i}\}, \tau_i \in [\kappa, T]$  belongs to the PF ODE. The consistency function is defined as  $f_\phi(\mathbf{x}_{\tau_i}, \tau_i) \rightarrow \mathbf{x}_{\tau_{i+1}}$  and its self-consistency ensures that  $f_\phi(\mathbf{x}_{\tau_{\tilde{\kappa}}}, \tau_{\tilde{\kappa}}) = f_\phi(\mathbf{x}_{\tau_{\tilde{\kappa}}}, \tau_{\tilde{\kappa}})$  for  $\tilde{\kappa}, \tilde{\kappa} \in [\kappa, T]$ . Recently, latent consistency models (LCM) Luo et al. (2023) have further enhanced efficiency by transforming  $x$  into latent space  $z$ , resulting in improved computational performance. LCMs can be trained by distilling pre-trained diffusion models. In this work, we use the following LCM parameterization:
+
+$$f_\phi(z, c, \tau_i) = s_\kappa(\tau_i)x + s_{\text{out}}(\tau_i)\tilde{z}_0 \quad (4)$$
+
+$$\tilde{z}_0 = \left( \frac{z_{\tau_i} - \sigma(\tau_i)\epsilon_\phi(z, c, \tau_i)}{\alpha(\tau_i)} \right), \quad (5)$$
+
+where  $s_\kappa(\tau_i)$  and  $s_{\text{out}}(\tau_i)$  are differentiable functions specifically defined as  $s_\kappa(\tau_i) = 0$  and  $s_{\text{out}}(\tau_i) = 1$ , and  $\epsilon_\phi(z, c, \tau_i)$  is the teacher diffusion model, whose forward process can be effectively expressed as  $z_{\tau_i} = \alpha(\tau_i)z_0 + \sigma(\tau_i)\epsilon_\phi$ .
+
+{3}------------------------------------------------
+
+### 2.2 OUR APPROACH
+
+Our goal is to establish a credible range-space that produces consistent results while accurately identifying a suitable null-space to enhance realness. Unlike the super-resolution and deblurring tasks that can define explicit degradation operators, LLIE is affected by variable illumination conditions, which complicates the design of a unified degradation operator. Building upon our RLP framework illustrated in the Figure 1(c), we introduce a Range-Null Latent Prior-guided Consistency Model (RLPCM), as depicted in Figure 2. RLPCM leverages Retinex theory to propose an adaptive and flexible illumination degradation factor derived from low-light images, thereby stabilizing the range-space component. Furthermore, we guide the null-space content through established consistency models by employing natural language for a more intuitive representation.
+
+**Range-space Content Correction.** Given a low-light image  $y$ , we first construct an illumination degradation factor  $\mathbf{A}$ , which will be discussed in detail in subsection 2.3, and then derive the range-space content using  $\mathbf{A}^\dagger y$ . Subsequently, we employ an off-the-shelf latent consistency model  $f_\phi(\cdot, \cdot, \cdot)$  Luo et al. (2023) and transform the low-light image  $y$  and range-space content  $\mathbf{A}^\dagger y$  into the latent space as  $\tilde{\mathbf{z}}$  and  $\mathbf{z}$ , respectively, via a pre-trained encoder. In this context, we consider  $\mathbf{z}$  as the anchor representing range-space content in the latent space. Notably, the origin of the ODE trajectory of the LCM may be situated far from this anchor, and we thus maintain a fixed distance between the anchor and the output of the LCM as follows:
+
+$$\epsilon = \mathbf{z} - f_\phi(\tilde{\mathbf{z}}, c_{null}, \tau_i), \quad (6)$$
+
+where  $\tau_i$  represents the time point and  $c_{null}$  denotes the null condition. This distance  $\epsilon$  is designed to bridge the gap, as illustrated in Figure 3. This bridging mechanism is essential for maintaining alignment between the generated output and the expected range-space content. The model’s self-consistency ensures that  $\epsilon$  consistently points toward the anchor, thereby enhancing the overall coherence of the transformation process. Next, the key problem is to identify an appropriate null-space content that guarantees the realness results.
+
+**Language-aware Null-space Content Refinement.** Inspired by Classifier-Free Guidance (CFG) Ho & Salimans (2022) for generating high-quality language-aligned images, we design a language-aware null-space content refinement module. Specifically, we utilize two contrasting language prompts to sample the conditional results, and the entire process can be articulated as follows:
+
+$$\Delta\epsilon = f_\phi(\tilde{\mathbf{z}}, c_n, \tau_i) - f_\phi(\tilde{\mathbf{z}}, c_l, \tau_i), \quad (7)$$
+
+where  $\Delta\epsilon$  denotes the null-space content aimed at improving the realness,  $c_l$  denotes low-light language prompt,  $c_n$  denotes normal-light language prompt. Recall the CFG Ho & Salimans (2022) employed in the LCM Luo et al. (2023), which involves replacing the original noise prediction with a linear combination of both conditional and unconditional noise derived from the teacher diffusion model, expressed as:  $\tilde{\epsilon}_\theta(\mathbf{z}_{\tau_i}, \omega, c, \tau_i) := (1 + \omega)\epsilon_\theta(\mathbf{z}_{\tau_i}, c, \mathbf{z}_{\tau_i}) - \omega\epsilon_\theta(\mathbf{z}_{\tau_i}, c_{null}, \mathbf{z}_{\tau_i})$  and  $\omega$  is called the guidance scale. We can rewrite equation 7 as follows:
+
+$$\Delta\epsilon = (1 + w_1) f_\phi(\tilde{\mathbf{z}}, c_n, \tau_i) - (1 + w_2) f_\phi(\tilde{\mathbf{z}}, c_l, \tau_i) + (w_2 - w_1) f_\phi(\tilde{\mathbf{z}}, c_{null}, \tau_i), \quad (8)$$
+
+By combining equation 6 and equation 8, therefore, we can combine the complete range-null space decomposition result as follows:
+
+$$\tilde{\mathbf{z}} = \epsilon + f_\phi(\tilde{\mathbf{z}}, c_{null}, \tau_i) + (\mathbf{I} - \gamma \mathbf{A}^\dagger \mathbf{A}) \Delta\epsilon \longrightarrow \tilde{\mathbf{z}} = \mathbf{z} + (\mathbf{I} - \gamma \mathbf{A}^\dagger \mathbf{A}) \Delta\epsilon \quad (9)$$
+
+where we set  $\gamma \in [0, 1]$  to prevent  $(\mathbf{I} - \gamma \mathbf{A}^\dagger \mathbf{A}) \equiv 0$ , thereby enhancing the null-space content. Additionally, providing an accurate language condition poses a challenge in preserving texture while improving illumination for Low-Light Image Enhancement (LLIE). Inspired by MasaCtrl Cao et al. (2023) and Infedit Xu et al. (2024), we employ a swapping self-attention mechanism that facilitates non-rigid semantic transformations for image style transfer. This approach allows for querying local
+
+![Figure 3: Schematic of range-null space decomposition in latent space. The diagram shows a 'Latent Space Manifold' containing a 'GT' (red star), 'Null-space Content' (blue square), 'Finally Result' (red square), 'Low Light Image' (blue triangle), 'Origin Latent' (grey square), and 'Range-space Content' (grey square). A dotted green line represents the trajectory of LCM, moving from the 'Origin Latent' towards the 'GT'. A red arrow points from the 'Origin Latent' to the 'Finally Result', and a grey arrow points from the 'Origin Latent' to the 'Range-space Content'.](8d3afc46f415cad96c2eba639730f7c3_img.jpg)
+
+Figure 3: Schematic of range-null space decomposition in latent space. The diagram shows a 'Latent Space Manifold' containing a 'GT' (red star), 'Null-space Content' (blue square), 'Finally Result' (red square), 'Low Light Image' (blue triangle), 'Origin Latent' (grey square), and 'Range-space Content' (grey square). A dotted green line represents the trajectory of LCM, moving from the 'Origin Latent' towards the 'GT'. A red arrow points from the 'Origin Latent' to the 'Finally Result', and a grey arrow points from the 'Origin Latent' to the 'Range-space Content'.
+
+Figure 3: Schematic of range-null space decomposition in latent space. The dotted green line represents the trajectory of LCM. In the latent space, the range and null-space content are adjusted along the LCM’s original trajectory, moving the position closer to the optimal result.
+
+{4}------------------------------------------------
+
+#### **Algorithm 1** Range-Null Latent Prior-guided Consistency Model for LLIE
+
+---
+
+```
+
+1: Input: Low light image  $\mathbf{y}$ , Global illumination intensity  $\varpi$ , Low light prompt  $c_l$ , Normal light
+2: prompt  $c_n$ , language guidance scale  $w_1$  and  $w_2$ , time-step scheduler  $\tau_T$ , off-the-shelf LCM
+3:  $f_\phi(\cdot, \cdot)$  and encoder  $\mathcal{E}(\cdot)$  and fine-tuned lighting decoder  $\mathcal{D}(\cdot)$ 
+4: Output: Enhanced image  $\tilde{\mathbf{x}}$ 
+5: 3:  $\mathbf{A} = \varpi \mathbf{I}$ ,  $\mathbf{A}^\dagger = \frac{1}{\varpi} \mathbf{I}$ , ▷ Pseudo-inverse
+6: 4:  $\hat{\mathbf{z}}, \cdot = \mathcal{E}(\mathbf{y}; \mathbf{z}, \mathbf{r} = \mathcal{E}(\mathbf{A}^\dagger \mathbf{y}))$ , ▷ Encoder
+7: 5:  $\epsilon = \mathbf{z} - f_\phi(\hat{\mathbf{z}}, c_{\text{null}}, \tau_l)$ , ▷ Fix range-space content
+8: 6:  $\Delta\epsilon = (1 + w_1) f_\phi(\hat{\mathbf{z}}, c_n, \tau_l) - (1 + w_2) f_\phi(\hat{\mathbf{z}}, c_l, \tau_l) + (w_2 - w_1) f_\phi(\hat{\mathbf{z}}, c_{\text{null}}, \tau_l)$ ,
+9: ▷ Refine null-space content
+10: 7:  $\bar{\mathbf{z}} = f_\phi(\hat{\mathbf{z}}, c_{\text{null}}, \tau_l) + \epsilon + (\mathbf{I} - \gamma \mathbf{A}^\dagger \mathbf{A}) \Delta\epsilon \rightarrow \bar{\mathbf{z}} = \mathbf{z} + (\mathbf{I} - \gamma \mathbf{A}^\dagger \mathbf{A}) \Delta\epsilon$ , ▷ Predict result
+11: 8: for  $\tau_l = T - 1, T - 2, \dots, \kappa$  do ▷ Iterative refinement
+12: 9:  $\bar{\mathbf{z}} \rightarrow \hat{\mathbf{z}}_{\tau_l}$ 
+13: 10:  $\epsilon = \bar{\mathbf{z}} - f_\phi(\hat{\mathbf{z}}_{\tau_l}, c_{\text{null}}, \tau_l)$ 
+14: 11:  $\Delta\epsilon = (1 + w_1) f_\phi(\hat{\mathbf{z}}_{\tau_l}, c_n, \tau_l) - (1 + w_2) f_\phi(\hat{\mathbf{z}}_{\tau_l}, c_l, \tau_l) + (w_2 - w_1) f_\phi(\hat{\mathbf{z}}_{\tau_l}, c_{\text{null}}, \tau_l)$ ,
+15: 12:  $\bar{\mathbf{z}} = \mathbf{z} + (\mathbf{I} - \gamma \mathbf{A}^\dagger \mathbf{A}) (\epsilon + \Delta\epsilon)$ 
+16: 13:  $\bar{\mathbf{z}} \rightarrow \bar{\mathbf{z}}$ 
+17: 14: end for
+18: 15: Return  $\bar{\mathbf{x}} = \mathcal{D}(\bar{\mathbf{z}}, \mathbf{r})$ . ▷ Decoder
+
+```
+
+---
+
+content and textures from low-light images, ensuring consistency is maintained. Our objective is to implement language-aware illumination attention that enhances illumination while preserving the original content of the low-light image. Specifically, we use the original  $\mathbf{Q}_n$ ,  $\mathbf{K}_n$ , and  $\mathbf{V}_n$  in self-attention mechanism. Subsequently, we query semantically similar content from  $\mathbf{K}_l$  and  $\mathbf{V}_l$  using the target query  $\mathbf{Q}_n$ . The attention mechanism can be expressed in matrix form as follows:
+
+$$\text{Attention}(\mathbf{Q}_n, \mathbf{K}_l, \mathbf{V}_l) = \text{Softmax} \left( \frac{\mathbf{Q}_n \mathbf{K}_l^T}{\sqrt{d}} \right) \mathbf{V}_l. \quad (10)$$
+
+**Lighting Decoder.** Once the range-null content in the latent space is refined, we propose a lighting decoder that converts  $\bar{\mathbf{z}}$  to image space as  $\tilde{\mathbf{x}}$ . This entire process can be expressed as follows:
+
+$$\mathbf{z}, \mathbf{r} = \mathcal{E}(\mathbf{x}), \quad (11)$$
+
+$$\bar{\mathbf{x}} = \mathcal{D}(\bar{\mathbf{z}}, \mathbf{r}). \quad (12)$$
+
+where  $\bar{\mathbf{z}}$  is refined from  $\mathbf{z}$  in equation 9, and  $\mathbf{r}$  is the middle-layer feature. Our lighting decoder incorporates additional convolutional layers for hidden feature fusion and utilizes skip connections. To our knowledge, QuadPrior Wang et al. (2024) introduced a bypass decoder that effectively captures details from randomly degraded images and is sensitive to illumination changes. However, it has notable limitations: the bypass decoder is trained on the COCO dataset Lin et al. (2014), which contains underexposed and low-quality images, thereby compromising its decoding capabilities. Additionally, its performance in recovering complex textures under varying illumination conditions is constrained, as the random illumination jittering and noise do not integrate a physical model of LLIE.
+
+To address the aforementioned issues, we collect a well-exposed image dataset from benchmark sources and the internet to ensure high-quality training data. We then fine-tune the lighting decoder to accept both Retinex-driven degraded images and normal images, allowing it to adapt to illumination degradation effectively. This approach ensures that the model remains sensitive to variations in illumination within the latent space while preserving high fidelity through skip connections. The overall objective for training the decoder model can be formulated as follows:
+
+$$L = \min \max (L_{\text{rec}}(\mathbf{x}, \mathcal{D}(\mathcal{E}(\tilde{\mathbf{x}}), \mathbf{r})) + L_{\text{reg}}(\mathbf{z}; \mathcal{E}, \mathcal{D})) \quad (13)$$
+
+where  $\tilde{\mathbf{x}}$  is the Retinex-driven degraded images.  $L_{\text{rec}}$  denotes the pixel-wise reconstruction losses, including MSE and LPIPS, while  $L_{\text{reg}}$  regularizes the latent  $\mathbf{z}$  to be zero centered and small variance.
+
+It is worth noting that our method also supports rapid one-step generation while also enabling multi-step sampling, allowing for a trade-off between computational efficiency and enhancement quality, much like traditional consistency models.
+
+{5}------------------------------------------------
+
+![Figure 4: Statistics of low/normal light image pairs. (a) Histogram and CDF of Illumination Intensity. (b) Histogram and CDF of Mean Difference. (c) Visual examples of Original Image, Illumination Heatmap, and Illumination Difference.](c54b3ca7603d65d4589151bc3a49d054_img.jpg)
+
+Figure 4 consists of three parts: (a), (b), and (c). Part (a) shows a histogram of Illumination Intensity (x-axis, 0.0 to 0.8) with a corresponding Cumulative Probability plot (y-axis, 0.0 to 1.0). The histogram shows a high frequency of low illumination intensities (0.0 to 0.2). Part (b) shows a histogram of Mean Difference (x-axis, 0 to 30) with a corresponding Cumulative Probability plot (y-axis, 0.0 to 1.0). The histogram shows a high frequency of low mean differences (0 to 10). Part (c) shows three visual examples: Original Image, Illumination Heatmap, and Illumination Difference. The Original Image shows a dark street scene. The Illumination Heatmap shows a color-coded intensity map. The Illumination Difference shows a color-coded difference map. A color bar on the right indicates intensity values from 0 to 60.
+
+Figure 4: Statistics of low/normal light image pairs. (a) Histogram and CDF of Illumination Intensity. (b) Histogram and CDF of Mean Difference. (c) Visual examples of Original Image, Illumination Heatmap, and Illumination Difference.
+
+Figure 4: The distribution and intensity of average and difference illumination from the statistics of the low/normal light image pairs.
+
+### 2.3 CONSTRUCTING ILLUMINATION FACTOR A
+
+Rather than focusing on precise illumination estimation, we reconsider Retinex theory through the lens of Range-null space decomposition and propose a simple yet effective global illumination intensity. We introduce the following proposition:
+
+**Proposition 1.** *We assume that the low-light image mainly suffers from the global degeneration operator  $\varpi$  in illumination intensity  $\mathbf{A}$ , which is a non-zero constant matrix. When we set the constant of  $\mathbf{A}$  as  $\varpi$ , its pseudo-inverse  $\mathbf{A}^\dagger$  can be easily calculated as*
+
+$$\mathbf{A}^\dagger = \frac{1}{\varpi} \mathbf{I}. \quad (14)$$
+
+Hence, we present a simple yet interpretable range-space content  $\mathbf{A}^\dagger \mathbf{y}$  for the LLIE task. It is then encoded into latent space as  $\mathbf{z} = \mathcal{E}(\mathbf{A}^\dagger \mathbf{y})$ . The proof can be found in the appendix B.
+
+To validate the universality of global illumination reduction, we gather approximately 7,000 low and normal light image pairs from existing benchmark datasets, including LOLv1 Wei et al. (2018), LOLv2 Yang et al. (2021), LSRW Hai et al. (2023), and our UAV-LL dataset. We conducted a study on the illumination degradation between these paired images. Specifically, we first estimated the average global illumination intensity. Following the methodology of Guo et al. (2017), we computed pixel-wise illumination by selecting the maximum value across the three color channels as the global illumination and then calculated the difference between this value and the average illumination.
+
+As illustrated in Figure 4(a), the global illumination intensity in low-light images is low and uniformly distributed between 0.1 and 0.4. Additionally, Figure 4(b) shows that the average difference intensity predominantly ranges from 0 to 15, indicating that the pixel-wise illumination is close to the average illumination. By observing toy examples of the illumination and difference maps in Figure 4(c), we have a reason to believe that most low-light images exhibit characteristics of global degradation.
+
+## 3 EXPERIMENTS
+
+### 3.1 DATASETS AND IMPLEMENTATION DETAILS
+
+**Datasets.** We evaluate our method on two paired benchmark datasets: LOL+ and LSRW Hai et al. (2023). Following Wang et al. (2024), we adopt LOL+ consists of 115 low and normal light image pairs from LOLv1 Wei et al. (2018) and LOLv2 Yang et al. (2021), while LSRW contains 50 pairs. To further assess generalization capabilities, we introduce a new UAV-LL dataset, referred to Appendix C, comprising 300 image pairs captured in diverse mobile environments For fine-tuning the lighting decoder, we gathered 7,000 normal images from benchmark datasets and the internet.
+
+**Compared Methods.** We compare our method with five SOTA supervised methods, including URetinex-Net Wu et al. (2022), R2RNet Hai et al. (2023), Retinexformer Cai et al. (2023), GSAD Hou et al. (2023) and DiffLL Jiang et al. (2023), all of which achieve state-of-the-art results on benchmark datasets. Furthermore, we compare our method with nine unsupervised low-light image
+
+{6}------------------------------------------------
+
+Table 1: Quantitative comparisons on LOL+, LSRW and UAV-LL dataset. The best unsupervised result is in red color, while the second best result is in blue color under the unsupervised setting.
+
+| Method |  | LOL+ |  |  | LSRW |  |  | UAV-LL |  |  | Training Set |
+|-|-|-|-|-|-|-|-|-|-|-|-|
+|  |  | PSNR | SSIM | LPIPS | PSNR | SSIM | LPIPS | PSNR | SSIM | LPIPS |  |
+| SL | URetinex-Net(CVPR22) | 20.93 | 0.854 | 0.104 | 18.27 | 0.518 | 0.295 | 13.35 | 0.482 | 0.276 | LOL |
+|  | R2RNet (JVRC123) | 20.20 | 0.816 | 0.664 | 16.24 | 0.502 | 0.251 | 11.61 | 0.49 | 0.295 | LSRW |
+|  | Retinexformer(ICC23) | 23.98 | 0.843 | 0.117 | 15.98 | 0.467 | 0.242 | 12.10 | 0.624 | 0.207 | LOL |
+|  | GSAD(NeurIPS23) | 28.32 | 0.886 | 0.093 | 17.41 | 0.507 | 0.294 | 14.75 | 0.521 | 0.281 | LOL |
+|  | DiffLL(Siggraph Asia23) | 28.54 | 0.870 | 0.102 | 13.48 | 0.396 | 0.264 | 11.69 | 0.595 | 0.247 | LOL |
+| USL | EnlightenGAN(CVPR21) | 18.57 | 0.700 | 0.302 | 17.10 | 0.462 | 0.322 | 17.96 | 0.538 | 0.252 | own data |
+|  | ZeroDCE(CVPR20) | 17.64 | 0.572 | 0.316 | 15.86 | 0.443 | 0.315 | 17.91 | 0.502 | 0.292 | own data |
+|  | SCI(CVPR22) | 16.97 | 0.532 | 0.312 | 15.24 | 0.419 | 0.321 | 14.78 | 0.576 | <b>0.240</b> | LOL+ |
+|  | PairLIE(CVPR23) | 19.70 | 0.774 | 0.235 | 17.60 | 0.501 | 0.323 | 15.21 | 0.512 | <b>0.248</b> | LOL+ |
+|  | NeRCo(ICC23) | 19.67 | 0.720 | 0.266 | 17.84 | 0.535 | 0.371 | 16.24 | 0.530 | 0.459 | LSRW |
+|  | CLIP-LIT(ICC23) | 14.82 | 0.524 | 0.371 | 13.48 | 0.396 | 0.264 | 17.22 | 0.558 | 0.282 | own data |
+|  | Zero-IG(CVPR24) | 22.17 | 0.771 | 0.276 | 16.61 | 0.470 | 0.282 | 12.66 | 0.362 | 0.377 | LOL |
+|  | QuadPrior(CVPR24) | 20.31 | <b>0.808</b> | 0.202 | 17.17 | <b>0.558</b> | <b>0.199</b> | 19.51 | <b>0.674</b> | 0.272 | COCO |
+|  | LightenDiff(ECCV24) | 20.45 | 0.803 | 0.192 | 18.55 | 0.539 | 0.311 | 16.88 | 0.547 | 0.249 | LOL |
+|  | <b>Our RLPCM</b> | <b>24.07</b> | <b>0.837</b> | <b>0.105</b> | <b>19.11</b> | <b>0.570</b> | <b>0.190</b> | <b>21.17</b> | <b>0.613</b> | 0.266 | Normal |
+
+![Figure 5: Qualitative comparison with previous methods on LOL+, LSRW and UAV-LL datasets. The figure shows a grid of images. The first column is the 'Input' image. The subsequent columns show results from various methods: RetinexFormer, SCI, PairLIE, NeRCo, Zero-IG, QuadPrior, LightenDiffusion, Ours, and GT (Ground Truth). The rows represent different datasets: the first two rows are LOL+ (night street scenes), the next two rows are LSRW (daytime building scenes), and the last two rows are UAV-LL (aerial night scenes). The 'Ours' column consistently shows improved image quality and detail preservation compared to other methods.](c1c7af7ea36be0323047962df57d75b0_img.jpg)
+
+Figure 5: Qualitative comparison with previous methods on LOL+, LSRW and UAV-LL datasets. The figure shows a grid of images. The first column is the 'Input' image. The subsequent columns show results from various methods: RetinexFormer, SCI, PairLIE, NeRCo, Zero-IG, QuadPrior, LightenDiffusion, Ours, and GT (Ground Truth). The rows represent different datasets: the first two rows are LOL+ (night street scenes), the next two rows are LSRW (daytime building scenes), and the last two rows are UAV-LL (aerial night scenes). The 'Ours' column consistently shows improved image quality and detail preservation compared to other methods.
+
+Figure 5: Qualitative comparison with previous methods on LOL+, LSRW and UAV-LL datasets. Our RLPCM effectively improve the realism and preserves the details compared to other methods.
+
+enhancement approaches, including EnlightenGAN Jiang et al. (2021), ZeroDCE Guo et al. (2020), SCI Ma et al. (2022), PairLIE Fu et al. (2023), NeRCo Yang et al. (2023), CLIP-LIT Liang et al. (2023), QuadPrior Wang et al. (2024), and LightenDiffusion Jiang et al. (2024a). Additionally, we evaluate the cross-dataset generalization of these pre-trained models by applying to UAV-LL datasets.
+
+**Implementation Details.** We implement RLPCM in PyTorch Paszke et al. (2019) on a server with the 4090GPUs. In our framework, LCM is tuning-free, only needs to fine-tune the lighting decoder.
+
+{7}------------------------------------------------
+
+378  
+379  
+380  
+381  
+382  
+383  
+384  
+385  
+386  
+387  
+388  
+389  
+390  
+391  
+392  
+393  
+394  
+395  
+396  
+397  
+398  
+399  
+400  
+401  
+402  
+403  
+404  
+405  
+406  
+407  
+408  
+409  
+410  
+411  
+412  
+413  
+414  
+415  
+416  
+417  
+418  
+419  
+420  
+421  
+422  
+423  
+424  
+425  
+426  
+427  
+428  
+429  
+430  
+431
+
+![Figure 6: Qualitative comparison with diffusion-based image restoration Methods on LOLv1 datasets. The figure shows two rows of image restoration results. The first row shows a dark indoor scene with a window and a lamp. The second row shows a hallway with multiple doors. Each row contains six images: Input, GDP, DDNM, AutoIR, Ours, and GT. The 'Ours' column consistently shows the most reasonable and satisfactory results across all methods.](32a03202e95ff09a974e12e4be687885_img.jpg)
+
+Figure 6: Qualitative comparison with diffusion-based image restoration Methods on LOLv1 datasets. The figure shows two rows of image restoration results. The first row shows a dark indoor scene with a window and a lamp. The second row shows a hallway with multiple doors. Each row contains six images: Input, GDP, DDNM, AutoIR, Ours, and GT. The 'Ours' column consistently shows the most reasonable and satisfactory results across all methods.
+
+Figure 6: Qualitative comparison with diffusion-based image restoration Methods on LOLv1 datasets. Our method yields the most reasonable and satisfactory results across all methods +.
+
+Table 3: The ablation study on LOL+ and LSRW datasets. The best result is in red color.
+
+| Method |  | LOL |  |  | LSRW |  |  |
+|-|-|-|-|-|-|-|-|
+|  |  | PSNR | SSIM | LPIPS | PSNR | SSIM | LPIPS |
+| Range-null Space Refinement | w/o Range-space content | 22.90 | 0.805 | 0.128 | 18.92 | 0.557 | 0.239 |
+|  | w/o Null-space content | 15.01 | 0.555 | 0.169 | 14.06 | 0.394 | 0.270 |
+| Decoder | vanilla decoder | 22.04 | 0.729 | 0.131 | 18.20 | 0.529 | 0.229 |
+|  | bypass decoder | 23.01 | 0.787 | 0.148 | 19.08 | 0.545 | 0.267 |
+| Ours |  | <b>24.07</b> | <b>0.837</b> | <b>0.105</b> | <b>19.11</b> | <b>0.570</b> | <b>0.204</b> |
+
+We set the batch size to 8 and train for 140k steps, with an initial learning rate of 1e-4 using the ADAM optimizer. For evaluation, we report peak signal-to-noise ratio (PSNR), structural similarity (SSIM) and LPIPS Zhang et al. (2018) is selected as the evaluation metrics.
+
+### 3.2 MAIN RESULTS
+
+**Quantitative Comparison.** As shown in Table 1, we evaluated the performance of our RLPCM with five SOTA supervised methods and nine unsupervised methods. Our RLPCM surpasses all unsupervised methods on LOL dataset in terms of PSNR SSIM and LPIPS, and achieves comparable performance with the supervised methods, while our approach achieves robust performance across all datasets, further emphasizing its generalizability and effectiveness.
+
+To further validate the performance of existing methods, we use the released models trained using their own data for evaluation on our proposed UAV-LL dataset. Despite the current diffusion models, GSAD and DiffLL, achieve the SOTA results in LOL datasets, ones exhibit the limited performance to new scenarios. In contrast, the unsupervised diffusion methods ,i.e., our model, QuadPrior and LightenDiffusion, outperform all pre-trained supervised methods, and our approach has the better result than others.
+
+**Qualitative Comparison.** Figure 5 summarizes the vision results of our method with other SOTA methods among LOL+, LSRW and UAV-LL datasets. It is observed that existing methods suffer from overexposure or underexposure illumination and noise, while our method provide a proper illumination and effectively suppress the noise. Notably, the ground-truth image of UAV-LL dataset has a trade-off between illumination and noise, since our UAV-LL is captured on the real low light scenarios. The limitation and more results and are provided in Appendixes D and E, respectively.
+
+### 3.3 COMPARING WITH DIFFUSION-BASED IMAGE RESTORATION METHODS
+
+To further verify the effectiveness of our framework, we compare our approach with several state-of-the-art (SOTA) diffusion-based image restoration methods, including GDP Ben Fei (2023), DDNM Wang et al. (2023b), and AutoDIR Jiang et al. (2024b). Following the evaluation method used in GDP, we assess the results on the LOLv1 dataset Wei et al. (2018). As shown in Table 2, our method achieves the best perfor-
+
+Table 2: Quantitative comparison with diffusion-based image restoration methods on LOLv1 datasets. The best result is in red color.
+
+| Method | PSNR | SSIM | LPIPS | Time (S) |
+|-|-|-|-|-|
+| GDP (CVPR 23) | 13.93 | 0.630 | 0.680 | 60.00+ |
+| DDNM (ICLR 23) | 13.15 | 0.492 | 0.498 | 5.47 |
+| AutoIR (ECCV 24) | 19.95 | 0.811 | 0.107 | 28.98 |
+| Ours | <b>24.12</b> | <b>0.826</b> | <b>0.103</b> | <b>0.84</b> |
+
+{8}------------------------------------------------
+
+432  
+433  
+434  
+435  
+436  
+437  
+438
+
+![Figure 7: Visual results of the ablation study on the Range-null space and Decoder. The figure shows six pairs of images: 'w/o Null-space', 'w/o Range-space', 'Range-null space', 'Vanilla Decoder', 'Bypass Decoder', and 'Lighting Decoder'. Each pair consists of a low-quality input image and a high-quality enhanced image. The 'Range-null space' and 'Lighting Decoder' methods show significantly better detail preservation and color accuracy compared to the others.](0ba998c66ef6a980bac9c0c12e9452bf_img.jpg)
+
+Figure 7: Visual results of the ablation study on the Range-null space and Decoder. The figure shows six pairs of images: 'w/o Null-space', 'w/o Range-space', 'Range-null space', 'Vanilla Decoder', 'Bypass Decoder', and 'Lighting Decoder'. Each pair consists of a low-quality input image and a high-quality enhanced image. The 'Range-null space' and 'Lighting Decoder' methods show significantly better detail preservation and color accuracy compared to the others.
+
+439  
+440
+
+Figure 7: Visual results of the ablation study on the Range-null space and Decoder, our proposed full model exhibits improved detail handling in the local images.
+
+441  
+442  
+443  
+444  
+445  
+446  
+447  
+448  
+449
+
+![Figure 8: Visual results of the ablation study on natural language guidance, iteration steps, and the self-attention swapping mechanism. The figure is divided into two rows. The top row shows 'Input', 'daytime', 'well lit', 'Dusk', 'w/o Swapping', and 'Ours'. The bottom row shows 'Input', 'Step 1', 'Step 5', 'Step 10', 'w/o Swapping', and 'Ours'. The 'Ours' column consistently shows better image quality and more accurate color/structure adaptation compared to the 'w/o Swapping' column.](3e513f3d2635342934cf8ad226cfa879_img.jpg)
+
+Figure 8: Visual results of the ablation study on natural language guidance, iteration steps, and the self-attention swapping mechanism. The figure is divided into two rows. The top row shows 'Input', 'daytime', 'well lit', 'Dusk', 'w/o Swapping', and 'Ours'. The bottom row shows 'Input', 'Step 1', 'Step 5', 'Step 10', 'w/o Swapping', and 'Ours'. The 'Ours' column consistently shows better image quality and more accurate color/structure adaptation compared to the 'w/o Swapping' column.
+
+450  
+451
+
+Figure 8: Visual results of the ablation study on natural language guidance, iteration steps, and the self-attention swapping mechanism.
+
+452  
+453  
+454  
+455  
+456  
+457  
+458  
+459
+
+mance on the LOLv1 dataset, while our inference speed is significantly higher than that of other models. This improvement is attributed to the introduction of a consistency model, which reduces the number of iterations. Furthermore, our latent prior-guided framework does not reduce the inference efficiency. Besides, Due to the limitation of DDNM, i.e., explicit degradation priors, we introduce our proposed global degeneration operator into DDNM, which also yields an acceptable results. In Figure 6, our method yields the most reasonable and satisfactory results across all methods.
+
+460  
+461
+
+### 3.4 ABLATION STUDY
+
+462  
+463  
+464  
+465  
+466
+
+We present ablation studies to demonstrate the effectiveness of the each part in our proposed RNLP. For range-null space, we remove the range-space content and null-space content, respectively. For refining the null-space content in latent space, we remove the self-attention swapping mechanism, while discuss the effect of different language prompts and its guidance scale. For the fidelity, we compare the lighting decoder with vanilla decoder, consistency decoder and bypass decoder.
+
+467  
+468  
+469  
+470  
+471  
+472  
+473  
+474  
+475  
+476  
+477
+
+The quantitative results of the ablated study on LOL+ and LSRW are presented in Table 3. Overall, the range-null space refinement provide a key contribute to achieve the best performance of the full model. Without either the range-space or null-space content, there would be a rapid decline in performance. In comparison, the impact of the decoder on the results is relatively smaller. As shown in Figure 7 a suboptimal decoder may lead to color distortion or content degradation. Furthermore, we compare the influence of natural language guidance, iteration steps, and the self-attention swapping mechanism in Figure 8. Specifically, natural language guidance can appropriately alter the tone of an image without impacting its content. However, in the absence of the self-attention swapping mechanism, irrelevant content may be introduced, highlighting the necessity of this mechanism. Lastly, the results indicate that our method requires only a few steps (or even just one) to achieve relatively satisfactory results.
+
+478  
+479  
+480
+
+## 4 CONCLUSION
+
+481  
+482  
+483  
+484  
+485
+
+In this paper, we presented a range-null latent prior-guided consistency model, a novel approach that introduces an off-the-shelf consistency model into low-light image enhancement using Retinex-based range-null space decomposition. Additionally, we contributed a new UAV LLIE dataset for comprehensive evaluation. Extensive experiments on both benchmark and UAV-LL datasets demonstrate that our model achieves robust performance. In future work, we aim to explore model distillation and extend the latent prior-guided framework to low-light video enhancement tasks.
+
+{9}------------------------------------------------
+
+## REFERENCES
+
+- 486  
+487  
+488 Liang Pan Junzhe Zhang Weidong Yang Tianyue Luo Bo Zhang Bo Dai Ben Fei, Zhaoyang Lyu.  
+489 Generative diffusion prior for unified image restoration and enhancement. In CVPR, 2023.
+- 490  
+491 Vladimir Bychkovsky, Sylvain Paris, Eric Chan, and Frédo Durand. Learning photographic global  
+492 tonal adjustment with a database of input / output image pairs. In CVPR, pp. 97–104, 2011.
+- 493 Jianrui Cai, Shuhang Gu, and Lei Zhang. Learning a deep single image contrast enhancer from  
+494 multi-exposure images. IEEE Transactions on Image Processing, 27(4):2049–2062, 2018.
+- 495 Yuanhao Cai, Hao Bian, Jing Lin, Haoqian Wang, Radu Timofte, and Yulun Zhang. Retinexformer:  
+496 One-stage retinex-based transformer for low-light image enhancement. In ICCV, pp. 12504–12513,  
+497 October 2023.
+- 498  
+499 Mingdeng Cao, Xintao Wang, Zhongang Qi, Ying Shan, Xiaohu Qie, and Yinqiang Zheng. Masactrl:  
+500 Tuning-free mutual self-attention control for consistent image synthesis and editing. In ICCV, pp.  
+501 22503–22513, 2023.
+- 502  
+503 Zhenqi Fu, Yan Yang, Xiaotong Tu, Yue Huang, Xinghao Ding, and Kai-Kuang Ma. Learning a  
+504 simple low-light image enhancer from paired low-light instances. In CVPR, pp. 22252–22261,  
+505 2023.
+- 506  
+507  
+508  
+509  
+510  
+511  
+512  
+513  
+514  
+515  
+516  
+517  
+518  
+519  
+520  
+521  
+522  
+523  
+524  
+525  
+526  
+527  
+528  
+529  
+530  
+531  
+532  
+533  
+534  
+535  
+536  
+537  
+538  
+539  
+Kanchana Vaishnavi Gandikota and Paramanand Chandramouli. Text-guided explorable image  
+super-resolution. volume abs/2403.01124, 2024. doi: 10.48550/ARXIV.2403.01124. URL  
+<https://doi.org/10.48550/arXiv.2403.01124>.
+- Albert Gu and Tri Dao. Mamba: Linear-time sequence modeling with selective state spaces. In  
+ICML, 2024.
+- Chunle Guo, Chongyi Li, Jichang Guo, Chen Change Loy, Junhui Hou, Sam Kwong, and Runmin  
+Cong. Zero-reference deep curve estimation for low-light image enhancement. In CVPR, pp.  
+1777–1786, 2020.
+- Xiaojie Guo, Yu Li, and Haibin Ling. LIME: low-light image enhancement via illumination map  
+estimation. IEEE Trans. Image Process., 26(2):982–993, 2017.
+- Jiang Hai, Zhu Xuan, Ren Yang, Yutong Hao, Fengzhu Zou, Fang Lin, and Songchen Han. R2net:  
+Low-light image enhancement via real-low to real-normal network. J. Vis. Commun. Image  
+Represent., 90:103712, 2023.
+- Khurram Azeem Hashmi, Goutham Kallemputi, Didier Stricker, and Muhammad Zeshan Afzal.  
+Featenhancer: Enhancing hierarchical features for object detection and beyond under low-light  
+vision. In ICCV, pp. 6702–6712, 2023.
+- Jonathan Ho and Tim Salimans. Classifier-free diffusion guidance. CoRR, abs/2207.12598, 2022.
+- Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. In NIPS, 2020.
+- Jinhui Hou, Zhiyu Zhu, Junhui Hou, Hui Liu, Huanqiang Zeng, and Hui Yuan. Global structure-aware  
+diffusion process for low-light image enhancement. ArXiv, abs/2310.17577, 2023.
+- Hai Jiang, Ao Luo, Haoqiang Fan, Songchen Han, and Shuaicheng Liu. Low-light image enhancement  
+with wavelet-based diffusion models. ACM Trans. Graph., 42(6):238:1–238:14, 2023.
+- Hai Jiang, Ao Luo, Xiaohong Liu, Songchen Han, and Shuaicheng Liu. Lightendiffusion: Unsuper-  
+vised low-light image enhancement with latent-retinex diffusion models. In ECCV, 2024a.
+- Yifan Jiang, Xinyu Gong, Ding Liu, Yu Cheng, Chen Fang, Xiaohui Shen, Jianchao Yang, Pan Zhou,  
+and Zhangyang Wang. Enlightengan: Deep light enhancement without paired supervision. IEEE  
+Trans. Image Process., 30:2340–2349, 2021.
+- Yitong Jiang, Zhaoyang Zhang, Tianfan Xue, and Jinwei Gu. Autodir: Automatic all-in-one image  
+restoration with latent diffusion. In ECCV, 2024b.
+
+ Rest of paper (reference and Appendix) is removed.

@@ -1,0 +1,343 @@
+
+
+{0}------------------------------------------------
+
+# INSTANTIR: BLIND IMAGE RESTORATION WITH INSTANT GENERATIVE REFERENCE
+
+Anonymous authors
+
+Paper under double-blind review
+
+![Figure 1: INSTANTIR image restoration and text-guided editing results.](5fb340ad68b0c71df0b56698b137e35b_img.jpg)
+
+Figure 1 is divided into two main sections. Section I, titled 'Photorealistic Image Restoration', shows two examples. The first example is a close-up of a wolf's face, where a low-quality input (blue border) is restored into high-quality details (orange border). The second example shows a traditional Japanese building and a forest scene, also demonstrating restoration from low-quality inputs to high-quality outputs. Section II, titled 'Text-Guided Edit', shows four sub-images: (a) Low-Quality Input, a blurry image of a fox; (b) w/o Prompt, a restored version of the fox without specific text guidance; (c) Prompt: Fox, a restored version guided by the prompt 'Fox'; and (d) Prompt: Cat, a restored version guided by the prompt 'Cat', resulting in a more cat-like appearance.
+
+Figure 1: INSTANTIR image restoration and text-guided editing results.
+
+Figure 1: I. INSTANTIR presents exceptional capability in reproducing photorealistic details. II. INSTANTIR provides an active interface for natural language guidance, helps handling large degradation and features creative restoration with semantic editing.
+
+## ABSTRACT
+
+Handling test-time unknown degradation is the major challenge in Blind Image Restoration (BIR), necessitating high model generalization. An effective strategy is to incorporate prior knowledge, either from human input or generative model. In this paper, we introduce Instant-reference Image Restoration (INSTANTIR), a novel diffusion-based BIR method which dynamically adjusts generation condition during inference. We first extract a compact representation of the input via a pre-trained vision encoder. At each generation step, this representation is used to decode current diffusion latent and instantiate it in the generative prior. The degraded image is then encoded with this reference, providing robust generation condition. We observe the variance of generative references fluctuate with degradation intensity, which we further leverage as an indicator for developing a sampling algorithm adaptive to input quality. Extensive experiments demonstrate INSTANTIR achieves **competitive** performance and offering outstanding visual quality. Through modulating generative references with textual description, INSTANTIR can restore extreme degradation and additionally feature creative restoration.
+
+{1}------------------------------------------------
+
+## 1 INTRODUCTION
+
+Image restoration seeks to recover High-Quality (HQ) visual details from Low-Quality (LQ) images. This technology has a wide range of important applications. It can enhance social media contents to improve user experience (Chao et al., 2023). It also functions at the heart in industries like autonomous driving (Patil et al., 2023) and robotics (Porav et al., 2019) by improving adaptability in diverse environments, as well as assists object detector in adverse conditions (Sun et al., 2022).
+
+Image restoration remains a long-standing challenge extending beyond its practical application. The information loss during degradation makes a single LQ image corresponds to multiple plausible restorations. This ill-posed problem is further exacerbated in Blind Image Restoration (BIR), where models are tested under unknown degradation. A common strategy is to leverage prior knowledge. Reference-IR models use other HQ images to modulate LQ features, requiring additional inputs with similar contents but richer visual details (Lu et al., 2021). Generative approaches, on the other hand, directly learn the HQ image distribution. The input is first encoded into a hidden variables  $z$ , which serves as the generation condition to sample HQ image from the learned distribution  $p(y|z)$ . Although generative methods achieve single-image restoration, they are prone to hallucinations that produce artifacts in restoration (Yang et al., 2020). This happens when the encoder fails to retrieve accurate hidden variable due to the input distribution shift in degradation. Existing methods improve robustness by training on more diverse synthetic degradation data or introduce discrete feature codebook. We argue that these are only shot-term solutions. Alternative methods are pending to be explored to better address unknown inputs in BIR.
+
+In this paper, we present INSTANTIR, a dynamic restoration pipeline that iteratively refines generation condition using a pre-trained Diffusion Probabilistic Model (DPM). INSTANTIR employs two complementary way for processing input LQ image. First, a pre-trained vision encoder extracts compact representation from degraded content. The encoder’s high compression rate enhances the robustness in the extracted representation, while retaining only high-level semantics and structural information. Next, we introduce the *Previewer* module, a distilled DPM capable of one-step generation. At each generation step, the previewer decodes current diffusion latent using the compact representation, providing a restoration preview resembles original input in high-level features. This preview serves as an instant generative reference to guide the *Aggregator* in encoding identity and other fine-grained missing from the compact representation. We observe in experiments that the previewer tends to decode aggressively when the input is clear, resulting in high variance in restoration previews. We take this as a reliable indicator of input image quality, and develop an adaptive sampling algorithm that amplifies the fine-grained encoding with relatively high quality inputs. Additionally, we find the previewer is controllable through text prompts, which produces diverse generative references and enables semantic editing with restoration. Our contributions are as follows:
+
+1. We explore a novel BIR method that iteratively aligns with the generative prior to address unknown degradation;
+2. We introduce a novel architecture based on pre-trained DPM, which dynamically adjusts the generation condition by previewing intermediate outputs;
+3. We develop sampling algorithms tailored for our pipeline, enabling both adaptive and controllable restoration to text prompts;
+4. We perform extensive evaluations to validate the effectiveness of the proposed methods.
+
+## 2 RELATED WORK
+
+### 2.1 DIFFUSION MODEL
+
+DPM is a class of generative model that generate data by iteratively denoising from Gaussian noise (Sohl-Dickstein et al., 2015; Ho et al., 2020; Song et al., 2020b). Typically, a neural network with a UNet architecture (Ronneberger et al., 2015) is trained to predict the noise added at each inference step. DPM offers superior mode coverage compared to Variational Autoencoders (VAE) (Kingma & Welling, 2013) and outperform GAN-based models (Goodfellow et al., 2020) in generation quality without the need of adversarial training (Dhariwal & Nichol, 2021). These advantages establish DPM as the leading approach in vision generative models. By incorporating
+
+{2}------------------------------------------------
+
+![Figure 2: (a) Pipeline overview of INSTANTIR. (b) Previewer model block. (c) Split-SFT connector.](1b7d539e02a202c2cf2d97698b911447_img.jpg)
+
+Figure 2 illustrates the INSTANTIR pipeline and its components. (a) Pipeline overview: An input Low Quality (LQ) image is processed by two parallel encoders: SD-VAE and DINOv2. The SD-VAE encodes the LQ image into a latent representation  $z_l$ . The DINOv2 encoder extracts a compact representation  $c_{lq}$ . These two representations are then processed by a Previewer module, which generates a reference representation  $z_r$ . The  $z_l$  and  $z_r$  representations are concatenated in an Aggregator module. The output of the Aggregator is then processed by an SDXL module to produce the final restored image  $z_{t-1}$ . (b) Previewer model block: This block takes  $c_{lq}$  and  $c_{text}$  as input. It consists of a Residual-Block (RB) and a Self-Attention/Cross-Attention (SA/CA) block. The output is regulated by a hyperparameter  $w^l$ . (c) Split-SFT connector: This connector takes  $h_{best}$  and  $h_p$  as input. It consists of two parallel Convolutional layers (Conv). The output is fused using Spatial Feature Transform (SFT) to produce  $h_{res}$ .
+
+Figure 2: (a) Pipeline overview of INSTANTIR. (b) Previewer model block. (c) Split-SFT connector.
+
+Figure 2: (a) Overview of the INSTANTIR pipeline. INSTANTIR utilizes two pre-trained encoder for processing LQ image at different levels. DINOv2 extracts compact representation  $c_{lq}$  robust to degradations, providing high-level guidance for sampling the generative reference  $Z_r$  from the refined posterior  $p(z_0|z_l, c_{lq})$ . SDXL’s VAE encodes the LQ latent  $Z_l$ , preserving fine-grained details. (b) A Previewer model block. RB denotes Residual-Block and SA/CA corresponds to Self-Attention/Cross-Attention. We introduce a new CA to process the two modalities in parallel, the output is regulated by a hyperparameter  $w^l$ . (c) Connector between the Aggregator and SDXL.  $Z_r$  and  $Z_l$  are spatially concatenated in the Aggregator to minimize additional parameters channel-wise. Finally, the outputs from the Aggregator are split and fused using Spatial Feature Transform.
+
+additional inputs, DPMs can learn diverse conditional distributions (Nichol & Dhariwal, 2021), with the most widely used application being text-to-image (T2I) generation (Rombach et al., 2022; Saharia et al., 2022a; Ramesh et al., 2022). Leveraging the flexibility of text inputs and the vast amount of text-image training data (Schuhmann et al., 2022), these models are capable of generating images with exceptional visual quality and remarkable diversity, forming the foundation for many subsequent excellent work in vision generative models (Wang et al., 2024c;a).
+
+### 2.2 BLIND IMAGE RESTORATION
+
+The task setting makes BIR particular valuable in real-world applications. The major challenge in BIR is the input distribution gap between training and testing data. Previous work have explored multiple ways to address this issue. Feature quantification is widely used in generative-based methods (Esser et al., 2021; Van Den Oord et al., 2017; Zhou et al., 2022). They align the encoded LQ image features to a learnable feature codebook, ensuring the input to generator is unaffected by domain shifts. However, this hard alignment constraints the generation diversity and quality by the capacity of the discrete codebook. Previous work have also explored the application of powerful DPM in BIR. Some approaches design specialized architectures and train DPMs from scratch (Saharia et al., 2022b; Sahak et al., 2023; Li et al., 2022), while the others apply additional modules on pre-trained T2I model (Wang et al., 2024b; Yu et al., 2024; Sun et al., 2024a), leveraging their large-scale prior. In many practical scenarios, HQ images with similar contents, such as those from photo albums or video frames, are available. This has spurred interest in restoring images using reference-based methods (Cao et al., 2022; Jiang et al., 2021; Lu et al., 2021; Xia et al., 2022; Yang et al., 2020; Zhang et al., 2019). They adopt regression models to learn how to transfer high-quality features to LQ images, enhancing details restoration.
+
+## 3 METHODOLOGY
+
+The distribution gap between training and testing data exacerbates the ill-posed nature of BIR, causing hallucinations in generation-based IR models and producing artifacts. We attribute this to the error in encoding LQ image, and propose a generative restoration pipeline that refines the LQ encodings with generative references. This is achieved by exploiting the reverse process of DPM. Specifically, we first encode the LQ image into a compact representation via pre-trained vision encoder, capturing global structure and semantics to initiate diffusion generation. Conditioned on this embedding, our Previewer module generates a restoration preview at each diffusion time-step. The
+
+{3}------------------------------------------------
+
+![Figure 3: (a) DINOv2 Classification Accuracy plot showing density vs accuracy for Baseline, Blur+FGD, Noise, and Ours methods. (b) Generative References showing a sequence of images from Train w/ LQ to LQ over 1000 steps.](e94f3bbb6f7501b9a1344dd0210e5dd8_img.jpg)
+
+Figure 3 consists of two parts. Part (a) is a density plot of DINOv2 Classification Accuracy for four methods: Baseline (blue), Blur+FGD (orange), Noise (green), and Ours (red). The x-axis represents Accuracy from 30% to 100%, and the y-axis represents Density from 0.00 to 1.75. The 'Ours' method shows a sharp peak at approximately 80% accuracy. Part (b) shows a sequence of images labeled 'Generative References' over time steps  $t=1000$  to  $LQ$ . The images show a penguin being generated from a low-quality (LQ) input, with the process starting from 'Train w/ LQ' and gradually converging towards the target mode.
+
+Figure 3: (a) DINOv2 Classification Accuracy plot showing density vs accuracy for Baseline, Blur+FGD, Noise, and Ours methods. (b) Generative References showing a sequence of images from Train w/ LQ to LQ over 1000 steps.
+
+Figure 3: (a) Zero-shot classification accuracies of DINOv2 on ImageNet-1K under various degradations, showing the robustness of its representations. (b) Sampling from the refined posterior  $p(z_0|z_t, c_{lq})$  across diffusion time-steps. Generative references conditioned on  $c_{lq}$  resemble the LQ input on high-level features and gradually converge toward the target mode in the reverse process.
+
+preview resembles to the input image with more plausible details, and they are further fused in the Aggregator module to preserve fidelity. Finally, the adjusted LQ encoding is used to control the pre-trained DPM for a fine-grained diffusion step.
+
+### 3.1 PRELIMINARIES
+
+DPM involves two stochastic processes named forward and reverse process (Ho et al., 2020). In the forward process, *i.i.d.* Gaussian noise is progressively added to the image  $\mathbf{x}$ . The marginal distribution of diffusion latent  $\mathbf{x}_t$  follows  $\mathcal{N}(\alpha_t \mathbf{x}, \beta_t \mathbf{I})$ , where  $\alpha_t$  and  $\beta_t$  are hyperparameters defining the forward process.  $\mathbf{x}_t$  converges to pure noise as  $t$  increases, and the reverse process generates images by inverting the forward process. Generally, we train a neural-network to predict the noise added at each time-step by minimizing the diffusion loss:
+
+$$\mathcal{L}_{diff} = \mathbb{E} [\|\epsilon_\theta(\mathbf{x}_t, t) - \epsilon\|^2], \quad (1)$$
+
+where  $\epsilon_\theta$  denotes the noise-prediction network. At each step in the reverse process, we can retrieve a denoising sample with the predicted noise and re-parameterization (Karras et al., 2022):
+
+$$\hat{\mathbf{x}} = \frac{\mathbf{x}_t - \beta_t \epsilon_\theta(\mathbf{x}_t, t)}{\alpha_t}. \quad (2)$$
+
+In the open-sourced T2I model Stable Diffusion (SD) (Rombach et al., 2022), the noise-prediction network  $\epsilon_\theta$  is additionally conditioned on a text input that describes the target image. Moreover, SD employs a VAE to move the input  $\mathbf{x}_t$  into latent space  $\mathbf{z}_t$ , compressing inputs by a factor of 48 and significantly reduces the memory usage to enable image generation up to  $512^2$  resolution.
+
+### 3.2 ARCHITECTURE
+
+The restoration pipeline of INSTANTIR consists of three key modules: Degradation Content Perceptor (DCP) for compact LQ image encoding, Instant Restoration Previewer for generating references on-the-fly during the reverse process, and Latent Aggregator for integrating restoration references.
+
+**Degradation Content Perceptor** Human visual perception can easily tell the meaning and subjects of images even when they are heavily degraded. The same thing happens to vision recognition models. In Fig. 3(a) we test the zero-shot classification accuracy of DINOv2 (Oquab et al., 2023) on ImageNet-1K (Deng et al., 2009) under various degradations including noise, blur and JPEG artifacts. DINOv2 sustains 80% accuracy even under a mixture of degradations. The high-level information in DINO’s representation can provide semantic guidance for the reverse process, yielding samples closely resemble the LQ input in these features. We employ the compact representation extracted from pre-trained DINOv2, and modulated it by a learnable Resampler (Han et al., 2024). For the  $l$ -th cross-attention block, we introduce an additional cross-attention operation:
+
+$$\mathbf{f}_{out}^l = \mathbf{f}_{in}^l + \text{CrossAttn}(\mathbf{f}_{in}^l, \mathbf{c}_{txt}) + w^l \cdot \text{CrossAttn}(\mathbf{f}_{in}^l, \Phi(\mathbf{c}_{lq}, t)), \quad (3)$$
+
+where  $\Phi$  denotes the DCP module and  $\mathbf{c}_{lq}$  is the LQ context matrix. We retain the text cross-attention here as it is a crucial part of the pre-trained T2I model that synthesizes high-level semantics. Jointly
+
+{4}------------------------------------------------
+
+training DCP with textual transformation allows it to focus on low-level information absent in the other modality. We introduce a hyper-parameter  $w^l$  to regulate their behaviors. Note that the DCP also takes time-step  $t$  as input to establish temporal dependency in the output. Specifically, we use adaptive layer-normalization to modulate the context matrix from the DCP according to time-step  $t$ :
+
+$$\Phi(\mathbf{x}, t) = \mathcal{T}_{scale} \odot \text{LayerNorm}(\mathbf{c}_{lq}) + \mathcal{T}_{shift}, \quad (4)$$
+
+where,  $\mathcal{T}_{scale}, \mathcal{T}_{shift}$  are calculated from the time-step. We train the DCP module on a frozen diffusion model using the standard diffusion loss in Eq. 1.
+
+**Instant Restoration Previewer** The compact representation encoded by the DCP, while robust against degradation, lacks low-level information. We introduce Previewer, a diffusion model generates from current diffusion latent instead of noise, to decode generative references from the DCP encoding. Decoding at each diffusion time-step requires  $(T(T+1)/2)$  network forward passes with the vanilla T2I model. To streamline this process, we fine-tune the Previewer using consistency distillation (Luo et al., 2023) to make it a one-step generator. For diffusion latent  $\mathbf{z}_s$  at time-step  $s$ , we first obtain the Previewer output conditioned solely on  $\mathbf{c}_{lq}$ . Then, we perform a diffusion step using the pre-trained model from  $\mathbf{z}_s$ , conditioned on both  $\mathbf{c}_{lq}$  and  $\mathbf{c}_{ext}$ , to reach  $\mathbf{z}_t$ .  $\mathbf{z}_t$  is regarded as the ground-truth diffusion latent at time-step  $t$  in the sampling trajectory. Finally, we get the preview of  $\mathbf{z}_t$ , again conditioned solely on  $\mathbf{c}_{lq}$ . The consistency distillation loss is then calculated by:
+
+$$\mathcal{L}_{dist} = \|\Psi(\mathbf{z}_s, s, \Phi(\mathbf{c}_{lq}, s)) - \text{StopGrad}(\Psi(\mathbf{z}_t, t, \Phi(\mathbf{c}_{lq}, t)))\|^2, \quad (5)$$
+
+where  $\Psi$  denotes the previewer model. Additionally, Eq. 5 trains the previewer to follow the sampling trajectory without  $\mathbf{c}_{ext}$ , removing its dependency on text conditions which are typically unavailable in BIR tasks. The consistency constraint (Song et al., 2023) of enforcing consistent outputs across time-step enabling the Previewer to decode generative references on-the-fly.
+
+**Latent Aggregator** The primary challenge in the BIR task is the input distribution shift. Previous work address this by aligning LQ features with reference HQ images or a learned feature codebook. The former takes extra inputs, while the latter is limited to a specific domain by the codebook capacity. In contrast, we generate reference features directly from diffusion prior. Since the compact embedding  $\mathbf{c}_{lq}$  retains only high-level information, it is insufficient for the Previewer to reconstruct HQ images at larger time-steps, as shown in Fig. 3. Relying solely on reference preview incurs error accumulation, so the Aggregator anchors preview to the original input to prevent divergence in the reverse process. The input LQ image is encoded into SD’s latent space and spatially concatenated with the preview. This expanded input remains compatible to the diffusion UNet, allowing the Aggregator to be initialized as a trainable copy of UNet compression path following (Zhang et al., 2023). We remove text cross-attention layers to make the Aggregator lightweight and independent of textual conditions like the Previewer. The preview and LQ hidden features are fused in the spatial-attention layers, which are further integrated via Spatial Feature Transform (SFT) (Wang et al., 2018). For hidden feature  $\mathbf{H}^l$  at the  $l$ -th layer in the Aggregator, we first split it spatially into  $\mathbf{h}_p^l$  and  $\mathbf{h}_b^l$ , corresponding to the hidden features of preview and LQ latent, and integrate them with SFT:
+
+$$\mathbf{h}_{res}^l = (1 + \alpha^l) \odot \mathbf{h}_p^l + \beta^l; \mathbf{h}_b^l, \mathbf{h}_b^l = \text{Split}(\mathbf{H}^l), \quad (6)$$
+
+where  $\alpha^l, \beta^l = \mathcal{M}_b^l(\mathbf{h}_b^l)$  are two affine transformation parameters calculated from the feature map of LQ latent at this level. We extract multi-level features  $\{\mathbf{h}_{res}^l\}_{l=1}^L$  from Aggregator using Eq. 6, and inject them into the corresponding part of U-Net expansion path through residual connections.
+
+### 3.3 ADAPTIVE RESTORATION
+
+INSTANTIR processes LQ image through two complementary ways: 1) extracting compact representation using the DCP, which is robust to degradation but loses fine-grained information; 2) encoding via the lossless SD-VAE and integrating with restoration preview, which is prone to errors in the SD-VAE. Under severe degradation, INSTANTIR may produce samples deviate from the target HQ image. In such cases, restoration previews exhibit small variation, suggesting the DCP struggles to provide guidance according to the input. We further analyze the trajectory of restoration previews during the reverse process, compare it with the denoising predictions from Eq. 2. We assess them on four degradation levels: HQ image, 4x downsampling, 8x downsampling and synthetic multi-degradation, representing decreasing input quality. Fig. 4 (a) illustrates the L2-distance between
+
+{5}------------------------------------------------
+
+![Figure 4: Three line plots showing the evolution of Previewer outputs during generation. (a) Trajectory Difference: L2-Distance vs Time-step. (b) Previewer Temporal Difference: L2-Distance vs Time-step. (c) Normalized Trajectory Difference: L2-Distance vs Time-step. All plots compare HQ, 4x, 8x, and LQ inputs.](c54b3ca7603d65d4589151bc3a49d054_img.jpg)
+
+Figure 4 consists of three line plots labeled (a), (b), and (c). Each plot shows the evolution of Previewer outputs during generation, with 'Time-step' on the x-axis (ranging from 1000 to 0) and 'L2-Distance' on the y-axis. The legend for all plots is: HQ (blue), 4x (orange), 8x (green), and LQ (red).  
+ (a) Trajectory Difference: The y-axis ranges from 0 to 250. All lines show a decreasing trend as time-steps decrease.  
+ (b) Previewer Temporal Difference: The y-axis ranges from 0 to 250. The LQ line starts at a much higher value (around 250) and decreases rapidly, while other lines start lower and decrease more gradually.  
+ (c) Normalized Trajectory Difference: The y-axis ranges from 0 to 2.0. The lines show more varied behavior, with some (like HQ) remaining relatively stable around 1.5, while others (like LQ) decrease towards 0.5.
+
+Figure 4: Three line plots showing the evolution of Previewer outputs during generation. (a) Trajectory Difference: L2-Distance vs Time-step. (b) Previewer Temporal Difference: L2-Distance vs Time-step. (c) Normalized Trajectory Difference: L2-Distance vs Time-step. All plots compare HQ, 4x, 8x, and LQ inputs.
+
+Figure 4: The evolution of the Previewer outputs during generation. (a) L2-distances between previews and denoising means; (b) temporal differences of the Previewer trajectory, measured by L2-distances between adjacent points; (c) relative distances between previews and denoising means.
+
+these two trajectories, which increases monotonically as input quality improves. A pronounced disparity between preview and ordinary denoising prediction represents the Previewer is confident with the guidance, suggesting the input LQ image is informative. Based on this observation, we use the relative difference between two predictions as an indicator of input quality:
+
+$$\delta = \frac{\|\Psi(z_t, t, \Phi(c_{lq}, t)) - \hat{z}_t\|^2}{\|\Psi(z_t, t, \Phi(c_{lq}, t)) - \Psi(z_{t+1}, t+1, \Phi(c_{lq}, t+1))\|^2}, \quad (7)$$
+
+where  $\hat{z}_t$  is given by Eq. 2. From Fig. 4(b) we can see the Previewer is unstable at the beginning. The consistency training in Eq. 5 drives it to decode aggressively, causing large prediction variance during early reverse process where the input diffusion latent is too noisy. Normalizing the L2-distance between trajectories with Previewer’s temporal difference effectively mitigates the temporal correlation as illustrated in Fig. 4(c). A larger  $\delta$  indicates higher input quality, and the conditional signals from the Aggregator should be amplified to preserve fine-grained information from the original input. On the other hand, DPM is known to first generate low-frequency features such as global structure, and add high-frequency details in the later stage of the reverse process. A decreasing  $\delta$  prevents INSTANTIR from divergence induced by generative references at the beginning. We provide more detailed discussion of the quality-fidelity trade off strategies in Appendix B.
+
+Surprisingly, although only the DCP module is explicitly trained on text-image data, INSTANTIR demonstrates notable creativity following textual descriptions. By employing a text-guided Previewer, we can generate diverse restoration variations with compound semantics from both modalities. However, these variation samples can conflict with the original input, making them ineligible as generative references. We provide detailed analysis in Appendix A. Inspired by previous work in image editing, we disable the Aggregator at later stage generation and let INSTANTIR renders semantic details according to LQ representation and text prompt. This ensures the low-frequency features are succeeded from the Aggregator, meanwhile prevents the high-frequency semantics and noise from entering the final results.
+
+#### Algorithm 1 Adaptive Restoration
+
+---
+
+**Input:**  $\epsilon_\theta, \Psi, z_{lq}, c, \{\alpha_t, \beta_t | t = 1 \dots T\}, \eta$   
+ 1: Sample  $z_{T-r} \sim \mathcal{N}(\mathbf{0}, \beta_T \mathbf{I})$   
+ 2: Initialize  $\bar{z}_{t+1}^{\Psi} = \mathbf{0}, z = \mathbf{0}, \delta = 1$   
+ 3: **for**  $t$  in  $[T, \dots, 1]$  **do**  
+ 4:    $\bar{z}_t^{\Psi} = \Psi(z_t, t, c)$   
+ 5:    $z_{ref} = \bar{z}_t^{\Psi} + \delta \cdot (z_{lq} - \bar{z}_t^{\Psi})$   
+ 6:    $\bar{z}_t = (z_t - \beta_t \epsilon_\theta(z_t, z_{ref}, t, c)) / \alpha_t$   
+ 7:    $\delta = \|\bar{z}_t^{\Psi} - \bar{z}_t\|^2 \cdot \|\bar{z}_t^{\Psi} - \bar{z}_{t+1}^{\Psi}\|^{-2}$   
+ 8:    $z_{t-1} = (\beta_{t-1}/\beta_t)z_t - (\alpha_t/\beta_t - \alpha_{t-1})\bar{z}_t$   
+ 9: **end for**  
+**Output:**  $z_0$
+
+---
+
+## 4 EXPERIMENTS
+
+### 4.1 IMPLEMENTATION DETAILS
+
+INSTANTIR is built on SDXL (Podell et al., 2023) accompanied by a two-stage training strategy. In Stage-I, we train the Resampler in the DCP module connecting frozen DINOv2 and SDXL,
+
+{6}------------------------------------------------
+
+Table 1: Quantitative comparisons on both synthetic validation data and public real-world dataset. We highlight the best results in **bold** and the second best with underline.
+
+| Dataset | Model | PSNR | SSIM | LPIPS | CLIPIQA | MANIQA | MUSIQ | NIQE |
+|-|-|-|-|-|-|-|-|-|
+| Synthetic | BSRGAN | 20.21 | 0.5214 | 0.7793 | 0.2072 | 0.2076 | 17.53 | 11.06 |
+|  | Real-ESRGAN | 19.92 | 0.5317 | 0.7554 | 0.2102 | 0.2331 | 17.39 | 9.840 |
+|  | StableSR | <u>20.42</u> | <b>0.5388</b> | <u>0.3751</u> | 0.4672 | 0.2602 | 52.33 | 5.274 |
+|  | CoSeR | 19.92 | 0.5114 | <b>0.3353</b> | <b>0.6651</b> | 0.4152 | <u>67.51</u> | <b>3.919</b> |
+|  | SUPiR | <b>20.46</b> | 0.4990 | 0.4090 | 0.4875 | 0.3081 | 56.43 | 4.408 |
+|  | INSTANTiR (ours) | 18.54 | 0.5126 | 0.3986 | <u>0.5497</u> | <b>0.4379</b> | <b>68.59</b> | <u>4.373</u> |
+| Real-world | BSRGAN | 26.38 | 0.7651 | 0.4120 | 0.3151 | 0.2147 | 28.58 | 9.528 |
+|  | Real-ESRGAN | <b>27.29</b> | <b>0.7894</b> | 0.4173 | 0.2532 | 0.2398 | 25.66 | 8.561 |
+|  | StableSR | 26.40 | 0.7721 | <b>0.2597</b> | 0.4501 | 0.2947 | 48.79 | 7.724 |
+|  | CoSeR | 25.59 | 0.7402 | <u>0.2788</u> | <b>0.5809</b> | 0.3941 | 60.51 | <u>6.514</u> |
+|  | SUPiR | 26.41 | 0.7358 | 0.3639 | 0.3869 | 0.2721 | 42.72 | 8.550 |
+|  | INSTANTiR (ours) | 21.75 | 0.6766 | 0.3686 | <u>0.5401</u> | <b>0.4819</b> | <b>65.32</b> | <b>6.064</b> |
+
+(a) Scenario 1:  $512^2$  image restoration. The outputs of SUPiR and INSTANTiR are downsampled to  $512^2$ .
+
+| Dataset | Model | PSNR | SSIM | LPIPS | CLIPIQA | MANIQA | MUSIQ | NIQE |
+|-|-|-|-|-|-|-|-|-|
+| Synthetic | BSRGAN | <b>21.32</b> | 0.5267 | 0.5611 | 0.4289 | 0.3299 | 37.97 | 9.566 |
+|  | Real-ESRGAN | 20.45 | 0.5202 | 0.5660 | 0.4566 | 0.3627 | 37.92 | 8.276 |
+|  | StableSR | <u>21.01</u> | <b>0.5490</b> | 0.3921 | 0.4526 | 0.2492 | 48.94 | 5.640 |
+|  | CoSeR | 20.50 | 0.5215 | <b>0.3488</b> | <b>0.6461</b> | 0.3939 | 64.84 | <u>4.265</u> |
+|  | SUPiR | 20.57 | 0.4569 | 0.4196 | 0.6286 | 0.3962 | 61.00 | 4.372 |
+|  | INSTANTiR (Ours) | 18.80 | 0.5076 | <u>0.3903</u> | 0.6111 | <b>0.4303</b> | <b>66.09</b> | <b>4.095</b> |
+| Real-world | BSRGAN | <b>28.60</b> | 0.8141 | 0.3690 | 0.4720 | 0.2258 | 18.26 | 10.89 |
+|  | Real-ESRGAN | <u>28.13</u> | <b>0.8209</b> | 0.3647 | 0.4435 | 0.3229 | 35.31 | 10.16 |
+|  | StableSR | 27.79 | 0.8043 | <b>0.2514</b> | 0.4634 | 0.2901 | 46.54 | <u>7.475</u> |
+|  | CoSeR | 27.04 | 0.7683 | <u>0.2882</u> | <b>0.5847</b> | <u>0.4068</u> | 58.39 | <b>6.514</b> |
+|  | SUPiR | 26.10 | 0.5825 | 0.5429 | 0.4822 | 0.3232 | 44.95 | 9.582 |
+|  | INSTANTiR (Ours) | 21.89 | 0.6879 | 0.3601 | <u>0.5647</u> | <b>0.4389</b> | <b>62.58</b> | <u>8.024</u> |
+
+(b) Scenario 2:  $1024^2$  image restoration. We crop  $512^2$  patches as inputs to 512-models and evaluate the quantitative metrics on the cropped area only.
+
+followed by the Previewer’s consistency distillation training (see Sec. 3.2). The Previewer is trained by applying Low-Rank Adaptation (LoRA) (Hu et al., 2021) on the base SDXL model for efficiency. By toggling the Previewer LoRA, we can seamlessly switch between the Previewer and SDXL, reducing memory footprint. After obtaining the DCP and Previewer LoRA, we proceed to Stage-II Aggregator training. The two-stage training ensures the Aggregator receives high-quality previews since the beginning of its training course.
+
+We adopt SDXL’s data preprocessing and conduct training on  $1024^2$  resolution. In both two stages we use the AdamW (Loshchilov, 2017) optimizer with a learning rate of  $1 \times 10^{-4}$ . In Stage-I, we train the DCP module using a batch size of 256 over 200K steps, and distill the Previewer for another 30K steps with the same batch size. We train the Aggregator with a batch size of 96 over 200K steps in Stage-II. The entire training process spans approximately 9 days on 8 Nvidia H800 GPUs.
+
+To enable Classifier-free Guidance (CFG) (Ho & Salimans, 2022) sampling, we apply LQ image dropout with a probability of 15% in both stages training. In all test experiments, we employ 30 steps DDIM sampling (Song et al., 2020a) with a CFG scale of 7.0.
+
+### 4.2 EXPERIMENTAL CONFIGURATION
+
+**Training Data** We synthesize LQ-HQ image pairs using Real-ESRGAN (Wang et al., 2021) with the default setting. As mentioned in Sec. 3.2, we conduct Stage-I training on the JourneyDB dataset (Sun et al., 2024b), a generated dataset with descriptive captions. While JourneyDB images are of extreme quality, they lack the textures in real-world images. Hence for Stage-II training, we incorporate publicly available texture-rich datasets to enhance model’s ability to produce realistic
+
+{7}------------------------------------------------
+
+![Figure 5: Qualitative comparisons on real-world LQ images. The figure shows a grid of images with 6 columns: LQ, Real-ESRGAN, StableSR, CoSeR, SUPIR, and InstantIR. Rows 1-3 show soldiers in camouflage, rows 4-6 show a classical painting, and rows 7-9 show a person in sunglasses. Red boxes highlight specific regions of interest in the LQ images, and zoomed-in crops of these regions are shown below each main image to illustrate detail restoration quality.](892f25e3d71d8e315a2a51092a8a8da7_img.jpg)
+
+Figure 5: Qualitative comparisons on real-world LQ images. The figure shows a grid of images with 6 columns: LQ, Real-ESRGAN, StableSR, CoSeR, SUPIR, and InstantIR. Rows 1-3 show soldiers in camouflage, rows 4-6 show a classical painting, and rows 7-9 show a person in sunglasses. Red boxes highlight specific regions of interest in the LQ images, and zoomed-in crops of these regions are shown below each main image to illustrate detail restoration quality.
+
+Figure 5: Qualitative comparisons on real-world LQ images. Restorations from INSTANTIR are rich in details with global semantic consistency. Better viewed zoom in.
+
+visual details. Specifically, we use DIV2K (Agustsson & Timofte, 2017), LSDIR (Li et al., 2023), Flickr2K (Timofte et al., 2017) and FFHQ (Karras et al., 2019).
+
+**Test Setting** For a comprehensive evaluation, we test INSTANTIR on a synthetic dataset and public benchmarks following previous work. We synthesize 2,000 multi-degradation samples from DIV2K and LSDIR validation sets using Real-ESRGAN pipeline, **including deblur, denoise, SR and deJPEG simultaneously**. We include a small portion of JourneyDB validation data to enhance benchmark diversity. We conduct evaluations on RealSR (Cai et al., 2019) and DRealSR (Wei et al., 2020) to assess model performance on real-world LQ images. We report full-reference metrics PSNR, SSIM, LPIPS (Zhang et al., 2018), if ground-truth targets are available, and non-reference metrics MANIQA (Yang et al., 2022), CLIPIQA (Wang et al., 2023), MUSIQ (Ke et al., 2021), and NIQE (Mittal et al., 2012) to quantitatively compare INSTANTIR with other models.
+
+### 4.3 COMPARING TO EXISTING METHODS
+
+We compare INSTANTIR with state-of-the-art models, including StableSR (Wang et al., 2024b), CoSeR (Sun et al., 2024a), SUPIR (Yu et al., 2024), BSRGAN (Zhang et al., 2021) and Real-ESRGAN (Wang et al., 2021). **For the SD-based methods, we roughly balance the computational cost to 30 seconds per image on a V100 GPU.** Since some of them are limited to  $512^2$  resolution, we consider two test scenarios for a fair comparison: 1) models are tested on  $512^2$  images with outputs of  $1024^2$  models scaled accordingly; 2) following SUPIR, the models are tested on  $1024^2$  images by cropping  $512^2$  patch as inputs to  $512^2$  models, metrics are evaluated on the cropped area only.
+
+**Quantitative Comparison** The results are summarized in Tab. 1. **INSTANTIR demonstrates superior image quality, as evaluated by an average ranking of 1.48 across non-reference metrics.** INSTANTIR continuously achieves the highest MUSIQ and MANIQA scores across all test settings, outperforming the second best by large margins up to **22%** in MANIQA and **8%** in MUSIQ. Notably in scenario 1, despite halving the input data, INSTANTIR still performs comparably to SOTA models. While CoSeR achieves the best CLIPIQA scores closely followed by INSTANTIR, restorations
+
+{8}------------------------------------------------
+
+432  
+433  
+434  
+435  
+436  
+437  
+438  
+439  
+440  
+441  
+442  
+443  
+444  
+445  
+446  
+447  
+448  
+449  
+450  
+451  
+452  
+453  
+454  
+455  
+456  
+457  
+458  
+459  
+460  
+461  
+462  
+463  
+464  
+465  
+466  
+467  
+468  
+469  
+470  
+471  
+472  
+473  
+474  
+475  
+476  
+477  
+478  
+479  
+480  
+481  
+482  
+483  
+484  
+485
+
+![Figure 6: Visual examples of the previewing mechanism in INSTANTIR. (a) In-domain previews enhance detail restoration. (b) Out-domain previews edit high-level semantics.](0ba998c66ef6a980bac9c0c12e9452bf_img.jpg)
+
+Figure 6 consists of two parts, (a) and (b), each showing a 2x3 grid of images. Part (a) shows three images of a man's face, labeled 'LQ image', 'w/o preview', and 'w/ preview'. The 'w/ preview' image shows significantly more detail and better alignment with the original face. Part (b) shows three images of a rabbit in a garden, labeled 'LQ', 'w/o prompt', and 'w/ prompt'. The 'w/ prompt' image shows the rabbit with a 'pink rose' instead of a 'cherry blossom', demonstrating high-level semantic editing.
+
+Figure 6: Visual examples of the previewing mechanism in INSTANTIR. (a) In-domain previews enhance detail restoration. (b) Out-domain previews edit high-level semantics.
+
+(a) In-domain previews enhance detail restoration. (b) Out-domain previews edit high-level semantics.
+
+Figure 6: Visual examples of the previewing mechanism in INSTANTIR. Better viewed zoom in.
+
+from 1024-models SUPIR and INSTANTIR are rich in details as shown in Fig. 5. We also observe the misalignment of PSNR and SSIM scores with visual quality as reported in the literature (Yu et al., 2024; Wang et al., 2024b). We include these metrics here for reference purpose.
+
+**Qualitative Comparison** We provide some restoration samples on real-world LQ images in Fig. 5. Through leveraging the previewing mechanism, INSTANTIR actively aligns with generative prior, reducing hallucinations and producing sharp yet realistic details. In the second row of Fig. 5, while SUPIR’s result contains rich textures, the absence of global semantic guidance causes the diver’s body and mask to blend together. In contrast, the cognitive encoder in CoSeR helps it identifies statues in the second example. CoSeR employs a feature codebook to handle unknown degradations, which limits the generation of complex textures on the statues. Notably in the first row of Fig. 5, INSTANTIR is the only one that successfully recovers all four faces without distortion, suggesting its superior ability in capturing semantic and reproduce realistic details from diverse degradations.
+
+### 4.4 ABLATION STUDY
+
+**In-domain Reference for Detail Enhancement** Reference-based BIR models improve detail restoration by transferring high-quality textures from HQ references. INSTANTIR achieves this by querying the T2I model, eliminating additional inputs. To evaluate the effectiveness of generative references, we test INSTANTIR with different sources of reference. Specifically, we consider six reference sources with progressively increasing quality: the input LQ image, the target HQ image, DDIM mean from Eq. 2, unconditional restoration preview, restoration preview with DCP and additionally with text prompt. The latter three are both produced by our distilled Previewer. Results of this ablation study are summarized In Tab. 2a. Using the LQ image as reference yields the highest PSNR and SSIM value, as it preserves the maximum amount of original information. However, using the target HQ image will have these two metrics reduced. This occurs because INSTANTIR is designed to utilize dynamic generative references, and a fixed reference does not align with its training paradigm. We leave this limitation for future improvements. As more conditions are incorporated into the generative references, the restored image quality consistently increases, as indicated by perceptual metrics like CLIPIQA, despite decreasing PSNR and SSIM values. This observation aligns with the ‘perception-distortion tradeoff’ (Blau & Michaeli, 2018) that better perceptual quality comes at a price of worse distortion. We provide some visual samples in Fig. 6a.
+
+**Out-domain Reference for Creative Restoration** Thanks to the efficiency of our Aggregator in processing latent inputs, INSTANTIR is able to perform high-level semantic editing during restoration, altering specific attributes of the subject and leaving other visual details unchanged as shown in Fig. 6b. We empirically find INSTANTIR offers better text-editing ability under heavy degradation where there is a relatively large information loss in the DINO representation. Detailed analysis as well as more visual samples are provided in Appendix. A.
+
+{9}------------------------------------------------
+
+Table 2: Ablation studies. The best results are highlighted in **bold**.
+
+| Reference | PSNR | SSIM | LPIPS | CLIPIQA | MANIQA | MUSIQ | NIQE |
+|-|-|-|-|-|-|-|-|
+| LQ Image | 21.36 | 0.6417 | 0.4950 | 0.2415 | 0.2025 | 33.39 | 8.049 |
+| HQ Image | 16.86 | 0.5791 | 0.3728 | 0.5078 | 0.3892 | 65.72 | 5.139 |
+| DDIM Mean | 21.10 | 0.6066 | 0.4000 | 0.4515 | 0.3727 | 60.93 | 5.819 |
+| Restoration Preview | 20.94 | 0.6108 | <b>0.3787</b> | 0.5023 | 0.4052 | 65.71 | 5.168 |
+| +DCP | 18.77 | 0.5514 | 0.3933 | 0.5941 | 0.4687 | 70.45 | <b>4.658</b> |
+| +DCP +prompt | 18.01 | 0.5202 | 0.4065 | <b>0.6489</b> | <b>0.5112</b> | <b>72.32</b> | 4.669 |
+| Diffusion Latent | <b>23.07</b> | <b>0.7312</b> | 0.3830 | 0.3767 | 0.2924 | 49.23 | 4.894 |
+
+(a) Ablation study of different reference types.
+
+| AdaIN | AdaRes | PSNR | SSIM | LPIPS | CLIPIQA | MANIQA | MUSIQ | NIQE |
+|-|-|-|-|-|-|-|-|-|
+| <i>X</i> | <i>X</i> | 22.40 | 0.6937 | 0.3625 | 0.5361 | 0.4673 | 63.55 | 7.577 |
+| <i>X</i> | <i>✓</i> | 21.75 | 0.6766 | 0.3686 | <b>0.5401</b> | <b>0.4819</b> | <b>65.32</b> | <b>6.064</b> |
+| <i>✓</i> | <i>X</i> | <b>25.16</b> | <b>0.7247</b> | <b>0.3469</b> | 0.5188 | 0.4575 | 63.56 | 7.978 |
+| <i>✓</i> | <i>✓</i> | 24.51 | 0.7102 | 0.3558 | 0.5319 | 0.4672 | 64.56 | 7.997 |
+
+(b) Ablation study of the adaIN and AdaRes sampling.
+
+**Adaptive Restoration** Alg. 1 enhances restoration quality by gradually relaxing the constraints, which, however, incurs worse distortion. As shown in the first two rows of Tab. 2b, image quality scores increase as full-reference metrics degraded. On the other hand, diffusion model can occasionally exhibit color shift (Choi et al., 2022), where minor deviations in pixel values can significantly affect full-reference metrics. To address this issue, (Wang et al., 2024b) proposed normalizing generation outputs with color statistics derived from the LQ image, a post-process trick referred to as adaIN. We conduct an ablation study of Alg. 1 combined with adaIN in Tab. 2b. While adaIN can substantially improve full-reference metrics, it compromises image quality. Therefore, we opt not to incorporate this technique in INSTANTIR.
+
+**Fresh Noise to Restoration Previews** We additionally train an Aggregator that injects fresh noise to reference latents according to diffusion time-step. The noisy preview latent follows the same distribution as current diffusion latent, making the overall pipeline resemble a ControlNet model (Zhang et al., 2023). As shown in the last row of Tab. 2a, INSTANTIR significantly outperforms ControlNet with LQ image as conditional inputs. This highlights the effectiveness of the previewing mechanism in INSTANTIR for adjusting generation conditions during inference.
+
+## 5 CONCLUSION
+
+In this paper, we explore a novel method to address unknown degradations in BIR task. We first demonstrate the reliability of pre-trained DINOv2 in this low-level vision task, the extracted high-level representations are robust against degradations. Through exploiting the generation process of DPM, we propose to actively align with the generative prior to reduce the errors in encoding conditions. Our pipeline is implemented based on pre-trained SDXL model, referred to as INSTANTIR. Extensive experiments demonstrate the exceptional restoration capability of INSTANTIR, delivering competitive performance in quantitative metrics and visual quality. However, we observe some disparity in full-reference metrics such as PSNR and SSIM compared to SOTA models, partly due to our AdaRes algorithm which relaxes the generation constraints to promote quality. Integrating INSTANTIR with an adaIN post-processing step can mitigate this issue with a compromised restoration quality, reflecting the perception-distortion tradeoff. Future work could explore approaches to further advance this Pareto frontier, such as improving the interaction between generative references and conditions, as well as refining the previewer to more constraint references. Another potential limitation of INSTANTIR is its generalization across other image modalities, which will require fine-tuning the Aggregator with DINOv2 replaced by domain-specific image recognition models.
+
+ Rest of paper (reference and Appendix) is removed.

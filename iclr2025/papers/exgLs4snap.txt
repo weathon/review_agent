@@ -1,0 +1,315 @@
+
+
+{0}------------------------------------------------
+
+# PARAMETER EXPANDED STOCHASTIC GRADIENT MARKOV CHAIN MONTE CARLO
+
+Hyunsu Kim, Giung Nam, Chulhee Yun, Hongseok Yang, & Juho Lee
+
+KAIST, South Korea
+
+{kim.hyunsu, giung, chulhee.yun, hongseok.yang, juholee}@kaist.ac.kr
+
+# ABSTRACT
+
+Bayesian Neural Networks (BNNs) provide a promising framework for modeling predictive uncertainty and enhancing out-of-distribution robustness (OOD) by estimating the posterior distribution of network parameters. Stochastic Gradient Markov Chain Monte Carlo (SGMCMC) is one of the most powerful methods for scalable posterior sampling in BNNs, achieving efficiency by combining stochastic gradient descent with second-order Langevin dynamics. However, SGMCMC often suffers from limited sample diversity in practice, which affects uncertainty estimation and model performance. We propose a simple yet effective approach to enhance sample diversity in SGMCMC without the need for tempering or running multiple chains. Our approach reparameterizes the neural network by decomposing each of its weight matrices into a product of matrices, resulting in a sampling trajectory that better explores the target parameter space. This approach produces a more diverse set of samples, allowing faster mixing within the same computational budget. Notably, our sampler achieves these improvements without increasing the inference cost compared to the standard SGMCMC. Extensive experiments on image classification tasks, including OOD robustness, diversity, loss surface analyses, and a comparative study with Hamiltonian Monte Carlo, demonstrate the superiority of the proposed approach.
+
+# 1 INTRODUCTION
+
+Bayesian Neural Networks (BNNs) provide a promising framework for achieving predictive uncertainty and out-of-distribution (OOD) robustness (Goan & Fookes, 2020). Instead of using a gradient-descent optimization algorithm typical for neural networks (NNs), BNNs are trained by estimating the posterior distribution  $p(\theta|\mathcal{D})$ , where  $\theta$  represents the BNN parameters and  $\mathcal{D}$  is the given dataset. Variational methods (Liu & Wang, 2016; David M. Blei & McAuliffe, 2017) and sampling methods are commonly used to estimate the posterior. A representative sampling method is Stochastic Gradient Markov Chain Monte Carlo (SGMCMC; Welling & Teh, 2011; Chen et al., 2014; Ma et al., 2015), which has been highly successful for large-scale Bayesian inference by leveraging both the exploitation of stochastic gradient descent (SGD) and the exploration of Hamiltonian Monte Carlo (HMC; Duane et al., 1987). Based on an appropriate stochastic differential equation, SGMCMC approximately draws samples from the posterior, while avoiding the computation of the intractable posterior density  $p(\theta|\mathcal{D})$  and instead using its unnormalized tractable counterpart  $p(\mathcal{D}|\theta)p(\theta)$ .
+
+However, despite its powerful performance, SGMCMC suffers from the issue of low sample diversity. Drawing diverse samples of the BNN parameters  $\theta$  is important because it usually leads to the diversity of the sampled functions  $f_\theta$  of the BNN, which in turn induces an improved approximation of the likelihood  $p(\mathcal{D}|\theta)$ . As a result, SGMCMC often fails to replace less-principled alternatives in practice, in particular, deep ensemble (DE; Lakshminarayanan et al., 2017), which generates multiple samples of the BNN parameters  $\theta$  simply by training a neural network multiple times with different random initializations and SGD. Although DE is technically not a principled Bayesian method, it partially approximates the posterior with high sample diversity, leading to a good uncertainty estimation (Ovadia et al., 2019; Ashukha et al., 2020). When training time is not a concern, DE usually outperforms SGMCMC in terms of both accuracy and uncertainty estimation.
+
+{1}------------------------------------------------
+
+Existing approaches for addressing the sample-diversity issue of SGMCMC mostly focus on modifying the dynamics of SGMCMC directly, e.g., by adjusting the step size schedule (Zhang et al., 2020), introducing preconditioning into the dynamics (Ma et al., 2015; Gong et al., 2019; Kim et al., 2024), or running multiple SGMCMC chains to explore different regions of the loss surface (Gallego & Insua, 2020; Deng et al., 2020). However, such a direct modification of the dynamics commonly requires extra approximations, such as the estimation of the Fisher information, bi-level optimization to learn appropriate preconditioning, or high computational resources, such as a large amount of memory due to the use of multiple chains.
+
+In this paper, we propose a simple yet effective approach for increasing the sample diversity of SGMCMC without requiring explicit preconditioning or multiple chains. Our approach modifies the dynamics of SGMCMC *indirectly* by reparameterizing the BNN parameters. In the approach, the original parameter matrices of the BNN are decomposed into the products of matrices of new parameters. Specifically, for a given multilayer perceptron (MLP), when  $\mathbf{W} \in \mathbb{R}^{m \times n}$  is a parameter matrix of an MLP layer, our approach reparameterizes  $\mathbf{W}$  as the following matrix product:
+
+$$\mathbf{W} = \mathbf{PVQ}, \quad (1)$$
+
+for new parameter matrices  $\mathbf{V} \in \mathbb{R}^{m \times n}$ ,  $\mathbf{P} \in \mathbb{R}^{m \times m}$  and  $\mathbf{Q} \in \mathbb{R}^{n \times n}$  for the same layer. We call the approach as *Parameter Expanded SGMCMC (PX-SGMCMC)*. In the paper, we provide theoretical and empirical evidence that our reparametrization alters the dynamics of SGMCMC such that PX-SGMCMC explores the target potential energy surface better than the original SGMCMC. The modified dynamics introduce a preconditioning on the gradient of the potential energy and causes an effect of increasing step size implicitly. While simply growing the step size often hinders the convergence of gradient updates, the implicit step size scaling caused by the preconditioning improves the convergence. Although PX-SGMCMC needs more BNN parameters during training, its inference cost remains the same as SGMCMC because the matrices  $\mathbf{P}$ ,  $\mathbf{V}$ ,  $\mathbf{Q}$  in Eq. 1 can be reassembled into the single weight matrix  $\mathbf{W}$  for inference.
+
+We evaluate the performance of PX-SGMCMC on various image classification tasks, with residual networks (He et al., 2016), measuring both in-distribution and OOD performance. Furthermore, we assess sample diversity in various ways, such as measuring ensemble ambiguity, comparing PX-SGMCMC with HMC (which is considered an oracle method), and visualizing the sampling trajectories over the loss surface. Our evaluation shows that PX-SGMCMC outperforms SGMCMC and other baselines by a significant margin, producing more diverse function samples and achieving better uncertainty estimation and OOD robustness than these baselines.
+
+# 2 PRELIMINARIES
+
+## 2.1 NOTATION
+
+We begin by presenting the mathematical formulation of neural networks. Specifically, a multilayer perceptron (MLP; Rosenblatt, 1958) with  $L$  layers transforms inputs  $\mathbf{x} = \mathbf{h}^{(0)}$  to outputs  $\mathbf{y} = \mathbf{h}^{(L)}$  through the following transformations:
+
+$$\mathbf{h}^{(l)} = \sigma(\mathbf{W}^{(l)}\mathbf{h}^{(l-1)} + \mathbf{b}^{(l)}), \text{ for } l = 1, \dots, L-1, \text{ and } \mathbf{h}^{(L)} = \mathbf{W}^{(L)}\mathbf{h}^{(L-1)} + \mathbf{b}^{(L)}, \quad (2)$$
+
+where  $\mathbf{h}^{(l)}$  denotes the feature at the  $l$ -th layer,  $\mathbf{W}^{(l)}$  and  $\mathbf{b}^{(l)}$  respectively are the weight and bias parameters at the  $l$ -th layer, and  $\sigma(\cdot)$  indicates the activation function applied element-wise.
+
+## 2.2 BAYESIAN INFERENCE WITH STOCHASTIC GRADIENT MCMC
+
+**Bayesian model averaging.** In Bayesian inference, our goal is not to find a single best estimate of the parameters, such as the maximum a posteriori estimate, but instead to sample from the posterior distribution  $p(\boldsymbol{\theta}|\mathcal{D})$  of the parameters  $\boldsymbol{\theta}$  given the observed data  $\mathcal{D}$ . The prediction for a new datapoint  $x$  is then given by Bayesian model averaging (BMA),
+
+$$p(y|x, \mathcal{D}) = \int p(y|x, \boldsymbol{\theta})p(\boldsymbol{\theta}|\mathcal{D})d\boldsymbol{\theta}, \quad (3)$$
+
+which can be approximated by Monte Carlo integration  $p(y|x, \mathcal{D}) \approx \sum_{m=1}^M p(y|x, \boldsymbol{\theta}_m)/M$  using finite posterior samples  $\boldsymbol{\theta}_1, \dots, \boldsymbol{\theta}_M \sim p(\boldsymbol{\theta}|\mathcal{D})$ . This Monte-Carlo integration is commonly used
+
+{2}------------------------------------------------
+
+in Bayesian deep learning with posterior samples generated by a sampling method, as the posterior distribution of the neural network parameters  $\theta$  cannot be expressed in closed form in practice.
+
+**Langevin dynamics for posterior simulation.** Due to the intractability of the posterior  $p(\theta|\mathcal{D})$  for the neural network parameters  $\theta$ , we often work with its unnormalized form. Specifically, we typically introduce the *potential energy*, defined as the negative of the unnormalized log-posterior:
+
+$$U(\theta) = -\log p(\mathcal{D}|\theta) - \log p(\theta). \quad (4)$$
+
+Simulating the following Langevin dynamics over the neural network parameters  $\theta$ ,
+
+$$d\theta = \mathbf{M}^{-1}r dt, \quad dr = -\gamma r dt - \nabla_{\theta}U(\theta) dt + \mathbf{M}^{1/2}\sqrt{2\gamma T}d\mathcal{W}, \quad (5)$$
+
+yields a trajectory distributed according to  $\exp(-U(\theta)/T)$ , where setting  $T = 1$  provides posterior samples for computing the BMA integral (Eq. 3). Here,  $\mathbf{M}$  is the mass,  $\gamma$  is the damping constant,  $\mathcal{W}$  represents a standard Wiener process, and  $T$  is the temperature.
+
+**Langevin dynamics with stochastic gradients.** Computing the gradient  $\nabla_{\theta}U(\theta)$  over the entire dataset  $\mathcal{D}$  becomes intractable as the dataset size increases. Inspired by stochastic gradient methods (Robbins & Monro, 1951), SGMCMC introduces a noisy estimate of the potential energy:
+
+$$\tilde{U}(\theta) = -(|\mathcal{D}|/|\mathcal{B}|) \log p(\mathcal{B}|\theta) - \log p(\theta), \quad (6)$$
+
+where the log-likelihood is computed only for a mini-batch of data  $\mathcal{B} \subset \mathcal{D}$ , replacing the full-data gradient with the mini-batch gradient. In practice, simulations rely on the semi-implicit Euler method, with Stochastic Gradient Langevin Dynamics (SGLD; Welling & Teh, 2011) and Stochastic Gradient Hamiltonian Monte Carlo (SGHMC; Chen et al., 2014) being two representatives:
+
+$$\text{(SGLD)} \quad \theta \leftarrow \theta - \epsilon \mathbf{M}^{-1} \nabla_{\theta} \tilde{U}(\theta) + \mathcal{N}(\mathbf{0}, 2\epsilon \mathbf{TM}), \quad (7)$$
+
+$$\text{(SGHMC)} \quad \theta \leftarrow \theta + \epsilon \mathbf{M}^{-1}r, \quad r \leftarrow (1 - \epsilon\gamma)r - \epsilon \nabla_{\theta} \tilde{U}(\theta) + \mathcal{N}(\mathbf{0}, 2\epsilon\gamma \mathbf{TM}). \quad (8)$$
+
+# 3 PARAMETER EXPANDED SGMCMC
+
+## 3.1 REPARAMETRIZATION
+
+Our solution for the sample-diversity problem of SGMCMC is motivated by the intriguing prior results on deep linear neural networks (DLNNs) (Arora et al., 2018; 2019a; He et al., 2024), which are just MLPs with a linear or even the identity activation function (i.e.,  $\sigma(t) = t$ ). Although DLNNs are equivalent to linear models in terms of expressiveness, their training trajectories during (stochastic) gradient descent are very different from those of the corresponding linear models. Existing results show that, under proper assumptions, DLNNs exhibit faster convergence (Arora et al., 2018; 2019a) and have an implicit bias (distinct from linear models) to converge to solutions that generalize better (Woodworth et al., 2020; Arora et al., 2019b; Gunasekar et al., 2018). Observe also that all the layers of each DLNN can be reassembled into a single linear layer so that the DLNNs do not incur overhead during inference when compared to the linear models.
+
+Building on these results and observation, we introduce the *expanded parametrization* (EP) of an  $L$ -layer MLP  $f$  in Eq. 2 with parameters  $\theta = (\mathbf{W}^{(1)}, \dots, \mathbf{W}^{(L)}, \mathbf{b}^{(1)}, \dots, \mathbf{b}^{(L)})$  as
+
+$$\mathbf{W}^{(l)} = \mathbf{P}_{1:c}^{(l)} \mathbf{V}^{(l)} \mathbf{Q}_{1:d}^{(l)} \quad \text{and} \quad \mathbf{b}^{(l)} = \mathbf{P}_{1:c}^{(l)} \mathbf{a}^{(l)}, \quad \text{for } l = 1, \dots, L, \quad (9)$$
+
+where  $\mathbf{P}_{1:c}^{(l)} \triangleq \mathbf{P}_c^{(l)} \dots \mathbf{P}_1^{(l)}$  and  $\mathbf{Q}_{1:d}^{(l)} \triangleq \mathbf{Q}_1^{(l)} \dots \mathbf{Q}_d^{(l)}$  for some new parameter matrices  $\mathbf{P}_i^{(l)}$  and  $\mathbf{Q}_j^{(l)}$ , called *expanded matrices*. Here,  $c$  represents the number of expanded matrices on the left side, and  $d$  on the right side, and the total number of expanded matrices is  $e = c + d \geq 0$  (note that when  $c = d = 0$ ,  $\mathbf{P}_{1:0}^{(l)}$  and  $\mathbf{Q}_{1:0}^{(l)}$  are identity matrices). While the expanded matrices  $\mathbf{P}_i^{(l)}$  and  $\mathbf{Q}_j^{(l)}$  do not need to be square, their products,  $\mathbf{P}_{1:c}^{(l)}$  and  $\mathbf{Q}_{1:d}^{(l)}$ , must be so in order to ensure that the *base matrix*  $\mathbf{V}^{(l)}$  retains the dimensionality of  $\mathbf{W}^{(l)}$ . In this paper, we use square matrices for  $\mathbf{P}_i^{(l)}$ s and  $\mathbf{Q}_j^{(l)}$ s, which lets us minimize additional memory overhead while making sure that the reparametrization does not introduce any additional non-global local minima; this is guaranteed when the widths of intermediate layers in a DLNN are greater than or equal to both the input and output dimensions (Laurent & von Brecht, 2018; Yun et al., 2019).
+
+{3}------------------------------------------------
+
+Under our EP, the position variable in the SGLD algorithm is given by
+
+$$\theta = \left( \mathbf{P}_1^{(1)}, \dots, \mathbf{P}_e^{(l)}, \mathbf{V}^{(l)}, \mathbf{Q}_1^{(1)}, \dots, \mathbf{Q}_d^{(l)}, \mathbf{a}^{(l)} \right)_{l=1}^L, \quad (10)$$
+
+while in the SGHMC algorithm, the momentum variable, in addition to the position, is defined as
+
+$$r = \left( \mathbf{R}_1^{(1)}, \dots, \mathbf{R}_e^{(l)}, \mathbf{S}^{(l)}, \mathbf{T}_1^{(1)}, \dots, \mathbf{T}_d^{(l)}, \mathbf{c}^{(l)} \right)_{l=1}^L, \quad (11)$$
+
+where this new momentum variable is related to the original momentum variable of SGHMC as in Eq. 9. SP only has  $\mathbf{S}$ , while  $\mathbf{R}$  and  $\mathbf{T}$  are introduced by the expanded parameters in the EP setting. We call SGLD and SGHMC under these EPs broadly as *Parameter Expanded SGMCMC (PX-SGMCMC)* methods. Although the dynamics of such a PX-SGMCMC method follows the update formulas in Eq. 7, it differs from the dynamics of the corresponding SGMCMC method significantly. The former is the preconditioned variant of the latter where gradients in the SGMCMC's dynamics, such as  $\nabla_{\theta_{\text{orig}}} \tilde{U}(\theta_{\text{orig}})$  for the original position variable  $\theta_{\text{orig}}$ , are replaced by preconditioned versions, and this preconditioning produces extraordinary directions of gradient steps in the PX-SGMCMC. In the next section, we dive into the new dynamics induced by the preconditioning, and analyze the effect of the preconditioning on the exploration of PX-SGMCMC in terms of the depth of EP and the maximum singular values of matrices in it.
+
+## 3.2 THEORETICAL ANALYSIS
+
+In this section, we provide a theoretical analysis of the EP proposed in Section 3.1. For simplicity, the following theorem and proof focus on the SGLD method described in Eq. 7. To highlight the effect of EP on SGLD, we first need to understand how the combined parameter  $\mathbf{W}$  evolves under gradient flows when each of its components follows its own gradient flow. The following lemma explains the preconditioning matrix induced by EP. Proofs can be found in Appendix A.
+
+**Lemma 3.1** (Dynamics of EP). *For an arbitrary function  $\mathcal{F}$  whose parameter is  $\mathbf{W}_{1:e} = \mathbf{W}_1 \cdots \mathbf{W}_e$  with its vectorization  $\mathbf{X} = \text{vec}(\mathbf{W}_{1:e})$ , assume that the gradient update of each  $\mathbf{W}_i$  for  $i \in \{1, \dots, e\}$  is defined as the following PDE:*
+
+$$d\mathbf{W}_i(t) = -\nabla_{\mathbf{W}_i} \mathcal{F}(\mathbf{W}_1(t), \dots, \mathbf{W}_e(t)) dt. \quad (12)$$
+
+Then, their multiplication  $\mathbf{X}$  satisfies the following dynamics:
+
+$$d\mathbf{X}(t) = -P_{\mathbf{X}(t)} \nabla_{\mathbf{X}} \mathcal{F}(\mathbf{X}(t)) dt,$$
+
+$$\text{where } P_{\mathbf{X}(t)} = \begin{cases} I, & (e = 1), \\ \mathbf{W}_2(t)^\top \mathbf{W}_2(t) \otimes I + I \otimes \mathbf{W}_1(t) \mathbf{W}_1(t)^\top, & (e = 2) \\ \mathbf{W}_{2:e}(t)^\top \mathbf{W}_{2:e}(t) \otimes I + I \otimes \mathbf{W}_{1:e-1}(t) \mathbf{W}_{1:e-1}(t)^\top \\ \quad + \sum_{j=2}^{e-1} (\mathbf{W}_{j+1:e}(t)^\top \mathbf{W}_{j+1:e}(t) \otimes \mathbf{W}_{1:j-1}(t) \mathbf{W}_{1:j-1}(t)^\top) & (e > 2). \end{cases}$$
+
+The operator  $\otimes$  refers to the Kronecker product, and  $P_{\mathbf{X}(t)}$  denotes the symmetric and positive semi-definite matrix.
+
+This unique gradient flow is known to be unattainable through regularization (Arora et al., 2018) in the standard parameterization (SP). Furthermore, the singular values or eigenvalues of  $P_{\mathbf{X}(t)}$  are closely tied to the singular values of the parameters  $\mathbf{W}_i$ . In the following, we show that the new dynamics induced by EP promotes greater exploration of the energy surface, which scales with the depth of EP and the maximum singular value across the EP parameters  $P_i(t)$ ,  $V(t)$ ,  $Q_i(t)$  in Eq. 9.
+
+**Theorem 3.2** (Exploration). *Assume the following bounds on the expectations of the norms of the gradients, the stochastic gradients, and the Gaussian noise in Eq. 7:*
+
+$$\mathbb{E} \left[ \left\| \nabla U(\mathbf{W}^{(l)}(t)) \right\|_2 \right] \leq h, \quad \mathbb{E} \left[ \left\| \nabla U(\mathbf{W}^{(l)}(t)) - \nabla \tilde{U}(\mathbf{W}^{(l)}(t)) \right\|_2 \right] \leq s, \quad \mathbb{E} \|2\mathbf{T}\mathbf{M}\|_2 \leq C, \quad (13)$$
+
+where the elements of  $\mathbf{M}$  corresponding to the expanded parameters  $\mathbf{P}, \mathbf{Q}$  are zero. Also assume that the maximum singular value of each parameter matrix in EP is bounded as follows:
+
+$$\sup_t \mathcal{V}(t) = M, \quad \mathcal{V}(t) = \max \{ \sigma_{\max}(\mathbf{P}_1(t)), \dots, \sigma_{\max}(\mathbf{P}_e(t)), \sigma_{\max}(\mathbf{V}(t)), \sigma_{\max}(\mathbf{Q}_1(t)), \dots, \sigma_{\max}(\mathbf{Q}_d(t)) \}. \quad (14)$$
+
+{4}------------------------------------------------
+
+Then, due to the preconditioning in [Lemma 3.1](#), the Euclidean distance of two SGLD samples at consecutive time steps is upper-bounded by the following term, which depends on the depth  $c+d+1$ :
+
+$$\mathbb{E} [\|\mathbf{W}(t) - \mathbf{W}(t+1)\|_2] \leq \epsilon L^2 (c+d+1) M^{(c+d)} (h+s) + \epsilon LC. \quad (15)$$
+
+Note that as the **depth**  $(c+d+1)$  and the **maximum singular value**  $M$  decrease, the upper bound on the distance of two consecutive samples gets smaller.
+
+Although the bound in [Theorem 3.2](#) is not necessarily the maximum distance between consecutive samples, its dependency on the depth  $(c+d+1)$  of our EP suggests that the preconditioning induced by EP may improve the exploration of the SGLD and lead to the generation of more diverse samples. Note that the bound in [Eq. 15](#) is also proportional to the step size  $\epsilon$ . However, in practice, using a large step size above a certain threshold rather *hinders* the performance. In our experiments, the performance monotonically improved as we increased the depth of EP, while converging to a certain fixed level in the end. This suggests that the preconditioning of our EP induces a form of *implicit step-size scaling* while maintaining the stability of the gradient-descent steps.
+
+## 3.3 IMPLEMENTING EP FOR DIFFERENT ARCHITECTURES
+
+**Linear layers.** We follow the [Eq. 9](#). The depth and width of each matrix  $\mathbf{P}_s$ ,  $\mathbf{V}$ , or  $\mathbf{Q}_t$  can be adjusted, but the width should be at least as large as that of the corresponding input dimension.
+
+**Convolution layers.** There are four dimension axes in the standard convolution layer. Let  $k$ ,  $c_i$ ,  $c_o$  be the sizes of the kernel, the input channel, and the output channel, and  $\mathbf{W} \in \mathbb{R}^{k \times k \times c_o \times c_i}$  be the kernel matrix. If we naively reparameterize  $\mathbf{W}$  with  $\mathbf{P} \in \mathbb{R}^{kc_o \times kc_i}$ ,  $\mathbf{V} \in \mathbb{R}^{k \times k \times c_o \times c_i}$ , and  $\mathbf{Q} \in \mathbb{R}^{kc_i \times kc_i}$ , the memory and computation overheads become significant. Thus, we let  $\mathbf{P}$  and  $\mathbf{Q}$  operate on the channel  $c_i, c_o$  dimensions only, and each kernel dimension is multiplied by the same matrices by defining  $\mathbf{P} \in \mathbb{R}^{c_o \times c_o}$ ,  $\mathbf{V} \in \mathbb{R}^{k \times k \times c_o \times c_i}$ , and  $\mathbf{Q} \in \mathbb{R}^{c_i \times c_i}$ . That is, in the index notation, our reparameterization is:
+
+$$W_{abij} = \sum_{u,l} P_{iu} V_{abul} Q_{lj}, \quad b_i = \sum_u P_{iu} a_u. \quad (16)$$
+
+In contrast to the naïve reparameterization, where the number of parameters roughly increases by three folds when the depth of the reparameterization is 3 (i.e.,  $\#\text{Params}(\mathbf{PVQ}) = 3 \cdot \#\text{Params}(\mathbf{W})$ ), the above reparameterization requires only  $\#\text{Params}(\mathbf{PVQ}) = (1+2/k^2) \cdot \#\text{Params}(\mathbf{W})$  in that case.
+
+**Normalization layers.** Normalization layers, such as Batch Normalization ([Ioffe & Szegedy, 2015](#)), Layer Normalization ([Ba, 2016](#)), and Filter Response Normalization (FRN; [Singh & Krishnan, 2020](#)), contain a few parameter vectors. For example, FRN used in [Izmailov et al. \(2021\)](#) consists of the scale, bias, and threshold vectors,  $\mathbf{s} \in \mathbb{R}^{c_o}$ ,  $\mathbf{b} \in \mathbb{R}^{c_o}$ ,  $\mathbf{t} \in \mathbb{R}^{c_o}$ . As in the case of the linear layer, we can simply multiply matrices on the left-hand side.
+
+$$s_i = \sum_{u,l} P_{iu}^s Q_{ul}^s s_l, \quad b_i = \sum_{u,l} P_{iu}^b Q_{ul}^b b_l, \quad t_i = \sum_{u,l} P_{iu}^t Q_{ul}^t t_l. \quad (17)$$
+
+The row and column dimensions of  $P$  and  $Q$  should be at least  $c_o$ .
+
+# 4 RELATED WORK
+
+**Linear parameter expansion.** Linear parameter expansion techniques are relatively underexplored in deep learning, as they do not inherently increase the expressivity of deep neural networks, particularly in non-linear architectures. While this approach has shown some benefits in linear networks, it is often overlooked in modern deep learning applications. A few notable works, however, have employed parameter expansion in the context of convolutional neural networks. For instance, [Chollet \(2017\)](#), [Guo et al. \(2020\)](#), and [Cao et al. \(2022\)](#) have introduced techniques that either decompose or augment convolution layers to reduce FLOPs and improve generalization. These methods primarily aim at enhancing efficiency or regularization, leveraging additional layers or decompositions to modify the structure of network without significantly increasing computational complexity. On the other hand, [Ding et al. \(2019\)](#) proposed a different approach by expanding convolutional layers
+
+{5}------------------------------------------------
+
+through addition rather than multiplication, aiming to improve robustness against rotational distortions in input images. While their method enhances robustness to certain image transformations, it does not focus on the exploration properties of parameter expansion in non-convex problems.
+
+**SGMCMCs for diversity.** Building upon the seminal work of [Welling & Teh \(2011\)](#), which introduced SGLD as a scalable MCMC algorithm based on stochastic gradient methods ([Robbins & Monro, 1951](#)), a range of SGMCMC methods have emerged in the past decade ([Ahn et al., 2012](#); [Patterson & Teh, 2013](#); [Chen et al., 2014](#); [Ding et al., 2014](#); [Ma et al., 2015](#); [Li et al., 2016](#)). Despite their theoretical convergence to target posteriors under the Robbins–Monro condition with a decaying step size ([Teh et al., 2016](#); [Chen et al., 2015](#)), effectively exploring and exploiting the posterior density of deep neural networks using a single MCMC chain remains challenging due to their multimodal nature. In this context, [Zhang et al. \(2020\)](#) proposed a simple yet effective cyclical step size schedule to enhance the exploration of SGMCMC methods. Intuitively, the larger step size at the beginning of each sampling cycle facilitates better exploration while tolerating simulation error, whereas the smaller step size towards the end of the cycle ensures more accurate simulation. While the cyclical schedule helps with exploration, it often struggles to fully capture multimodality and typically requires a significant number of update steps to transition between modes ([Fort et al., 2019](#); [Kim et al., 2024](#)). Thus, improving SGMCMC methods for modern deep neural networks is still an active area of research, with recent progress using meta-learning frameworks ([Gong et al., 2019](#); [Kim et al., 2024](#)). To the best of our knowledge, we are the first to propose the parameter expansion for enhancing the exploration of SGMCMC.
+
+# 5 EXPERIMENTS
+
+In this section, we present empirical results demonstrating the effectiveness of the parameter expansion strategy proposed in [Section 3](#) for image classification tasks. We aim to show that PX-SGHMC, an SGHMC variant of PXSGMCMC, collects diverse posterior samples and consistently outperforms baseline methods across various tasks. We compare with the following SGMCMC methods as baselines: SGLD ([Welling & Teh, 2011](#)), pSGLD ([Li et al., 2016](#)), SGHMC ([Chen et al., 2014](#)), and SGNHT ([Ding et al., 2014](#)). Unless otherwise specified, all methods utilize a cyclical step size schedule. Note that in our method, we set the elements of the semidefinite damping (friction)  $\gamma$  in Eq. 8 corresponding to **P** and **Q** much smaller than those of **V**, ensuring a stable SGHMC trajectory. For details on implementations and hyperparameters, please refer to [Appendices C and D](#).
+
+We conduct experiments including multimodal distribution ([Section 5.1](#)) sampling and Bayesian neural networks on image classification tasks ([Sections 5.2 and 5.3](#)). Unless stated otherwise, (1) the reported values are presented as “mean<sub>std</sub>,” averaged over four trials, and (2) a **bold-faced underline** highlights the best outcome, while an underline indicates the second-best value. To assess the quality of classifier predictions, we compute classification error (ERR) and negative log-likelihood (NLL), while ensemble ambiguity (AMB) quantifies the diversity of ensemble predictions. Refer to [Appendix B.1](#) for the definitions of the evaluation metrics.
+
+## 5.1 TOY RESULTS: MIXTURE OF GAUSSIANS
+
+We begin by comparing SP and EP on the multimodal 2D mixture of 25 Gaussians (MoG), following [Zhang et al. \(2020\)](#). Although this distribution is not a BNN posterior, it is sufficient to demonstrate the role of the preconditioning induced by EP. The random variables of MoG,  $\mathbf{x} \in \mathbb{R}^2$ , are decomposed as  $\mathbf{W}_3 \mathbf{W}_2 \mathbf{W}_1 \mathbf{x}$  for  $\mathbf{W}_1, \mathbf{W}_2, \mathbf{W}_3 \in \mathbb{R}^{2 \times 2}$ , and HMC sampling also follows the preconditioning on the gradients. Specifically, we collect 10,000 samples by running HMC with a single chain, using 10 leapfrog steps and a constant step size of 0.05 for both SP and EP. Fig. 1 illustrates that EP resolves the issue of SP getting trapped in local modes without requiring additional techniques such as tempering or cyclical step sizes ([Zhang et al., 2020](#)). As explained in [Section 3.2](#), the implicit step size scaling induced by the preconditioning facilitates escaping local modes, which suggests strong performance in non-convex problems such as multimodal distributions.
+
+![Figure 1: Toy results. HMC samples with SP and EP. The figure shows three heatmaps: Target, SP, and EP. The Target heatmap shows a 5x5 grid of orange squares. The SP heatmap shows a 5x5 grid with a small cluster of blue squares in the bottom-left corner. The EP heatmap shows a 5x5 grid with a more spread-out distribution of orange and green squares. Below the heatmaps is a color bar with values 2.79, 7.57, 12.35, and 17.13.](80530169c7b6298ce012a85b906caeb3_img.jpg)
+
+Figure 1: Toy results. HMC samples with SP and EP. The figure shows three heatmaps: Target, SP, and EP. The Target heatmap shows a 5x5 grid of orange squares. The SP heatmap shows a 5x5 grid with a small cluster of blue squares in the bottom-left corner. The EP heatmap shows a 5x5 grid with a more spread-out distribution of orange and green squares. Below the heatmaps is a color bar with values 2.79, 7.57, 12.35, and 17.13.
+
+**Figure 1:** Toy results. HMC samples with SP and EP. The color rep-resents the negative log probability.
+
+{6}------------------------------------------------
+
+**Table 1: Main results on CIFAR-10 and associated distribution shifts.** Evaluation results on C10 (CIFAR-10), C10.1 (CIFAR-10.1), C10.2 (CIFAR-10.2), STL, and C10-C (CIFAR-10-C). Metrics for C10-C are computed using a total of 950,000 examples, encompassing 5 intensity levels and 19 corruption types. Please refer to [Appendix B.2](#) for more detailed results regarding C10-C.
+
+| Metric | Method | Distribution shifts |  |  |  |  |
+|-|-|-|-|-|-|-|
+|  |  | C10 | C10.1 | C10.2 | STL | C10-C |
+| ERR ( $\downarrow$ ) | SGLD | $0.152 \pm 0.003$ | $0.258 \pm 0.007$ | $0.293 \pm 0.004$ | $0.326 \pm 0.004$ | $0.309 \pm 0.007$ |
+|  | pSGLD | $0.158 \pm 0.004$ | $0.277 \pm 0.004$ | $0.305 \pm 0.003$ | $0.333 \pm 0.003$ | $0.316 \pm 0.006$ |
+|  | SGHMC | $0.133 \pm 0.002$ | $0.234 \pm 0.003$ | $0.277 \pm 0.006$ | $0.306 \pm 0.003$ | $0.292 \pm 0.002$ |
+|  | SGNHT | $0.135 \pm 0.002$ | $0.236 \pm 0.005$ | $0.273 \pm 0.004$ | $0.307 \pm 0.005$ | $0.294 \pm 0.008$ |
+|  | <b>PX-SGHMC (ours)</b> | <b><math>0.121 \pm 0.002</math></b> | <b><math>0.218 \pm 0.005</math></b> | <b><math>0.257 \pm 0.007</math></b> | <b><math>0.287 \pm 0.002</math></b> | <b><math>0.287 \pm 0.008</math></b> |
+| NLL ( $\downarrow$ ) | SGLD | $0.477 \pm 0.009$ | $0.772 \pm 0.010$ | $0.891 \pm 0.005$ | $0.928 \pm 0.014$ | $0.913 \pm 0.022$ |
+|  | pSGLD | $0.501 \pm 0.007$ | $0.812 \pm 0.015$ | $0.928 \pm 0.007$ | $0.958 \pm 0.006$ | $0.938 \pm 0.017$ |
+|  | SGHMC | $0.422 \pm 0.005$ | $0.698 \pm 0.006$ | $0.834 \pm 0.007$ | $0.868 \pm 0.010$ | $0.871 \pm 0.005$ |
+|  | SGNHT | $0.425 \pm 0.004$ | $0.705 \pm 0.007$ | $0.833 \pm 0.008$ | $0.873 \pm 0.006$ | $0.877 \pm 0.021$ |
+|  | <b>PX-SGHMC (ours)</b> | <b><math>0.388 \pm 0.005</math></b> | <b><math>0.661 \pm 0.012</math></b> | <b><math>0.806 \pm 0.009</math></b> | <b><math>0.819 \pm 0.004</math></b> | <b><math>0.859 \pm 0.022</math></b> |
+
+**Table 2: Out-of-distribution detection.** Evaluation results for distinguishing in-distribution inputs from CIFAR-10 and out-of-distribution inputs from SVHN and LSUN based on predictive entropy. This table summarizes evaluation metrics, including AUROC, TNR95 (TNR@TPR=95%), and TNR99 (TNR@TPR=99%). For detailed plots, we refer readers to [Appendix B.3](#).
+
+| Method | SVHN |  |  | LSUN |  |  |
+|-|-|-|-|-|-|-|
+|  | AUROC ( $\uparrow$ ) | TNR95 ( $\uparrow$ ) | TNR99 ( $\uparrow$ ) | AUROC ( $\uparrow$ ) | TNR95 ( $\uparrow$ ) | TNR99 ( $\uparrow$ ) |
+| SGLD | $0.784 \pm 0.031$ | $0.536 \pm 0.039$ | $0.424 \pm 0.034$ | $0.853 \pm 0.015$ | $0.520 \pm 0.038$ | $0.276 \pm 0.039$ |
+| pSGLD | $0.745 \pm 0.009$ | $0.506 \pm 0.012$ | $0.408 \pm 0.018$ | $0.855 \pm 0.009$ | $0.520 \pm 0.025$ | $0.255 \pm 0.043$ |
+| SGHMC | $0.790 \pm 0.051$ | $0.549 \pm 0.068$ | $0.427 \pm 0.030$ | $0.860 \pm 0.018$ | $0.554 \pm 0.028$ | $0.357 \pm 0.034$ |
+| SGNHT | $0.776 \pm 0.014$ | $0.530 \pm 0.013$ | $0.436 \pm 0.014$ | $0.864 \pm 0.009$ | $0.556 \pm 0.006$ | $0.373 \pm 0.015$ |
+| <b>PX-SGHMC (ours)</b> | <b><math>0.832 \pm 0.014</math></b> | <b><math>0.632 \pm 0.009</math></b> | <b><math>0.514 \pm 0.021</math></b> | <b><math>0.884 \pm 0.007</math></b> | <b><math>0.594 \pm 0.037</math></b> | <b><math>0.405 \pm 0.036</math></b> |
+
+## 5.2 MAIN RESULTS: IMAGE CLASSIFICATION TASKS
+
+### 5.2.1 CIFAR-10
+
+We present results on CIFAR-10 (Krizhevsky et al., 2009) and extensively study in advanced tasks such as robustness analysis and OOD detection. For our experiments, we employ the R20-FRN-Swish architecture, representing ResNet20 with FRN normalization and Swish nonlinearity and adapted from the HMC checkpoints provided by Izmailov et al. (2021).
+
+**Results on CIFAR.** Table 1 presents the evaluation on the CIFAR-10 test split in the ‘C10’ column. It shows that PX-SGHMC significantly outperforms other methods in terms of both ERR and NLL.
+
+**Robustness to distribution shifts.** One of the key selling points of Bayesian methods is that they produce reliable predictions that account for uncertainty, leading us to evaluate robustness to distribution shifts (Recht et al., 2019; Taori et al., 2020; Miller et al., 2021). Specifically, we test on natural distribution shifts using CIFAR-like test datasets, including CIFAR-10.1 (Recht et al., 2019), CIFAR-10.2 (Lu et al., 2020), and STL (Coates et al., 2011), as well as on image corruptions using CIFAR-10-C (Hendrycks & Dietterich, 2019). Table 1 shows that our approach not only outperforms the baseline methods on the in-distribution data but also exhibits significant robustness to distribution shifts. Please refer to [Appendix B.2](#) for further results on the CIFAR-10-C benchmark.
+
+**Out-of-distribution detection.** Another important task for evaluating predictive uncertainty is the OOD detection. In real-world scenarios, models are likely to encounter random OOD examples, in which they are required to produce uncertain predictions (Hendrycks & Gimpel, 2017; Liang & Li, 2018). Categorical predictions of the classifiers are expected to be closer to being uniform for OOD inputs than for in-distribution ones. Therefore, we use predictive entropy (Lakshminarayanan et al., 2017) to distinguish between in-distribution examples from CIFAR-10 and OOD examples from SVHN (Netzer et al., 2011) and LSUN (Yu et al., 2015). Table 2 demonstrates our method
+
+{7}------------------------------------------------
+
+**Table 3: Results with data augmentation.** Evaluation results on C10 (CIFAR-10), C100 (CIFAR-100), and TIN (TinyImageNet) with data augmentation. In this context, we manually set the posterior temperature to 0.01 to account for the increased data resulting from augmentation.
+
+| Method | ERR ( $\downarrow$ ) |  |  | NLL ( $\downarrow$ ) |  |  |
+|-|-|-|-|-|-|-|
+|  | C10 | C100 | TIN | C10 | C100 | TIN |
+| SGLD | $0.080 \pm 0.002$ | $0.326 \pm 0.006$ | $0.546 \pm 0.004$ | $0.246 \pm 0.004$ | $1.180 \pm 0.018$ | $2.278 \pm 0.010$ |
+| pSGLD | $0.097 \pm 0.002$ | $0.412 \pm 0.007$ | $0.601 \pm 0.005$ | $0.306 \pm 0.004$ | $1.546 \pm 0.035$ | $2.562 \pm 0.015$ |
+| SGHMC | $0.071 \pm 0.001$ | $0.319 \pm 0.002$ | $0.538 \pm 0.003$ | $0.223 \pm 0.002$ | $1.138 \pm 0.008$ | $2.251 \pm 0.022$ |
+| SGNHT | $0.074 \pm 0.001$ | $0.335 \pm 0.004$ | $0.536 \pm 0.002$ | $0.231 \pm 0.006$ | $1.199 \pm 0.014$ | $2.240 \pm 0.013$ |
+| <b>PX-SGHMC (ours)</b> | <b><math>0.069 \pm 0.001</math></b> | <b><math>0.290 \pm 0.004</math></b> | <b><math>0.498 \pm 0.004</math></b> | <b><math>0.217 \pm 0.005</math></b> | <b><math>1.030 \pm 0.011</math></b> | <b><math>2.089 \pm 0.008</math></b> |
+
+![Figure 2: Connection between exploration and singular value dynamics. The figure contains five subplots. The first two plots show exploration through unnormalized (d(i_{n-1}, \theta_{n+1})) and normalized (d(i_{n-1}, \theta_{n+1}) / \sigma_{max}) Euclidean distances over 100 cycles for four configurations: c=0, d=0 (blue); c=1, d=0 (orange); c=1, d=1 (green); and c=2, d=2 (red). The third plot shows the largest singular value (\sigma_{max}) over 100 cycles. The fourth plot shows the smallest singular value (\sigma_{min}) over 100 cycles. The fifth plot shows the condition number over 100 cycles. Each plot features 21 transparent lines representing individual layers, with a thicker line representing the maximum (or minimum) value.](d864789b0d8384da1d22fd6a5d76bbdf_img.jpg)
+
+Figure 2: Connection between exploration and singular value dynamics. The figure contains five subplots. The first two plots show exploration through unnormalized (d(i\_{n-1}, \theta\_{n+1})) and normalized (d(i\_{n-1}, \theta\_{n+1}) / \sigma\_{max}) Euclidean distances over 100 cycles for four configurations: c=0, d=0 (blue); c=1, d=0 (orange); c=1, d=1 (green); and c=2, d=2 (red). The third plot shows the largest singular value (\sigma\_{max}) over 100 cycles. The fourth plot shows the smallest singular value (\sigma\_{min}) over 100 cycles. The fifth plot shows the condition number over 100 cycles. Each plot features 21 transparent lines representing individual layers, with a thicker line representing the maximum (or minimum) value.
+
+**Figure 2: Connection between exploration and singular value dynamics.** The first and second plots illustrate exploration through unnormalized and normalized Euclidean distances, while the third to fifth plots depict singular value dynamics, represented by the largest and smallest singular values and condition numbers. For the 21 layers, the singular value plots feature 21 transparent lines for each item, with the maximum (or minimum) value highlighted as the representative.
+
+shows greater predictive uncertainty in handling OOD examples, as indicated by metrics associated with the Receiver Operating Characteristic (ROC) curve.
+
+### 5.2.2 RESULTS WITH DATA AUGMENTATIONS
+
+Although our evaluations in Section 5.2.1 were conducted *without* data augmentation, practical settings typically involve it. Therefore, we present additional comparative results on various image classification datasets, including CIFAR-10, CIFAR-100, and TinyImageNet, using data augmentation that includes random cropping and horizontal flipping. Since these augmentations can lead to inaccurate likelihood estimation (Wenzel et al., 2020; Noci et al., 2021; Nabarro et al., 2022), we introduce the concept of a *cold posterior* in these experiments, i.e., setting  $T < 1$  in Eq. 5 and sampling from the tempered posterior  $p(\theta|D)^{1/T}$ .
+
+Table 3 presents the results obtained by setting  $T = 0.01$  in Eq. 7. It demonstrates that PX-SGHMC still outperforms the other methods in both ERR and NLL, indicating that the enhanced diversity is also applicable to practical scenarios involving data augmentations and posterior tempering across various datasets. Additionally, Appendix B.4 provides ablation results related to the cold posterior effect in the absence of data augmentation, showing that our method consistently outperforms the SGHMC baselines across varying temperatures.
+
+### 5.2.3 EMPIRICAL ANALYSIS
+
+**Connection between exploration and singular value dynamics.** Theorem 3.2 suggests that the update size of SGLD dynamics at each time step is constrained by the maximum singular value, implying that small singular values may limit exploration. In this regard, a key characteristic of EP in deep linear neural networks is the learning dynamics of singular values; Arora et al. (2019b) showed that the evolution rates of singular values are proportional to their magnitudes raised to the power of  $2 - 2/e$ , where  $e$  represents the depth of the factorization. In other words, as the depth of matrices increases, larger singular values tend to grow, while smaller singular values shrinks close to zero. Although our setting does not fully align with the theoretical assumptions in Arora et al. (2019b), as we do not consider DLNNs, we empirically demonstrate the connection between exploration and singular value dynamics by varying the number of expanded matrices  $e = c + d + 1$ .
+
+{8}------------------------------------------------
+
+![Figure 3: Trace plots for EP. The figure contains two line plots. The left plot shows 'Train error' on the y-axis (ranging from 0.08 to 0.12) against 'Cycle index' on the x-axis (ranging from 0 to 100). The right plot shows 'Valid error' on the y-axis (ranging from 0.16 to 0.20) against 'Cycle index' on the x-axis (ranging from 0 to 100). Both plots show four data series corresponding to different experimental setups: c=0, d=0 (blue line); c=1, d=0 (orange line); c=1, d=1 (green line); and c=2, d=2 (red line). All series show a rapid decrease in error over the first 25 cycles, followed by a plateau. The c=2, d=2 series (red) shows the lowest error in both plots, indicating the fastest convergence.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 3: Trace plots for EP. The figure contains two line plots. The left plot shows 'Train error' on the y-axis (ranging from 0.08 to 0.12) against 'Cycle index' on the x-axis (ranging from 0 to 100). The right plot shows 'Valid error' on the y-axis (ranging from 0.16 to 0.20) against 'Cycle index' on the x-axis (ranging from 0 to 100). Both plots show four data series corresponding to different experimental setups: c=0, d=0 (blue line); c=1, d=0 (orange line); c=1, d=1 (green line); and c=2, d=2 (red line). All series show a rapid decrease in error over the first 25 cycles, followed by a plateau. The c=2, d=2 series (red) shows the lowest error in both plots, indicating the fastest convergence.
+
+**Figure 3: Trace plots for EP.** It depicts training and validation errors along with trajectory.
+
+| Expansion | ERR (↓) | NLL (↓) | AMB (↑) |
+|-|-|-|-|
+| $c = 0, d = 0$ | $0.135 \pm 0.005$ | $0.444 \pm 0.007$ | $0.196 \pm 0.004$ |
+| $c = 1, d = 0$ | $0.127 \pm 0.002$ | $0.404 \pm 0.004$ | $0.214 \pm 0.004$ |
+| $c = 1, d = 1$ | $0.116 \pm 0.003$ | <b>0.369</b> $\pm 0.005$ | $0.253 \pm 0.001$ |
+| $c = 2, d = 2$ | <b>0.114</b> $\pm 0.001$ | $0.373 \pm 0.003$ | <b>0.278</b> $\pm 0.006$ |
+
+**Table 4: Ablation results on EP.** Metrics are computed using the validation split.
+
+**Fig. 2** depicts our experimental findings: (i) The first and second plots quantify exploration by computing the Euclidean distance between consecutive posterior samples, defined as  $d(\boldsymbol{\theta}_m, \boldsymbol{\theta}_{m+1}) = \|\boldsymbol{\theta}_{m+1} - \boldsymbol{\theta}_m\|_2$ , where  $\boldsymbol{\theta}_m$  denotes the sample at cycle index  $m$ . To exclude the effect of scale invariance in neural network parameters due to normalization layers such as FRN, we also compute their normalized version:  $\tilde{d}(\boldsymbol{\theta}_m, \boldsymbol{\theta}_{m+1}) = \|\boldsymbol{\theta}_{m+1} - \boldsymbol{\theta}_m\|_2 / \|\boldsymbol{\theta}_m\|_2$ . Both unnormalized and normalized distances between consecutive samples increase as the number of expanded matrices  $e = c + d + 1$  grows. (ii) The third and fourth plots illustrate the dynamics of singular values by plotting the maximum and minimum singular values of the convolution layer kernels. For each convolution layer, we compute the singular values of the kernel tensor following [Sedghi et al. \(2019\)](#). In line with the theoretical argument presented in [Arora et al. \(2019b\)](#), although our setup does not involve DLNNs, we observe that as the number of expanded matrices increases, the largest singular value rises while the smallest singular value decreases.
+
+**EP converges faster than SP.** Another important property of EP in DLNNs is its accelerated convergence toward optima or modes ([Arora et al., 2019a](#)), which has also been observed in deep convolutional networks with nonlinearities ([Guo et al., 2020](#)). Building on this, we empirically investigate the local mode convergence of EP within the SGMCMC framework, where faster convergence is particularly crucial for BMA performance due to the slower local mode convergence caused by the injected Gaussian noise in SGMCMC methods ([Zhang et al., 2020](#)) compared to SGD in DE. **Fig. 3** presents trace plots of training and validation errors, showing that both tend to converge more rapidly as the number of expanded matrices increases.
+
+Based on the empirical findings, we hypothesize that EP induces a large maximum singular value, as shown in ii), which enlarges the upper bound in [Theorem 3.2](#) and breaks the exploration limit, as demonstrated in i). **Table 4** additionally presents the validation metrics for each setup and clearly demonstrates that the proposed EP indeed achieves better functional diversity, as indicated by the increased AMB. To sum up, PX-SGMCMC effectively enhances both the exploration and exploitation of a single SGHMC chain, resulting in improved BMA measured by ERR and NLL.
+
+## 5.3 COMPARATIVE ANALYSIS USING HMC CHECKPOINTS
+
+While [Section 5.2](#) presents extensive experimental results by running SGMCMC algorithms from random initializations, we also conduct a comparison using HMC checkpoints provided by [Izmailov et al. \(2021\)](#) as an initialization of parameters in SGMCMC. Specifically, we run both SGHMC and PX-SGHMC starting from the burn-in checkpoint of HMC, employing hyperparameters aligned with those in [Izmailov et al. \(2021\)](#). Further experimental setups can be found in [Appendix D](#).
+
+### 5.3.1 DIVERSITY ANALYSIS
+
+The diversity of the parameters does not necessarily imply that the diversity of the corresponding functions they represent; for instance, certain weight permutations and sign flips can leave the function invariant ([Hecht-Nielsen, 1990; Chen et al., 1993](#)). To effectively approximate the BMA integral in [Eq. 3](#), functional diversity is essential ([Wilson & Izmailov, 2020](#)). Therefore, we quantify the diversity of posterior samples using their predictions by computing the ensemble ambiguity ([Wood et al., 2023](#)) as well as the variance of predictions ([Ortega et al., 2022](#)).
+
+**Table 5** clearly shows that PX-SGHMC exhibits (a) superior exploration in the parameter space compared to vanilla SGHMC, as evidenced by the average distances between consecutive samples, and (b) higher diversity in predictions, indicated by ensemble ambiguity and variance of predictions comparable to the gold standard HMC. Consequently, similar to HMC, (c) the BMA performance
+
+{9}------------------------------------------------
+
+**Table 5: Diversity analysis using HMC checkpoints.** We measure (a) parameter diversity using unnormalized and normalized Euclidean distances ( $d$  and  $\bar{d}$ ), (b) prediction diversity using ensemble ambiguity (AMB) and variance (VAR), and (c) individual (IND) and ensemble (ENS) negative log-likelihoods for 10 posterior samples from each method.
+
+| Method | (a) |  | (b) |  | (c) |  |
+|-|-|-|-|-|-|-|
+|  | $d(\theta_m, \theta_{m+1})$ | $\bar{d}(\theta_m, \theta_{m+1})$ | AMB | VAR | IND | ENS |
+| HMC | $322.8_{\pm 0.333}$ | <b><math>1.374_{\pm 0.002}</math></b> | <b>0.347</b> | <b>0.107</b> | 0.800 | 0.381 |
+| SGHMC | $60.65_{\pm 0.258}$ | $0.258_{\pm 0.001}$ | 0.162 | 0.063 | <b>0.690</b> | 0.464 |
+| <b>PX-SGHMC (Ours)</b> | <b><math>1290_{\pm 1.372}</math></b> | $1.372_{\pm 0.150}$ | 0.339 | 0.105 | 0.739 | <b>0.353</b> |
+
+![Figure 4: Loss landscape analysis using HMC checkpoints. (a) Linear connectivity plot showing ERR@Train vs Cycle index for HMC, SGHMC, and PX-SGHMC. (b) Two-dimensional subspace plots for HMC, SGHMC, and PX-SGHMC showing loss barriers.](f519a5be118c846f631c992412353fb9_img.jpg)
+
+Figure 4 consists of two parts. Part (a) is a line plot titled 'Linear connectivity' showing the classification error on training examples (ERR@Train) across 10 cycles for three methods: HMC (black line), SGHMC (blue line), and PX-SGHMC (orange line). The y-axis ranges from 0.0 to 0.9, and the x-axis ranges from 0 to 10. HMC shows high peaks, indicating large barriers between samples. SGHMC shows lower peaks. PX-SGHMC shows a series of peaks that are higher than SGHMC but lower than HMC. Part (b) shows three heatmaps titled 'Two-dimensional subspace' for HMC, SGHMC, and PX-SGHMC. Each heatmap shows a 2D subspace with a color scale from 0.0 to 1.0. HMC shows a single dark region (low loss) with a sharp boundary. SGHMC shows a larger dark region. PX-SGHMC shows a complex landscape with multiple dark regions, indicating a more diverse exploration of the subspace.
+
+Figure 4: Loss landscape analysis using HMC checkpoints. (a) Linear connectivity plot showing ERR@Train vs Cycle index for HMC, SGHMC, and PX-SGHMC. (b) Two-dimensional subspace plots for HMC, SGHMC, and PX-SGHMC showing loss barriers.
+
+**Figure 4: Loss landscape analysis using HMC checkpoints.** We visualize (a) linear connectivity between consecutive posterior samples and (b) a two-dimensional subspace spanned by the 0th (diamond), 1st (circle), and 2nd (pentagon) posterior samples. Both plots depict classification error on 1,000 training examples. Note that the 8th HMC sample was rejected and reverted to the 7th.
+
+of PX-SGHMC surpasses that of SGHMC, although individual posterior samples exhibit worse performance in terms of negative log-likelihoods.
+
+### 5.3.2 LOSS LANDSCAPE ANALYSIS
+
+In this section, we investigate how effectively PX-SGHMC explores the posterior distribution over parameters compared to both HMC and SGHMC, from the perspective of loss surface geometry (Li et al., 2018). Fig. 4a visualizes the loss barrier between consecutive posterior samples, illustrating how often each method *jumps* over these barriers. While PX-SGHMC does not jump as high as HMC, the larger barriers it crosses compared to SGHMC indicate significantly better exploration, consistent with the discussion in Section 5.3. Fig. 4b visualizes a two-dimensional subspace spanning the right-most initial position (0th) and two subsequent posterior samples (1st and 2nd), demonstrating that the diversity of PX-SGHMC approaches that of the gold standard HMC when sampling from the multi-modal BNN posterior.
+
+# 6 CONCLUSION
+
+We have presented PX-SGMCMC, a simple yet effective parameter expansion technique tailored for SGMCMC, which decomposes each weight matrix in deep neural networks into the product of new expanded-parameter matrices. Our theoretical analysis shows that the proposed parameter expansion strategy provides a form of preconditioning on the gradient updates, enhancing the exploration of the posterior energy surface. The extensive experimental results strongly support our claims regarding the improved exploration linked to the singular value dynamics of the weight matrices explained in our theoretical analysis. As a result, the posterior samples obtained through PX-SGMCMC demonstrate increased diversity in both parameter and function spaces, comparable to the gold standard HMC, leading to improved predictive uncertainty and enhanced robustness to OOD data.
+
+**Limitations.** While EP does not increase inference costs, it does require additional training resources in terms of memory and computation. In future work, we aim to optimize the reparameterization design to minimize these computational overheads while further enhancing diversity.
+
+ Rest of paper (reference and Appendix) is removed.

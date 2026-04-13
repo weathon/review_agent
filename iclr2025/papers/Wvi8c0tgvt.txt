@@ -1,0 +1,299 @@
+
+
+{0}------------------------------------------------
+
+# CONTROLLABLE BLUR DATA AUGMENTATION USING 3D-AWARE MOTION ESTIMATION
+
+Insoo Kim<sup>1,2</sup> Hana Lee<sup>1</sup> Hyong-Euk Lee<sup>1</sup> Jinwoo Shin<sup>2\*</sup>
+
+<sup>1</sup>SAIT, Samsung Electronics <sup>2</sup>KAIST
+
+## ABSTRACT
+
+Existing realistic blur datasets provide insufficient variety in scenes and blur patterns to be trained, while expanding data diversity demands considerable time and effort due to complex dual-camera systems. To address the challenge, data augmentation can be an effective way to artificially increase data diversity. However, existing methods on this line are typically designed to estimate motions from a 2D perspective, e.g., estimating 2D non-uniform kernels disregarding 3D aspects of blur modeling, which leads to unrealistic motion patterns due to the fact that camera and object motions inherently arise in 3D space. In this paper, we propose a 3D-aware blur synthesizer capable of generating diverse and realistic blur images for blur data augmentation. Specifically, we estimate 3D camera positions within the motion blur interval, generate the corresponding scene images, and aggregate them to synthesize a realistic blur image. Since the 3D camera positions projected onto the 2D image plane inherently lie in 2D space, we can represent the 3D transformation as a combination of 2D transformation and projected 3D residual component. This allows for 3D transformation without requiring explicit depth measurements, as the 3D residual component is directly estimated via a neural network. Furthermore, our blur synthesizer allows for controllable blur data augmentation by modifying blur magnitude, direction, and scenes, resulting in diverse blur images. As a result, our method significantly improves deblurring performance, making it more practical for real-world scenarios.
+
+## 1 INTRODUCTION
+
+Motion blur is a common challenge in photography, where it is typically caused by camera or object movement during long exposure times. Given a blur image, blind motion deblurring tackles the challenge of producing a sharp image. In recent years, a breakthrough has been made by adopting diverse neural architecture designs (Nah et al., 2017; Tao et al., 2018; Kupyn et al., 2019; Cho et al., 2021; Zamir et al., 2021; Tu et al., 2022; Li et al., 2022; Chen et al., 2022; Nah et al., 2022; Zamir et al., 2022; Wang et al., 2022; Tsai et al., 2022; Li et al., 2023b; Kong et al., 2023; Fang et al., 2023; Kim et al., 2024) and utilizing the realistic blur datasets (Rim et al., 2020; 2022; Li et al., 2023a) in blind motion deblurring tasks, enabling the practical usability in real-world scenarios.
+
+To build a more generalizable deblurring model, a realistic large-scale blur dataset containing diverse scenes and blur patterns is required. Nevertheless, existing realistic blur datasets suffer from a limited number of scenes and blur patterns because their dual camera system is heavy and complicated to collect a large-scale blur dataset (Rim et al., 2020; 2022; Li et al., 2023a). Data augmentation is an alternative to artificially increase the amount of data via a synthesis procedure. For example, one can synthesize the blur image using blur synthesizers and train a deblurring model using both real and synthetic blur images. Despite its significant successes in high-level vision tasks (DeVries & Taylor, 2017; Zhang et al., 2018; Yun et al., 2019; Cubuk et al., 2019; 2020; Hendrycks et al., 2020; Kim et al., 2021; Yang et al., 2021), there has been little study particularly focused on blur data augmentation (Zhang et al., 2020; Carvajal et al., 2023; Wu et al., 2024; Lee et al., 2024).
+
+In fact, the previous literature on blur data augmentation exhibits certain limitations that merit further investigation: (1) diffusion-based data augmentation (Wu et al., 2024) requires ground-truth video
+
+\*Corresponding author
+
+{1}------------------------------------------------
+
+![Figure 1: Our controllable blur image synthesis pipeline. The diagram shows the flow from a 'Blur Image' to '3D-Aware Motion Estimation' (visualized with a camera frustum), then to '3D-Aware Vector Fields' (represented by a grid of arrows), and finally to 'Controllable Blur Synthesis' (indicated by a dashed box). This synthesis process takes 'Target Images' and parameters like 'Scene 1', 'Amp. 0.5 x', 'Amp. 2.0 x', 'Phase -45', 'Phase +45', and 'Scene 2' to produce 'Synthesized Blur Images'.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 1: Our controllable blur image synthesis pipeline. The diagram shows the flow from a 'Blur Image' to '3D-Aware Motion Estimation' (visualized with a camera frustum), then to '3D-Aware Vector Fields' (represented by a grid of arrows), and finally to 'Controllable Blur Synthesis' (indicated by a dashed box). This synthesis process takes 'Target Images' and parameters like 'Scene 1', 'Amp. 0.5 x', 'Amp. 2.0 x', 'Phase -45', 'Phase +45', and 'Scene 2' to produce 'Synthesized Blur Images'.
+
+Figure 1: Our controllable blur image synthesis. We can manipulate the motion amount (amplitude), direction (phase) of the 3D-aware vector fields, and target scene images to generate a variety of blur images. They are used for data augmentation in training the deblurring model.
+
+frame images which are not typically provided in blur datasets. Hence, its applicability to other blur datasets for blur data augmentation remains challenging, and (2) the kernel-based method (Carbajal et al., 2023) offers estimated blur kernels. However, simply regressing the simulated kernels without physically-driven blur modeling leads to unrealistic synthetic blur images which are not acceptable in real-world scenarios (Gong et al., 2017; Tran et al., 2021). Above all, the existing methods on this line neglect to pay attention to explicit 3D geometry for blur synthesis despite the fact that the camera and object motion primarily occurs in 3D space (Whyte et al., 2010). This may lead to inaccurate or unrealistic blur patterns, constraining their practical usability for blur data augmentation.
+
+In this paper, we propose a controllable and 3D-aware blur image synthesizer to generate various realistic blur images as shown in Fig. 1, leading to better deblurring performance. Our intuition is that *intricate* 2D non-uniform motion kernels can be parameterized by a *simple* 3D camera position trajectory using rotation and translations. Such parametric technique helps reduce ill-posedness of the problem while it is closely grounded in realistic blur modeling. In the case of camera motion, we estimate 3D camera positions within the exposure time, use them for generating the transformed scene images with grid sampling (Jaderberg et al., 2015), and aggregate them to produce a synthesized blur image as shown in Fig. 2. We are motivated by the fact that the 3D camera positions projected onto the 2D image plane inherently lie in 2D space. Hence, they can be modeled by a combination of 2D rigid transformations and projected 3D residual components as shown in Fig. 2: the former is represented by *parametric* vector fields, and the latter is represented by *non-parametric* vector fields. This decomposition allows for 3D rigid transformation without depth measurements, as the 3D residual component is directly estimated via a neural network. Furthermore, our parametric and non-parametric motion modeling takes advantage of reducing ill-posedness (by parametric) and effectively capturing 3D residual components (by non-parametric).
+
+In the case of object motion, the 3D residual components also serve as capturing object motion behaviors such as non-uniform and non-rigid deformation due to the flexibility and versatility of the non-parametric vector field. Therefore, the 3D residual components represent not only 3D *camera* residual components but also *object* residual components. Furthermore, while the non-parametric vector field is essential for capturing 3D camera motion as shown in Fig. 3 and object motion as shown in Fig. 4, its flexible nature can lead to undesirable results and ambiguity as shown in Fig. 6 (a). To overcome this, we introduce Laplacian and invertible geometric regularizations which enables us to produce more natural motions. Specifically, the 3D transformed scene image can be traced back to the original image using our invertible geometric regularization. As a result, the non-parametric vector field remains geometrically structured. Furthermore, a key aspect of our method is to represent motion as a vector field, which provides an inherently flexible framework where the magnitude and direction of each vector can be easily adjusted. This controllability allows for the generation of millions of diverse blur patterns by randomly varying the blur intensities, directions and scenes during the deblurring training, enabling the deblurring model to handle a wide range of unseen blur scenarios. We summarize our contributions as follows:
+
+- We propose a controllable 3D-aware blur synthesizer that combines 2D motion and 3D residual components to represent 3D motion. This enables 3D transformation without depth measurements and facilitates accurate 3D motion modeling for blur data augmentation.
+- Our blur synthesizer enables controllable blur data augmentation by modifying blur magnitude, direction, and scenes. It does not require any extra data such as ground-truth kernels, depths or frame images during the training, which ensures compatibility to any blur dataset.
+- We demonstrate that our blur data augmentation scheme contributes to superior deblurring performance across various network architectures and blur datasets.
+
+{2}------------------------------------------------
+
+![Figure 2: Training procedure for our blur synthesis model. The diagram is split into two main horizontal tracks. The top track, 'Blur Image Synthesis', shows a 'Sharp Image S' being processed through 'Grid Sampling' using '3D-aware Vector Fields' to produce 'Transformed Scene Images' labeled S(T_1) and S(T_M). The bottom track, '3D-aware Motion Estimation', shows a 'Blur Image B' being processed by a 'Motion Estimator' to produce a '3D Residual Field (Non-Parametric Vector Field)'. This field is then processed by an 'MLP' to produce 'Image Coordinates' and 'Parametric Vector Fields'. These are combined via 'Amplitude-Phase Integration' to produce the final '3D-aware Vector Fields' (F_1, F_2, ..., F_M). The two tracks are connected by a 'Grid Sampling' block that takes the vector fields and the sharp image to produce the transformed scene images.](1b7d539e02a202c2cf2d97698b911447_img.jpg)
+
+Figure 2: Training procedure for our blur synthesis model. The diagram is split into two main horizontal tracks. The top track, 'Blur Image Synthesis', shows a 'Sharp Image S' being processed through 'Grid Sampling' using '3D-aware Vector Fields' to produce 'Transformed Scene Images' labeled S(T\_1) and S(T\_M). The bottom track, '3D-aware Motion Estimation', shows a 'Blur Image B' being processed by a 'Motion Estimator' to produce a '3D Residual Field (Non-Parametric Vector Field)'. This field is then processed by an 'MLP' to produce 'Image Coordinates' and 'Parametric Vector Fields'. These are combined via 'Amplitude-Phase Integration' to produce the final '3D-aware Vector Fields' (F\_1, F\_2, ..., F\_M). The two tracks are connected by a 'Grid Sampling' block that takes the vector fields and the sharp image to produce the transformed scene images.
+
+Figure 2: Training procedure for our blur synthesis model. We first predict 3D-aware vector fields (parametric + non-parametric) from a given blur image, which are used to generate corresponding scene images. These images are then aggregated to construct a realistic blur image. Note that the motion estimator, MLP, and compensation network are jointly trained.
+
+## 2 RELATED WORKS
+
+**Data augmentation.** Data augmentation has been widely explored in the field of image classification, where it is proven to be effective for improving the model generalization (DeVries & Taylor, 2017; Yun et al., 2019; Cubuk et al., 2019; Lim et al., 2019; Cubuk et al., 2020; Hendrycks et al., 2020; Kim et al., 2021; Yang et al., 2021). On the other hand, there has been little study particularly focused on blur data augmentation (Zhang et al., 2020; Rim et al., 2022; Wu et al., 2024). Blur Pipeline (Rim et al., 2022) presents a method to generate synthetic blur images based on GoProU dataset using saturation and noise synthesis (not data-agnostic and not controllable). Diffusion-based data augmentation (Wu et al., 2024) is a scheme to generate a synthetic blur dataset and use it for pre-training and fine-tuning the deblurring model (not cost-effective). Also, it requires the video frame images for extracting the optical flow (not data-agnostic), where the optical flow is used for the condition of the diffusion model. Also, these fail to explicitly account for the 3D geometry, despite the fact that the motion inherently occurs in 3D space (not accurate). On the other hand, our method considers the explicit 3D geometry, such that it achieves a realistic blur synthesis (*accurate*). Furthermore, our method can be *controllable*, applied to any blur dataset (*data-agnostic*), and used during the training of the deblurring model (*cost-effective*).
+
+**Deblurring methods.** The kernel-based methods estimate blur kernels or motion information to reconstruct latent sharp images (Gong et al., 2017; Zhang et al., 2021; Carbajal et al., 2023). We may utilize these byproducts, i.e., blur kernels, to synthesize blur images. However, simply regressing the simulated kernels without physically-driven blur modeling may not hold in generating realistic blur images. In recent years, as realistic blur-sharp pair datasets (Rim et al., 2020; 2022; Li et al., 2023a) have been released, they have enabled direct prediction of latent sharp images without explicit kernel estimation. A variety of neural architecture designs (Kupyn et al., 2018; Cui et al., 2024; Mao et al., 2023; Tu et al., 2022; Cho et al., 2021; Zamir et al., 2021; Chen et al., 2022; Zamir et al., 2022; Kong et al., 2023) has emerged to improve the deblurring performance. Also, some works introduce additional self-generated priors to further improve deblurring performance (Li et al., 2022; Fang et al., 2023; Kim et al., 2024). They estimate the degradation representation (Li et al., 2022), non-uniform kernel (Fang et al., 2023), and blur segmentation map (Kim et al., 2024) as prior information and exploit them for improving the deblurring performance. These methods require additional computational costs to generate their own priors. On the other hand, our method is used for blur data augmentation during the training, such that it does not require additional inference cost.
+
+## 3 CONTROLLABLE 3D-AWARE BLUR SYNTHESIS
+
+### 3.1 2D BLUR SYNTHESIS MODEL
+
+In this section, we present a new blur synthesis framework that considers a 3D perspective on blur modeling, rather than simply regressing non-uniform motion kernels from a 2D perspective. Simple regression-based motion estimation may not be generalizable and controllable. Our primary goal is to estimate camera positions in 3D space within the exposure time, generate the corresponding scene images, and aggregate them to achieve a realistic blur image synthesis. To this end, we
+
+{3}------------------------------------------------
+
+![Figure 3: Blur synthesis results on 3D motion blur. The figure is divided into two rows. The top row shows results for in-plane rotation blur: (a) Blur image, (b) Blur synthesis result, and (c) Estimated blur trajectory. The bottom row shows results for z-axis translation blur: (d) Blur image, (e) Blur synthesis result, and (f) Estimated blur trajectory. Each image shows a road with white lines receding into the distance, with varying degrees of blur and corresponding trajectory visualizations.](dc1e692e5b7efd8e5a2a790c458646d9_img.jpg)
+
+Figure 3: Blur synthesis results on 3D motion blur. The figure is divided into two rows. The top row shows results for in-plane rotation blur: (a) Blur image, (b) Blur synthesis result, and (c) Estimated blur trajectory. The bottom row shows results for z-axis translation blur: (d) Blur image, (e) Blur synthesis result, and (f) Estimated blur trajectory. Each image shows a road with white lines receding into the distance, with varying degrees of blur and corresponding trajectory visualizations.
+
+Figure 3: Blur synthesis results on 3D motion blur such as in-plane rotation blur, e.g., z-axis rotation: (a) Blur image, (b) Blur synthesis result, and (c) Estimated blur trajectory, and forward motion blur, e.g., z-axis translation: (d) Blur image, (e) Blur synthesis result, and (f) Estimated blur trajectory.
+
+consider a dataset  $\mathcal{D} = \{(B, S)\}$ , which contains a pair of blur image  $B$  and sharp image  $S$ . Let  $\mathcal{T}_\tau = \{\mathcal{T}_\tau(\mathbf{u}_i)\}_{i=1}^N$  be a vector field, i.e., a set of transformed coordinates, where  $\mathbf{u}_i \in \mathbb{R}^2$  denotes a 2D image coordinate at a pixel index  $i$ ,  $\mathcal{T}_\tau(\mathbf{u}_i) \in \mathbb{R}^2$  indicates  $i$ th transformed pixel coordinate at a time  $\tau$ , and  $N$  is the number of pixels. Note that we initially consider 2D motion and extend it to 3D motion subsequently. The blur image is expressed by using the camera exposure model over the exposure time  $T$ :
+
+$$B = \int_0^T S(\mathcal{T}_\tau) d\tau, \quad (1)$$
+
+where  $S(\mathcal{T}_\tau)$  is a scene image at a time  $\tau$ . As scenes may change due to object movements and camera shake over the exposure time, we generate the corresponding scene images  $\{S(\mathcal{T}_1), \dots, S(\mathcal{T}_M)\}$  using transformed vector field  $\{\mathcal{T}_1, \dots, \mathcal{T}_M\}$  with grid sampling (Ladéberg et al., 2015). Note that the exposure time  $T$  is approximately divided into  $M$  discrete camera positions for implementations. Here, we begin by considering a certain case, i.e., camera motion, which is easily encoded by a rigid transformation. The 2D rigid transformation is simply parameterized by  $[\mathbf{R}_\tau | \mathbf{t}_\tau]$ , e.g., rotation and translation. The transformed coordinate  $\mathcal{T}_\tau(\mathbf{u})$  is denoted by
+
+$$\mathcal{T}_\tau(\mathbf{u}) = [\mathbf{R}_\tau | \mathbf{t}_\tau] \mathbf{u} = \begin{bmatrix} r_\tau^{(11)} & r_\tau^{(12)} & t_\tau^{(1)} \\ r_\tau^{(21)} & r_\tau^{(22)} & t_\tau^{(2)} \end{bmatrix} \begin{bmatrix} x \\ y \\ 1 \end{bmatrix} = \begin{bmatrix} r_\tau^{(11)}x + r_\tau^{(12)}y + t_\tau^{(1)} \\ r_\tau^{(21)}x + r_\tau^{(22)}y + t_\tau^{(2)} \end{bmatrix}. \quad (2)$$
+
+Since the unknown parameters are now  $[\mathbf{R} | \mathbf{t}]$  in (1), one can view the blur synthesis problem as a camera pose estimation by a neural network,  $f_0 : B \rightarrow [\gamma_1, \dots, \gamma_M, \mathbf{t}_1, \dots, \mathbf{t}_M]$  where  $\gamma_\tau \in \mathbb{R}^3$  is the axis-angle representation (Murray et al., 2017) for a rotation matrix and  $\mathbf{t}_\tau \in \mathbb{R}^2$  indicates a translation component. Once we estimate  $\gamma_\tau$ , we can generate a 3D rotation matrix using Rodrigues’ formula (Murray et al., 2017), whose 2D components are used to construct a 2D transformation matrix  $\mathbf{R}_\tau$ . Given  $\mathbf{R}_\tau$  and  $\mathbf{t}_\tau$ , we can make a 2D rigid transformation field  $\mathcal{T}_\tau$  using (2) and optimize the following loss to train the blur synthesis model, i.e.,  $L_{\text{blur}} = \|B - \frac{1}{M} \sum_\tau S(\mathcal{T}_\tau)\|_1$ .
+
+### 3.2 3D-AWARE BLUR SYNTHESIS MODEL
+
+**3D camera motion blur synthesis.** We further develop our blur synthesis model, elaborating on its extension to 3D space. In fact, the camera motion appears in 3D space, but it is primarily modeled from a 2D perspective, i.e., 2D non-uniform kernels (Carbajal et al., 2023; Fang et al., 2023), which is insufficient to ensure the geometric coherence of the camera motions. Therefore, we begin by investigating the 3D rigid transformation below
+
+$$\mathcal{T}_\tau(\mathbf{X}) = [\mathbf{R}_\tau | \mathbf{t}_\tau] \mathbf{X} = \begin{bmatrix} r_\tau^{(11)} & r_\tau^{(12)} & r_\tau^{(13)} & t_\tau^{(1)} \\ r_\tau^{(21)} & r_\tau^{(22)} & r_\tau^{(23)} & t_\tau^{(2)} \\ r_\tau^{(31)} & r_\tau^{(32)} & r_\tau^{(33)} & t_\tau^{(3)} \end{bmatrix} \begin{bmatrix} x \\ y \\ z \\ 1 \end{bmatrix} = \begin{bmatrix} r_\tau^{(11)}x + r_\tau^{(12)}y + r_\tau^{(13)}z + t_\tau^{(1)} \\ r_\tau^{(21)}x + r_\tau^{(22)}y + r_\tau^{(23)}z + t_\tau^{(2)} \\ r_\tau^{(31)}x + r_\tau^{(32)}y + r_\tau^{(33)}z + t_\tau^{(3)} \end{bmatrix}, \quad (3)$$
+
+where  $\mathbf{X}$  is a 3D canonical coordinate. We discover that the 3D rigid transformation vector  $\mathcal{T}_\tau(\mathbf{X}) \in \mathbb{R}^3$  can be decomposed into 2D rigid transformation vector  $\mathcal{T}_\tau^z(\mathbf{u}) = [\mathcal{T}_\tau(\mathbf{u}), 0] \in \mathbb{R}^3$  and 3D residual vector  $\mathcal{E}_\tau(\mathbf{X}) \in \mathbb{R}^3$ , written by
+
+$$\mathcal{T}_\tau(\mathbf{X}) = \underbrace{\begin{bmatrix} r_\tau^{(11)}x + r_\tau^{(12)}y + t_\tau^{(1)} \\ r_\tau^{(21)}x + r_\tau^{(22)}y + t_\tau^{(2)} \\ 0 \end{bmatrix}}_{\mathcal{T}_\tau^z(\mathbf{u})} + \underbrace{\begin{bmatrix} r_\tau^{(13)}z \\ r_\tau^{(23)}z \\ r_\tau^{(31)}x + r_\tau^{(32)}y + r_\tau^{(33)}z + t_\tau^{(3)} \end{bmatrix}}_{\mathcal{E}_\tau(\mathbf{X})}. \quad (4)$$
+
+{4}------------------------------------------------
+
+![Figure 4: Visual results on (a) Blur image, (b) Synthesized blur image, (c) 2D parametric blur trajectory, and (d) 2D parametric + 3D non-parametric blur trajectory. The images show a person walking in a dark environment. (a) is the original blurred image. (b) is the synthesized blur image. (c) shows the 2D parametric blur trajectory as a series of white dots on a black background. (d) shows the 2D parametric + 3D non-parametric blur trajectory, which is more complex and captures the person's movement.](a0167e3dcece9dcd8a378bcd98fb9cfa_img.jpg)
+
+Figure 4: Visual results on (a) Blur image, (b) Synthesized blur image, (c) 2D parametric blur trajectory, and (d) 2D parametric + 3D non-parametric blur trajectory. The images show a person walking in a dark environment. (a) is the original blurred image. (b) is the synthesized blur image. (c) shows the 2D parametric blur trajectory as a series of white dots on a black background. (d) shows the 2D parametric + 3D non-parametric blur trajectory, which is more complex and captures the person's movement.
+
+Figure 4: Visual results on (a) Blur image, (b) Synthesized blur image, (c) 2D parametric blur trajectory, and (d) 2D parametric + 3D non-parametric blur trajectory. Person movements are captured by (d), but not (c).
+
+![Figure 5: Visual results on (a) Synthesized blur image, (b-d) transformed scene images. The images show a person in a dark environment. (a) is the synthesized blur image. (b-d) are transformed scene images that are sharper versions of (a), showing the person's face and upper body more clearly.](17a042ee648d9fdaddb609aead503980_img.jpg)
+
+Figure 5: Visual results on (a) Synthesized blur image, (b-d) transformed scene images. The images show a person in a dark environment. (a) is the synthesized blur image. (b-d) are transformed scene images that are sharper versions of (a), showing the person's face and upper body more clearly.
+
+Figure 5: Visual results on (a) Synthesized blur image, (b-d) transformed scene images. Our blur synthesizer generates 3D-aware transformed scene images without requiring ground-truth video frame images.
+
+Using a projection operation  $\pi : \mathbb{R}^3 \rightarrow \mathbb{R}^2$  with camera intrinsics  $K$ , we compute the projected coordinate vector  $\tilde{\mathcal{T}}_\tau(\mathbf{u}) = \pi(\mathcal{T}_\tau(\mathbf{X}; K) = \pi(\mathcal{T}_\tau^*(\mathbf{u}) + \mathcal{E}_\tau(\mathbf{X}; K))$  to sample 3D-aware transformed scene images over the exposure time. Here, we are motivated by the fact that  $\tilde{\mathcal{T}}_\tau(\mathbf{u})$  lies in  $\mathbb{R}^2$ . Therefore, following the rationale of the decomposition principle in (4), we express the projected coordinate vector  $\tilde{\mathcal{T}}_\tau(\mathbf{u})$  as a combination of 2D rigid transformation coordinate  $\mathcal{T}_\tau(\mathbf{u}) \in \mathbb{R}^2$  and projected 3D residual vector<sup>1</sup>  $\epsilon_\tau(\mathbf{u}) \in \mathbb{R}^2$  derived from  $\mathcal{E}_\tau(\mathbf{X})$ , i.e.,
+
+$$\tilde{\mathcal{T}}_\tau(\mathbf{u}) = \mathcal{C}(\mathcal{T}_\tau(\mathbf{u}), \epsilon_\tau(\mathbf{u})), \quad (5)$$
+
+where  $\mathcal{C}$  serves as a composition function for integrating the two components. Since  $\tilde{\mathcal{T}}_\tau(\mathbf{u})$  contains 3D residual components, it is referred to as the 3D-aware coordinate vector. Then, we simply induce the 3D-aware vector field, i.e.,  $\tilde{\mathcal{T}}_\tau = \mathcal{C}(\mathcal{T}_\tau, \epsilon_\tau)$  where  $\mathcal{T}_\tau$  is the 2D rigid transformation field as discussed in Section 3.1 and  $\epsilon_\tau$  denotes the 3D residual field modeled by a neural network,  $g_\phi : B \rightarrow \{\epsilon_1, \epsilon_2, \dots, \epsilon_M\}$ . This decomposition scheme allows for 3D rigid transformation without requiring explicit depth measurements<sup>2</sup>, as the 3D residual field is directly estimated via the neural network. To investigate the composition function  $\mathcal{C}$  for better motion controllability, we first reformulate the 3D-aware vector field using a known canonical vector field  $\mathbf{U}$ , i.e.,  $S = \tilde{S}(\mathbf{U})$ , which is
+
+$$\tilde{\mathcal{T}}_\tau = \mathcal{C}(\mathcal{T}_\tau, \epsilon_\tau) = \underbrace{\mathcal{C}(\mathbf{U} + \Delta\mathcal{T}_\tau, \epsilon_\tau)}_{\mathcal{T}_\tau} = \mathbf{U} + \underbrace{\mathcal{C}(\Delta\mathcal{T}_\tau, \epsilon_\tau)}_{\delta_\tau} = \mathbf{U} + \delta_\tau, \quad (6)$$
+
+where  $\delta_\tau = \mathcal{C}(\Delta\mathcal{T}_\tau, \epsilon_\tau)$  is a displacement field which consists of the 2D rigid transformation residual field  $\Delta\mathcal{T}_\tau$  (*parametric* field) and 3D residual field  $\epsilon_\tau$  (*non-parametric* field). Note that the canonical vector field  $\mathbf{U}$  is the constant field, such that it is factored out from the composition function. Then, we adopt amplitude-phase integration in polar coordinates for the composition function, i.e.,  $\delta_\tau = \mathcal{C}(\Delta\mathcal{T}_\tau, \epsilon_\tau) = |\Delta\mathcal{T}_\tau| \cdot |\epsilon_\tau| \angle(\phi(\Delta\mathcal{T}_\tau) + \phi(\epsilon_\tau))$ , where  $|\cdot|$  indicates the magnitude of the vector and  $\phi$  is a function to calculate the vector angle. This integration scheme provides a straightforward way to manipulate the magnitude and direction of the motion, facilitating a controllable blur synthesis, as opposed to simple vector field integration, i.e.,  $\delta_\tau = \mathcal{C}(\Delta\mathcal{T}_\tau, \epsilon_\tau) = \Delta\mathcal{T}_\tau + \epsilon_\tau$ . Given a target scene image  $S$  and the 3D-aware vector field  $\tilde{\mathcal{T}}_\tau$ , we can render 3D-aware transformed scene images and synthesize a blur image as exemplified in Fig. 5 by
+
+$$\tilde{B} = \frac{1}{M} \sum_\tau S(\tilde{\mathcal{T}}_\tau). \quad (7)$$
+
+Finally, we suggest minimizing the following loss to train the 3D-aware blur synthesis model:
+
+$$L_{\text{blur}, 3D} = \|B - \tilde{B}\|_1 + \|B - h_\xi(\tilde{B})\|_1, \quad (8)$$
+
+where  $h_\xi$  is an auxiliary network that compensates for photometric variations between blur and sharp images, arising from different image sensors, lenses, and color drifts. This compensation is required to encourage the 3D-aware vector fields to focus only on blur components (not disrupted by the photometric issues). This will be more discussed in Section C of Appendix. Furthermore, we emphasize that our compositional training framework leverages structured parametric modeling
+
+<sup>1</sup>We provide underlying derivation and insights of projected 3D residual vector in Section A of Appendix.
+
+<sup>2</sup>In our experiments, we observe that inaccurate absolute depth measurements can lead to performance degradation, as discussed in detail in Section 4.4.
+
+{5}------------------------------------------------
+
+to alleviate ill-posedness and flexible non-parametric modeling to effectively capture 3D residual components, thereby achieving accurate 3D motion modeling.
+
+**3D object motion blur synthesis.** As discussed earlier, we estimate the 3D residual components using the non-parametric vector field  $\epsilon_\tau$ , which is initially designed to represent the 3D *camera* residual fields. Additionally, the 3D residual components are capable of representing *object* residual fields. In fact, non-parametric motion modeling, i.e., directly estimating the vector field via a neural network, is particularly effective in capturing the object motion behaviors (i.e., non-uniform and non-rigid motion) due to its flexibility and versatility. Hence, our 3D-aware blur synthesis model (7) is inherently compatible with scenarios containing object motion without further modification. As a result, our method can handle 3D camera motions as shown in Fig. 3 and object motions as shown in Fig. 4, using (6). Additional visualization results can be found in Fig. 14 and 15 of Appendix.
+
+### 3.3 AMBIGUITY REGULARIZATION AND TOTAL LOSS
+
+As discussed in Section 3.2, the non-parametric vector field provides substantial flexibility, but its arbitrary and unconstrained natures can lead to ambiguities. This makes the optimization more challenging. As a result, it yields implausible synthesis images and artifacts as shown in Fig. 6 (a). To address this, we present Laplacian regularization and invertible geometric regularization. These regularizations help mitigate the ambiguities and ensure the geometric coherence regarding the non-parametric vector field.
+
+**Laplacian regularization.** The Laplacian regularization helps smooth irregular vector fields. This holds under the prior knowledge that the motion vector field is not irregularly changed in the spatial space. To promote the smoothness of the vector fields, we derive the Laplacian regularization with respect to the 3D-aware vector field  $\tilde{\mathcal{T}}_\tau$ :
+
+$$L_{\text{smooth}} = \sum_\tau \sum_{x,y} \left( 4\tilde{\mathcal{T}}_\tau(x,y) - \sum_{i,j} \tilde{\mathcal{T}}_\tau(x+i,y) + \tilde{\mathcal{T}}_\tau(x,y+j) \right)^2, \quad i,j \in \{-1,1\}. \quad (9)$$
+
+**Invertible geometric regularization.** To adapt the geometric consistency for the 3D-aware vector field  $\tilde{\mathcal{T}}_\tau$ , we propose a new invertible geometric regularization that allows us to trace back to the original scene image. Specifically, the 3D transformed scene image  $\tilde{S}_\tau = S(\tilde{\mathcal{T}}_\tau)$  should be geometrically reverted to the original one  $S$  via an inverse vector field. To this end, we recall the 3D-aware vector field (6), i.e.,  $\tilde{\mathcal{T}}_\tau = \mathbf{U} + \delta_\tau$ , where  $\delta_\tau$  denotes the displacement field. The inverse vector field  $\mathcal{T}'_\tau$  is computed by using the reversed direction of the displacement field, i.e.,  $\mathcal{T}'_\tau = \mathbf{U} - \delta_\tau$ . Finally, the geometric-consistent vector field is achieved by optimizing the following loss:
+
+$$L_{\text{geometric}} = \frac{1}{M} \sum_\tau \|S - \tilde{S}_\tau(\mathcal{T}'_\tau)\|_1, \quad (10)$$
+
+where  $\tilde{S}_\tau(\mathcal{T}'_\tau)$  is the geometrically inverted scene image. This geometric consistency loss is the key component of our method to ensure that the 3D-aware vector field remains geometrically structured. Therefore, it ensures geometric-aware blur synthesis as shown in Fig. 6 (b).
+
+**Total loss.** We suggest minimizing the following loss to train our geometric-aware blur synthesizer:
+
+$$L_{\text{total}} = L_{\text{blur\_3D}} + \lambda_1 L_{\text{smooth}} + \lambda_2 L_{\text{geometric}}, \quad (11)$$
+
+where  $\lambda_1, \lambda_2 > 0$  are hyper-parameters to balance the loss terms, which will be discussed in Section 4.5 and Section F.1 of Appendix.
+
+### 3.4 CONTROLLABLE BLUR IMAGE SYNTHESIS
+
+Our blur synthesis model is designed to enable blur data augmentation during the deblurring model training, thereby improving final deblurring performance and model generalization. Specifically, if
+
+{6}------------------------------------------------
+
+![Figure 7: Qualitative comparison results on real-world blur images. The figure shows a 4x6 grid of images. The first column contains the original blurry images. The subsequent columns show the results of different deblurring methods: Blur (the input), NAFNet-64, FFTformer, ID-Blau, and GeoSyn (ours). The GeoSyn column shows significantly sharper and more artifact-free results compared to the other methods across various scenes, including street views, buildings, and text.](9ebd85380ef496499e5f23ec0d9cd744_img.jpg)
+
+Figure 7: Qualitative comparison results on real-world blur images. The figure shows a 4x6 grid of images. The first column contains the original blurry images. The subsequent columns show the results of different deblurring methods: Blur (the input), NAFNet-64, FFTformer, ID-Blau, and GeoSyn (ours). The GeoSyn column shows significantly sharper and more artifact-free results compared to the other methods across various scenes, including street views, buildings, and text.
+
+Figure 7: Qualitative comparison results on real-world blur images. NAFNet is used for all methods. Our blur synthesizer produces sharper and artifact-free results compared to state-of-the-art methods.
+
+a blur dataset contains 3, 000 blur images and the deblurring model is trained over 1,000 epochs, it generates approximately 3,000,000 different synthetic blur images. This extensive diversity enhances the generalization ability of the deblurring model, enabling it to handle a wide range of unseen blur scenarios. To this end, we first extract a 3D-aware displacement vector  $\delta = (\tilde{x}_\delta, \tilde{y}_\delta)$  from (6). Note that we use the notation  $\delta$  for simplicity here. It can be converted into the amplitude-phase representations in the polar coordinates, i.e.,  $\delta = |\delta| \angle \phi(\delta)$  where  $|\delta| = \sqrt{\tilde{x}_\delta^2 + \tilde{y}_\delta^2}$  indicates the amplitude of the vector, i.e., motion intensity and  $\phi(\delta) = \tan^{-1}(\frac{\tilde{y}_\delta}{\tilde{x}_\delta})$  represents the phase of the vector, i.e., motion direction. Then, every displacement vector is controlled by the amplitude control parameter  $\alpha$  and phase control parameter  $\beta$ , i.e.,  $\tilde{x}_\delta = \alpha |\delta| \cos(\phi(\delta) + \beta)$  and  $\tilde{y}_\delta = \alpha |\delta| \sin(\phi(\delta) + \beta)$ , whose parameters are explored in Section B of Appendix. We remark that this amplitude-phase motion adjustment preserves the geometric structure of the vector fields since the control parameters are identically applied to all vector fields generated from a single blur image to adjust overall blur intensity and direction. Meanwhile, the control parameters can be determined for each blur image. Finally, we employ this modified displacement motion vector,  $\tilde{\delta} = (\tilde{x}_\delta, \tilde{y}_\delta)$  instead of the original one  $\delta$  for the subsequent scene image rendering and blur image synthesis as in (7). We present some blur synthesis results for different scenes, amplitudes, and phases as shown in Fig. 1, Fig. 16 and 17 of Appendix.
+
+## 4 EXPERIMENTS
+
+### 4.1 EXPERIMENTAL SETUP
+
+**Datasets and evaluation metrics.** For datasets, we use RealBlur (Rim et al., 2020), RSBlur (Rim et al., 2022), and GoPro (Nah et al., 2017) datasets for training and evaluation. RealBlur is split into two types: RealBlur-J (sRGB domain) and RealBlur-R (RAW domain). Each RealBlur type consists of 3,758 and 980 image pairs for training and test sets, respectively. RSBlur contains 8,878 and 3,360 blur-sharp image pairs for training and test sets, respectively. GoPro contains 2,103 and 1,111 image pairs for training and test sets, respectively. We use the evaluation metrics such as Peak Signal to Noise Ratio (PSNR) and Structural SIMilarity (SSIM) (Wang et al., 2004).
+
+**Implementation details.** We present the implementation details for training our blur synthesis model. Our blur synthesis model consists of a motion estimator (NAFNet-8) and compensation network (NAFNet-16). NAFNet-16 means NAFNet (Chen et al., 2022) with 16 base channel widths. Note that the compensation network is only used for the photometric compensation during the training, as discussed in Section C of Appendix. According to Fig. 2, the blur input image is fed into the encoder of the motion estimator. Then, the intermediate features are fed to MLP, including global average pooling, two fully connected layers, and one ReLU activation, in order to estimate 2D motion parameters  $\{\gamma_1, \dots, \gamma_M, t_1, \dots, t_M\}$ . Using the parameters, we obtain parametric vector
+
+{7}------------------------------------------------
+
+Table 1: Comparison results across diverse neural networks and blur datasets.
+
+| Model | GoPro |  | HIDE |  | RealBlur-J |  | RealBlur-R |  |
+|-|-|-|-|-|-|-|-|-|
+|  | PSNR | SSIM | PSNR | SSIM | PSNR | SSIM | PSNR | SSIM |
+| MIMO-UNet+ | 32.44 | 0.957 | 30.00 | 0.930 | 31.92 | 0.919 | 39.10 | 0.969 |
+| + GeoSyn (ours) | <b>33.01</b> | <b>0.962</b> | <b>30.86</b> | <b>0.940</b> | <b>32.55</b> | <b>0.925</b> | <b>39.68</b> | <b>0.972</b> |
+| Restormer | 32.92 | 0.961 | 31.22 | 0.942 | 32.32 | 0.924 | 39.47 | 0.972 |
+| + GeoSyn (ours) | <b>33.37</b> | <b>0.964</b> | <b>31.61</b> | <b>0.946</b> | <b>33.05</b> | <b>0.937</b> | <b>40.31</b> | <b>0.974</b> |
+| NAFNet | 33.69 | 0.966 | 31.32 | 0.943 | 32.50 | 0.928 | 39.89 | 0.973 |
+| + GeoSyn (ours) | <b>34.09</b> | <b>0.969</b> | <b>31.64</b> | <b>0.947</b> | <b>32.99</b> | <b>0.936</b> | <b>40.49</b> | <b>0.976</b> |
+| FFTFormer | 34.21 | 0.969 | 31.62 | 0.946 | 32.62 | 0.933 | 40.11 | 0.973 |
+| + GeoSyn (ours) | <b>34.39</b> | <b>0.970</b> | <b>31.98</b> | <b>0.949</b> | <b>33.68</b> | <b>0.938</b> | <b>40.89</b> | <b>0.977</b> |
+
+fields  $\{\mathcal{T}_1, \mathcal{T}_2, \dots, \mathcal{T}_M\}$  as discussed in Section 3.1. Also, the intermediate features are fed into the decoder of the motion estimator to predict non-parametric vector fields  $\{\epsilon_1, \epsilon_2, \dots, \epsilon_M\}$ . Then, we aggregate the parametric and non-parametric vector fields using the amplitude-phase integration and finally obtain the 3D-aware vector fields as discussed in Section 3.2. To produce diverse blur images for blur data augmentation, we modify amplitudes, phases of the vector field, and scene contents as discussed in Section 3.4. We will discuss how to synthesize and where to synthesize in detail in Section B of Appendix. Note that our blur synthesizer is only used for training. Therefore, it does not increase the computation cost in the evaluation stage. We use blur datasets randomly cropped by  $256 \times 256$  during the training. We train our blur synthesizer up to 1,000 epochs for RealBlur, 3,000 epochs for GoPro, and 500 epochs for RSBur. Also, our blur synthesizer is optimized by the AdamW (Loshchilov & Hutter, 2019) algorithm ( $\beta_1 = 0.9$ ,  $\beta_2 = 0.9$  and weight decay  $1e^{-3}$ ) with the cosine annealing schedule ( $1e^{-3}$  to  $1e^{-7}$ ) (Loshchilov & Hutter, 2016) gradually reduced for total iterations of each dataset. Unless otherwise specified, we use  $\lambda_1 = 0.1$ ,  $\lambda_2 = 1.0$  and the number of camera positions as 16, which is discussed in Section 4.5 and F.1 of Appendix. We use RealBlur-J for all ablation studies. The pseudo-codes can be found in Section G and H of Appendix.
+
+### 4.2 MAIN RESULTS
+
+To demonstrate the effectiveness of our blur synthesizer, we conduct experiments across various datasets such as GoPro (Nah et al., 2017), HIDE (Shen et al., 2019), RealBlur-J and R (Rim et al., 2020), and network architectures such as MIMO-UNet+ (Cho et al., 2021), Restormer (Zamir et al., 2022), NAFNet (Chen et al., 2022) and FFTFormer (Kong et al., 2023). We train with GoPro and evaluate GoPro and HIDE. Also, we train with RealBlur-J and R, and evaluate the corresponding trained models. As shown in Table 1, the results clearly demonstrate that our blur synthesizer, i.e., GeoSyn boosts deblurring performance across not only different network architectures but also various datasets. For example, FFTFormer equipped with our GeoSyn significantly improves PSNR from 32.62 to 33.68 dB on RealBlur-J. Furthermore, we present a more comprehensive analysis of the generalization ability of our GeoSyn in Section E. Also, we present the visual comparison results on GoPro as shown in Fig. 12 of Appendix, RealBlur as shown in Fig. 13 of Appendix, and real-world blur images as shown in Fig. 7 and Fig. 11 of Appendix.
+
+### 4.3 COMPARISON TO OTHER METHODS
+
+**Comparison to kernel-based methods.** J-MKPD (Carbajal et al., 2023) and MotionETR (Zhang et al., 2021) generate motion information for deblurring purposes. However, motion information can be used for blur data augmentation. Since their motion estimators are trained with GoPro, we train our blur synthesizer with GoPro for a fair comparison. Then, the deblurring model, NAFNet-64 is trained with GoPro, using data augmentation with their motion estimators and ours. As shown in the upper side of Table 2, MotionETR exhibits a performance improvement from 33.69 to 33.92 dB, but it lags behind our GeoSyn (34.09 dB). We believe their motion information does not account for explicit 3D geometry, causing performance limitations.
+
+**Comparison to blur synthesis methods.** Blur Pipeline (Rim et al., 2022) and ID-Blau (Wu et al., 2024) are the blur data augmentation methods and are trained with a certain dataset (GoPro). For example, ID-Blau requires the ground-truth video frame images to extract optical flows, such that it
+
+{8}------------------------------------------------
+
+Table 2: Comparison results against related works. We compare our method with kernel-based methods (above) and blur data augmentation methods (below).
+
+| Augmentation Types | Datasets | PSNR $\uparrow$ | SSIM $\uparrow$ |
+|-|-|-|-|
+| None | GoPro | 33.69 | 0.966 |
+| J-MKPD |  | 33.59 | 0.965 |
+| MotionETR |  | 33.92 | 0.968 |
+| GeoSyn (ours) |  | <b>34.09</b> | <b>0.969</b> |
+| None |  | 32.50 | 0.928 |
+| Blur Pipeline | RealBlur-J | 32.57 | 0.931 |
+| ID-Blau |  | 32.70 | 0.932 |
+| GeoSyn (ours) |  | <b>32.99</b> | <b>0.936</b> |
+| ID-Blau + GeoSyn (ours) |  | <b>33.09</b> | <b>0.938</b> |
+
+Table 4: Ablation study on various types of vector fields. “P” indicates the parametric vector field while “NP” exhibits the non-parametric vector field. The best results are indicated in bold.
+
+| Methods | P | NP | PSNR $\uparrow$ | SSIM $\uparrow$ |
+|-|-|-|-|-|
+| No Augmentation |  |  | 32.50 | 0.928 |
+| 2D Parametric | ✓ |  | 32.65 | 0.932 |
+| 3D Non-Parametric |  | ✓ | 32.61 | 0.930 |
+| 3D Flat Depth | ✓ |  | 32.66 | 0.932 |
+| 3D Monocular Depth | ✓ |  | 32.47 | 0.929 |
+| GeoSyn (ours) | ✓ | ✓ | <b>32.99</b> | <b>0.936</b> |
+
+Table 3: Comparison results on RSBlur. The best results are indicated in bold.
+
+| Methods | GMACs | RSBlur |  |
+|-|-|-|-|
+|  |  | PSNR $\uparrow$ | SSIM $\uparrow$ |
+| SRN-Deblur | 1434.82 | 32.53 | 0.840 |
+| MIMO-UNet+ | 154.41 | 33.37 | 0.856 |
+| MPRNet | 777.01 | 33.61 | 0.861 |
+| Restormer | 141.00 | 33.69 | 0.863 |
+| Uformer-B | 89.50 | 33.98 | 0.866 |
+| ConvIR-L | 71.22 | 34.06 | 0.868 |
+| NAFNet-64 |  | 33.98 | 0.866 |
+| + GeoSyn (ours) | 63.64 | <b>34.23</b> | <b>0.870</b> |
+| SegDeblur-L | 62.68 | 34.21 | 0.870 |
+| + GeoSyn (ours) | 62.68 | <b>34.31</b> | <b>0.872</b> |
+
+Table 5: Ablation study on model sizes. Our blur augmentation enables us to build an efficient deblurring model. It reduces the computational cost by up to 4x.
+
+| Methods | GMACs | PSNR $\uparrow$ | SSIM $\uparrow$ |
+|-|-|-|-|
+| NAFNet-16 | 4.0 | 31.58 | 0.912 |
+| + GeoSyn (ours) |  | <b>31.97</b> | <b>0.921</b> |
+| NAFNet-32 | 16.0 | 31.99 | 0.920 |
+| + GeoSyn (ours) |  | <b>32.59</b> | <b>0.931</b> |
+| NAFNet-64 | 63.5 | 32.50 | 0.928 |
+| + GeoSyn (ours) |  | <b>32.99</b> | <b>0.936</b> |
+
+can not be trained with other datasets containing only blur and sharp images such as RealBlur (Rim et al., 2020) and RSBlur (Rim et al., 2022). As shown in the lower side of Table 2, ID-Blau, trained with GoPro, leads to limited deblurring performance improvement on RealBlur-J, from 32.50 to 32.70 dB. On the other hand, our GeoSyn can be trained with RealBlur-J, to capture dataset-specific motion patterns. Hence, our GeoSyn yields better deblurring performance (32.99 dB), thanks to our data-agnostic motion modeling. Furthermore, we remark that our GeoSyn is compatible with ID-Blau. Specifically, we train the deblurring model initialized by ID-Blau pre-trained model, with our GeoSyn. We observe that it further improves the deblurring performance (33.09 dB), achieving the best performance. More comparison results with ID-Blau can be found in Section D of Appendix.
+
+**Results on RSBlur.** We experiment with an additional dataset, RSBlur (Rim et al., 2022) which contains a variety of camera and object motions with high-resolution images. We train and evaluate NAFNet-64 (Chen et al., 2022) and SegDeblur-L (Kim et al., 2024) with RSBlur, using our data augmentation scheme. As shown in Table 3, our GeoSyn improves the performance on NAFNet-64, from 33.97 to 34.23 dB. Interestingly, our GeoSyn can be compatible with the prior-based method such as SegDeblur-L, improving the deblurring performance from 34.21 to 34.31 dB.
+
+### 4.4 VARIOUS FORMS OF VECTOR FIELDS
+
+The goal of this experiment is to identify an optimal configuration of the vector fields for blur data augmentation, by evaluating various combinations of parametric and non-parametric vector fields including 2D motion, 3D motion, and depth information, as reported in Table 4.
+
+**2D parametric vector field.** The parametric vector field approach is beneficial for reducing the ill-posedness of the problem, rather than naively estimating non-parametric vector fields. However, the 2D parametric vector field that relies solely on 2D transformations fails to incorporate 3D motion information, leading to a sub-optimal performance of 32.65 dB.
+
+**3D non-parametric vector field.** The non-parametric vector field is specialized to capture 3D motions. However, when the non-parametric method is used only, it struggles to effectively learn motion behaviors due to huge ill-posedness, e.g., the presence of numerous feasible solutions, achieving insufficient performance (32.61 dB).
+
+**3D parametric vector field using depth information.** The parametric vector fields using 3D transformation with depth measurements yield sub-optimal results. The deblurring result (32.47 dB)
+
+{9}------------------------------------------------
+
+![Figure 8: Ablation studies on (a) Regularizations, (b) Controllability, and (c) # of camera positions. (a) PSNR (dB) for None (32.52), Laplacian (32.87), Geometric (32.92), and All (32.99). (b) PSNR (dB) for No Aug. (32.50), Amp. (32.82), Phase (32.78), Scene (32.86), and All (32.99). (c) PSNR (dB) for 4 (32.86), 8 (32.97), 16 (32.99), 32 (32.98), and 64 (32.97) camera positions.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 8: Ablation studies on (a) Regularizations, (b) Controllability, and (c) # of camera positions. (a) PSNR (dB) for None (32.52), Laplacian (32.87), Geometric (32.92), and All (32.99). (b) PSNR (dB) for No Aug. (32.50), Amp. (32.82), Phase (32.78), Scene (32.86), and All (32.99). (c) PSNR (dB) for 4 (32.86), 8 (32.97), 16 (32.99), 32 (32.98), and 64 (32.97) camera positions.
+
+Figure 8: Ablation studies on (a) Regularizations, (b) Controllability, and (c) # of camera positions.
+
+using the monocular depth estimates generated by Ke et al. (2024) is even worse than that of flat depth (32.66 dB). We believe that monocular depth values are inherently inaccurate because they are typically relative depth information rather than accurate absolute depth measurements required for 3D transformations, leading to unfavorable blur synthesis.
+
+**2D parametric + 3D non-parametric vector field (ours).** Our method fuses 2D parametric and 3D non-parametric vector fields, which circumvents the need for absolute depth values. Therefore, we take advantage of both reducing ill-posedness (by parametric) and effectively modeling 3D residual components (by non-parametric), achieving the best performance (32.99 dB).
+
+### 4.5 ABLATION STUDY
+
+**Efficient deblurring models.** In this section, we discuss the effectiveness of our blur data augmentation scheme in constructing an efficient deblurring model. We train and evaluate NAFNet with different model sizes, incorporating our data augmentation scheme. As shown in Table. 5, the results show that our GeoSyn reduces the computational cost, i.e., GMACs, by up to  $4\times$ . Specifically, NAFNet-32 equipped with our data augmentation (16 GMACs, PSNR 32.50 dB) produces even better performance than that of NAFNet-64 (63.5 GMACs, PSNR 32.50 dB). This highlights the potential benefits of our blur synthesis model in building an efficient deblurring model.
+
+**Effects on regularization.** To verify that the ambiguity regularization losses are necessary, we train deblurring models using our blur synthesizers trained without regularization, with Laplacian only ( $\lambda_1 = 0.1$ ), with geometric only ( $\lambda_2 = 1.0$ ), and with both regularizations. As shown in Fig. 8 (a), we observe that each regularization technique contributes to reducing ambiguities, leading to better subsequent deblurring performance (32.50  $\rightarrow$  32.87 or 32.92 dB). Furthermore, the results demonstrate that both regularizations are crucial for achieving further improvements, reaching 32.99 dB. We explore the hyperparameters  $\{\lambda_1, \lambda_2\}$  for more details in Section F.1 of Appendix.
+
+**Controllability.** We explore the controllability of our GeoSyn. As discussed in Section 3.4, we can manipulate amplitude, phase of the vector fields, and scene contents to produce blur images with diverse blur patterns and scene contents. To confirm which augmentation type is more effective, we train deblurring models with amplitude, phase, scene, and all augmentations. As shown in Fig. 8 (b), each augmentation type demonstrates its effectiveness in improving deblurring performance. Moreover, the results indicate that all augmentation types are necessary to achieve the best performance.
+
+**The number of camera positions.** We investigate the effect of the number of camera positions when synthesizing a blur image. We train our blur synthesizer with different numbers of camera positions: {4, 8, 16, 32, 64}, and the deblurring model using individual synthesizers. As shown in Fig. 8 (c), a sufficient number of camera positions, e.g., more than 8, can capture intrinsic motion behaviors, such that it results in meaningful subsequent deblurring performance.
+
+**More ablation studies.** For further insights, we perform an in-depth analysis of our blur synthesizer in Section F of Appendix.
+
+## 5 CONCLUSIONS
+
+In this paper, we propose a new 3D-aware blur synthesizer designed to generate diverse blur images for data augmentation, improving deblurring performance. We integrate parametric and non-parametric vector fields to take advantage of reducing the ill-posedness and modeling 3D camera and object residual components. We demonstrate the effectiveness of our blur synthesizer on various network architectures and datasets. Our 3D-aware vector fields can be applied to optical flow and depth prediction from blur images while facilitating motion estimation for video generation.
+
+ Rest of paper (reference and Appendix) is removed.

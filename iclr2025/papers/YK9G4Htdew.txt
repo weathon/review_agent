@@ -1,0 +1,287 @@
+
+
+{0}------------------------------------------------
+
+# LEARNING TRANSFORMER-BASED WORLD MODELS WITH CONTRASTIVE PREDICTIVE CODING
+
+Maxime Burchi, Radu Timofte
+
+Computer Vision Lab, CAIDAS & IFI, University of Würzburg, Germany  
+ maxime.burchi@uni-wuerzburg.de
+
+## ABSTRACT
+
+The DreamerV3 algorithm recently obtained remarkable performance across diverse environment domains by learning an accurate world model based on Recurrent Neural Networks (RNNs). Following the success of model-based reinforcement learning algorithms and the rapid adoption of the Transformer architecture for its superior training efficiency and favorable scaling properties, recent works such as STORM have proposed replacing RNN-based world models with Transformer-based world models using masked self-attention. However, despite the improved training efficiency of these methods, their impact on performance remains limited compared to the Dreamer algorithm, struggling to learn competitive Transformer-based world models. In this work, we show that the next state prediction objective adopted in previous approaches is insufficient to fully exploit the representation capabilities of Transformers. We propose to extend world model predictions to longer time horizons by introducing TWISTER (Transformer-based World model with contraStive Representations), a world model using action-conditioned Contrastive Predictive Coding to learn high-level temporal feature representations and improve the agent performance. TWISTER achieves a human-normalized mean score of 162% on the Atari 100k benchmark, setting a new record among state-of-the-art methods that do not employ look-ahead search. We release our code at <https://github.com/burchim/TWISTER>.
+
+## 1 INTRODUCTION
+
+Deep Reinforcement Learning (RL) algorithms have achieved notable breakthroughs in recent years. The growing computational capabilities of hardware systems have allowed researchers to make significant progress, training powerful agents from high-dimensional observations like images (Mnih et al., 2013) or videos (Hafner et al., 2020) using deep neural networks (LeCun et al., 2015) as function approximations. Following the rapid adoption of Convolutional Neural Networks (CNNs) (LeCun et al., 1989) in the field of Computer Vision for their efficient pattern recognition ability, neural networks were applied to visual reinforcement learning problems and achieved human to superhuman performance in challenging and visually complex domains like Atari games (Mnih et al., 2015; Hessel et al., 2018), the game of Go (Silver et al., 2018; Schrittwieser et al., 2020), StarCraft II (Vinyals et al., 2019) and more recently, Minecraft (Baker et al., 2022; Hafner et al., 2023).
+
+Following the success of neural networks in solving reinforcement learning problems, model-based approaches learning world models using gradient backpropagation were proposed to reduce the amount of necessary interaction with the environment to achieve strong re-
+
+![Figure 1: Two bar charts comparing Mean and Median Human Normalized Scores on the Atari 100k benchmark for various RL methods. The top chart shows Mean scores (0-200%) and the bottom chart shows Median scores (0-80%). TWISTER (ours) consistently outperforms other methods in both metrics.](1066b22ea190b81c91c3441ea7618236_img.jpg)
+
+**Mean Human Normalized Score (Atari 100k)**
+
+| Method | Mean Score (%) |
+|-|-|
+| dreamerv3 (ICLR 2020) | 33% |
+| TWM (ICLR 2023) | 96% |
+| IRIS (ICLR 2023) | 105% |
+| dreamerv3 (ICLR 2023) | 112% |
+| STORM (NeurIPS 2023) | 127% |
+| $\Delta$ -IRIS (ICLR 2024) | 139% |
+| TWISTER (ours) | 162% |
+
+**Median Human Normalized Score (Atari 100k)**
+
+| Method | Median Score (%) |
+|-|-|
+| dreamerv3 (ICLR 2020) | 13% |
+| TWM (ICLR 2023) | 51% |
+| IRIS (ICLR 2023) | 29% |
+| dreamerv3 (ICLR 2023) | 49% |
+| STORM (NeurIPS 2023) | 58% |
+| $\Delta$ -IRIS (ICLR 2024) | 53% |
+| TWISTER (ours) | 77% |
+
+Figure 1: Two bar charts comparing Mean and Median Human Normalized Scores on the Atari 100k benchmark for various RL methods. The top chart shows Mean scores (0-200%) and the bottom chart shows Median scores (0-80%). TWISTER (ours) consistently outperforms other methods in both metrics.
+
+Figure 1: Human-normalized mean and median scores of recently published model-based methods on the Atari 100k benchmark. TWISTER outperforms other model-based approaches. TWM, IRIS, STORM and  $\Delta$ -IRIS employ a Transformer-based world model while DreamerV3 uses a RNN-based model.
+
+{1}------------------------------------------------
+
+sults (Kaiser et al., 2020; Hafner et al., 2020; 2021; 2023; Schrittwieser et al., 2020). World models (Sutton, 1991; Ha & Schmidhuber, 2018) summarize an agent’s experience into a predictive model that can be used in place of the real environment to learn complex behaviors. Having access to a model of the environment enables the agent to simulate multiple plausible trajectories in parallel, improving generalization, sample efficiency and decision-making via planning.
+
+Design choices for the world model have tended toward Recurrent Neural Networks (RNNs) (Hafner et al., 2019) for their ability to model temporal relationships effectively. Following the success of the Dreamer algorithm (Hafner et al., 2020) and the rapid adoption of the Transformer architecture (Vaswani et al., 2017) for its superior training efficiency and favorable scaling properties compared to RNNs, research works have proposed replacing the one-layer recurrent-based world model of Dreamer with a Transformer-based world model using masked self-attention (Chen et al., 2022; Micheli et al., 2023; Robine et al., 2023). However, despite the improved training efficiency of these methods, their impact on performance remains limited compared to the Dreamer algorithm, struggling to learn competitive Transformer-based world models. Zhang et al. (2024) suggested that these findings may be attributed to the subtle differences between consecutive video frames. The task of predicting the next video frame in latent space may not require a complex model in contrast to other fields like Neural Language Modeling (Kaplan et al., 2020) where a deep understanding of the past context is essential to accurately predict the next tokens. As shown in Figure 2, the cosine similarity between adjacent latent states of the world model is very high, making it relatively straightforward for the world model to predict the next state compared to more distant states. These findings motivate our work to complexify the world model objective by extending predictions to longer time horizons in order to learn higher quality feature representations and improve the agent performance.
+
+![Figure 2: A line graph showing Cosine Similarities between TWISTER latent state z_t and future states z_{t+k} aggregated over all 26 games of the Atari 100k benchmark. The x-axis is 'Num steps in future (k)' ranging from 2 to 20. The y-axis is 'Cos Sim(z_t, z_{t+k})' ranging from 0.2 to 0.7. Multiple colored lines represent different seeds, all starting near 0.7 at k=2 and gradually decreasing to around 0.4 at k=20. A blue line represents the average similarity, which follows a similar downward trend.](505116873ad67b610dfceb37016d04a3_img.jpg)
+
+Figure 2: A line graph showing Cosine Similarities between TWISTER latent state z\_t and future states z\_{t+k} aggregated over all 26 games of the Atari 100k benchmark. The x-axis is 'Num steps in future (k)' ranging from 2 to 20. The y-axis is 'Cos Sim(z\_t, z\_{t+k})' ranging from 0.2 to 0.7. Multiple colored lines represent different seeds, all starting near 0.7 at k=2 and gradually decreasing to around 0.4 at k=20. A blue line represents the average similarity, which follows a similar downward trend.
+
+Figure 2: Cosine Similarities between TWISTER latent state  $z_t$  and future states  $z_{t+k}$  aggregated over all 26 games of the Atari 100k benchmark. We show average similarities over 5 seeds.
+
+In this work, we show that the next latent state prediction objective adopted in previous approaches is insufficient to fully exploit the representation capabilities of Transformers. We introduce TWISTER, a Transformer model-based reinforcement learning algorithm using action-conditioned Contrastive Predictive Coding (AC-CPC) to learn high-level temporal feature representations and improve the agent performance. CPC (Oord et al., 2018) was initially applied to speech, image, and text domains as a pretraining pretext task. It also showed promising results on DeepMind Lab tasks (Beattie et al., 2016) being used as an auxiliary loss for the A3C agent (Mnih et al., 2016). Motivated by these findings, we apply the CPC objective to model-based reinforcement learning by conditioning CPC predictions on the sequence of future actions. This approach enables the world model to accurately predict the feature representations of future time steps using contrastive learning. As shown in Figure 1, TWISTER sets a new record on the commonly used Atari 100k benchmark (Kaiser et al., 2020) among state-of-the-art methods that do not employ look-ahead search, achieving a human-normalized mean and median score of 162% and 77%, respectively.
+
+## 2 RELATED WORKS
+
+### 2.1 MODEL-BASED REINFORCEMENT LEARNING
+
+Model-based reinforcement learning approaches use a model of the environment to simulate agent trajectories, improving generalization, sample efficiency, and decision-making via planning. Following the success of deep neural networks for learning function approximations, researchers proposed to learn world models using gradient backpropagation. While initial works concentrated on simple environments like proprioceptive tasks (Silver et al., 2017; Henaff et al., 2017; Wang et al., 2019; Wang & Ba, 2020) using low-dimensional observations, more recent works focus on learning world models from high-dimensional observations like images (Kaiser et al., 2020; Hafner et al., 2019).
+
+One of the earliest model-based algorithms applied to image data is SimPLE (Kaiser et al., 2020), which proposed to learn a world model for Atari games in pixel space using a convolutional autoen-
+
+{2}------------------------------------------------
+
+coder. The world model learns to predict the next frame and environment reward given previous observation frames and selected action. It is then used to train a Proximal Policy Optimization (PPO) agent (Schulman et al., 2017) from reconstructed images and predicted rewards. Concurrently, PlaNet (Hafner et al., 2019) introduced a Recurrent State-Space Model (RSSM) using a Gated Recurrent Unit (GRU) (Cho et al., 2014) to learn a world model in latent space, planning using model predictive control. PlaNet learns a convolutional variational autoencoder (VAE) (Kingma & Welling, 2013) with a pixel reconstruction loss to encode observation into stochastic state representations. The RSSM learns to predict the next stochastic states and environment rewards given previous stochastic and deterministic recurrent states. Following the success of PlaNet on DeepMind Visual Control tasks (Tassa et al., 2018), Dreamer (Hafner et al., 2020) improved the algorithm by learning an actor and a value network from the world model representations. DreamerV2 (Hafner et al., 2021) applied the algorithm to Atari games, utilizing categorical latent states with straight-through gradients (Bengio et al., 2013) in the world model to improve performance, instead of Gaussian latents with reparameterized gradients (Kingma & Welling, 2013). DreamerV3 (Hafner et al., 2023) mastered diverse domains using the same hyper-parameters with a set of architectural changes to stabilize learning across tasks. The agent uses symlog predictions for the reward and value function to address the scale variance across domains. The networks also employ layer normalization (Ba et al., 2016) to improve robustness and performance while scaling to larger model sizes. It stabilizes policy learning by normalizing the returns and value function using an Exponential Moving Average (EMA) of the returns percentiles. With these modifications, DreamerV3 outperformed specialized model-free and model-based algorithms in a wide range of benchmarks.
+
+In parallel to the Dreamer line of work, Schrittwieser et al. (2020) proposed MuZero, a model-based algorithm combining Monte-Carlo Tree Search (MCTS) (Coulom, 2006) with a powerful world model to achieve superhuman performance in precision planning tasks such as Chess, Shogi and Go. The model is learned by being unrolled recurrently for K steps and predicting environment quantities relevant to planning. The MCTS algorithm uses the learned model to simulate environment trajectories and output an action visit distribution over the root node. This potentially better policy compared to the neural network one is used to train the policy network. More recently, Ye et al. (2021) proposed EfficientZero, a sample efficient version of the MuZero algorithm using self-supervised learning to learn a temporally consistent environment model and achieve strong performance on Atari games.
+
+### 2.2 TRANSFORMER-BASED WORLD MODELS
+
+Recent works have proposed replacing RNN-based world models by Transformer-based architectures using self-attention to process past context. TransDreamer (Chen et al., 2022) replaced DreamerV3’s RSSM by a Transformer State-Space Model (TSSM) using masked self-attention to imagine future trajectories. The agent was evaluated on Hidden Order Discovery tasks requiring long-term memory and reasoning. They also experimented on a few Visual DeepMind Control (Tassa et al., 2018) and Atari (Bellemare et al., 2013) tasks, showing comparable performance to DreamerV2. TWM (Robine et al., 2023) (Transformer-based World Model) proposed a similar approach, encoding states, actions and rewards as distinct successive input tokens for the autoregressive Transformer. The decoder also reconstructed input images without the world model hidden states, discarding past context temporal information for image reconstruction. More recently, STORM (Zhang et al., 2024) (Stochastic Transformer-based wOrld Model) achieved results comparable to DreamerV3 with better training efficiency on the Atari 100k benchmark. STORM proposed to fuse state and action into
+
+Table 1: Comparison between TWISTER and other recent model-based approaches learning a world model in latent space. *Tokens* refers to tokens used by the autoregressive world model. *Latent* ( $z_t$ ) is image representation while *hidden* ( $h_t$ ) is world model hidden state carrying historical information.
+
+| Attributes | TWM | IRIS | DreamerV3 | STORM | $\Delta$ -IRIS | TWISTER (ours) |
+|-|-|-|-|-|-|-|
+| World Model | Transformer | Transformer | GRU | Transformer | Transformer | Transformer |
+| Prediction Horizon | Next state | Next state | Next state | Next state | Next state | $K = 10$ steps |
+| Tokens | Latent, action, reward | Latent ( $4 \times 4$ ) | Latent | Latent | Latent ( $2 \times 2$ ) | Latent |
+| Latent Representation | Categorical-VAE | VQ-VAE | Categorical-VAE | Categorical-VAE | VQ-VAE | Categorical-VAE |
+| Decoder Inputs | Latent | Latent | Latent, hidden | Latent | Latent, action, image | Latent |
+| Agent State ( $s_t$ ) | Latent | Image | Latent, hidden | Latent, hidden | Image | Latent, hidden |
+
+{3}------------------------------------------------
+
+a single token for the transformer network compared to TWM which uses distinct tokens. This led to better training efficiency with state-of-the-art performance.
+
+Another line of work focused on designing Transformer-based world model to train agents from reconstructed trajectories in pixel space. Analogously to SimPLe, the agent’s policy and value functions are trained from image reconstruction instead of world model hidden state representations. This requires learning auxiliary encoder networks for the policy and value functions. Contrary to Dreamer-inspired works that learn agents from world model representations, these approaches also require accurate image reconstruction to train agents effectively. IRIS (Micheli et al., 2023) first proposed a world model composed of a VQ-VAE (Van Den Oord et al., 2017) to convert input images into discrete tokens and an autoregressive transformer to predict future tokens. IRIS was evaluated on the Atari 100k benchmark (Kaiser et al., 2020) showing promising performance in a low data regime. More recently, Micheli et al. (2024) proposed  $\Delta$ -IRIS, encoding stochastic deltas between time steps using previous action and image as conditions for the encoder and decoder. This increased VQ-VAE compression ratio and image reconstruction capabilities, achieving state-of-the-art performance on the Crafter (Hafner, 2021) benchmark and better results on Atari 100k.
+
+Table 1 compares the architectural details of recent model-based approaches learning a world model in latent space with our proposed method. Following preceding Transformer-based approaches, we reconstruct image observation from the encoder stochastic state  $z_t$  instead of  $s_t$ , which prevents the world model from using temporal information to facilitate reconstruction. The Transformer network uses relative positional encodings (Dai et al., 2019), which simplifies the use of the world model during imagination and evaluation. Absolute positional encodings require the Transformer network to reprocess past latent states with adjusted positional encodings when the current position gets larger than the ones seen during training. We also use the agent state  $s_t$  as input for predictor networks during the world model training phase to make actor-critic learning more straightforward.
+
+### 2.3 CONTRASTIVE PREDICTIVE CODING
+
+Contrastive Predictive Coding (CPC) was introduced by Oord et al. (2018) as a representation learning method based on contrastive learning for autoregressive models. CPC encodes a temporal signal into hidden representations and trains an autoregressive model to maximize the mutual information between the autoregressive model output features and future encoded representations using an InfoNCE loss based on Noise-Contrastive Estimation (Gutmann & Hyvärinen, 2010). CPC was able to learn useful representations achieving strong performance on four distinct domains: speech phoneme classification, image classification, text classification tasks, and reinforcement learning with DeepMind Lab 3D environments (Beattie et al., 2016). While CPC was applied to speech, image, and text domains as a pretraining pretext task, it showed promising results on DeepMind Lab tasks being used as an auxiliary loss for the A3C (Mnih et al., 2016) agent. In this work, we propose to apply CPC to model-based reinforcement learning. We introduce action-conditioned CPC (AC-CPC) that conditions CPC predictions on the sequence of future actions to help the world model to make more accurate predictions and learn higher quality representations. We describe our use of action-conditioned CPC in more detail in section 3.1.
+
+## 3 METHOD
+
+We introduce TWISTER, a Transformer model-based reinforcement learning algorithm using action-conditioned Contrastive Predictive Coding to learn high-level feature representations and improve the agent performance. TWISTER comprises three main neural networks: a world model, an actor network and a critic network. The world model learns to transform image observations into discrete stochastic states and simulate the environment to generate imaginary trajectories. The actor and critic networks are trained in latent space with imaginary trajectories generated from the world model to select actions maximizing the expected sum of future rewards. The three networks are trained concurrently using a replay buffer sampling sequences of past experiences collected during training. This section describes the architecture and optimization process of our proposed Transformer-based world model with contrastive representations. Analogously to previous approaches, we also detail the learning process of the critic and actor networks taking place in latent space. Figure 3 shows an overview of our Transformer-based world model trained with AC-CPC. It also illustrates the imagination process undertaken during the agent behavior learning phase.
+
+{4}------------------------------------------------
+
+![Figure 3: Transformer-based world model with contrastive representations. (a) World Model Learning: Shows a sequence of image observations (e.g., Atari games) being processed by an Encoder Network to produce stochastic states z_t. These states are then processed by a Masked Attention Transformer Network (MATN) to predict next episode continuations, rewards, and AC-CPC features. (b) Agent Behavior Learning: Shows the MATN being used to predict next episode continuations, rewards, and AC-CPC features from a sequence of previous states and actions.](690fce4fb5c9cbb8beb560cb2a3fcbeb_img.jpg)
+
+Figure 3: Transformer-based world model with contrastive representations. (a) World Model Learning: Shows a sequence of image observations (e.g., Atari games) being processed by an Encoder Network to produce stochastic states z\_t. These states are then processed by a Masked Attention Transformer Network (MATN) to predict next episode continuations, rewards, and AC-CPC features. (b) Agent Behavior Learning: Shows the MATN being used to predict next episode continuations, rewards, and AC-CPC features from a sequence of previous states and actions.
+
+Figure 3: Transformer-based world model with contrastive representations. The world model learns temporal feature representations by maximizing the mutual information between model states  $s_t$  and future stochastic states  $z_{t:t+k}^c$  obtained from augmented views of image observations. The encoder network converts image observations into stochastic states  $z_t$ , from which a decoder network learns to reconstruct images while the masked attention Transformer network predicts next episode continuations, rewards and stochastic states conditioned on selected actions.
+
+### 3.1 WORLD MODEL LEARNING
+
+Consistent with prior works (Hafner et al., 2023; Robine et al., 2023; Zhang et al., 2024), we learn a world model in latent space by encoding input image observations  $o_t$  into hidden representations using a convolutional VAE with categorical latents. The hidden representations are linearly projected to categorical distribution logits comprising 32 categories, each with 32 classes, from which discrete stochastic states  $z_t$  are sampled. The world model is implemented as a Transformer State-Space Model (TSSM) (Chen et al., 2022) using masked self-attention to predict next stochastic states  $\hat{z}_{t+1}$  given previous states  $z_{1:t}$  and actions  $a_{1:t}$ . The Transformer network outputs hidden states  $h_t$  that are concatenated with stochastic states  $z_t$  to form the model states  $s_t = \{h_t, z_t\}$ . The world model predicts environment reward  $\hat{r}_t$ , episode continuation  $\hat{c}_t$  and AC-CPC features  $\hat{e}_t^k$  using simple Multi Layer Perceptron (MLP) networks. The trainable world model components are the following:
+
+$$\begin{aligned}
+ \text{TSSM} \left\{ \begin{array}{ll} \text{Encoder Network:} & z_t \sim q_\phi(z_t | o_t) \\ \text{Transformer Network:} & h_t = f_\phi(z_{1:t-1}, a_{1:t-1}) \\ \text{Dynamics Predictor:} & \hat{z}_t \sim p_\phi(\hat{z}_t | h_t) \\ \text{Decoder Network:} & \hat{o}_t \sim p_\phi(\hat{o}_t | z_t) \\ \text{Reward Predictor:} & \hat{r}_t \sim p_\phi(\hat{r}_t | s_t) \\ \text{Continue Predictor:} & \hat{c}_t \sim p_\phi(\hat{c}_t | s_t) \end{array} \right. \\
+ \text{AC-CPC} \left\{ \begin{array}{ll} \text{Representation Network:} & e_t^k = q_\phi^k(z_{t:t+k}^c) \\ \text{AC-CPC Predictor:} & \hat{e}_t^k = p_\phi^k(s_t, a_{t:t+k}) \end{array} \right.
+ \end{aligned} \tag{1}$$
+
+**Transformer State-Space Model** We train an autoregressive Transformer network using masked self-attention with relative positional encodings (Dai et al., 2019). During both training, exploration and evaluation, the hidden state sequence computed for the previous segment or state is cached to be reused as an extended context when the model processes the next state. This encoding and caching mechanism allows the world model to imagine future trajectories from any state, eliminating the need to reprocess latent states with adjusted positional encodings.
+
+**World model losses** Given an input batch containing  $B$  sequences of  $T$  image observations  $o_{1:T}$ , actions  $a_{1:T}$ , rewards  $r_{1:T}$ , and episode continuation flags  $c_{1:T}$ , the world model parameters ( $\phi$ ) are optimized to minimize the following loss function:
+
+$$L(\phi) = \frac{1}{BT} \sum_{b=1}^B \sum_{t=1}^T \left[ L_{\text{rew}}(\phi) + L_{\text{con}}(\phi) + L_{\text{rec}}(\phi) + L_{\text{dyn}}(\phi) + L_{\text{cpc}}(\phi) \right] \tag{2}$$
+
+{5}------------------------------------------------
+
+![Figure 4: AC-CPC predictions made by the world model. The figure is a grid with three rows: 'Ball' (top), 'Basketball' (middle), and 'Action' (bottom). The columns are labeled 'Image Target' and 'Most Similar Samples' (first two columns) and 'Least Similar Samples' (last three columns). Each cell contains a small image of a basketball game. The 'Action' row shows a heatmap of predicted future actions, with a color scale from blue (low probability) to red (high probability).](c54b3ca7603d65d4589151bc3a49d054_img.jpg)
+
+Figure 4: AC-CPC predictions made by the world model. The figure is a grid with three rows: 'Ball' (top), 'Basketball' (middle), and 'Action' (bottom). The columns are labeled 'Image Target' and 'Most Similar Samples' (first two columns) and 'Least Similar Samples' (last three columns). Each cell contains a small image of a basketball game. The 'Action' row shows a heatmap of predicted future actions, with a color scale from blue (low probability) to red (high probability).
+
+Figure 4: AC-CPC predictions made by the world model. We show the target positive sample without augmentation and the predicted most/least similar samples among the batch of augmented image views. We observe that TWISTER learns to identify most/least similar samples to the future target state using observation details such as the ball position, game score or agent movements. AC-CPC necessitates the agent to focus on observation details to accurately predict future samples, thereby preventing common failure cases where small objects are ignored by the reconstruction loss.
+
+$L_{rew}$  and  $L_{com}$  train the world model to predict environment rewards and episode continuation flags, which are used to compute the returns of imagined trajectories during the behavior learning phase. We adopt the symlog cross-entropy loss from DreamerV3 (Hafner et al., 2023), which scales and transforms rewards into twohot encoded targets to ensure robust learning across games with different reward magnitudes. The reconstruction loss  $L_{rec}$  trains the categorical VAE to learn stochastic representations  $z_t$  for the world model by reconstructing input visual observations  $o_t$ :
+
+$$L_{rew}(\phi) = \text{SymlogCrossEnt}(\hat{r}_t, r_t) \quad (3a)$$
+
+$$L_{com}(\phi) = \text{BinaryCrossEnt}(\hat{c}_t, c_t) \quad (3b)$$
+
+$$L_{rec}(\phi) = \|\hat{o}_t - o_t\|_2^2 \quad (3c)$$
+
+The world model dynamics loss  $L_{dyn}$  trains the dynamics predictor network to predict the next stochastic states representations from transformer hidden states by minimizing the Kullback–Leibler (KL) divergence between the predictor output distribution  $p_\phi(\hat{z}_t | h_t)$  and the next encoder representation  $q_\phi(z_t | o_t)$ . We also add a regularization term to avoid spikes in the KL loss and stabilize learning by training the encoder representations to become more predictable. Both loss terms use the stop gradient operator  $sg(\cdot)$  to prevent the gradients of targets from being backpropagated and are scaled with loss weights  $\beta_{dyn} = 0.5$  and  $\beta_{reg} = 0.1$ , respectively:
+
+$$L_{dyn}(\phi) = \beta_{dyn} \max(1, \text{KL}[ sg(q_\phi(z_t | o_t)) \parallel p_\phi(\hat{z}_t | h_t) ]) \\ + \beta_{reg} \max(1, \text{KL}[ q_\phi(z_t | o_t) \parallel sg(p_\phi(\hat{z}_t | h_t)) ]) \quad (4)$$
+
+The Transformer network learns feature representations using action-conditioned Contrastive Predictive Coding. The representations are learned by maximizing the mutual information between model states  $s_t$  and future stochastic states  $z_{t:t+K}^\prime$  obtained from augmented views of image observations. We adopt a simple strategy to generate negative samples: Given the sequence batch of augmented stochastic states  $Z^\prime$  containing one positive sample, we treat the other  $B \times T - 1$  samples as negatives. The world model learns to distinguish positive samples from negatives using InfoNCE:
+
+$$L_{cpc}(\phi) = -\frac{1}{K} \sum_{k=0}^{K-1} \log \frac{\exp(\text{sim}(z_{t+k}^\prime, s_t))}{\sum_{z_j^\prime \in Z^\prime} \exp(\text{sim}(z_j^\prime, s_t))} \quad (5)$$
+
+The world model learns to predict  $K = 10$  future stochastic states among the batch of augmented samples. We compute similarities as dot products:  $\text{sim}(z_j^\prime, s_t) = q_\phi^k(z_j^\prime)^T p_\phi^k(s_t, a_{t:t+k})$ , learning two MLP networks  $q_\phi^k$  and  $p_\phi^k$  for each step  $k$ . Contrary to the original CPC paper, which experiments with continuous feature states, we use discrete latent states for the world model. This requires learning a representation network  $q_\phi^k$  to project discretized stochastic states  $z_j^\prime$  to contrastive feature representations  $e_t^k$ . The AC-CPC predictor  $p_\phi^k$  uses the concatenated sequence of future actions  $a_{t:t+k}$  as condition to reduce uncertainty and learn quality representations.
+
+### 3.2 AGENT BEHAVIOR LEARNING
+
+The agent critic and actor networks are trained with imaginary trajectories generated from the world model. In order to compare TWISTER with previous approaches that train agents using world
+
+{6}------------------------------------------------
+
+model representations, we adopt the agent behavior learning settings from DreamerV3 (Hafner et al., 2023). Learning takes place entirely in latent space, which allows the agent to process large batch sizes and increase generalization. We flatten the model states of the sampled sequences along the batch and time dimensions to generate  $B^{img} = B \times T$  sample trajectories using the world model. The self-attention keys and values features computed during the world model training phase are cached to be reused during the agent behavior learning phase and preserve past context. As shown in Figure 3b, the world model imagines  $H = 15$  steps into the future using the Transformer network and the dynamics network head, selecting actions by sampling from the actor network categorical distribution. Analogously to world model predictor networks, the actor and critic networks are designed as simple MLPs with parameter vectors ( $\theta$ ) and ( $\psi$ ), respectively.
+
+$$\begin{aligned} \text{Actor Network:} \quad & a_t \sim \pi_\theta(a_t | s_t) \\ \text{Critic Network:} \quad & v_t \sim V_\psi(v_t | s_t) \end{aligned} \quad (6)$$
+
+**Critic Learning** Following DreamerV3, the critic network learns to minimize the symlog cross-entropy loss with discretized  $\lambda$ -returns obtained from imagined trajectories with rewards and episode continuation flags predicted by the world model:
+
+$$R_t^\lambda = \hat{r}_{t+1} + \gamma \hat{c}_{t+1} \left( (1 - \lambda) V_\psi(s_{t+1}) + \lambda R_{t+1}^\lambda \right) \quad R_H^\lambda = V_\psi(s_{H+1}) \quad (7)$$
+
+The critic does not use a target network but relies on its own predictions for estimating rewards beyond the prediction horizon. This requires stabilizing the critic by adding a regularizing term toward the outputs of its own EMA network  $V_{\psi'}$ . Equation 8 defines the critic network loss:
+
+$$L_{critic}(\psi) = \frac{1}{BH} \sum_{b=1}^B \sum_{t=1}^H \left[ \underbrace{\text{SymlogCrossEnt}(v_t, R_t^\lambda)}_{\text{discrete returns regression}} + \underbrace{\text{SymlogCrossEnt}(v_t, V_{\psi'}(s_t))}_{\text{critic EMA regularizer}} \right] \quad (8)$$
+
+**Actor Learning** The actor network learns to select actions that maximize the predicted returns using Reinforce (Williams, 1992) while maximizing the policy entropy to ensure sufficient exploration during both data collection and imagination. The actor network loss is defined as follows:
+
+$$L_{actor}(\theta) = \frac{1}{BH} \sum_{b=1}^B \sum_{t=1}^H \left[ \underbrace{-sg(A_t^\lambda) \log \pi_\theta(a_t | s_t)}_{\text{reinforce}} - \underbrace{\eta H(\pi_\theta(a_t | s_t))}_{\text{entropy regularizer}} \right] \quad (9)$$
+
+Where  $A_t^\lambda = (\hat{R}_t^\lambda - V_\psi(s_t)) / \max(1, S)$  defines advantages computed using normalized returns. The returns are scaled using exponentially moving average statistics of their 5<sup>th</sup> and 95<sup>th</sup> batch percentiles to ensure stable learning across all Atari games:
+
+$$S = \text{EMA}(\text{Per}(R_t^\lambda, 95) - \text{Per}(R_t^\lambda, 5), \text{momentum} = 0.99) \quad (10)$$
+
+## 4 EXPERIMENTS
+
+In this section, we describe our experiments on the commonly used Atari 100k benchmark. We compare TWISTER with SimPLE, DreamerV3 and recent Transformer model-based approaches in Table 2. We also perform several ablation studies on the principal components of TWISTER.
+
+### 4.1 ATARI 100K BENCHMARK
+
+The Atari 100k benchmark was proposed in Kaiser et al. (2020) to evaluate reinforcement learning agents on Atari games in low data regime. The benchmark includes 26 Atari games with a budget of 400k environment frames, amounting to 100k interactions between the agent and the environment using the default action repeat setting. This amount of environment steps corresponds to about two hours (1.85 hours) of real-time play, representing a similar amount of time that a human player would need to achieve reasonably good performance. The current state-of-the-art is held by EfficientZero V2 (Wang et al., 2024), which uses Monte-Carlo Tree Search to select the best action at every time step. Another recent notable work is BBF (Schwarzer et al., 2023), a model-free agent using learning techniques that are orthogonal to our work such as periodic network resets and hyper-parameters annealing to improve performance. In this work, to ensure fair comparison and demonstrate the effectiveness of AC-CPC for learning world models, we compare our method with model-based approaches that do not utilize look-ahead search techniques. Combining these additional components with TWISTER would nevertheless be an interesting research direction for future works.
+
+{7}------------------------------------------------
+
+### 4.2 RESULTS
+
+Table 2: Agent scores and human-normalized metrics on the 26 games of the Atari 100k benchmark. We show average scores over 5 seeds. Bold numbers indicate best performing method for each game.
+
+| Game | Random | Human | SimPLe | TWM | IRIS | DreamerV3 | STORM | $\Delta$ -IRIS | TWISTER (ours) |
+|-|-|-|-|-|-|-|-|-|-|
+| Alien | 228 | 7128 | 617 | 675 | 420 | 959 | <b>984</b> | 391 | 970 |
+| Amidar | 6 | 1720 | 74 | 122 | 143 | 139 | <b>205</b> | 64 | 184 |
+| Assault | 222 | 742 | 527 | 683 | <b>1524</b> | 706 | 801 | 1123 | 721 |
+| Asterix | 210 | 8503 | 1128 | 1116 | 854 | 932 | 1028 | <b>2492</b> | 1306 |
+| Bank Heist | 14 | 753 | 34 | 467 | 53 | 649 | 641 | <b>1148</b> | 942 |
+| Battle Zone | 2360 | 37188 | 4031 | 5068 | 13074 | 12250 | <b>13540</b> | 11825 | 9920 |
+| Boxing | 0 | 12 | 8 | 78 | 70 | 78 | 80 | 70 | <b>88</b> |
+| Breakout | 2 | 30 | 16 | 20 | 84 | 31 | 16 | <b>302</b> | 35 |
+| Chopper Command | 811 | 7388 | 979 | 1697 | 1565 | 420 | <b>1888</b> | 1183 | 910 |
+| Crazy Climber | 10780 | 35829 | 62584 | 71820 | 59324 | <b>97190</b> | 66776 | 57854 | 81880 |
+| Demon Attack | 152 | 1971 | 208 | 350 | <b>2034</b> | 303 | 165 | 533 | 289 |
+| Freeway | 0 | 30 | 17 | 24 | 31 | 0 | <b>34</b> | 31 | 32 |
+| Frostbite | 65 | 4335 | 237 | <b>1476</b> | 259 | 909 | 1316 | 279 | 305 |
+| Gopher | 258 | 2412 | 597 | 1675 | 2236 | 3730 | 8240 | 6445 | <b>22234</b> |
+| Hero | 1027 | 30826 | 2657 | 7254 | 7037 | <b>11161</b> | 11044 | 7049 | 8773 |
+| James Bond | 29 | 303 | 100 | 362 | 463 | 445 | 509 | 309 | <b>573</b> |
+| Kangaroo | 52 | 3035 | 51 | 1240 | 838 | 4098 | 4208 | 2269 | <b>6016</b> |
+| Krull | 1598 | 2666 | 2205 | 6349 | 6616 | 7782 | 8413 | 5978 | <b>8839</b> |
+| Kung Fu Master | 258 | 22736 | 14862 | 24555 | 21760 | 21420 | <b>26182</b> | 21534 | 23442 |
+| Ms Pacman | 307 | 6952 | 1480 | 1588 | 999 | 1327 | <b>2673</b> | 1067 | 2206 |
+| Pong | -21 | 15 | 13 | 19 | 15 | 18 | 11 | <b>20</b> | <b>20</b> |
+| Private Eye | 25 | 69571 | 35 | 87 | 100 | 882 | <b>7781</b> | 103 | 1608 |
+| Qbert | 164 | 13455 | 1289 | 3331 | 746 | 3405 | <b>4522</b> | 1444 | 3197 |
+| Road Runner | 12 | 7845 | 5641 | 9107 | 9615 | 15565 | 17564 | 10414 | <b>17832</b> |
+| Seaquest | 68 | 42055 | 683 | <b>774</b> | 661 | 618 | 525 | 827 | 532 |
+| Up N Down | 533 | 11693 | 3350 | <b>15982</b> | 3546 | 7600 | 7985 | 4072 | 7068 |
+| # Superhuman | 0 | N/A | 1 | 8 | 10 | 9 | 10 | 11 | <b>12</b> |
+| Normed Mean (%) | 0 | 100 | 33 | 96 | 105 | 112 | 127 | 139 | <b>162</b> |
+| Normed Median (%) | 0 | 100 | 13 | 51 | 29 | 49 | 58 | 53 | <b>77</b> |
+
+Table 2 compares TWISTER with SimPLe (Kaiser et al., 2020), DreamerV3 (Hafner et al., 2023) and recent Transformer model-based approaches (Robine et al., 2023; Micheli et al., 2023; Zhang et al., 2024; Micheli et al., 2024) on the Atari 100k benchmark. Following preceding works, we use human-normalized metrics and compare the mean and median returns across all 26 games. The human-normalized scores are computed for each game using the scores achieved by a human player and the scores obtained by a random policy:  $normed\ score = \frac{agent\ score - random\ score}{human\ score - random\ score}$ . We also show stratified bootstrap confidence intervals of the human-normalized mean and median in Figure 5. Performance curves corresponding to individual games can be found in the appendix 9.
+
+TWISTER achieves a human-normalized mean score of 162% and a median of 77% on the Atari 100k benchmark, setting a new record among state-of-the-art model-based methods that do not employ look-ahead search techniques. Analogously to STORM, we find that TWISTER demonstrates superior performance in games where key objects related to rewards are numerous, such as *Amidar*, *Bank Heist*, *Gopher* and *Ms Pacman*. Furthermore, we observe that TWISTER benefits from increased performance in games with small moving objects like *Breakout*, *Pong* and *Asterix*. We suppose that the AC-CPC objective requires the agent to focus on the ball’s position in these games to accurately predict future samples, thereby preventing failure cases where small objects are ignored by the reconstruction loss. Alternatively, IRIS and  $\Delta$ -IRIS solve this issue by learning agents from high-quality reconstructed images. They encode image observations into spatial latent spaces through a VQ-VAE structure, which allows these approaches to better capture details and achieve lower reconstruction errors with good results for these games. We show CPC predictions made by the world model for diverse Atari games in the appendix A.4.
+
+![Figure 5: Mean and median scores, computed with stratified bootstrap confidence intervals (Agarwal et al., 2021). The figure shows two bar charts. The left chart displays 'Mean' scores on a scale from 0.4 to 1.6. The right chart displays 'Median' scores on a scale from 0.25 to 0.75. Both charts compare TWISTER (purple) with other methods: Δ-IRIS (grey), STORM (light blue), DreamerV3 (pink), IRIS (green), TWM (orange), and SimPLe (blue). TWISTER consistently shows higher mean and median scores across all methods.](27b22513fc27a0ff5f230b062ad3112f_img.jpg)
+
+Figure 5: Mean and median scores, computed with stratified bootstrap confidence intervals (Agarwal et al., 2021). The figure shows two bar charts. The left chart displays 'Mean' scores on a scale from 0.4 to 1.6. The right chart displays 'Median' scores on a scale from 0.25 to 0.75. Both charts compare TWISTER (purple) with other methods: Δ-IRIS (grey), STORM (light blue), DreamerV3 (pink), IRIS (green), TWM (orange), and SimPLe (blue). TWISTER consistently shows higher mean and median scores across all methods.
+
+Figure 5: Mean and median scores, computed with stratified bootstrap confidence intervals (Agarwal et al., 2021). TWISTER achieves a normalized mean of 1.62 and a median of 0.77.
+
+{8}------------------------------------------------
+
+### 4.3 ABLATION STUDIES
+
+In order to study the impact of AC-CPC on TWISTER performance, we perform ablation studies on all 26 games of the Atari 100k benchmark, applying one modification at a time. We experiment with the number of CPC steps predicted by the world model. We show that data augmentation helps to complexify the AC-CPC objective and improve its effectiveness. We find that conditioning CPC predictions on the sequence of future actions leads to more accurate predictions and improves the quality of representations. We also study the effect of world model design on AC-CPC effectiveness. Table 3 shows the aggregated scores obtained for the main ablations after 400k environment steps.
+
+Table 3: Ablations of the AC-CPC loss, contrastive samples augmentation, conditioning on future actions and using DreamerV3’s RSSM. We perform one modification at a time and evaluate on the 26 Atari games. The detailed results obtained for individual games can be found in the appendix A.6.
+
+| Metrics | TWISTER | No AC-CPC | DreamerV3 World Model | No Action Conditioning | No Data Augmentation |
+|-|-|-|-|-|-|
+| Normed Mean (%) | <b>162</b> | 112 | 121 | 111 | 120 |
+| Normed Median (%) | <b>77</b> | 44 | 69 | 42 | 68 |
+
+**Number of Contrastive Steps** We experiment with several numbers of CPC steps, comparing human-normalized metrics over all 26 games of the Atari100k benchmark. Figure 6a shows that TWISTER achieves the best human-normalized mean score when predicting 10 steps into the future, corresponding to 0.67 seconds of game time. We find that AC-CPC has a significant effect on TWISTER performance up to a certain amount of steps. We observe an increase in human-normalized mean and median scores with the number of predicted CPC steps. However, a degradation of the results is noticed when predicting 15 steps into the future. The difference in median score indicates a decrease in performance for middle-scoring games.
+
+**World Model Architecture** We study the impact of world model design on AC-CPC effectiveness to learn feature representations. Figure 6b shows the effect of AC-CPC on performance when replacing the TSSM of TWISTER with DreamerV3’s RSSM (Hafner et al., 2023). While the two approaches achieve similar results without the AC-CPC objective, we find that AC-CPC has a significant effect on TWISTER, improving performance on most games. These findings can be attributed to the fact that Transformers are generally more effective than RNNs at learning feature representations due to several key architectural differences. The capacity of self-attention to model temporal relationships without recurrence makes the Transformer architecture highly effective at capturing context and learning hierarchical features. On the other hand, the recurrent nature of RNNs can lead to vanishing gradients and slower convergence, particularly with long sequences.
+
+![Figure 6: Ablations made on the Atari 100k benchmark. The figure consists of four subplots (a, b, c, d) each showing Mean and Median performance over 400k steps. (a) Number of Contrastive steps: compares 0, 1, 5, 10, and 15 steps. (b) World Model Architecture: compares TWISTER TSSM with and without AC-CPC against DreamerV3 RSSM with and without AC-CPC. (c) Action Conditioning: compares TWISTER with and without AC-CPC. (d) Data Augmentation: compares No Data Augmentation against Random Crop & Resize (TWISTER) and Random Shifts.](e8ff6e66c77a8e96203c9f8db8f0986f_img.jpg)
+
+Figure 6: Ablations made on the Atari 100k benchmark. The figure consists of four subplots (a, b, c, d) each showing Mean and Median performance over 400k steps. (a) Number of Contrastive steps: compares 0, 1, 5, 10, and 15 steps. (b) World Model Architecture: compares TWISTER TSSM with and without AC-CPC against DreamerV3 RSSM with and without AC-CPC. (c) Action Conditioning: compares TWISTER with and without AC-CPC. (d) Data Augmentation: compares No Data Augmentation against Random Crop & Resize (TWISTER) and Random Shifts.
+
+Figure 6: Ablations made on the Atari 100k benchmark. The results are averaged over 5 seeds. We study the effect of data augmentation, action conditioning and the number of predicted CPC steps on TWISTER performance. We also study the effect of world model design on AC-CPC effectiveness.
+
+{9}------------------------------------------------
+
+**Actions Conditioning** We find that conditioning the CPC prediction head on the sequence of future actions leads to more accurate predictions and higher quality representations. Figure 7 shows the aggregated CPC loss and prediction accuracy for training and validation sequences over all Atari games. We report the average number of times the similarity for the positive sample is higher than for the negative samples in the contrastive loss. Without knowing the sequence of future actions, the world model cannot predict future environment states accurately, which makes the task almost insolvable and counterproductive beyond a certain amount of CPC steps. We observe a decrease in accuracy compared to TWISTER when predicting multiple steps without knowing the sequence of future actions. Figure 6c shows the aggregated human-normalized scores over the 26 games when removing the condition of future actions for CPC predictions. We find that the CPC objective does not bring notable performance improvements when removing future actions conditioning.
+
+![Figure 7: Aggregated CPC loss and prediction accuracy for training and validation sequences over all Atari games. The figure consists of four subplots arranged in a 2x2 grid. The top row shows 'CPC loss' on the y-axis (ranging from 0.0 to 8.0) and training steps on the x-axis (0 to 400K). The bottom row shows 'CPC accuracy' on the y-axis (ranging from 0.0 to 1.0) and training steps on the x-axis (0 to 400K). The columns are labeled 'Training' and 'Validation', and the rows are labeled '1st step' and '10th step'. Each subplot compares two models: TWISTER (blue line) and 'No Action Cond' (orange line). In all cases, TWISTER achieves lower loss and higher accuracy than the 'No Action Cond' model.](7801d00a216dc4dc8a7d210dcb5fe3c5_img.jpg)
+
+Figure 7: Aggregated CPC loss and prediction accuracy for training and validation sequences over all Atari games. The figure consists of four subplots arranged in a 2x2 grid. The top row shows 'CPC loss' on the y-axis (ranging from 0.0 to 8.0) and training steps on the x-axis (0 to 400K). The bottom row shows 'CPC accuracy' on the y-axis (ranging from 0.0 to 1.0) and training steps on the x-axis (0 to 400K). The columns are labeled 'Training' and 'Validation', and the rows are labeled '1st step' and '10th step'. Each subplot compares two models: TWISTER (blue line) and 'No Action Cond' (orange line). In all cases, TWISTER achieves lower loss and higher accuracy than the 'No Action Cond' model.
+
+Figure 7: Aggregated CPC loss and prediction accuracy over all 26 games. We use a validation replay buffer of 100k samples to compare CPC loss on unseen trajectories. The trajectories are obtained from a collection of DreamerV3 and TWISTER agents pretrained with 5 seeds.
+
+**Effect of Data Augmentation** The effect of data augmentation on CPC performance was studied by Kharonitov et al. (2021). In their work, they propose to introduce data augmentation for CPC to learn higher quality speech representations, yielding better performances. In this work, we apply image augmentation to contrastive samples in order to complexify the AC-CPC objective and make the representation learning task more challenging. We apply the commonly used *random crop and resize* augmentation during training for its effectiveness in the area of image-based contrastive learning (Chen et al., 2020). The use of random crops requires the world model to identify several key elements in the observations in order to accurately predict positives samples. We also experiment with *random shifts* (Yarats et al., 2021), shifting the image up to 4 pixels in height and width but found it to have a lesser impact on the learning objective. Figure 6d shows the aggregated human-normalized scores for studied augmentation techniques. We find that *random crop and resize* helps the best to improve final performance. Not using image augmentations for negative and positive samples reduces the impact of AC-CPC on TWISTER performance, achieving lower mean and median scores. We show the impact of data augmentation on the AC-CPC objective complexity for different time horizons in Figure 8.
+
+![Figure 8: Effect of data augmentation on AC-CPC objective complexity. The figure consists of six subplots arranged in a 2x3 grid. The top row shows 'CPC loss' on the y-axis (ranging from 0.0 to 8.0) and training steps on the x-axis (0 to 400K). The bottom row shows 'CPC accuracy' on the y-axis (ranging from 0.0 to 1.0) and training steps on the x-axis (0 to 400K). The columns are labeled '1st step', '5th step', and '10th step'. Each subplot compares three models: 'Random Crop & Resize' (blue line), 'Random Shifts' (orange line), and 'No Data Augment' (red line). In all cases, 'Random Crop & Resize' achieves the lowest loss and highest accuracy, followed by 'Random Shifts', and then 'No Data Augment'.](8ee3b76dd49f31624d287885bc2c81ee_img.jpg)
+
+Figure 8: Effect of data augmentation on AC-CPC objective complexity. The figure consists of six subplots arranged in a 2x3 grid. The top row shows 'CPC loss' on the y-axis (ranging from 0.0 to 8.0) and training steps on the x-axis (0 to 400K). The bottom row shows 'CPC accuracy' on the y-axis (ranging from 0.0 to 1.0) and training steps on the x-axis (0 to 400K). The columns are labeled '1st step', '5th step', and '10th step'. Each subplot compares three models: 'Random Crop & Resize' (blue line), 'Random Shifts' (orange line), and 'No Data Augment' (red line). In all cases, 'Random Crop & Resize' achieves the lowest loss and highest accuracy, followed by 'Random Shifts', and then 'No Data Augment'.
+
+Figure 8: Effect of data augmentation on AC-CPC objective complexity. We aggregate CPC loss and prediction accuracy over all Atari games for different time horizons.
+
+## 5 CONCLUSION
+
+We propose TWISTER, a Transformer model-based reinforcement learning agent learning high-level temporal feature representations with action-conditioned Contrastive Predictive Coding. TWISTER achieves new state-of-the-art results on the Atari 100k benchmark among model-based approaches that do not employ look-ahead search with a human-normalized mean and median score of 162% and 77%, respectively. We study the impact of learning contrastive representations on Transformer-based world models and find that the AC-CPC objective significantly helps to improve the agent performance. We also show that data augmentation and future actions conditioning play an important role in the learning of representations to complexify the AC-CPC objective and help the model to make accurate future predictions. Following our early findings, we hope that this work will inspire researchers to further study the benefits of self-supervised learning techniques for model-based reinforcement learning.
+
+ Rest of paper (reference and Appendix) is removed.

@@ -1,0 +1,256 @@
+
+
+{0}------------------------------------------------
+
+# EPISTEMIC MONTE CARLO TREE SEARCH
+
+**Yaniv Oren**
+
+Delft University of Technology  
+2628 CD Delft, The Netherlands  
+y.oren@tudelft.nl
+
+**Viliam Vadocz**
+
+Delft University of Technology  
+2628 CD Delft, The Netherlands
+
+**Matthijs T. J. Spaan**
+
+Delft University of Technology  
+2628 CD Delft, The Netherlands  
+m.t.j.spaan@tudelft.nl
+
+**Wendelin Böhmer**
+
+Delft University of Technology  
+2628 CD Delft, The Netherlands  
+j.w.bohmer@tudelft.nl
+
+## ABSTRACT
+
+The AlphaZero/MuZero (A/MZ) family of algorithms has achieved remarkable success across various challenging domains by integrating Monte Carlo Tree Search (MCTS) with learned models. Learned models introduce epistemic uncertainty, which is caused by learning from limited data and is useful for exploration in sparse reward environments. MCTS does not account for the propagation of this uncertainty however. To address this, we introduce Epistemic MCTS (EMCTS): a theoretically motivated approach to account for the epistemic uncertainty in search and harness the search for deep exploration. In the challenging sparse-reward task of writing code in the Assembly language SUBLEQ, AZ paired with our method achieves significantly higher sample efficiency over baseline AZ. Search with EMCTS solves variations of the commonly used hard-exploration benchmark Deep Sea - which baseline A/MZ are practically unable to solve - much faster than an otherwise equivalent method that does not use search for uncertainty estimation, demonstrating significant benefits from search for epistemic uncertainty estimation.
+
+## 1 INTRODUCTION
+
+Many recent successes of reinforcement learning (RL) have been achieved by the model-based algorithm family of AlphaZero/MuZero (A/MZ, Silver et al., 2018; Schrittwieser et al., 2020). A/MZ have outperformed humans in games, in tasks that traditionally relied on intricate human engineering (Mandhane et al., 2022) and even made real world impact with the design of novel, more efficient algorithms (Fawzi et al., 2022; Mankowitz et al., 2023) for day-to-day problems, a task that is often formulated as a challenging sparse reward environment. When rewards are sparse, it is difficult to learn good policies without employing some form of *deep exploration* to search for the rewards. Deep exploration refers to the ability of the agent to direct itself towards novel transitions in the environment irrespective of how far away they are from the current state and promises up to exponential improvement in sample efficiency in sparse reward environments (Osband et al., 2018).
+
+At the core of A/MZ is the combination of Monte Carlo Tree Search (MCTS, Swiechowski et al., 2023) with learned models of value and/or environment dynamics. Learned models introduce *epistemic uncertainty*, which refers to the uncertainty in the predictions of the model sourced in limited coverage of the state-action space during training (Hüllermeier & Waegeman, 2021). Accounting for epistemic uncertainty allows the agent to discern between predictions that are based on evidence (i.e. the learned predictor was trained on this input), or based on generalization (i.e. the learned predictor *was not* trained on this input) and is useful for many purposes in online and offline RL. Common uses range from reducing overestimation errors through pessimism in the face of uncertainty (see Kumar et al., 2020), to directing deep exploration through optimism in the face of uncertainty (see
+
+{1}------------------------------------------------
+
+Neu & Pike-Burke, 2020). Harnessing search for exploration is a popular approach in similar model based algorithms, such as Dreamer (Sekar et al., 2020).
+
+MCTS, however, was designed for search with the true dynamics model and without a value model, and as a result, does not account for epistemic uncertainty introduced from learning the models. For this reason, A/MZ cannot harness MCTS for deep exploration, nor benefit from the epistemic uncertainty associated with the predictions of the search tree in other ways. In this work we aim to address both, with three main contributions. Practical and theoretically motivated methods to (i) harness MCTS and epistemic uncertainty for upper-confidence-bound-based deep exploration (Jin et al., 2018) and (ii) propagate the epistemic uncertainty from learned models of value and/or dynamics during search, which we call Epistemic MCTS (EMCTS). (iii) A parallelized implementation in JAX (Bradbury et al., 2018) of EMCTS paired with an AZ agent and an environment implementing the Assembly language SUBLEQ (Mazonka & Kolodin, 2011)<sup>1</sup>. We find that the propagation of epistemic uncertainty in EMCTS is very similar to that of value in MCTS. As search with MCTS improves the value estimates at the root, we hypothesize that search with EMCTS similarly improves the epistemic uncertainty estimates at the root, resulting in more accurate UCBs and more sample efficient exploration compared to a method that does not rely on search but is otherwise equivalent.
+
+We evaluate EMCTS in the challenging, similar to real-world applications and sparse-reward task of programming in SUBLEQ, as well as in the commonly used hard-exploration benchmark Deep Sea (Osband et al., 2020). Our method is able to find correct programs for a harder programming task in a much smaller number of samples than the AZ baseline. In the Deep Sea benchmark, our method demonstrates deep exploration by solving stochastic and deterministic reward variations of the task, both of which baseline A/MZ is unable to solve in a reasonable number of samples. In addition, EMCTS significantly outperforms an ablation that does not rely on search for epistemic uncertainty estimation but is otherwise equivalent, demonstrating significant advantages from search for uncertainty estimation.
+
+## 2 BACKGROUND
+
+In RL, an agent learns a behavior policy through interactions with an environment. The environment is represented by a Markov Decision Process (MDP, Bellman, 1957)  $\mathcal{M} = \langle \mathcal{S}, \mathcal{A}, \rho, \mathcal{R}, P, \gamma \rangle$ , where  $\mathcal{S}$  is a set of states,  $\mathcal{A}$  a set of actions,  $\rho$  the initial state distribution,  $\mathcal{R} : \mathcal{S} \times \mathcal{A} \rightarrow \mathbb{R}$  a bounded possibly stochastic reward function, and  $P$  is a transition distribution such that  $P(s'|s, a)$  specifies the probability of transitioning from state  $s$  to state  $s'$  after executing action  $a$ . The objective  $J_\pi$  of the agent is to find a policy  $\pi(a|s)$ , specifying the probability of selecting action  $a$  in state  $s$ , that maximizes the *expected discounted return*, also called value  $V^\pi$ , from the starting state distribution  $\rho$ :
+
+$$J_\pi = \mathbb{E}[V^\pi(s_0) | s_0 \sim \rho] = \mathbb{E} \left[ \sum_{t=0}^{H-1} \gamma^t \mathcal{R}(s_t, a_t) \mid s_0 \sim \rho, s_{t+1} \sim P(s_t, a_t), a_t \sim \pi(s_t) \right]. \quad (1)$$
+
+The discount factor  $0 < \gamma < 1$  is used in infinite-horizon MDPs, i.e.  $H = \infty$ , to guarantee that the values remain bounded, and is commonly used in RL for training stability. A state-action *Q-value function* is also often used:  $Q^\pi(s, a) = \mathbb{E}[\mathcal{R}(s, a) + \gamma V^\pi(s') | s' \sim P(s, a)]$ . We denote the value of the optimal policy  $\pi^*$  with  $V^*(s) = \max_\pi V^\pi(s), \forall s \in \mathcal{S}$ . In offline RL, the agent must maximize this objective given a static dataset. In model-based RL (MBRL) the agent uses a model of the dynamics of the environment  $(P, \mathcal{R})$  to optimize its policy, often through planning (Moerland et al., 2023). The dynamics are either learned from interactions (e.g., in MZ, Schrittwieser et al., 2020) or provided (e.g., in AZ, Silver et al., 2018). In Deep MBRL the agent utilizes deep neural networks (DNN, Goodfellow et al., 2016) to approximate any of the value, policy, reward and transition functions.
+
+<sup>1</sup>Our implementation, inspired by SIC-1 which is an open source game demonstrating SUBLEQ, is available at <https://github.com/emcts/e-alphazero>.
+
+{2}------------------------------------------------
+
+### 2.1 MONTE CARLO TREE SEARCH
+
+The MCTS algorithm constructs a tree with the current state  $s_k$  at its root to estimate the objective:  $\arg \max_a \max_{\pi} Q^{\pi}(s_k, a)$  (Browne et al., 2012), by iteratively performing selection, expansion, simulation and backup. At each iteration  $i$  of the algorithm a trajectory in the tree is selected using a tree search policy such as UCT (Kocsis & Szepesvári, 2006):
+
+$$a_k^i = UCT_i(s_k) = \arg \max_{a \in \mathcal{A}} q^i(s_k, a) + C_{UCT} \sqrt{\frac{2 \log(\sum_{a' \in \mathcal{A}} N(s_k, a'))}{N(s_k, a)}}, \quad (2)$$
+
+where  $N(s_k, a)$  denotes the number of times action  $a$  has been selected in node  $s_k$ ,  $C_{UCT} > 0$  trades off exploration of new nodes in the tree with maximizing observed return and  $q^i(s_k, a)$  is the averaged return observed for this state action up to step  $i$ . Modern algorithms (such as A/MZ) use instead variations of PUCT (Rosin, 2011):
+
+$$a_k^i = PUCT_i(s_k) = \arg \max_{a \in \mathcal{A}} q^i(s_k, a) + \pi(a|s_k) C_{PUCT} \frac{\sqrt{\sum_{a' \in \mathcal{A}} N(s_k, a')}}{1 + N(s_k, a)}, \quad (3)$$
+
+with some learned prior-policy  $\pi$ . When selection step  $i$  arrives at a leaf  $s_T^i$  the node is expanded with a value estimate  $v(s_T^i)$ . MCTS propagates the return  $\nu^i$  of planning step  $i$  back along the planning trajectory  $\{s_j^i, a_j^i\}_{j=0}^T$ :
+
+$$\nu^i(s_k, a_k^i) = \sum_{j=0}^{T-1} \gamma^j r(s_{k+j}^i, a_{k+j}^i) + \gamma^T v(s_T^i), \quad q^i(s_k, a) = \frac{1}{N(s_k, a)} \sum_{j=1}^i \nu^j(s_k, a) \quad (4)$$
+
+where  $a_{k+j}^i = P/UCT_i(s_{k+j}^i)$  and  $s_{k+j+1}^i = f(s_{k+j}^i, a_{k+j}^i)$  for a deterministic transition function<sup>2</sup>  $f: \mathcal{S} \times \mathcal{A} \rightarrow \mathcal{S}$  and a mean-reward function  $r(s, a) = \mathbb{E}[\mathcal{R}(s, a)]$ . In the original MCTS, the dynamics model  $m = (f, r)$  is provided to the agent and assumed to be correct for the true MDP  $\mathcal{M}$  and the value estimate  $v(s_T^i)$  is computed using Monte-Carlo (MC) rollouts with  $m$ . In AZ the value function (Silver et al., 2018) and in MZ all functions  $f, r, v$ , are learned from interactions with the environment and thus their predictions are uncertain outside of the training set. The prior-policy  $\pi$  is trained with cross-entropy loss on targets extracted from the root of the tree. With Reanalyze (Schrittwieser et al., 2021), which uses search to generate fresh value and policy targets from off-policy data, A/MZ are able to learn off-policy.
+
+### 2.2 QUANTIFYING UNCERTAINTY IN DEEP REINFORCEMENT LEARNING
+
+Quantifying uncertainty in deep learning is an active field of research (see Hüllermeier & Waegeman, 2021; Lockwood & Si, 2022). In this work, we take the common approach for quantifying epistemic uncertainty as *the variance in a random variable that approximates predictions that are consistent with a dataset of observed interactions  $\mathcal{D}$* . We model a learned function  $\hat{r}$ , trained to approximate a true function  $r$  on data  $\mathcal{D}$ ,  $\hat{r}(s, a) \approx r(s, a)$ , as a random variable with respect to the data:  $\hat{r}(s, a)|\mathcal{D} := \hat{R}(s, a)$ . We assume unbiased approximation  $\mathbb{E}[\hat{R}(s, a)] := r(s, a)$ , and use the variance  $\mathbb{V}[\hat{R}(s, a)]$  to quantify the epistemic uncertainty. In discrete state-action spaces, the epistemic uncertainty in a reward or a transition can be estimated as the novelty of a state or state-action pair using visitation counting. Exact counting, which is generally intractable in large state-action spaces, can be replaced by Hash-based counting (Tang et al., 2017), or methods that focus on direct estimation of the novelty of state-action pairs, such Random Network Distillation (RND, Burda et al., 2019).
+
+In contrast, epistemic uncertainty in a *value* prediction  $\mathbb{V}[\hat{V}(s)]$  that is trained with TD-based targets, requires reasoning about uncertainty in the value-targets, as well as whether  $\hat{V}$  was trained on  $s$  at all. We follow the popular approach by Strens (2000) of defining epistemic uncertainty in the value function as the variance of a Bayesian posterior of the Q-values of a
+
+<sup>2</sup>For notational simplicity we assume here a deterministic transition function  $f$ , so that nodes  $s_{k+j}^i$  correspond to individual states. It is also possible to use a stochastic transition model  $P$ , where nodes correspond to distributions of states, which are sampled by the selection step. The above equations remain the same, but the state corresponding to  $s_{k+j}^i$  is effectively a random variable.
+
+{3}------------------------------------------------
+
+policy conditioned on the data the agent has collected, as follows:
+
+$$\mathbb{V}[\hat{Q}^\pi(s, a)] = \mathbb{V}\left[\hat{R}(s, a) + \gamma \sum_{s', a'} \pi(a'|s') \hat{P}(s'|s, a) \hat{Q}^\pi(s', a')\right]. \quad (5)$$
+
+Note that the epistemic uncertainty about rewards  $\mathbb{V}[\hat{R}]$  and transitions  $\mathbb{V}[\hat{P}]$  are induced by the data  $\mathcal{D}$  the value function has been trained on, not by the agent’s knowledge of the environment. Values predicted by learned value functions can therefore be epistemically uncertain, even if a perfect model of the environment is known to the agent. In their work on the Uncertainty Bellman Equation (UBE), O’Donoghue et al. (2018) propose to approximate an upper bound  $u^\pi(s_t, a_t) \geq \mathbb{V}[\hat{Q}^\pi(s_t, a_t)]$ .  $u^\pi(s_t, a_t)$  can be learned with (possibly  $n$ -step) TD targets in a similar manner to value learning from *local* uncertainties  $\eta(s, a)$ :
+
+$$u^\pi(s_t, a_t) := \eta(s_t, a_t) + \gamma^2 \sum_{a'} \pi(a'|s_{t+1}) u^\pi(s_{t+1}, a') \leq \eta(s_t, a_t) + \gamma^2 \max_{a'} u^\pi(s_{t+1}, a'). \quad (6)$$
+
+The local uncertainty  $\eta$  can be derived from  $\mathbb{V}[\hat{R}]$  and  $\mathbb{V}[\hat{P}]$ . Note that the above inequality yields an upper bound on the epistemic uncertainty of *any* policy  $\pi$  with training data  $\mathcal{D}$ .
+
+### 2.3 DEEP EXPLORATION WITH UPPER CONFIDENCE BOUNDS
+
+A popular approach to harness epistemic uncertainty for deep exploration is that of optimism in the face of uncertainty (Lattimore & Szepesvari, 2017), often formalized using an upper confidence bound (UCB) on the true value of the optimal policy (Azar et al., 2017; Jin et al., 2018). Acting greedily with respect to the maximum UCB guarantees exploration of the environment, as long as the UCB tightens with more samples from the environment. The efficiency of UCB exploration depends on the epistemic uncertainty estimator. In environments with small state-action spaces, epistemic uncertainty estimators that predict maximum uncertainty for unvisited states can be used to guarantee exploration of every state-action pair. To explore continuous or large state-action domains in practical numbers of samples, using an UCB requires uncertainty estimators that estimate the epistemic uncertainty in unvisited states  $s'$  based on a similarity metric between  $s'$  and visited states  $s \in \mathcal{D}$  (Jin et al., 2023), such as imposed by RND, for example.
+
+## 3 DEEP EXPLORATION WITH EPISTEMIC MCTS
+
+To find an optimal policy, an RL agent must explore the environment until all necessary information is gathered. When the agent uses search for action selection in the environment, it can search for exploration, exploitation, or a trade-off between the two. When a learned model  $\hat{m}$  is used in search, the agent faces a problem: the values  $q_{\hat{m}}^i$  in the search tree converge to  $Q_{\hat{m}}^*$ , the  $Q$  value *in the learned model* of the policy that is optimal *in that model*  $\pi_{\hat{m}}^*$ . In areas where the learned model is inaccurate, the search may lead to arbitrarily bad actions with respect to expected return in the true environment. From the perspective of exploration on the other hand, this presents an opportunity: by estimating the epistemic uncertainty the agent can identify the areas where the model is uncertain due to insufficient interactions, and use the uncertainty to direct exploration into these areas.
+
+Our objective is then two-fold: To extend MCTS to estimate and propagate the epistemic uncertainty from the uncertain learned model and harness the epistemic uncertainty in the search to achieve deep exploration of the environment. To achieve this, we take the following steps: (i) Formulate the learned model  $\hat{m}$  as a random variable and use it to construct a UCB on  $Q^*$  (Section 3.1). (ii) Propose search policies to track the maximum UCB exploration objective (Section 3.2). (iii) Propagate the epistemic uncertainty through search, such that the epistemic uncertainty  $\mathbb{V}[q_{\hat{m}}^i(s, a)]$  in nodes’ value predictions  $q_{\hat{m}}^i(s, a)$  can be estimated (Section 3.3). Search with learned transition models introduces additional challenges for uncertainty propagation, which we address in Section 3.4.
+
+### 3.1 SEARCH WITH A LEARNED REWARD MODEL
+
+For simplicity, we begin by formulating the problem of search with learned models only in terms of a learned reward model and later extend the setup to learned value
+
+{4}------------------------------------------------
+
+and transition models. Consider the following setting: the agent has access to a dataset  $\mathcal{D} = \{(s_i, a_i, r_i, s_{i+1}) \mid 0 \leq i < N\}$  of transitions and rewards, as well as to the true (possibly stochastic) transition model  $P$ . The reward function is bounded with:  $\max_{s,a \in \mathcal{S} \times \mathcal{A}} |\mathcal{R}(s, a)| \leq r_{max}$ . We define the uncertain model as a random variable  $\hat{M} = (\hat{P}, \hat{R})$ . The uncertain mean-reward function is defined as a random variable  $\hat{R}$  in the standard manner for defining an epistemically uncertain model (see Section 2.2), such that  $\mathbb{E}[\hat{R}(s, a)] = r(s, a)$  the mean reward, and  $\hat{R}(s, a) = \frac{1}{|\{(s, a, \cdot, \cdot) \in \mathcal{D}\}|} \sum_{(s, a, r, \cdot) \in \mathcal{D}} r \approx r(s, a)$ , as the empirical mean of observed rewards. The epistemic uncertainty in reward prediction is defined as the variance  $\mathbb{V}[\hat{R}(s, a)]$ . We note that  $\hat{R}(s, a)$  is a bounded random variable over the interval  $[-r_{max}, r_{max}]$ . To facilitate constructing an upper confidence bound on  $Q^*$  we define  $\mathbb{V}[\hat{R}(s, a)] := r_{max}^2, \forall (s, a) \notin \mathcal{D}$ . That is, for unobserved transitions, the maximum variance possible for a bounded random variable (Popoviciu, 1935). The value with respect to the Markov chain induced by the random variable  $\hat{M}$  is then itself a random variable:
+
+$$Q_M^\pi(s, a) := \mathbb{E}_{\pi, P} \left[ \sum_{i=0}^{\infty} \gamma^i r_i \mid a_i \sim \pi(s_i), s_{i+1} \sim P(s_i, a_i), r_i = \hat{R}(s_i, a_i), s_0 = s, a_0 = a \right], \quad (7)$$
+
+where the expectation is with respect to  $\pi$  and  $P$  and not  $\hat{R}$ . Using this definition for the value in the model  $Q_M^\pi$  and its variance  $\mathbb{V}[Q_M^\pi]$  we can construct an upper confidence bound on  $Q^*$  for deep exploration.
+
+**Theorem 1** For  $\hat{M}$ ,  $\mathcal{M}$ ,  $Q^*$ ,  $Q_M^\pi$  defined as above and  $\delta \in (0, 1]$ :
+
+$$P \left( Q^*(s, a) \leq \max_{\pi} \left( Q_M^\pi(s, a) + \frac{1}{\sqrt{\delta}} \sqrt{\mathbb{V}[Q_M^\pi(s, a)]} \right) \right) \geq 1 - \delta, \quad \forall (s, a) \in \mathcal{S} \times \mathcal{A}. \quad (8)$$
+
+The proof is provided in Appendix A.1 and relies on the linearity of  $Q_M^\pi$  in the reward function  $\hat{R}$ . An extended UCB that is maintained in the presence of an uncertain transition model  $\hat{P}$  is constructed in Appendix A.3. The UCB can be tracked by MCTS using epistemic search policies, which we propose next.
+
+### 3.2 PLANNING FOR EXPLORATION WITH EPISTEMIC SEARCH
+
+To harness search for deep exploration through the approximation of the UCB in Equation 8, we propose Epistemic P/UCT (EP/UCT, changes are marked in blue):
+
+$$a_{\text{EUCT}} = \arg \max_{a \in \mathcal{A}} q_M^\beta(s_k, a) + C_{\text{UCT}} \sqrt{\frac{2 \log(\sum_{a'} N(s_k, a'))}{N(s_k, a)}}, \quad (9)$$
+
+$$a_{\text{EPUCT}} = \arg \max_{a \in \mathcal{A}} q_M^\beta(s_k, a) + \pi(a \mid s_k) C_{\text{PUCT}} \frac{\sqrt{\sum_{a'} N(s_k, a')}}{1 + N(s_k, a)}, \quad (10)$$
+
+where we define:
+
+$$q_M^\beta(s_k, a) := \underbrace{\frac{1}{N(s_k, a)} \sum_{i=0}^{N(s_k, a)} \nu_M^i(s_k, a)}_{:=q_M(s_k, a)} + \underbrace{\beta \frac{1}{N(s_k, a)} \sum_{i=0}^{N(s_k, a)} \sqrt{\mathbb{V}[\nu_M^i(s_k, a)]}}_{:=\sigma_{q_M}(s_k, a) \geq \sqrt{\mathbb{V}[q_M(s_k, a)]}}. \quad (11)$$
+
+The hyper-parameter  $\beta \geq 0$  can be tuned per task, or chosen to guarantee an upper confidence bound with specific confidence  $1 - \delta$ , and  $\nu_M^i(s_k, a)$  is as defined in Equation 4 for a specific model  $\hat{M}$ . We suppress the dependence on planning step  $i$  in the notation of  $q_M^\beta(s_k, a)$  for simplicity. To maintain the property of PUCT, which assumes  $q_M$  is between 0 and 1 (Rosin, 2011), one can use the Q normalization approach proposed by Schrittwieser et al. (2020) to normalize the  $q^\beta$  scores. More modern variations of PUCT such as those proposed by Danihelka et al. (2022) can be used by replacing  $q_M$  with  $q_M^\beta$  in the search objective. We note that in order to properly harness search policies that use a prior-policy for deep exploration, such as EPUCT, the agent must learn an exploration-prior-policy  $\pi_e$  that is trained with an exploratory objective. Otherwise, the prior policy may direct the search away from the exploratory planning objective. To enable EP/UCT, in the following section
+
+{5}------------------------------------------------
+
+we propose methodology to estimate the epistemic uncertainty in backups and upper bound  $\mathbb{V}[q_{\hat{M}}^i(s_k, a)]$ .
+
+### 3.3 PROPAGATING EPISTEMIC UNCERTAINTY IN SEARCH
+
+To estimate  $\mathbb{V}[q_{\hat{M}}^i(s_k, a)]$  we need to: (i) extend the problem setup to account for the learned value model, (ii) compute or upper bound the epistemic uncertainty in one backup  $\mathbb{V}[\nu_{\hat{M}}^i(s_k, a)]$  and (iii) compute or upper bound  $\mathbb{V}[q_{\hat{M}}^i(s_k, a)]$  using  $\mathbb{V}[\nu_{\hat{M}}^i(s_k, a)]$ .
+
+**Search with a Learned Value Model** A learned value model  $\hat{V}$  introduces an additional source of epistemic uncertainty into the search,  $\mathbb{V}[\hat{V}(s)]$ . In this case, for the UCB to hold it is important that the models  $\hat{M} = (f, \hat{R}, \hat{V})$  are trained on the same data, which is the popular choice in practice. This is sufficient to analytically maintain that  $\mathbb{V}[\hat{V}(s)] \geq \mathbb{V}[V_M^\pi(s)]$  (see Equation 5). To maintain this property in practice, we choose the UBE (O'Donoghue et al., 2018) estimator  $\hat{u}$  (see Section 2.2 and Equation 6) which upper bounds  $\mathbb{V}[\hat{V}(s)]$  using  $\mathbb{V}[\hat{R}(s, a)]$ . To account for the possibility that  $\hat{u}$  is unreliable outside of the training set we use the novelty of  $(s, a)$  to upper bound the uncertainty predicted by  $\hat{u}$  (see Appendix D.6 and Equation 25). When the reward model is not learned, such as in AZ, the value model still has epistemic uncertainty as it is trained from interactions and  $\mathbb{V}[\hat{V}(s)]$  coincides with the definition of value uncertainty in model-free literature (Equation 5). This definition accounts for uncertainty in transitions that are unobserved in the environment, regardless of whether the transitions are known to the planning model, capturing the uncertainty in a value model that is trained from interactions. To estimate  $\mathbb{V}[\hat{R}(s, a)]$  RND and (pseudo-)counting methods can be used (see Section 2.2 for more detail).
+
+**Epistemic Uncertainty of the Backup** The epistemic uncertainty in one backup step  $\mathbb{V}[\nu_{\hat{M}}^i(s_k, a)]$  starting at node  $s_k$  and choosing action  $a$  can be formulated as follows:
+
+$$\mathbb{V}[\nu_{\hat{M}}^i(s_k, a)] = \sum_{j=0}^{T-k-1} \gamma^{2j} \mathbb{V}[\hat{R}(s_{k+j}, a_{k+j}^i)] + \gamma^{2(T-k)} \mathbb{V}[\hat{V}(s_T^i)], \quad (12)$$
+
+under the assumption that  $\hat{R}(s_{k+i}, a)$  is independent from  $\hat{R}(s_{k+j}, a), \forall i \neq j$ , and  $\hat{V}$  is independent from  $\hat{R}$  conditional on the data. We note that this assumption might be reasonable for some estimators (i.e., a table), but is not generally assumed to be true for DNNs. To avoid this assumption, we can instead upper bound the standard deviation of correlated backups using the sum of standard deviations (see Appendix A.2).
+
+**Epistemic Uncertainty of Node Values** Since A/MZ use the same model  $\hat{M}$  throughout planning, the returns predicted for different backups cannot be assumed to be de-correlated. We propose to upper bound the epistemic uncertainty instead:
+
+$$\mathbb{V}[q_{\hat{M}}^i(s_k, a)] \leq \sigma_{\hat{M}}^2(s_k, a) := \left( \frac{1}{N(s_k, a)} \sum_{i=0}^{N(s_k, a)} \sqrt{\mathbb{V}[\nu^i(s_k, a)]} \right)^2, \quad (13)$$
+
+where  $N(s_k, a)$  is the number of visitations to action  $a$  at node  $s_k$ . We provide a complete derivation in Appendix A.2. Equation 13 completes the Epistemic MCTS (EMCTS) algorithm for learned value and/or reward models. See Algorithm 1 for pseudo code of EMCTS with EUCT, where we suppress dependence on the model  $\hat{M}$  for notation simplicity. Extensions to MCTS are marked in [blue](#). In AZ, with a true reward model, EMCTS will use  $\mathbb{V}[\hat{R}(s, a)] = 0, \forall (s, a) \in \mathcal{S} \times \mathcal{A}$ , but still use  $\mathbb{V}[\hat{V}(s)] \geq 0$ .
+
+To conclude this section we note that while in this work we motivate and later evaluate EMCTS from the perspective of deep exploration, EMCTS is not limited to this use case. Our method introduces to MCTS-based algorithms such as A/MZ a novel capability to estimate the epistemic uncertainty in the value predictions during and post search, which may be attractive for different purposes. Noted example are: (i) reducing over estimation errors with lower-bound value targets of the form  $q_{\hat{M}}^i(s, a) - \beta \sqrt{\mathbb{V}[q_{\hat{M}}^i(s, a)]}$ . This approach is popular in model free AC methods implicitly (Fujimoto et al., 2018; Haarnoja et al., 2018)
+
+{6}------------------------------------------------
+
+**Algorithm 1** EMCTS with EUCT. Requires  $f, r, v^\pi$  and uncertainty estimators  $\mathbb{V}[\hat{V}], \mathbb{V}[\hat{R}]$
+
+```
+
+1: function EMCTS(state  $s, \beta$ )  $\triangleright \beta = 0$  for unmodified MCTS exploitation episodes
+2:   while within computation budget do
+3:     SELECT( $s, \beta$ )  $\triangleright$  traverses tree from root  $s_0 := s$  and adds new leaf
+4:     return action  $a$  drawn from  $\pi(a_0|s) = \frac{N(s_0, a)}{\sum_{a'} N(s_0, a')}$   $\triangleright$  MCTS action selection
+
+5: function SELECT(node  $s_k, \beta$ )
+6:    $a_k \leftarrow \arg \max_{a \in A} q^\beta(s_k, a) + C_{\text{UCT}} \sqrt{\frac{2 \log(\sum_{a'} N(s_k, a'))}{N(s_k, a)}}$   $\triangleright$  Equation 9
+7:   if  $a_k$  already expanded then SELECT( $f(s_k, a_k), \beta$ )  $\triangleright$  traverses tree
+8:   else EXPAND( $s_k, a_k$ )  $\triangleright$  adds new leaf
+9: function EXPAND(node  $s_k$ , not yet expanded action  $a_k$ )
+10:   $s_{k+1}, \hat{V}(s_{k+1}), \hat{R}(s_k, a_k) \leftarrow$  Execute MCTS expansion  $\triangleright$  creates a new leaf  $s_{k+1}$ 
+11:  Estimate epistemic variance of reward  $\mathbb{V}[\hat{R}(s_k, a_k)]$  and store it in node  $s_{k+1}$ .
+12:  Estimate epistemic variance of value  $\mathbb{V}[\hat{V}(s_{k+1})]$  and store it in node  $s_{k+1}$ .
+13:  BACKUP( $s_{k+1}, \hat{V}(s_{k+1}), \mathbb{V}[\hat{V}(s_{k+1})]$ )  $\triangleright$  updates the tree values & value variances
+14: function BACKUP(node  $s_{k+1}$ , ret.  $\nu(s_{k+1}, a_{k+1})$ , ret. unc.  $\mathbb{V}[\nu(s_{k+1}, a_{k+1})]$ )
+15:   $s_k, a_k, \nu(s_k, a_k) \leftarrow$  Execute MCTS backup step  $\triangleright$  updates  $q(s_k, a_k), N(s_k, a_k)$ 
+16:   $\mathbb{V}[\nu(s_k, a_k)] \leftarrow \mathbb{V}[\hat{R}(s_k, a_k)] + \gamma^2 \mathbb{V}[\nu(s_{k+1}, a_{k+1})]$   $\triangleright$  Equation 12
+17:   $\sigma_q(s_k, a_k) \leftarrow \sigma_q(s_k, a_k) + \frac{\mathbb{V}[\nu(s_k, a_k)] - \sigma_q(s_k, a_k)}{N(s_k, a_k)}$   $\triangleright$  Equation 13
+18:  if  $k > 0$  then BACKUP( $s_k, \nu(s_k, a_k), \mathbb{V}[\nu(s_k, a_k)]$ )
+
+```
+
+and explicitly (Ciosek et al., 2019), as well as in model-based RL (Zhou et al., 2020) and is generally very common in offline RL (Kumar et al., 2020; Ghasemipour et al., 2022). This makes EMCTS an especially attractive candidate to enhance A/MZ’s Reanalyze for offline-RL or off-policy target generation (Schrittwieser et al., 2021). We propose to track the objective  $q_M(s, a) - \beta \sqrt{\mathbb{V}[q_M(s, a)]}$  in search, i.e. to use EP/UCT but with  $\beta < 0$ . (ii) Weighting value and policy losses by the estimate of the epistemic uncertainty in the value which was successful in online as well as offline RL (Lee et al., 2021; Wu et al., 2021). The uncertainty of the value of the root of EMCTS can be used for this purpose.
+
+### 3.4 SEARCH WITH A LEARNED TRANSITION MODEL
+
+Learned transition models introduce several challenges from the perspective of EMCTS: (i) estimating epistemic uncertainty in the possibly-abstracted planning space, (ii) propagating the uncertainty forward during search as future transitions become less certain, in addition to backwards, and (iii) propagating it in such a way that maintains the UCB constructed in Theorem 1. Multiple methods to overcome (i) have been successful in previous works, see Henaff (2019); Sekar et al. (2020). In Appendix A.3 we propose an approach to overcome (ii) and (iii) as well as discuss the challenges in more detail. In practice however, in Section 5 we include experiments where a MZ agent fitted with a reliable uncertainty estimator for  $\mathbb{V}[\hat{R}(s, a)]$  successfully demonstrates deep exploration without accounting for (ii) and (iii).
+
+## 4 RELATED WORK
+
+Search for exploration was used successfully in a number of previous works, see Jaksch et al. (2010), Sun et al. (2011), Hester & Stone (2012), Shyam et al. (2019), Henaff (2019), Sekar et al. (2020), Lambert et al. (2022) and Luis et al. (2023). We add to this line of work EMCTS: designed for MCTS (and planning trees in general), practical and based in theory. Tesauro et al. (2010) develop a Bayesian approach for aleatoric uncertainty propagation in MCTS. POMCP (Silver & Veness, 2010), POMCPOW (Sunberg & Kochenderfer, 2018) and BOMCP (Mern et al., 2021) extend MCTS to POMDPs with a probabilistic Bayesian belief state at the nodes using a probabilistic model, while Stochastic MuZero (Antonoglou et al., 2022) extends MuZero to the stochastic transitions setting by replacing the deterministic transition function with a Vector Quantised Variational AutoEncoder (van den Oord et al.,
+
+{7}------------------------------------------------
+
+2017). In these works, epistemic uncertainty is not distinguished or used for exploration. Latent disagreement ensembles (Lakshminarayanan et al., 2017; Ramesh et al., 2022) offer a popular alternative to RND and counts. Wasserstein Temporal Difference (WTD, Metelli et al., 2019) offers an alternative to UBE (O’Donoghue et al., 2018) for estimating value uncertainty, using Wasserstein Barycenters (Agueh & Carlier, 2011) to update a posterior over  $Q$  functions in place of a standard Bayesian update. While UBE was criticized by Janz et al. (2019) for being insufficient for deep exploration with posterior-sampling based RL (PSRL, Osband et al., 2013), we note that the same shortcomings do not apply when UBE is used for UCB-based exploration.
+
+## 5 EXPERIMENTS
+
+The task of writing code and finding new algorithms, where AZ has recently made world real-world impact (Fawzi et al., 2022; Mankowitz et al., 2023), is natural to formulate using sparse-reward environments where the actions of the agent are operations and reward is received when a correct program is completed. Such environments represent a hard exploration challenge: the state space is often exponential  $|\mathcal{A}|^L$  in the actions  $\mathcal{A}$  and the maximum length of the program  $L$ , and while the number of possible solutions is generally unknown, it is in most cases very small compared to the number of possible sequences of operations. To evaluate the contribution of EMCTS in such real-world tasks we conduct experiments in the one-instruction Assembly programming language SUBLEQ (Section 5.1).
+
+To verify that EMCTS demonstrates deep exploration and benefits from search, we conduct experiments in the commonly used hard-exploration benchmark Deep Sea (Osband et al., 2020) (Section 5.2). Specifically, we are interested in the following:
+
+**RQ I** *Does EMCTS paired with an epistemic search policy demonstrate deep exploration with both AZ as well as MZ and in the presence of stochastic as well as deterministic rewards?*
+
+**RQ II** *Is there benefit in search with EMCTS for deep exploration, compared to an otherwise equivalent approach that does not use search, and if so, is the benefit retained in the presence of the learned transition model of MZ?*
+
+We also conduct an ablation study on the exploration parameter  $\beta$  to verify that the agent can learn stably from the possibly very-off-policy exploratory data provided by deep exploration.
+
+### 5.1 SUBLEQ EXPERIMENTS
+
+SUBLEQ is a Turing-complete (excepting for finite memory) one-instruction programming language (Mazonka & Kolodin, 2011). Because there is only one instruction, writing code in SUBLEQ summarizes to writing a sequence of memory addresses. We model the action space with  $\mathcal{A} = \{0, \dots, N-1\}$ , for  $N$  the size of the memory. The agent is rewarded with 1.0 when the sequence of addresses specifies a program that solves the task, evaluated on a set of test cases. The reward is otherwise zero. The observation space constitutes of an example input and corresponding desired output, the program written so far, and the state of the input and output after executing the program on the example input. We limit the memory size to 16 and the maximum program length to 10 resulting in a state space of size  $\leq 16^{10} \approx 1$  trillion unique states. We present results on two tasks: An easier task of outputting the negated input for positive inputs (Negate Positives), and a harder task of implementing the Identity Function. An implementation of Negate Positives in SUBLEQ of length 2 is known, which means finding a solution without prior knowledge requires searching on the order of  $16^2$  unique states. To the Identity Function an implementation of length 6 is known which suggests searching on the order of  $16^6 \approx 16$  million unique states. We provide a more detailed introduction to SUBLEQ, a description of the environment and the tasks in Appendix C. The results are presented in Figure 1.
+
+We compare two variations of EMCTS with AZ (**E-AZ**) to the **AZ** baseline. Both variations of E-AZ are able to solve the harder task in a much smaller number of samples than AZ. To estimate  $\mathbb{V}[\hat{R}(\cdot, s')$ ] one variation of E-AZ uses a hash based visit count that takes as input the complete state  $s'$ , allowing the agent to, in principle, avoid searching the same state twice. The other E-AZ variation hashes only part of the state: the example input-output, before and after execution (IO hash), directing the agent to search actions that have an
+
+{8}------------------------------------------------
+
+![Figure 1: Sample efficiency plots. Left: 'Negate Positives (easy)' task showing Average Evaluation Return vs Environment steps (0 to 250,000). Right: 'Identity Function (hard)' task showing Average Evaluation Return vs Environment steps (0 to 1.2e7). Both plots compare E-AZ (IO Hash) (purple), E-AZ (full Observation Hash) (blue), and AZ (orange).](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 1: Sample efficiency plots. Left: 'Negate Positives (easy)' task showing Average Evaluation Return vs Environment steps (0 to 250,000). Right: 'Identity Function (hard)' task showing Average Evaluation Return vs Environment steps (0 to 1.2e7). Both plots compare E-AZ (IO Hash) (purple), E-AZ (full Observation Hash) (blue), and AZ (orange).
+
+Figure 1: Sample efficiency. Left: the easy *SUBLEQ Negate Positives* task. Right: the harder *Identity Function* task. Mean of 15 seeds, two standard errors.
+
+effect on the output of the program. As expected from a UCB-based method, E-AZ benefits from the more-appropriate uncertainty estimator and finds a correct program much earlier with the IO hash.
+
+All agents use Danihelka et al. (2022)’s approach that combines Gumbel noise with Sequential Halving at the root and a modern variation of PUCT at non-root nodes. For E-AZ variations, in online search (when selecting actions in the environment) the tree search policies use  $q_M^\beta$  (11) in place of  $q_M$  and an exploration-prior-policy  $\pi_e$  (See Section 3.2). To select actions during evaluation, as well as when generating targets with Reanalyze, the search uses EMCTS to propagate the uncertainty, but uses the exploitation prior policy  $\pi$  and  $q_M$  in the search objective, in the standard manner of MCTS search. The policy  $\pi_e(s)$  is trained with cross entropy loss to fit the softmax across actions over  $q^\beta(s, \cdot)$  at the root.
+
+### 5.2 DEEP SEA EXPERIMENTS
+
+The Deep Sea environment is structured as a grid, where at each time step the agent chooses between two actions, goes right or left and one row down. There is a reward  $r_{goal} = 1.0$  at the bottom right corner, the agent starts at the top left corner and thus the probability of randomly finding the unique optimal trajectory decays exponentially with the size of the grid. Every transition along the optimal trajectory receives a negative reward that is negligible in comparison to the goal reward, but is otherwise the only reward the agent sees, actively discouraging exploration along the optimal path. The action mappings are randomized such that the effect of the same action is different in different states, preventing the agent from generalizing across actions. To evaluate EMCTS in the presence of deterministic transitions and stochastic rewards that more generally align with the assumptions in Section 3, we include a custom stochastic-reward variation of Deep Sea where the goal reward  $r_{goal} \sim \mathcal{N}(1, 1)$ , and a reward  $r_{mislead} \sim \mathcal{N}(0, 1)$  is given at the bottom left corner. The agent must explore both transitions a sufficient number of times to correctly identify the larger mean reward. Results are presented in Figure 2.
+
+![Figure 2: Deep Sea experiments. Left: 'Scaling to Different Deep Sea Sizes' plot showing Episodes until < 90% average reward vs DeepSea Size (10 to 50). Middle: 'Stochastic-Reward Deep Sea 50x50' plot showing Expected Evaluation Return vs Environment steps (0 to 40,000). Right: 'Sensitivity to the Exploration Parameter beta' plot showing Average agent over 1000 episodes vs Beta (10^-3 to 10^3).](e8ff6e66c77a8e96203c9f8db8f0986f_img.jpg)
+
+Figure 2: Deep Sea experiments. Left: 'Scaling to Different Deep Sea Sizes' plot showing Episodes until < 90% average reward vs DeepSea Size (10 to 50). Middle: 'Stochastic-Reward Deep Sea 50x50' plot showing Expected Evaluation Return vs Environment steps (0 to 40,000). Right: 'Sensitivity to the Exploration Parameter beta' plot showing Average agent over 1000 episodes vs Beta (10^-3 to 10^3).
+
+Figure 2: Left: Scaling to growing Deep Sea sizes, 5 seeds per point. Only 2 seeds of MZ+UBE were able to solve size 40, and none size 50 within the training budget, both marked with an X. Middle: Stochastic-reward Deep Sea 50x50, 10 seeds. Right: The effect of the exploration parameter in Deep Sea 30x30, 3 seeds per point. Mean and standard error.
+
+{9}------------------------------------------------
+
+The left subplot shows sample complexity measured as number of interactions until 90% regret is reached against the size of the Deep Sea environment to demonstrate that the scaling is sub-exponential as expected from deep-exploration methods. The middle subplot presents expected return in evaluation episodes in the stochastic-reward variation of Deep Sea. In the right subplot, the sensitivity to the exploration parameter  $\beta$  is studied and the ability of the agent to learn stably from off-policy data. In Appendix B we include additional results, including a visualization of the uncertainty estimated by EMCTS.
+
+To answer the research questions the following agents based in A/MZ are compared: (i) **E-A/MZ** (purple, dashed for AZ and dotted for MZ), our method. The agents use EMCTS with counts/RND to estimate reward and transition uncertainty and UBE to estimate value uncertainty, search with EUCT and act with the action with the most visitations at the root. (ii) Baseline **AZ** (orange) explores by sampling actions proportionally to visitations at the MCTS root. AZ is included for reference, to demonstrate that indeed Deep Sea cannot be solved in reasonable time with random exploration, and is not able to solve any of the environments in the allotted training steps, with the exception of one seed in the smallest environment size, and that only because the initial replay buffer by chance already contained a trajectory that reached the goal. We include the exponentially-scaling performance expected of random-exploration based methods such as AZ, for reference. (iii) Last, **A/MZ+UBE** (red) acts with a similar UCB-exploration objective to that of EP/UCT, but does not search with the uncertainty (see Appendix D.8). AZ-based agents are given access to the true transition model. The value model is learned, as well as the reward model to investigate the behavior under the most general setting considered in Section 3.3. All A/MZ agents are trained with targets generated by Reanalyze. For reference performance on Deep Sea, we include Bootstrapped DQN (**BDQN**, Osband et al., 2018), a popular model-free, non-search based deep exploration approach that relies on an ensemble to drive deep exploration directly. For full implementation details see Appendix D.
+
+As expected for deep exploration methods, agents that are informed with respect to epistemic uncertainty (E-A/MZ, A/MZ+UBE and BDQN) demonstrate sample efficiency that scales sub-exponentially with environment size (Figure 2, left). In addition, E-AZ is able to solve Deep Sea in the presence of stochastic rewards (Figure 2, middle). This answers **RQ I**: EMCTS successfully demonstrates deep exploration in the presence of learned value, reward and transition models as well as both deterministic and stochastic rewards. E-A/MZ (Figure 2, left and middle plots, purple) demonstrate significant improvement in sample efficiency over the equivalent agents that do not use search (red), in deterministic and stochastic reward environments and even with the learned transition model of MZ (dotted line). This answers **RQ II**: EMCTS demonstrates benefits from search for uncertainty estimation and exploration which is retained in the presence of MZ’s learned transition dynamics’ model. The low regret in evaluation with exponentially increasing values of  $\beta$  (Figure 2, right) demonstrates that the agent can stably learn the optimal policy even in the presence of off-policy exploratory data.
+
+## 6 CONCLUSIONS
+
+In this work we present EMCTS, a novel, practical and theoretically motivated method to incorporate the epistemic uncertainty from learned models into MCTS, as well as harness the search for deep exploration. AZ paired with EMCTS (E-AZ) achieves significantly higher sample efficiency in the sparse-reward, challenging task of programming in the Assembly language SUBEQ, compared to baseline AZ. In the popular hard-exploration benchmark Deep Sea, E-A/MZ demonstrate deep exploration by solving variations of the task which cannot be solved by baseline A/MZ at all in a reasonable amount of samples. EMCTS’ search demonstrates significantly improved epistemic uncertainty estimation through more sample efficient exploration over an otherwise equivalent method that does not use search. With EMCTS, A/MZ are much better equipped for sparse-reward and hard-exploration environments, which come up in realistic settings such as algorithm design, where AZ has already made significant advances. By making A/MZ uncertainty aware, EMCTS is also promising for settings that require improved reliability in the face of the unknown such as offline RL and off-policy target generation.
+
+ Rest of paper (reference and Appendix) is removed.

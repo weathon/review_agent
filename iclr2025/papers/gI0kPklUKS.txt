@@ -1,0 +1,277 @@
+
+
+{0}------------------------------------------------
+
+# BILINEAR MLPs ENABLE WEIGHT-BASED MECHANISTIC INTERPRETABILITY
+
+**Michael T. Pearce\***
+
+Independent  
+pearcent@  
+alumni.stanford.edu
+
+**Thomas Dooms\***
+
+University of Antwerp  
+thomas.dooms@  
+uantwerpen.be
+
+**Alice Rigg**
+
+Independent  
+rigg.alice0@  
+gmail.com
+
+**Jose Oramas**
+
+University of Antwerp, sqIRL/IDLabs  
+jose.oramas@uantwerpen.be
+
+**Lee Sharkey**
+
+Apollo Research  
+lee@apolloresearch.ai
+
+## ABSTRACT
+
+A mechanistic understanding of how MLPs do computation in deep neural networks remains elusive. Current interpretability work can extract features from hidden activations over an input dataset but generally cannot explain how MLP weights construct features. One challenge is that element-wise nonlinearities introduce higher-order interactions and make it difficult to trace computations through the MLP layer. In this paper, we analyze bilinear MLPs, a type of Gated Linear Unit (GLU) without any element-wise nonlinearity that nevertheless achieves competitive performance. Bilinear MLPs can be fully expressed in terms of linear operations using a third-order tensor, allowing flexible analysis of the weights. Analyzing the spectra of bilinear MLP weights using eigendecomposition reveals interpretable low-rank structure across toy tasks, image classification, and language modeling. We use this understanding to craft adversarial examples, uncover overfitting, and identify small language model circuits directly from the weights alone. Our results demonstrate that bilinear layers serve as an interpretable drop-in replacement for current activation functions and that weight-based interpretability is viable for understanding deep-learning models.
+
+## 1 INTRODUCTION
+
+Multi-layer perceptrons (MLPs) are an important component of many deep learning models, including transformers (Vaswani et al., 2017). Unfortunately, element-wise nonlinearities obscure the relationship between weights, inputs, and outputs, making it difficult to trace a neural network’s decision-making process. Consequently, MLPs have previously been treated as undecomposable components in interpretability research (Elhage et al., 2021).
+
+While early mechanistic interpretability literature explored neural network weights (Olah et al., 2017; 2020; Voss et al., 2021; Elhage et al., 2021), activation-based approaches dominate contemporary research (Petsiuk et al., 2018; Ribeiro et al., 2016; Simonyan et al., 2014; Montavon et al., 2018). In particular, most recent studies on transformers use sparse dictionary learning (SDL) to decompose latent representations into an overcomplete basis of seemingly interpretable atoms (Cunningham et al., 2024; Bricken et al., 2023b; Marks et al., 2024; Dunefsky et al., 2024). However, SDL-based approaches only describe which features are present, not how they are formed or what their downstream effect is. Previous work has approximated interactions between latent dictionaries using linear and gradient-based attribution (Marks et al., 2024; Ge et al., 2024), but these approaches offer weak guarantees of generalization. To ensure faithfulness, ideally, we would be able to capture nonlinear feature interactions in circuits that are grounded in the model weights.
+
+\*Equal contribution
+
+Code at: <https://github.com/tdooms/bilinear-decomposition>
+
+{1}------------------------------------------------
+
+One path to better circuit discovery is to use more inherently interpretable architectures. Previous work constrains the model into using human-understandable components or concepts (Koh et al., 2020; Chen et al., 2019), but this typically requires labeled training data for the predefined concepts and involves a trade-off in accuracy compared to learning the best concepts for performance (Henighan et al., 2023). Ideally, we could more easily extract and interpret the concepts that models naturally learn rather than force the model to use particular concepts. To this end, Sharkey (2023) suggested that bilinear layers Lin et al. (2015); Li et al. (2017); Chrysos et al. (2021) of the form  $g(\mathbf{x}) = (\mathbf{W}\mathbf{x}) \odot (\mathbf{V}\mathbf{x})$  are intrinsically interpretable because their computations can be expressed in terms of linear operations with a third order tensor. This enables the use of tensor or matrix decompositions to directly understand the weights. Moreover, bilinear layers outperform ReLU-based transformers in language modeling (Shazeer, 2020) and have performance only slightly below SwiGLU, which is prevalent in competitive models today (Touvron et al., 2023).
+
+Tensor decompositions have long been studied in machine learning (Cichocki et al., 2015; Panagakis et al., 2021; Sidiropoulos et al., 2017) where most applications are based on an input dataset. Using decompositions to extract features directly from the weights of tensor-based models is less explored. Here, we show that bilinear MLPs can be decomposed into functionally relevant, interpretable components by directly decomposing the weights, without using inputs. These decompositions reveal a low-rank structure in bilinear MLPs trained across various tasks. In summary, this paper demonstrates that bilinear MLPs are an interpretable drop-in replacement for ordinary MLPs in a wide range of settings. Our contributions are as follows:
+
+1. In section 3, we introduce several methods to analyze bilinear MLPs. One method decomposes the weights into a set of eigenvectors that explain the outputs along a given set of directions in a way that is fully equivalent to the layer’s original computations.
+2. In section 4, we showcase the eigenvector decomposition across multiple image classification tasks, revealing an interpretable low-rank structure. Smaller eigenvalue terms can be truncated while preserving performance. Using the eigenvectors, we see how regularization reduces signs of overfitting in the extracted features and construct adversarial examples.
+3. Finally, in section 5, we analyze how bilinear MLPs compute output features from input features, both derived from sparse dictionary learning (SDL). We highlight a small circuit that flips the sentiment of the next token if the current token is a negation (“not”). We also find that many output features are well-correlated with low-rank approximations. This gives evidence that weight-based interpretability can be viable in large language models.
+
+## 2 BACKGROUND
+
+Throughout, we use conventional notation as in Goodfellow et al. (2016). Scalars are denoted by  $s$ , vectors by  $\mathbf{v}$ , matrices by  $\mathbf{M}$ , and third-order tensors by  $\mathbf{T}$ . The entry in row  $i$  and column  $j$  of a matrix  $\mathbf{M}$  is a scalar and therefore denoted as  $m_{ij}$ . We denote taking row  $i$  or column  $j$  of a matrix by  $\mathbf{m}_{i, :}$  and  $\mathbf{m}_{:, j}$  respectively. We use  $\odot$  to denote an element-wise product and  $\cdot_{\text{axis}}$  to denote a product of tensors along the specified axis.
+
+**Defining bilinear MLPs.** Modern Transformers (Touvron et al., 2023) feature Gated Linear Units (GLUs), which offer a performance gain over standard MLPs for the same number of parameters (Shazeer, 2020; Dauphin et al., 2017). GLU activations consist of the component-wise product of two linear up-projections of size  $(d_{\text{hidden}}, d_{\text{input}})$ ,  $\mathbf{W}$  and  $\mathbf{V}$ , one of which is passed through a nonlinear activation function  $\sigma$  (Equation 1). The hidden activations  $g(\mathbf{x})$  then pass through a down-projection  $\mathbf{P}$  of size  $(d_{\text{output}}, d_{\text{hidden}})$ . We omit biases for brevity.
+
+$$\begin{aligned} g(\mathbf{x}) &= (\mathbf{W}\mathbf{x}) \odot \sigma(\mathbf{V}\mathbf{x}) \\ \text{GLU}(\mathbf{x}) &= \mathbf{P}(g(\mathbf{x})) \end{aligned} \tag{1}$$
+
+A bilinear layer is a GLU variant that omits the nonlinear activation function  $\sigma$ . Bilinear layers beat ordinary ReLU MLPs and perform almost as well as SwiGLU on language modeling tasks (Shazeer, 2020). We corroborate these findings in Appendix I, and show that bilinear layers achieve equal loss when keeping training time constant and marginally worse loss when keeping data constant.
+
+{2}------------------------------------------------
+
+**Interaction matrices and the bilinear tensor.** A bilinear MLP parameterizes the pairwise interactions between inputs. One way to see this is by looking at how a single output  $g(\mathbf{x})_a$  is computed.
+
+$$\begin{aligned} g(\mathbf{x}) &= (\mathbf{W}\mathbf{x}) \odot (\mathbf{V}\mathbf{x}) \\ g(\mathbf{x})_a &= (\mathbf{w}_a^T \mathbf{x}) (\mathbf{v}_a^T \mathbf{x}) \\ &= \mathbf{x}^T (\mathbf{w}_a \mathbf{v}_a^T) \mathbf{x} \end{aligned}$$
+
+We call the  $(d_{\text{input}}, d_{\text{input}})$  matrix  $\mathbf{w}_a \mathbf{v}_a^T = \mathbf{B}_a$ : an *interaction matrix* since it defines how each pair of inputs interact for a given output dimension  $a$ .
+
+The collection of interaction matrices across the output axis can be organized into the third-order *bilinear tensor*,  $\mathbf{B}$ , with elements  $b_{aij} = w_{ai} v_{aj}$ , illustrated in Figure 1A. The bilinear tensor allows us to easily find the interaction matrix for a specific output direction  $\mathbf{u}$  of interest by taking a product along the output axis,  $\mathbf{u}^T \mathbf{B}$ , equal to a weighted sum over the neuron-basis interaction matrices,  $\sum_a u_a \mathbf{w}_a \mathbf{v}_a^T$ . As written,  $\mathbf{B}$  has size  $(d_{\text{hidden}}, d_{\text{input}}, d_{\text{input}})$  but we will typically multiply the down-projection  $\mathbf{P}$  into  $\mathbf{B}$  resulting in a  $(d_{\text{output}}, d_{\text{input}}, d_{\text{input}})$  size tensor.
+
+**Simplifications due to symmetry.** Because an interaction matrix is always evaluated with two copies of the input  $\mathbf{x}$ , it contains redundant information that does not contribute to the activation. Any square matrix can be expressed uniquely as the sum of a symmetric and anti-symmetric matrix.
+
+$$\mathbf{B}_{a::} = \underbrace{\frac{1}{2}(\mathbf{B}_{a::} + \mathbf{B}_{a::}^T)}_{\mathbf{B}_{a::}^{\text{sym}}} + \underbrace{\frac{1}{2}(\mathbf{B}_{a::} - \mathbf{B}_{a::}^T)}_{\mathbf{B}_{a::}^{\text{anti}}}$$
+
+However, evaluating an anti-symmetric matrix  $\mathbf{A}$  with identical inputs yields 0 and can be omitted:
+
+$$\mathbf{x}^T \mathbf{A} \mathbf{x} = \mathbf{x}^T (-\mathbf{A}^T) \mathbf{x} = -(\mathbf{x}^T \mathbf{A} \mathbf{x})^T = 0.$$
+
+Therefore, only the symmetric part  $\mathbf{B}_{a::}^{\text{sym}}$  contributes. From here on, we drop the  $\text{sym}$  superscript and assume the symmetric form for any interaction matrix or bilinear tensor ( $b_{aij} = \frac{1}{2}(w_{ai}v_{aj} + w_{aj}v_{ai})$ ). Symmetric matrices have simpler eigendecompositions since the eigenvalues are all real-valued, and the eigenvectors are orthogonal by the spectral theorem.
+
+**Incorporating biases.** If a bilinear layer has biases, we can augment the weight matrices to adapt our approach. Given activations of the form  $g(\mathbf{x}) = (\mathbf{W}\mathbf{x} + \mathbf{b}_1) \odot (\mathbf{V}\mathbf{x} + \mathbf{b}_2)$ , define  $\mathbf{W}' = [\mathbf{W}; \mathbf{b}_2]$ ,  $\mathbf{V}' = [\mathbf{V}; \mathbf{b}_1]$ , and  $\mathbf{x}' = [\mathbf{x}, 1]$ . Then,  $g(\mathbf{x}) = (\mathbf{W}'\mathbf{x}') \odot (\mathbf{V}'\mathbf{x}')$  in a bilinear layer with biases. In subsection 4.3, we study a toy classification task using a model trained with biases, illustrating how biases can be interpreted using the same framework. For the rest of our experiments, we used models without biases for simplicity, as it did not harm performance. See Appendix L for details.
+
+## 3 ANALYSIS METHODS
+
+Since bilinear MLPs can be expressed in terms of a third-order tensor,  $\mathbf{B}$ , they can be flexibly analyzed using techniques from linear algebra, such as decompositions and transformations. The choice of analysis approach depends on what additional information, in terms of previously obtained input or output features, is provided.
+
+### 3.1 INPUT / OUTPUT FEATURES $\rightarrow$ DIRECT INTERACTIONS
+
+If we have already obtained meaningful sets of features for the bilinear MLP’s inputs and outputs, for example from a set of latent feature dictionaries  $F^{\text{in}}$  and  $F^{\text{out}}$ , then we can directly study the interactions between these features and understand how the output features are constructed from input ones. We can transform the bilinear tensor into the feature basis via  $\tilde{b}_{abc} = \sum_{ijk} f_{ai}^{\text{out}} b_{ijk} f_{bj}^{\text{in}} f_{ck}^{\text{in}}$ . For a given set of sparse input and output activations, only a small subset of the interactions (with  $a, b, c$  all active) will contribute, and the statistics of these active interactions can be studied.
+
+For dictionaries obtained from sparse autoencoders (SAEs) we can instead use the output SAE’s encoder directions in the transformation:  $\tilde{b}_{abc} = \sum_{ijk} e_{ai}^{\text{out}} b_{ijk} f_{bj}^{\text{in}} f_{ck}^{\text{in}}$ . Then the output activations are  $z_c^{\text{out}} = \text{ReLU}(\sum_{ab} \tilde{b}_{abc} z_a^{\text{in}} z_b^{\text{in}})$  in terms of the input directions  $\mathbf{z}^{\text{in}}$ . In section 5, we use this approach to identify the top relevant interactions for features in a language model.
+
+{3}------------------------------------------------
+
+![Figure 1: A) Bilinear layer and Bilinear tensor representations. B) Eigendecomposition technique diagram.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 1 consists of two parts, A and B. Part A shows two ways to represent a bilinear layer: on the left, a diagram of a bilinear layer with input  $x$  being elementwise multiplied ( $\odot$ ) by weights  $W$  and  $V$ ; on the right, a bilinear tensor  $B$  with input  $x$  and output  $g(x)$ . Below these are the equations  $g(x) = Wx \odot Vx$  and  $g(x)_a = \sum_{ij} b_{aij} x_i x_j$ . Part B shows the eigendecomposition technique: a vector  $u$  is multiplied by the bilinear tensor  $B$  to produce an interaction matrix  $Q$ , which is then decomposed into eigenvectors  $v_i$  and eigenvalues  $\lambda_i$ . Below this is the equation  $u \cdot_{out} B = Q = \sum_i \lambda_i v_i v_i^T$ .
+
+Figure 1: A) Bilinear layer and Bilinear tensor representations. B) Eigendecomposition technique diagram.
+
+Figure 1: A) Two ways to represent a bilinear layer, via an elementwise product or the bilinear tensor. B) Diagram of the eigendecomposition technique. Multiplying the bilinear tensor by a desired output direction  $u$  produces an interaction matrix  $Q$  that can be decomposed into a set of eigenvectors  $v$  and associated eigenvalues  $\lambda_i$ .
+
+### 3.2 OUTPUT FEATURES $\rightarrow$ EIGENDECOMPOSITION
+
+Given a set of meaningful features for the MLP outputs, we can identify the most important input directions that determine the output feature activations. The output features could come from a dictionary, from the unembedding (shown in section 4), or from the decompilation of later layers.
+
+The interaction matrix,  $Q = u \cdot_{out} B$  for a given output feature  $u$  can be decomposed into a set of eigenvectors (Figure 1). Since  $Q$  can be considered symmetric without loss of generality (see section 2), the spectral theorem gives
+
+$$Q = \sum_i^d \lambda_i v_i v_i^T \quad (2)$$
+
+with a set of  $d$  (the rank of  $W, V$ ) orthonormal eigenvectors  $v_i$  and real-valued eigenvalues  $\lambda_i$ . In the eigenvector basis, the output in the  $u$ -direction is
+
+$$x^T Q x = \sum_i^d \underbrace{\lambda_i (v_i^T x)^2}_{\text{activation for } v_i} \quad (3)$$
+
+where each term can be considered the activation for the eigenvector  $v_i$  of size ( $d_{\text{input}}$ ). That is, the bilinear layer’s outputs are quadratic in the eigenvector basis.
+
+The eigenvector basis makes it easy to identify any low-rank structure relevant to  $u$ . The top eigenvectors by eigenvalue magnitude give the best low-rank approximation to the interaction matrix  $Q$  for a given rank. And since the eigenvectors diagonalize  $Q$ , there are no cross-interactions between eigenvectors that would complicate the interpretation of their contributions to  $u$ .
+
+### 3.3 NO FEATURES $\rightarrow$ HIGHER-ORDER SVD
+
+If we have no prior features available, it is still possible to determine the most important input and output directions of  $B$  through a higher-order singular value decomposition (HOSVD). The simplest approach that takes advantage of the symmetry in  $B$  is to reshape the tensor by flattening the two input dimensions to produce a  $(d_{\text{output}}, d_{\text{input}}^2)$  shaped matrix and then do a standard singular value decomposition (SVD). Schematically, this gives
+
+$$B_{\text{out, in} \times \text{in}} = \sum_i \sigma_i u_{\text{out}}^{(i)} \otimes q_{\text{in} \times \text{in}}^{(i)}$$
+
+where  $q$  can still be treated as an interaction matrix and further decomposed into eigenvectors as described above. We demonstrate this approach for an MNIST model in Appendix D.
+
+## 4 IMAGE CLASSIFICATION: INTERPRETING VISUAL FEATURES
+
+We consider models trained on the MNIST dataset of handwritten digits and the Fashion-MNIST dataset of clothing images. This is a semi-controlled environment that allows us to evaluate the
+
+{4}------------------------------------------------
+
+![Figure 2: A) Diagram showing the quadratic nature of eigenvector activations. It includes a legend for 'Positive' (blue) and 'Negative' (red) regions, and a table showing activation levels for different input alignments. B) A 2x5 grid of visualizations showing top eigenvectors for MNIST (digits 1-5) and Fashion-MNIST (classes: trouser, pullover, dress, coat, sandal).](e0d425c8e4eef259e4c52d81426d93fa_img.jpg)
+
+Figure 2: A) Diagram showing the quadratic nature of eigenvector activations. It includes a legend for 'Positive' (blue) and 'Negative' (red) regions, and a table showing activation levels for different input alignments. B) A 2x5 grid of visualizations showing top eigenvectors for MNIST (digits 1-5) and Fashion-MNIST (classes: trouser, pullover, dress, coat, sandal).
+
+Figure 2: A) Eigenvector activations are quadratic in the input and have a large magnitude if an input aligns with the positive (blue) regions *or* the negative (red) regions, but not both. B) Top eigenvectors for single-layer MNIST and Fashion-MNIST models, revealing the most significant patterns learned for each class. In MNIST, eigenvectors represent components of the target class, while Fashion-MNIST eigenvectors function as localized edge detectors. Best viewed in color.
+
+interpretability of eigenvectors computed using the methods in subsection 3.2. This section analyses a shallow feedforward network (FFN) consisting of an embedding projection, a bilinear layer, and a classification head; see Appendix G for details.
+
+First, we qualitatively survey the eigenvectors and highlight the importance of regularization in feature quality. Second, we consider the consistency of eigenvectors across training runs and sizes. Third, we turn toward an algorithmic task on MNIST, where we compare the ground truth with the extracted eigenvectors. Lastly, we use these eigenvectors to construct adversarial examples, demonstrating their causal importance.
+
+### 4.1 QUALITATIVE ASSESSMENT: TOP EIGENVECTORS APPEAR INTERPRETABLE
+
+The eigenvectors are derived using the unembedding directions for the digits as the output directions  $\mathbf{u}$  to obtain interaction matrices  $\mathbf{Q} = \mathbf{u}_{\text{out}} \mathbf{B}$  that are then decomposed following subsection 3.2. So each unembedding direction (digit) has a corresponding set of eigenvectors, although we may refer to the full collection as the eigenvectors of the layer or model.
+
+We can visualize them by projecting them into the input space using the embedding weights. Because the activation of an eigenvector  $\mathbf{v}$  with eigenvalue  $\lambda_i$  is quadratic in the input,  $\lambda_i(v^T \mathbf{x})^2$ , the sign of the eigenvector  $\mathbf{v}$  is arbitrary. The quadratic leads to XOR-like behavior where high overlap with an eigenvector’s positive regions (blue) *or* the negative regions (red)—but not both—leads to large activation magnitude, while the overall sign is determined by the eigenvalue (Figure 2A).
+
+For MNIST, the top positive eigenvector for each output class emphasizes a curve segment specific to its digit or otherwise resembles a prototypical class image (Figure 2B). Top eigenvectors for FMNIST function as localized edge detectors, focusing on important edges for each clothing article, such as the leg gap for trousers. The localized edge detection relies on the XOR-like behavior of the eigenvector’s quadratic activation.
+
+![Figure 3: A plot on the left shows the top four positive (top) and negative (bottom) eigenvalues for the digit 5, ordered from left to right by importance. The y-axis ranges from -0.18 to 0.14. To the right of the plot are 8 visualizations of eigenvectors, arranged in two rows of four, corresponding to the eigenvalues shown in the plot.](bec3b1d6f15b643228b0da0a7d47bdbd_img.jpg)
+
+Figure 3: A plot on the left shows the top four positive (top) and negative (bottom) eigenvalues for the digit 5, ordered from left to right by importance. The y-axis ranges from -0.18 to 0.14. To the right of the plot are 8 visualizations of eigenvectors, arranged in two rows of four, corresponding to the eigenvalues shown in the plot.
+
+Figure 3: The top four positive (top) and negative (bottom) eigenvectors for the digit 5, ordered from left to right by importance. Their eigenvalues are highlighted on the left. Only 20 positive and 20 negative eigenvalues (out of 512) are shown on the left images. Eigenvectors tend to represent semantically and spatially coherent structures.
+
+{5}------------------------------------------------
+
+![Figure 4: Top eigenvector for models trained with varying Gaussian input noise. The figure shows five heatmaps of the top eigenvector for a digit '5'. Above each heatmap is its test accuracy: 97.6%, 98.1%, 98.1%, 97.8%, and 97.2%. Below the heatmaps is a horizontal axis labeled 'Noise' with 'norm=0' at the left and 'norm=1' at the right. The heatmaps show a transition from a noisy, scattered pattern at norm=0 to a clear, recognizable digit '5' at norm=1.](c54b3ca7603d65d4589151bc3a49d054_img.jpg)
+
+Figure 4: Top eigenvector for models trained with varying Gaussian input noise. The figure shows five heatmaps of the top eigenvector for a digit '5'. Above each heatmap is its test accuracy: 97.6%, 98.1%, 98.1%, 97.8%, and 97.2%. Below the heatmaps is a horizontal axis labeled 'Noise' with 'norm=0' at the left and 'norm=1' at the right. The heatmaps show a transition from a noisy, scattered pattern at norm=0 to a clear, recognizable digit '5' at norm=1.
+
+Figure 4: Top eigenvector for models trained with varying Gaussian input noise. For reference, the norm of an average digit is about 0.3; adding noise with a norm of 1 results in a heavily distorted but discernible digit. Finally, the test accuracy for each model is shown at the top.
+
+Only a small fraction of eigenvalues have non-negligible magnitude (Figure 3). Different top eigenvectors capture semantically different aspects of the class. For example, in the spectrum for digit 5, the first two positive eigenvectors detect the 5’s horizontal top stroke but at different positions, similar to Gabor filters. The next two positive eigenvectors detect the bottom segment. The negative eigenvectors are somewhat less intuitive but generally correspond to features that indicate the digit is not a five, such as an upward curve in the top right quadrant instead of a horizontal stroke. In Appendix C, we study this technique towards explaining an input prediction. Details of the training setup are outlined in Appendix G while similar plots for other digits can be found in Appendix A.
+
+Because we can extract features directly from model weights, we can identify overfitting in image models by visualizing the top eigenvectors and searching for spatial artifacts. For instance, the eigenvectors of unregularized models focus on certain outlying pixels (Figure 4). We found adding dense Gaussian noise to the inputs (Bricken et al., 2023a) to be an effective model regularizer, producing bilinear layers with more intuitively interpretable features. Increasing the scale of the added noise results produces more digit-like eigenvectors and results in a lower-rank eigenvalue spectrum (Appendix E). These results indicate that our technique can qualitatively help uncover overfitting or other unwanted behavior in models. Furthermore, it can be used to evaluate the effect of certain regularizers and augmentation techniques, as explored in Appendix B.
+
+### 4.2 QUANTITATIVE ASSESSMENT: EIGENVECTORS LEARN CONSISTENT PATTERNS
+
+One important question in machine learning is whether models learn the same structure across training runs (Li et al., 2016) and across model sizes (Frankle & Carbin, 2019). In this section, we study both and find that eigenvectors are similar across runs and behave similarly across model sizes. Furthermore, we characterize the impact of eigenvector truncation on classification accuracy.
+
+Both the ordering and contents of top eigenvectors are very consistent across runs. The cosine similarities of the top eigenvector are between 0.8 and 0.9 depending on size (Figure 5). Generally,
+
+![Figure 5: Two line plots showing eigenvector consistency. Plot A, 'Similarity Across Eigenvectors', shows 'Cosine similarity' (y-axis, 0 to 1) vs 'Eigenvector rank' (x-axis, 0 to 15) for model sizes 30, 50, 100, 300, 1000, and 10000. All lines start near 1.0 and decrease as rank increases, with larger models maintaining higher similarity. Plot B, 'Truncation Across Sizes', shows 'Classification error' (y-axis, 1% to 100%) vs 'Eigenvector rank (per digit)' (x-axis, 0 to 30) for the same model sizes. All lines show a sharp decrease in error as rank increases from 0 to 10, then plateau. Larger models achieve lower error rates faster.](80530169c7b6298ce012a85b906caeb3_img.jpg)
+
+Figure 5: Two line plots showing eigenvector consistency. Plot A, 'Similarity Across Eigenvectors', shows 'Cosine similarity' (y-axis, 0 to 1) vs 'Eigenvector rank' (x-axis, 0 to 15) for model sizes 30, 50, 100, 300, 1000, and 10000. All lines start near 1.0 and decrease as rank increases, with larger models maintaining higher similarity. Plot B, 'Truncation Across Sizes', shows 'Classification error' (y-axis, 1% to 100%) vs 'Eigenvector rank (per digit)' (x-axis, 0 to 30) for the same model sizes. All lines show a sharp decrease in error as rank increases from 0 to 10, then plateau. Larger models achieve lower error rates faster.
+
+Figure 5: A) The similarity between ordered eigenvectors of the same model size averaged over all digits. This shows that equally sized models learn similar features. B) Resulting accuracy after only retaining the  $n$  most important eigenvalues (per digit). Both plots are averaged over 5 runs with the 90% confidence interval shown.
+
+{6}------------------------------------------------
+
+increasing model sizes results in more similar top eigenvectors. Further, truncating all but the top few eigenvectors across model sizes yields very similar classification accuracy. This implies that, beyond being consistently similar, these eigenvectors have a comparable impact on classification. In Appendix F, we further study the similarity of eigenvectors between sizes and show that retaining only a handful of eigenvectors results in minimal accuracy drops (0.01%).
+
+### 4.3 COMPARING WITH GROUND TRUTH: EIGENVECTORS FIND COMPUTATION
+
+To perform a ground-truth assessment of eigenvectors, we consider a task from a mechanistic interpretability challenge, where the goal was to determine the labeling function (training objective) from a model Casper (2023). Specifically, the challenge required reverse-engineering a binary image classifier trained on MNIST, where the label is based on the similarity to a specific target image. The model predicted ‘True’ if the input has high cosine similarity to this target or high similarity to the complement (one minus the grayscale) of that target and ‘False’ otherwise. This target is chosen as an instance of a ‘1’.
+
+Previous work (Stefan Heimersheim, 2023) reverse-engineered this through a combination of methods, all requiring careful consideration and consisting of non-trivial insights. Furthermore, the methods required knowledge of the original dataset and a hint of what to look for. While our method does not work on the original architecture, we show that we do not require such knowledge and can extract the original algorithm from the weights alone.
+
+We perform our decomposition on the output difference (True – False) since this is the only meaningful direction before the softmax. This consistently reveals one high positive eigenvalue; the rest are (close to) zero (Figure 6). The most positive eigenvector is sufficient for completing the task; it computes the exact similarity we want. If the input is close to the target, the blue region will match; if it is close to the complement, the red will match; if both are active simultaneously, they will somewhat cancel out. The remaining two eigenvectors are separated as they seem to overfit the data slightly; the negative eigenvector seems to penalize diagonal structures.
+
+Contrary to other models, this task greatly benefited from including biases. This arises from the fact that the model must not only compute similarity but also make its binary decision based on a learned threshold. If no bias is provided, the model attempts to find quadratic invariances in the data, which don’t generalize well, especially given the important but sensitive role of this threshold in classification. Here, the bias (shown in the bottom corner of Figure 6) represents a negative contribution. The role of biases in bilinear layers is further discussed in Appendix L.
+
+![Figure 6: Eigenvalues and eigenvectors of a model trained to classify based on similarity to a target. The figure consists of two rows of plots. The top row shows the top positive eigenvalue (blue line) starting at approximately 0.15 and dropping to near zero by x=10. The bottom row shows the negative eigenvalue (red line) starting at approximately -0.04 and rising to near zero by x=10. To the right of the plots are visualizations of the corresponding eigenvectors. The top row shows a blue vertical bar (Target) and a blue square (Bias). The bottom row shows a red vertical bar (Target) and a red square (Bias).](84e2ac543ffc4145dc85b05a48ec62e3_img.jpg)
+
+Figure 6: Eigenvalues and eigenvectors of a model trained to classify based on similarity to a target. The figure consists of two rows of plots. The top row shows the top positive eigenvalue (blue line) starting at approximately 0.15 and dropping to near zero by x=10. The bottom row shows the negative eigenvalue (red line) starting at approximately -0.04 and rising to near zero by x=10. To the right of the plots are visualizations of the corresponding eigenvectors. The top row shows a blue vertical bar (Target) and a blue square (Bias). The bottom row shows a red vertical bar (Target) and a red square (Bias).
+
+Figure 6: Eigenvalues and eigenvectors of a model trained to classify based on similarity to a target. The most important eigenvector (top-left) is a generalizing solution; the other features sharpen the decision boundary based on the training dataset. The latter features disappear with increased regularization. On the right, the target digit is shown along with the learned bias from the model.
+
+### 4.4 ADVERSARIAL MASKS: GENERAL ATTACKS FROM WEIGHTS
+
+To demonstrate the utility of weight-based decomposition, we construct adversarial masks for the MNIST model without training or any forward passes. These masks are added to the input, leading to misclassification as the adversarial digit. The effect is similar to steering, but the intervention is at the input instead of the model internals.
+
+{7}------------------------------------------------
+
+![Figure 7: Examples of an adversarial mask constructed from the given eigenvector along for models trained A) with Gaussian noise regularization (std 0.15) and B) without regularization. The figure shows four columns of images: Eigenvector, Adversarial Mask, Misclassified Example, and Random Mask. Below the images are two line graphs. The left graph shows Accuracy (y-axis, 0.6 to 1.0) vs Mask Std Dev (x-axis, 0.1 to 0.3). The right graph shows Misclassification (y-axis, 0.0 to 0.3) vs Mask Std Dev (x-axis, 0.1 to 0.3). Both graphs compare Original (blue line with circles), Adversarial (orange line with triangles), and Random (green line with squares) models. In both A and B, the Adversarial model shows a significant drop in accuracy and a corresponding increase in misclassification as the mask standard deviation increases, while the Original and Random models remain relatively stable.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 7: Examples of an adversarial mask constructed from the given eigenvector along for models trained A) with Gaussian noise regularization (std 0.15) and B) without regularization. The figure shows four columns of images: Eigenvector, Adversarial Mask, Misclassified Example, and Random Mask. Below the images are two line graphs. The left graph shows Accuracy (y-axis, 0.6 to 1.0) vs Mask Std Dev (x-axis, 0.1 to 0.3). The right graph shows Misclassification (y-axis, 0.0 to 0.3) vs Mask Std Dev (x-axis, 0.1 to 0.3). Both graphs compare Original (blue line with circles), Adversarial (orange line with triangles), and Random (green line with squares) models. In both A and B, the Adversarial model shows a significant drop in accuracy and a corresponding increase in misclassification as the mask standard deviation increases, while the Original and Random models remain relatively stable.
+
+Figure 7: Examples of an adversarial mask constructed from the given eigenvector along for models trained A) with Gaussian noise regularization (std 0.15) and B) without regularization. The average accuracy and the rate of misclassification as the adversarial digit show stronger effects for adversarial masks than random baselines. In B), the mask is only applied to the outer edge of pixels that are active on less than 1% of samples.
+
+We construct the adversarial masks from the eigenvectors for specific digits. One complication is that the eigenvectors can have nontrivial cosine similarity with each other, so an input along a single eigenvector direction could potentially activate multiple eigenvectors across different digits. To help avoid this, we construct the mask  $m_i$  for a given eigenvector  $v_i$  as the corresponding row of the pseudoinverse  $(V^+)_i$  for a set of eigenvectors  $V$  (specifically the top 10 positive). In an analogy to key-value pairs, the pseudoinverses effectively act like keys that activate with more specificity than the eigenvectors themselves, since  $v_j \cdot (V^+)_i = \delta_{ij}$ .
+
+We construct an adversarial mask from an eigenvector for the digit 3 (Figure 7A). Even though the original eigenvector resembles the digit, the pseudoinverse-based mask does not (see Appendix M for more examples). The accuracy, averaged over masks from the top three eigenvectors, drops significantly more than the baseline of randomly permuting the mask despite regularizing the model during training using dense Gaussian noise with a standard deviation of 0.15. The corresponding rise in misclassification indicates effective steering towards the adversarial digit.
+
+Ilyas et al. (2019) observe that adversarial examples can arise from predictive but non-robust features of the data, perhaps explaining why they often transfer to other models. Our construction can be seen as a toy realization of this phenomenon because the masks correspond to directions that are predictive of robust features but are not robust. We construct masks that only exploit the patterns of over-fitting found on the outer edge of the image for a model trained without regularization (Figure 7B). Since we can find this over-fitting pattern from the eigenvectors, in a general way, we can construct the mask by hand instead of optimizing it.
+
+## 5 LANGUAGE: FINDING INTERACTIONS BETWEEN SAE FEATURES
+
+Each output of a bilinear layer is described by weighted pairwise interactions between their input features. Previous sections show that this can be successfully leveraged to trace between a bilinear layer’s inputs and outputs. Here, we turn towards tracing between latent feature dictionaries obtained by training sparse autoencoders (SAEs) on the MLP inputs or outputs for a 6-layer bilinear transformer trained on TinyStories (Eldan & Li, 2023) (see training details in Appendix G).
+
+### 5.1 SENTIMENT NEGATION CIRCUIT
+
+We focus on using the eigendecomposition to identify low-rank, single-layer circuits in a bilinear transformer. We cherry-pick and discuss one such circuit that takes input sentiment features and semantically negates them. Unlike previous work on sparse feature circuits (Marks et al., 2024) that relies on gradient-based linear approximations, we identify nonlinear interactions grounded in the layer’s weights that contribute to the circuit’s computation.
+
+{8}------------------------------------------------
+
+![Figure 8: The sentiment negation circuit. A) Heatmap of the top 15 interactions between input features and output features. B) Scatter plot of top interacting features projected onto the top eigenvectors. C) Scatter plot of not-good feature activation vs. its approximation by the top two eigenvectors.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 8: The sentiment negation circuit. A) Heatmap of the top 15 interactions between input features and output features. B) Scatter plot of top interacting features projected onto the top eigenvectors. C) Scatter plot of not-good feature activation vs. its approximation by the top two eigenvectors.
+
+Figure 8: The sentiment negation circuit that computes the not-good and not-bad output features. A) The interaction submatrix containing the top 15 interactions. B) The projection of top interacting features onto the top eigenvectors using cosine similarity. The symbols for different clusters match the labels in A. Clusters coincide with the projection of meaningful directions such as the difference in “bad” vs “good” token unembeddings and the MLP’s input activations for the input “[BOS] not”. C) The not-good feature activation compared to its approximation by the top two eigenvectors.
+
+The sentiment negation circuit computes the activation of two opposing output features in layer 4 (index 1882 and 1179) that form a fully linear subspace. The cosine similarity of their decoder vectors is  $-0.975$ . Based on their top activations, the output features activate on negation tokens (“not”, “never”, “wasn’t”) and boosts either positive sentiment tokens (“good”, “safe”, “nice”) or negative sentiment tokens (“bad”, “hurt”, “sad”), so we denote the two features as the *not-good* and the *not-bad* features respectively. See Appendix O for the top activations of all features mentioned.
+
+Focusing on the not-good feature, the top interactions for computing its activations resemble an AND-gate (Figure 8A). Input features that boost negative sentiment tokens (blue squares) have strong positive interactions with negation token features (green triangles), but both have negligible self-interactions. So, both types of input features are needed to activate the not-good feature and flip the boost from negative to positive sentiment. The one positive sentiment feature (orange downward triangle) interacts with the opposite sign. The interactions shown are significantly larger than the typical cross-interactions with a standard deviation of 0.004 (Figure 27).
+
+The eigenvalue spectrum has one large positive (0.62) and one large negative value (-0.66) as outliers (Figure 27). We can see the underlying geometry of the circuit computation by projecting the input features onto these eigenvectors (Figure 8). By itself, a positive sentiment feature (blue squares) would equally activate both eigenvectors and cancel out, but if a negation feature is also present, the positive eigenvector is strongly activated. The activation based on only these two eigenvectors, following Equation 3, has a good correlation (0.66) with the activation of the not-good feature, particularly at large activation values (0.76), conditioned on the not-good feature being active.
+
+### 5.2 LOW-RANK APPROXIMATIONS OF OUTPUT FEATURE ACTIVATIONS
+
+The top eigenvectors can be used to approximate the activations of the SAE output features using a truncated form of Equation 3. To focus on the more meaningful tail of large activations, we compute the approximation’s correlation conditioned on the output feature being active. The correlations of inactive features are generally lower because they are dominated by ‘noise’. We evaluate this on three bilinear transformers at approximately 2/3 depth: a 6-layer TinyStories (‘ts-tiny’) and two FineWeb models with 12 and 16 layers (‘fw-small’ and ‘fw-medium’).
+
+We find that features are surprisingly low-rank, with the average correlation starting around 0.65 for approximations by a single eigenvector and rising steadily with additional eigenvectors (Figure 9A). Most features have a high correlation ( $> 0.75$ ) even when approximated by just two eigenvectors (Figure 9B). Scatter plots for a random sample of features show that the low-rank approximation often captures the tail dependence well (Figure 9C). Interestingly, we find the approximation to drastically improve with longer SAE training times while other metrics change only slightly. This indicates a ‘hidden’ transition near convergence and is further discussed in Appendix H. Overall, these results suggest that the interactions that produce large output activations are low-rank, making their interpretability potentially easier.
+
+{9}------------------------------------------------
+
+![Figure 9: Activation correlations with low-rank approximations for differently-sized transformers. A) Line plot of Correlation vs Top eigenvectors (0-60) for 'fw-medium' (blue), 'fw-small' (orange), and 'fw-tiny' (green). B) Histogram of Correlation (active only) vs Count for top 2 eigenvectors. C) 3x3 grid of scatter plots for 'fw-medium' output features with correlation values.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 9 consists of three panels. Panel A is a line plot titled 'Feature activation approximation' showing 'Correlation' on the y-axis (0.5 to 1.0) against 'Top eigenvectors' on the x-axis (0 to 60). Three lines represent 'fw-medium' (blue), 'fw-small' (orange), and 'fw-tiny' (green). All lines show an increasing trend, with 'fw-tiny' reaching the highest correlation of approximately 0.95 at 60 eigenvectors. Panel B is a histogram titled 'Approx. by top 2 eigenvectors' showing 'Count' on the y-axis (0 to 300) against 'Correlation (active only)' on the x-axis (-0.25 to 0.75). It features three distributions: 'fw-medium' (blue), 'fw-small' (orange), and 'fw-tiny' (green), all peaking around a correlation of 0.75. Panel C is a 3x3 grid of scatter plots for 'fw-medium' output features. The y-axis is 'Approximation' and the x-axis is 'Activation'. The diagonal cells show correlation values: top row (0.78, 0.82, 0.89), middle row (0.96, 0.89, 0.72), and bottom row (0.96, 0.46, 0.85).
+
+Figure 9: Activation correlations with low-rank approximations for differently-sized transformers. A) Line plot of Correlation vs Top eigenvectors (0-60) for 'fw-medium' (blue), 'fw-small' (orange), and 'fw-tiny' (green). B) Histogram of Correlation (active only) vs Count for top 2 eigenvectors. C) 3x3 grid of scatter plots for 'fw-medium' output features with correlation values.
+
+Figure 9: Activation correlations with low-rank approximations for differently-sized transformers. A) Average correlation over output features computed over every input where the feature is active. B) The distribution of active-only correlations for approximations using the top two eigenvectors. C) Scatter plots for a random set of nine output features on ‘fw-medium’. Approximations use the top two eigenvectors. Low correlation scores generally only occur on low-activation features.
+
+## 6 DISCUSSION
+
+**Summary.** This paper introduces a novel approach to weight-based interpretability that leverages the close-to-linear structure of bilinear layers. A key result is that we can identify the most important input directions that explain the layer’s output along a given direction using an eigenvector decomposition. The top eigenvectors are often interpretable, for example for MNIST they function as edge-detectors for strokes specific to each digit. The lack of element-wise nonlinearity in bilinear MLPs allows us to transform their weights into interaction matrices that connect input to output features and then extract the low-rank structure. In language models, we find that many SAE output features are well-approximated by low-rank interaction matrices, particularly at large activations. We highlighted one example of an extracted low-rank circuit that flips the sentiment of the next token if the current token is a negation (“not”). The behavior of this circuit can be easily understood in terms of the top eigenvectors, whereas finding a similar circuit in conventional MLPs would be more difficult. Overall, our results demonstrate that bilinear MLPs offer intrinsic interpretability that can aid in feature and circuit extraction.
+
+**Implications.** The main implication of our work is that weight-based interpretability is viable, even for large language models. Bilinear MLPs can replace conventional MLPs in transformers with minimal cost while offering intrinsic interpretability due to their lack of element-wise nonlinearities and close-to-linear structure. Current circuit analysis techniques rely on gradient-based approximations (Syed et al., 2023; Marks et al., 2024) or use transcoders (Dunefsky et al., 2024) to approximate MLPs. Both approaches depend on an input dataset, potentially leading to poor performance out-of-distribution, and they may not fully capture the nonlinear computations in MLPs. In contrast, bilinear MLPs can be transformed into explicit feature interaction matrices and decomposed in a way fully equivalent to the original computations. Extracting interactions more directly from the weights should lead to better, more robust circuits. Weight-based interpretability may also offer better safety guarantees since we could plausibly prove bounds on a layer’s outputs by quantifying the residual weights not captured in a circuit’s interactions.
+
+**Limitations.** Application of our methods typically relies on having a set of meaningful output directions available. In shallow models, the unembedded directions can be used, but in deeper models, we rely on features derived from sparse autoencoders that are dependent on an input dataset. Another limitation is that, although the eigenvalue spectra are often low-rank and the top eigenvectors appear interpretable, there are no guarantees the eigenvectors will be monosemantic. We expect that for high-rank spectra, the orthogonality between eigenvectors may limit their interpretability. Applying sparse dictionary learning approaches to decompose the bilinear tensor may be a promising way to relax the orthogonality constraint and find interpretable features from model weights.
+
+## ACKNOWLEDGEMENTS
+
+We are grateful to Narmeen Oozeer, Nora Belrose, Philippe Chlenski, and Kola Ayonrinde for helpful feedback on the draft. We are grateful to the AI Safety Camp program where this work first
+
+ Rest of paper (reference and Appendix) is removed.

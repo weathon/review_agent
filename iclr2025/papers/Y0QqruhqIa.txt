@@ -1,0 +1,320 @@
+
+
+{0}------------------------------------------------
+
+# EFFICIENT NEURON SEGMENTATION IN ELECTRON MICROSCOPY BY AFFINITY-GUIDED QUERIES
+
+Hang Chen<sup>1</sup>, Chufeng Tang<sup>1</sup>, Xiao Li<sup>1</sup>, Xiaolin Hu<sup>1,2,3\*</sup>
+
+1. Department of Computer Science and Technology, Institute for AI, BNRist, Tsinghua University, Beijing 100084, China
+
+2. Tsinghua Laboratory of Brain and Intelligence (THBI),
+
+IDG/McGovern Institute for Brain Research, Tsinghua University, Beijing 100084, China
+
+3. Chinese Institute for Brain Research (CIBR), Beijing 100010, China
+
+{chenhang20,lixiaol20}@emails.tsinghua.edu.cn; chufeng.t@foxmail.com  
+xlhu@tsinghua.edu.cn
+
+## ABSTRACT
+
+Accurate segmentation of neurons in electron microscopy (EM) images plays a crucial role in understanding the intricate wiring patterns of the brain. Existing automatic neuron segmentation methods rely on traditional clustering algorithms, where affinities are predicted first, and then watershed and post-processing algorithms are applied to yield segmentation results. Due to the nature of watershed algorithm, this paradigm has deficiency in both prediction quality and speed. Inspired by recent advances in natural image segmentation, we propose to use query-based methods to address the problem because they do not necessitate watershed algorithms. However, we find that directly applying existing query-based methods faces great challenges due to the large memory requirement of the 3D data and considerably different morphology of neurons. To tackle these challenges, we introduce affinity-guided queries and integrate them into a lightweight query-based framework. Specifically, we first predict affinities with a lightweight branch, which provides coarse neuron structure information. The affinities are then used to construct affinity-guided queries, facilitating segmentation with bottom-up cues. These queries, along with additional learnable queries, interact with the image features to directly predict the final segmentation results. Experiments on benchmark datasets demonstrated that our method achieved better results over state-of-the-art methods with a  $2\sim 3\times$  speedup in inference. Code is available at <https://github.com/chenhang98/AGQ>.
+
+## 1 INTRODUCTION
+
+Neuron segmentation in electron microscopy (EM) images has significant scientific importance for connectomics research, which enables the comprehensive reconstruction of neural connections in the nervous system and provides insights into the functioning of the brain (Winding et al., 2023; Scheffer et al., 2020; Dorkenwald et al., 2022; Peddie et al., 2022). Reconstructing large-scale structures typically involves handling vast amounts of data, ranging from terabytes to petabytes (Scheffer et al., 2020). Given the intricate three-dimensional and densely packed nature of neurons, the manual reconstruction process is extremely laborious and often requires years of effort from human experts to reconstruct an entire brain (e.g., a *Drosophila* larval brain (Winding et al., 2023)).
+
+In recent years, many methods (Funke et al., 2019; Lee et al., 2017; Knowles-Barley et al., 2016; Huang et al., 2022b; Chen et al., 2024) have been proposed to address the challenges of neuron segmentation by employing deep neural networks as an alternative to labor-intensive manual procedures. These methods usually follow a bottom-up segmentation paradigm, as depicted in Figure 1 (a). Initially, 3D affinities, which indicate the probabilities of neighboring voxels belonging to the same neuron, are predicted using a neural network (e.g., 3D U-Net (Çiçek et al., 2016)) and then transformed into fragments via a clustering algorithm where watershed (Meyer, 1992) is the
+
+---
+
+\*Corresponding author.
+
+{1}------------------------------------------------
+
+![Figure 1: Comparison of the proposed model with previous neuron segmentation methods. (a) Previous methods utilize neural networks to predict affinities, and then derive the final segmentation results via watershed and agglomeration. (b) The proposed query-based model directly predicts the segmentation results, which is more concise and efficient. Best viewed in digital with zoom-in.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+The diagram illustrates two neuron segmentation pipelines. Pipeline (a), labeled '(a) Previous', shows a sequential process: 'Volume Image' → '3D U-Net' → 'Affinities' → 'Watershed' → 'Fragments' → 'Agglomeration' → 'Segmentations'. Pipeline (b), labeled '(b) Ours', shows a more direct process: 'Volume Image' → 'Query-based Model' → 'Segmentations'. The 'Query-based Model' block includes a sub-diagram showing 'Queries' (represented by small colored squares) being processed to produce the final 'Segmentations'.
+
+Figure 1: Comparison of the proposed model with previous neuron segmentation methods. (a) Previous methods utilize neural networks to predict affinities, and then derive the final segmentation results via watershed and agglomeration. (b) The proposed query-based model directly predicts the segmentation results, which is more concise and efficient. Best viewed in digital with zoom-in.
+
+Figure 1: Comparison of the proposed model with previous neuron segmentation methods. (a) Previous methods utilize neural networks to predict affinities, and then derive the final segmentation results via watershed and agglomeration. (b) The proposed query-based model directly predicts the segmentation results, which is more concise and efficient. Best viewed in digital with zoom-in.
+
+de-facto practice. Subsequently, these fragments are merged into final neuron segmentation results through an agglomeration algorithm (Funke et al., 2019), which merges fragments based on their affinities at interfaces. However, these methods, heavily relying on traditional clustering algorithms such as watershed, suffer from several drawbacks that limit their application: (1) The watershed algorithm usually produces fragments with unnatural boundaries such as straight lines, referred to as artifacts, due to competition between seeds, leading to inaccurate segmentation results (as shown in Section 4.4); (2) These methods may incorrectly merge different neurons and make them difficult to distinguish in the agglomeration step; (3) The watershed algorithm lacks parallelizability, making it unsuitable for GPU acceleration, resulting in inefficiency. Moreover, the large amount (e.g., more than 100 thousands in a volume (Huang et al., 2022b)) of generated fragments slows down the subsequent post-processing steps such as agglomeration. Despite recent efforts to improve neuron segmentation through various techniques (Chen et al., 2023; Funke et al., 2019; Huang et al., 2022a; Liu et al., 2023b; 2022) (see Section 2), they still adhere to the traditional paradigm and, as a result, encounter the aforementioned problems. Note that there are also methods (Januszewski et al., 2018; Meirovitch et al., 2019) that work without using watershed, which we discuss in detail in Section 2.
+
+Neuron segmentation can be considered as a form of instance segmentation which has been extensively studied in computer vision. But it has notable differences from conventional instance segmentation. Firstly, the input data involves 3D volume images rather than 2D images. Secondly, the target objects in neuron segmentation are 3D neurons rather than natural objects with distinctive appearance. Given the morphologically complex and homogeneous nature of neurons, which exhibit dense distributions and similar appearances, distinguishing different neurons presents a significant challenge. For example, region-based methods like Mask R-CNN (He et al., 2017) may encounter difficulty in addressing this problem due to the ambiguity of bounding boxes, as pointed out in Huang et al. (2022b). Recently, query-based instance segmentation methods have shown promise in natural images, offering both efficiency and accuracy advantages (Cheng et al., 2022b;a; Zhang et al., 2021). However, these methods cannot be directly applied to neuron segmentation because their specific design for 2D natural images faces problems such as unaffordable memory overhead when ported to 3D data.
+
+In this work, we seek to explore the possibility of the query-based model in neuron segmentation, which could potentially address the limitations associated with current methods. The motivation is that the query-based model can directly predict the final segmentation results, thus avoiding the inaccuracy and inefficiency caused by watershed. However, we found that transferring the query-based methods to neuron segmentation is nontrivial. First, existing query-based models are tailored for 2D natural images and cannot be directly transferred to 3D neuron segmentation due to the unaffordable GPU memory overhead. Second, the distinct characteristics of neurons in EM, such as their homogeneous appearance and intricate morphology, which differ significantly from objects in natural images, could hinder the learning of queries. To tackle these challenges, we propose an efficient EM neuron segmentation model (Figure 1 (b)) with Affinity-Guided Query (AGQ). AGQ is constructed based on the predicted affinities from a lightweight affinity branch. It incorporates bottom-up cues, allowing the model to initiate predictions from coarse approximations rather than learning from scratch, thereby significantly reducing the learning difficulty. AGQ and learnable queries interact with the volume image features and with each other, capturing the diverse morphological characteristics of neurons and complementing the predictions of each other.
+
+{2}------------------------------------------------
+
+We conducted experiments on benchmark datasets AC3/AC4 (Kasthuri et al., 2015) and ZEBRAFING (Kornfeld et al., 2017). The results demonstrated that our method achieved superior results in terms of both accuracy and efficiency. In comparison to state-of-the-art methods, our method achieved significantly lower errors with  $200 \sim 300\%$  speedup. Note this speedup is significant considering that a volume for connectomics research could reach the  $mm^3$  level (Zheng et al., 2018; Winding et al., 2023; Shapson-Coe et al., 2024) and processing  $0.001mm^3$  volume requires hundreds of GPU hours plus hundreds of CPU hours (Sheridan et al., 2023).
+
+The main contributions of the paper are summarized as follows:
+
+- By introducing affinity-guided queries, we devise a lightweight query-based neuron segmentation method, eliminating the clustering algorithm used in traditional methods.
+- Extensive experiments validated the effectiveness of our method, improving both the accuracy and efficiency of neuron segmentation over previous methods.
+
+## 2 RELATED WORK
+
+**Neuron Segmentation.** Previous methods mainly follow bottom-up segmentation fashion (Funke et al., 2019; Lee et al., 2017; Huang et al., 2022b). They use a neural network (e.g., a 3D U-Net) to predict affinities, followed by the watershed algorithm to transform affinities into fragments and an agglomeration algorithm (Funke et al., 2019) to obtain the final results. The watershed and agglomeration algorithms require processing on the CPU, causing inefficiency. Recent advances include improving visual representation (Chen et al., 2023; Sheridan et al., 2023), devising superior loss functions (Funke et al., 2019), implementing label efficient supervision (Huang et al., 2022a; Liu et al., 2023b), employing learnable agglomeration modules (Liu et al., 2022), and improving the U-Net architecture (Luo et al., 2024; Sun et al., 2023). APViT (Sun et al., 2023) advanced U-Net by improving the ViT architecture with tailored designs such as learnable prompt base. However, these methods still follow the previous segmentation paradigm and suffer from inaccuracy and inefficiency. FFN (Januszewski et al., 2018) processes one individual neuron at a time. Despite being a new practice, FFN is two orders of magnitude slower than affinity-based methods and has similar performance (Sheridan et al., 2023). 3C (Meirovitch et al., 2019) introduced combinational encoding to process multiple neurons in parallel, but required multiple runs and could only merge those neurons, making it more of a substitute for agglomeration. Instead, the proposed method directly predict the final segmentation results via a query-based paradigm, which is concise and efficient.
+
+**Instance Segmentation.** The mainstream methods in instance segmentation include two-stage (He et al., 2017) and one-stage ones (Tian et al., 2020; Wang et al., 2020a;b). However, these methods were not suitable for the neuron segmentation. Two-stage methods rely on boxes to distinguish instances and cannot handle dense and widely distributed neurons. One-stage methods could not guarantee recall. Recently, query-based instance segmentation algorithms (Fang et al., 2021; Cheng et al., 2022a; Zhang et al., 2021) have emerged, which directly predict objects. However, these methods cannot be directly applied to neuron segmentation because their specific design for 2D natural images faces problems such as unaffordable memory overhead when ported to 3D data. Motivated by their success in natural images, we explore a lightweight query-based model coupled with affinity-guided queries specially tailored for neuron segmentation task. It is worth noting that although object detectors like Deformable DETR (two-stage version) (Zhu et al., 2021) also involve predicted queries, we address significantly different tasks and problems, with plenty of design differences (e.g., their predicted queries are implicit and do not work with learnable queries).
+
+**3D Medical and Biological Image Segmentation.** The segmentation of organs or lesions from CT (Wang et al., 2019; Zhou et al., 2019) or MRI (Ji et al., 2022; Zeng et al., 2020) images is the primary focus of 3D medical image segmentation. These tasks mainly involve semantic-level segmentation, which differs from the instance-level segmentation discussed in this paper. Building upon the 3D U-Net (Çiçek et al., 2016), various studies have improved the segmentation quality by refining the model structure, module design (Hatamizadeh et al., 2022; 2021; Peiris et al., 2022; Shaker et al., 2024) and label efficiency (Wu et al., 2024; Zhou et al., 2023). The 3D biological image segmentation tasks in electron microscopy include: mitochondria segmentation (Pan et al., 2023; Mai et al., 2023; Lin et al., 2021), synapse detection (Lin et al., 2021) and soma segmentation (Liu
+
+{3}------------------------------------------------
+
+et al., 2023a). They typically follow the bottom up fashion, where a semantic-level segmentation is first predicted and then converted into an instance-level segmentation by post-processing.
+
+## 3 METHOD
+
+In this section, we first introduce the preliminaries involving the problem definition of EM neuron segmentation and the previous methods. We then present a brief overview of our method, including the problem formulation and the framework. Subsequently, we detail the design and function of each module, as well as the training objectives. Finally, we describe how to apply our method on the large 3D volume EM images via block assembly.
+
+### 3.1 PRELIMINARIES
+
+#### 3.1.1 PROBLEM DEFINITION
+
+Given a volume EM image  $I \in \mathbb{R}^{D \times H \times W}$ , a neuron segmentation algorithm is required to predict the neuron id of all voxels, denoted as  $S \in \mathbb{N}^{D \times H \times W}$ , where  $D, H, W$  denote the depth, height, and width of the image, respectively. Each id in  $S$  indicates the segmentation result of a specific neuron, and id 0 indicates the background.
+
+#### 3.1.2 PREVIOUS METHODS
+
+As shown in Figure 1(a), previous methods typically employ deep neural networks (e.g., 3D U-Net) to predict affinities  $A \in [0, 1]^{3 \times D \times H \times W}$  first. These affinities represent the probabilities that neighboring voxels<sup>1</sup> belong to the same neuron (Gao et al., 2019; Ke et al., 2018; Funke et al., 2019) (see Appendix A for more explanation). Subsequently, a seeded watershed algorithm (Meyer, 1992) is applied to extract the fragments  $G$  based on the predicted affinities:
+
+$$G = \text{Watershed}(A) \in \mathbb{N}^{D \times H \times W}. \quad (1)$$
+
+Finally, the fragments  $G$  obtained from the seeded watershed algorithm are merged using an agglomeration algorithm based on the statistics of the affinities at their interfaces, yielding the final segmentation result:
+
+$$S_t = \text{Agglomeration}(G, A) \in \mathbb{N}^{D \times H \times W}. \quad (2)$$
+
+The agglomeration usually only merges fragments and cannot dissolve incorrect mergers. Thus, the seeds of the watershed are usually densely picked, incurring significant redundancy. On the one hand, the redundancy causes unnatural boundaries such as straight lines, referred to as artifacts, due to the competition between seeds; while on the other hand, it slows down the overall inference speed.
+
+### 3.2 QUERY-BASED NEURON SEGMENTATION FRAMEWORK
+
+To address the above issues, we aim to devise a concise and efficient query-based neuron segmentation method. We adopt a new modeling manner and directly predict  $N$  potential segmentation probability maps  $P \in (0, 1)^{N \times D \times H \times W}$  based on  $N$  queries. During inference, we obtain the segmentation results  $S_a$  by simply taking  $\text{argmax}$  on the first dimension of  $P$  to obtain the segmentation results (i.e., neuron id):
+
+$$S_a = \arg \max_{i \in 1, \dots, N} (P_{i, :, :, :}) \in \mathbb{N}^{D \times H \times W}. \quad (3)$$
+
+Without the watershed algorithm, this modeling simplifies the inference process considerably and could achieve faster inference than previous methods.
+
+Figure 2 instantiates several query-based models, consisting of 3D U-Net backbone and decoders to predict segmentation results. We create two baselines based on two mainstream decoder design (Figure 2 (a) and (b)) from state-of-the-art query-based models on natural images (Zhang et al., 2021; Cheng et al., 2021; 2022a). These two baselines have been adapted for the 3D data of neuron segmentation to make the GPU memory usage affordable. However, we found that neither baseline
+
+<sup>1</sup>Each voxel has six neighbors, of which only three need to be predicted due to duplication.
+
+{4}------------------------------------------------
+
+![Figure 2: Comparison of different query-based models. (a) Transformer Decoder: Volume image → 3D U-Net → Transformer Decoder → Seg. (b) K-Net Decoder: Volume image → 3D U-Net → K-Net Decoder → Seg. (c) Ours: Volume image → 3D U-Net → K-Net Decoder → Seg. In (c), a Query Generator takes learnable queries (LQ) and generates affinity-guided queries (AGQ) using learnable queries (LQ) and affinity-guided queries (AGQ).](690fce4fb5c9cbb8beb560cb2a3fcbeb_img.jpg)
+
+Figure 2: Comparison of different query-based models. (a) Transformer Decoder: Volume image → 3D U-Net → Transformer Decoder → Seg. (b) K-Net Decoder: Volume image → 3D U-Net → K-Net Decoder → Seg. (c) Ours: Volume image → 3D U-Net → K-Net Decoder → Seg. In (c), a Query Generator takes learnable queries (LQ) and generates affinity-guided queries (AGQ) using learnable queries (LQ) and affinity-guided queries (AGQ).
+
+Figure 2: Comparison of different query-based models. LQ and AGQ denotes learnable queries and affinity-guided queries, respectively.
+
+could tackle the task-specific challenges in neuron segmentation (see Section 4.5.1). The reason could be that query-based methods on natural images typically involve only learnable queries that are randomly initialized and updated by gradient descent. These queries lack inductive bias and does not discriminate well between neurons which have the same appearance and complex structure. This may underlie the difficulty encountered by these methods. In view of this, we propose to embed certain prior knowledge of affinities into the generation of queries. We chose K-Net decoder as shown in Figure 2 (c), since our experiments showed that it outperformed the Transformer decoder.
+
+### 3.3 OVERVIEW OF THE PROPOSED METHOD
+
+Figure 3 shows our framework, which consists of a 3D U-Net backbone network for feature extraction, a module to generate affinity-guided queries, and a 3D neuron decoder for directly predicting segmentation results. We then describe each module in detail.
+
+![Figure 3: Overview of the proposed method. The diagram shows the flow from Volume Image to Image Features F via a 3D U-Net. Image Features F are processed by an Affinity Branch to generate Affinities and a Connected Components module to generate coarse binary masks M_coarse. These are combined to form Affinity-Guided Queries. Image Features F are also processed by a 3D Neuron Decoder to generate initial queries Q_0 and segmentation probability maps P_0. These are combined with the Affinity-Guided Queries to form Learnable Queries. The Learnable Queries are processed by the 3D Neuron Decoder to generate Predicted Segmentation Probability Maps (Pred.). The Pred. maps are compared with the Ground Truth (GT) using a Bipartite Matching loss L_seg. The Affinity Branch is also supervised by a loss L_affinity. The 3D Neuron Decoder is supervised by a loss L_feature.](ca5566458a134032dd860e88fdaa0d2b_img.jpg)
+
+Figure 3: Overview of the proposed method. The diagram shows the flow from Volume Image to Image Features F via a 3D U-Net. Image Features F are processed by an Affinity Branch to generate Affinities and a Connected Components module to generate coarse binary masks M\_coarse. These are combined to form Affinity-Guided Queries. Image Features F are also processed by a 3D Neuron Decoder to generate initial queries Q\_0 and segmentation probability maps P\_0. These are combined with the Affinity-Guided Queries to form Learnable Queries. The Learnable Queries are processed by the 3D Neuron Decoder to generate Predicted Segmentation Probability Maps (Pred.). The Pred. maps are compared with the Ground Truth (GT) using a Bipartite Matching loss L\_seg. The Affinity Branch is also supervised by a loss L\_affinity. The 3D Neuron Decoder is supervised by a loss L\_feature.
+
+Figure 3: Overview of the proposed method.  $Q_0$  and  $P_0$  stand for the initial queries and segmentation probability maps, respectively.  $M_{\text{coarse}}$  denotes coarse binary masks.  $\mathcal{L}_{\text{affinity}}$ ,  $\mathcal{L}_{\text{feature}}$ ,  $\mathcal{L}_{\text{seg}}$  are losses for predicted affinities, image features and segmentation probability maps, respectively.
+
+### 3.4 3D NEURON DECODER
+
+Our efficient 3D neuron decoder is inspired by the query-based model for natural images (Zhang et al., 2021). The decoder comprises multiple stages with the same structure, as depicted in Figure 4. Each stage incorporates three inputs:
+
+- The image features  $F \in \mathbb{R}^{C \times D \times H \times W}$ , where  $C$  denotes the feature dimension<sup>2</sup>;
+- The segmentation probability maps from the previous stage  $P_{i-1} \in (0, 1)^{N \times D \times H \times W}$ ;
+- The neuron queries from the previous stage  $Q_{i-1} \in \mathbb{R}^{N \times C}$ , where  $i$  denotes the current stage (see Section 3.5 for the definition of  $P_0$  and  $Q_0$ ).
+
+With these inputs, we initially update the neuron queries using image features and segmentation predictions from the previous stage:
+
+$$Q'_i = \text{DyConv}_i(Q_{i-1}, P_{i-1} F^\top), \quad (4)$$
+
+<sup>2</sup>The dimension of batch size is omitted for simplicity.
+
+{5}------------------------------------------------
+
+![Figure 4: The detailed structure of the 3D Neuron Decoder. The diagram shows a sequence of operations starting with Image Features F. These are processed through a series of stages (K stages). Each stage consists of a DyConv_i layer, a SelfAtt_i layer, and a Linear_i layer. The DyConv_i layer takes Queries Q_{i-1} and Seg. Prob. Maps P_{i-1} as input and produces enhanced Queries Q'_i. The SelfAtt_i layer takes Q'_i and produces Q_i. The Linear_i layer takes Q_i and F as input and produces Seg. Prob. Maps P_i. The final output is a stack of Seg. Prob. Maps P_i for all stages, with a total of K stages.](191a4a245a7d36d03be9a990d0f758f5_img.jpg)
+
+Figure 4: The detailed structure of the 3D Neuron Decoder. The diagram shows a sequence of operations starting with Image Features F. These are processed through a series of stages (K stages). Each stage consists of a DyConv\_i layer, a SelfAtt\_i layer, and a Linear\_i layer. The DyConv\_i layer takes Queries Q\_{i-1} and Seg. Prob. Maps P\_{i-1} as input and produces enhanced Queries Q'\_i. The SelfAtt\_i layer takes Q'\_i and produces Q\_i. The Linear\_i layer takes Q\_i and F as input and produces Seg. Prob. Maps P\_i. The final output is a stack of Seg. Prob. Maps P\_i for all stages, with a total of K stages.
+
+Figure 4: The detailed structure of the 3D Neuron Decoder.  $K$  denotes the number of stages.
+
+where  $\text{DyConv}_i$  is a dynamic convolution layer (Fang et al., 2021), and  $P_{i-1}F^\top \in \mathbb{R}^{N \times C}$ . The enhanced queries can better capture the structural information of the morphologically complex and homogeneous neurons. Subsequently, these queries are processed through a self-attention layer  $\text{SelfAtt}_i$  (Vaswani et al., 2017):
+
+$$Q_i = \text{SelfAtt}_i(Q'_i), \quad (5)$$
+
+where the queries interact with each other to better distinguish among the neurons (e.g., deciding which query predicts which neuron). Finally, these queries interact with the image features to generate the segmentation probability maps for the current stage,
+
+$$P_i = \text{Softmax}(\text{Linear}_i(Q_i)F), \quad (6)$$
+
+where  $\text{Linear}_i(Q_i)F \in \mathbb{R}^{N \times D \times H \times W}$  and softmax is applied along its first dimension. The  $\text{Linear}_i$  represents a linear layer. This global and direct prediction approach can mitigate potential systematic artifacts that might arise from the watershed algorithm.
+
+### 3.5 AFFINITY-GUIDED QUERY
+
+To enhance the learning efficiency of the 3D neuron decoder, we propose the affinity-guided queries. These queries are designed to include coarse neuron structure information, allowing the decoder to initiate the process from it rather than from scratch. Initially, we utilize an affinity branch composed of multiple convolutional layers to predict affinities based on image features  $F$ ,
+
+$$A = \text{AffinityBranch}(F) \in (0, 1)^{3 \times D \times H \times W}. \quad (7)$$
+
+Subsequently, the predicted affinities are averaged along the first dimension to derive  $\bar{A} \in (0, 1)^{D \times H \times W}$ , which is then thresholded to create a 3D binary mask. We use the mean value of  $A$  across all dimensions, referred as  $a$ , as the threshold. This is to ensure that there is at least one foreground connected component during training. Following this, a fast connected component extraction algorithm (Wu et al., 2005) is employed to generate coarse masks:
+
+$$M_{\text{coarse}} = \text{ConnectedComponent}(\bar{A} > a), \quad (8)$$
+
+where  $M_{\text{coarse}} \in \{0, 1\}^{N_a \times D \times H \times W}$  comprises a collection of (denoted as  $N_a$ ) boolean masks. By multiplying and averaging each of these masks with the image features, we obtain the respective affinity-guided queries  $Q_{\text{affinity}} \in \mathbb{R}^{N_a \times C}$ , where  $C$  denotes the feature dimension. These queries encapsulate the rudimentary neuron structure details, thereby facilitating the subsequent stages and reducing their reliance on training data. This enhancement leads to improved segmentation accuracy.
+
+Due to the possibility of incorrect merging in  $M_{\text{coarse}}$ , the number of affinity-guided queries could be less than the actual number of neurons, resulting in missing neurons not being predicted. Thus we also use  $N_l$  learnable queries  $Q_{\text{learnable}} \in \mathbb{R}^{N_l \times C}$ . We concatenate them with affinity-guided queries together as the initial queries of the 3D neuron decoder (i.e.,  $N = N_a + N_l$ ),
+
+$$Q_0 = \text{Concat}(Q_{\text{affinity}}, Q_{\text{learnable}}) \in \mathbb{R}^{(N_a + N_l) \times C}. \quad (9)$$
+
+Note that  $N_a$  varies between passes through the network while  $N_l$  is kept constant. The learnable queries are expected to interact with affinity-guided queries through self-attention layer (in Equation (5)) to recognize and predict the missing neurons. The initial segmentation probability maps  $P_0$  are created by taking the product<sup>3</sup> of  $Q_0$  (post a linear layer) and image features  $F$ , which is then passed through a softmax function, i.e.,  $P_0 = \text{Softmax}(\text{Linear}_0(Q_0)F)$ .
+
+<sup>3</sup>The two matrices have the shapes  $N \times C$  and  $C \times (D \times H \times W)$ , with reshaping omitted for simplicity.
+
+{6}------------------------------------------------
+
+### 3.6 TRAINING OBJECTIVES
+
+During training, we employ three loss functions to supervise the predicted affinities, the image features, and the final segmentation results, respectively,
+
+$$\mathcal{L} = \mathcal{L}_{\text{affinity}} + \mathcal{L}_{\text{feature}} + \mathcal{L}_{\text{seg}}, \quad (10)$$
+
+where  $\mathcal{L}_{\text{affinity}}$  denotes the binary cross-entropy loss,  $\mathcal{L}_{\text{feature}}$  denotes the contrastive loss, and  $\mathcal{L}_{\text{seg}}$  is a weighted combination of dice loss and cross-entropy loss. See Appendix B for more details.
+
+### 3.7 BLOCK ASSEMBLY
+
+Due to the extensive coverage of volumetric EM images across large continuous regions (e.g.,  $100 \times 1024 \times 1024$  voxels), it is impractical to directly input the entire volume into the network. Current methods utilize a sliding-window technique, which generates affinity on individual cropped blocks (e.g.,  $17 \times 257 \times 257$  voxels) and then assembles them together for watershed and agglomeration. The sliding stride is smaller than the block’s size (typically half) to reduce border effects. In our method, the predictions of the blocks also require assembly. To achieve this, we reuse the agglomeration function, but for merging the results of distinct blocks instead of fragments. Another difference is that we do not necessitate overlap to address border effects, which is an advantage over previous methods. More details are discussed in Appendix C.
+
+## 4 EXPERIMENT
+
+### 4.1 DATASETS AND METRICS
+
+**Datasets.** To validate the effectiveness of our method, we conducted experiments on the benchmark datasets AC3/AC4 (Kasthuri et al., 2015) and ZEBRAFINECH (Kornfeld et al., 2017). AC3 and AC4 are two human-labeled sub-volumes extracted from the mouse somatosensory cortex dataset (Kasthuri et al., 2015), with dimensions of  $256 \times 1024 \times 1024$  and  $100 \times 1024 \times 1024$ , respectively. The ZEBRAFINECH dataset contains 33 volumes (approximately  $150 \times 150 \times 150$ ), of which we used 30 volumes as a training set and 3 volumes as a test set. More details about the datasets can be found in Appendix D.
+
+**Metrics.** We utilized the widely used Variation of Information (VOI) (Nunez-Iglesias et al., 2013) and Adapted Rand Error (Arand) (Arganda-Carreras et al., 2015) as the evaluation metrics. VOI can be further divided into two types of errors,  $\text{VOI}_{\text{split}}$  and  $\text{VOI}_{\text{merge}}$ , which refer to the errors of segmenting a single neuron into multiple segments and merging multiple neurons into the same segment, respectively. Both VOI and Arand indicate errors, with a lower value indicating better accuracy. Further elaboration can be found in Appendix E.
+
+### 4.2 IMPLEMENTATION DETAILS
+
+By default, we employed a 3D neuron decoder with two stages (i.e.,  $K = 2$  in Figure 4), comprising 100 learnable queries and a maximum of 100 affinity-guided queries. For feature extraction, we adopted a 3D U-Net with ResBlock (He et al., 2016) (i.e., ResUNet (Xiao et al., 2018)). We used Adam optimizer and trained 20k iterations by default. Training was performed on  $8 \times$  NVIDIA 3090 GPUs and costed about 40 hours. More implementation details are provided in Appendix F.
+
+### 4.3 QUANTITATIVE RESULTS
+
+We first conducted experiments on the AC3/AC4 dataset and presented the results in Table 1. The results were reproduced utilizing the `pytorch_connectomics` codebase (Lin et al., 2021) (e.g., ResUNet (Xiao et al., 2018) and SwinUNETR (Hatamizadeh et al., 2021)) or referenced from published papers (e.g., PEA (Huang et al., 2022b) and FragViT (Luo et al., 2024)). Our method was compared with these watershed-based methods in terms of both accuracy and efficiency.
+
+Regarding accuracy, our method generally outperformed these methods, exhibiting superior performance in metrics such as the lowest VOI and competitive Arand. This shows the strong potential of
+
+{7}------------------------------------------------
+
+Table 1: Results on the AC3/AC4 dataset. “-” indicates that the value is unavailable. Inference times were tested with an NVIDIA 3090 GPU and 64 Intel Xeon Gold CPUs, which represent the time (in seconds) to process the full test set. ‘\*’ indicates results obtained from published papers (Huang et al., 2022b; Luo et al., 2024).  $VOIs$  and  $VOI_m$  are short for  $VOI_{split}$  and  $VOI_{merge}$ , respectively.
+
+|  | Metrics |  |  |  | Inference Time |  |  |  |
+|-|-|-|-|-|-|-|-|-|
+|  | $VOIs$ | $VOI_m$ | $VOI$ | Arand | Model | Watershed | Agg. | Total |
+| ResUNet (Xiao et al., 2018) | 1.037 | 0.258 | 1.295 | 0.154 | 81.2 | 30.8 | 35.8 | 147.8 |
+| SeUNet (Lin et al., 2021) | 1.031 | 0.251 | 1.282 | 0.156 | 83.1 | 30.7 | 36.0 | 149.8 |
+| UNETR (Hatamizadeh et al., 2022) | 2.750 | 0.281 | 3.031 | 0.220 | 37.0 | 41.4 | 133.0 | 211.4 |
+| SwinUNETR (Hatamizadeh et al., 2021) | 1.238 | <b>0.191</b> | 1.429 | 0.110 | 80.0 | 32.5 | 43.1 | 155.6 |
+| LSD (Sheridan et al., 2023) | 1.448 | 0.229 | 1.677 | 0.134 | 229.9 | 29.7 | 26.5 | 286.1 |
+| ML-De (De Brabandere et al., 2017) | 1.575* | 0.615* | 2.190* | 0.196* | - | - | - | - |
+| SuperHuman (Lee et al., 2017) | 1.145* | 0.263* | 1.408* | 0.122* | 52.3 | 28.4 | 19.4 | 100.1 |
+| MALA (Funke et al., 2019) | 1.304* | 0.242* | 1.546* | 0.120* | - | - | - | - |
+| PEA (Huang et al., 2022b) | 0.852* | 0.232* | 1.084* | 0.094* | 60.2 | 37.1 | 25.4 | 122.7 |
+| FragViT (Luo et al., 2024) | 0.868* | <b>0.191*</b> | 1.054* | 0.093* | >60.2 | ≈37.1 | ≈25.4 | >122.7 |
+| APViT (Sun et al., 2023) | 0.767* | 0.209* | 0.976* | <b>0.078*</b> | >60.2 | ≈37.1 | ≈25.4 | >122.7 |
+| AGQ (ours) | <b>0.677</b> | 0.290 | <b>0.967</b> | 0.095 | <b>27.6</b> | <b>N/A</b> | <b>6.1</b> | <b>33.7</b> |
+
+Table 2: Results on the ZEBRAFINCH dataset. Results on three test volumes are reported. Inference times were tested with an NVIDIA 3090 GPU and 64 Intel Xeon Gold CPUs, which represent the time (in seconds) required to process all the test volumes.
+
+|  | Volume-1 |  | Volume-2 |  | Volume-3 |  | Infer. Time |
+|-|-|-|-|-|-|-|-|
+|  | $VOI$ | Arand | $VOI$ | Arand | $VOI$ | Arand | Total |
+| ResUNet (Xiao et al., 2018) | 0.272 | 0.013 | 1.967 | 0.135 | 1.003 | 0.154 | 21.1 |
+| SeUNet (Lin et al., 2021) | 0.271 | 0.012 | 1.894 | 0.152 | 1.021 | 0.162 | 21.0 |
+| UNETR (Hatamizadeh et al., 2022) | 3.013 | 0.403 | 3.394 | 0.529 | 2.665 | 0.360 | 17.7 |
+| SwinUNETR (Hatamizadeh et al., 2021) | 0.744 | 0.206 | 2.022 | 0.154 | 0.693 | 0.035 | 34.9 |
+| SuperHuman (Lee et al., 2017) | 0.268 | 0.011 | 1.867 | <b>0.107</b> | 0.721 | 0.042 | 16.6 |
+| PEA (Huang et al., 2022b) | 0.208 | 0.009 | 1.715 | 0.122 | 0.534 | 0.028 | 17.4 |
+| AGQ (ours) | <b>0.177</b> | <b>0.008</b> | <b>1.278</b> | 0.134 | <b>0.338</b> | <b>0.024</b> | <b>6.4</b> |
+
+our method, as a brand new neuron segmentation method. The achievement of the lowest  $VOI_{split}$  (indicating errors in predicting a neuron as multiple segments) aligns with our motivation to avoid the extensive fragments associated with the watershed algorithm.
+
+Regarding efficiency, our method significantly surpassed previous methods, due to its concise neuron segmentation modeling and framework. Firstly, our method did not generate segmentation results from affinities, eliminating the need for overlap prediction to address border effects (as discussed in Section 3.7). As a result, the model’s inference time was reduced. Secondly, with its compact modeling, our method predicted segmentation results without the need of watershed, thus entirely saved this time. Finally, despite reusing the agglomeration function (as explained in Section 3.7), our results were relatively complete with fewer regions to process, leading to significant time savings in the agglomeration step. Overall, our method achieved a speedup of about 340% over ResUNet and 260% over PEA. Regarding FragViT and APViT, the inference time was estimated, as the code was unavailable. The estimation was made due to FragViT and APViT employing the same watershed and post-processing method as PEA but with a heavier network.
+
+On ZEBRAFINCH dataset (Table 2), our model also exhibited general better accuracy on the three test volumes, with a speedup of about 200%. For example, our method achieved significantly lower  $VOI$  on all test volume and was 230% and 170% faster than ResUNet and PEA, respectively. For deployment, our model consumed 6.5G GPU and 5.4G CPU memory during inference on these datasets, suitable for most computing devices.
+
+{8}------------------------------------------------
+
+![Figure 5: Visualization comparison of segmentation results obtained from different methods. The figure is a 3x6 grid. The first column shows the 'Volume Image' (raw grayscale data). The second column shows the 'Ground Truth' (color-coded segmentation). The third column shows 'ResUNet' results. The fourth column shows 'SuperHuman' results. The fifth column shows 'PEA' results. The sixth column shows 'AGQ (Ours)' results. The first two rows show 2D slices with zoomed-in regions (indicated by white boxes) to highlight artifacts (indicated by white arrows). The third row shows 3D reconstructions of neuron structures, with colored arrows pointing to specific features like thin branches or myelin sheaths that are prone to failed reconstruction.](d4e9f8f6bf5d7853ecae9c9633900af1_img.jpg)
+
+Figure 5: Visualization comparison of segmentation results obtained from different methods. The figure is a 3x6 grid. The first column shows the 'Volume Image' (raw grayscale data). The second column shows the 'Ground Truth' (color-coded segmentation). The third column shows 'ResUNet' results. The fourth column shows 'SuperHuman' results. The fifth column shows 'PEA' results. The sixth column shows 'AGQ (Ours)' results. The first two rows show 2D slices with zoomed-in regions (indicated by white boxes) to highlight artifacts (indicated by white arrows). The third row shows 3D reconstructions of neuron structures, with colored arrows pointing to specific features like thin branches or myelin sheaths that are prone to failed reconstruction.
+
+Figure 5: Visualization comparison of segmentation results obtained from different methods. The top two rows present a 2D slice alongside two zoomed-in regions, highlighting artifacts with white arrows. The third row illustrates neuron structures in 3D space, with colored arrows indicating locations that are prone to failed reconstruction. Best viewed in digital with zoom-in.
+
+### 4.4 QUALITATIVE RESULTS
+
+We present a qualitative comparison of segmentation results on AC3/AC4 obtained using previous methods and our method in Figure 5. The first two rows display the results on a 2D section, illustrating that our method can avoid the artifacts present in previous methods. In the second row, indicated by white arrows, the watershed-based methods generated numerous unnatural boundaries (*i.e.*, artifacts). In contrast, our method employed a learning-based approach to predict the final result directly, effectively reducing this issue.
+
+The third row in Figure 5 showcases the 3D morphology of several predicted neurons. Highlighted by colored arrows, our method excels in reconstructing the neuronal structure. We observed that traditional methods struggle with locations characterized by thin branches or myelin sheaths, indicating the limitations of relying solely on affinities. Predicted affinities in these areas may be uncertain or distorted. Some failure cases of our method are presented and discussed in Appendix G.
+
+To further analyze the roles of different queries in prediction, we visualized the intermediate outputs of the 3D neuron decoder in the Appendix H. As shown in Figure 10, the integration of learnable queries gradually refines the segmentation, effectively recovering missing or incorrectly merged neurons (highlighted by yellow arrows). This analysis highlights the distinct roles of the two query types: affinity-guided queries provide initial predictions, while learnable queries assist in correcting segmentation errors, particularly in resolving neuron mergers.
+
+### 4.5 ABLATION STUDY
+
+We conducted ablation experiments on the AC3/AC4 dataset to analyze the individual effects of each module. We report both the metrics on blocks and on the full test set (*i.e.*, before and after block assembly). Note that the models were trained for 10k iterations to save training costs, thus there is a discrepancy with the results in Table 1. More ablation experiments can be found in Appendix I.
+
+#### 4.5.1 DESIGN OF NEURON DECODER
+
+As shown in Table 3, the K-Net style decoder achieved better results, probably due to its more explicit way of extracting instance features. Consequently, we chose the K-Net style decoder as a baseline and incorporated the proposed affinity-guided queries to achieve the best results.
+
+{9}------------------------------------------------
+
+Table 3: Design of neuron decoder.
+
+|  | Block |  | Full |  |  |  |
+|-|-|-|-|-|-|-|
+|  | VOI | Arand | VOI <sub>split</sub> | VOI <sub>merge</sub> | VOI | Arand |
+| Transformer Decoder | 1.245 | 0.184 | 1.695 | 1.138 | 2.833 | 0.395 |
+| K-Net Decoder | 0.710 | 0.087 | 1.131 | 0.562 | 1.693 | 0.160 |
+| Ours | <b>0.538</b> | <b>0.065</b> | 0.781 | 0.397 | <b>1.177</b> | <b>0.141</b> |
+
+#### 4.5.2 EFFECT OF AFFINITY-GUIDED AND LEARNABLE QUERIES
+
+We studied the effectiveness of affinity-guided queries (AGQ) in Table 4. Completely excluding AGQ significantly deteriorated results (denoted as *LQ* in the table). Merely increasing the number of learnable queries (*i.e.*, *Double LQ*) did not lead to improved results, suggesting that enhancing segmentation quality solely by increasing query quantity is insufficient.
+
+The effect of learnable queries (LQ) was validated by comparing the results with and without them, as shown in Table 4 (*AGQ* *v.s.* *LQ* + *AGQ*). The incorporation of learnable queries notably enhanced the segmentation results, particularly in mitigating merging errors (*i.e.*, VOI<sub>merge</sub>). This finding aligned with our motivation that learnable queries could retrieve incorrectly merged neurons.
+
+Table 4: Effect of affinity-guided queries.
+
+|  | Block |  | Full |  |  |  |
+|-|-|-|-|-|-|-|
+|  | VOI | Arand | VOI <sub>split</sub> | VOI <sub>merge</sub> | VOI | Arand |
+| LQ | 0.710 | 0.087 | 1.131 | 0.562 | 1.693 | 0.160 |
+| Double LQ | 0.695 | 0.082 | 1.078 | 0.650 | 1.729 | 0.209 |
+| AGQ | 0.836 | 0.102 | 0.822 | 0.881 | 2.010 | 0.229 |
+| LQ+AGQ | <b>0.538</b> | <b>0.065</b> | <b>0.781</b> | <b>0.397</b> | <b>1.177</b> | <b>0.141</b> |
+
+#### 4.5.3 AFFINITY GUIDANCE
+
+We compare different ways of leveraging affinity guidance to validate whether affinity-guided query is the optimal. Two naive baselines are concatenating affinities or coarse segmentation onto image features, which can fuse information from affinities into image features instead of queries. As shown in Table 5, AGQ yielded the best results, showing its effect in leveraging bottom-up cues.
+
+Table 5: Results of different approaches of using bottom-up cues.
+
+|  | Block |  | Full |  |  |  |
+|-|-|-|-|-|-|-|
+|  | VOI | Arand | VOI <sub>split</sub> | VOI <sub>merge</sub> | VOI | Arand |
+| Concat affinities | 0.836 | 0.102 | 0.836 | 0.102 | 2.010 | 0.229 |
+| Concat coarse segmentation | 0.869 | 0.104 | 0.975 | 0.917 | 1.893 | 0.213 |
+| Affinity guided queries | <b>0.538</b> | <b>0.065</b> | 0.781 | 0.397 | <b>1.177</b> | <b>0.141</b> |
+
+## 5 CONCLUSION AND DISCUSSION
+
+We propose a new method named AGQ for neuron segmentation in 3D volume EM images. Diverging from previous methods that heavily rely on watershed, our method offers a more concise and efficient solution. Extensive experiments validated the effectiveness of our method, which achieved superior results and a 2~3 $\times$  speedup. We hope our method could advance the development of large-scale neuron reconstruction, thereby deepening our understanding of the brain. Future work includes exploring improved ways to handle large volumes and focused improvements for failure cases (failure cases and limitations are discussed in Appendix G).
+
+## ACKNOWLEDGMENTS
+
+We thank Gang Zhang for helpful discussions and Lesi Wei for developing the drawing scripts. This work was supported in part by the National Key Research and Development Program of China (No. 2021ZD0200301) and the National Natural Science Foundation of China (No. U2341228).
+
+ Rest of paper (reference and Appendix) is removed.

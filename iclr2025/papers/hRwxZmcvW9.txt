@@ -1,0 +1,301 @@
+
+
+{0}------------------------------------------------
+
+# BRIDGING AND MODELING CORRELATIONS IN PAIRWISE DATA FOR DIRECT PREFERENCE OPTIMIZATION
+
+Yuxin Jiang<sup>1,2\*</sup>, Bo Huang<sup>1,2</sup>, Yufei Wang<sup>3</sup>, Xingshan Zeng<sup>3</sup>, Liangyou Li<sup>3</sup>,  
+Yasheng Wang<sup>3</sup>, Xin Jiang<sup>3</sup>, Lifeng Shang<sup>3</sup>, Ruiming Tang<sup>3</sup>, Wei Wang<sup>1,2</sup>
+
+<sup>1</sup>The Hong Kong University of Science and Technology (Guangzhou)
+
+<sup>2</sup>The Hong Kong University of Science and Technology
+
+<sup>3</sup>Huawei Noah’s Ark Lab
+
+yjiangcm@connect.ust.hk, weiwcs@ust.hk
+
+## ABSTRACT
+
+Direct preference optimization (DPO), a widely adopted offline preference optimization algorithm, aims to align large language models (LLMs) with human-desired behaviors using pairwise preference data. However, the generation of the winning response and the losing response within pairwise data are typically isolated, leading to weak correlations between them as well as suboptimal alignment performance. To address this issue, we propose an effective framework for Bridging and Modeling Correlations in pairwise data, named **BMC**. Firstly, we increase the consistency and informativeness of the pairwise preference signals through *targeted modifications*, synthesizing a pseudo-winning response by improving the losing response with the winning response as a reference. Secondly, we identify that DPO alone is insufficient to model these correlations and capture nuanced variations. Therefore, we propose learning token-level correlations by *dynamically* leveraging the policy model’s confidence during training. Comprehensive experiments on QA, math, and instruction-following tasks demonstrate the effectiveness of our approach, significantly surpassing competitive baselines, including DPO. Additionally, our in-depth quantitative analysis reveals the reasons behind our method’s superior performance over DPO and showcases its versatility to other DPO variants. We release our repository at <https://github.com/YJiangcm/BMC>.
+
+## 1 INTRODUCTION
+
+Direct preference optimization (DPO) (Rafailov et al., 2023) has emerged as a prominent alternative to reinforcement learning from human feedback (RLHF) (Christiano et al., 2017; Bai et al., 2022a; Ouyang et al., 2022) for aligning large language models (LLMs) with human values. Unlike the traditional RLHF approach, DPO bypasses training a reward model and avoids using any reinforcement learning algorithms. Since the inception of DPO, numerous studies have sought to advance this method by refining its training objective (Wang et al., 2024). For instance, IPO (Azar et al., 2024) introduces an alternative pairwise preference loss to mitigate overfitting to the preference dataset, while R-DPO (Park et al., 2024) incorporates a regularization term to prevent the exploitation of latent length bias in the training data.
+
+However, relatively little attention has been given to enhancing DPO through advancements in the quality of preference data used for training. In particular, the generation of winning and losing responses within preference data often occurs in an *isolated* manner, either through human annotation (Bai et al., 2022a) or automated techniques such as RLAIF (Bai et al., 2022b) and reject sampling (Liu et al., 2024a; Pace et al., 2024). This isolation implies that winning and losing responses are produced without mutual visibility, resulting in a lack of strong correlation or relevance between them. Consequently, the model may struggle to identify nuanced yet significant distinctions that differentiate superior responses from inferior ones (Fürnkranz & Hüllermeier, 2010; Wirth et al., 2017), which can ultimately compromise optimization and alignment effectiveness.
+
+\*Work partially done during the internship at Huawei Noah’s Ark Lab.
+
+{1}------------------------------------------------
+
+In this work, we introduce an innovative framework, termed **BMC**, to Bridge and Model Correlations in pairwise data for direct preference optimization. During the Bridging Phase, we enhance correlations by increasing the consistency and informativeness of pairwise preference signals. By using the winning response as a reference, we synthesize a pseudo-winning response through *targeted modifications* of the losing response. This pseudo-winning response offers two key advantages: (1) it preserves essential characteristics of the losing response, minimizing noise in preference signals (*consistency*); (2) it encapsulates all human-desired values from the winning response, enabling the model to better discern features that lead to superior performance (*informativeness*). The nuanced differences between the pseudo-winning and losing responses are indeed what we expect the model to learn in the subsequent Modeling Phase. Nonetheless, we identify that DPO alone is insufficient to model these correlations and capture nuanced variations. From the perspective of the token-level Markov Decision Process (MDP) (Rafailov et al., 2024), DPO aggregates rewards uniformly across all tokens, assuming equal contribution to sequence quality and neglecting token-specific importance. To address this, we adjust the emphasis on rewards of different tokens between pseudo-winning and losing responses. Unlike previous methods (Guo et al., 2024; Cao et al., 2024; Chan et al., 2024; Chen et al., 2024a) that assign predefined values for fine-grained guidance, our adjustment is *dynamically* guided by the policy model’s confidence, *i.e.*, the probability assigned to generated tokens during training. This ensures the model focuses on learning challenging distinctions while reinforcing known patterns, resulting in a more nuanced and robust policy.
+
+We conduct extensive experiments across three downstream scenarios: question answering, mathematical reasoning, and instruction following, utilizing a total of 10 datasets. Our results demonstrate that our method consistently and significantly outperforms competitive offline optimization algorithms across various tasks. Furthermore, we use in-depth analyses to elucidate why our method outperforms DPO and show that our framework can be versatily adapted to other DPO variants, confirming its potential for broad application.
+
+## 2 RELATED WORK
+
+**Preference optimization.** Preference optimization refers to aligning large language models with human preferences or specific desired outcomes. A well-established method for this is reinforcement learning from human feedback (RLHF) (Christiano et al., 2017; Bai et al., 2022a; Ouyang et al., 2022). Although RLHF produces highly capable models, its training process is often complex and unstable (Santacrocce et al., 2023). To address these challenges, direct preference optimization (DPO) (Rafailov et al., 2023) introduces an alternative offline algorithm to optimize the regularized expected rewards without relying on RL. Building on DPO, subsequent methods like IPO (Azar et al., 2024) address overfitting to preference data, while R-DPO (Park et al., 2024) introduces length-based regularization to mitigate exploitation.
+
+**Preference data construction.** Constructing high-quality pairwise preference data is essential for preference optimization. Given the high cost of manually curating these datasets at scale, researchers have explored automated methods for producing preference data. One notable approach, RLAIF (Bai et al., 2022b) employs LLMs to label side-by-side response pairs, eliminating the need for human labeling. Alternatively, winning and losing responses can be generated by utilizing models of varying quality (Kim et al., 2023) or through specific prompting techniques (Yang et al., 2023a). Recently, sampling-based methods such as Statistical Rejection Sampling (Liu et al., 2024a) and West-of-N (Pace et al., 2024) have been introduced, generating preference pairs by selecting candidates sampled from the optimal policy. Nonetheless, these methods isolatedly generate winning and losing responses without accounting for the correlations between them.
+
+**Token-level preference optimization.** The majority of preference optimization strategies typically utilize trajectory-wise (sequence-level) rewards, while LM training and generation both occur at the token level (Yang et al., 2023b). To bridge this gap, FIGA (Guo et al., 2024) and DRLC (Cao et al., 2024) exploit external LLMs to pinpoint positive and negative token segments within responses, assigning fixed reward values (*e.g.*, +1 for positive, -1 for negative) as guidance. Meanwhile, ABC (Chan et al., 2024) and RLMEC (Chen et al., 2024a) extract fine-grained credits from the reward model. Despite their contributions, these methods rely on predefined values for fine-grained guidance, failing to account for the dynamic learning process of the policy model.
+
+{2}------------------------------------------------
+
+## 3 METHODOLOGY
+
+In this section, we present the proposed **BMC** approach, which bridges and models correlations in pairwise data for direct preference optimization. As depicted in Figure 1, our BMC framework is structured around two pivotal stages: (1) the Bridging Phase, where we enhance the correlations between pairwise data by increasing the consistency and informativeness of pairwise preference signals through *targeted modifications* (§3.1); and (2) the Modeling Phase, where we *dynamically* model the correlations during the optimization process by leveraging the confidence of the policy model (§3.2), alleviating the insufficient token-level credit assignment of DPO.
+
+![Figure 1: Overview of the proposed BMC framework. The diagram is divided into two main sections: Bridging Phase and Modeling Phase. In the Bridging Phase, an input prompt x and a losing response y_l are processed by an LLM to generate a targeted modification, resulting in a winning response y_w. In the Modeling Phase, the winning response y_w and the losing response y_l are compared to find differences (diff). These differences are then used to optimize a policy model pi_theta, which leverages the policy model confidence to dynamically model the correlations between y_w and y_l.](69edc2887e907309499ac95b47ab6905_img.jpg)
+
+**Bridging Phase**
+
+The input prompt  $x$  is: "He felt pride when he looked at his new mile time, what did he do? Options: (A) compete against (B) tell many people about (C) improve yourself (D) pass class". The losing response  $y_l$  is: "He was proud of passing a mile race. He felt pride when he looked at his new mile time as he passed a class. The answer is D". The winning response  $y_w$  is: "Feeling pride about a new mile time suggests he worked on getting better and improved himself. The answer is C". An LLM is used to make a targeted modification to  $y_l$  using  $y_w$  as a reference, resulting in the synthesized pseudo-winning response  $\tilde{y}_w$ : "He was proud of his new mile time. He felt pride when he looked at his new mile time as he improved himself. The answer is C".
+
+**Modeling Phase**
+
+The synthesized pseudo-winning response  $\tilde{y}_w$  and the losing response  $y_l$  are compared to find differences (diff). The differences are then used to optimize a policy model  $\pi_\theta$ , which leverages the policy model confidence to dynamically model the correlations between  $\tilde{y}_w$  and  $y_l$ . The policy model  $\pi_\theta$  is shown with its confidence scores for the tokens in  $\tilde{y}_w$  and  $y_l$ .
+
+Figure 1: Overview of the proposed BMC framework. The diagram is divided into two main sections: Bridging Phase and Modeling Phase. In the Bridging Phase, an input prompt x and a losing response y\_l are processed by an LLM to generate a targeted modification, resulting in a winning response y\_w. In the Modeling Phase, the winning response y\_w and the losing response y\_l are compared to find differences (diff). These differences are then used to optimize a policy model pi\_theta, which leverages the policy model confidence to dynamically model the correlations between y\_w and y\_l.
+
+Figure 1: Overview of our proposed BMC framework. (1) In the Bridging Phase, we utilize an off-the-shelf LLM to make *targeted modifications* of losing response  $y_l$  on undesired tokens, with the winning response  $y_w$  serving as a reference. Therefore, the synthesized pseudo-winning response  $\tilde{y}_w$  is highly correlated with  $y_l$ . (2) In the Modeling Phase, we model the correlations between  $\tilde{y}_w$  and  $y_l$  by *dynamically* emphasizing the rewards of their varied tokens ( $\text{diff}(\tilde{y}_w | y_l)$  and  $\text{diff}(y_l | \tilde{y}_w)$ ), leveraging the policy model confidence (numbers indicated above tokens) during training.
+
+### 3.1 BRIDGING PHASE
+
+In offline preference optimization, it is commonly assumed that we have access to a static pairwise preference dataset  $\mathcal{D} = \{x^{(i)}, y_w^{(i)}, y_l^{(i)}\}_{i=1}^N$ , where  $y_w$  and  $y_l$  denote the winning and losing response, give the input prompt  $x$ . However, since  $y_w$  and  $y_l$  are typically generated in isolation, the correlation between  $y_w$  and  $y_l$  can be inherently weak during pairwise preference optimization. In the context of DPO, the Bradley-Terry objective (Bradley & Terry, 1952) computes gradients based on the relative likelihoods of  $y_w$  and  $y_l$ . When the correlation between  $y_w$  and  $y_l$  is weak, the differences between these responses are often superficial (e.g., stylistic or irrelevant variations) rather than substantive distinctions that reflect human-preferred behaviors. Consequently, the optimization process may inadvertently focus on minor discrepancies rather than meaningful distinctions. This results in gradients that are less informative for guiding the model towards robust preference alignment. To address this challenge, we enhance the alignment efficacy by improving the consistency and informativeness of pairwise preference signals. As shown in the upper part of Figure 1, we utilize an off-the-shelf LLM to make targeted modification of  $y_l$  by referring to  $y_w$ :
+
+$$\text{LLM}(I, x, y_w, y_l) \rightarrow \tilde{y}_w, \quad (1)$$
+
+where  $\tilde{y}_w$  is the generated pseudo-winning response,  $I$  is the instruction (see examples in Appendix A.2) that requires  $y_l$  to be modified only on dispreferred tokens, using  $y_w$  as a reference guidance. In this way,  $\tilde{y}_w$  preserves essential characteristics of the losing response  $y_l$  while encapsulating all
+
+{3}------------------------------------------------
+
+human-desired values in the winning response  $y_w$ . The token-level differences between  $\tilde{y}_w$  and  $y_l$  highlight the core human expected and unexpected behaviors by decoupling from the inherent linguistic style and overall semantic distribution. Thus,  $(\tilde{y}_w, y_l)$  refines the original training data  $(y_w, y_l)$  for more focused learning, shifting the optimization process to concentrate on the most critical differences in preference data. The benefits of the Bridging Phase are further analyzed in §5.2. Finally, we use the new dataset  $\tilde{\mathcal{D}} = \{x^{(i)}, \tilde{y}_w^{(i)}, y_l^{(i)}\}_{i=1}^N$  for subsequent training.
+
+An alternative approach that attempts to enhance the correlation between the winning and losing responses is to degenerate  $y_w$  to  $\tilde{y}_l$  via targeted modification and utilize  $(y_w, \tilde{y}_l)$  as the preference pair. Nevertheless, our ablation study in Table 3 reveals that LLMs encounter challenges with this inverse operation, leading to a notable decline in performance.
+
+### 3.2 MODELING PHASE
+
+After the Bridging Phase, the token-level differences between  $\tilde{y}_w$  and  $y_l$  can be obtained through dynamic programming algorithms like Levenshtein Distance (Yujian & Bo, 2007). As depicted in the lower part of Figure 1, these nuanced variations guide LLMs to prioritize the reinforcement of optimal actions while discouraging suboptimal ones within a single response. However, our findings below indicate that DPO alone is insufficient for capturing the nuanced variations, highlighting the necessity for supplementary techniques to comprehensively model these correlations.
+
+**Alternative interpretation of DPO.** DPO (Rafailov et al., 2023) introduced a novel framework for optimizing the equivalent KL-constrained reward function as in RLHF, without the need to learn an explicit reward model. Instead, the problem is cast as a maximum likelihood estimation for the policy model  $\pi_\theta$  on the preference dataset  $\mathcal{D}$ , resulting in the following training objective:
+
+$$\mathcal{L}_{\text{DPO}}(\pi_\theta; \pi_{\text{ref}}) = -\mathbb{E}_{(x, y_w, y_l) \sim \mathcal{D}} \left[ \log \sigma \left( \beta \log \frac{\pi_\theta(y_w | x)}{\pi_{\text{ref}}(y_w | x)} - \beta \log \frac{\pi_\theta(y_l | x)}{\pi_{\text{ref}}(y_l | x)} \right) \right], \quad (2)$$
+
+where  $\pi_{\text{ref}}$  is the reference model, typically the supervised fine-tuned (SFT) model, and  $\beta$  is a regularisation term corresponding to the strength of KL-regularization in RLHF.
+
+As shown in Eq. (2), DPO was originally conceptualized as a bandit problem, where the whole response of the model is treated as a single arm to receive a reward. More recently, Rafailov et al. (2024) extended the theoretical foundation of DPO, showing that it can also be derived in the context of token-level MDP. The corresponding training objective at the token level is:
+
+$$\mathcal{L}_{\text{DPO}}(\pi_\theta; \pi_{\text{ref}}) = -\mathbb{E}_{(\tau_w, \tau_l) \sim \mathcal{D}} \left[ \log \sigma \left( \beta \sum_{t=0}^{N-1} \log \frac{\pi_\theta(a_w^t | s_w^t)}{\pi_{\text{ref}}(a_w^t | s_w^t)} - \beta \sum_{t=0}^{M-1} \log \frac{\pi_\theta(a_l^t | s_l^t)}{\pi_{\text{ref}}(a_l^t | s_l^t)} \right) \right], \quad (3)$$
+
+where  $\tau_w$  and  $\tau_l$  denote the win trajectory and the lose trajectory, respectively.  $a$  indicates the action (current generated token), and  $s$  signifies the state (all tokens generated so far).
+
+**Our solution.** It can be inferred from Eq. (3) that DPO, redefined as a token-level MDP, assigns rewards to each token generation by  $\beta \log \frac{\pi_\theta(a^t | s^t)}{\pi_{\text{ref}}(a^t | s^t)}$ , and simply add up the rewards of all tokens as the accumulated reward of the trajectory. This *uniform aggregation* assumes that each token contributes equally to the overall quality of the sequence, without considering the varying importance of each token (timestep). Therefore, nuanced differences between  $\tilde{y}_w$  and  $y_l$  that significantly influence the overall meaning or quality of the response might not be adequately emphasized (refer to Figure 6), leading to suboptimal performance. To this end, we propose to emphasize the rewards of critical tokens, *i.e.*, nuanced differences between  $\tilde{y}_w$  and  $y_l$ . The magnitude of the emphasis is determined *dynamically* by the policy model’s confidence, which refers to the probability assigned to the generated token during training. Below, we detail our design choices for the pseudo-winning response and losing response, respectively.
+
+- For varied tokens in the pseudo-winning response  $\tilde{y}_w$ , we adapt the reward factor based on the learning process of the policy model. Lower policy confidence indicates underdeveloped learning of the target behavior, signaling the need for additional focus to help the model better capture these nuances. Consequently, we adjust the reward factor to be inversely proportional to the policy model’s confidence, as formalized in Eq. (5).
+
+{4}------------------------------------------------
+
+![Figure 2: Two bar charts showing -log(p) for different token positions. (a) Pseudo-winning response: 1st (1.23), w/o 1st (1.09), all (1.11). (b) Losing response: 1st (13.79), w/o 1st (1.81), all (1.85).](e0d425c8e4eef259e4c52d81426d93fa_img.jpg)
+
+Figure 2 consists of two bar charts, (a) and (b), showing the averaged  $-\log(p)$  of tokens in different positions of spans. The y-axis for both charts is  $-\log(p)$  ranging from 0 to 15. The x-axis is 'Token position' with three categories: '1st', 'w/o 1st', and 'all'.
+
+(a) Pseudo-winning response: The bars show  $-\log(p)$  values of 1.23 for '1st', 1.09 for 'w/o 1st', and 1.11 for 'all'.
+
+(b) Losing response: The bars show  $-\log(p)$  values of 13.79 for '1st', 1.81 for 'w/o 1st', and 1.85 for 'all'.
+
+Figure 2: Two bar charts showing -log(p) for different token positions. (a) Pseudo-winning response: 1st (1.23), w/o 1st (1.09), all (1.11). (b) Losing response: 1st (13.79), w/o 1st (1.81), all (1.85).
+
+Figure 2: We aggregate varied tokens in  $\tilde{y}_w$  or  $y_l$  into more coarser-grained spans. During the DPO training on  $\tilde{\mathcal{D}}$ , we compute the averaged  $-\log(p)$  of tokens in different positions of spans.
+
+- For varied tokens in the losing response  $y_l$ , we carefully adjust the reward factor by reinforcing already learned patterns of the policy model. Intuitively, tokens in  $y_l$  with higher confidence from the policy model may reflect inaccurate preference learning and therefore warrant stronger penalization. However, our analysis reveals a distinct pattern of the policy model when processing  $y_l$  compared to  $\tilde{y}_w$ . Specifically, when grouping varied tokens in  $y_l$  into coarser-grained spans, the model’s confidence is significantly influenced by the token’s position within these spans, as illustrated in Figure 2. We observe that the probabilities assigned to the initial token of incorrect spans in  $y_l$  are typically low, whereas the probabilities for subsequent tokens within the same span are notably higher. Prior studies have identified token probability as a critical signal for detecting anomalous behaviors (Xiao & Wang, 2021; Fadeeva et al., 2024) and assessing generation quality (Yuan et al., 2021; Fu et al., 2024). Consistent with these findings, our results indicate that during training, the policy model can effectively recognize the onset of undesired spans by assigning low probabilities to initial tokens. Nonetheless, due to the autoregressive dependencies, subsequent tokens within these spans receive higher probabilities, reflecting the contextual coherence established by preceding tokens, even when the span as a whole is incorrect. Thus, while it is crucial to penalize initial tokens, applying equally strong penalties to subsequent tokens might be suboptimal, as they often maintain local coherence within the flawed span. Therefore, we adjust the reward factor to also be inversely proportional to the policy model’s confidence in Eq. (6).
+
+In a nutshell, our approach dynamically modulates the emphasis placed on critical tokens based on the policy model’s confidence. This adaptive reward mechanism ensures that the model focuses on learning challenging distinctions while reinforcing already learned patterns, ultimately fostering a more nuanced and robust policy (see our analysis in §5.2). The formalization of our approach is encapsulated in Eq. (4), where  $\lambda_{\tilde{y}_w^t}$  and  $\lambda_{y_l^t}$  adjust dynamically based on the policy’s confidence, ensuring a tailored emphasis on critical tokens to improve the overall model performance.
+
+$$\mathcal{L}_{\text{DPO-BMC}}(\pi_\theta; \pi_{\text{ref}}) = -\mathbb{E}_{(x, \tilde{y}_w, y_l) \sim \tilde{\mathcal{D}}} \left[ \log \sigma \left( \beta \sum_{\tilde{y}_w^t \in \tilde{y}_w} \lambda_{\tilde{y}_w^t} \log \frac{\pi_\theta(\tilde{y}_w^t | \tilde{y}_w^{\leq t}, x)}{\pi_{\text{ref}}(\tilde{y}_w^t | \tilde{y}_w^{\leq t}, x)} - \beta \sum_{y_l^t \in y_l} \lambda_{y_l^t} \log \frac{\pi_\theta(y_l^t | y_l^{\leq t}, x)}{\pi_{\text{ref}}(y_l^t | y_l^{\leq t}, x)} \right) \right], \quad (4)$$
+
+where
+
+$$\lambda_{\tilde{y}_w^t} = \begin{cases} 1 + \min \left( \text{sg} \left( \frac{1}{\pi_\theta(\tilde{y}_w^t | \tilde{y}_w^{\leq t}, x)} \right), \delta \right), & \text{if } \tilde{y}_w^t \in \text{diff}(\tilde{y}_w | y_l) \\ 1, & \text{otherwise} \end{cases} \quad (5)$$
+
+$$\lambda_{y_l^t} = \begin{cases} 1 + \min \left( \text{sg} \left( \frac{1}{\pi_\theta(y_l^t | y_l^{\leq t}, x)} \right), \delta \right), & \text{if } y_l^t \in \text{diff}(y_l | \tilde{y}_w) \\ 1, & \text{otherwise} \end{cases} \quad (6)$$
+
+The  $\text{sg}$  denotes the stop-gradient operator, the  $\delta$  is an upper limit threshold that controls the emphasis on the rewards of the critical tokens, preventing overly aggressive updates. The  $\text{diff}(\tilde{y}_w | y_l)$  and  $\text{diff}(y_l | \tilde{y}_w)$  signify using the Levenshtein Distance algorithm to find the varied tokens in  $\tilde{y}_w$  and  $y_l$ , respectively. In Appendix C, we provide a gradient analysis of DPO-BMC. Unlike DPO, our approach harmonizes both sequential and token-level perspectives, effectively optimizing the overall sequence structure alongside crucial token choices for the desired outcome.
+
+{5}------------------------------------------------
+
+## 4 EXPERIMENTAL SETUP
+
+We conduct a comprehensive evaluation across three downstream scenarios, including question answering (QA), mathematical reasoning, and instruction following (IF). The detailed data statistics as well as the evaluation metrics are listed in Table 6 of Appendix A.1.
+
+**Models and training settings.** For the QA and mathematical reasoning setup, we utilize Llama2-7B-base (Touvron et al., 2023) in our experiments. Dealing with these tasks necessitates LLMs to possess domain-specific knowledge and engage in systematic, step-by-step reasoning to reach the ultimate answer. Therefore, following prior works (Chen et al., 2024a;b), we fine-tune Llama2-7B-base on the training set of ECQA (Aggarwal et al., 2021) and QASC (Khot et al., 2020) for QA, and fine-tune Llama2-7B-base on MetaMathQA (Yu et al., 2024) for mathematical reasoning. We denote the fine-tuned LLM as SFT and use it as the backbone for preference optimization. In line with prior research (Chen et al., 2024a;b), we construct preference pairs  $(y_w, y_l)$  based on the training data, by using the ground truth as  $y_w$  and the SFT model’s inference output as  $y_l$ . For the instruction following setup, we utilize Llama3-8B-base (Dubey et al., 2024) and Mistral-7B-Base (Jiang et al., 2023a) in our experiments. Following the training pipeline of Zephyr (Tunstall et al., 2023) and SimPO (Meng et al., 2024), we train a base model on the UltraChat-200k dataset (Ding et al., 2023) to obtain an SFT model. Then, we use the SFT model as the starting point and perform preference optimization on the UltraFeedback dataset (Cui et al., 2023), where  $y_w$  and  $y_l$  are collected from LLMs of varying quality.
+
+During our Bridging Phase, we utilize gpt-4-0125-preview for targeted modification to obtain  $\tilde{y}_w$ , based on the prompt template in Appendix A.2. We also demonstrate in Table 4 that **a less powerful open-source LLM, such as Llama3-70B-Instruct, can acquire comparable results**. During our Modeling Phase, we list the implementation details in Appendix A.3 for reproducibility. A comprehensive cost analysis in Appendix B confirms that **the computational overhead introduced by our BMC pipeline is minimal**.
+
+**Evaluation benchmarks.** In question answering, we adopt the test splits of ECQA (Aggarwal et al., 2021), QASC (Khot et al., 2020), OpenbookQA (Mihaylov et al., 2018), and StrategyQA (Geva et al., 2021) for evaluation. In mathematical reasoning, we conduct the evaluation on four challenge datasets including GSM8k (Cobbe et al., 2021), MATH (Hendrycks et al., 2021), MAWPS (Koncel-Kedziorski et al., 2016), and TabMWP (Lu et al., 2023). In instruction following, We assess our models using two of the most popular open-ended instruction-following benchmarks: AlpacaEval 2 (Li et al., 2023) and Arena-Hard v0.1 (Li et al., 2024). Both benchmarks evaluate the models’ versatile conversational abilities across a diverse set of queries. For each query, the evaluated model’s response and the reference model’s response are compared head-to-head using an auto-evaluator. We use the officially recommended configurations<sup>1</sup> during the evaluation.
+
+**Baselines.** We compare our approach with various powerful *offline* preference optimization methods, including FIGA (Guo et al., 2024), DPO (Rafailov et al., 2023), and DPO variants (IPO (Azar et al., 2024), ORPO (Hong et al., 2024), R-DPO (Park et al., 2024), and SimPO (Meng et al., 2024)). The training objectives of these methods are listed in Table 7. Besides, we include two additional baselines: (1) **DPO (CW)**: enhancing pairwise data correlation by prompting the SFT model to Continue Writing a prefix of the winning response to generate the losing one; (2) **DPO (EW)**: leveraging an off-the-shelf LLM for External Weighting of token-level reward (Lee et al., 2024), where LLM scores each token in the winning and losing responses based on how much it improves or decreases the overall quality.
+
+## 5 EXPERIMENTAL RESULTS
+
+In this section, we present the main results of our experiments, showcasing the superior performance of our method across various benchmarks and ablation studies (§5.1). Next, we conduct in-depth quantitative analyses to elucidate why our method outperforms DPO (§5.2 and §5.3). Furthermore, we demonstrate the versatility of our framework by adapting it to other DPO variants (§5.4).
+
+<sup>1</sup>AlpacaEval: [https://github.com/tatsu-lab/alpaca\\_eval](https://github.com/tatsu-lab/alpaca_eval). Arena-Hard v0.1: <https://github.com/lm-sys/arena-hard-auto>.
+
+{6}------------------------------------------------
+
+Table 1: Experimental results (based on Llama2-7B-base) on question answering tasks and mathematical reasoning tasks. “Avg.” is the average accuracy of all sub-tasks. In each column, the highest score is **bolded** and the second-highest is underlined.
+
+| Method | Question-Answering Tasks |  |  |  |  | Mathematical Reasoning Tasks |  |  |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|
+|  | ECQA | QASC | OBQA | StrategyQA | Avg. | GSM8k | MATH | MAWPS | TabMWP | Avg. |
+| SFT | 72.8 | 54.5 | 51.8 | 56.9 | 59.0 | 55.8 | 11.6 | 80.3 | 42.8 | 47.6 |
+| FIGA | 70.3 | 52.5 | 51.7 | 48.6 | 55.8 | 54.1 | 9.8 | 75.5 | 39.0 | 44.6 |
+| IPO | 71.5 | 58.9 | 53.6 | 58.4 | 60.6 | 57.2 | 12.1 | 82.2 | 42.5 | 48.5 |
+| OPRO | 69.8 | 55.1 | 51.4 | 57.2 | 58.4 | 56.0 | 12.4 | 80.8 | 41.3 | 47.6 |
+| R-DPO | 73.5 | 59.5 | 55.4 | 58.8 | 61.8 | 56.9 | 12.0 | 81.9 | 42.2 | 48.2 |
+| SimPO | 71.9 | 56.7 | 52.2 | 55.4 | 59.1 | 57.5 | 12.7 | 81.8 | <u>43.5</u> | 48.9 |
+| DPO | 73.1 | 58.8 | 55.6 | 57.8 | 61.3 | 56.3 | 12.3 | 81.2 | 43.4 | 48.3 |
+| DPO (CW) | 72.5 | 58.6 | 55.2 | 57.3 | 60.9 | 55.9 | 11.8 | 80.7 | 42.8 | 47.8 |
+| DPO (EW) | 72.9 | 59.4 | 55.8 | 57.9 | 61.5 | 56.5 | 12.0 | 80.9 | 43.4 | 48.2 |
+| <b>DPO-BMC</b> | <b>75.9</b> | <b>63.0</b> | <b>60.4</b> | <b>61.0</b> | <b>65.1</b> | <b>58.4</b> | <b>13.0</b> | <b>83.1</b> | <b>43.8</b> | <b>49.6</b> |
+| DPO-BC | <u>75.7</u> | <u>62.0</u> | <u>56.0</u> | <u>60.1</u> | <u>63.4</u> | <u>57.6</u> | <u>12.7</u> | <u>82.8</u> | 43.4 | <u>49.1</u> |
+| DPO-MC | 74.8 | 60.0 | <u>56.4</u> | 58.8 | 62.5 | 57.2 | 12.5 | 82.4 | 43.0 | 48.8 |
+
+Table 2: Experimental results on instruction-following tasks. “LC” is the length-controlled win rate, and “WR” is the raw win rate. “Avg. len” denotes the average number of tokens in the responses.
+
+| Method | Llama3-8B-Base |  |  |  |  | Mistral-7B-Base |  |  |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|
+|  | AlpacaEval 2 |  |  | Arena-Hard |  | AlpacaEval 2 |  |  | Arena-Hard |  |
+|  | LC (%) | WR (%) | Avg. len | WR (%) | Avg. len | LC (%) | WR (%) | Avg. len | WR (%) | Avg. len |
+| SFT | 7.5 | 4.7 | 956 | 2.6 | 414 | 8.1 | 5.9 | 998 | 2.2 | 454 |
+| FIGA | 8.4 | 4.2 | 1,199 | 5.1 | 416 | 7.0 | 4.9 | 1,378 | 2.5 | 461 |
+| IPO | 13.4 | 9.8 | 1,430 | 14.0 | 477 | 12.5 | 10.8 | 1,588 | 8.5 | 522 |
+| ORPO | 12.5 | 11.4 | 1,793 | 11.7 | 573 | 14.5 | 11.5 | 1,630 | 9.4 | 566 |
+| R-DPO | 17.1 | 14.4 | 1,801 | 17.6 | 582 | 16.0 | 12.3 | 1,521 | 10.4 | 529 |
+| SimPO | <u>21.3</u> | <b>18.9</b> | 1,718 | <b>26.6</b> | 562 | 16.8 | <u>14.4</u> | 1,906 | <b>18.4</b> | 615 |
+| DPO | 16.0 | 14.8 | 1,713 | 17.6 | 559 | 15.1 | 13.3 | 1,657 | 13.6 | 540 |
+| DPO (CW) | 15.2 | 14.0 | 1,756 | 17.1 | 570 | 14.5 | 12.9 | 1,647 | 13.0 | 532 |
+| DPO (EW) | 17.2 | 15.6 | 1,702 | 18.2 | 566 | 15.3 | 13.4 | 1,668 | 13.9 | 549 |
+| <b>DPO-BMC</b> | <b>22.4</b> | <u>16.8</u> | 1,285 | <u>18.1</u> | 406 | <b>20.8</b> | <b>16.6</b> | 1,317 | <u>17.6</u> | 488 |
+| DPO-BC | 20.6 | 14.4 | 1,269 | 16.8 | 422 | <u>18.6</u> | 13.8 | 1,489 | 15.9 | 502 |
+| DPO-MC | 17.7 | 15.2 | 1,890 | 17.9 | 579 | 16.4 | 14.3 | 1,712 | 15.4 | 551 |
+
+### 5.1 MAIN RESULTS AND ABLATIONS
+
+**Our method consistently and significantly outperforms baselines.** As presented in Table 1, our model DPO-BMC consistently achieves state-of-the-art results across all evaluated QA and math benchmarks. Specifically, DPO-BMC outperforms DPO by 3.8 absolute points on QA tasks and by 1.3 points on math tasks. On instruction-following tasks (Table 2), DPO-BMC secures the highest length-controlled win rate, surpassing DPO by over 5 points across various settings, with even greater gains for larger base models (Appendix E). The length-controlled win rate (Dubois et al., 2024) serves as a robust metric that mitigates the effects of length bias, thereby providing a more reliable evaluation of LLM-based auto-annotation. Notably, **DPO-BMC generates responses that are significantly more concise than other baselines.** As highlighted in Table 2, the average response length of DPO-BMC and DPO-BC is approximately 75% of that produced by DPO and DPO-MC. This attribute of length normalization is credited to the correlated preference data we constructed, which directs optimization towards critical desired behaviors rather than verbosity. A case study in Table 12 further underscores the effectiveness and robustness of our approach.
+
+**Both key designs in BMC are crucial.** In Table 1 and Table 2, we additionally present results from ablating each key design element of DPO-BMC:
+
+- **DPO-BC:** Training using DPO’s original objective on our constructed preference data.
+- **DPO-MC:** Training using our proposed objective in Eq. (4) on the original preference data.
+
+{7}------------------------------------------------
+
+Table 3: Ablation study on diverse data synthesis methods in the Bridging Phase. The average accuracy is presented for QA and Math. LC on AlpacaEval 2 is reported for instruction following (IF), based on Llama3-8B.
+
+| Data Synthesis | Training Data | QA | Math | IF |
+|-|-|-|-|-|
+| $y_l \xrightarrow{y_w} \tilde{y}_w$ (ours) | $(\tilde{y}_w, y_l)$ | <b>65.1</b> | <b>49.6</b> | <b>22.4</b> |
+| $y_l \longrightarrow \tilde{y}_w$ | $(\tilde{y}_w, y_l)$ | 64.3 | 49.2 | 19.8 |
+| $y_w \xrightarrow{y_l} \tilde{y}_l$ | $(y_w, \tilde{y}_l)$ | 64.6 | 48.7 | 18.9 |
+| $y_w \longrightarrow \tilde{y}_l$ | $(y_w, \tilde{y}_l)$ | 63.9 | 48.6 | 17.6 |
+
+![Bar chart showing Performance (Y-axis, 10 to 70) versus Data Modification Proportion (X-axis, 100% to 0%). The chart compares QA (blue), Math (orange), and IF (green) across different modification levels. Dashed lines indicate baseline performance for each task: QA at ~65, Math at ~50, and IF at ~22. Performance for all tasks increases as the modification proportion decreases from 100% to 20%, then slightly decreases at 0%.](d864789b0d8384da1d22fd6a5d76bbdf_img.jpg)
+
+| Modification Proportion | QA (Blue) | Math (Orange) | IF (Green) |
+|-|-|-|-|
+| 100% (DPO-BMC) | ~65 | ~50 | ~22 |
+| 80% | ~65 | ~50 | ~22 |
+| 60% | ~65 | ~50 | ~22 |
+| 40% | ~65 | ~50 | ~22 |
+| 20% | ~65 | ~50 | ~22 |
+| 0% (DPO-BMC) | ~65 | ~50 | ~22 |
+
+Bar chart showing Performance (Y-axis, 10 to 70) versus Data Modification Proportion (X-axis, 100% to 0%). The chart compares QA (blue), Math (orange), and IF (green) across different modification levels. Dashed lines indicate baseline performance for each task: QA at ~65, Math at ~50, and IF at ~22. Performance for all tasks increases as the modification proportion decreases from 100% to 20%, then slightly decreases at 0%.
+
+Figure 3: Ablation study on data modification proportion in the Bridging Phase.
+
+Our examination reveals several key findings: (1) DPO (CW), the “Continue Writing” approach, slightly underperforms standard DPO, as it introduces superficial correlations that fail to capture the nuanced, task-specific alignments essential for effective optimization. In contrast, our Bridging Phase explicitly enhances *informative correlations*—elucidate fine-grained distinctions between desired and undesired behaviors through token-level variations. This targeted focus significantly improves model performance; (2) Even when leveraging identical training preference data, our designed optimization objective consistently outperforms both DPO and DPO (EW), highlighting its superior ability to model fine-grained correlations based on the dynamic of the policy model’s confidence; and (3) Combining our constructed data with our designed objective yields the best results, affirming the inseparability of the Bridging Phase and the Modeling Phase.
+
+**Influence of data synthesis method.** Table 3 shows the effects of various data synthesis strategies during the Bridging Phase. When generating  $\tilde{y}_w$  without referring to  $y_w$ , LLMs potentially make erroneous modifications that misalign with the intended target, leading to a performance drop. An alternative approach that attempts to enhance the correlation between winning and losing responses is to degenerate  $y_w$  to  $\tilde{y}_l$  and utilize  $(y_w, \tilde{y}_l)$  as the preference pair. However, this approach also falls short, likely because LLMs are primarily trained to generate high-quality data, making it challenging for them to generate low-quality outputs that mimic the nuanced errors of losing responses. Semantic similarity analysis using the `all-mpnet-base-v2` embedding model<sup>2</sup> supports this, showing a high score of 0.88 for  $(y_w, \tilde{y}_w)$  but only 0.73 for  $(y_w, \tilde{y}_l)$ .
+
+**Influence of data modification proportion.** Figure 3 illustrates the impact of data modification proportions during the Bridging Phase on performance. Increasing modifications from 0% to 20% yields the most substantial gains, highlighting the effectiveness of enhancing pairwise preference correlations. Performance plateaus beyond 80% modifications, indicating that extensive changes are beneficial but not essential, offering flexibility under computational or data constraints. These results demonstrate the scalability and adaptability of our framework for diverse applications.
+
+**Influence of LLMs for targeted modification.** Table 4 explores the influence of diverse LLMs for targeted modification. Notably, substituting the `gpt-4-0125-preview` model with a less powerful yet open-source alternative, such as `Llama3-70B-Instruct`, **yields comparable performance while significantly surpassing vanilla DPO**. This finding underscores the adaptability of our method to varying levels of model sophistication, thereby reducing dependence on commercial LLMs without significant impact on final model performance.
+
+**Influence of  $\delta$ .** We conduct an ablation study to examine the influence of the threshold  $\delta$  in the DPO-BMC objective on model performance, as shown in Figure 4. Setting  $\delta = 1.0$  reduces our method to one that assigns fixed token-level rewards, leading to suboptimal accuracy. As  $\delta$  increases, the model performance improves, with the optimal setting observed around  $\delta = 3.0$ . However, further increasing  $\delta$  results may degrade model performance due to excessively aggressive gradient updates on certain tokens. Notably, across all tested values of  $\delta$ , our method consistently outperforms the DPO baseline, indicating its robustness and effectiveness in stabilizing the learning process.
+
+<sup>2</sup><https://huggingface.co/sentence-transformers/all-mpnet-base-v2>
+
+{8}------------------------------------------------
+
+Table 4: Influence of diverse LLMs for targeted modification in the Bridging Phase. The average accuracy is presented for QA and Math. LC on AlpacaEval 2 is reported for instruction following (IF), based on Llama3-8B.
+
+| Method | LLM for Targeted Modification | QA | Math | IF |
+|-|-|-|-|-|
+| SFT | – | 56.9 | 47.6 | 7.5 |
+| DPO | – | 61.3 | 48.3 | 16.0 |
+| DPO-BMC | Llama3-70B-Instruct | 64.6 | 49.4 | 21.8 |
+| DPO-BMC | gpt-4-0125-preview | <b>65.1</b> | <b>49.6</b> | <b>22.4</b> |
+
+![Figure 4: A line graph showing QA Performance (Y-axis, ranging from 62 to 65) versus delta (X-axis, ranging from 1.0 to 3.5). The performance starts at approximately 63.5 for delta=1.0, rises to a peak of about 65.0 at delta=3.0, and then drops to about 64.0 at delta=3.5. A dashed horizontal line at approximately 61.3 represents the DPO baseline.](bedcca5cdf168e3508ef511d94ec514c_img.jpg)
+
+Figure 4: A line graph showing QA Performance (Y-axis, ranging from 62 to 65) versus delta (X-axis, ranging from 1.0 to 3.5). The performance starts at approximately 63.5 for delta=1.0, rises to a peak of about 65.0 at delta=3.0, and then drops to about 64.0 at delta=3.5. A dashed horizontal line at approximately 61.3 represents the DPO baseline.
+
+Figure 4: Ablation study on  $\delta$  in the Modeling Phase. The average accuracy is presented as the QA performance.
+
+![Figure 5: Four bar charts (a, b, c, d) showing Edit Distance, LC (%), and Grad Norm for six splits of UltraFeedback training data. The splits are ordered by increasing edit distance. (a) DPO: Edit Distance increases from 0.57 to 0.95; LC (%) increases from 7.68 to 15.00; Grad Norm increases from 3.31 to 4.85. (b) DPO-MC: Edit Distance increases from 0.57 to 0.95; LC (%) increases from 9.40 to 13.27; Grad Norm increases from 5.70 to 9.04. (c) DPO-BC: Edit Distance increases from 0.45 to 0.84; LC (%) increases from 10.82 to 12.29; Grad Norm increases from 3.47 to 9.67. (d) DPO-BMC: Edit Distance increases from 0.45 to 0.84; LC (%) increases from 11.21 to 15.28; Grad Norm increases from 5.26 to 8.75.](925f55ce69802b9d3b00546382663ee2_img.jpg)
+
+Figure 5: Four bar charts (a, b, c, d) showing Edit Distance, LC (%), and Grad Norm for six splits of UltraFeedback training data. The splits are ordered by increasing edit distance. (a) DPO: Edit Distance increases from 0.57 to 0.95; LC (%) increases from 7.68 to 15.00; Grad Norm increases from 3.31 to 4.85. (b) DPO-MC: Edit Distance increases from 0.57 to 0.95; LC (%) increases from 9.40 to 13.27; Grad Norm increases from 5.70 to 9.04. (c) DPO-BC: Edit Distance increases from 0.45 to 0.84; LC (%) increases from 10.82 to 12.29; Grad Norm increases from 3.47 to 9.67. (d) DPO-BMC: Edit Distance increases from 0.45 to 0.84; LC (%) increases from 11.21 to 15.28; Grad Norm increases from 5.26 to 8.75.
+
+Figure 5: We segment the 60k training data of UltraFeedback into six equal-sized splits based on increasing edit distance between winning and losing responses. For each split, we report LC on AlpacaEval 2 and the average gradient norm during training.
+
+### 5.2 QUANTITATIVE ANALYSIS OF BRIDGING AND MODELING PHASE
+
+To rigorously assess the effectiveness of the two pivotal phases in our framework, we segment the 60k training data of UltraFeedback into six equal-sized splits, ordered by increasing edit distance between winning and losing responses. For each split, we also construct its corresponding  $(\tilde{y}_w, y_l)$  pair data through our Bridging Phase. We then train four models—(a) DPO, (b) DPO-MC, (c) DPO-BC, and (d) DPO-BMC—on each split based on Llama3-8B, with identical hyperparameters to ensure comparability. As shown in Figure 5, the Bridging Phase successfully decreases the edit distance between pairwise data through targeted modification, shifting the optimization process to concentrate on the most critical differences in preference data. This phase consistently enhances performance across all splits by refining training data for more focused learning. Another notable observation is the average gradient norm during DPO training increases as the edit distance between pairwise data enlarges, reflecting the sensitivity of DPO’s training process to individual data points and potential gradient variance. Our proposed Modeling Phase mitigates the variance by dynamically adjusting the training process based on the policy model’s confidence. This adaptive mechanism prioritizes challenging distinctions while reinforcing learned patterns, promoting a balanced optimization landscape with diverse training data (See Appendix D for further analysis).
+
+### 5.3 QUANTITATIVE ANALYSIS OF CREDIT ASSIGNMENT
+
+We compare the token-level and sequence-level credits assigned by DPO and DPO-BMC, assessing how well their final learned rewards align with preference labels on a held-out set of UltraFeedback.
+
+**Analysis on token-level reward.** Figure 6 depicts the token-level reward assignment for DPO and DPO-BMC on a response pair consisting of a winning response  $y_w$  and a losing response  $y_l$ . The reward of each token is computed as  $r_\theta(x, y^t) = \beta \log \frac{\pi_\theta(y^t|y^{<t}, x)}{\pi_{ref}(y^t|y^{<t}, x)}$ . From the figure, we observe that: (1) DPO assigns nearly uniform rewards across tokens, failing to differentiate the importance of tokens to the overall response quality; and (2) although DPO can identify and assign lower rewards to several erroneous tokens in the losing response (e.g., “13”), it struggles to capture
+
+{9}------------------------------------------------
+
+![Figure 6: Visualization of token-level rewards assigned by DPO and our method. (a) DPO: Winning response shows '99' in descending order, '22, 13, 5, and 1'. Losing response shows '22, 13, 99, 5, 1'. (b) DPO-BMC: Winning response shows '99' in descending order, '22, 13, 5, and 1'. Losing response shows '22, 13, 99, 5, 1'. A color bar on the right indicates reward values from -0.25 (blue) to 0.05 (red).](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 6: Visualization of token-level rewards assigned by DPO and our method. (a) DPO: Winning response shows '99' in descending order, '22, 13, 5, and 1'. Losing response shows '22, 13, 99, 5, 1'. (b) DPO-BMC: Winning response shows '99' in descending order, '22, 13, 5, and 1'. Losing response shows '22, 13, 99, 5, 1'. A color bar on the right indicates reward values from -0.25 (blue) to 0.05 (red).
+
+Figure 6: Visualization of token-level rewards assigned by DPO and our method. The preference pair is sampled from the held-out set of UltraFeedback, whose input prompt is “*Arrange the numbers 5, 13, 99, 1, and 22 in descending order. What is the first number in the new arrangement?*”
+
+subtle distinctions between the winning and losing responses. In contrast, DPO-BMC assigns higher rewards to critical tokens (e.g., “descending order”) and effectively penalizes incorrect tokens in the losing response. These results demonstrate DPO’s limitations in providing precise token-level preferences on sentence quality, and our method can effectively alleviate this issue.
+
+**Analysis on sequence-level reward.** For a rigorous comparison, we calculate the sequence-level DPO reward expression by  $r_\theta(x, y) = \beta \log \frac{\pi_\theta(y|x)}{\pi_{ref}(y|x)}$ . The reward margin is determined by  $r_\theta(x, y_w) - r_\theta(x, y_l)$ . Reward accuracy is defined as the percentage of preference pairs where the winning response achieves a higher reward than the losing response, i.e.,  $r_\theta(x, y_w) > r_\theta(x, y_l)$ . Our findings show that DPO-BMC outperforms DPO in terms of average reward margin (0.74 vs. 0.54) and reward accuracy (73.60 vs. 72.19). This enhancement validates our method’s superior ability to discern subtle differences between preference pairs, enabling more effective generalization.
+
+### 5.4 VERSATILITY OF OUR FRAMEWORK
+
+Our BMC framework demonstrates versatility and can be seamlessly integrated with various DPO variants. As shown in Table 5, the XPO-BMC methods consistently outperform their corresponding XPO baselines across a diverse set of tasks, including QA, Math, and Instruction Following (IF). For instance, IPO-BMC achieves a significant improvement in QA accuracy (64.1 vs. 60.6) and IF score (15.7 vs. 13.4) compared to IPO. Similarly, ORPO-BMC, R-DPO-BMC, SimPO-BMC, and DPO-BMC exhibit higher performance in QA and Math, alongside notable gains in IF, such as R-DPO-BMC improving the IF score from 17.1 to 20.0 over R-DPO. These results highlight the robustness of our framework in enhancing task-specific performance across various settings, reaffirming its potential as a generalizable enhancement to existing DPO methodologies.
+
+Table 5: Versatility of our framework across various XPOs..
+
+| Method | QA | Math | IF |
+|-|-|-|-|
+| SFT | 56.9 | 47.6 | 7.5 |
+| IPO | 60.6 | 48.3 | 13.4 |
+| IPO-BMC | <b>64.1</b> | <b>48.6</b> | <b>15.7</b> |
+| ORPO | 58.4 | 47.6 | 12.5 |
+| ORPO-BMC | <b>62.3</b> | <b>48.4</b> | <b>15.7</b> |
+| R-DPO | 61.8 | 48.2 | 17.1 |
+| R-DPO-BMC | <b>65.3</b> | <b>49.5</b> | <b>20.0</b> |
+| SimPO | 59.1 | 48.9 | 21.3 |
+| SimPO-BMC | <b>61.6</b> | <b>49.0</b> | <b>21.9</b> |
+| DPO | 61.3 | 48.3 | 16.0 |
+| DPO-BMC | <b>65.1</b> | <b>49.6</b> | <b>22.4</b> |
+
+## 6 CONCLUSION
+
+In this work, we propose BMC, an effective framework for bridging and modeling correlations in pairwise data for direct preference optimization. BMC equips LLMs with better human value alignment through a two-phase process: a Bridging Phase that enhances correlations between pairwise data by explicitly manifesting fine-grained preference signals via targeted modifications, and a Modeling Phase that learns token-level correlations by dynamically leveraging the policy model’s confidence during training. Our framework exhibits superior performance in question-answering, mathematical reasoning, and instruction-following tasks, consistently surpassing the baseline DPO by a significant margin. Extensive analysis highlights that the key designs in BMC are crucial and validates the effectiveness and versatility of BMC.
+
+ Rest of paper (reference and Appendix) is removed.

@@ -1,0 +1,402 @@
+
+
+{0}------------------------------------------------
+
+# SIMPLE YET EFFECTIVE INCOMPLETE MULTI-VIEW CLUSTERING: SIMILARITY-LEVEL IMPUTATION AND INTRA-VIEW HYBRID-GROUP PROTOTYPE CONSTRUCTION
+
+Shengju Yu <sup>1</sup>, Zhibin Dong <sup>1</sup>, Siwei Wang <sup>2\*</sup>, Pei Zhang <sup>1</sup>, Yi Zhang <sup>1</sup>, Xinwang Liu <sup>1\*</sup>,  
+Naiyang Guan <sup>3</sup>, Tiejun Li <sup>1\*</sup>, Yiu-ming Cheung <sup>4</sup>
+
+<sup>1</sup>National University of Defense Technology, <sup>2</sup>Intelligent Game and Decision Lab
+
+<sup>3</sup>National Innovation Institute of Defense Technology, <sup>4</sup>Hong Kong Baptist University
+
+`yu-shengju@foxmail.com {wangsiwei13, xinwangliu, tjli}@nudt.edu.cn`
+
+## ABSTRACT
+
+Most of incomplete multi-view clustering (IMVC) methods typically choose to ignore the missing samples and only utilize observed unpaired samples to construct bipartite similarity. Moreover, they employ a single quantity of prototypes to extract the information of **all** views. To eliminate these drawbacks, we present a simple yet effective IMVC approach, SIIHPC, in this work. It firstly transforms partial bipartition learning into original sample form by virtue of reconstruction concept to split out of observed similarity, and then loosens traditional non-negative constraints via regularizing samples to more freely characterize the similarity. Subsequently, it learns to recover the incomplete parts by utilizing the connection built between the similarity exclusive on respective view and the consensus graph shared for all views. On this foundation, it further introduces a group of hybrid prototype quantities for each individual view to flexibly extract the data features belonging to each view itself. Accordingly, the resulting graphs are with various scales and describe the overall similarity more comprehensively. It is worth mentioning that these all are optimized in one unified learning framework, which makes it possible for them to reciprocally promote. Then, to effectively solve the formulated optimization problem, we design an ingenious auxiliary function that is with theoretically proven monotonic-increasing properties. Finally, the clustering results are obtained by implementing spectral grouping action on the eigenvectors of stacked multi-scale consensus similarity. Experimental results confirm the effectiveness of SIIHPC.
+
+## 1 INTRODUCTION
+
+Incomplete multi-view clustering (IMVC), a representative unsupervised learning approach, is grasping increasing concerns owing to its effectiveness in grouping heterogeneous data containing missing samples (Lin et al., 2021; Zhang et al., 2021a; Chen et al., 2024a; Tang & Liu, 2022; Gu et al., 2024). It aims to under no any label information divide all samples into distinct sets such that samples within the same set have relatively higher similarity while different sets are with significant differences, thereby discovering the latent pattern relations embedded inside samples (Liu et al., 2020; Huang et al., 2021; Ma et al., 2024a; Yu et al., 2024a; Pan & Kang, 2021; Li et al., 2025; Chen et al., 2024b; Yu et al., 2023b). To generate high-quality results for IMVC, recently a series of eye-catching algorithms have been carefully devised (Zhang et al., 2022; Wang et al., 2021c; Yu et al., 2024d; Yang et al., 2023a; Chen et al., 2023; Yu et al., 2024c). For instance, Li et al. (2024a) describe the relationship between existing samples and prototypes through an incomplete graph instead of the full pair-wise instance graph to improve the computational efficiency, and produce the uniform similarity under parameter free searching. Long et al. (2024) utilize the prototypes in potential feature subspace to do low-rank approximation for the view correlations, and preserve the consistencies between views by decreasing the rotation sensitivity in the embedded space. Rather than the distance-oriented
+
+---
+
+\*Corresponding Authors.
+
+{1}------------------------------------------------
+
+![Figure 1: The overall framework of proposed SIIHPC. The diagram illustrates a multi-view clustering pipeline. On the left, multiple 'Incomplete view' inputs (e.g., Incomplete view 1, Incomplete view v, Incomplete view V) are processed. Each view is first handled by a 'T-PBL' (Transforming Partial Bipartition Learning) block, which outputs 'Observed Similarity' (OS) and 'Intra-View Hybrid-Group Prototypes' (IVHGP). These are combined via 'MSVSG' (Multi-Scale View-Specific Graph) blocks. The OS outputs are then processed by 'SLI' (Similarity Level Imputation) blocks. The IVHGP outputs are combined with the SLI outputs via 'Staking' (stacking) and then processed by 'CG' (Consensus Graph) blocks. The final output is 'Spectral Grouping' (SG), which produces the final clustering result. A legend on the right defines the symbols: OS (Observed Similarity), MSVSG (Multi-Scale View-Specific Graph), SLI (Similarity Level Imputation), CG (Consensus Graph), SG (Spectral Grouping), and SP (Similarity Propagation).](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 1: The overall framework of proposed SIIHPC. The diagram illustrates a multi-view clustering pipeline. On the left, multiple 'Incomplete view' inputs (e.g., Incomplete view 1, Incomplete view v, Incomplete view V) are processed. Each view is first handled by a 'T-PBL' (Transforming Partial Bipartition Learning) block, which outputs 'Observed Similarity' (OS) and 'Intra-View Hybrid-Group Prototypes' (IVHGP). These are combined via 'MSVSG' (Multi-Scale View-Specific Graph) blocks. The OS outputs are then processed by 'SLI' (Similarity Level Imputation) blocks. The IVHGP outputs are combined with the SLI outputs via 'Staking' (stacking) and then processed by 'CG' (Consensus Graph) blocks. The final output is 'Spectral Grouping' (SG), which produces the final clustering result. A legend on the right defines the symbols: OS (Observed Similarity), MSVSG (Multi-Scale View-Specific Graph), SLI (Similarity Level Imputation), CG (Consensus Graph), SG (Spectral Grouping), and SP (Similarity Propagation).
+
+Figure 1: The overall framework of proposed SIIHPC. It firstly utilizes T-PBL to split out of observed similarity and then conducts SLI based on the connection between CG and view-specific similarities. Further, combined with IVHGP, it generates MSVSG to flexibly extract features on respective view.
+
+weighting. He et al. (2023) construct an asymmetric matrix by structural prototype based metric learning to expand the late fusion, and accelerate the spectral generation through prototype inferred graph learning. Li et al. (2023) maintain the view versatility and instance commonality via a double stream learning framework, and use view-wise prototypes to exploit cluster-specific representations.
+
+These approaches successfully achieve clustering result improvement from various perspectives, nevertheless, they typically choose to ignore the missing samples and only take advantages of observed samples to achieve the construction of bipartite similarity. This will miss out latent useful information from the missing samples, resulting in the generated similarity not that accurate. Also, due to the randomness of sample missing, the remaining observed samples are usually unpaired, which could lead to unbalanced cluster distribution and deteriorate the graph structure. Besides, they usually employ a single quantity of prototypes to extract all view information. This is apparently unreasonable since each view generally owns unique features, and a single quantity of prototypes could be not competent to adequately characterize all views, accordingly weakening the view information diversity.
+
+To eliminate these issues, we present a simple yet effective IMVC method, SIIHPC, in this paper. The overall framework is described in Fig. 1. Concretely, we firstly transform partial bipartition learning under prototype orthogonality into the form containing original samples by utilizing the data reconstruction concept to split out of observed similarity, and then relax conventional non-negative constraints through a sample regularization skill to make the measure of similarity more free. Based on the criterion that one object appears on at least one view, we further introduce the learnable consensus graph, which is shared for all views, to provide unified structure. Afterwards, relying on the connection built between all view-specific bipartition similarities and the consensus graph, we gather the information from other views at the similarity level to assist imputing the incomplete parts of similarity on each view. On this basis, rather than a single prototype quantity for all views, we associate a group of hybrid prototype quantities for each individual view so that it can flexibly exploit features according to the characteristics of each view. Accordingly, the resultant graphs have various scales and in addition to balancing views, they also can more comprehensively characterize the overall similarity. In particular, we achieve these goals within one unified learning framework such that they are able to negotiate with each other towards the direction of mutual reinforcement. Then, to minimize the objective function, we adopt the alternate optimization idea and design an ingenious four-step solution scheme that cleverly solves the sub-problem through an auxiliary function with theoretically and experimentally proven monotonic-increasing properties. Subsequently, we stack all obtained multi-scale consensus graphs and perform spectral grouping action on the feature embedding that consists of the eigenvectors to generate the clustering results. After that, to demonstrate the effectiveness of SIIHPC, we organize experiments on multiple datasets and under different missing percentages. Numerous experiment results suggest that our SIIHPC has the ability to effectively cluster incomplete data. Main novelties in this paper are as follows:
+
+{2}------------------------------------------------
+
+- Unlike previous methods disregarding the missing samples when constructing bipartite similarity, this paper successfully imputes incomplete parts at the similarity level. Not only does this alleviate the adverse impacts caused by the unpairing of observed samples but also can take advantages of the potential useful information of missing samples to help characterize the similarity more accurately.
+- Instead of a single prototype quantity for all views, this paper successfully generates a group of hybrid prototype quantities for each individual view to flexibly extract data features according to the characteristics of each view itself. The resulting graphs are with diverse scales and besides balancing views, they are also able to more comprehensively describe the overall similarity.
+- To optimize the objective function, this paper carefully designs an alternate solving scheme, which decomposes the entire problem into four parts and solves the sub-problem via an ingenious auxiliary function with theoretically proven monotonic-increasing properties.
+
+## 2 RELATED WORKS
+
+As the information age progresses, multi-view data which commonly stems from diverse descriptions of the same instances is becoming increasingly widespread (Ma et al., 2024b; Peng et al., 2019; Kang et al., 2020b; Yu et al., 2023a; Qin et al., 2023; Zhang et al., 2024c; Yang et al., 2023b; Lu et al., 2024). Accordingly, clustering technology receives growing interest owing to its ability effectively grouping multi-view data without needing label information (Wan et al., 2024; Liang et al., 2024; Kang et al., 2020a; Lin et al., 2023b; Wang et al., 2021a; Huang et al., 2022; Yu et al., 2024b). However, due to factors like sensor breakdown or environment change, it is inevitable that some samples are missing/incomplete on certain views, causing traditional clustering methods not working properly and inducing the IMVC problem (Wang et al., 2022b; Zhang et al., 2019; Xu et al., 2024; Zeng et al., 2024; Lv et al., 2022). For effectively tackling this problem, many remarkable works have been proposed successively from various perspectives, such as (Zhao et al., 2023; Yang et al., 2024; Zhang et al., 2024a; Wang et al., 2021b; Huang et al., 2023; Xu et al., 2022; Zhang et al., 2024b).
+
+Let matrices  $\{\mathbf{D}_v \in \mathbb{R}^{d_v \times n}\}_{v=1}^V$  and vectors  $\{r_v \in \mathbb{R}^{n_v}\}_{v=1}^V$  denote the overall data and indexes of observed data respectively, then, the basic IMVC framework can be expressed as
+
+$$\min_{\mathbf{X}_v} \sum_{v=1}^V \|\mathbf{D}_v \mathbf{W}_v - \mathbf{H}_v \mathbf{X}_v \mathbf{W}_v\|_F^2 + \lambda \|\mathbf{X}_v\|_F^2 \quad s.t. \quad \mathbf{X}_v^\top \mathbf{1} = \mathbf{1}, \mathbf{X}_v \geq 0, \quad (1)$$
+
+where the indicator matrix  $\mathbf{W}_v \in \mathbb{R}^{n \times n_v}$  measures the incompleteness of view  $v$ , and its elements consist of  $[\mathbf{W}_v]_{i,j} = 1$  when  $[r_v]_j == i$  otherwise  $[\mathbf{W}_v]_{i,j} = 0, \forall j = 1, 2, \dots, n_v$ .  $\mathbf{H}_v \in \mathbb{R}^{d_v \times m}$  denotes the prototype matrix on view  $v$ , and is intended to approximately characterize the data  $\mathbf{D}_v$ .  $\mathbf{X}_v \in \mathbb{R}^{m \times n}$  denotes the incomplete similarity matrix on view  $v$ . The clustering results can be obtained by first fusing all learned  $\mathbf{X}_v$  and then performing spectral embedding partitioning on it.
+
+Following this paradigm, Chen et al. (2023) introduce tensor learning to exploit the low-rankness between views and utilize high-level view correlations captured by tensor to assist the learning of prototypes. Wang et al. (2022a) conduct a group of projectors to guarantee the dimension consistency of prototypes and aggregate different view information via an uniform fusion scheme. Xu et al. (2023a) regard the common features among views as prototypes and perform the distribution alignment by maximizing the mutual information between prototypes and view-wise features. Lin et al. (2023a) choose to concatenate view-representations as prototypes on each view and preserve the consistency by minimizing the distance between prototypes and within-cluster instances. Wen et al. (2021a) adopt the within-view maintenance and between-view inference strategy to decrease the adverse impact of information unbalance and encourage cluster structure directly reflected in representations. Lin et al. (2024) concurrently recoup and infer features in latent embedding space to explore the correlations between views and utilize an exploratory scheme to update all parameters. Xia et al. (2022) employ tensor norm to extract complementary information and introduce connectivity constraint to capture the spatial structure hidden into similarity. Xu et al. (2023b) design a two-branch, common and private, variable strategy to leverage representations and improve the robustness to senseless information via a controllable way. Wen et al. (2021b) devise a graph regularizer to maintain the local geometric similarities between views and utilize semantic coherence constraints to stimulate uniform features.
+
+{3}------------------------------------------------
+
+## 3 METHODOLOGY
+
+Rethinking (1), its nature is to reconstruct  $\mathbf{D}_v$  using  $\mathbf{H}_v \mathbf{X}_v$  under given  $\mathbf{H}_v$ . Unlike the fixing strategy, we firstly make prototype learnable and then introduce orthogonal constraint to strengthen its discrimination, i.e.,  $\mathbf{H}_v^\top \mathbf{H}_v = \mathbf{I}$ . On this basis, we have  $\mathbf{H}_v^\top \mathbf{D}_v \mathbf{W}_v = \mathbf{X}_v \mathbf{W}_v$ . Then, the observed parts can be split out through  $\mathbf{X}_v \mathbf{W}_v \mathbf{W}_v^\top = \mathbf{H}_v^\top \mathbf{D}_v \mathbf{W}_v \mathbf{W}_v^\top$ . Notice that the item  $\mathbf{H}_v^\top \mathbf{D}_v$  can be regarded as the cosine similarity between  $\mathbf{H}_v^\top$  and  $\mathbf{D}_v$  when all columns of  $\mathbf{D}_v$  are unit vectors. Hence, we choose to do normalization on  $\mathbf{D}_v$ , which expands the similarity range from  $[0, 1]$  to  $[-1, 1]$ , more freely measuring the similarity. Subsequently, we introduce a consensus graph  $\mathbf{G}$  to aggregate information from different views, and impute the incomplete parts by utilizing  $\mathbf{H}_v^\top \mathbf{D}_v \mathbf{W}_v \mathbf{W}_v^\top$  and  $\mathbf{G}$ . Further, to avoid a single prototype quantity for all views, we provide a group of hybrid prototype quantities  $\{m_1, m_2, \dots, m_s\}$  for each view  $v$  to flexibly extract features according to the characteristics of each view itself. Consequently, we have  $\mathbf{X}_{v,s} \mathbf{W}_v \mathbf{W}_v^\top = \mathbf{H}_{v,s}^\top \mathbf{D}_v \mathbf{W}_v \mathbf{W}_v^\top$ . Besides, to adaptively adjust the importance between prototype quantities, we associate a learnable weight,  $a_{v,s}$ , for each prototype quantity on each view. Finally, our SIIHPC can be formulated as
+
+$$\min_{\mathbf{A}, \mathbf{H}_{v,s}, \mathbf{Q}_{v,s}, \mathbf{G}_s} \sum_{v=1}^V \sum_{s=1}^S a_{v,s} \left( \left\| \mathbf{H}_{v,s}^\top \mathbf{D}_v \mathbf{W}_v \mathbf{W}_v^\top + \mathbf{Q}_{v,s} \mathbf{M}_v \mathbf{M}_v^\top - \mathbf{G}_s \right\|_F^2 + \lambda \|\mathbf{G}_s\|_F^2 \right) + \beta \|\mathbf{A}\|_F^2$$
+
+$$s.t. \quad \mathbf{H}_{v,s}^\top \mathbf{H}_{v,s} = \mathbf{I}_{m_s}, \quad -1 \leq \mathbf{Q}_{v,s} \leq 1, \quad -1 \leq \mathbf{G}_s \leq 1, \quad \mathbf{A} \mathbf{1} = \mathbf{1}, \quad 0 \leq \mathbf{A}, \quad (2)$$
+
+where  $\mathbf{H}_{v,s} \in \mathbb{R}^{d_v \times m_s}$  denotes the prototype matrix with the  $s$ -th quantity on view  $v$ .  $\mathbf{M}_v$  consists of  $[\mathbf{M}_v]_{i,j} = 1$  when  $[h_v]_j = i$  otherwise  $[\mathbf{M}_v]_{i,j} = 0, \forall j = 1, 2, \dots, n - n_v; i = 1, 2, \dots, n, h_v = \{z | z \in T_v \text{ and } z \notin T_o\}$  where  $T_v = \{1, 2, \dots, n\}$  and  $T_o = \{[r_v]_1, [r_v]_2, \dots, [r_v]_{n_v}\}$ .  $\mathbf{Q}_{v,s} \in \mathbb{R}^{m_s \times n}$  is the imputation matrix with the  $s$ -th scale on view  $v$ .  $\mathbf{A} \in \mathbb{R}^{V \times S}$  consists of  $a_{v,s}$ .
+
+## 4 OPTIMIZATION
+
+Due to the non-convexity when jointly considering all variables in (2), we alternatively optimize each variable via the following four-step updating skill.
+
+**Step 1: Optimizing the Prototype Matrix  $\mathbf{H}_{v,s}$**
+
+Under fixed  $\mathbf{Q}_{v,s}$ ,  $\mathbf{G}_s$  and  $\mathbf{A}$ , we can simplify the optimization problem (2) as
+
+$$\max_{\mathbf{H}_{v,s}} \text{Tr} \left( \mathbf{H}_{v,s}^\top \hat{\mathbf{L}}_v \mathbf{H}_{v,s} + \mathbf{H}_{v,s}^\top \mathbf{P}_{v,s} \right) \quad s.t. \quad \mathbf{H}_{v,s}^\top \mathbf{H}_{v,s} = \mathbf{I}_{m_s}, \quad (3)$$
+
+where the matrix  $\hat{\mathbf{L}}_v = \varphi_v \mathbf{I}_{d_v} - \mathbf{L}_v$ , the scalar  $\varphi_v$  represents the largest eigenvalue of  $\mathbf{L}_v$ ,  $\mathbf{L}_v = \mathbf{D}_v \mathbf{W}_v \mathbf{W}_v^\top \mathbf{W}_v \mathbf{W}_v^\top \mathbf{D}_v^\top$ ,  $\mathbf{P}_{v,s} = 2\mathbf{D}_v \mathbf{W}_v \mathbf{W}_v^\top (\mathbf{G}_s - \mathbf{Q}_{v,s} \mathbf{M}_v \mathbf{M}_v^\top)^\top$ .
+
+Denote the function  $g(\mathbf{H}_{v,s}) = \text{Tr}(\mathbf{H}_{v,s}^\top \hat{\mathbf{L}}_v \mathbf{H}_{v,s} + \mathbf{H}_{v,s}^\top \mathbf{P}_{v,s})$ , its derivative as  $\nabla g((\mathbf{H}_{v,s})^r)$ , the value of  $\mathbf{H}_{v,s}$  at the  $r$ -th iteration as  $(\mathbf{H}_{v,s})^r$ , the singular value decomposition results of  $\nabla g((\mathbf{H}_{v,s})^r)$  as  $(\mathbf{U}_{v,s})^r (\Sigma_{v,s})^r (\mathbf{V}_{v,s})^r$ . Then, we have the following two lemmas hold.
+
+**Lemma 1.** Under  $(\mathbf{H}_{v,s})^{r+1}$  taking  $(\mathbf{U}_{v,s})^r (\mathbf{V}_{v,s})^r$ , for the trace of  $\mathbf{H}_{v,s}$  and its derivative, we have
+
+$$\text{Tr} \left( \left[ (\mathbf{H}_{v,s}^\top)^{r+1} - (\mathbf{H}_{v,s}^\top)^r \right] \nabla g((\mathbf{H}_{v,s})^r) \right) \geq 0, \quad (4)$$
+
+where  $\nabla g((\mathbf{H}_{v,s})^r)$  denotes the derivative value at the  $r$ -th iteration.
+
+**Lemma 2.** For the trace of  $\mathbf{H}_{v,s}$  at the  $r$ -th iteration and  $(r+1)$ -th iteration, we have
+
+$$\text{Tr} \left( (\mathbf{H}_{v,s}^\top)^{r+1} \hat{\mathbf{L}}_v [(\mathbf{H}_{v,s})^{r+1} - (\mathbf{H}_{v,s})^r] \right) \geq \text{Tr} \left( \left[ (\mathbf{H}_{v,s}^\top)^{r+1} - (\mathbf{H}_{v,s}^\top)^r \right] \hat{\mathbf{L}}_v (\mathbf{H}_{v,s})^r \right). \quad (5)$$
+
+In conjunction with **Lemma 1** and **Lemma 2**, we have the following theorem holds.
+
+**Theorem 1.** For the function  $g$ , under any  $(\mathbf{H}_{v,s})^r$  and  $(\mathbf{H}_{v,s})^{r+1} = (\mathbf{U}_{v,s})^r (\mathbf{V}_{v,s})^r$ , we have  $g(\mathbf{H}_{v,s})$  is monotonically increasing.
+
+According to **Theorem 1**, we can determine  $\mathbf{H}_{v,s}$  by comparing the objective value at current iteration and that at previous iteration. **Algorithm 1** summaries the overall procedure of optimizing  $\mathbf{H}_{v,s}$ .
+
+{4}------------------------------------------------
+
+**Algorithm 1** The procedure of optimizing  $\mathbf{H}_{v,s}$  in (3).
+
+**Input:** The matrices  $\mathbf{H}_{v,s}$ ,  $\mathbf{Q}_{v,s}$ ,  $\mathbf{G}_s$ ,  $\mathbf{A}$ ,  $\mathbf{D}_v$ ,  $\mathbf{W}_v$ ,  $\mathbf{M}_v$ .  
+Construct the function  $g(\mathbf{H}_{v,s})$ .
+
+- 1: **while**  $g(\mathbf{H}_{v,s})^{r+1} - g(\mathbf{H}_{v,s})^r / g(\mathbf{H}_{v,s})^r \leq 1e-3$  **do**
+- 2: Compute the derivative function  $\nabla g((\mathbf{H}_{v,s})^r)$ .
+- 3: Generate the singular matrices  $(\mathbf{U}_{v,s})^r$  and  $(\mathbf{V}_{v,s}^\top)^r$ .
+- 4: Assign  $(\mathbf{H}_{v,s})^{r+1}$  by  $(\mathbf{H}_{v,s})^{r+1} = (\mathbf{U}_{v,s})^r (\mathbf{V}_{v,s}^\top)^r$ .
+- 5:  $r = r + 1$ .
+- 6: **end while**
+
+**Output:** The prototype matrices  $\{\mathbf{H}_{v,s}\}_{v=1,s=1}^{V,S}$ .
+
+**Remark 1.** Due to  $\mathbf{W}_v \mathbf{W}_v^\top \in \mathbb{R}^{n \times n}$  and  $\mathbf{M}_v \mathbf{M}_v^\top \in \mathbb{R}^{n \times n}$ , calculating  $\mathbf{L}_v$  and  $\mathbf{P}_{v,s}$  needs at least  $\mathcal{O}(n^2)$  computing overhead. Noticed that  $\mathbf{W}_v \mathbf{W}_v^\top$  and  $\mathbf{M}_v \mathbf{M}_v^\top$  are diagonal matrices with elements 0 or 1, by virtue of Hadamard product, we can transform  $\mathbf{L}_v$  and  $\mathbf{P}_{v,s}$  as  $\mathbf{D}_v \odot \mathbf{B}_v \cdot \mathbf{B}_v^\top \odot \mathbf{D}_v^\top$  and  $2\mathbf{D}_v \odot \mathbf{B}_v (\mathbf{G}_s - \mathbf{Q}_{v,s} \odot \mathbf{C}_v)^\top$ , where  $\mathbf{B}_v = \mathbf{1}_{d_v} \cdot [\sum_{j=1}^{n_v} [\mathbf{W}_v]_{1,j}, \sum_{j=1}^{n_v} [\mathbf{W}_v]_{2,j}, \dots, \sum_{j=1}^{n_v} [\mathbf{W}_v]_{n,j}]$  and  $\mathbf{C}_v = \mathbf{1}_{m_s} \cdot [\sum_{j=1}^{n-n_v} [\mathbf{M}_v]_{1,j}, \sum_{j=1}^{n-n_v} [\mathbf{M}_v]_{2,j}, \dots, \sum_{j=1}^{n-n_v} [\mathbf{M}_v]_{n,j}]$ . After transforming, the computing complexity is reduced to  $\mathcal{O}(n)$ .
+
+**Step 2: Optimizing the Similarity Imputation Matrix  $\mathbf{Q}_{v,s}$**
+
+Under fixed  $\mathbf{H}_{v,s}$ ,  $\mathbf{G}_s$  and  $\mathbf{A}$ , we can simplify the problem (2) as
+
+$$\min_{\mathbf{Q}_{v,s}} \|\mathbf{Q}_{v,s} \mathbf{M}_v \mathbf{M}_v^\top - \mathbf{J}_{v,s}\|_F^2 \quad s.t. \quad -1 \leq \mathbf{Q}_{v,s} \leq 1, \quad (6)$$
+
+where the matrix  $\mathbf{J}_{v,s} = \mathbf{G}_s - \mathbf{H}_{v,s}^\top \mathbf{D}_v \mathbf{W}_v \mathbf{W}_v^\top \mathbf{M}_v$  is an indicator matrix, and therefore we can determine  $\mathbf{Q}_{v,s}$  by taking the value of corresponding index of  $\mathbf{J}_{v,s}$ . To guarantee the feasible region, we can regularize the solution by first comparing it and  $\pm 1$  and then performing truncation operation.
+
+**Remark 2.** Due to the direct assignment operation, the computing overhead of optimizing  $\mathbf{Q}_{v,s}$  is mainly from the construction of  $\mathbf{J}_{v,s}$ . Inspired by **Remark 1**, the item  $\mathbf{H}_{v,s}^\top \mathbf{D}_v \mathbf{W}_v \mathbf{W}_v^\top$  can be transformed as  $\mathbf{H}_{v,s}^\top \mathbf{D}_v \odot \mathbf{B}_v$ . Therefore, the computing complexity about optimizing  $\mathbf{Q}_{v,s}$  is  $\mathcal{O}(n)$ .
+
+**Step 3: Optimizing the Unified Representation Matrix  $\mathbf{G}_s$**
+
+Under fixed  $\mathbf{H}_{v,s}$ ,  $\mathbf{Q}_{v,s}$  and  $\mathbf{A}$ , we can simplify the problem (2) as
+
+$$\min_{\mathbf{G}_s} \text{Tr} \left( \mathbf{G}_s^\top \left( \sum_{v=1}^V a_{v,s} (1 + \lambda) \mathbf{I}_{m_s} \right) \mathbf{G}_s - 2 \left( \sum_{v=1}^V (a_{v,s} \mathbf{F}_{v,s})^\top \right) \mathbf{G}_s \right), \quad s.t. \quad -1 \leq \mathbf{G}_s \leq 1, \quad (7)$$
+
+where the matrix  $\mathbf{F}_{v,s} = \mathbf{H}_{v,s}^\top \mathbf{D}_v \mathbf{W}_v \mathbf{W}_v^\top + \mathbf{Q}_{v,s} \mathbf{M}_v \mathbf{M}_v^\top$ . After expanding the trace by elements, we can equivalently transform the objective as
+
+$$\min_{[\mathbf{G}_s]_{:,j}} [\mathbf{G}_s]_{:,j}^\top \left( \sum_{v=1}^V a_{v,s} (1 + \lambda) \mathbf{I}_{m_s} \right) [\mathbf{G}_s]_{:,j} - 2 \left( \sum_{v=1}^V a_{v,s} [\mathbf{F}_{v,s}]_{:,j} \right)^\top [\mathbf{G}_s]_{:,j}. \quad (8)$$
+
+For the feasible region, we can split it into  $-1 \leq [\mathbf{G}_s]_{:,j} \leq 1, j = 1, 2, \dots, n$ . Therefore, the problem (7) is transformed as a quadratic programming (QP) problem, and can be effectively solved using existing software packages.
+
+**Remark 3.** Solving each column vector  $[\mathbf{G}_s]_{:,j}$  by QP consumes  $\mathcal{O}(m_s^3)$  overhead. Therefore, the computing overhead of optimizing  $\mathbf{G}_s$  is  $\mathcal{O}(m_s^3 n)$ . Note that the number of prototypes  $m_s$  is not related to  $n$  and usually is far less than  $n$ , accordingly, the computing complexity of  $\mathbf{G}_s$  is also  $\mathcal{O}(n)$ .
+
+**Step 4: Optimizing the Prototype Balance Matrix  $\mathbf{A}$**
+
+Under fixed  $\mathbf{H}_{v,s}$ ,  $\mathbf{Q}_{v,s}$  and  $\mathbf{G}_s$ , we can simplify the problem (2) as
+
+$$\min_{\mathbf{A}} \sum_{v=1}^V \sum_{s=1}^S a_{v,s} p_{v,s} + \beta \|\mathbf{A}\|_F^2 \quad s.t. \quad \mathbf{A} \mathbf{1} = \mathbf{1}, 0 \leq \mathbf{A}, \quad (9)$$
+
+{5}------------------------------------------------
+
+---
+
+**Algorithm 2** The procedure of solving the problem (2).
+
+---
+
+**Input:** Data matrix  $\mathbf{D}_v$ , index vectors  $b_v$ , hyper-parameters  $\lambda$  and  $\beta$ ,  $v = 1, 2, \dots, V$ .
+
+Construct indicator matrices  $\mathbf{W}_v$  and  $\mathbf{M}_v$ .
+
+- 1: **while**  $(f_{obj}(t) - f_{obj}(t+1))/f_{obj}(t) \leq 1e-4$  **do**
+- 2:   Optimize the variable  $\mathbf{H}_{v,s}$  by **Algorithm 1**.
+- 3:   Optimize the variable  $\mathbf{Q}_{v,s}$  by solving (6).
+- 4:   Optimize the variable  $\mathbf{G}_s$  by solving (7).
+- 5:   Optimize the variable  $\mathbf{A}$  by (11).
+- 6: **end while**
+
+**Output:** The unified representation matrices  $\{\mathbf{G}_s\}_{s=1}^S$ .
+
+---
+
+where  $p_{v,s} = \|\mathbf{H}_{v,s}^\top \mathbf{D}_v \mathbf{W}_v \mathbf{W}_v^\top + \mathbf{Q}_{v,s} \mathbf{M}_v \mathbf{M}_v^\top - \mathbf{G}_s\|_F^2 + \lambda \|\mathbf{G}_s\|_F^2$ . Due to the constraints being for the row of  $\mathbf{A}$ , we can further transform the problem (9) as
+
+$$\min_{\mathbf{a}_{v,s}} \sum_{s=1}^S a_{v,s} p_{v,s} + \beta a_{v,s}^2 \quad s.t. \quad \mathbf{a}_{v,:} \mathbf{1} = 1, 0 \leq \mathbf{a}_{v,:}, \quad (10)$$
+
+where the vector  $\mathbf{a}_{v,:}$  denotes the  $v$ -th row of  $\mathbf{A}$ . For the above optimization problem, we can get its closed-form solution as
+
+$$\mathbf{a}_{v,:} = \left( \frac{\frac{\mathbf{p}_{v,:} \mathbf{1} \mathbf{1}^\top}{2\beta} + \mathbf{1}^\top}{S} - \frac{\mathbf{p}_{v,:}}{2\beta} \right)_+, \quad (11)$$
+
+where the vector  $\mathbf{p}_{v,:}$  is composed of  $p_{v,s}$ ,  $s = 1, 2, \dots, S$ .
+
+**Remark 4.** Owing to the closed-form solution, the computing overhead is mainly from the construction of  $\mathbf{p}_{v,:}$ . According to **Remark 1**, we can obtain that constructing each  $p_{v,s}$  takes  $\mathcal{O}(n)$ . Accordingly, solving  $\mathbf{a}_{v,:}$  takes  $\mathcal{O}(Sn)$ . Solving the overall  $\mathbf{A}$  will take  $\mathcal{O}(VSn)$ , which is also  $\mathcal{O}(n)$ .
+
+We summary the overall procedure for solving the optimization problem (2) in **Algorithm 2**, where  $f_{obj}(t)$  denotes the objective value at the  $t$ -th iteration.
+
+After obtaining the unified representation matrices  $\{\mathbf{G}_s\}_{s=1}^S$ , we concatenate them by row and subsequently perform spectral grouping on it to generate the data clustering results.
+
+**Remark 5.** The overall computing complexity of **Algorithm 2** is  $\mathcal{O}(n)$  since updating  $\mathbf{H}_{v,s}$ ,  $\mathbf{Q}_{v,s}$ ,  $\mathbf{G}_s$  and  $\mathbf{A}$  all take  $\mathcal{O}(n)$ , which consequently enables it to be expanded to large-scale tasks.
+
+**Remark 6.** Storing the optimization variables  $\mathbf{H}_{v,s}$ ,  $\mathbf{Q}_{v,s}$ ,  $\mathbf{G}_s$  and  $\mathbf{A}$  takes  $\mathcal{O}(m_s d_v)$ ,  $\mathcal{O}(m_s n)$ ,  $\mathcal{O}(m_s n)$  and  $\mathcal{O}(SV)$ , respectively. Therefore, the space complexity of **Algorithm 2** is also  $\mathcal{O}(n)$ .
+
+## 5 EXPERIMENTS
+
+### 5.1 BASELINES AND DATASETS
+
+We conduct all experiments on six public multi-view datasets, and their details are presented in Table 1, where SS: Sample Size, NV: Number of Views, FD: Feature Dimension, NC: Number of Clusters.
+
+Table 1: Dataset Description
+
+| Dataset | SS | NV | FD | NC |
+|-|-|-|-|-|
+| BDGPFEA | 2500 | 3 | 1000/500/250 | 5 |
+| NUSOBJECT | 6251 | 5 | 129/74/145/226/65 | 10 |
+| VGGFACEFIFTY | 16936 | 4 | 944/576/512/640 | 50 |
+| VGGFACEHUND | 36287 | 4 | 512/576/640/944 | 100 |
+| YOUTUBEFACE | 63896 | 4 | 640/944/576/512 | 20 |
+| FASHMINST | 70000 | 4 | 576/512/944/640 | 10 |
+
+The following methods are used as baselines in this paper to illustrate the effectiveness of SIHPC:
+
+{6}------------------------------------------------
+
+Localized Sparsity (**LSIMVC** (Liu et al., 2023)), Refined Graph Structure (**GSRIMC** (Li et al., 2024b)), High-Order Correlation (**HCPIMSC** (Li et al., 2022)), Efficient Effective Regularizer (**EEIMVC** (Liu et al., 2021)), Low-Rank Graph (**LRGRIMVC** (Cui et al., 2024)), Consensus Bipartite Graph (**IMVCCBG** (Wang et al., 2022a)), Balance Guidance (**BGIMVSC** (Sun et al., 2023)), Late Fusion (**OSLFIMVC** (Zhang et al., 2021b)), Neighbor Group Structure (**NGSPCGL** (Wong et al., 2023)), Projections (**PIMVC** (Deng et al., 2023)), Parameter-Free Scalable Prototype Graph (**PSIMVC** (Li et al., 2024a)), Structured Anchor-Inferred Graph (**SAGL** (He et al., 2023)), Local Structure Consensus Graph (**HCLSCGL** Wen et al. (2023)).
+
+### 5.2 RESULTS AND DISCUSSIONS
+
+Table 2: Clustering Results on Benchmark Datasets
+
+| Method | BDGPFEA |  |  |  |  |  |  |  | NUSOBJECT |  |  |  |  |  |  |  |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  | 30% |  |  |  | 50% |  |  |  | 30% |  |  |  | 50% |  |  |  |  |  |
+|  | ACC | NMI | PUR | ACC | NMI | PUR | ACC | NMI | ACC | NMI | PUR | ACC | NMI | PUR | ACC | NMI |  |  |
+| LSIMVC | 26.56 | 6.14 | 26.56 | 26.81 | 7.18 | 26.81 | 27.40 | 8.35 | 28.07 | 21.70 | 9.03 | 31.23 | 21.81 | 8.43 | 30.99 | 20.57 | 7.43 | 30.52 |
+| GSRIMC | 39.84 | 14.22 | 39.96 | 38.30 | 13.15 | 36.78 | 34.41 | 11.22 | 34.17 | 23.03 | 8.34 | 32.73 | 20.91 | 7.58 | 32.04 | 20.46 | 7.86 | 31.20 |
+| HCPIMSC | 34.12 | 12.65 | 36.36 | 32.20 | 12.41 | 35.24 | 33.16 | 11.01 | 34.58 | 21.56 | 6.38 | 29.31 | 21.23 | 8.93 | 30.18 | <b>22.87</b> | 8.07 | 29.81 |
+| EEIMVC | 35.70 | 14.47 | 36.34 | 33.23 | 12.39 | 36.05 | 31.02 | 10.37 | 33.64 | 21.51 | 6.17 | 15.51 | 21.07 | 8.97 | 13.42 | 20.13 | 8.14 | 13.17 |
+| LRGRIMVC | 34.71 | 12.58 | 35.74 | 31.43 | 9.12 | 32.63 | 27.25 | 4.80 | 27.27 | 21.43 | 7.25 | 30.17 | <b>22.62</b> | 7.83 | 30.99 | 21.73 | 8.16 | 30.15 |
+| IMVCCBG | <b>40.05</b> | 15.01 | <b>40.17</b> | 38.10 | 11.49 | 36.76 | 34.78 | 10.03 | 34.06 | 22.59 | 8.36 | 31.96 | 21.35 | 7.90 | 32.85 | 22.05 | 7.43 | 31.16 |
+| BGIMVSC | 22.65 | 3.19 | 23.26 | 26.88 | 9.68 | 27.08 | 24.04 | 4.72 | 24.56 | 19.06 | 0.30 | 22.86 | 19.13 | 0.34 | 22.91 | 19.06 | 0.31 | 22.86 |
+| OSLFIMVC | 30.38 | 9.58 | 36.47 | 31.84 | 9.12 | 35.37 | 31.68 | 8.80 | 35.73 | 21.88 | 7.67 | 32.34 | 20.68 | 6.91 | 33.00 | 18.41 | 4.63 | 29.58 |
+| NGSPCGL | 29.95 | 6.64 | 31.13 | 29.54 | 6.07 | 29.89 | 27.15 | 5.70 | 27.64 | 23.09 | 7.83 | 30.78 | 19.97 | 4.62 | 28.32 | 17.47 | 2.22 | 25.20 |
+| PIMVC | 34.03 | 14.62 | 35.99 | 33.04 | 12.92 | 33.54 | 34.41 | 11.60 | 35.41 | 21.29 | <b>9.36</b> | 31.01 | 21.08 | 8.52 | 31.12 | 19.44 | 7.89 | 31.36 |
+| PSIMVC | 34.00 | 12.51 | 35.58 | 31.98 | 9.55 | 33.65 | 30.12 | 9.15 | 32.45 | 19.65 | 8.25 | 29.11 | 20.09 | 8.91 | 30.21 | 22.07 | 7.91 | 30.35 |
+| SAGL | 23.76 | 1.69 | 23.92 | 23.02 | 1.41 | 23.60 | 28.52 | 4.09 | 29.56 | 20.48 | 7.67 | 27.46 | 20.39 | 6.91 | 26.16 | 18.39 | 6.63 | 26.47 |
+| HCLSCGL | 29.80 | 7.12 | 31.80 | 24.28 | 3.12 | 25.08 | 28.25 | 4.31 | 28.55 | 21.93 | 7.54 | 30.68 | 21.59 | 7.79 | 31.49 | 20.28 | 7.81 | 31.31 |
+| Ours | 38.80 | 15.21 | 39.97 | <b>40.31</b> | <b>13.88</b> | <b>40.31</b> | <b>35.04</b> | 11.54 | <b>37.30</b> | <b>23.30</b> | <b>9.14</b> | <b>32.87</b> | <b>22.38</b> | <b>9.21</b> | <b>33.92</b> | <b>21.46</b> | <b>8.36</b> | <b>31.49</b> |
+| Method | VGGFACEFIFTY |  |  |  |  |  |  |  | VGGFACEHUND |  |  |  |  |  |  |  |  |  |
+|  | 30% |  |  |  | 50% |  |  |  | 30% |  |  |  | 50% |  |  |  |  |  |
+|  | ACC | NMI | PUR | ACC | NMI | PUR | ACC | NMI | ACC | NMI | PUR | ACC | NMI | PUR | ACC | NMI |  |  |
+| LSIMVC | 8.45 | 10.78 | 8.65 | 7.30 | 9.83 | 7.56 | 6.94 | 9.08 | 7.18 | N/A |  |  |  |  |  |  |  |  |
+| GSRIMC |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| HCPIMSC | 10.33 | 12.36 | 12.14 | 10.54 | 11.90 | 10.85 | 10.85 | 9.23 | 10.16 |  |  |  |  |  |  |  |  |  |
+| EEIMVC | 6.05 | 14.03 | 5.94 | 5.60 | 14.15 | 5.50 | 5.33 | 13.29 | 5.22 | 3.37 | 7.32 | 4.78 | 3.41 | 6.89 | 5.67 | 3.20 | 6.27 | 5.74 |
+| LRGRIMVC | 9.21 | 13.23 | 11.37 | 10.02 | 12.48 | 11.45 | 9.15 | 11.58 | <b>12.56</b> |  |  |  |  |  |  |  |  |  |
+| IMVCCBG | 12.12 | 14.25 | 13.11 | 11.52 | 12.29 | 12.40 | 10.80 | 12.35 | 11.66 | 8.12 | 14.23 | 8.92 | 7.52 | 13.25 | 8.25 | 6.80 | 12.20 | 7.06 |
+| BGIMVSC | 6.49 | 9.83 | 6.83 | 7.34 | 9.45 | 7.19 | 6.76 | 9.85 | 7.19 |  |  |  |  |  |  |  |  |  |
+| OSLFIMVC | 8.50 | 8.79 | 8.96 | 6.98 | 6.70 | 7.58 | 6.01 | 5.09 | 6.60 | 5.54 | 9.59 | 5.97 | 4.62 | 7.54 | 5.05 | 3.60 | 5.81 | 4.08 |
+| NGSPCGL | 6.50 | 6.74 | 7.17 | 6.24 | 6.54 | 6.74 | 6.08 | 6.2 | N/A |  |  |  |  |  |  |  |  |  |
+| PIMVC | 9.40 | 12.36 | 11.07 | 9.06 | 12.52 | 11.12 | 8.78 | 11.89 | 12.06 | 6.10 | 13.42 | 7.32 | 5.97 | 12.91 | 7.11 | 5.68 | 12.36 | 6.72 |
+| PSIMVC | 10.63 | 12.50 | 11.58 | 9.54 | 11.33 | 10.49 | 9.06 | 10.45 | 9.92 | 6.17 | 11.04 | 6.71 | 5.28 | 10.58 | 5.89 | 5.51 | 9.91 | 6.04 |
+| SAGL | 8.25 | 9.33 | 9.75 | 6.54 | 9.65 | 6.75 | 5.84 | 9.65 | 8.86 | 5.84 | 10.54 | 6.36 | 4.85 | 10.13 | 4.74 | 3.84 | 9.32 | 4.54 |
+| HCLSCGL | 5.65 | 9.35 | 5.74 | 4.18 | 8.68 | 4.62 | 4.67 | 8.55 | 5.01 | 3.05 | 10.32 | 4.26 | 3.05 | 10.12 | 4.13 | 3.15 | 9.51 | 4.02 |
+| Ours | 12.52 | 14.91 | 13.44 | 12.31 | 14.48 | 13.21 | 11.18 | 13.35 | 11.96 | <b>8.26</b> | <b>14.94</b> | <b>9.13</b> | <b>7.55</b> | <b>13.85</b> | <b>8.39</b> | <b>6.82</b> | <b>12.69</b> | <b>7.55</b> |
+| Method | YOUTUBEFACE |  |  |  |  |  |  |  | FASHMINST |  |  |  |  |  |  |  |  |  |
+|  | 30% |  |  |  | 50% |  |  |  | 30% |  |  |  | 50% |  |  |  |  |  |
+|  | ACC | NMI | PUR | ACC | NMI | PUR | ACC | NMI | ACC | NMI | PUR | ACC | NMI | PUR | ACC | NMI |  |  |
+| LSIMVC |  |  |  |  |  |  |  |  |  | N/A |  |  |  |  |  |  |  |  |
+| GSRIMC |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| HCPIMSC |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| EEIMVC |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| LRGRIMVC |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| IMVCCBG | 74.88 | 79.28 | 77.29 | 72.39 | 78.33 | 77.04 | 70.61 | 78.60 | <b>77.97</b> | 58.18 | 57.58 | 62.22 | 58.01 | 58.01 | 61.75 | 56.27 | 56.48 | 60.17 |
+| BGIMVSC |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| OSLFIMVC | 61.85 | 70.25 | 69.84 | 60.78 | 69.27 | 69.56 | 61.99 | 68.27 | 67.46 | 41.73 | 36.25 | 47.28 | 41.67 | 34.36 | 45.37 | 41.23 | 32.89 | 44.76 |
+| NGSPCGL |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| PIMVC | 68.10 | 75.67 | 74.33 | 67.48 | 72.29 | 74.49 | 67.67 | 71.64 | 74.17 | 50.11 | 52.23 | 51.92 | 54.09 | 57.19 | 58.11 | 54.42 | 54.78 | 57.73 |
+| SAGL | 63.48 | 72.89 | 72.45 | 62.47 | 73.63 | 73.04 | 62.65 | 72.75 | 73.68 | 43.47 | 53.56 | 53.68 | 43.35 | 57.88 | 55.73 | 43.58 | 53.62 | 54.86 |
+| HCLSCGL |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Ours | <b>76.29</b> | <b>82.27</b> | <b>80.81</b> | <b>72.60</b> | <b>79.60</b> | <b>77.65</b> | <b>71.05</b> | <b>79.19</b> | 76.75 | <b>61.24</b> | <b>59.52</b> | <b>62.69</b> | <b>62.51</b> | <b>60.22</b> | <b>64.64</b> | <b>60.59</b> | <b>58.77</b> | <b>63.18</b> |
+
+Table 2 presents the clustering results under multiple missing ratios (30%, 50%, 70%). We can get:
+
+- The proposed **SIHPC** receives preferable results than many comparison algorithms under multiple missing ratios and metrics. For instance, on the datasets **VGGFACEHUND** and **FASHMINST**, **SIHPC** is consistently the best; on **VGGFACEFIFTY** and **YOUTUBEFACE**, **SIHPC** obtains only two sub-optimal results totally; on **BDGPFEA** and **NUSOBJECT**, **SIHPC** also makes desirable results. Therefore, **SIHPC** can effectively tackle **IMVC** tasks.
+- **LSIMVC**, **GSRIMC**, **HCPIMSC**, **EEIMVC**, **LRGRIMVC**, **BGIMVSC**, **NGSPCGL**, **PIMVC** and **HCLSCGL** can not normally run on slightly-larger dataset **VGGFACEFIFTY**, **VGGFACEHUND**, **YOUTUBEFACE** or **FASHMINST**, while the proposed **SIHPC** is not only able to work properly under these circumstances but also makes favorable results. Therefore, **SIHPC** is with relatively stronger practicality.
+
+{7}------------------------------------------------
+
+### 5.3 TIME AND MEMORY OVERHEAD COMPARISON
+
+For illustrating SIIHPC’s friendliness to computing resource and storage resource, we compare the running time (min) and memory overhead (GB) between all previously-mentioned IMVC methods, as reported in Table 3. According to this table, we can observe that:
+
+- SIIHPC consumes fewer resources against most methods. For example, on datasets YOUTUBEFACE and FASHMINST, the algorithms OSLFIMVC and SAGL require 126.28GB, 82.96GB, 123.42GB and 99.01GB memory respectively while our SIIHPC only needs 6.01GB and 5.13GB. In other situations, the time overhead and memory overhead of SIIHPC are still relatively small. Therefore, SIIHPC is resource-friendly.
+- In some cases, PIMVC, PSIMVC and IMVCCBG take lower running time and/or memory overhead, possibly because PIMVC learns representation in a common low-dimensional space instead of in diverse original space, PSIMVC employs only one bipartite graph to characterize the correlation between all views, and IMVCCBG utilizes the landmarks with a single dimension to extract features. Despite resource-saving, they generally can not integrate information from missing samples, accordingly giving inferior clustering results.
+
+Table 3: Running Time and Memory Overhead Comparison
+
+| Method | BDGPEA |  | NUSOBJECT |  | VGGFACEFIFTY |  | VGGFACEHUND |  | YOUTUBEFACE |  | FASHMINST |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  | Time | Memo | Time | Memo | Time | Memo | Time | Memo | Time | Memo | Time | Memo |
+| LSIMVC | 0.03 | 0.32 | 0.13 | 2.42 | 0.55 | 15.18 |  |  |  |  |  |  |
+| GSRIMC | 2.10 | 2.82 | 28.88 | 28.07 | N/A |  | N/A |  | N/A |  | N/A |  |
+| HCPIMSC | 2.79 | 1.93 | 43.33 | 17.25 | 741.45 | 104.84 |  |  |  |  |  |  |
+| EEIMVC | 0.02 | 0.80 | 0.33 | 5.06 | 2.99 | 30.97 | 238.01 | 98.84 |  |  |  |  |
+| LRGRIMVC | 3.35 | 1.11 | 60.59 | 10.09 | 492.37 | 61.87 | N/A |  | N/A |  | N/A |  |
+| IMVCCBG | 0.02 | 0.17 | 0.05 | 0.20 | 0.56 | 1.73 | 2.46 | <b>3.96</b> | <b>1.23</b> | 6.16 | <b>1.27</b> | 6.41 |
+| BGIMVSC | 4.85 | 1.27 | 15.76 | 8.75 | 132.67 | 135.70 | N/A |  | N/A |  | N/A |  |
+| OSLFIMVC | 0.09 | 0.30 | 0.18 | 1.51 | 3.23 | 10.02 | 20.00 | 41.96 | 13.54 | 126.28 | 12.27 | 123.42 |
+| NGSPCGL | 0.97 | 1.79 | 11.42 | 13.43 | 111.29 | 89.09 | N/A |  | N/A |  | N/A |  |
+| PIMVC | <b>0.01</b> | 0.46 | <b>0.40</b> | 2.53 | <b>0.36</b> | 17.20 | 3.37 | 76.58 |  |  |  |  |
+| PSIMVC | <b>0.02</b> | 0.16 | <b>0.04</b> | <b>0.15</b> | <b>0.40</b> | <b>1.62</b> | <b>1.30</b> | 5.22 | 1.57 | 6.42 | 1.95 | 6.41 |
+| SAGL | 0.22 | 0.40 | 0.41 | 2.22 | 7.54 | 16.29 | 45.06 | 26.96 | 38.39 | 82.96 | 30.07 | 99.01 |
+| HCLSCGL | 0.17 | 1.84 | 4.14 | 13.92 | 309.87 | 91.51 | 4838.55 | 133.20 | N/A |  | N/A |  |
+| Ours | 0.06 | <b>0.14</b> | 0.11 | 0.22 | 1.86 | 2.84 | 6.22 | 10.32 | 3.31 | <b>6.01</b> | 3.57 | <b>5.13</b> |
+
+### 5.4 ABLATION
+
+We utilize the similarity level imputation (SLI) to capture the latent useful information from missing samples and thereby improve the clustering performance. To verify its effectiveness, we do result comparison under these two situations, as shown in Table 4, where AB: Ablation, MR: Missing Ratio, NSLI: No-SLI. As seen, SLI results are always preferable. Therefore, our SLI scheme is functional.
+
+Table 4: Similarity-level Imputation Effectiveness
+
+| AB | MR | BDGPEA |  |  | NUSOBJECT |  |  | VGGFACEFIFTY |  |  | VGGFACEHUND |  |  | YOUTUBEFACE |  |  | FASHMINST |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  |  | ACC | NMI | PUR | ACC | NMI | PUR | ACC | NMI | PUR | ACC | NMI | PUR | ACC | NMI | PUR | ACC | NMI | PUR |
+| NSLI | 30% | 28.15 | 3.83 | 30.38 | 22.60 | 7.29 | 31.85 | 6.71 | 7.22 | 7.51 | 4.83 | 9.93 | 5.53 | 46.19 | 40.95 | 51.69 | 46.99 | 33.74 | 49.41 |
+| SLI |  | <b>38.80</b> | <b>15.21</b> | <b>39.97</b> | <b>23.30</b> | <b>9.14</b> | <b>32.87</b> | <b>12.52</b> | <b>14.91</b> | <b>13.44</b> | <b>8.26</b> | <b>14.94</b> | <b>9.13</b> | <b>76.29</b> | <b>82.27</b> | <b>80.81</b> | <b>61.24</b> | <b>59.52</b> | <b>62.69</b> |
+| NSLI | 50% | 29.74 | 3.97 | 30.98 | 21.09 | 6.20 | 31.10 | 5.33 | 4.45 | 6.00 | 3.73 | 6.69 | 4.26 | 26.07 | 16.16 | 28.60 | 37.85 | 24.03 | 40.85 |
+| SLI |  | <b>40.31</b> | <b>13.88</b> | <b>40.31</b> | <b>22.38</b> | <b>9.21</b> | <b>33.92</b> | <b>12.31</b> | <b>14.48</b> | <b>13.21</b> | <b>7.55</b> | <b>13.85</b> | <b>8.39</b> | <b>72.60</b> | <b>79.60</b> | <b>77.65</b> | <b>62.51</b> | <b>60.22</b> | <b>64.64</b> |
+| NSLI | 70% | 26.39 | 1.68 | 26.80 | 18.05 | 3.25 | 27.86 | 5.01 | 3.76 | 5.64 | 3.12 | 4.98 | 3.56 | 13.82 | 15.40 | 17.46 | 25.15 | 9.26 | 27.31 |
+| SLI |  | <b>35.04</b> | <b>11.54</b> | <b>37.30</b> | <b>21.46</b> | <b>8.36</b> | <b>31.49</b> | <b>11.18</b> | <b>13.35</b> | <b>11.96</b> | <b>6.82</b> | <b>12.69</b> | <b>7.55</b> | <b>71.05</b> | <b>79.19</b> | <b>76.75</b> | <b>60.59</b> | <b>58.77</b> | <b>63.18</b> |
+
+Unlike a single prototype quantity (SPQ) for all views, we introduce a group of hybrid prototype quantities (HPQ)  $[1k, 2k, \dots, 5k]$  for each view to flexibly exploit features where  $k$  is the number of clusters. The ablation results are shown in Table 5 where PQ: prototype quantity. It can be seen that the HPQ results are consistently superior to any SPQ ones. Therefore, our HPQ scheme is effective.
+
+Further, we adaptively adjust the importance of each prototype quantity via a learnable weight to more flexibly extract features. To verify its effectiveness, we present the ablation results in Table 6,
+
+{8}------------------------------------------------
+
+Table 5: Hybrid-group Prototype Quantity Effectiveness
+
+| AB | MR | PQ | BDGFPEA |  |  | NUSOBJECT |  |  | VGGFACEIFTY |  |  | VGGFACEHUND |  |  | YOUTUBEFACE |  |  | FASHMINST |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  |  |  | ACC | NMI | PUR | ACC | NMI | PUR | ACC | NMI | PUR | ACC | NMI | PUR | ACC | NMI | PUR | ACC | NMI | PUR |
+| SPQ | 30% | m=1k | 29.77 | 6.07 | 30.45 | 12.75 | 1.30 | 23.03 | 9.48 | 11.21 | 10.45 | 5.15 | 10.84 | 6.03 | 65.28 | 72.52 | 70.51 | 53.16 | 56.70 | 58.30 |
+|  |  | m=2k | 34.46 | 9.79 | 35.89 | 13.93 | 2.08 | 23.22 | 10.42 | 12.57 | 11.23 | 5.67 | 11.54 | 6.59 | 69.74 | 78.24 | 75.29 | 55.01 | 58.84 | 59.26 |
+|  |  | m=3k | 28.71 | 6.70 | 30.60 | 15.15 | 3.64 | 24.36 | 11.29 | 13.35 | 12.06 | 6.41 | 12.27 | 7.27 | 70.68 | 80.63 | 76.57 | 53.50 | 58.61 | 57.34 |
+|  |  | m=4k | 34.43 | 11.46 | 35.66 | 16.88 | 4.56 | 27.12 | 11.18 | 13.60 | 12.04 | 6.48 | 12.80 | 7.36 | 68.36 | 78.85 | 74.42 | 56.94 | 58.71 | 58.40 |
+|  |  | m=5k | 34.84 | 9.71 | 36.15 | 17.46 | 4.21 | 27.17 | 12.00 | 14.03 | 12.92 | 7.06 | 12.56 | 7.44 | 69.81 | 78.88 | 75.33 | 56.12 | 55.80 | 59.85 |
+|  |  | <b>ours</b> | <b>38.80</b> | <b>15.21</b> | <b>39.97</b> | <b>23.30</b> | <b>9.14</b> | <b>32.87</b> | <b>12.52</b> | <b>14.91</b> | <b>13.44</b> | <b>8.26</b> | <b>14.94</b> | <b>9.13</b> | <b>76.29</b> | <b>82.27</b> | <b>80.81</b> | <b>61.24</b> | <b>59.52</b> | <b>62.69</b> |
+| HPQ | 30% | m=1k | 24.23 | 2.30 | 25.18 | 14.37 | 1.57 | 24.79 | 9.20 | 10.70 | 10.08 | 5.98 | 10.78 | 6.16 | 62.12 | 66.35 | 66.63 | 53.41 | 56.05 | 54.69 |
+|  |  | m=2k | 34.87 | 7.83 | 34.87 | 18.88 | 5.68 | 29.75 | 10.77 | 12.81 | 11.71 | 6.12 | 11.31 | 6.32 | 66.96 | 74.15 | 71.47 | 59.97 | 55.58 | 54.41 |
+|  |  | m=3k | 34.59 | 8.96 | 34.59 | 19.27 | 6.21 | 29.56 | 11.17 | 13.31 | 11.93 | 6.61 | 11.68 | 6.76 | 67.03 | 73.99 | 72.04 | 55.62 | 58.39 | 57.25 |
+|  |  | m=4k | 34.98 | 9.44 | 35.74 | 20.13 | 7.01 | 30.80 | 11.24 | 13.51 | 12.17 | 6.54 | 11.74 | 6.68 | 70.21 | 77.23 | 74.64 | 58.47 | 58.69 | 59.24 |
+|  |  | m=5k | 34.25 | 9.22 | 36.55 | 19.04 | 6.01 | 31.08 | 11.33 | 13.25 | 12.16 | 6.68 | 11.89 | 7.43 | 70.53 | 76.25 | 75.53 | 61.01 | 58.45 | 62.83 |
+|  |  | <b>ours</b> | <b>40.31</b> | <b>13.88</b> | <b>40.31</b> | <b>22.38</b> | <b>9.21</b> | <b>33.92</b> | <b>12.31</b> | <b>14.48</b> | <b>13.21</b> | <b>7.55</b> | <b>13.85</b> | <b>8.39</b> | <b>72.60</b> | <b>79.60</b> | <b>77.65</b> | <b>62.51</b> | <b>60.22</b> | <b>64.64</b> |
+| SPQ | 50% | m=1k | 22.84 | 1.26 | 23.78 | 12.36 | 1.26 | 22.45 | 7.90 | 9.00 | 8.83 | 5.03 | 9.37 | 5.09 | 59.53 | 64.12 | 64.69 | 51.36 | 52.32 | 55.39 |
+|  |  | m=2k | 28.48 | 4.64 | 29.64 | 14.92 | 2.55 | 24.69 | 9.08 | 10.91 | 10.00 | 5.84 | 10.37 | 5.96 | 60.57 | 70.46 | 66.26 | 52.86 | 55.75 | 57.26 |
+|  |  | m=3k | 30.49 | 7.02 | 31.35 | 15.37 | 3.37 | 25.00 | 9.69 | 11.77 | 10.50 | 5.84 | 10.55 | 5.92 | 64.61 | 74.48 | 70.66 | 55.76 | 57.80 | 60.05 |
+|  |  | m=4k | 30.38 | 6.91 | 32.76 | 14.06 | 3.53 | 25.58 | 10.08 | 12.13 | 10.98 | 6.00 | 10.69 | 6.03 | 68.09 | 76.77 | 73.13 | 53.57 | 56.62 | 57.78 |
+|  |  | m=5k | 31.90 | 7.67 | 33.73 | 16.93 | 3.98 | 26.53 | 10.53 | 12.24 | 11.35 | 6.06 | 10.54 | 6.34 | 69.58 | 75.94 | 73.29 | 52.69 | 53.91 | 57.57 |
+|  |  | <b>ours</b> | <b>35.04</b> | <b>11.54</b> | <b>37.30</b> | <b>21.46</b> | <b>8.36</b> | <b>31.49</b> | <b>11.18</b> | <b>13.35</b> | <b>11.96</b> | <b>6.82</b> | <b>12.69</b> | <b>7.55</b> | <b>71.05</b> | <b>79.19</b> | <b>76.75</b> | <b>60.59</b> | <b>58.77</b> | <b>63.18</b> |
+| SPQ | 70% | m=1k | 22.84 | 1.26 | 23.78 | 12.36 | 1.26 | 22.45 | 7.90 | 9.00 | 8.83 | 5.03 | 9.37 | 5.09 | 59.53 | 64.12 | 64.69 | 51.36 | 52.32 | 55.39 |
+|  |  | m=2k | 28.48 | 4.64 | 29.64 | 14.92 | 2.55 | 24.69 | 9.08 | 10.91 | 10.00 | 5.84 | 10.37 | 5.96 | 60.57 | 70.46 | 66.26 | 52.86 | 55.75 | 57.26 |
+|  |  | m=3k | 30.49 | 7.02 | 31.35 | 15.37 | 3.37 | 25.00 | 9.69 | 11.77 | 10.50 | 5.84 | 10.55 | 5.92 | 64.61 | 74.48 | 70.66 | 55.76 | 57.80 | 60.05 |
+|  |  | m=4k | 30.38 | 6.91 | 32.76 | 14.06 | 3.53 | 25.58 | 10.08 | 12.13 | 10.98 | 6.00 | 10.69 | 6.03 | 68.09 | 76.77 | 73.13 | 53.57 | 56.62 | 57.78 |
+|  |  | m=5k | 31.90 | 7.67 | 33.73 | 16.93 | 3.98 | 26.53 | 10.53 | 12.24 | 11.35 | 6.06 | 10.54 | 6.34 | 69.58 | 75.94 | 73.29 | 52.69 | 53.91 | 57.57 |
+|  |  | <b>ours</b> | <b>35.04</b> | <b>11.54</b> | <b>37.30</b> | <b>21.46</b> | <b>8.36</b> | <b>31.49</b> | <b>11.18</b> | <b>13.35</b> | <b>11.96</b> | <b>6.82</b> | <b>12.69</b> | <b>7.55</b> | <b>71.05</b> | <b>79.19</b> | <b>76.75</b> | <b>60.59</b> | <b>58.77</b> | <b>63.18</b> |
+
+where ETPQ: Equally Treating Prototype Quantity, AW PQ: Adaptively Weighing Prototype Quantity. Evidently, our AW PQ scheme makes performance improvement.
+
+Table 6: Hybrid-group Prototype Quantity Weighting Effectiveness
+
+| AB | MR | BDGFPEA |  |  | NUSOBJECT |  |  | VGGFACEIFTY |  |  | VGGFACEHUND |  |  | YOUTUBEFACE |  |  | FASHMINST |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  |  | ACC | NMI | PUR | ACC | NMI | PUR | ACC | NMI | PUR | ACC | NMI | PUR | ACC | NMI | PUR | ACC | NMI | PUR |
+| ETHP | 30% | 33.28 | 11.99 | 36.33 | 20.29 | 6.16 | 28.41 | 11.21 | 14.66 | 13.08 | 8.06 | 14.13 | 8.38 | 69.86 | 78.89 | 76.31 | 53.02 | 59.01 | 59.12 |
+|  |  | <b>38.80</b> | <b>15.21</b> | <b>39.97</b> | <b>23.30</b> | <b>9.14</b> | <b>32.87</b> | <b>12.52</b> | <b>14.91</b> | <b>13.44</b> | <b>8.26</b> | <b>14.94</b> | <b>9.13</b> | <b>76.29</b> | <b>82.27</b> | <b>80.81</b> | <b>61.24</b> | <b>59.52</b> | <b>62.69</b> |
+| ETHP | 50% | 37.70 | 12.37 | 39.04 | 21.37 | 7.24 | 31.79 | 11.29 | 13.44 | 12.13 | 7.11 | 12.87 | 7.54 | 71.32 | 78.93 | 75.67 | 62.08 | 59.90 | 64.84 |
+|  |  | <b>40.31</b> | <b>13.88</b> | <b>40.31</b> | <b>22.38</b> | <b>9.21</b> | <b>33.92</b> | <b>12.31</b> | <b>14.48</b> | <b>13.21</b> | <b>7.55</b> | <b>13.85</b> | <b>8.39</b> | <b>72.60</b> | <b>79.60</b> | <b>77.65</b> | <b>62.51</b> | <b>60.22</b> | <b>64.64</b> |
+| ETP | 70% | 34.70 | 10.66 | 35.69 | 17.44 | 3.13 | 28.10 | 10.37 | 12.58 | 10.22 | 6.26 | 11.68 | 6.97 | 68.62 | 78.38 | 75.92 | 56.35 | 59.42 | 60.54 |
+|  |  | <b>35.04</b> | <b>11.54</b> | <b>37.30</b> | <b>21.46</b> | <b>8.36</b> | <b>31.49</b> | <b>11.18</b> | <b>13.35</b> | <b>11.96</b> | <b>6.82</b> | <b>12.69</b> | <b>7.55</b> | <b>71.05</b> | <b>79.19</b> | <b>76.75</b> | <b>60.59</b> | <b>58.77</b> | <b>63.18</b> |
+
+### 5.5 CONVERGENCE
+
+We draw the objective value evolution of **Algorithm 2** to illustrate the convergence of SIHPC. From Fig. 2, we can know that it monotonically decreases and gradually stabilizes within twenty iterations.
+
+![Figure 2: Three line graphs showing the objective value evolution of Algorithm 2 over 20 iterations for three datasets: (a) BDGFPEA, (b) NUSOBJECT, and (c) VGGFACEIFTY. All three graphs show a sharp initial decrease in the objective value followed by a plateau. The y-axis for (a) ranges from 0 to 6800, for (b) from 1.02 to 1.12 x 10^5, and for (c) from 0 to 8.8 x 10^5. The x-axis for all graphs is 'Iteration Number' from 0 to 20.](0d5fdb87a392819c7d2e3b6230912a0b_img.jpg)
+
+Figure 2: Three line graphs showing the objective value evolution of Algorithm 2 over 20 iterations for three datasets: (a) BDGFPEA, (b) NUSOBJECT, and (c) VGGFACEIFTY. All three graphs show a sharp initial decrease in the objective value followed by a plateau. The y-axis for (a) ranges from 0 to 6800, for (b) from 1.02 to 1.12 x 10^5, and for (c) from 0 to 8.8 x 10^5. The x-axis for all graphs is 'Iteration Number' from 0 to 20.
+
+Figure 2: The objective value of **Algorithm 2** on BDGFPEA, NUSOBJECT and VGGFACEIFTY.
+
+### 5.6 MONOTONICITY OF FUNCTION $g$
+
+To experimentally verify the monotonicity of function  $g$ , we draw its objective value evolution in Fig. 3. Evidently,  $g$  is monotonically increasing. Further, we also give the change of  $g$  during each iteration of **Algorithm 2**. Taking Fig. 2 (a) as an example, **Algorithm 2** iterates totally 10 times. Fig. 4 presents the change of  $g$  when **Algorithm 2** is at the 2-th ~ 10-th iteration respectively. As seen, it is also monotonically increasing. Moreover, it can be observed that as the upper-loop **Algorithm 2** iterates, the number of iterations required for the inner-loop **Algorithm 1** gradually decreases, which is mainly because along with the iteration of **Algorithm 2**, the optimization variable in the inner-loop gradually reaches to its optimal solution and accordingly **Algorithm 1** needs fewer iterations.
+
+{9}------------------------------------------------
+
+![Figure 3: Three line plots showing the value change of function g for different datasets at the 1st iteration of Algorithm 2. (a) BDGPEA: Objective Value (400-1100) vs Iteration Number (0-14). (b) NUSOBJECT: Objective Value (2500-4500) vs Iteration Number (0-20). (c) VGGFACEFIFTY: Objective Value (1.11-1.16 x 10^5) vs Iteration Number (0-12). All plots show a rapid increase in objective value that plateaus after a few iterations.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 3: Three line plots showing the value change of function g for different datasets at the 1st iteration of Algorithm 2. (a) BDGPEA: Objective Value (400-1100) vs Iteration Number (0-14). (b) NUSOBJECT: Objective Value (2500-4500) vs Iteration Number (0-20). (c) VGGFACEFIFTY: Objective Value (1.11-1.16 x 10^5) vs Iteration Number (0-12). All plots show a rapid increase in objective value that plateaus after a few iterations.
+
+Figure 3: The value change of function  $g$  when **Algorithm 2** is at the 1-th iteration.![Figure 4: A 3x3 grid of line plots showing the value change of function g on the BDGPEA dataset for Algorithm 2 at iterations 2 through 10. Each plot (a-i) shows Objective Value vs Iteration Number (1-2). The y-axis scale for each plot is very narrow, showing a linear increase in the objective value over the two iterations shown. (a) Algorithm 2 at 2-th iteration, (b) Algorithm 2 at 3-th iteration, (c) Algorithm 2 at 4-th iteration, (d) Algorithm 2 at 5-th iteration, (e) Algorithm 2 at 6-th iteration, (f) Algorithm 2 at 7-th iteration, (g) Algorithm 2 at 8-th iteration, (h) Algorithm 2 at 9-th iteration, (i) Algorithm 2 at 10-th iteration.](f519a5be118c846f631c992412353fb9_img.jpg)
+
+Figure 4: A 3x3 grid of line plots showing the value change of function g on the BDGPEA dataset for Algorithm 2 at iterations 2 through 10. Each plot (a-i) shows Objective Value vs Iteration Number (1-2). The y-axis scale for each plot is very narrow, showing a linear increase in the objective value over the two iterations shown. (a) Algorithm 2 at 2-th iteration, (b) Algorithm 2 at 3-th iteration, (c) Algorithm 2 at 4-th iteration, (d) Algorithm 2 at 5-th iteration, (e) Algorithm 2 at 6-th iteration, (f) Algorithm 2 at 7-th iteration, (g) Algorithm 2 at 8-th iteration, (h) Algorithm 2 at 9-th iteration, (i) Algorithm 2 at 10-th iteration.
+
+Figure 4: The value change of function  $g$  on BDGPEA.
+
+## 6 CONCLUSION
+
+We propose a simple yet effective IMVC method named **SIHPC** in this paper. Rather than only utilizing observed unpaired samples to construct bipartite similarity, it successfully imputes incomplete parts at the similarity level via partial bipartition learning transformation to integrate the latent useful information from missing samples. Then, instead of a single prototype quantity for all views, it introduces a group of hybrid prototype quantities for each view to flexibly extract data features according to the characteristics of respective view itself. To minimize the formulated objective, it carefully decomposes the entire optimization problem into four sub-parts and devises an auxiliary function with theoretically and experimentally proven monotonic-increasing properties. Experimental results on six popular datasets with various missing ratios demonstrate the effectiveness of **SIHPC**.
+
+ Rest of paper (reference and Appendix) is removed.

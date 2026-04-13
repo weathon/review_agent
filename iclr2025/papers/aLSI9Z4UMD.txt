@@ -1,0 +1,331 @@
+
+
+{0}------------------------------------------------
+
+# GAGA: GROUP ANY GAUSSIANS VIA 3D-AWARE MEMORY BANK
+
+Anonymous authors
+
+Paper under double-blind review
+
+![Figure 1: GAGA groups any Gaussians in an open-world 3D scene and renders multi-view consistent segmentation. The figure shows a living room scene with a couch, a table, and a bookshelf. On the left, three small images show different views of the scene with colored segmentation masks. In the center, a larger image shows the same scene with a 3D-aware memory bank overlay, represented by colored triangles and lines. On the right, a list of objects (couch, table, bookshelf, etc.) is shown with their corresponding 3D segmentation masks. Below the main scene, there are three smaller images: 'Multi-view Consistent Seg.', 'Rendered Seg.', and 'Feature Field'. To the far right, an 'Editing' section shows a cushion on a footstool being changed from blue to maroon, with a 'Accurate 3D Object Seg.' label.](5fb340ad68b0c71df0b56698b137e35b_img.jpg)
+
+Figure 1: GAGA groups any Gaussians in an open-world 3D scene and renders multi-view consistent segmentation. The figure shows a living room scene with a couch, a table, and a bookshelf. On the left, three small images show different views of the scene with colored segmentation masks. In the center, a larger image shows the same scene with a 3D-aware memory bank overlay, represented by colored triangles and lines. On the right, a list of objects (couch, table, bookshelf, etc.) is shown with their corresponding 3D segmentation masks. Below the main scene, there are three smaller images: 'Multi-view Consistent Seg.', 'Rendered Seg.', and 'Feature Field'. To the far right, an 'Editing' section shows a cushion on a footstool being changed from blue to maroon, with a 'Accurate 3D Object Seg.' label.
+
+Figure 1: *Gaga* groups any Gaussians in an open-world 3D scene and renders multi-view consistent segmentation (pixels of the same region across views are represented with the same color). By employing a 3D-aware memory bank, we eliminate the label inconsistency that exists in 2D segmentation predicted by foundational models and assign each mask across different views a universal group ID. This enables the process of lifting 2D segmentation to a consistent 3D segmentation. *Gaga* produces accurate 3D object segmentation, achieving high-quality results for downstream applications such as scene manipulation (e.g. changing the cushion’s color of the footstool to maroon).
+
+## ABSTRACT
+
+We introduce *Gaga*, a framework that reconstructs and segments open-world 3D scenes reconstructed with 3D Gaussians by leveraging inconsistent 2D masks predicted by zero-shot class-agnostic segmentation models. Contrasted to prior 3D scene segmentation approaches that heavily rely on video object tracking, *Gaga* utilizes spatial information provided by 3D Gaussians and effectively associates object masks across diverse camera poses through a novel 3D-aware memory bank. By eliminating the assumption of continuous view changes in training images, *Gaga* demonstrates robustness to variations in camera poses, particularly beneficial for sparsely sampled images, ensuring precise mask label consistency. Furthermore, *Gaga* accommodates 2D segmentation masks from diverse sources and demonstrates robust performance with different open-world zero-shot class-agnostic segmentation models, significantly enhancing its versatility. Extensive qualitative and quantitative evaluations demonstrate that *Gaga* performs favorably against state-of-the-art methods, emphasizing its potential for real-world applications such as scene understanding and manipulation. The source codes will be made available to the public.
+
+## 1 INTRODUCTION
+
+Effective open-world 3D segmentation is essential for scene understanding and manipulation. Despite notable advancements in 2D open-world segmentation techniques, exemplified by Segment Anything (SAM) (Kirillov et al., 2023) and EntitySeg (Qi et al., 2023), extending these methodologies to the realm of 3D encounters the challenge of ensuring consistent mask label assignment
+
+{1}------------------------------------------------
+
+![Figure 2: Comparison of rendered segmentation. The figure shows a grid of images comparing three methods: Gaussian Grouping, Gaga, and Ground Truth. The columns are: RGB, Mask Association via Video Tracker, Class-agnostic Seg., Object Seg. Mask, Our 3D-aware Mask Association, Class-agnostic Seg., Object Seg. Mask, Panoptic Seg., and Object Seg. Mask. The rows show different scenes: a leather sofa, a desk with a chair, and a desk with a lamp. The Ground Truth column shows the reference segmentation masks.](c803f6f6e2c49429d2951832bd0f208d_img.jpg)
+
+Figure 2: Comparison of rendered segmentation. The figure shows a grid of images comparing three methods: Gaussian Grouping, Gaga, and Ground Truth. The columns are: RGB, Mask Association via Video Tracker, Class-agnostic Seg., Object Seg. Mask, Our 3D-aware Mask Association, Class-agnostic Seg., Object Seg. Mask, Panoptic Seg., and Object Seg. Mask. The rows show different scenes: a leather sofa, a desk with a chair, and a desk with a lamp. The Ground Truth column shows the reference segmentation masks.
+
+Figure 2: **Comparison of rendered segmentation.** Previous methods (Ye et al., 2024; Dou et al., 2024) adopt an off-the-shelf video object tracker (Cheng et al., 2023a) to for mask association. Results on ScanNet dataset (Dai et al., 2017) show that they frequently misidentify objects, especially when similar objects are present in the scene (e.g. the leather sofa), and struggle to handle significant changes in camera perspective. In contrast, *Gaga* integrates 3D information to precisely locate objects and associate 2D masks, leading to multi-view consistent class-agnostic segmentation and precise 3D object segmentation rendering. We adopt the ground truth panoptic segmentation of the ScanNet dataset for comparison as, in this case, it is visually similar to class-agnostic segmentation.
+
+across multi-view images. Specifically, masks of the same object across different views may have different mask label IDs, as the 2D class-agnostic segmentation model independently processes the multi-view images. Naively lifting these inconsistent 2D masks to 3D introduces ambiguity and leads to inferior results in 3D scene segmentation. Hence, we show that assigning each mask a multi-view consistent universal mask ID is crucial before lifting them to 3D. We refer to this task as mask association (Ye et al., 2024).
+
+Prior research efforts (Ye et al., 2024; Dou et al., 2024) leverage the recent advance in 3D reconstruction, e.g., Gaussian Splatting (Kerbl et al., 2023), attempt to solve this task by treating multi-view images as video sequences and adopting an off-the-shelf video object tracking method (Cheng et al., 2023a). Nevertheless, this design relies on the assumption of minimal view changes between multi-view images. This condition may not consistently hold in real-world 3D scenes, especially when the input views are sparse. Consequently, these approaches struggle with similar objects or occluded objects that intermittently disappear and reappear in the sequence, as shown in Fig. 2.
+
+As such, we analyze the fundamental disparity between the 3D mask association and video object-tracking tasks: the latter does not leverage 3D information naturally provided by the 3D scene. Specifically, masks of the same object across different views shall correspond to the same group of 3D Gaussians. Hence, we can assign two masks from different views with the same universal mask ID if there is a large overlap between two groups of 3D Gaussians splatted onto the masks.
+
+In this work, we propose *Gaga*, which groups any 3D Gaussians and renders consistent 3D class-agnostic segmentation across different views. Given a collection of posed RGB images, we first employ Gaussian Splatting (Kerbl et al., 2023) to reconstruct the 3D scene and extract 2D masks using an open-world segmentation method. Subsequently, we iteratively build a 3D-aware memory bank that collects and stores the Gaussians grouped by category. Specifically, for each input view, we project each 2D mask into 3D space using camera parameters and search the memory bank for the category with the largest overlapping with the unprojected mask. Depending on the degree of overlapping, we either assign the mask to an existing category or create a new one. Finally, following the mask association process described above, we can get a set of multi-view consistent 2D segmentation masks.
+
+We use a 16-dimension feature for each Gaussian, i.e., Identity Encoding (Ye et al., 2024). Leveraging the consistent 2D segmentation masks as supervision, identity encoding is trained via differentiable Gaussian rendering to render 2D segmentation feature maps. A linear layer is employed to classify the splatted 2D features into semantic labels for segmentation rendering.
+
+Our approach, *Gaga*, is capable of: 1) synthesizing novel view images of RGB and segmentation with inherent 3D consistency; 2) grouping 3D Gaussians based on their 2D segmentation masks and providing accurate 3D object segmentation for scene manipulation; 3) accommodating any 2D segmentation methods without additional mask pre-processing.
+
+{2}------------------------------------------------
+
+Our contributions are summarized as follows:
+
+- We propose a framework that reconstructs and segments 3D scenes using inconsistent 2D masks generated by open-world segmentation models.
+- To resolve the inconsistency of 2D masks across views, we design a 3D-aware memory bank that collects Gaussians of the same semantic group. This memory bank is then employed to align 2D masks across diverse views.
+- We show that the proposed method can effectively leverage any 2D segmentation masks, making it readily applicable for synthesizing novel view images and segmentation masks.
+- We conduct comprehensive experiments on diverse datasets and challenging scenarios, including sparse input views, to demonstrate the effectiveness of the proposed method both qualitatively and quantitatively.
+
+## 2 RELATED WORK
+
+**Segment and Tracking Anything in 2D.** Segment Anything (SAM) (Kirillov et al., 2023) and EntitySeg (Qi et al., 2023) demonstrate the effectiveness of large-scale training in image segmentation, thus establishing a pivotal foundation for open-world segmentation methods. Subsequent studies (Yang et al., 2023; Cheng et al., 2023b;a) further extend the applicability of SAM to video data by leveraging video object segmentation algorithms to propagate SAM masks. Conversely, acquiring data for training their 3D counterparts poses a challenge, given that existing 3D datasets with annotated segmentation (Straub et al., 2019; Dai et al., 2017) primarily focus on indoor scenarios.
+
+**NeRF-based 3D Segmentation.** Neural Radiance Fields (NeRF) (Mildenhall et al., 2020) model scenes as continuous volumetric functions, learned through neural networks that map 3D coordinates to scene radiance. This approach facilitates the capture of intricate geometric details and the generation of photorealistic renderings, offering novel view synthesis capabilities.
+
+Semantic-NeRF (Zhi et al., 2021) initiates the incorporation of semantic information into NeRFs and enables the generation of semantic masks for novel views. Note that semantic segmentation masks do not face the challenge of ambiguous mask ID across views. Numerous methods expand the scope by introducing instance modeling and matching instance masks relying on existing 3D bounding boxes (Liu et al., 2023b; Fu et al., 2022), resorting to the cost-based linear assignment during training (Siddiqui et al., 2023; Wang et al., 2023) or directly training instance-specific MLPs (Kundu et al., 2022). However, most of these methods are developed based on ground truth segmentation and tailored for scene modeling within specific domains. They often entail high computational costs and lack substantial evidence of their performance in open-world scenarios.
+
+Leveraging SAM’s open-world segmentation capability, SA3D (Cen et al., 2023b) endeavors to recover a 3D consistent mask by tracing 2D masks across adjacent views with user guidance. Similarly, Chen et al. (Chen et al., 2023) distill SAM encoder features into 3D and query the decoder. In contrast, *Gaga* achieves multi-view consistency without user intervention, offering segmentation for all objects rather than an instance. Garfield (Kim et al., 2024) focuses more on clustering than segmentation. They densely sample SAM masks and train a scale-conditioned affinity field supervised on the scale of each mask deprojected to 3D.
+
+**Gaussian-based 3D Segmentation.** As an alternative to NeRF and its variants (Mildenhall et al., 2020; Chen et al., 2022; Müller et al., 2022; Tancik et al., 2023), Gaussian Splatting (Kerbl et al., 2023; Chen & Wang, 2024; Wu et al., 2024; Yu et al., 2024) has recently emerged as a powerful approach to reconstruct 3D scenes via real-time radiance field rendering. By representing the scene as 3D Gaussians from posed images, it achieves photorealistic novel view synthesis with high reconstruction quality and efficiency. Additionally, manipulating 3D Gaussians for scene editing is more straightforward compared to NeRF’s representation.
+
+SAGA (Cen et al., 2023a) renders a 2D SAM feature map and uses a SAM guidance loss to learn 3D segmentation from the ambiguous 2D masks. Similar to (Cen et al., 2023b), this method requires user input and only provides segmentation for one object at a time. Feature 3DGS (Zhou et al., 2024) distills LSeg (Li et al., 2022) and SAM features to 3D Gaussians and decodes rendered features to obtain segmentation. However, it fails to provide consistent segmentation across views. Gaussian Grouping (Ye et al., 2024) and CoSSegGaussians (Dou et al., 2024) use a video object tracker (Cheng et al., 2023a) to associate masks across different views. However, in scenarios with significant changes in camera poses between frames, such approaches struggle to maintain accuracy.
+
+{3}------------------------------------------------
+
+![Figure 3: Overview of Gaga. The diagram illustrates the reconstruction pipeline. Top: Input images are processed by SAM to generate 2D segmentation masks. These masks are used to train ID encodings for 3D Gaussians. A 'Pseudo Label' is generated for each 3D Gaussian. Bottom: A '3D-aware Memory Bank' is used to associate masks with corresponding Gaussians. It shows a 'Group ID' (1, 2, 3) and '3D Gaussians' (G1, G2, G3). The 'Mask with Corresponding Gaussians' is found using Eq. (3) and Eq. (4). The 'Assign Group ID' is determined by the maximum overlapped Gaussians. The 'Update Memory Bank' is done using Eq. (3) and Eq. (4). The final output is a rendered image with segmentation masks.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 3: Overview of Gaga. The diagram illustrates the reconstruction pipeline. Top: Input images are processed by SAM to generate 2D segmentation masks. These masks are used to train ID encodings for 3D Gaussians. A 'Pseudo Label' is generated for each 3D Gaussian. Bottom: A '3D-aware Memory Bank' is used to associate masks with corresponding Gaussians. It shows a 'Group ID' (1, 2, 3) and '3D Gaussians' (G1, G2, G3). The 'Mask with Corresponding Gaussians' is found using Eq. (3) and Eq. (4). The 'Assign Group ID' is determined by the maximum overlapped Gaussians. The 'Update Memory Bank' is done using Eq. (3) and Eq. (4). The final output is a rendered image with segmentation masks.
+
+Figure 3: **Overview of Gaga.** Gaga reconstructs 3D scenes using Gaussian Splatting and adopts any open-world model to generate 2D segmentation masks. To eliminate the 2D mask label inconsistency, we design a mask association process, where a 3D-aware memory bank is employed to assign a consistent group ID across different views to each 2D mask based on the 3D Gaussians projected to that mask (Sec. 3.2). Specifically, we find the corresponding Gaussians projected to 2D mask and assign the mask with the group ID in the memory bank with the maximum overlapped Gaussians (Eq. 3). After 3D-aware mask association process, we use masks with multi-view consistent group IDs as pseudo labels to train an identity encoding on each 3D Gaussian for segmentation rendering.
+
+## 3 PROPOSED METHOD
+
+### 3.1 PRELIMINARIES
+
+**Gaussian Splatting.** Recently, Gaussian Splatting (Kerbl et al., 2023) has significantly advanced the 3D representation field by combining the benefits of implicit and explicit 3D representations. Specifically, a 3D scene is parameterized as a set of 3D Gaussians  $\{G_i\}$ . Each Gaussian  $G_i = \{p_i, s_i, q_i, \alpha_i, c_i\}$  is defined by its position  $p_i = \{x, y, z\} \in \mathbb{R}^3$ , scale  $s_i \in \mathbb{R}^3$ , orientation  $q \in \mathbb{R}^4$ , opacity  $\alpha \in \mathbb{R}$  and color features  $c$  encoded by spherical harmonics (SH) coefficients.
+
+Gaussian Splatting employs the splatting rendering pipeline, wherein 3D Gaussians are projected onto the 2D image space using the world-to-frame transformation matrix corresponding to each camera pose. Gaussians projected to the same coordinates  $(x, y)$  (represented as  $i \in N$ ) are blended in depth order and weighted by their opacity  $\alpha$  to produce the color  $c_{x,y}$  of each pixel:
+
+$$c_{x,y} = \sum_{i \in N} c_i \alpha_i \prod_{j=1}^{i-1} (1 - \alpha_j). \quad (1)$$
+
+**Identity Encoding.** Identity encoding (Ye et al., 2024) aims to assign a universal label to each 3D Gaussian for segmentation rendering. It is a 16-dimensional feature attached to each Gaussian, which is subsequently decoded to a segmentation mask ID through a combination of linear and SoftMax layers. The resulting mask ID can then be supervised using 2D segmentation masks.
+
+$$m_{x,y} = \arg \max \left\{ L \left( \sum_{i \in N} e_i \alpha_i \prod_{j=1}^{i-1} (1 - \alpha_j) \right) \right\}. \quad (2)$$
+
+### 3.2 GROUP ANY GAUSSIANS VIA 3D-AWARE MEMORY BANK
+
+Given a set of posed images, we aim to reconstruct a 3D scene with semantic labels for segmentation rendering. To this end, we first leverage Gaussian Splatting for scene reconstruction. We then employ open-world 2D segmentation methods such as SAM (Kirillov et al., 2023) or EntitySeg (Qi et al., 2023) to predict class-agnostic segmentation for each input image.
+
+{4}------------------------------------------------
+
+![Figure 4: Illustrations of finding corresponding Gaussians. (a) Motivation to choose front x% of Gaussians. (b) Significance of mask partition.](a0167e3dcece9dcd8a378bcd98fb9cfa_img.jpg)
+
+Figure 4 consists of two parts, (a) and (b). Part (a) shows two views of a scene with a white tent. View 1 shows the tent from a side angle, while View 2 shows it from a front angle. Below the images, a diagram illustrates the process of selecting Gaussians. It shows a 'Splatted Gaussians Under Different Views' step, followed by a selection of 'Front  $x\%$  Gaussians of a Mask'. A formula  $\#Patch = N \times N$  is shown. Part (b) shows a 2x4 grid of images. The first row shows 'View 1' and 'View 2' of a room with a blue screen. The second row shows the same views after partitioning into  $N \times N$  patches. Columns 2 and 4 show '3D Gaussian Groups' as colored regions. Columns 3 and 5 show 'Associated Mask' as colored rectangles. In the first row, a yellow rectangle highlights a confined area in View 1, and a red rectangle highlights a mismatched mask in View 2. In the second row, the masks are better aligned with the 3D Gaussian groups.
+
+Figure 4: Illustrations of finding corresponding Gaussians. (a) Motivation to choose front x% of Gaussians. (b) Significance of mask partition.
+
+Figure 4: **Illustrations of finding corresponding Gaussians.** (a) **Motivation to choose front  $x\%$  of Gaussians.** We select  $x\%$  of Gaussians closest to the camera frame as many Gaussians splatted to mask in view 1 represent objects from behind, as shown in view 2. (b) **Significance of mask partition.** We color the Gaussians in the 3D-aware memory bank based on their groups, displayed as 3D Gaussian Groups in columns 2, and 4. When images aren't partitioned (row 1), the front  $x\%$  of Gaussians concentrate in a confined area, as shown in the orange rectangle, also visualized as the yellow Gaussians in column 1. These Gaussians fail to accurately represent the mask's shape, resulting in mismatched masks (columns 3, 5), as shown in the red rectangle. After dividing each mask into  $N \times N$  patches (row 2) (figure column 1 use  $4 \times 1$  for illustration), the selected front Gaussians can better represent the shape of a 3D object.
+
+However, because the segmentation model processes each input image independently, the resulting masks are not naturally multi-view consistent. To resolve this issue, (Ye et al., 2024; Dou et al., 2024) assume that nearby input views are similar and apply a video tracker to associate inconsistent 2D masks of different views. Yet, this assumption may not hold for all 3D scenes, especially when the input views are sparse, as demonstrated in Fig. 2.
+
+*Gaga* is inspired by the fundamental disparity between the task of mask association across multiple views and tracking objects in a video: the incorporation of 3D information. To reliably generate consistent masks across different views, we propose a method that leverages 3D information without relying on any assumptions about the input images. Our key insight is that masks belonging to the same object in different views shall correspond to the same Gaussians in the 3D space. Consequently, these Gaussians should be grouped together and assigned an identical group ID.
+
+**Corresponding Gaussians of Mask.** Based on this intuition, we first associate each 2D segmentation mask with its corresponding 3D Gaussians. Specifically, we splat all 3D Gaussians onto the camera frame, given the camera pose of each input image. Subsequently, for each mask within the image, we identify 3D Gaussians whose centers are projected within that mask. Those Gaussians should be identified as representatives of the mask in 3D and can be used as guidance for associating masks from different views.
+
+Notably, segmentation masks typically describe the shape of foreground objects under the current camera pose. However, as Fig. 4 (a) shows, a significant proportion of Gaussians do not contribute to the pixels in the 2D segmentation mask, as they represent objects in the back of the 3D scene. To address this, we experiment with different solutions and find that selecting the front  $x$  percentage of 3D Gaussians closest to the camera frame as the corresponding Gaussians of the mask works best. Here,  $x$  serves as a hyperparameter that can be adjusted based on the nature of the current 3D scene.
+
+As shown in Fig. 4 (b), some masks in 2D represent a large object in 3D, i.e., the blue screen in the image. Selecting corresponding Gaussians based on the entire mask will inaccurately represent the shape of the 3D object, as the selected front Gaussians often concentrate in a confined area (see the yellow Gaussians in Front  $x\%$  Gaussians of a Mask). Subsequently, when the camera pose changes, the front  $x\%$  of Gaussians of the same mask may land in a different confined area (see Fig. 4 (b) View 2 row 1 3D Gaussian Group) and have no or little overlap with the Gaussian Group in the memory bank, fail to associate masks across different camera poses. To resolve this issue, we propose a strategy wherein we partition an input image into patches and calculate corresponding Gaussians within each patch, as shown in Fig. 4 (b) row 2. Specifically, we begin by dividing the image into  $N \times N$  patches. Subsequently, we identify the collection of top  $x\%$  of 3D Gaussians closest to the camera frame within each patch to be the corresponding Gaussians of
+
+{5}------------------------------------------------
+
+mask  $m$ , denoted as  $\mathcal{G}(m)$ . This simple strategy effectively improves the consistency of associated masks across different views.
+
+**3D-aware Memory Bank.** Next, to collect and categorize 3D Gaussians into groups and use them to associate masks across different views, we introduce a 3D-aware Memory Bank (see Fig. 3). Given a set of images, we initialize the 3D-aware Memory Bank by storing the corresponding Gaussians of each mask in the first image into an individual group and labeling each mask with a group ID the same as its mask label. For each 2D mask of the subsequent image, we first determine its corresponding Gaussians as outlined above. We then either assign these Gaussians to an existing group within the memory bank or establish a new one if they do not share similarities with existing categories in the memory bank. Details of this assignment process are elaborated in the following.
+
+**Group ID Assignment via Gaussian Overlap.** To assign each mask a group ID, we aim to find if the current mask has a significant amount of overlapped Gaussians with any groups in the memory bank. We define the similarity between two sets of 3D Gaussians based on their shared 3D Gaussian ratio. Specifically, given the 3D Gaussians corresponding to a 2D mask  $m$  (denoted as  $\mathcal{G}(m)$  as described above) and the Gaussians of category  $i$  (denoted as  $\mathcal{G}_i$ ) in the memory bank, we identify their shared Gaussians as  $\mathcal{G}(m) \cap \mathcal{G}_i$  (i.e., Gaussians of the same indices), we then compute the overlap as the ratio of number of shared Gaussians to number of all Gaussians within mask  $m$ :
+
+$$Overlap(m, i) = \frac{\#(\mathcal{G}(m) \cap \mathcal{G}_i)}{\#\mathcal{G}(m)}. \quad (3)$$
+
+Suppose category  $i$  has the highest overlap with mask  $m$  among all categories in the memory bank, and this overlap value is above a threshold. In that case, we assign the group ID of mask  $m$  as  $i$  and add the non-overlapped Gaussians in the  $i_{th}$  category.
+
+$$\mathcal{G}_i = \mathcal{G}_i \cup \mathcal{G}(m). \quad (4)$$
+
+We establish a new group ID  $j$  if none of the existing groups contains an overlap with mask  $m$  above the overlap threshold. We add  $\mathcal{G}(m)$  into this new category in the Gaussian memory bank and assign mask  $m$  with the new group ID  $j$ . Note that we ensure that each Gaussian is added to only one group in the memory bank by recording all the Gaussian indices already in the memory bank.
+
+### 3.3 3D SEGMENTATION RENDERING AND DOWNSTREAM APPLICATION.
+
+After the group ID assigning process, masks projected by the same group of Gaussians are supposed to have the same group ID across different views. Similar to (Ye et al., 2024), we learn a 16-dimension identity encoding feature for each Gaussian. Like RGB rendering, identity encoding renders a 2D identity encoding feature map given a camera pose. Then, a linear layer and a SoftMax function are employed to predict a semantic label for each pixel in the rendered identity encoding feature map, resulting in segmentation rendering. We use those associated masks as pseudo-labels to train the identity encoding.
+
+Our segmentation-aware 3D Gaussians can be readily used for various downstream applications. For instance, we can render segmentation masks of novel views with consistent semantic labels for the same object across different camera poses. Gaussians can also be selected by their identity encoding for scene editing tasks, including removal, color-changing, position translation, etc., as demonstrated in Sec. 4.6.
+
+## 4 EXPERIMENTS
+
+### 4.1 EXPERIMENTAL SETUP
+
+**Datasets.** We experiment with various datasets across diverse scenarios to demonstrate the performance of *Gaga*. For quantitative comparison, we use a scene understanding dataset LERF-Mask (Ye et al., 2024), along with two indoor scene datasets: Replica (Straub et al., 2019) and ScanNet (Dai et al., 2017). Additionally, we showcase the robustness of *Gaga* against variations in training image quantity by sparsely sampling the Replica dataset. We present visual comparison results on the commonly used scene reconstruction dataset, MipNeRF 360 (Barron et al., 2021). The quantitative and qualitative results are conducted on the test set, i.e., novel view synthesis results. Details about datasets can be found in the supplementary material.
+
+**Evaluation Metrics.** Similarly to prior work (Ye et al., 2024), mIoU and boundary IoU (mBIOU) are used to evaluate the LERF-Mask dataset. We use ground-truth panoramic segmentation to evaluate the Replica and ScanNet datasets and disregard class information. To handle differences between
+
+{6}------------------------------------------------
+
+Table 1: **Quantitative results for open-vocabulary 3D query tasks on LERF-Mask dataset.** *Gaga* outperforms previous approaches, showcasing favorable performance in terms of mIoU and BIoU with both segmentation models. \* denotes the results are reported in (Ye et al., 2024).
+
+| Model | 2D Seg. Method | mIoU(%) | mBIoU(%) |
+|-|-|-|-|
+| LERF (Kerr et al., 2023)* | / | 37.17 | 29.30 |
+| LEGaussians (Shi et al., 2024) | / | 36.26 | 28.90 |
+| LangSplat (Qin et al., 2024) | / | 61.24 | 56.07 |
+| Gaussian Grouping (Ye et al., 2024) | EntitySeg | 54.10 | 50.90 |
+| <i>Gaga</i> (Ours) |  | 62.44 | 60.28 |
+| Gaussian Grouping (Ye et al., 2024)* | SAM | 72.79 | 67.58 |
+| <i>Gaga</i> (Ours) |  | <b>74.71</b> | <b>72.19</b> |
+
+![Figure 5: Visual comparison on LERF-Mask dataset. The figure shows two rows of images. The first row is labeled 'Prompt: paper napkin' and the second row is labeled 'Prompt: bag of cookies'. Each row contains five images: the original input image, and four segmentation masks generated by LEGaussians, LangSplat, Gaussian Grouping, and Gaga. The Gaga masks are more complete and accurate than the others.](c1c7af7ea36be0323047962df57d75b0_img.jpg)
+
+Figure 5: Visual comparison on LERF-Mask dataset. The figure shows two rows of images. The first row is labeled 'Prompt: paper napkin' and the second row is labeled 'Prompt: bag of cookies'. Each row contains five images: the original input image, and four segmentation masks generated by LEGaussians, LangSplat, Gaussian Grouping, and Gaga. The Gaga masks are more complete and accurate than the others.
+
+Figure 5: **Visual comparison on LERF-Mask dataset.** Our rendered segmentation exhibits fewer artifacts and delivers more accurate segmentation results than both prior 3D class-agnostic segmentation works and language embedding works.
+
+predicted and ground truth mask labels, we calculate the best linear assignment based on IoU. Moreover, with IoU = 0.5 as the criterion, we report precision and recall to further evaluate the accuracy of predicted masks.
+
+**Implementation Details.** We use SAM (Kirillov et al., 2023) and EntitySeg (Qi et al., 2023) with the Hornet-L backbone to obtain open-world 2D segmentation. We preprocess the generated raw masks following the method outlined in (Qi et al., 2023), prioritizing those with higher confidence scores by ranking them accordingly. Masks with confidence scores below 0.5 are discarded. For all experiments, we train vanilla Gaussian Splatting (Kerbl et al., 2023) for 30K iterations and train the identity encoding for 10K iterations with all other parameters frozen. We train Gaussian Grouping (Ye et al., 2024) for 40K iterations for fair comparisons. We choose the front 20% 3D Gaussians that are closest to the camera frames to be the corresponding Gaussians of a mask. We set the overlap threshold for declaring a new group ID as 0.1. We divide the image into 32×32 patches. Ablation studies of these parameter choices can be found in the supplementary material, showing that our method is robust to parameters selection.
+
+### 4.2 OPEN-VOCABULARY 3D QUERY ON LERF-MASK DATASET
+
+We compare our method with 4 state-of-the-art methods on 3D scene understanding: LERF (Kerr et al., 2023), LEGaussians (Shi et al., 2024), LangSplat (Qin et al., 2024) and Gaussian Grouping (Ye et al., 2024). The first three methods focus on CLIP feature embedding. We calculate the relevancy between rendered CLIP features and query text features following their official implementation. Since SAM (Kirillov et al., 2023) and EntitySeg (Qi et al., 2023) do not support language prompts, both *Gaga* and Gaussian Grouping adopt Grounding DINO (Liu et al., 2023a) to identify the mask ID in a 2D image and pick the corresponding 3D mask. Tab. 1 illustrates that *Gaga* achieves superior results in mIoU and mBIoU compared to previous methods, especially when utilizing SAM as 2D segmentation method. Visualization results of 3D query tasks with prompts "paper napkin" and "bag of cookies" further demonstrate the advancement of *Gaga*.
+
+### 4.3 3D SEGMENTATION ON REPLICA AND SCANNET DATASETS
+
+Tab. 2 presents the quantitative comparison results on Replica and ScanNet datasets. *Gaga* exhibits better performance on both datasets regardless of the 2D segmentation model used, showcasing its stability across different datasets and models and consistently achieving high performance. Qualitative results are shown in Fig. 6. Rows 1–2 depict the visualizations from the Replica dataset, while rows 3–5 showcase results from the ScanNet dataset. Gaussian Grouping (Ye et al., 2024) frequently assigns different mask IDs to the same object, resulting in inconsistent mask colors and empty regions. Row 4 illustrates that Gaussian Grouping struggles to distinguish similar objects, whereas our proposed *Gaga* accurately identifies each object by leveraging 3D information.
+
+{7}------------------------------------------------
+
+Table 2: **Quantitative results on Replica and ScanNet datasets.** *Gaga* performs well with both 2D segmentation methods on two datasets. The performance of Gaussian Grouping varies significantly with different 2D segmentation methods, whereas *Gaga* consistently delivers stable performance.
+
+| Model | 2D Seg. Method | Replica |  |  | ScanNet |  |  |
+|-|-|-|-|-|-|-|-|
+|  |  | IoU(%) | Precision(%) | Recall(%) | IoU(%) | Precision(%) | Recall(%) |
+| Gaussian Grouping (Ye et al., 2024) | EntitySeg | 35.90 | 14.07 | 31.57 | 39.54 | 6.88 | 36.56 |
+| <i>Gaga</i> (Ours) |  | 41.08 | <b>63.06</b> | 46.14 | 42.56 | <b>33.89</b> | <b>47.63</b> |
+| Gaussian Grouping (Ye et al., 2024) | SAM | 21.76 | 25.00 | 19.72 | 34.24 | 18.70 | 32.61 |
+| <i>Gaga</i> (Ours) |  | <b>46.50</b> | 41.52 | <b>52.50</b> | <b>44.87</b> | 18.61 | 45.94 |
+
+![Figure 6: Qualitative results on Replica and ScanNet datasets. The figure shows a 5x6 grid of images. The first column contains the original RGB images. The subsequent columns show segmentation masks generated by different methods: GG + EntitySeg, GG + SAM, Gaga + EntitySeg, Gaga + SAM, and the Ground Truth. The rows illustrate various segmentation challenges, such as covering the same object with different masks (rows 1, 3, 6), creating large empty regions (rows 1-3), and misidentifying similar instances (rows 4, 5).](efca2dce0095c9dc2a68e9af6b2bfd40_img.jpg)
+
+Figure 6: Qualitative results on Replica and ScanNet datasets. The figure shows a 5x6 grid of images. The first column contains the original RGB images. The subsequent columns show segmentation masks generated by different methods: GG + EntitySeg, GG + SAM, Gaga + EntitySeg, Gaga + SAM, and the Ground Truth. The rows illustrate various segmentation challenges, such as covering the same object with different masks (rows 1, 3, 6), creating large empty regions (rows 1-3), and misidentifying similar instances (rows 4, 5).
+
+Figure 6: **Qualitative results on Replica and ScanNet datasets.** *Gaga* provides high-quality segmentation masks that are more similar to the ground truth. Gaussian Grouping (noted as GG) often covers the same object with different masks (rows 1, 3, 6), creating large empty regions (rows 1-3), and misidentifying similar instances (rows 4, 5).
+
+### 4.4 3D SEGMENTATION WITH LIMITED DATA ON REPLICA DATASET
+
+To demonstrate the robustness of *Gaga* against changes in training image quantity, we sparsely sample the Replica training set with ratios of 0.3, 0.2, 0.1, and 0.05. As depicted in Tab. 3, *Gaga* consistently exhibits superior performance in terms of IoU, with approximately a 10% advantage using EntitySeg and a 20% advantage using SAM. Remarkably, when utilizing SAM, *Gaga* surpasses fully trained Gaussian Grouping with just 5% of the training data (22.79% vs. 21.76%). We also compute the IoU drop compared to using all training images, as follows:
+
+$$IoU\ Drop(x\%) = \frac{IoU(100\%) - IoU(x\%)}{IoU(100\%)}, \quad (5)$$
+
+Table 3: **Quantitative results on Replica dataset with limited training data.** *Gaga* consistently outperforms Gaussian Grouping with both 2D segmentation methods. The percentage of IoU drop indicates that *Gaga* exhibits greater robustness against reductions in training data.
+
+| Model | 2D Seg. Method | Training Data | EntitySeg |  | SAM |  |
+|-|-|-|-|-|-|-|
+|  |  |  | IoU(%) ↑ | IoU Drop(%) ↓ | IoU(%) ↑ | IoU Drop(%) ↓ |
+| Gaussian Grouping (Ye et al., 2024) | EntitySeg | 30% | 28.42 | 20.85 | 17.02 | 21.78 |
+| <i>Gaga</i> (Ours) |  |  | 37.98 | 7.57 | 41.79 | 10.11 |
+| Gaussian Grouping (Ye et al., 2024) | EntitySeg | 20% | 24.56 | 31.35 | 16.02 | 26.38 |
+| <i>Gaga</i> (Ours) |  |  | 37.25 | 9.33 | 40.27 | 13.40 |
+| Gaussian Grouping (Ye et al., 2024) | SAM | 10% | 20.62 | 42.56 | 13.97 | 35.78 |
+| <i>Gaga</i> (Ours) |  |  | 31.93 | 22.27 | 35.61 | 23.40 |
+| Gaussian Grouping (Ye et al., 2024) | SAM | 5% | 10.00 | 72.15 | 6.77 | 68.87 |
+| <i>Gaga</i> (Ours) |  |  | 20.59 | 49.88 | 22.79 | 50.98 |
+
+{8}------------------------------------------------
+
+![Figure 7: Qualitative results on Replica dataset with limited training data. The figure shows two rows of images. Each row contains an RGB image, a Gaussian Grouping segmentation mask, and a Gaga segmentation mask. The first row shows a room with a desk and chair, and the second row shows a room with a desk and a window. The Gaga masks are more complete and accurate than the Gaussian Grouping masks, which leave significant empty regions.](d4e9f8f6bf5d7853ecae9c9633900af1_img.jpg)
+
+Figure 7: Qualitative results on Replica dataset with limited training data. The figure shows two rows of images. Each row contains an RGB image, a Gaussian Grouping segmentation mask, and a Gaga segmentation mask. The first row shows a room with a desk and chair, and the second row shows a room with a desk and a window. The Gaga masks are more complete and accurate than the Gaussian Grouping masks, which leave significant empty regions.
+
+Figure 7: **Qualitative results on Replica dataset with limited training data.** The visualizations depict samples when using only 5% of the training data. Even with limited data, *Gaga* consistently produces high-quality segmentation. In contrast, Gaussian Grouping struggles to track objects accurately and leaves significant empty regions.
+
+![Figure 8: Qualitative results on MipNeRF 360 dataset. The figure shows a 4x3 grid of images. Each row contains an RGB image, a Gaussian Grouping segmentation mask, and a Gaga segmentation mask. The rows represent different scenes: a living room, a kitchen, a construction site, and a bedroom. The Gaga masks are more detailed and consistent across views than the Gaussian Grouping masks, which exhibit artifacts and empty regions.](c37fe03d7cad74ad675a0eb16aa43821_img.jpg)
+
+Figure 8: Qualitative results on MipNeRF 360 dataset. The figure shows a 4x3 grid of images. Each row contains an RGB image, a Gaussian Grouping segmentation mask, and a Gaga segmentation mask. The rows represent different scenes: a living room, a kitchen, a construction site, and a bedroom. The Gaga masks are more detailed and consistent across views than the Gaussian Grouping masks, which exhibit artifacts and empty regions.
+
+Figure 8: **Qualitative results on MipNeRF 360 dataset.** *Gaga* provides superior segmentation with finer details (row 1, 2), fewer artifacts and empty regions (row 1, 3, 4), and more consistent object segmentation across different views (wall in row 1, tablecloth in row 3).
+
+where  $IoU(x\%)$  denotes the IoU achieved when  $x\%$  of the training data is used. Compared to Gaussian Grouping, *Gaga* exhibits less sensitivity to decreases in the number of training images, as evidenced by smaller values in IoU drop. Visualization results are shown in Fig. 7. With just 5% of the training data, *Gaga* can still deliver accurate segmentation masks, whereas Gaussian Grouping fails to provide masks for a significant portion of objects due to inaccurate tracking.
+
+### 4.5 3D SEGMENTATION ON MIPNERF 360 DATASET
+
+We further showcase the performance of *Gaga* on the diverse MipNeRF 360 dataset. We provide visualization comparison with Gaussian Grouping (Ye et al., 2024) in Fig. 8, using SAM (Kirillov et al., 2023) (row 1, 2) and EntitySeg (Qi et al., 2023) (row 3, 4). We display two images for each scene to assess the consistency across different views. *Gaga* offers more detailed segmentation, while segmentation masks generated by Gaussian Grouping exhibit severe artifacts and empty regions. Additionally, inconsistency across two views exists in the rendering results of Gaussian Grouping, as shown in row 1, 3.
+
+### 4.6 APPLICATION: SCENE MANIPULATION
+
+*Gaga* achieves high-quality and multi-view consistent 3D segmentation, beneficial for tasks like scene manipulation. We demonstrate the effectiveness of this application on the MipNeRF 360 (Baron et al., 2021) and Replica (Straub et al., 2019) datasets (see Fig. 9). In the left image, we change the color of the footstool’s cushion and remove the stuffed animal on the armchair. *Gaga* accurately identifies 3D Gaussians representing the cushion, while Gaussian Grouping fails, coloring the entire footstool maroon along with part of the sofa and some floating Gaussians. *Gaga* also effectively groups and removes the entire part of the stuffed animal on the sofa with minimal artifacts, whereas Gaussian Grouping leaves many floating Gaussians. Similar results are observed in experiments involving the position shifting of a chair in the right image.
+
+### 4.7 ABLATION STUDY ON MASK ASSOCIATION METHOD
+
+We conduct ablation studies to evaluate the effectiveness of the proposed mask association method on the Replica dataset. The baselines for comparison include: 1) *w/o. Mask Association*: Lifting
+
+{9}------------------------------------------------
+
+486  
+487  
+488  
+489  
+490  
+491  
+492  
+493  
+494  
+495  
+496  
+497  
+498  
+499  
+500  
+501  
+502  
+503  
+504  
+505  
+506  
+507  
+508  
+509  
+510  
+511  
+512  
+513  
+514  
+515  
+516  
+517  
+518  
+519  
+520  
+521  
+522  
+523  
+524  
+525  
+526  
+527  
+528  
+529  
+530  
+531  
+532  
+533  
+534  
+535  
+536  
+537  
+538  
+539
+
+![Figure 9: Scene manipulation results on MipNeRF 360 and Replica dataset. The figure shows two rows of images. The top row is for the task 'Change the cushion's color of [cushion icon] to maroon, remove [trash bin icon]'. The bottom row is for the task 'Move [cushion icon] closer to the window'. Each row has three columns: 'Before Editing', 'Gaussian Grouping', and 'Gaga'. The 'Gaga' column shows more accurate and artifact-free results compared to 'Gaussian Grouping'.](349ca0a6a9c2e2651a4deeeaf8be6da1_img.jpg)
+
+Figure 9: Scene manipulation results on MipNeRF 360 and Replica dataset. The figure shows two rows of images. The top row is for the task 'Change the cushion's color of [cushion icon] to maroon, remove [trash bin icon]'. The bottom row is for the task 'Move [cushion icon] closer to the window'. Each row has three columns: 'Before Editing', 'Gaussian Grouping', and 'Gaga'. The 'Gaga' column shows more accurate and artifact-free results compared to 'Gaussian Grouping'.
+
+Figure 9: **Scene manipulation results on MipNeRF 360 and Replica dataset.** *Gaga* accurately identifies the cushion part of the footstool, whereas Gaussian Grouping colors it entirely. For object removal and translation tasks, *Gaga* generates more precise 3D entities with fewer artifacts, resulting in better visual performance.
+
+Table 4: **Ablation study on different mask association methods.** Our mask association method with the 3D-aware memory bank surpasses the previous video tracker baseline on both IoU, Precision, and Recall.
+
+| Baseline | IoU (%) | Precision (%) | Recall (%) |
+|-|-|-|-|
+| SAM (Upper Bound) | 60.89 | 57.07 | 67.16 |
+| w/o. Mask Association | 8.81 | 3.19 | 2.16 |
+| Video Tracker (Ye et al., 2024) | 21.76 | 25.00 | 19.72 |
+| Memory Bank (w. All Gaussians) (Ours) | 42.26 | 40.19 | 45.95 |
+| Memory Bank (w/o. Mask Partition) (Ours) | 46.08 | 27.88 | 50.67 |
+| Memory Bank (Depth) (Ours) | 46.09 | 36.30 | 51.25 |
+| Memory Bank (Ours) | <b>46.50</b> | <b>41.52</b> | <b>52.50</b> |
+
+![Figure 10: Visual comparison of different mask association methods. The figure shows a row of images: 'RGB', 'w/o. Mask Association', 'Video Object Tracker', 'Memory Bank (w. All Gaussians)', 'Memory Bank (w/o. Mask Partition)', 'Memory Bank (Depth)', 'Memory Bank (Ours)', and 'Ground Truth'. The 'Memory Bank (Ours)' column shows results that are visually closer to the 'Ground Truth' than the other methods.](d3f6de4fe9f9138fc6afc584b5104433_img.jpg)
+
+Figure 10: Visual comparison of different mask association methods. The figure shows a row of images: 'RGB', 'w/o. Mask Association', 'Video Object Tracker', 'Memory Bank (w. All Gaussians)', 'Memory Bank (w/o. Mask Partition)', 'Memory Bank (Depth)', 'Memory Bank (Ours)', and 'Ground Truth'. The 'Memory Bank (Ours)' column shows results that are visually closer to the 'Ground Truth' than the other methods.
+
+Figure 10: **Visual comparison of different mask association methods.** *Gaga* with 3D-aware memory bank achieves a superior visual quality and closer to the ground truth. Notice that the Video Tracker baseline mislabels the wall and floor, Memory Bank (w. All Gaussians) and Memory Bank (Depth) baselines mislabel the floor, Memory Bank (w/o. Mask Partition) baseline creates artifacts on the table,
+
+inconsistent 2D masks to 3D. 2) *Video Tracker*: (Ye et al., 2024) is employed as a representative method. 3) *Memory Bank (w. All Gaussians)*: same as *Gaga* except that it selects all Gaussians splatted to the mask as its corresponding Gaussians. 4) *Memory Bank (w/o. Mask Partition)*: same as *Gaga* except that it does not partition the image and masks into patches. 5) *Memory Bank (Depth)*: same as *Gaga* except that it uses rendered depth to locate corresponding Gaussians. 6) *Memory Bank*: i.e., *Gaga*. We also add a baseline *SAM (Upper Bound)*, which uses SAM to process rendered RGBs from Gaussian Splatting and evaluate on each single frame without considering multi-view consistency. This baseline can serve as an upper bound to show the inherent difference between class-agnostic and panoptic segmentation.
+
+Quantitative results in Tab. 4 indicate that *Gaga* with the 3D-aware memory bank achieves superior performance with a 24.74%, 16.52%, and 32.78% improvement on IoU, precision on recall, respectively, compared to the previous method with video tracker. Comparison with other Memory Bank baselines demonstrates the effectiveness of our well-designed process for finding corresponding Gaussians of each mask. We also show the visual comparison in Fig. 10.
+
+## 5 CONCLUSIONS
+
+We introduce *Gaga*, a framework that reconstructs and segments open-world 3D scenes using inconsistent 2D masks predicted by zero-shot segmentation models. *Gaga* employs a 3D-aware memory bank to store the indices of pre-trained 3D Gaussians and establishes mask association across different views by identifying the overlap between Gaussians projected to each mask. Results on various datasets demonstrate that *Gaga* outperforms previous methods with superior segmentation accuracy, multi-view consistency, and reduced artifacts. Additionally, application in scene manipulation highlights *Gaga*’s high segmentation accuracy and practical utility.
+
+ Rest of paper (reference and Appendix) is removed.

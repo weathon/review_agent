@@ -1,0 +1,311 @@
+
+
+{0}------------------------------------------------
+
+# CALIBRATING EXPRESSIONS OF CERTAINTY
+
+Peiqi Wang <sup>\*1</sup> Barbara D. Lam <sup>2</sup> Yingcheng Liu <sup>1</sup> Ameneh Asgari-Targhi <sup>2</sup>  
+ Rameswar Panda <sup>3</sup> William M. Wells <sup>1,2</sup> Tina Kapur <sup>2</sup> Polina Golland <sup>1</sup>  
+<sup>1</sup> CSAIL, MIT <sup>2</sup> Harvard Medical School <sup>3</sup> MIT-IBM Watson AI Lab
+
+## ABSTRACT
+
+We present a novel approach to calibrating linguistic expressions of certainty, e.g., “Maybe” and “Likely”. Unlike prior work that assigns a single score to each certainty phrase, we model uncertainty as distributions over the simplex to capture their semantics more accurately. To accommodate this new representation of certainty, we generalize existing measures of miscalibration and introduce a novel post-hoc calibration method. Leveraging these tools, we analyze the calibration of both humans (e.g., radiologists) and computational models (e.g., language models) and provide interpretable suggestions to improve their calibration.
+
+## 1 INTRODUCTION
+
+Measuring the calibration of humans and computational models is crucial. For example, in healthcare, radiologists express uncertainty in natural language (e.g., “Likely pneumonia”) due to the inherent ambiguity in the image they examine. These certainty phrases (e.g., “Maybe”, “Likely”) influence healthcare providers’ decisions such as ordering additional diagnostic tests. Accurate perception of these certainty phrases directly impacts patient diagnosis and treatment. Additionally, it’s more natural for large language models (LLMs) to express their confidence using certainty phrases since humans struggle with precise probability estimates (Zhang & Maloney, 2012). Our work enables measuring the calibration of both data annotators and LLMs, paving ways for future work to improve the reliability of LLMs.
+
+Existing miscalibration measures focus on classifiers that provide a confidence score, e.g., posterior probability. These approaches cannot be applied directly to text written by humans or language models that communicate uncertainty using natural language. Prior work on “verbalized confidence” attempted to address this by mapping certainty phrases to fixed probabilities, e.g., “High Confidence” equals “90% confident”, (Lin et al., 2022a). The oversimplification misses two key aspects: (1) individual semantics: people use phrases like “High Confidence” to indicate a range (e.g., 80-100%) rather than a single value; and (2) population-level variation: different individuals may interpret the same certainty phrase differently. Appendix D explains this gap in more detail.
+
+Calibration in the space of certainty phrases presents unique challenges. Prior work such as histogram binning (Zadrozny & Elkan, 2001) and Platt scaling (Platt, 2000) fit low-dimensional functions (e.g., one-dimensional for binary classifiers) to map uncalibrated confidence scores to calibrated probabilities. However, when working with certainty phrases, direct manipulation of the underlying confidence scores is not feasible. Rather than mapping confidence scores directly, we instead calibrate a model by adjusting the use of different certainty phrases.
+
+In this work, we measure and calibrate both humans and computational models that convey their confidence using natural language expressions of certainty. The key idea is to treat certainty phrases as distributions over the probability simplex. Using this construction, we generalize existing estimators for miscalibration metrics, such as the expected calibration error (ECE) (Pakdaman Naeni et al., 2015), and visualization tools, such as the reliability diagrams (Wilks, 2006). To calibrate over certainty phrases, we learn a discrete and possibly stochastic calibration map over a set of these certainty phrases to a potentially different set. This mapping is derived as the solution to an optimal transport problem that minimizes the net change in calibration error.
+
+We demonstrate our approach by analyzing the calibration of radiologists writing clinical reports, accounting for variables such as the pathology and radiologist’s identity. Moreover, we show how
+
+<sup>\*</sup>Correspondence to [wpq@mit.edu](mailto:wpq@mit.edu); Code available on [GitHub](#)
+
+{1}------------------------------------------------
+
+we can guide radiologists to become better calibrated in their use of certainty phrases. In addition, we showcase the calibration of language models and demonstrate the effectiveness of our calibration method to post-hoc improve model calibration. Our research opens new avenues for assessing and improving the calibration of humans and computational models that communicate their confidence using natural language.
+
+## 2 RELATED WORK
+
+**Measuring Miscalibration** We build our approach on the expected calibration error (ECE), a popular method for measuring miscalibration (Zadrozny & Elkan, 2001). Previous research has focused on adapting ECE to skewed confidence score distributions (Nguyen & O’Connor, 2015), improving its sample efficiency (Zhang et al., 2020), and debiasing (Roelofs et al., 2022). We extend the ECE estimator to accommodate the assumption that certainty phrases represent distributions rather than real-valued scores. This formulation is robust to binning strategies and alleviates estimation noise under small sample sizes (Kumar et al., 2019). Interestingly, our proposed ECE estimator can be viewed as a variant of kernel density estimator for ECE (Zhang et al., 2020; Popordanoska et al., 2022) that uses input-dependent, possibly asymmetric kernels.
+
+**Calibrating Classifiers & Regressors** We focus on post-hoc calibration, as opposed to training models to be calibrated ab initio. Post-hoc calibration reduces to estimating or fitting the canonical calibration function (Vaicenavicius et al., 2019). For example, histogram binning (Pakdaman Naeini et al., 2015) estimates the canonical calibration function with histogram regression. Platt scaling (Platt, 2000), isotonic regression (Zadrozny & Elkan, 2002), and Beta calibration (Kull et al., 2017) fit monotonic, potentially smooth functions from data. These methods assume models provide confidence scores, which makes them unsuitable when only certainty phrases are available.
+
+Distribution calibration (Song et al., 2019) works on regressors that, akin to our setup, predict confidence distributions rather than scores. In contrast to distribution calibration, we focus on classification problems. Moreover, matching the predicted distribution to the true distribution of subsets of examples sharing the same prediction is not of interest in our application.
+
+**Language Model Calibration** Language model calibration typically involves defining real-valued confidence scores and using existing tools designed for calibrating classifiers. For instance, confidence scores can represent conditional probability of an answer given the context (Desai & Durrett, 2020) or the average probability across different paraphrases of answer tokens (Jiang et al., 2021). These methods require access to the model’s internal state. Our work is closely related to “verbalized confidence” (Lin et al., 2022b; Tian et al., 2023), where the model articulates its confidence in token-space as certainty phrases. Rather than focusing solely on the mean, our method offers a more realistic quantification of calibration error by treating each certainty phrase as a distribution. Unlike previous studies that apply calibration techniques designed for classifiers (Desai & Durrett, 2020) or fine-tune the language model for controlled generation (Mielke et al., 2022), we propose a lightweight discrete policy that adjusts the use of certainty phrases to improve calibration.
+
+## 3 METHOD
+
+### 3.1 BACKGROUND
+
+**Miscalibration Measures** Let  $\mathcal{X}$  be the input space and  $\mathcal{Y}$  be a finite set of labels. For simplicity, we consider binary classification, i.e.,  $\mathcal{Y} = \{0, 1\}$ . A probabilistic classifier  $g : \mathcal{X} \rightarrow [0, 1]$  provides its confidence level for the positive class. Here, we use  $g$  to refer to any type of classifier, whether it be a human or a computational model. Classifier  $g$  is calibrated if the true probability of the positive class given model’s prediction is exactly equal to that prediction:
+
+$$\mathbb{E}[Y | S] = S, \quad (1)$$
+
+where  $S = g(X)$  represents the confidence score. For instance, a radiologist is perfectly calibrated if his predicted probabilities match real-world outcomes, e.g., if a radiologist predicts a 30% probability of pneumonia for a group of patients, then pneumonia actually occur in 30% of those patients.
+
+Alternative definitions of calibration, e.g., confidence calibration (Guo et al., 2017) and class-wise calibration (Kull et al., 2019), are equivalent for binary classification (Vaicenavicius et al., 2019).
+
+{2}------------------------------------------------
+
+![Figure 1: Probability density functions obtained by fitting beta distributions to results of a survey of radiologists' perception of different certainty phrases. The figure shows 16 subplots arranged in a 2x8 grid. The top row includes phrases: 'very unlikely', 'question of', 'unlikely', 'maybe', 'possibly', 'may represent', 'may', and 'suggestive of'. The bottom row includes phrases: 'suspicious for', 'probably', 'warrantsome for', 'likely', 'most likely', 'highly suggestive of', 'compatible with', and 'consistent with'. Each plot shows a blue shaded area representing the probability density function over the interval [0, 1]. The distributions vary, with some being skewed towards 0 or 1, and others being more centered.](d9d706121d1c4ba9ad2c793746382361_img.jpg)
+
+Figure 1: Probability density functions obtained by fitting beta distributions to results of a survey of radiologists' perception of different certainty phrases. The figure shows 16 subplots arranged in a 2x8 grid. The top row includes phrases: 'very unlikely', 'question of', 'unlikely', 'maybe', 'possibly', 'may represent', 'may', and 'suggestive of'. The bottom row includes phrases: 'suspicious for', 'probably', 'warrantsome for', 'likely', 'most likely', 'highly suggestive of', 'compatible with', and 'consistent with'. Each plot shows a blue shaded area representing the probability density function over the interval [0, 1]. The distributions vary, with some being skewed towards 0 or 1, and others being more centered.
+
+Figure 1: Probability density functions obtained by fitting beta distributions to results of a survey of radiologists' perception of different certainty phrases (Shinagare et al., 2023).
+
+The expected calibration error (ECE) (Pakdaman Naeini et al., 2015) measures the degree to which the calibration definition is violated in expectation:
+
+$$\text{ECE} = \mathbb{E} [|\mathbb{E}[Y | S] - S|], \quad (2)$$
+
+where the outer expectation is computed with respect to the distribution  $P_S$  that is the pushforward of  $P_X$  by  $g$ . If  $\text{ECE} = 0$ , then  $g$  is perfectly calibrated.
+
+**Empirical Estimation** Given a dataset  $\mathcal{D} = \{(x_1, y_1), \dots, (x_N, y_N)\}$ , one can estimate ECE in Equation (2) or visualize the reliability diagram (DeGroot & Fienberg, 1983) with binning (Pakdaman Naeini et al., 2015). Specifically, we use  $(I_1, \dots, I_M)$  to denote the set of bins that partition classifier  $g$ 's range and  $B_m$  to denote the set of indices of samples whose predictions fall into bin  $I_m$ . Empirical averages
+
+$$\hat{r}_m = \frac{1}{|B_m|} \sum_{n \in B_m} y_n \quad \hat{p}_m = \frac{|B_m|}{N} \quad \hat{g}_m = \frac{1}{|B_m|} \sum_{n \in B_m} g(x_n) \quad (3)$$
+
+serve as estimates for per-bin calibration function  $r_m \triangleq \mathbb{E}[Y | S \in I_m]$ , score probability  $p_m \triangleq P(S \in I_m)$ , and model prediction  $g_m \triangleq \mathbb{E}[S | S \in I_m]$  respectively.
+
+The binning estimator for ECE is a weighted average of per-bin calibration errors
+
+$$\widehat{\text{ECE}} = \sum_{m=1}^M \hat{p}_m |\hat{r}_m - \hat{g}_m|. \quad (4)$$
+
+Statistical properties of the estimator above have been studied in (Vaicenavicius et al., 2019).
+
+If we define  $\hat{r}(s) = \hat{r}_m$  for  $s \in I_m$ , function  $\hat{r}$  is the histogram regression estimator for the canonical calibration function  $r(s) \triangleq \mathbb{E}[Y | S = s]$ . The reliability diagram displays the curve  $(s, \hat{r}(s))$  for  $s \in [0, 1]$ . If  $g$  is perfectly calibrated, then  $\hat{r}(s) = s$  for  $s \in [0, 1]$ .
+
+**Post-hoc Calibration** Given a model  $g$  and a calibration dataset  $\mathcal{D}$ , post-hoc calibration seeks a calibration map  $t: [0, 1] \rightarrow [0, 1]$  such that  $t \circ g$  is well-calibrated. This can be achieved by minimizing  $\mathbb{E}_{(X, Y) \sim \mathcal{D}} \ell(t(g(X)), Y)$  over a family  $\mathcal{T}$  of possible mappings, where  $\ell$  is a loss function. Platt scaling (Platt, 2000) is an example of this approach, where  $\mathcal{T}$  is the set of logistic functions and  $\ell$  is the log-loss.
+
+### 3.2 CONFIDENCE AS A DISTRIBUTION
+
+Let  $\mathcal{U} \triangleq \{u_1, \dots, u_K\}$  be a set of  $K$  distributions corresponding to different certainty phrases. For instance, the phrase “Maybe” could be modeled as  $\text{Beta}(2, 2)$ , which is centered at 0.5 with decaying density away from 0.5. Figure 1 illustrates what these distributions might look like. We can derive confidence distributions from surveys on human perception of certainty phrases, e.g., in radiology (Shinagare et al., 2023) or from social media polls (Fagen-Ulmschneider, 2023). In this work, we employ beta distributions to represent the confidence distributions  $u_1, \dots, u_K$ .
+
+We assume that instead of outputting a scalar-valued score, the classifier  $g: \mathcal{X} \rightarrow \mathcal{P}([0, 1])$  provides its confidence for the positive class as a distribution over  $[0, 1]$ . Here, we use  $g$  to abstract a human
+
+{3}------------------------------------------------
+
+or a language model that generates certainty phrases about its internal belief of an event, e.g., a radiologist might dictate “Likely pneumonia.” To restrict our attention to a finite set of certainty phrases, we assume  $g = u \circ \gamma$  where  $\gamma : \mathcal{X} \rightarrow [K]$  outputs an index and  $u : [K] \rightarrow \mathcal{P}([0, 1])$  maps that index to the corresponding confidence distribution, i.e.,  $u(k) = u_k$ . Given any sample  $x \in \mathcal{X}$ , the classifier’s output  $g(x) = u_{\gamma(x)}$  is one of the  $K$  confidence distributions. Alternatively,  $g(x)$  can be interpreted as defining a conditional density for the score  $S$  that is a finite mixture over  $\{u_k\}$ , i.e.,
+
+$$f_{S|X}(s | x) = \sum_{k=1}^K \mathbb{1}[\gamma(x) = k] u_k(s). \quad (5)$$
+
+The definitions of calibration and ECE in Equations (1) and (2) remain valid even as we move to treat confidence as a distribution. Instead of being the pushforward of  $P_X$  by  $g$ ,  $P_S$  is characterized by the density  $f_S(s) = \mathbb{E}[f_{S|X}(s | X)]$ . We generalize estimators in Equation (3) as follows:
+
+$$\hat{r}_m = \frac{\sum_{n=1}^N P(S \in I_m | X = x_n) y_n}{\sum_{n=1}^N P(S \in I_m | X = x_n)} \quad \hat{p}_m = \frac{1}{N} \sum_{n=1}^N P(S \in I_m | X = x_n) \quad (6)$$
+
+$$\hat{g}_m = \frac{\sum_{n=1}^N P(S \in I_m | X = x_n) \mathbb{E}[S | S \in I_m, X = x_n]}{\sum_{n=1}^N P(S \in I_m | X = x_n)}. \quad (7)$$
+
+**Proposition 1.** *The estimators  $\hat{r}_m$ ,  $\hat{p}_m$ , and  $\hat{g}_m$  defined in Equation (6) are consistent estimators for  $\mathbb{E}[Y | S \in I_m]$ ,  $P(S \in I_m)$ , and  $\mathbb{E}[S | S \in I_m]$  respectively.*
+
+We provide the proof in Appendix A.1.
+
+**Interpretation** The estimators in Equation (6) reduce to that in Equation (3) if the confidence distributions are delta distributions, i.e.,  $\mathcal{U} = \{\delta_s | s \in [0, 1]\}$ . Provided that the confidence distributions are supported on  $[0, 1]$ , we can interpret the estimators in Equation (6) as allowing each sample to contribute to the estimates  $\hat{r}_m, \hat{g}_m, \hat{p}_m$  of every bin  $I_m$  with a smaller weight determined by  $P(S \in I_m | X = x_n)$ . The resulting estimates are more robust to increasing the number of bins and will not result more biased calibration errors as we explain in Section 3.3.
+
+**Implementation** Since the confidence distributions are represented via their parametric form, computing  $P(S \in I_m | X = x_n)$  is straightforward and requires two evaluations of the CDF of  $u_{\gamma(x_n)}$ . In contrast, computing  $\mathbb{E}[S | S \in I_m, X = x_n]$  involves integrating w.r.t. a density. If the number of bins  $M$  is small, we can use adaptive quadrature algorithms through `scipy.integrate` to trade time for better approximation; If  $M$  is large, midpoint rule provides sufficiently good approximation of the integral, requiring a single evaluation of the density  $u_{\gamma(x_n)}$ .
+
+**Accounting for Uncertain Labels** In practice, ground truth labels  $y_1, \dots, y_n$  may not always be available. Instead, we might only have access to certainty phrases that provide information about the latent binary labels. We can incorporate such uncertain labels into calibration error estimation, which is especially useful when the sample size is small and many labels are uncertain. Let  $c_n \in \mathcal{P}([0, 1])$  be the confidence distribution associated with the certainty phrases for label  $y_n$ . To account for this uncertainty, we can replace  $y_n$  with  $P(c_n \geq \frac{1}{2})$  in the estimator  $\hat{r}_m$  defined in Equation (6). The modified estimator remains consistent that we prove in Appendix A.2.
+
+### 3.3 CONNECTION TO KERNEL DENSITY ESTIMATION OF ECE
+
+Suppose  $I_1, \dots, I_M$  are equal width intervals, i.e.,  $I_m = (s_m, s_m + \delta)$  for some  $\delta > 0$ . We define continuous versions of the estimator  $\hat{r}_m$  and  $\hat{p}_m$  in Equation (6)
+
+$$\hat{r}(s) = \frac{\sum_{n=1}^N f_{S|X}(s | x_n) y_n}{\sum_{n=1}^N f_{S|X}(s | x_n)} \quad \hat{f}_S(s) = \frac{1}{N} \sum_{n=1}^N f_{S|X}(s | x_n) \quad (8)$$
+
+by considering the limit when the number of bins  $M$  goes to infinity. Specifically,
+
+$$\hat{r}_m = \frac{\sum_{n=1}^N P(S \in I_m | X = x_n) y_n}{\sum_{n=1}^N P(S \in I_m | X = x_n)} \approx \frac{\sum_{n=1}^N \delta f_{S|X}(s_m | x_n) y_n}{\sum_{n=1}^N \delta f_{S|X}(s_m | x_n)} = \hat{r}(s_m), \quad (9)$$
+
+{4}------------------------------------------------
+
+as  $P(S \in I_m | X = x_n) \approx \delta_{f_S|X}(s_m | x_n)$  when  $M \rightarrow \infty$  or  $\delta \rightarrow 0$ .
+
+For each sample  $x_n \in \mathcal{X}$ , let  $\alpha_n, \beta_n$  be parameters of the predicted confidence distribution  $g(x_n) \sim \text{Beta}(\alpha_n, \beta_n)$ . We can define an input-dependent kernel  $K_{h_n}(s - s_n) = f_g(x_n)(s)$  where  $s_n \triangleq \frac{\alpha_n - 1}{\alpha_n + \beta_n - 2}$  is the “mode” and  $h_n \triangleq \frac{1}{\alpha_n + \beta_n - 2}$  is the “spread” of the kernel. Note
+
+$$\hat{r}(s) \equiv \frac{\sum_{n=1}^N K_{h_n}(s - s_n) y_n}{\sum_{n=1}^N K_{h_n}(s - s_n)} \quad (10)$$
+
+is the Nadaraya–Watson estimator (Nadaraya, 1964; Watson, 1964) for the canonical calibration function  $r(s) = \mathbb{E}[Y | S = s]$ . This estimator is akin to the KDE-based estimator proposed in (Zhang et al., 2020; Popordanoska et al., 2022). However, unlike the KDE-based estimator where  $s_n$  is the predicted confidence score and  $h_n$  is a fixed hyperparameter common to all  $n$ , in the estimator in Equation (10), both  $s_n$  and  $h_n$  are parameters induced by the confidence distribution  $g(x_n)$ .
+
+We define a continuous version of the estimator for ECE in Equation (2) as
+
+$$\widehat{\text{ECE}} = \int |\hat{r}(s) - s| \hat{f}_S(s) ds. \quad (11)$$
+
+The estimate  $\widehat{\text{ECE}}$  in Equation (4) is a finite-sample approximation of  $\widehat{\text{ECE}}$ .  $\widehat{\text{ECE}}$  can be shown to be unbiased and consistent (Zhang et al., 2020; Popordanoska et al., 2022).
+
+**Caveats** When the model predicts delta distributions as confidence distributions, e.g.,  $g(x_n) \sim \delta_s$  for some  $s \in [0, 1]$  indicating “100% Confident,” special attention is required. These samples can be easily missed when constructing estimates of  $\hat{r}(\cdot)$  and  $\hat{f}_S(\cdot)$  if the sequence  $s_1, \dots, s_M$  is not properly chosen. For continuous confidence distributions  $\mathcal{U}$ , we approximate  $P(S \in I_m | X = x_n)$  using the midpoint rule when computing the estimators in Equation (6). This numerical approximation of  $\hat{r}_m$  is exactly  $\hat{r}(\cdot)$  defined in Equations (8). If some predicted confidence distributions  $g(x_n)$  are delta distributions, we compute the binning estimators in Equation (6) for the bin  $I_m$  where  $s \in I_m$  without any approximation.
+
+### 3.4 OBTAINING CALIBRATION MAPS USING OPTIMAL TRANSPORT
+
+**Calibration Map** If a classifier  $g$  outputs confidence distributions, we do not have direct access to the confidence scores, rendering the classical definition of a calibration map  $t : [0, 1] \rightarrow [0, 1]$  inapplicable. A natural extension is to consider map  $t : \mathcal{P}([0, 1]) \rightarrow \mathcal{P}([0, 1])$  that adjusts confidence distributions in arbitrary ways. However, this definition complicates the interpretation of results. For instance, if  $\text{Beta}(2, 2)$  represents “Maybe”, it is unclear what a slightly modified distribution, such as  $\text{Beta}(2, 2.2)$ , represents in natural language.
+
+Instead, we define a calibration map  $t : [K] \rightarrow [L]$  that maps elements of the source set of  $K$  confidence distributions  $\{u_1, \dots, u_K\}$  to elements of a target set of  $L$  confidence distributions  $\{v_1, \dots, v_L\}$ . More concretely, let  $T \in \mathbb{R}^{K \times L}$  denote the transport matrix, where  $T_{kl}$  represents the proportion of samples for which the confidence is better described by  $v_l$  rather than  $u_k$ . We then define  $t(k)$  as a draw from the categorical distribution with unnormalized probabilities  $(T_{k1}, \dots, T_{kL})$ . For example, if  $u_k$  and  $v_l$  are confidence distributions that correspond to “Likely” and “Maybe” respectively, then  $T_{kl} / \sum_l T_{kl} = 0.3$  indicates that the model should change 30% of its use of “Likely” to “Maybe” to reduce overconfidence.
+
+**Calibration as Discrete Optimal Transport** Given that model  $g$  is defined as  $u \circ \gamma$ , post-hoc calibration aims to find  $t$  such that the composition  $u \circ t \circ \gamma$  is well-calibrated. To achieve this, we formulate a discrete optimal transport problem. Let  $a_k = \frac{1}{N} \sum_{n=1}^N \mathbb{1}[\gamma(x_n) = k]$  be the proportion of times  $k$ -th certainty phrase is mentioned. Therefore, the source weight  $a = (a_1, \dots, a_K) \in \Delta^{K-1}$  represents occurrences of certainty phrases in the calibration dataset. In some application, we are given target weights  $b = (b_1, \dots, b_L) \in \Delta^{L-1}$  that represent the ideal use of the target confidence distributions. We define a cost matrix  $C \in \mathbb{R}^{K \times L}$  where
+
+$$C_{kl} = \frac{1}{a_k} \left( \widehat{\text{ECE}}(u_k \rightarrow v_l) - \widehat{\text{ECE}} \right) \quad (12)$$
+
+{5}------------------------------------------------
+
+is the per-unit net change in the calibration error when we replace  $u_k$  with  $v_l$  as the confidence distribution. If target weight  $b$  is given, we can obtain the calibration map  $t$  by solving the classic Kantorovich formulation of discrete optimal transport (Peyré & Cuturi, 2019) that minimizes  $\langle C, T \rangle$  over  $T \in \mathbb{R}^{K \times L}$  subject to the constraints  $T\mathbf{1} = a$  and  $T^T\mathbf{1} = b$ . The optimal transport plan  $T$  minimizes the amount of work, e.g., change in the expected calibration error, required to transform  $\sum_k a_k u_k$  to  $\sum_l b_l v_l$ . In practice, the target weight  $b$  is often unknown and that we use the same source and target confidence distributions. In this case, it is generally desirable to ensure that the transport plan  $T$  does not significantly change the relative use of source certainty phrases. To achieve this, we use unbalanced optimal transport (Frogner et al., 2015; Peyré & Cuturi, 2019):
+
+$$\min_{T \in \mathbb{R}_+^{K \times L}} \langle C, T \rangle + \epsilon H(T) + \tau_1 \text{KL}(T\mathbf{1} \| a) + \tau_2 \text{KL}(T^T \mathbf{1} \| a) \quad (13)$$
+
+where  $H(T) = -\langle T, \log(T) \rangle$  is the discrete entropy of  $T$  and  $\tau_1, \tau_2$  controls the degree of marginal deviations. In practice, we set a large  $\tau_1$  to strictly enforce the constraint  $T\mathbf{1} = a$  while a smaller  $\tau_2$  to permit some deviation of transported mass  $T^T \mathbf{1}$  from the initial proportions  $a$ .
+
+## 4 EXPERIMENTS
+
+### 4.1 IMPLEMENTATION DETAILS
+
+**Evaluation Metrics** We estimate ECE as described in Section 3.2. Specifically, we partition  $[0, 1]$  into 100 equal-width bins and compute the estimators in Equation (6) for each bin. To improve computational efficiency, we apply the midpoint rule to approximate the integrals, except for the first and last bins to account for  $g(x_n) \in \{\delta_0, \delta_1\}$  for some  $x_n$ . We use bootstrap resampling with 100 samples to calculate the mean and 95% confidence interval for these estimators. In addition to ECE, we report a modified calibration error,  $\text{ECE}^*$ , which excludes 100% confident predictions (e.g.,  $\delta_0, \delta_1$ ) in the first and last bins, and therefore better characterizes the calibration curves that are unaffected by extremely confident predictions. To compute classification statistics, such as the Brier Score (BS) and accuracy (Acc). We also employ bootstrap resampling, with further sampling from the predicted confidence distributions  $g(x_n)$  and the ground truth confidence distributions  $c_n$ , to obtain the scalar-valued scores and binary labels required to compute these metrics.
+
+**Optimal Transport Calibration** We solve the entropy-regularized unbalanced transport problem in Equation (13) using the log-stabilization variant of the Sinkhorn algorithm (Cuturi, 2013; Chizat et al., 2018; Schmitzer, 2019) to mitigate numerical instabilities. We use POT’s solver implementation (Flamary et al., 2021). Based on ablation studies (Appendix B.5), we set  $\epsilon = 1\text{e-}3$  to minimize mass splitting and simplify interpretation of the calibration map. By default, we set  $\tau_2 = 1\text{e-}3$  arbitrarily due to its minimal impact on performance given such a small  $\epsilon$ .
+
+### 4.2 CALIBRATING RADIOLOGISTS
+
+To demonstrate the utility of our approach, we analyze the calibration of radiologists on a dataset of reports dictated for X-ray images and matching CT scans.
+
+**Dataset** We curated a dataset of 2,662 paired chest X-ray and CT radiology reports recorded from January to September 2023 at Brigham and Women’s Hospital. We treat X-ray reports as human predictions  $\{g(x_1), \dots, g(x_N)\}$  and CT reports as ground truth labels  $\{y_1, \dots, y_N\}$  because the 3D CT scans provide greater details. Both types of reports contain certainty phrases about various pathologies. Appendix B.2 provides an example X-ray report. To mitigate distribution shifts in the use of certainty phrases, we use stratified sampling and split the dataset equally into calibration and test sets. We anonymize the names of radiologists with commonly used names in the US (Remy, 2021). To extract (pathology, confidence) labels from clinical reports, we prompt Llama 3 8B (Dubey & et al., 2024) with in-context learning. This approach demonstrates good accuracy on a hand-annotated test set of about 150 X-ray reports, but performance is slightly lower on the CT reports, likely due to their more detailed descriptions. Appendix B.4 provides further details.
+
+**Confidence Distributions** We derive the confidence distributions  $\{u_1, \dots, u_K\}$  from survey data on radiologists’ interpretation of “diagnostic certainty phrases” commonly used in dictating radiol-
+
+{6}------------------------------------------------
+
+![Figure 2: Reliability diagrams of radiologists' certainty phrase use in clinical reports. The figure is a 2x5 grid of plots. The top row shows calibration curves stratified by pathology: Atelectasis (ECE: 0.195), Pneumonia (ECE: 0.251), Edema (ECE: 0.246), Infection (ECE: 0.337), and Overall (ECE: 0.194). The bottom row shows calibration curves stratified by radiologist identity: Faviola (ECE: 0.164), Bo (ECE: 0.193), Avinash (ECE: 0.258), Christen (ECE: 0.175), and Ruby (ECE: 0.176). Each plot shows the calibration curve (red line), its 95% confidence interval (blue shaded area), and the score density (gray shaded area). A dashed diagonal line represents the identity function. The x-axis is labeled 's' and the y-axis is labeled 't(s)'. Areas where the calibration curve is above the identity line indicate overconfidence, while areas below indicate underconfidence.](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+Figure 2: Reliability diagrams of radiologists' certainty phrase use in clinical reports. The figure is a 2x5 grid of plots. The top row shows calibration curves stratified by pathology: Atelectasis (ECE: 0.195), Pneumonia (ECE: 0.251), Edema (ECE: 0.246), Infection (ECE: 0.337), and Overall (ECE: 0.194). The bottom row shows calibration curves stratified by radiologist identity: Faviola (ECE: 0.164), Bo (ECE: 0.193), Avinash (ECE: 0.258), Christen (ECE: 0.175), and Ruby (ECE: 0.176). Each plot shows the calibration curve (red line), its 95% confidence interval (blue shaded area), and the score density (gray shaded area). A dashed diagonal line represents the identity function. The x-axis is labeled 's' and the y-axis is labeled 't(s)'. Areas where the calibration curve is above the identity line indicate overconfidence, while areas below indicate underconfidence.
+
+Figure 2: Reliability diagrams of radiologists’ certainty phrase use in clinical reports, stratified by pathology (top) and radiologist identity (bottom). The calibration curve (red), with its 95% confidence interval (blue) and score density (gray) are shown. There is significant variation in calibration across different pathologies and radiologists. Areas where the calibration curve is above the identity line correspond to radiologists underestimating their confidence. Interestingly, this correlates with regions of low confidence. Same is true about overestimation in regions of high confidence.
+
+ogy reports (Shinagare et al., 2023). Specifically, we fit beta distributions to the empirical data using the method of moments. Appendix B.3 provides further details.
+
+**Measuring Radiologists’ Calibration** Figure 2 illustrates the variation in radiologists’ calibration across different pathologies and between individual providers. Radiologists are generally underconfident in diagnosing common pathologies like atelectasis but tend to be overconfident with more ambiguous conditions like infection. In general, they exhibit underconfidence when expressing low certainty (e.g., using terms like “Possibly”) and overconfidence with high certainty (e.g., “Likely”). This is consistent with prior studies on human perception of probabilities (Tversky & Kahneman, 1992). Moreover, individual radiologists display unique calibration patterns and distinct behaviors in their use of certainty phrases. Individual preferences for certain terms can contribute to differences in calibration. For instance, Bo frequently uses the term “May” while Christen often uses “Likely.” Avinash is less calibrated than Bo, despite sharing similar calibration curves.
+
+**Improving Human Calibration** Figure 3 demonstrates the effectiveness of our calibration method in providing interpretable recommendations to improve radiologists’ calibration. For instance, the calibration map suggests that radiologists use “May” instead of “Absent” to address underconfidence when diagnosing atelectasis. Similarly for edema diagnosis, the calibration map recommends lowering the confidence by replacing “Present” and “Likely” with “May”. By following these straightforward adjustments, our method reduces the ECE<sup>\*</sup> and Brier Score (BS) on the test set. In contrast, classical methods like histogram binning or Platt scaling does not provide clear guidance on how radiologists can adjust their language in reporting to improve calibration.
+
+After calibration, the calibration curve is not perfectly aligned with the identity function for two reasons. First, adjustments to a small and discrete set of certainty phrases inherently limit precision in fine-tuning the curve. Second, the improvement in calibration depends on model’s discriminative performance. For instance, the left side of the calibration curve (top-right subfigure in Figure 3) cannot be lowered further without a model that more accurately detects the absence of atelectasis.
+
+In Appendix C.1, we examine the effect of  $\tau_2$  on the resulting calibration map, illustrating the tradeoff between preserving assessment informativeness and improving calibration.
+
+### 4.3 CALIBRATING LANGUAGE MODELS
+
+To demonstrate the utility of our approach, we analyze the calibration of language models (LMs) on question-answering datasets.
+
+{7}------------------------------------------------
+
+![Figure 3: Calibration examples for atelectasis and edema. The figure is a 2x4 grid. The first row shows results for 'Atelectasis' and the second row for 'Edema'. Column 1: 'Before' reliability diagrams showing ECE and BS. Column 2: 'Cost' matrices for the optimal transport problem. Column 3: 'Calibration Map' showing suggested changes in certainty phrases. Column 4: 'After' reliability diagrams showing improved ECE and BS.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+**Atelectasis**
+
+**Before**: ECE: 0.215, BS: 0.356
+
+**Cost** matrix for Atelectasis:
+
+|  | "Absent" | "Possible" | "May" | "Likely" | "Present" |
+|-|-|-|-|-|-|
+| "Present" | 0.00 | 0.00 | 0.00 | 0.00 | 0.04 |
+| "Possible" | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 |
+| "May" | 0.40 | 0.13 | 0.00 | 0.08 | 0.10 |
+| "Likely" | 0.38 | 0.00 | 0.22 | 0.00 | 0.08 |
+| "Absent" | 0.31 | 0.23 | 0.09 | 0.10 | 0.00 |
+
+**Calibration Map** for Atelectasis: Suggests replacing "Present" with "May" and "Likely" with "Absent".
+
+**After**: ECE: 0.138, BS: 0.259
+
+**Edema**
+
+**Before**: ECE: 0.276, BS: 0.166
+
+**Cost** matrix for Edema:
+
+|  | "Absent" | "Possible" | "May" | "Likely" | "Present" |
+|-|-|-|-|-|-|
+| "Present" | 0.00 | 0.09 | 0.21 | 0.55 | 0.71 |
+| "Possible" | 0.14 | 0.00 | 0.05 | 0.30 | 0.53 |
+| "May" | 0.19 | 0.01 | 0.00 | 0.24 | 0.47 |
+| "Likely" | 0.12 | 0.07 | 0.14 | 0.00 | 0.21 |
+| "Absent" | 0.22 | 0.15 | 0.22 | 0.22 | 0.00 |
+
+**Calibration Map** for Edema: Suggests replacing "Present" and "Likely" with "May".
+
+**After**: ECE: 0.177, BS: 0.140
+
+Figure 3: Calibration examples for atelectasis and edema. The figure is a 2x4 grid. The first row shows results for 'Atelectasis' and the second row for 'Edema'. Column 1: 'Before' reliability diagrams showing ECE and BS. Column 2: 'Cost' matrices for the optimal transport problem. Column 3: 'Calibration Map' showing suggested changes in certainty phrases. Column 4: 'After' reliability diagrams showing improved ECE and BS.
+
+Figure 3: Examples of calibrating radiologists on two representative pathologies: atelectasis and edema. The 1st and 4th columns show the reliability diagrams before and after the post-hoc calibration, respectively. The 2nd column displays the cost matrix  $C$  of the optimal transport problem, while the 3rd column illustrates the probabilistic calibration map  $T$ . For atelectasis, underconfidence can be addressed by suggesting the use of “May” instead of “Present”; For edema, overconfidence can be mitigated by recommending that radiologists replace “Present” and “Likely” with “May”. Quantitatively, our calibration approach improves ECE and Brier Score (BS) metrics.
+
+**Models** We evaluate state-of-the-art LMs, such as gpt-4o (gpt-4o-2024-08-06), claude-3.5-sonnet (claude-3-5-sonnet-20240620), and gemini-1.5-pro (gemini-1.5-prob-002), as well as their smaller and faster variants, such as gpt-4o-mini (gpt-4o-2024-07-18), claude-3-haiku (claude-3-haiku-20240307), and gemini-1.5-flash (gemini-1.5-flash-002).
+
+**Evaluation Setup** Following Tian et al. (2023), we use two question-answering datasets: (1) SciQ (Welbl et al., 2017) contains crowd-sourced science exam questions, and (2) TruthfulQA (Lin et al., 2022c) contains questions designed to test language models’ tendency to mimic human misconceptions. We use all 1,000 questions for SciQ and 817 questions for TruthfulQA from their respective validation set. Each dataset is evenly split into calibration and test sets using stratified sampling.
+
+We focus on evaluating language models’ ability to verbalize their confidence in natural language (Lin et al., 2022a). We prompt the models to provide either a probability (e.g., “0.3” or “0.7”), a certainty phrase (e.g., “Maybe”, “Likely”), or a distribution directly (e.g., “Beta(2, 3)”). Appendix B.2 includes an example of how LMs express confidence using certainty phrases.
+
+Similar to Tian et al. (2023), we derive ground truth labels by using gpt-4o-mini to evaluate whether a model’s answer is semantically equivalent to the correct answer, thereby avoiding false negatives that arise from exact matching. For the TruthfulQA dataset, we verify whether the predicted answer matches any of the correct answers to further reduce false negative rates.
+
+Appendix B.6 provides more details on prompts used. Table 5 lists all prompt templates.
+
+**Confidence Distributions** We investigate how the choice of certainty phrases and their corresponding distributions  $u_1, \dots, u_K$  impacts calibration performance. We prompt gpt-4o to generate  $K$  pairs of (certainty phrase, distribution) using the prompt template in last row of Table 5. Figure 7 shows that calibration performance varies with  $K$ , but remains consistent across models and datasets. Based on this analysis, we choose  $K = 12$  for subsequent experiments.
+
+Table 3 compares calibration performance when confidence distributions are derived by: (1) *survey*: fitting beta distributions to survey data on human perceptions of probability-related terms (Fagen-Ulmschneider, 2023), (2) *on-the-fly*: generating beta distribution parameters for each sample, and (3) *fixed*: selecting from a predefined set of certainty phrases generated by gpt-4o. We find that pre-
+
+{8}------------------------------------------------
+
+![Figure 4: Reliability diagrams of LMs verbalizing confidence. The figure is a 2x6 grid of plots. The top row is labeled 'SciQ' and the bottom row is labeled 'TruthfulQA'. The columns represent different models: gpt-4o-mini, gpt-4o, claude-3-haiku, claude-3.5-sonnet, gemini-1.5-flash, and gemini-1.5-pro. Each plot shows the relationship between predicted confidence (x-axis, 0.25 to 0.75) and actual frequency (y-axis, 0.25 to 0.75). A red curve represents the calibration curve, a blue shaded area represents the 95% confidence interval, and a gray shaded area represents the score density. A dashed diagonal line represents perfect calibration. The ECE (Expected Calibration Error) is provided for each plot: SciQ (gpt-4o-mini: 0.132, gpt-4o: 0.087, claude-3-haiku: 0.119, claude-3.5-sonnet: 0.089, gemini-1.5-flash: 0.154, gemini-1.5-pro: 0.139); TruthfulQA (gpt-4o-mini: 0.320, gpt-4o: 0.252, claude-3-haiku: 0.334, claude-3.5-sonnet: 0.244, gemini-1.5-flash: 0.329, gemini-1.5-pro: 0.292).](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 4: Reliability diagrams of LMs verbalizing confidence. The figure is a 2x6 grid of plots. The top row is labeled 'SciQ' and the bottom row is labeled 'TruthfulQA'. The columns represent different models: gpt-4o-mini, gpt-4o, claude-3-haiku, claude-3.5-sonnet, gemini-1.5-flash, and gemini-1.5-pro. Each plot shows the relationship between predicted confidence (x-axis, 0.25 to 0.75) and actual frequency (y-axis, 0.25 to 0.75). A red curve represents the calibration curve, a blue shaded area represents the 95% confidence interval, and a gray shaded area represents the score density. A dashed diagonal line represents perfect calibration. The ECE (Expected Calibration Error) is provided for each plot: SciQ (gpt-4o-mini: 0.132, gpt-4o: 0.087, claude-3-haiku: 0.119, claude-3.5-sonnet: 0.089, gemini-1.5-flash: 0.154, gemini-1.5-pro: 0.139); TruthfulQA (gpt-4o-mini: 0.320, gpt-4o: 0.252, claude-3-haiku: 0.334, claude-3.5-sonnet: 0.244, gemini-1.5-flash: 0.329, gemini-1.5-pro: 0.292).
+
+Figure 4: Reliability diagrams of LMs verbalizing confidence from a fixed set of certainty phrases generated by prompting gpt-4o, evaluated on SciQ (top) and TruthfulQA (bottom). The calibration curve (red), with its 95% confidence interval (blue), and score density (gray) are shown. Models are better calibrated on SciQ than TruthfulQA, with larger models (e.g., gpt-4o) outperforming their smaller variants (e.g., gpt-4o-mini). The smooth calibration curve improves the ability of human viewers to compare the calibration performance of different models.
+
+defining a fixed set of phrases for the model to choose from yields better calibration than generating confidence distributions on-the-fly. Allowing the model to propose its own certainty phrases and rely on its perception of these phrases proves more effective than using those provided by humans.
+
+Appendix B.3 provides additional details. Table 2 provides visualization of the probability density functions of the confidence distributions studied.
+
+**Measuring Language Models’ Calibration** Figure 4 illustrates the calibration performance of various LMs verbalizing confidence by selecting from a set of certainty phrases generated by prompting gpt-4o. Table 5 (row 5) provides a detailed view on the certainty phrases used. Current state-of-the-art language models exhibit good calibration on the SciQ dataset but perform less well on the TruthfulQA dataset. Larger models, such as gpt-4o, consistently outperform their smaller counterparts, like gpt-4o-mini, in terms of calibration. Models from the same family (e.g., gpt-4o and gpt-4o-mini) exhibit more similar characteristics compared to models from different vendors. For instance, gpt-4o tends to be more confident than claude-3.5-sonnet, even though both models achieve similar calibration errors.
+
+Appendix C.3 demonstrates that our method yields a smooth calibration curves that enables clearer differentiation between model calibration profiles and better correspondence to values of ECE. Unlike binned calibration curves, which are sensitive to bin size and harder to interpret, our approach produces stable, consistent curves robust to binning variations.
+
+**Post-hoc Calibration of Language Models** We compare our optimal transport calibration method with two classic calibration methods: Platt scaling (Platt, 2000) and histogram binning (Zadrozny & Elkan, 2001). These baseline methods are evaluated in two scenarios: (1) verbalized probability and (2) verbalized certainty phrases. For the second scenario, since the baseline methods only work with scalar confidence scores, we mapped the verbalized phrases to the mean of their corresponding confidence distributions. (Tian et al., 2023) also evaluates histogram binning under the verbalized phrase setup. To ensure a fair comparison, we calculate ECE and Brier Score (BS) for our method the same way as for the baselines, as opposed to following our formulation. Our method is unique in producing calibrated certainty phrases directly, while baselines require conversion to scalar confidence scores during calibration.
+
+Table 1 demonstrates the effectiveness of our optimal transport calibration method in improving the calibration of language models. We show that even after reducing the output natural language expressions of certainty to scalar values (by simply taking the mean of the corresponding confidence distribution), our method remains competitive and does not compromise performance in terms of accuracy. We emphasize that our method’s key advantage isn’t in outperforming baseline calibration methods, but in directly operating on and producing natural language certainty phrases - a prop-
+
+{9}------------------------------------------------
+
+Table 1: Comparison of post-hoc calibration methods for language models expressing confidence as probabilities or certainty phrases. Our optimal transport calibration method, even after reducing output certainty phrases to scalar values (e.g., by taking the mean of the confidence distribution), remains competitive with calibration baselines without compromising accuracy. Unlike traditional methods limited to confidence scores, our approach directly operates on and produces certainty phrases, offering actionable suggestions to improve human calibration.
+
+| Model | Verbalize | Calibrated? | SciQ |  |  | TruthfulQA |  |  |
+|-|-|-|-|-|-|-|-|-|
+|  |  |  | Acc $\uparrow$ | ECE $\downarrow$ | BS $\downarrow$ | Acc $\uparrow$ | ECE $\downarrow$ | BS $\downarrow$ |
+| gpt-4o | probability | ✗ | 0.72 | 0.18 | 0.22 | 0.3 | 0.52 | 0.43 |
+|  |  | ✓ (scaling) | 0.72 | 0.11 | 0.19 | 0.3 | 0.11 | 0.2 |
+|  | phrase | ✗ | 0.73 | 0.07 | 0.19 | 0.35 | 0.22 | 0.28 |
+|  |  | ✓ (scaling) | 0.73 | 0.09 | 0.17 | 0.35 | 0.11 | 0.2 |
+|  |  | ✓ (binning) | 0.73 | 0.07 | 0.17 | 0.35 | 0.05 | 0.2 |
+|  |  | ✓ (ours) | 0.73 | 0.08 | 0.18 | 0.35 | 0.1 | 0.21 |
+| claude-3.5-sonnet | probability | ✗ | 0.69 | 0.24 | 0.24 | 0.34 | 0.42 | 0.37 |
+|  |  | ✓ (scaling) | 0.69 | 0.1 | 0.19 | 0.34 | 0.03 | 0.2 |
+|  | phrase | ✗ | 0.66 | 0.06 | 0.22 | 0.33 | 0.25 | 0.3 |
+|  |  | ✓ (scaling) | 0.66 | 0.06 | 0.21 | 0.33 | 0.06 | 0.21 |
+|  |  | ✓ (binning) | 0.66 | 0.06 | 0.21 | 0.33 | 0.04 | 0.21 |
+|  |  | ✓ (ours) | 0.66 | 0.07 | 0.22 | 0.33 | 0.04 | 0.21 |
+| gemini-1.5-pro | probability | ✗ | 0.72 | 0.22 | 0.24 | 0.27 | 0.5 | 0.46 |
+|  |  | ✓ (scaling) | 0.72 | 0.03 | 0.19 | 0.27 | 0.12 | 0.19 |
+|  | phrase | ✗ | 0.68 | 0.17 | 0.22 | 0.34 | 0.28 | 0.31 |
+|  |  | ✓ (scaling) | 0.68 | 0.09 | 0.19 | 0.34 | 0.04 | 0.2 |
+|  |  | ✓ (binning) | 0.68 | 0.07 | 0.19 | 0.34 | 0.07 | 0.2 |
+|  |  | ✓ (ours) | 0.68 | 0.06 | 0.19 | 0.34 | 0.07 | 0.21 |
+
+erty that existing methods lack. This makes our approach uniquely suited for improving human calibration in real-world settings, as it provides actionable guidance (e.g., suggesting radiologists use “May” instead of “Present” in their reporting to mitigate overconfidence) rather than abstract probability adjustments that can’t be easily understood by humans.
+
+Figure 13 provides visualizations of the calibration process for different language models. While the calibration maps follow a similar overall trend, they reveal distinct differences based on each model’s distinct preference for certainty phrases.
+
+## 5 DISCUSSIONS
+
+**Limitations and Future Work** Our study demonstrates that radiologists can improve their calibration by strictly following our proposed calibration method. However, it remains to be investigated how receptive radiologists are to calibration-improving suggestions and whether they can mentally adjust their use of certainty phrases effectively. Conducting a clinical study to assess these behavioral aspects would provide valuable insights into the practical benefits of our work.
+
+**Conclusions** This work presents a novel approach to modeling certainty phrases as probability distributions instead of fixed confidence scores. By adopting this perspective, we generalize existing estimators for ECE and introduce a smooth calibration curve for reliability diagrams. Additionally, we propose an interpretable post-hoc calibration method based on optimal transport that provides actionable calibration maps. Our method effectively calibrates both radiologists and language models, providing valuable insights into their calibration characteristics while serving as a lightweight tool for improving calibration. We believe our work will be useful for understanding and improving both human and computational models that communicate uncertainty through natural language.
+
+ Rest of paper (reference and Appendix) is removed.

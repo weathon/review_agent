@@ -1,0 +1,309 @@
+
+
+{0}------------------------------------------------
+
+# SQL-GEN: BRIDGING THE DIALECT GAP FOR TEXT-TO-SQL VIA MULTI-DIALECT SYNTHETIC DATA AND MODEL MERGING
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Text-to-SQL systems, that convert natural language queries into SQL programs, have seen significant progress with recent breakthroughs. However, these have been primarily for the SQLite dialect and adapting Text-to-SQL systems to other SQL dialects like BigQuery and PostgreSQL remains a challenge due to the diversity in SQL syntaxes and functions, along with the high cost of collecting and curating SQL-specific training data. To this end, we introduce SQL-GEN, a framework for generating high-quality synthetic data for any dialect guided by dialect-specific tutorials. We demonstrate the effectiveness of SQL-GEN in creating training data to significantly improve the downstream Text-to-SQL performance for other dialects – it improves the execution accuracy by up to 20% over previous methods, and reduces the gap with large-scale human-annotated data on unseen real world multi-dialect benchmarks. Moreover, combining our synthetic data with human-annotated data provides additional performance boosts up to 5.6%. Towards unifying the multi-dialect capability in a single system, we also introduce a novel Mixture of Experts (MoE) initialization method that integrates dialect-specific models by merging self-attention layers and initializing the gates with dialect-specific keywords, yielding one unified and versatile model adept for multiple SQL dialects, further enhancing performance across different SQL dialects. By leveraging shared core features of multiple dialect-specific models, our MoE demonstrated superior performance compared with models trained on individual dialects alone.
+
+## 1 INTRODUCTION
+
+Text-to-SQL systems translate natural language questions into executable SQL queries, enabling users to interact with databases using natural language. This transformation is crucial as it links the intuitive nature of human communication with the structured precision of SQL, the standard language for querying databases (Androutsopoulos et al., 1995; Hristidis et al., 2003; Li & Jagadish, 2014). Text-to-SQL plays a significant role for conversational agents, empowering them to process complex queries within large-scale databases efficiently (Yu et al., 2019; Gu et al., 2022; Pérez-Mercado et al., 2023). Such systems serve as a copilot for data science professionals to enhance productivity, beyond being valuable for non-technical users who wish to derive business insights without SQL expertise (Li et al., 2023; Sun et al., 2023a;b; Wang et al., 2019).
+
+SQL has been adopted by each database product (e.g. PostgreSQL, MySQL, and SQLite) to suit their specific needs. Despite their common foundations, these SQL dialects differ significantly in their syntax, functions, and capabilities, which even make the automated translation of queries across dialects a complex task that often requires human intervention (Zmigrod et al., 2024; Ngom & Kraska, 2024). Figure 1 exemplifies a question that can be answered with different SQL keywords across different dialects with their own unique keywords that are distinct from one another. Additionally in Appendix A.7, we provide some of the dialect specific keywords for BigQuery, PostgreSQL, and SQLite, which are not supported across all of them. In the realm of Text-to-SQL, most benchmarks are based on the SQLite dialect, chosen for its simplicity and self-contained nature (Li et al., 2024b; Yu et al., 2018b; Zhong et al., 2017; Chang et al., 2023; Gan et al., 2021). This dialect dependency poses a significant challenge, as models trained on SQLite-specific syntax are prone to generating
+
+{1}------------------------------------------------
+
+erroneous queries in other dialects. A conventional solution involves translating queries across dialects before training, using tools like SQLglot parser or tools offered by cloud providers (Li et al., 2024b; Mao, 2023; Zmigrod et al., 2024). However, most of these tools are not 100% successful in translating the queries between dialects Zmigrod et al. (2024). For example, during the translation of the BIRD benchmark (Li et al., 2024b) from SQLite to BigQuery, approximately 20% of the queries encountered errors using the SQLGlot parser. Additionally, this approach fails to leverage the unique capabilities of each SQL dialect, as queries originally written for SQLite may not fully exploit the potential of the target dialects due to the absence of support for specific functions and keywords in the source dialect. For example, REGEX operations are supported in BigQuery but not in SQLite, so we cannot get this REGEX support by translating queries from SQLite. To overcome this, we propose a dialect-agnostic method for generating synthetic Text-to-SQL pairs for any database.
+
+![Figure 1: Exemplification of a question being answered using different SQL keywords for different dialects, BigQuery, PostgreSQL, and SQLite. The diagram shows a user asking a question and three different SQL queries generated for different dialects.](aa9e46d6f962be5cebcbb5c654c9b13e_img.jpg)
+
+The diagram illustrates a user asking a question and three different SQL queries generated for different dialects. The user asks: "RETRIEVE THE TOTAL NUMBER OF ORDERS PLACED EACH DAY FOR THE LAST 7 DAYS". The three dialect-specific SQL queries are:
+
+- BigQuery:** `SELECT TIMESTAMP_TRUNC(order_date, DAY), COUNT(order_id) AS total_orders FROM orders WHERE order_date >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY) GROUP BY order_day ORDER BY order_day DESC;`
+- PostgreSQL:** `SELECT DATE_TRUNC(day, order_date) AS, COUNT(order_id) AS total_orders FROM orders WHERE order_date >= CURRENT_DATE - INTERVAL 7 days GROUP BY order_day ORDER BY order_day DESC;`
+- SQLite:** `SELECT date(order_date), COUNT(order_id) AS total_orders FROM orders WHERE order_date >= date('now', -7 days) GROUP BY order_day ORDER BY order_day DESC;`
+
+Figure 1: Exemplification of a question being answered using different SQL keywords for different dialects, BigQuery, PostgreSQL, and SQLite. The diagram shows a user asking a question and three different SQL queries generated for different dialects.
+
+Figure 1: Exemplification of a question being answered using different SQL keywords for different dialects, BigQuery, PostgreSQL, and SQLite.
+
+SQL-GEN consists of a three-step pipeline. Initially, we begin with a small collection of seed SQL templates. These retain only the SQL keywords, abstracting away the specific database schema and values. Accompanying these templates, we provide dialect-specific tutorials that explain the usage of each SQL keyword across different dialects. In the first stage of our pipeline, we leverage a Large Language Model (LLM) to expand the seed templates, using the tutorials to adapt the keywords and function to various SQL dialects. In the second stage, these database-independent templates are populated with actual values and schema elements from any given database. The final stage involves a rigorous quality checks to ensure that the generated pairs accurately match each other.
+
+We perform comprehensive evaluations on the effectiveness of SQL-GEN in teaching models new dialects, specifically focusing on dialect-specific characteristics like keywords. We assess the quality of synthetic samples by comparing them against both prior synthetic and human-annotated datasets. We construct synthetic datasets for three dialects and evaluate various LLMs (of sizes 7B-22B), trained on these pairs as well as other baselines. We show that all LLMs trained on our synthetic data exhibit a performance increase ranging from 4% to 27%, surpassing those trained on earlier synthetic and human-annotated data. In addition, for under-explored dialects of PostgreSQL and BigQuery, we focus on evaluations on real-world data, specifically designed for PostgreSQL and BigQuery. We demonstrate that models trained with synthetic data generated by SQL-GEN consistently outperform others by a significant margin, approximately 7.5% on BigQuery and 2.5% on PostgreSQL dialect-specific datasets. This highlights the generalizability of our approach to unseen datasets due to its broad coverage. We also explore data augmentation for cross-domain Text-to-SQL scenario as another use case of synthetic queries. By integrating synthetic queries with training samples from other databases, we show improvements in models' ability to adapt across domains. We test the proposed data augmentation approach using the BIRD development set by combining synthetic and training data, aiming to improve performance on the target databases. We show consistent performance improvements of up to ~5.7% when fine-tuning with the augmented data.
+
+As noted earlier, each SQL dialect has distinct keywords and functions, rendering a model trained on a specific dialect uniquely specialized. A significant challenge arises when Text-to-SQL users manage databases across multiple dialects, as deploying multiple dialect-specific models can be computationally demanding. Moreover, we hypothesize that multi-dialect datasets share common SQL features, leading to some overlap in the features learned by the models. By merging models, we believe they can gain a deeper understanding of core features as they appear across multiple dialects. To overcome this, we introduce a novel method for utilizing the Mixture of Experts (MoE) architecture (Fedus et al., 2022b; Riquelme et al., 2021; Jiang et al., 2024). Specifically, our approach is based on initializing the MoE model using the layers of the dialect-expert models, while the sub-layers are initialized using a two-by-two Spherical Linear Interpolation (SLERP) of self-
+
+{2}------------------------------------------------
+
+attentions from the dialect experts, as approaches for efficient merging. Additionally, to harness dialect-specific expertise effectively, we initialize the routers with hidden states corresponding to dialect-specific keywords. We demonstrate an improvement of 2.5% in average performance compared to other model merging approaches, as well as superior performance in SQLite and BigQuery dialects, outperforming the expert models by 0.68% and 7.25%, respectively. We also show performance outperformance of a MoE model initialized without our dialect-aware model merging, trained for the same number of steps.
+
+## 2 METHODOLOGY
+
+We first introduce the SQL-GEN pipeline, designed to generate high-quality, dialect-specific Text-to-SQL samples, as illustrated in Figure 2 and detailed in Algorithm 1. The generation of multi-dialect Text-to-SQL synthetic data addresses the critical issue of insufficient high-quality data for training models tailored to specific SQL dialects. However, since users of Text-to-SQL systems often work with databases across various dialects, serving models in a multi-dialect environment presents a unique challenge. Additionally, many SQL dialects adhere to standard SQL and share common syntaxes, making the concept of information sharing particularly compelling. To this end, we propose a model merging method that combines dialect-specific models into a single, unified MoE model capable of serving multiple SQL dialects effectively.
+
+#### Algorithm 1 SQL-GEN: Dialect-Specific Synthetic Question-SQL Pair Generation.
+
+**Require:** set of target databases  $D$ , set of dialect-specific tutorials for each SQL keyword  $T$ , LLM  $M_1$ , quality assurance LLM  $M_2$ , number of SQL templates threshold  $\theta$ , number of question-SQL pairs threshold  $\beta$ , template expansion prompt  $P_{TempGen}$  Figure 9, question-SQL sample generation prompt  $P_{Qen}$  Figure 10, quality assurance prompt  $P_{Quality}$  Figure 12, SQL templates parsing filter  $F_{Filter1}()$ , question-SQL pairs heuristic-based filters  $F_{Filter2}()$ , template extractor function  $G()$ .
+
+```
+
+1: Initialization:
+2:  $S \leftarrow G(\text{SeedQueries})$  // Generate initial set of SQL templates using a set of dialect-specific seeds
+3:  $T \leftarrow \text{Dialect Specific Tutorials}$  // Scrape a set of dialect-specific SQL tutorials
+4: while  $\text{len}(S) < \theta$  do
+5:   // Generating new SQL templates using tutorials
+6:    $\text{template} \leftarrow \text{sample}(S)$ 
+7:    $\text{tutorial} \leftarrow \text{sample}(T)$ 
+8:    $S \leftarrow S \cup \{ \text{Filter}_1(M_1(P_{TempGen}(\text{template}, \text{tutorial}))) \}$ 
+9: end while
+10:  $Q \leftarrow \emptyset$  // set of generated question-SQL pairs
+11: while  $\text{len}(Q) < \beta$  do
+12:   // Generating question-SQL pairs
+13:    $\text{template} \leftarrow \text{sample}(S)$ 
+14:    $\text{db} \leftarrow \text{sample}(D)$ 
+15:    $\text{candidate} \leftarrow \text{Filter}_2(M_1(P_{Qen}(\text{template}, \text{db})))$ 
+16:   try
+17:      $\text{results} \leftarrow \text{executeQuery}(\text{candidate})$  // quality assurance check
+18:     if  $\text{isError}(\text{results})$  then
+19:       continue // Skip to the next iteration if error
+20:     end if
+21:      $Q \leftarrow Q \cup \{ \text{Filter}_2(M_2(P_{Quality}(\text{candidate}, \text{results}))) \}$ 
+22: end while
+
+```
+
+![Figure 2: SQL-GEN pipeline diagram. The process starts with SPIDER QUERIES (SELECT NAME FROM BRONX, SELECT AVG(SALARY) FROM BRONX, ...). These are processed through EXTRACT TEMPLATES (SELECT COL FROM TABLE, SELECT A.VOICEL FROM TABLE, ...). The extracted templates go into a TEMPLATES POOL. From the TEMPLATES POOL, templates are expanded using LLM and DATABASES to create EXPANDED TEMPLATES. These expanded templates are then processed through SEMANTIC FILTERING (LLM) to create CANDIDATE PAIRS. The candidate pairs are then processed through QUALITY CHECK (SECOND LLM, SEMANTIC FILTERING) to create the FINAL DATASET. The FINAL DATASET is then used for SCRAPING DIALECT TUTORIALS (HOW TO USE GROUP BY, HOW TO USE ORDER BY, ...).](7a1dee155822446f7828dcb055c465c3_img.jpg)
+
+Figure 2: SQL-GEN pipeline diagram. The process starts with SPIDER QUERIES (SELECT NAME FROM BRONX, SELECT AVG(SALARY) FROM BRONX, ...). These are processed through EXTRACT TEMPLATES (SELECT COL FROM TABLE, SELECT A.VOICEL FROM TABLE, ...). The extracted templates go into a TEMPLATES POOL. From the TEMPLATES POOL, templates are expanded using LLM and DATABASES to create EXPANDED TEMPLATES. These expanded templates are then processed through SEMANTIC FILTERING (LLM) to create CANDIDATE PAIRS. The candidate pairs are then processed through QUALITY CHECK (SECOND LLM, SEMANTIC FILTERING) to create the FINAL DATASET. The FINAL DATASET is then used for SCRAPING DIALECT TUTORIALS (HOW TO USE GROUP BY, HOW TO USE ORDER BY, ...).
+
+Figure 2: SQL-GEN to generate diverse and high-quality synthetic Text-to-SQL samples for any database.
+
+{3}------------------------------------------------
+
+### 2.1 SYNTHETIC TEXT-TO-SQL DATA GENERATION
+
+The initial step of SQL-GEN involves creating a pool of simple queries by extracting template question-SQL pairs. Building on this, we expand the templates using LLMs and dialect-specific tutorials, rather than relying solely on extracted templates. After expanding these templates, each one is converted into an actual SQL query, and a corresponding question is generated by passing a sample database to the LLM. Subsequently, all generated question-SQL pairs, along with their execution results, undergo a quality-checking step to ensure they accurately match each other and effectively extract valuable information from the database. Throughout this process, we apply filtering to remove low-quality samples at each step, to ensure the overall generated data would be high quality.
+
+**Extraction of Seed Templates:** Similar to Wu et al. (2021); Yu et al. (2020), we extract SQL templates by abstracting all of the schema mentions in the queries from the Spider dataset to serve as a foundational pool for generating more diverse queries. Since the seed queries are initially in SQLite, for the other dialects, we transpile these queries using the SQLGlot parser (Mao, 2023) before extracting their SQL query templates.
+
+**Templates Expansion From Tutorials:** The initial pool of query templates created in the previous step presents two main challenges. First, the extracted templates are derived from simple SQL queries, which are relatively basic compared to the queries found in other SQLite benchmarks like BIRD (Li et al., 2024b). Second, for dialects other than SQLite, the seed templates—originally designed for SQLite would not have complete coverage for all the dialect-specific SQL functions from other dialects. To address these, we expand the templates for each dialect using LLMs with in-context learning (Brown et al., 2020; Wei et al., 2022). To prepare the LLMs for template expansion, we first scrape online tutorials for each target dialect, focusing on the use of dialect-specific SQL functions and keywords. We then randomly select a seed template from the pool, pairing it with a random tutorial document about a dialect-specific keyword or function, and prompt the LLM to increase the complexity of the template, drawing inspiration from the document. To ensure the validity of the templates for all of the different dialects, we parse all generated SQL templates using dialect-specific parser (from SQLGlot (Mao, 2023)). Figure 3 demonstrates an examples of this template expansion step for the BigQuery dialect. Additionally, Appendix A.9.1 provides the prompt that has been used for template expansion.
+
+![Figure 3: An example of template expansion using BigQuery tutorials and seed templates. The diagram shows a flow from a seed template 'SELECT columns FROM table' to a 'TEMPLATE EXPANSION' block containing 'PARSER' and 'LLM' icons, resulting in a more complex template 'SELECT BIVARIAS COLUMN AS TOTAL_POINTS, COLUMN FROM TABLE GROUP BY ALL'. A callout box explains the 'GROUP BY ALL' clause: 'The GROUP BY ALL clause groups rows by forming grouping keys from the SELECT items. The following SELECT items are excluded from the GROUP BY ALL clause:'.](f0bae10b54c4f3cf8d0e33f5e2fb7cfa_img.jpg)
+
+Figure 3: An example of template expansion using BigQuery tutorials and seed templates. The diagram shows a flow from a seed template 'SELECT columns FROM table' to a 'TEMPLATE EXPANSION' block containing 'PARSER' and 'LLM' icons, resulting in a more complex template 'SELECT BIVARIAS COLUMN AS TOTAL\_POINTS, COLUMN FROM TABLE GROUP BY ALL'. A callout box explains the 'GROUP BY ALL' clause: 'The GROUP BY ALL clause groups rows by forming grouping keys from the SELECT items. The following SELECT items are excluded from the GROUP BY ALL clause:'.
+
+Figure 3: An example of template expansion using BigQuery tutorials and seed templates.
+
+**Sample Generation:** After generating the SQL templates, our next step is to convert them into valid question-SQL pairs. For this process, we select a template along with a database schema with a random row from any given database. Random database rows are necessary since the LLM should be able to fill conditions with actual database values. The database schemas can be sourced from different datasets (e.g. publicly-available Spider or BIRD). As these are originally in SQLite, these databases are migrated to each target dialect for dialects other than SQLite. The combination is then passed to an LLM, instructing it to integrate schema mentions into the templates and generate corresponding questions that align with the SQL queries. After generating the SQL queries, heuristic-based semantic and syntactic filters are applied to ensure the high quality of both the queries and questions. The specifics of these filters are detailed in the Appendix A.6. Additionally, Appendix A.9.2 includes the detailed prompt which is used in this step.
+
+**Data Quality Check:** To ensure high quality generation of question-SQL pairs, we present the question-SQL pairs alongside the first  $K$  rows of their execution results over the database to an LLM. This LLM is tasked with verifying that the question and SQL pair match appropriately and that the question is free of ambiguity. To avoid repeating the same errors, we employ a different LLM,
+
+{4}------------------------------------------------
+
+not used in previous steps, to act as the judge. Appendix A.4.1 provides a detailed analysis of the importance of utilizing a secondary LLM and highlights the importance of this step. Appendix A.9.3 provides the prompt that has been used for quality checking.
+
+### 2.2 DIALECT EXPERTS MERGING: MULTI-DIALECTS MIXTURE OF EXPERT (MoE)
+
+With SQL-GEN, we can generate question-SQL pairs for various dialects and train corresponding dialect-specific models. However, in real-world scenarios, users often manage databases across different dialects, necessitating the deployment of multiple models, which can come with practical challenges, including increased model serving costs and overhead of managing multiple checkpoints. Additionally, while each dialect features unique keywords and functions, there is commonality across some SQL keywords across dialects that can be exploited for cross-dialect information transfer. By merging these dialect experts into a single model, not only we mitigate the practical serving challenges, but we can improve the performance of each facilitating sharing of common knowledge. As model merging approaches, we introduce our proposed method utilizing the Mixture of Experts (MoE) architecture.
+
+**MoE:** In a Mixture of Experts (MoE) model, each layer contains multiple MLP blocks, or “experts,” and a router network selects specific experts to process each token at every position, combining their outputs. This architecture enhances the traditional MLP sub-layer within Transformer blocks by replacing it with multiple experts, each with its own set of parameters (Jiang et al., 2024; Fedus et al., 2022a). MoE-based LLMs route tokens to different experts, increasing modeling expressiveness without significantly increasing the compute budget, as only a subset of experts is activated for each token. With different Transformer-based expert models, we can combine them into a single MoE model that leverages the expert-specific MLP layers. By initializing the router to select the corresponding expert for each token, we can combine the knowledge of expert models by activating multiple experts and merging the self-attention layers. This approach aligns well with our setting, where we have dialect-specific expert models that already have prior knowledge of SQL syntax. For dialect-specific keywords, we can use the router to select the appropriate MLP layer, which allows us to integrate three models into a single one without the need to train a new model from scratch. Figure 4 illustrates one Transformer block with the proposed method for constructing an MoE model from three distinct dialect expert models.
+
+![Diagram of a Transformer block for a MoE model. The input is processed through a Layer Norm and Self Attention. The output is then processed through another Layer Norm and a Router. The Router selects between three expert networks: SQLite MLP, Postgres MLP, and BigQuery MLP. The outputs of these experts are combined using Weighted Average. Above the Router, there is a SLEP Merging block that takes inputs from SQLite self-attention, Postgres self-attention, and BigQuery self-attention. This block also outputs SQLite Keywords hidden states, Postgres Keywords hidden states, and BigQuery Keywords hidden states, which are then combined using a Weighted Average block.](f76f0f5dfff2511b51f6b875867c029f_img.jpg)
+
+Diagram of a Transformer block for a MoE model. The input is processed through a Layer Norm and Self Attention. The output is then processed through another Layer Norm and a Router. The Router selects between three expert networks: SQLite MLP, Postgres MLP, and BigQuery MLP. The outputs of these experts are combined using Weighted Average. Above the Router, there is a SLEP Merging block that takes inputs from SQLite self-attention, Postgres self-attention, and BigQuery self-attention. This block also outputs SQLite Keywords hidden states, Postgres Keywords hidden states, and BigQuery Keywords hidden states, which are then combined using a Weighted Average block.
+
+Figure 4: Our proposed method to initialize one Transformer block of a MoE model from different dialect experts, exemplified here for Postgres, SQLite, and BigQuery dialects to create an all in one model to address all. Objects in yellow demonstrate multi-dialect models
+
+**Key-words based multi-dialects gating (routing):** An important aspect of the MoE framework is the gating (routing) mechanism. In MoE, the output for a given input  $x$  is computed as a weighted sum of the expert networks’ outputs, with the weights determined by the gating network (Jiang et al., 2024). Given  $n$  expert networks  $\{E_1, E_2, \dots, E_n\}$  The output is
+
+$$\sum_{i=0}^{n-1} G(x)_i E_i(x)$$
+
+where the gates’ outputs are determined based on the dot product of the input  $x$  and the gate weights  $W_g$  as follows:
+
+$$G(x) = \text{Softmax}(\text{TopK}(\text{dot}(x, W_g)))$$
+
+{5}------------------------------------------------
+
+We propose to initialize these gates at each layer by averaging the hidden vectors of the dialect-specific keywords, derived from the training data of each model and based on the top  $K$  most frequently occurring dialect-specific keywords from generated question-SQL pairs. This process begins by cataloging all dialect-specific keywords from our generated SQL queries, sorting them by frequency, and selecting the top-k keywords. These keywords are then processed by the model, where the hidden representations from the self-attention sub-modules for all tokens of these keywords are used to initialize the gates. The formula below provides the described method for initializing the gate weights:
+
+$$W_g(i) = \frac{1}{K} \sum_{k=1}^K \sum_{j=1}^{k_t} h_{k_j}$$
+
+, where  $W_g(i)$  is the  $i$ th column of the gate weight matrix corresponding to  $i$ th expert,  $k_t$  is the number of tokens for the  $k$ th dialect keyword, and  $h_{k_j}$  is the hidden representation of the  $j$ -th token of the  $k$ -th keyword. This approach increases the dot product between dialect-specific input keywords and their corresponding gate weight matrix columns, thereby boosting the weight for the dialect-specific expert. Although this method shows improved performance even without further training compared to other model merging approaches, we show superior joint modeling of the sub-models by further fine-tuning the MoE architecture on a mixed dataset from various dialects.
+
+**SLERP-based self-attention merging:** In our proposed methodology, the MLP layers of each expert within the MoE model are initialized using the MLP sub-layers from models previously trained on distinct dialects. For the self-attention sub-layers of the MoE model, we employ Spherical Linear Interpolation (SLERP) (Goddard et al., 2024; Shoemake, 1985) to merge the initial weights of the self-attention layers (Key, Value, and Query projections) across multiple dialects. SLERP allows for smooth, non-linear transitions between two weight vectors while preserving the intrinsic geometric properties of the spherical space. The process begins by normalizing the weights of the Key, Value, and Query layers from different dialect models to unit magnitude, ensuring that they lie on the surface of a unit sphere. Once normalized, the angle ( $\theta$ ) between the weight vectors is computed using the dot product. If the vectors are nearly collinear (i.e., the dot product is close to 1), the merging process defaults to linear interpolation (LERP) for efficiency. Otherwise, SLERP calculates the scale factors based on the interpolation parameter  $t$  and the angular separation between the vectors:
+
+$$\text{SLERP}(t, \mathbf{v}_0, \mathbf{v}_1) = \frac{\sin((1-t)\theta)}{\sin(\theta)} \mathbf{v}_0 + \frac{\sin(t\theta)}{\sin(\theta)} \mathbf{v}_1$$
+
+Where  $v_0$  and  $v_1$  represents the normalized weight vectors of the models. By merging the self-attention weights through SLERP, we can smoothly integrate the knowledge from different dialect-specific models into the initialization of the MoE model’s self-attention layers, providing a more effective starting point for model training.
+
+## 3 EXPERIMENTS
+
+**Datasets:** We use benchmark datasets tailored for three dialects. For SQLite, we use two datasets from BIRD: 1) the development set and 2) the mini development set. For PostgreSQL, we utilize three benchmarks: 1) BIRD queries transpiled to PostgreSQL, 2) BIRD PostgreSQL mini development set, and 3) Pagila—a dataset specific to PostgreSQL containing real-world queries originally written for PostgreSQL, which are extracted from online resources. For BigQuery, we use two datasets: 1) BIRD queries transpiled to BigQuery, and 2) the GitHub-repositories dataset, a public BigQuery dataset featuring BigQuery-specific sample question/SQL pairs obtained from tutorials and online resources. Further details of the datasets are provided in Appendix A.2.
+
+**Baselines:** In order to evaluate the quality of the synthetic queries generated with SQL-GEN, we compare the performance of the models trained on synthetic data considering the following datasets: 1) Gretel (Gretel, 2024): Gretel Text-to-SQL dataset consists  $>100K$  high-quality synthetic Text-to-SQL samples with a coverage across 100 distinct domains. 2) SQL create context (b mc2, 2023): This dataset consists  $\sim 78K$  samples, obtained from the Spider (Yu et al., 2018b) and WikiSQL (Zhong et al., 2017) datasets by cleaning these sources. All queries were generated through a human-in-the-loop process, making it a strong baseline for comparing LLM-generated
+
+{6}------------------------------------------------
+
+data with human-annotated data. 3) BIRD train set (Li et al., 2024b): This dataset consists of ~10k human-annotated samples. Queries are considered more complex in comparison to the Spider and WikiSQL benchmarks.
+
+For dialects other than SQLite, all queries from the baselines are transpiled to the target dialects to ensure their validity. Details of the models and metrics are provided in Appendix A.3 and details of the seed templates and tutorials are provided in Appendix A.4.
+
+### 3.1 DIALECT-SPECIFIC SQL KEYWORDS CONVERGE IMPROVEMENT
+
+We compare our generated SQL queries with two baseline datasets in terms of the diversity of queries, focusing on the use of unique SQL keywords and the frequency of dialect-specific queries. The results are presented in Figure 5. For an equitable comparison, we sample 60K queries from each baseline. Since our Text-to-SQL dataset exclusively contains SELECT queries, we exclude samples that do not start with the SELECT keyword. According to the results, our dataset exhibits the highest diversity and the greatest number of dialect-specific queries compared to the baselines. Interestingly, the SQL create context dataset, which is intended to be a SQLite dataset, contains several queries using the STRUCT() keyword, which is supported by BigQuery, not SQLite.
+
+![Figure 5: Comparison between queries generated by our method with the baselines in terms of diversity of the SQL keywords and number of dialect-specific queries in each of them. The figure consists of four bar charts: 'All Keyword Count (log Scale)', 'SQLite Count (log Scale)', 'Postgres Count (log Scale)', and 'BigQuery Count (log Scale)'. Each chart compares 'gretel', 'data', and 'create context' datasets. In all charts, the 'data' dataset consistently shows the highest counts, followed by 'gretel', and then 'create context'.](4279c8be6ec4ed56f4b3349be98bb426_img.jpg)
+
+Figure 5: Comparison between queries generated by our method with the baselines in terms of diversity of the SQL keywords and number of dialect-specific queries in each of them. The figure consists of four bar charts: 'All Keyword Count (log Scale)', 'SQLite Count (log Scale)', 'Postgres Count (log Scale)', and 'BigQuery Count (log Scale)'. Each chart compares 'gretel', 'data', and 'create context' datasets. In all charts, the 'data' dataset consistently shows the highest counts, followed by 'gretel', and then 'create context'.
+
+Figure 5: Comparison between queries generated by our method with the baselines in terms of diversity of the SQL keywords and number of dialect-specific queries in each of them.
+
+### 3.2 POSTGRESQL RESULTS
+
+For PostgreSQL, we train LoRA adapters for the CodeLlama 7B and Codestral 22B model on the transpiled baseline datasets and compared its performance against our proposed method. As shown in Table 1, our method achieves the highest performance on the PostgreSQL BIRD and Minidev benchmarks compared to other baselines, except for the BIRD train set. While training a model on the original BIRD training split delivers the highest performance on the BIRD development split, it significantly underperforms when evaluated on other PostgreSQL datasets, such as Pagila (as seen in the third row). This highlights the importance of diversity in training data to prevent overfitting to a specific distribution. In contrast, our approach achieves consistently high accuracy when evaluated on both the BIRD development split and other PostgreSQL datasets, demonstrating outstanding generalization ability. Moreover, these results demonstrate the importance of dialect specific datasets as the other transpiled queries couldn't match the performance of our method.
+
+Table 1: Execution Accuracy (EX) of PostgreSQL Models on the three PostgreSQL benchmarks using CodeLlama 7B and Codestral 22B. “-” denotes the zero-shot performance of the models.
+
+| Training Dataset | Benchmark | Model | EX (%) | ΔEX | Model | EX (%) | ΔEX |
+|-|-|-|-|-|-|-|-|
+| Bird train set | PostgreSQL BIRD | CodeLlama 7B | 44.37 | +20.08 | Codestral 22B | 52.26 | +5.68 |
+| Our synthetic dataset | PostgreSQL BIRD | CodeLlama 7B | 39.22 | +14.93 | Codestral 22B | 49.84 | 3.26 |
+| Gretel Text-to-SQL | PostgreSQL BIRD | CodeLlama 7B | 28.05 | +3.76 | Codestral 22B | 40.55 | -6.03 |
+| SQL Create Context | PostgreSQL BIRD | CodeLlama 7B | 13.35 | -10.94 | Codestral 22B | 36.17 | -10.61 |
+| - | PostgreSQL BIRD | CodeLlama 7B | 24.29 | 0 | Codestral 22B | 46.58 | 0 |
+| Bird train set | PostgreSQL Minidev | CodeLlama 7B | 31.0 | +17.8 | Codestral 22B | 36.0 | +4.2 |
+| Our synthetic dataset | PostgreSQL Minidev | CodeLlama 7B | 25.4 | +12.2 | Codestral 22B | 33.0 | +2.2 |
+| Gretel Text-to-SQL | PostgreSQL Minidev | CodeLlama 7B | 14.6 | +1.4 | Codestral 22B | 23.0 | -8.8 |
+| SQL Create Context | PostgreSQL Minidev | CodeLlama 7B | 7.8 | -5.4 | Codestral 22B | 25.2 | -6.6 |
+| - | PostgreSQL Minidev | CodeLlama 7B | 13.2 | 0 | Codestral 22B | 31.8 | 0 |
+| Bird train set | Pagila | CodeLlama 7B | 19.56 | -4.35 | Codestral 22B | 43.47 | -6.53 |
+| Our synthetic dataset | Pagila | CodeLlama 7B | 39.13 | +15.22 | Codestral 22B | 50 | 0.0 |
+| Gretel Text-to-SQL | Pagila | CodeLlama 7B | 36.95 | +13.04 | Codestral 22B | 50 | 0 |
+| SQL Create Context | Pagila | CodeLlama 7B | 8.69 | -15.22 | Codestral 22B | 36.95 | -13.05 |
+| - | Pagila | CodeLlama 7B | 23.91 | 0 | Codestral 22B | 50 | 0 |
+
+{7}------------------------------------------------
+
+### 3.3 BIGQUERY RESULTS
+
+Similar to the PostgreSQL experiments, we present the results of the CodeLlama 7B and Codestral 22B model trained on various baseline datasets and evaluated on two BigQuery benchmark datasets: BIRD and the GitHub Repository database. Looking at the results provided in Table 2, consistent with the trends observed for the PostgreSQL dialect, on BigQuery BIRD, the model trained on our generated samples achieves the second highest performance, following the BIRD train set. For the GitHub Repository database, which is a BigQuery dialect specific dataset, our model outperforms the second-best model by a 10% margin, further demonstrating the effectiveness of our method to train dialect specific models.
+
+Table 2: Execution Accuracy (EX) of BigQuery Models on the two BigQuery benchmarks using CodeLlama 7B and Codestral 22B. “-” denotes the zero-shot performance of the models.
+
+| Training Dataset | Benchmark | Model | EX (%) | $\Delta EX$ | Model | EX (%) | $\Delta EX$ |
+|-|-|-|-|-|-|-|-|
+| Bird train set | BigQuery BIRD | CodeLlama 7B | 38.04 | +21.47 | Codestral 22B | 47.74 | +9.55 |
+| Our synthetic dataset | BigQuery BIRD | CodeLlama 7B | <b>33.53</b> | +16.96 | Codestral 22B | <b>47.24</b> | +9.05 |
+| Gretel Text-to-SQL | BigQuery BIRD | CodeLlama 7B | 26.73 | +11.16 | Codestral 22B | 36.74 | +1.45 |
+| SQL Create Context | BigQuery BIRD | CodeLlama 7B | 10.84 | -5.73 | Codestral 22B | 39.19 | +1.0 |
+| - | BigQuery BIRD | CodeLlama 7B | 16.57 | 0 | Codestral 22B | 38.19 | 0 |
+| Bird train set | Github Repository | CodeLlama 7B | 7.5 | -7.5 | Codestral 22B | 7.5 | -12.5 |
+| Our synthetic dataset | Github Repository | CodeLlama 7B | 25.0 | +10.0 | Codestral 22B | <b>30.0</b> | +10.0 |
+| Gretel Text-to-SQL | Github Repository | CodeLlama 7B | 17.5 | +2.5 | Codestral 22B | 22.5 | +2.25 |
+| SQL Create Context | Github Repository | CodeLlama 7B | 0.0 | -15.00 | Codestral 22B | 20.0 | 0 |
+| - | Github Repository | CodeLlama 7B | 15 | 0 | Codestral 22B | 20.0 | 0 |
+
+### 3.4 SQLITE RESULTS
+
+Utilizing SQL-GEN, we generate 20K samples for the SQLite dialect. Appendix A.4.2 studies the impact of the number of samples. We train three different models with different sizes from 7B to 22B on these samples. For a fair comparison with the baselines, we only use the Spider databases for generating the synthetic data. For this comparison, we train models on: 1) The entire BIRD training set; 2) 20K samples from the SQL Create Context (b mc2, 2023); and 3) 20K samples from the Gretel Text-to-SQL datasets (Gretel, 2024). We assess the Text-to-SQL performance of these models on the BIRD development set and minidev set (see Table 3). Additionally, we evaluate the zero-shot performance of each model and calculate the performance gains for each method relative to zero-shot.
+
+SQL-GEN generated samples significantly surpass the Gretel dataset, achieving a large performance gain of approximately 10% across all model sizes. Furthermore, LLMs trained on SQL-GEN synthetic data consistently outperform those trained on the human-annotated SQL Create Context data, underscoring the high quality of SQL-GEN synthetic data. While LLMs trained on the BIRD dataset consistently exhibit the highest performance on BIRD development sets, this outcome is likely due to overfitting to the canonical input distribution of the BIRD train set which is similar to its development set (Yu et al., 2020).
+
+Table 3: Execution Accuracy (EX) of SQLite Models on the BIRD development set and minidev set using CodeLlama 7B, CodeGemma 7B, and Codestral 22B Models. “-” denotes the zero-shot performance of the models.
+
+| Training Dataset | Model | Dataset | EX (%) | $\Delta EX$ | Dataset | EX (%) | $\Delta EX$ |
+|-|-|-|-|-|-|-|-|
+| Bird train set | CodeLlama 7B | dev set | 40.22 | +22.36 | minidev set | 38.4 | +24.8 |
+| Our synthetic dataset | CodeLlama 7B | dev set | <b>38.33</b> | +20.47 | minidev set | <b>30.00</b> | +16.4 |
+| Gretel Text-to-SQL | CodeLlama 7B | dev set | 26.01 | +8.15 | minidev set | 19.6 | +6.0 |
+| SQL Create Context | CodeLlama 7B | dev set | 18.31 | +0.45 | minidev set | 12.6 | -1.0 |
+| - | CodeLlama 7B | dev set | 17.86 | 0 | minidev set | 13.6 | 0.0 |
+| Bird train set | CodeGemma 7B | dev set | 45.63 | +11.87 | minidev set | 40.4 | +10.4 |
+| Our synthetic dataset | CodeGemma 7B | dev set | <b>42.37</b> | +8.64 | minidev set | <b>36.4</b> | +6.4 |
+| Gretel Text-to-SQL | CodeGemma 7B | dev set | 30.83 | -2.93 | minidev set | 30.6 | +0.6 |
+| SQL Create Context | CodeGemma 7B | dev set | 28.87 | -4.89 | minidev set | 29.6 | -0.4 |
+| - | CodeGemma 7B | dev set | 33.76 | 0 | minidev set | 30.0 | 0.0 |
+| Bird train set | Codestral 22B | dev set | 53.12 | +8.6 | minidev set | 50.4 | +10.0 |
+| Our synthetic dataset | Codestral 22B | dev set | <b>50.45</b> | +5.93 | minidev set | <b>46.6</b> | +6.2 |
+| Gretel Text-to-SQL | Codestral 22B | dev set | 37.87 | -6.65 | minidev set | 30.8 | -9.6 |
+| SQL Create Context | Codestral 22B | dev set | 40.80 | -3.72 | minidev set | 36.8 | -3.6 |
+| - | Codestral 22B | dev set | 44.52 | 0 | minidev set | 40.4 | 0.0 |
+
+To pinpoint whether the gains are consistent across, we evaluate different models on different SQL query complexity levels: simple, medium, or challenging, as presented in Appendix A.5.
+
+{8}------------------------------------------------
+
+**Database Adaptation:** SQL-GEN operates independently of specific databases, enabling the generation of high-quality synthetic data for any database. Therefore, as another use case of synthetic data, we introduce *Database Adaptation*, to improve the performance in cross-domain Text-to-SQL setting. This involves generating synthetic queries for databases for which no pre-existing question-SQL pairs are available. We apply this training in two distinct ways: (1) in-context learning, which leverages the generated queries directly within the model’s input context as demonstrations, and (2) model tuning, which involves supervised fine-tuning of the model weights:
+
+**Database Adaptation With Model Tuning:** Our synthetic data generation pipeline is designed to generate question-SQL pairs for any database. To demonstrate this, we generated 10K pure synthetic question-SQL pairs across the 11 databases in the BIRD development set and separately 10K samples for the entire databases in the BIRD training set using Gemini-1.5-pro. We then compared the performance of two model against a model trained on the original 10K training samples from the BIRD benchmark. The results are detailed in Section 3.4. The table indicates that our synthetic generation approach on the BIRD development set databases achieves performance comparable to the original BIRD training set with only 1.5% gap. This is particularly noteworthy given that generating synthetic samples is significantly less resource- and cost-intensive compared to creating 10,000 human-annotated samples. The latter involves 11 crowd-source workers to annotate the samples. Additionally, synthetic data generation on development split outperforms train split showing that SQL-Gen helps to learn unseen database and improve performance.
+
+| Training Data | EX (%) | $\Delta EX$ |
+|-|-|-|
+| BIRD train set | 40.22 | +22.36 |
+| Synthetic sample on BIRD dev dbs | 38.78 | +20.92 |
+| Synthetic sample on BIRD train dbs | 34.68 | +16.82 |
+| Zero-shot (no training) | 17.86 | 0 |
+
+Table 4: Using our proposed pipeline to generate 10K synthetic data for BIRD development set databases.
+
+| #ICL | Model | EX (%) | $\Delta EX$ |
+|-|-|-|-|
+| Zero-shot | CodeLlama | 12.35 | 0.0 |
+| 1 | CodeLlama | 17.97 | +5.62 |
+| 5 | CodeLlama | 20.22 | +7.87 |
+| 10 | CodeLlama | 22.47 | +10.12 |
+
+Table 5: Using SQL-GEN to generate synthetic data for the given database. #ICL denotes the number of in-context learning samples used in the prompts.
+
+**Database Adaptation with In-context Learning:** An alternative method to enhance the performance of LLMs on task-specific datasets is through in-context learning (Brown et al., 2020). We explore the concept of database adaptation through in-context learning, using synthetic queries as few-shot in-context samples without additional model training. To evaluate this approach, we generate 500 synthetic samples for the California schools database from the BIRD development set. We then test the model’s performance on 89 samples from this database using different numbers of in-context samples. The results, presented in Section 3.4. For selecting the few-shot samples, we use cosine similarity between question embeddings. These results demonstrate that we can achieve a 10% improvement in accuracy without any training.
+
+**Data Augmentation:** Beyond merely creating a pool of pure synthetic question-SQL pairs for training, synthetic data generation offers the potential to augment existing datasets (e.g. mixing with original dataset), thereby enhancing model performance beyond what is achievable with solely the available data. We consider integrating synthetic data generated for specific target databases (as discussed in Database
+
+Adaptation, see Section 3.4) with pre-existing training datasets. To this end, we merge 10K synthetic question-SQL pairs generated on the BIRD development databases with the 10K pairs from the BIRD training set. We then train various models using this combined dataset and compared their performance to models trained solely on the original BIRD training set. For a balanced comparison, models using the combined datasets are trained for only one epoch, whereas those trained exclusively on the BIRD training set are trained for two epochs. As shown in Table 6, augmenting
+
+Table 6: Performance comparison of the data augmentation method on the BIRD development set using different LLMs.
+
+| Training Dataset | Model | EX (%) | $\Delta EX$ |
+|-|-|-|-|
+| BIRD train set | CodeLlama 7B | 40.22 | 0 |
+| BIRD Train + synthetic | CodeLlama 7B | 45.82 | +5.6 |
+| BIRD train set | CodeGemma 7B | 45.63 | 0 |
+| BIRD Train + synthetic | CodeGemma 7B | 51.10 | +5.47 |
+| BIRD train set | Codestral 22B | 53.12 | 0 |
+| BIRD Train + synthetic | Codestral 22B | 56.45 | +3.33 |
+
+{9}------------------------------------------------
+
+training data results in a performance improvement of up to 5.6%, a significant enhancement compared to previous work, such as Yang et al. (2024) (which demonstrated only a 1.5% improvement in performance after augmentation on the same base model CodeLLama 7B).
+
+### 3.5 EXPERTS MERGING RESULTS
+
+We evaluate various expert merging approaches for integrating dialect-specific models into a single unified model and compare to our method based on the Mixture of Experts (MoE) architecture. We utilize three expert CodeLLama 7B models, each trained on synthetic question-SQL pairs for SQLite, PostgreSQL, and BigQuery. We consider three popular model merging techniques: DARE (Yu et al., 2024), TIES (Yadav et al., 2024), and SLERP. Unlike the first two, SLERP can only merge two models at a time. Therefore, we initially merge the SQLite and PostgreSQL experts and then combined the resulting model with the BigQuery expert. Additionally, we fine-tune a *generalist* (not dialect-specific) CodeLLama 7B and MoE 3x7B model on 40K samples from a mix of different dialects to establish a baseline for comparison. The *generalist MoE* baseline is a MoE 3x7B model initialized from CodeLLama 7B model and trained with 40K combined dialect samples for 1 epoch. We compare all these methods to the proposed method for initializing the MoE model which is trained only for one epoch of 20K samples from different dialects. We train for a single epoch to promote effective collaboration among the submodules. We also include the performance of the proposed MoE model before the single epoch fine-tuning to better understand the effectiveness of our proposed initialization method. We assess the performance of the different models on PostgreSQL’s Pagila, BigQuery’s Github Repository, and 10% of random samples from the SQLite BIRD dev set, with results detailed in Table 7. The table demonstrates that the proposed MoE model overall outperforms others, even exceeding the performance of the individual dialect experts, highlighting the effectiveness of our approach in sharing common SQL knowledge across dialects while preserving dialect-specific expertise. The MoE architecture also enhances the model’s learning capacity, contributing to improved overall performance. Notably, our initialization method is more effective at maintaining high dialect-specific performance compared to the generalist MoE 3x7B model. Among all merging techniques, SLERP achieves the highest performance, surpassing even the generalist model trained on the combined dialect-specific datasets, which is the main reason for initializing the self-attention sub-layers. Moreover, the results suggest that our proposed method for initialization even before fine-tuning provide a strong baseline surpassing TIES and DARE methods for model merging. In Appendix A.8, we provide detailed analysis of token-level routing for MoE architecture.
+
+Table 7: Comparison between different dialect expert merging approaches and our proposed MoE for dialect benchmarks. Generalist model refers to CodeLLama trained on the combination of the dialect datasets.
+
+| Model | BIRD SQLite | PostgreSQL Pagila | BigQuery BIRD | Overall |
+|-|-|-|-|-|
+| CodeLlama 7B SQLite expert | 34.01 | 39.13 | 25 | 32.71 |
+| CodeLlama 7B Postgres expert | 29.93 | 39.13 | 20 | 29.68 |
+| CodeLlama 7B BigQuery expert | 33.33 | 32.60 | 27.5 | 31.14 |
+| CodeLlama 7B generalist | 33.33 | 32.66 | 32.25 | 32.83 |
+| Merged experts + SLERP | 34.69 | 39.13 | 27.5 | 33.77 |
+| Merged experts + TIES | 35.37 | 30.43 | 27.5 | 31.1 |
+| Merged experts + DARE | 35.37 | 36.95 | 17.5 | 29.94 |
+| MoE 3x7B (ours) | 36.05 | 39.13 | 22.5 | 32.56 |
+| MoE 3x7B fine-tuned (ours) | 34.69 | 39.13 | 32.25 | <b>35.44</b> |
+| MoE 3x7B generalist | 34.01 | 41.3 | 25 | 33.43 |
+
+## 4 CONCLUSIONS
+
+We present a novel framework for generating dialect-specific synthetic data to tackle the diverse SQL dialect modeling challenges for Text-to-SQL. The proposed framework addresses the unique challenges such as keywords and functions being different for each SQL dialect, constituting a scalable approach. It significantly narrows the performance gap with human-annotated datasets and creates the highest quality datasets for other dialects. Our comprehensive evaluations across three models and multiple benchmarks, showcase the effectiveness of the proposed data generation framework. Additionally, our innovative approach integrates dialect-specific experts into a unified model, enhancing performance by promoting effective information sharing among them.
+
+ Rest of paper (reference and Appendix) is removed.

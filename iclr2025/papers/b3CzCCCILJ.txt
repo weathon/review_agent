@@ -1,0 +1,304 @@
+
+
+{0}------------------------------------------------
+
+# NO TRAINING, NO PROBLEM: RETHINKING CLASSIFIER-FREE GUIDANCE FOR DIFFUSION MODELS
+
+Seyedmorteza Sadat<sup>1</sup>, Manuel Kansy<sup>1</sup>, Otmar Hilliges<sup>1</sup>, Romann M. Weber<sup>2</sup>
+
+<sup>1</sup>ETH Zürich, <sup>2</sup>DisneyResearchStudios
+
+{seyedmorteza.sadat, manuel.kansy, otmar.hilliges}@inf.ethz.ch  
+ {romann.weber}@disneyresearch.com
+
+## ABSTRACT
+
+Classifier-free guidance (CFG) has become the standard method for enhancing the quality of conditional diffusion models. However, employing CFG requires either training an unconditional model alongside the main diffusion model or modifying the training procedure by periodically inserting a null condition. There is also no clear extension of CFG to unconditional models. In this paper, we revisit the core principles of CFG and introduce a new method, independent condition guidance (ICG), which provides the benefits of CFG without the need for any special training procedures. Our approach streamlines the training process of conditional diffusion models and can also be applied during inference on any pre-trained conditional model. Additionally, by leveraging the time-step information encoded in all diffusion networks, we propose an extension of CFG, called time-step guidance (TSG), which can be applied to *any* diffusion model, including unconditional ones. Our guidance techniques are easy to implement and have the same sampling cost as CFG. Through extensive experiments, we demonstrate that ICG matches the performance of standard CFG across various conditional diffusion models. Moreover, we show that TSG improves generation quality in a manner similar to CFG, without relying on any conditional information.
+
+## 1 INTRODUCTION
+
+Diffusion models have recently emerged as the main methodology behind many successful generative models (Sohl-Dickstein et al., 2015; Ho et al., 2020; Dhariwal & Nichol, 2021; Rombach et al., 2022; Song & Ermon, 2019; Song et al., 2021b). At the core of such models lies a diffusion process that gradually adds noise to the data until the corrupted points are indistinguishable from pure noise. During inference, a denoiser trained to reverse this process is used to gradually refine pure-noise samples until they resemble the clean data. While the theory suggests that standard sampling from diffusion models should yield high-quality images, this does not generally hold in practice, and guidance methods are often required to increase the quality of generations, albeit at the expense of diversity (Dhariwal & Nichol, 2021; Ho & Salimans, 2022). Classifier guidance (Dhariwal & Nichol, 2021) introduced this quality-boosting concept by utilizing the gradient of a classifier trained on noisy images to increase the class-likelihood of generated samples. Later, classifier-free guidance (CFG) (Ho & Salimans, 2022) was proposed, allowing diffusion models to simulate the same behavior as classifier guidance without using an explicit classifier. Since then, CFG has been applied to other conditional generation tasks, such as text-to-image synthesis (Nichol et al., 2022) and text-to-3D generation (Poole et al., 2023).
+
+In addition to CFG’s trading diversity for quality, it has the following two practical limitations. First, it requires a dedicated, pre-defined training process on an *auxiliary* task in order to learn the unconditional score function. This typically involves training a separate unconditional model or, more commonly, randomly dropping the conditioning vector and replacing it with a null vector during training. This approach reduces training efficiency, as the model now needs to be trained on two different tasks. Moreover, replacing the condition may not be straightforward when multiple conditioning signals—such as text, images, and audio—are used simultaneously or when the null vector (often the zero vector) carries specific meaning. We demonstrate that this dedicated auxiliary training process is unnecessary. A second limitation is that there has been no clear way to extend
+
+{1}------------------------------------------------
+
+the benefits of classifier-free guidance beyond conditional models to unconditional generation. We introduce a method that closes this gap.
+
+We revisit the principles behind classifier-free guidance and show both theoretically and empirically that similar quality-boosting behavior can be achieved without the need for additional auxiliary training of an unconditional model. The main idea is that by using a conditioning vector *independent* of the input data, the conditional score function becomes equivalent to the unconditional score. This insight leads us to propose *independent condition guidance* (ICG), a method that replicates the behavior of CFG at inference time without requiring auxiliary training of an unconditional model, i.e., without needing explicit access to the unconditional score function. In Section 6.1, we show that the auxiliary training of the unconditional model in CFG can be detrimental to training efficiency, and similar or better performance can be achieved by training only a purely conditional model and using ICG instead.
+
+Inspired by the above, we also introduce a novel technique to extend classifier-free guidance to a more general setting that includes unconditional generation. We argue that by using a perturbed version of the time-step embedding in diffusion models, one can create a guidance signal similar to CFG to improve the quality of generations. This method, which we call *time-step guidance* (TSG), aims to improve the accuracy of denoising at each sampling step by leveraging the time-step information learned by the diffusion model to steer sampling trajectories toward better noise-removal paths.
+
+ICG and TSG are easy to implement, do not require additional fine-tuning of the underlying diffusion models, and have the same sampling cost as CFG. Through extensive experiments, we empirically verify that: 1) ICG offers performance similar to CFG and can be readily applied to models that are not trained with the CFG objective in mind, such as EDM (Karras et al., 2022); and 2) TSG improves output quality in a manner similar to CFG for both conditional and unconditional generation.
+
+The core contributions of our work are as follows: (i) We revisit the principles of classifier-free guidance and offer an efficient, theoretically motivated method to employ CFG without requiring any auxiliary training of an unconditional model, greatly simplifying the training process of conditional diffusion models and improving training efficiency relative to the standard approach. (ii) We offer an extension of CFG that is generally applicable to all diffusion models, whether conditional or unconditional. (iii) We demonstrate empirically that our guidance techniques achieve the quality-boosting benefits of CFG across various setups and network architectures.
+
+## 2 RELATED WORK
+
+Score-based diffusion models (Song & Ermon, 2019; Song et al., 2021b; Sohl-Dickstein et al., 2015; Ho et al., 2020) learn the data distribution by reversing a forward diffusion process that progressively transforms the data into Gaussian noise. These models have quickly surpassed the fidelity and diversity of previous generative modeling methods (Nichol & Dhariwal, 2021; Dhariwal & Nichol, 2021), achieving state-of-the-art results in various domains, including unconditional image generation (Dhariwal & Nichol, 2021; Karras et al., 2022), text-to-image generation (Ramesh et al., 2022; Saharia et al., 2022b; Balaji et al., 2022; Rombach et al., 2022; Podell et al., 2023; Yu et al., 2022), video generation (Blattmann et al., 2023b;a; Gupta et al., 2023), image-to-image translation (Saharia et al., 2022a; Liu et al., 2023), motion synthesis (Tevet et al., 2023; Tseng et al., 2023), and audio generation (Chen et al., 2021; Kong et al., 2021; Huang et al., 2023).
+
+Since the development of the DDPM model (Ho et al., 2020), many advancements have been proposed including improved network architectures (Hoogeboom et al., 2023; Karras et al., 2023; Peebles & Xie, 2022; Dhariwal & Nichol, 2021), sampling algorithms (Song et al., 2021a; Karras et al., 2022; Liu et al., 2022; Lu et al., 2022a; Salimans & Ho, 2022), and training methods (Nichol & Dhariwal, 2021; Karras et al., 2022; Song et al., 2021b; Salimans & Ho, 2022; Rombach et al., 2022). Despite these recent advances, diffusion guidance, including classifier and classifier-free guidance (Dhariwal & Nichol, 2021; Ho & Salimans, 2022), still plays an essential role in improving the quality of generations as well as increasing the alignment between the condition and the output image (Nichol et al., 2022).
+
+SAG (Hong et al., 2022) and PAG (Ahn et al., 2024) have recently been proposed to increase the quality of UNet-based diffusion models by modifying the predictions of the self-attention layers. Our method is complementary to these approaches, as one can combine ICG updates with the update
+
+{2}------------------------------------------------
+
+signal from the perturbed attention modules (Hong et al., 2022). In addition, we make no assumptions about the network architecture.
+
+Another line of work includes guiding the generation of the diffusion model with a differentiable loss function or an off-the-shelf classifier (Song et al., 2023; Chung et al., 2022; Yu et al., 2023; Bansal et al., 2023; He et al., 2023). These methods are primarily focused on solving inverse problems, typically with unconditional models, while we are instead concerned with achieving the benefits of CFG in conditional models without any additional training requirements. With TSG, we also generalize our approach to extend CFG-like benefits to unconditional models.
+
+Perturbing the condition vector is employed in CADS (Sadat et al., 2024) to increase the diversity of generations. CADS differs from ICG in focusing on the *conditional* branch to improve diversity, while ICG is concerned with the *unconditional* branch to simulate CFG. Since CADS is designed to enhance the diversity of CFG, it can be used alongside ICG to improve the diversity of output at high guidance scales (see Appendix C).
+
+## 3 BACKGROUND
+
+This section provides an overview of diffusion models. Let  $\mathbf{x} \sim p_{\text{data}}(\mathbf{x})$  be a data point,  $t \in [0, 1]$  be the time step, and  $\mathbf{z}_t = \mathbf{x} + \sigma(t)\epsilon$  be the forward process of the diffusion model that adds noise to the data. Here  $\sigma(t)$  is the noise schedule and determines how much information is destroyed at each time step  $t$ , with  $\sigma(0) = 0$  and  $\sigma(1) = \sigma_{\max}$ . Karras et al. (2022) showed that this forward process corresponds to the ordinary differential equation (ODE)
+
+$$d\mathbf{z}_t = -\dot{\sigma}(t)\sigma(t) \nabla_{\mathbf{z}_t} \log p_t(\mathbf{z}_t) dt \quad (1)$$
+
+or, equivalently, a stochastic differential equation (SDE) given by
+
+$$d\mathbf{z}_t = -\dot{\sigma}(t)\sigma(t) \nabla_{\mathbf{z}_t} \log p_t(\mathbf{z}_t) dt - \beta(t)\sigma(t)^2 \nabla_{\mathbf{z}_t} \log p_t(\mathbf{z}_t) dt + \sqrt{2\beta(t)}\sigma(t) d\omega_t. \quad (2)$$
+
+Here  $d\omega_t$  is the standard Wiener process, and  $p_t(\mathbf{z}_t)$  is the time-dependent distribution of noisy samples, with  $p_0 = p_{\text{data}}$  and  $p_1 = \mathcal{N}(\mathbf{0}, \sigma_{\max}^2 \mathbf{I})$ . Assuming that we have access to the time-dependent score function  $\nabla_{\mathbf{z}_t} \log p_t(\mathbf{z}_t)$ , we can sample from the data distribution  $p_{\text{data}}$  by solving the ODE or SDE backward in time (from  $t = 1$  to  $t = 0$ ). The unknown score function  $\nabla_{\mathbf{z}_t} \log p_t(\mathbf{z}_t)$  is estimated via a neural denoiser  $D_\theta(\mathbf{z}_t, t)$  that is trained to predict the clean samples  $\mathbf{x}$  from the corresponding noisy samples  $\mathbf{z}_t$ . The framework allows for conditional generation by training a denoiser  $D_\theta(\mathbf{z}_t, t, \mathbf{y})$  that accepts additional input signals  $\mathbf{y}$ , such as class labels or text prompts.
+
+**Training objective** Given a noisy sample  $\mathbf{z}_t$  at time step  $t$ , the denoiser  $D_\theta(\mathbf{z}_t, t, \mathbf{y})$  with parameters  $\theta$  can be trained with the standard MSE loss (also called denoising score matching loss)
+
+$$\arg \min_{\theta} \mathbb{E}_t \left[ \|D_\theta(\mathbf{z}_t, t, \mathbf{y}) - \mathbf{x}\|^2 \right]. \quad (3)$$
+
+The denoiser approximates the time-dependent conditional score function  $\nabla_{\mathbf{z}_t} \log p_t(\mathbf{z}_t|\mathbf{y})$  via
+
+$$\nabla_{\mathbf{z}_t} \log p_t(\mathbf{z}_t|\mathbf{y}) \approx \frac{D_\theta(\mathbf{z}_t, t, \mathbf{y}) - \mathbf{z}_t}{\sigma(t)^2}. \quad (4)$$
+
+**Classifier-free guidance (CFG)** CFG is an inference method for improving the quality of generated outputs by mixing the predictions of a conditional and an unconditional model (Ho & Salimans, 2022). Specifically, given a null condition  $\mathbf{y}_{\text{null}} = \emptyset$  corresponding to the unconditional case, CFG modifies the output of the denoiser at each sampling step according to
+
+$$\hat{D}_\theta(\mathbf{z}_t, t, \mathbf{y}) = D_\theta(\mathbf{z}_t, t, \mathbf{y}_{\text{null}}) + w_{\text{CFG}}(D_\theta(\mathbf{z}_t, t, \mathbf{y}) - D_\theta(\mathbf{z}_t, t, \mathbf{y}_{\text{null}})), \quad (5)$$
+
+where  $w_{\text{CFG}} = 1$  corresponds to the non-guided case. The unconditional model  $D_\theta(\mathbf{z}_t, t, \mathbf{y}_{\text{null}})$  is trained by randomly assigning the null condition  $\mathbf{y}_{\text{null}} = \emptyset$  to the input of the denoiser with probability  $p$ , where we normally have  $p \in [0.1, 0.2]$ . One can also train a separate denoiser to estimate the unconditional score in Equation (5) (Karras et al., 2023). Similar to the truncation method in GANs (Brock et al., 2019), CFG increases the quality of individual images at the expense of less diversity (Murphy, 2023).
+
+{3}------------------------------------------------
+
+## 4 REVISITING CLASSIFIER-FREE GUIDANCE
+
+We now show how a conditional model can be used to simulate the behavior of classifier-free guidance, without needing any auxiliary training to learn the unconditional score function. The analysis in this section is inspired by Sadat et al. (2024).
+
+First, note that at each time step  $t$ , classifier-free guidance implicitly uses the conditional score  $\nabla_{z_t} \log p_t(z_t|y)$  and the unconditional score  $\nabla_{z_t} \log p_t(z_t)$  to guide the sampling process. From Bayes' theorem, we can write  $p_t(z_t|y) = \frac{p_t(y|z_t)p_t(z_t)}{p_t(y)}$ , which gives us
+
+$$\nabla_{z_t} \log p_t(z_t|y) = \nabla_{z_t} \log p_t(z_t) + \nabla_{z_t} \log p_t(y|z_t). \quad (6)$$
+
+Next, assume that we replace the condition  $y$  with a random vector  $\tilde{y} \sim q(\tilde{y})$  that is independent of the input  $z_t$ . In this case, the "classifier"  $p_t(\tilde{y}|z_t)$  is equal to  $q(\tilde{y})$ , which gives us
+
+$$\nabla_{z_t} \log p_t(z_t|\tilde{y}) \approx \nabla_{z_t} \log p_t(z_t) + \nabla_{z_t} \log q(\tilde{y}) = \nabla_{z_t} \log p_t(z_t). \quad (7)$$
+
+This suggests that we can estimate the unconditional score purely based on the conditional model by replacing the condition  $y$  with an independent vector  $\tilde{y}$ . We argue as a result that there is no need to train a separate model  $D_\theta(z_t, t, y_{null})$  to apply classifier-free guidance, as we can use the conditional model itself to predict the score of the unconditional distribution as long as we pick an input condition that is independent of  $z_t$ . We call this method *independent condition guidance* (ICG) for the rest of the paper.
+
+In reality, the scores in Equation (7) are approximated by finite-capacity parametric models on *dependent* data drawn from  $p_t(z_t, y)$ .<sup>1</sup> In this case,  $D_\theta(z_t, t, \tilde{y})$  will not necessarily exactly equal  $D_\theta(z_t, t, y_{null})$  since independent  $\tilde{y}$  and  $z_t$  are technically out of distribution relative to what the model was trained on. We have not found this to be an issue in practice, and further, the expected error in the unconditional score estimate can be made arbitrarily small through both the capacity of  $D_\theta$  and the choice of  $q(\tilde{y})$ . We provide an analysis in the appendix.
+
+**Implementation details** In practice, we experiment with two options for the independent condition. First,  $\tilde{y}$  can be drawn from a Gaussian distribution with a suitable standard deviation so that  $\tilde{y}$  matches the scale of the actual conditioning vector  $y$ . Second, a random condition from the conditioning space, such as a random class label or random clip tokens, can be chosen as the independent  $\tilde{y}$ . We show in Section 7 that both methods perform similarly. However, there may be a slight preference for the random condition over Gaussian noise, as it stays closer to the conditioning distribution that the diffusion model was trained on.
+
+## 5 TIME-STEP GUIDANCE
+
+Inspired by ICG, we next offer an extension of classifier-free guidance that can be used with any model, including unconditional networks. We begin our analysis with class-conditional models and subsequently extend it to a more general setting.
+
+In the class-conditional case, the embedding vector of the class is typically added to the embedding vector of the time step  $t$  to compute the input condition of the diffusion network. Hence, in practice, CFG essentially uses the outputs of the diffusion network for two different input embeddings and takes their difference as the update direction. Thus, we might directly utilize the time-step embedding of each diffusion model as a means to define a similar guidance signal. This leads to a novel method that we refer to as *time-step guidance* (TSG), which, like CFG, increases the quality of generations but, unlike CFG, is applicable even to unconditional models.
+
+In this method, we compute the model outputs for the clean time-step embedding and a perturbed embedding and use their difference to guide the sampling. More specifically, at each time step  $t$ , we update the output via
+
+$$\hat{D}_\theta(z_t, t) = D_\theta(z_t, \tilde{t}) + w_{\text{TSG}}(D_\theta(z_t, t) - D_\theta(z_t, \tilde{t})), \quad (8)$$
+
+where  $\tilde{t}$  is the perturbed version of  $t$ . The intuition behind TSG is that at each time step  $t$ , altering the time-step embedding of the network leads to denoised outputs with either insufficient or excessive
+
+<sup>1</sup>However, at the highest noise scales,  $p_t(z_t, y) \approx p_t(z_t)p(y)$ .
+
+{4}------------------------------------------------
+
+noise removal (see Figure 10 in the appendix). Consequently, these outputs can be exploited to prevent the network from going toward undesirable predictions, thus increasing the accuracy of the score predictions at each time step. As we show below, TSG is related to stochastic Langevin dynamics in terms of the first-order approximation, and hence, is expected to improve generation quality.
+
+**Connection to Langevin dynamics** Let  $\tilde{t} = t + \Delta t$ , where  $\Delta t$  is a small perturbation. Using a Taylor expansion, we get  $D_\theta(z_1, \tilde{t}) = D_\theta(z_1, t) + \frac{\partial D_\theta(z_1, t)}{\partial t} \Delta t$ . Hence,  $\tilde{D}_\theta(z_1, \tilde{t}) = D_\theta(z_1, t) + (1 - w_{\text{TSG}}) \frac{\partial D_\theta(z_1, t)}{\partial t} \Delta t$ . Based on Equation (4), the score function is equal to
+
+$$\nabla_{z_1} \log \tilde{p}_t(z_1) = \nabla_{z_1} \log p_t(z_1) + \frac{1 - w_{\text{TSG}}}{\sigma(t)^2} \frac{\partial D_\theta(z_1, t)}{\partial t} \Delta t. \quad (9)$$
+
+Now, if we follow the Euler sampling step for solving Equation (1), i.e. we define the update rule as  $z_{t-1} = z_t + \eta_t \nabla_{z_t} \log \tilde{p}_t(z_t)$ , then the modified sampling step after time-step guidance will be equal to
+
+$$z_{t-1} = z_t + \eta_t \nabla_{z_t} \log p_t(z_t) + \eta_t \frac{1 - w_{\text{TSG}}}{\sigma(t)^2} \frac{\partial D_\theta(z_t, t)}{\partial t} \Delta t. \quad (10)$$
+
+Assuming that  $\Delta t$  is a Gaussian random variable with zero mean, the update rule resembles a Langevin dynamics step, where the noise strength is determined based on the network behavior as represented by  $\frac{\partial D_\theta(z_t, t)}{\partial t}$ . As Langevin dynamics is known to increase the quality of sampling from a given distribution by compensating for the errors happening at each sampling step, we argue that TSG also behaves similarly in terms of first-order approximation.
+
+**Implementation details** In practice, we implement TSG by perturbing the time-step embedding with zero-mean Gaussian noise according to  $\tilde{t}_{\text{emb}} = t_{\text{emb}} + st^\alpha \mathbf{n}$  where  $\mathbf{n} \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$  and  $st^\alpha$  determines the noise scale at each time step  $t$ . We choose  $s$  and  $\alpha$  such that the scale of the noise portion becomes comparable to the scale of the time-step embedding  $t_{\text{emb}}$ . Empirically, we also find that it is sometimes beneficial to apply the perturbed embeddings only to a portion of layers in the diffusion network, e.g., using  $\tilde{t}_{\text{emb}}$  for the first 10 layers and  $t_{\text{emb}}$  for the rest of layers. We provide ablations on these hyperparameters in Section 7.
+
+## 6 EXPERIMENTS
+
+In this section, we rigorously evaluate ICG and demonstrate its ability to simulate the behavior of CFG across several conditional models. Additionally, we show that TSG improves the quality of both conditional and unconditional generations compared to the non-guided sampling baseline.
+
+**Setup** All experiments are conducted via pre-trained checkpoints provided by official implementations. We use the recommended sampler that comes with each model, such as the EDM sampler for EDM networks (Karras et al., 2022), DPM++ (Lu et al., 2022b) for Stable Diffusion (Rombach et al., 2022), and DDPM (Ho et al., 2020) for DiT-XL/2 (Peebles & Xie, 2022).
+
+**Evaluation** We use Fréchet Inception Distance (FID) (Heusel et al., 2017) as the main metric to measure both quality and diversity due to its alignment with human judgment. As FID is known to be sensitive to small implementation details, we ensure that models under comparison follow the same evaluation setup. For completeness, we also report precision (Kynkäänniemi et al., 2019) as a standalone quality metric and recall (Kynkäänniemi et al., 2019) as a diversity metric whenever possible. F<sub>DINoV2</sub> (Stein et al., 2024) is also reported for the EDM2 model (Karras et al., 2023).
+
+### 6.1 COMPARISON BETWEEN ICG AND CFG
+
+**Qualitative results** The qualitative comparisons between ICG and CFG are given in Figure 1 for Stable Diffusion (Rombach et al., 2022) and DiT-XL/2 (Peebles & Xie, 2022) models. Figure 2 also shows a comparison between the EDM2 model (Karras et al., 2023) guided with a separate unconditional module vs ICG. We observe that both ICG and CFG improve image quality, and the outputs of ICG and CFG are almost identical. This empirical evidence agrees with our theoretical justification provided in Section 4.
+
+{5}------------------------------------------------
+
+![Figure 1: Comparison between CFG and ICG for (a) Stable Diffusion and (b) DiT-XL/2. The figure shows a 2x3 grid of images for each model. The columns are labeled 'w/o guidance', 'CFG', and 'ICG (Ours)'. Each column contains two rows of three images. The images show various subjects like tigers, dogs, and red pandas in different settings, demonstrating the improvement in image quality and detail rendering provided by CFG and ICG over the baseline without guidance.](afe5eb459b7c9cfe880b067777d876d8_img.jpg)
+
+Figure 1: Comparison between CFG and ICG for (a) Stable Diffusion and (b) DiT-XL/2. The figure shows a 2x3 grid of images for each model. The columns are labeled 'w/o guidance', 'CFG', and 'ICG (Ours)'. Each column contains two rows of three images. The images show various subjects like tigers, dogs, and red pandas in different settings, demonstrating the improvement in image quality and detail rendering provided by CFG and ICG over the baseline without guidance.
+
+Figure 1: Comparison between CFG and ICG for (a) Stable Diffusion (Rombach et al., 2022) and (b) DiT-XL/2 (Peebles & Xie, 2022). Both CFG and ICG significantly improve the image quality of the baseline. Also note the similarity between the outputs of CFG and ICG, confirming our theoretical analysis in Section 4.
+
+![Figure 2: Comparison between the EDM2 model guided with another unconditional module and ICG. The figure shows a 2x3 grid of images. The columns are labeled 'w/o guidance', 'CFG', and 'ICG (Ours)'. Each column contains two rows of three images. The images show various subjects like a duck, a red panda, a fox, and a red mailbox, demonstrating that ICG leads to similar generations as CFG and both methods significantly improve output quality compared to sampling without guidance.](0e62b4ac2303ba5f3ff10123a7c0f273_img.jpg)
+
+Figure 2: Comparison between the EDM2 model guided with another unconditional module and ICG. The figure shows a 2x3 grid of images. The columns are labeled 'w/o guidance', 'CFG', and 'ICG (Ours)'. Each column contains two rows of three images. The images show various subjects like a duck, a red panda, a fox, and a red mailbox, demonstrating that ICG leads to similar generations as CFG and both methods significantly improve output quality compared to sampling without guidance.
+
+Figure 2: Comparison between the EDM2 model (Karras et al., 2023) guided with another unconditional module and ICG. We observe that using ICG leads to similar generations as CFG, and both methods significantly improve output quality compared to sampling without guidance.
+
+**Quantitative results** We now show that ICG and CFG both result in similar performance metrics across several conditional models. As shown in Table 1, compared to CFG, ICG achieves better or similar performance across all metrics.<sup>2</sup> In Table 2, we also compare the effect of ICG on EDM (Karras et al., 2022) and EDM2 (Karras et al., 2023) models that were not trained with the CFG objective. The table shows that ICG performs similarly to guiding the generations with a separate unconditional module.
+
+**Effect of removing the CFG objective from training** In this experiment, we demonstrate that the training component allocated to the CFG objective (i.e., label dropping) is unnecessary, and better results are obtained by training a purely conditional model and guiding the generations at inference with ICG. Using a DiT model for class-conditional ImageNet generation, Figure 3 shows that the purely conditional model consistently outperforms standard training with label dropping ( $p = 0.1$ ) across all checkpoints. Consequently, training resources can be reallocated to the conditional part, leading to either faster convergence (by approximately 30%) or a better model (with around a 20% reduction in FID) with the same number of training iterations.
+
+<sup>2</sup>For MDM (Tevet et al., 2023), recall is not available, and R-precision is reported similar to the paper.
+
+{6}------------------------------------------------
+
+Table 1: Quantitative comparison between CFG and ICG. ICG is able to achieve similar metrics to standard CFG by extracting the unconditional score from the conditional model itself.
+
+| Model | Architecture | Guidance | FID ↓ | Precision ↑ | Recall ↑ |
+|-|-|-|-|-|-|
+| Stable Diffusion (Rombach et al., 2022) | UNet | CFG | 20.13 | <b>0.69</b> | <b>0.54</b> |
+|  |  | ICG (Ours) | <b>20.05</b> | <b>0.69</b> | 0.53 |
+| DiT-XL/2 (Peebles & Xie, 2022) | Transformer | CFG | 5.56 | 0.81 | <b>0.66</b> |
+|  |  | ICG (Ours) | <b>5.50</b> | <b>0.83</b> | 0.65 |
+| Pose-to-Image (Sadat et al., 2024) | UNet | CFG | 14.61 | 0.93 | 0.02 |
+|  |  | ICG (Ours) | <b>13.46</b> | <b>0.94</b> | <b>0.03</b> |
+| MDM (Tevet et al., 2023) | Transformer | CFG | 0.65 | <b>0.73</b> | - |
+|  |  | ICG (Ours) | <b>0.47</b> | 0.71 | - |
+
+Table 2: Quantitative comparison between CFG and ICG for EDM networks. Although these models are not trained with the CFG objective, guiding their generations using a separate unconditional module results in similar outcomes to using ICG.
+
+| Model | Dataset | Guidance | FID ↓ | FD <sub>DINOv2</sub> ↓ |
+|-|-|-|-|-|
+| EDM2-XS (Karras et al., 2023) | Imagenet | CFG | 3.36 | 79.94 |
+|  |  | ICG (Ours) | <b>3.35</b> | <b>79.54</b> |
+| EDM (Karras et al., 2022) | CIFAR-10 | CFG | <b>1.87</b> | - |
+|  |  | ICG (Ours) | <b>1.87</b> | - |
+
+![Figure 3: Comparison of CFG and ICG during training of a DiT model on ImageNet. The figure contains four line plots: FID, Inception Score (IS), Precision, and Recall, all plotted against Training Iterations (x10^3). In the FID plot, ICG (orange solid line) starts at a higher FID and decreases more rapidly than CFG (blue dashed line), reaching a lower FID by 300 iterations. In the IS plot, ICG increases more rapidly than CFG, reaching a higher IS by 300 iterations. In the Precision plot, ICG increases more rapidly than CFG, reaching a higher precision by 300 iterations. In the Recall plot, ICG increases more rapidly than CFG, reaching a higher recall by 300 iterations. The legend indicates that the orange solid line represents ICG (Ours) and the blue dashed line represents CFG.](4279c8be6ec4ed56f4b3349be98bb426_img.jpg)
+
+Figure 3: Comparison of CFG and ICG during training of a DiT model on ImageNet. The figure contains four line plots: FID, Inception Score (IS), Precision, and Recall, all plotted against Training Iterations (x10^3). In the FID plot, ICG (orange solid line) starts at a higher FID and decreases more rapidly than CFG (blue dashed line), reaching a lower FID by 300 iterations. In the IS plot, ICG increases more rapidly than CFG, reaching a higher IS by 300 iterations. In the Precision plot, ICG increases more rapidly than CFG, reaching a higher precision by 300 iterations. In the Recall plot, ICG increases more rapidly than CFG, reaching a higher recall by 300 iterations. The legend indicates that the orange solid line represents ICG (Ours) and the blue dashed line represents CFG.
+
+Figure 3: Comparison of CFG and ICG during training of a DiT model on ImageNet. Compared to standard CFG with label dropping, using ICG with a purely conditional model achieves better FID across all checkpoints. This indicates that the iterations spent on the CFG objective could be better allocated to training the conditional score, ultimately leading to a better model.
+
+**Varying the Guidance Scale** Next, we demonstrate that by varying the guidance scale of ICG, we can increase the quality of outputs in a manner similar to standard CFG. As shown in Figure 4, increasing the guidance scale improves precision but reduces recall. The FID plots also form a U-shaped curve, consistent with what we expect from standard CFG.
+
+**Results for ControlNet** We also show that ICG can be used for improving the quality of image-conditioned models as well. We use ControlNet (Zhang & Agrawala, 2023) as an example in this section since it is not trained with the CFG objective on the image condition input. That is, it only applies CFG to the text component of the condition. Our results are given in Figure 5. We see that without any text prompt, ICG significantly improves the quality of generations over the base sampling.
+
+### 6.2 EFFECTIVENESS OF TIME-STEP GUIDANCE
+
+Lastly, we show the effectiveness of time-step guidance in improving generation quality without relying on any information about the conditioning signal. The qualitative results are given in Figure 6. We can see that TSG increases the image quality of both conditional and unconditional sampling. Table 3 also presents the quantitative evaluation of TSG for both conditional and unconditional generation. Similar to CFG, using TSG significantly improves FID by trading diversity with quality. Finally, Figure 7 shows how TSG behaves as we increase the guidance scale. We observe that similar to CFG, TSG also has a U-shaped plot for the FID as the guidance scale increases.
+
+{7}------------------------------------------------
+
+![Figure 4: Behavior of ICG as the guidance scale increases. Six line plots showing FID, Precision, and Recall for DiT-XL2 and Stable Diffusion models as a function of guidance scale w.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 4 displays six line plots showing the behavior of ICG as the guidance scale  $w$  increases (ranging from 1 to 2.6). The plots compare DiT-XL2 (purple line) and Stable Diffusion (red line) across three metrics: FID, Precision, and Recall.
+
+- FID:** For DiT-XL2, FID decreases from approximately 15.5 at  $w=1$  to a minimum of about 6.5 at  $w=1.4$ , then increases to about 14.5 at  $w=2.6$ . For Stable Diffusion, FID decreases from approximately 36 at  $w=1$  to a minimum of about 20 at  $w=1.4$ , then increases to about 24 at  $w=2.6$ .
+- Precision:** For DiT-XL2, Precision increases from approximately 0.65 at  $w=1$  to about 0.92 at  $w=2.6$ . For Stable Diffusion, Precision increases from approximately 0.4 at  $w=1$  to about 0.7 at  $w=2.6$ .
+- Recall:** For DiT-XL2, Recall decreases from approximately 0.72 at  $w=1$  to about 0.4 at  $w=2.6$ . For Stable Diffusion, Recall decreases from approximately 0.65 at  $w=1$  to about 0.4 at  $w=2.6$ .
+
+Figure 4: Behavior of ICG as the guidance scale increases. Six line plots showing FID, Precision, and Recall for DiT-XL2 and Stable Diffusion models as a function of guidance scale w.
+
+Figure 4: Behavior of ICG as the guidance scale increases. Similar to CFG, ICG trades diversity (lower recall) for quality (higher precision) at higher guidance scales.
+
+![Figure 5(a): Pose-to-image generation results. A 2x6 grid of images showing 'w/o guidance' (top row) and 'ICG' (bottom row) results for various poses.](efca2dce0095c9dc2a68e9af6b2bfd40_img.jpg)
+
+Figure 5(a) displays two rows of generated images for pose-to-image generation. The top row, labeled "w/o guidance", shows six generated images that are heavily degraded with noise and artifacts. The bottom row, labeled "ICG", shows six generated images that are significantly clearer and more structurally accurate, better matching the input poses.
+
+Figure 5(a): Pose-to-image generation results. A 2x6 grid of images showing 'w/o guidance' (top row) and 'ICG' (bottom row) results for various poses.
+
+(a) Pose-to-image generation
+
+![Figure 5(b): Depth-to-image generation results. A 2x4 grid of images showing 'w/o guidance' (top row) and 'ICG' (bottom row) results for various depth maps.](af54a0b30d50f3f8620b331cdc59ae3a_img.jpg)
+
+Figure 5(b) displays two rows of generated images for depth-to-image generation. The top row, labeled "w/o guidance", shows four generated images that are heavily degraded with noise and artifacts. The bottom row, labeled "ICG", shows four generated images that are significantly clearer and more structurally accurate, better matching the input depth maps.
+
+Figure 5(b): Depth-to-image generation results. A 2x4 grid of images showing 'w/o guidance' (top row) and 'ICG' (bottom row) results for various depth maps.
+
+(b) Depth-to-image generation
+
+Figure 5: Image-conditioned generation with ControlNet (without prompt). ICG significantly increases the quality of generations by applying guidance to the image condition.
+
+{8}------------------------------------------------
+
+![Figure 6: Effectiveness of TSG to improve the quality of both unconditional and conditional generation across two different models. (a) DiT-XL/2 unconditional: w/o guidance vs TSG (Ours) for class-conditional generation. (b) Stable Diffusion unconditional: w/o guidance vs TSG (Ours) for text-conditional generation. (c) DiT-XL/2 conditional: w/o guidance vs TSG (Ours) for class-conditional generation. (d) Stable Diffusion conditional: w/o guidance vs TSG (Ours) for text-conditional generation.](d4e9f8f6bf5d7853ecae9c9633900af1_img.jpg)
+
+Figure 6: Effectiveness of TSG to improve the quality of both unconditional and conditional generation across two different models. (a) DiT-XL/2 unconditional: w/o guidance vs TSG (Ours) for class-conditional generation. (b) Stable Diffusion unconditional: w/o guidance vs TSG (Ours) for text-conditional generation. (c) DiT-XL/2 conditional: w/o guidance vs TSG (Ours) for class-conditional generation. (d) Stable Diffusion conditional: w/o guidance vs TSG (Ours) for text-conditional generation.
+
+Figure 6: Effectiveness of TSG to improve the quality of both unconditional and conditional generation across two different models: DiT-XL/2 (Peebles & Xie, 2022) for class-conditional generation, and Stable Diffusion (Rombach et al., 2022) for text-conditional generation.
+
+Table 3: Quantitative comparison between the baseline sampling of the diffusion models and sampling with TSG. TSG significantly boosts quality (lower FID) across various setups.
+
+| Model | Architecture | Type | Guidance | FID ↓ | Precision ↑ | Recall ↑ |
+|-|-|-|-|-|-|-|
+| Stable Diffusion (Rombach et al., 2022) | UNet | Unconditional | ✗ | 69.38 | 0.42 | 0.49 |
+|  |  |  | TSG (Ours) | <b>56.65</b> | <b>0.54</b> | <b>0.54</b> |
+|  |  | Text-conditional | ✗ | 36.63 | 0.48 | <b>0.64</b> |
+|  |  |  | TSG (Ours) | <b>22.17</b> | <b>0.62</b> | 0.59 |
+| DiT-XL/2 (Peebles & Xie, 2022) | Transformer | Unconditional | ✗ | 48.67 | 0.48 | <b>0.59</b> |
+|  |  |  | TSG (Ours) | <b>29.03</b> | <b>0.69</b> | 0.55 |
+|  |  | Class-conditional | ✗ | 15.49 | 0.64 | <b>0.74</b> |
+|  |  |  | TSG (Ours) | <b>6.39</b> | <b>0.82</b> | 0.65 |
+
+![Figure 7: Behavior of TSG as the guidance scale increases for DiT-XL/2. Three line plots show FID, Precision, and Recall as a function of the guidance scale w. FID decreases to a minimum at w=2.5 and then increases. Precision increases and plateaus. Recall decreases monotonically.](925f55ce69802b9d3b00546382663ee2_img.jpg)
+
+Figure 7: Behavior of TSG as the guidance scale increases for DiT-XL/2. Three line plots show FID, Precision, and Recall as a function of the guidance scale w. FID decreases to a minimum at w=2.5 and then increases. Precision increases and plateaus. Recall decreases monotonically.
+
+Figure 7: Behavior of TSG as the guidance scale increases for DiT-XL/2. Similar to CFG, TSG also significantly improves FID by trading diversity (recall) with quality (precision).
+
+**Combining TSG and ICG** We also demonstrate that ICG and TSG can be complementary to each other when combined at the proper scale. The quantitative results of this experiment are presented in Table 4 with a visual example given in Figure 8. The table indicates that the combination of ICG and TSG outperforms each method in isolation in terms of FID, and all guided sampling algorithms significantly outperform the non-guided baseline.
+
+Table 4: Compatibility of ICG and TSG
+
+| ICG | TSG | FID ↓ | Precision ↑ | Recall ↑ |
+|-|-|-|-|-|
+| ✗ | ✗ | 15.49 | 0.64 | <b>0.74</b> |
+| ✓ | ✗ | 6.47 | 0.77 | 0.69 |
+| ✗ | ✓ | 9.55 | 0.70 | 0.71 |
+| ✓ | ✓ | <b>5.76</b> | <b>0.82</b> | 0.65 |
+
+{9}------------------------------------------------
+
+![Figure 8: Visual example of combining ICG and TSG. The figure shows three columns of generated images: 'w/o guidance', 'ICG', and 'ICG + TSG'. Each column contains a 2x3 grid of images. The 'w/o guidance' column shows various scenes like a yellow school bus, a person on a beach, and a dog. The 'ICG' column shows similar scenes but with some artifacts. The 'ICG + TSG' column shows the same scenes with improved visual quality and fewer artifacts.](625e10f48104ba2b06b2220a9b224712_img.jpg)
+
+Figure 8: Visual example of combining ICG and TSG. The figure shows three columns of generated images: 'w/o guidance', 'ICG', and 'ICG + TSG'. Each column contains a 2x3 grid of images. The 'w/o guidance' column shows various scenes like a yellow school bus, a person on a beach, and a dog. The 'ICG' column shows similar scenes but with some artifacts. The 'ICG + TSG' column shows the same scenes with improved visual quality and fewer artifacts.
+
+Figure 8: Visual example of combining ICG and TSG. The combination yields better visual generations compared to the baseline and using ICG alone.
+
+Table 6: Ablation study examining various design elements in TSG.
+
+| (a) Influence of the noise scale $s$ |  |  |  | (b) Influence of $\alpha$ |  |  |  | (c) Maximum layer index |  |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|
+| $s$ | FID ↓ | Precision ↑ | Recall ↑ | $\alpha$ | FID ↓ | Precision ↑ | Recall ↑ | Index | FID ↓ | Precision ↑ | Recall ↑ |
+| 1.0 | 10.23 | 0.69 | 0.35 | 0.75 | 7.22 | 0.82 | 0.62 | 5 | 7.84 | 0.75 | <b>0.69</b> |
+| 2.0 | <b>6.85</b> | <b>0.80</b> | <b>0.69</b> | 1.0 | <b>6.39</b> | <b>0.84</b> | 0.65 | 10 | <b>6.85</b> | 0.79 | 0.65 |
+| 2.5 | 7.94 | <b>0.80</b> | <b>0.69</b> | 1.25 | 6.47 | 0.78 | <b>0.66</b> | 15 | 7.65 | <b>0.82</b> | 0.65 |
+
+## 7 ABLATION STUDIES
+
+We next present the ablation studies on the effect of random conditioning in ICG and the hyperparameters in TSG. All ablations are conducted using the DiT-XL/2 model (Peebles & Xie, 2022).
+
+**The choice of random condition in ICG** We first show that both Gaussian noise and random conditions can be used for estimating the unconditional part in ICG. The quantitative results are given in Table 5. The table shows that both methods are viable options for simulating classifier-free guidance without training.
+
+Table 5: Ablation on the choice of independent condition in ICG.
+
+| ICG method | FID ↓ | Precision ↑ | Recall ↑ |
+|-|-|-|-|
+| Gaussian noise | <b>5.50</b> | <b>0.83</b> | <b>0.65</b> |
+| Random condition | 5.55 | <b>0.83</b> | <b>0.65</b> |
+
+**Impact of hyperparameters in time-step guidance** This ablation study explores the effect of hyperparameters in TSG. The results are presented in Table 6. We observe that as we introduce more perturbation into the time-step embedding of the model, in the form of higher noise scale  $s$  (Table 6a), lower power  $\alpha$  (Table 6b), or higher layer index (Table 6c), precision improves while recall decreases. This suggests that the amount of perturbation should be balanced for a good trade-off between diversity and quality. We also empirically observed that adding too much noise to the time-step embedding hurts image quality.
+
+## 8 DISCUSSION AND CONCLUSION
+
+In this paper, we revisited the core aspects of classifier-free guidance and showed that by replacing the conditional vector in a trained conditional diffusion model with an independent condition, we can efficiently estimate the score of the unconditional distribution. We then introduced independent condition guidance (ICG), a novel method that simulates the same behavior as CFG without the need to learn an unconditional model during training. Inspired by this, we also proposed time-step guidance (TSG) and demonstrated that the time-step information learned by the diffusion model can be leveraged to enhance the quality of generations, even for unconditional models. Our experiments indicate that ICG performs similarly to standard CFG and alleviates the need to consider the CFG objective during training. Thus, ICG streamlines the training of conditional models and improves training efficiency. Additionally, we verified that TSG also improves generation quality in a manner similar to CFG, without relying on any conditional information. As with CFG, challenges remain in accelerating the proposed methods to narrow the gap between the cost of guided and unguided sampling (i.e., eliminating the need to query the diffusion model twice per sampling step); we view this topic as a promising avenue for further research.
+
+ Rest of paper (reference and Appendix) is removed.

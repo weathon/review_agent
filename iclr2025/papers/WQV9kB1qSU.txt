@@ -1,0 +1,308 @@
+
+
+{0}------------------------------------------------
+
+# TRANSITION PATH SAMPLING WITH IMPROVED OFF-POLICY TRAINING OF DIFFUSION PATH SAMPLERS
+
+Kiyoung Seong<sup>†</sup>, Seonghyun Park<sup>†</sup>, Seonghwan Kim, Woo Youn Kim, Sungsoo Ahn<sup>†</sup>  
+KAIST
+
+{kyseong98, hyun26, dmdtka00, wooyoun, sungsoo.ahn}@kaist.ac.kr
+
+## ABSTRACT
+
+Understanding transition pathways between two meta-stable states of a molecular system is crucial to advance drug discovery and material design. However, unbiased molecular dynamics (MD) simulations are computationally infeasible because of the high energy barriers that separate these states. Although recent machine learning techniques are proposed to sample rare events, they are often limited to simple systems and rely on collective variables (CVs) derived from costly domain expertise. In this paper, we introduce a novel approach that trains diffusion path samplers (DPS) to address the transition path sampling (TPS) problem without requiring CVs. We reformulate the problem as an amortized sampling from the transition path distribution by minimizing the log-variance divergence between the path distribution induced by DPS and the transition path distribution. Based on the log-variance divergence, we propose learnable control variates to reduce the variance of gradient estimators and the off-policy training objective with replay buffers and simulated annealing techniques to improve sample efficiency and diversity. We also propose a scale-based equivariant parameterization of the bias forces to ensure scalability for large systems. We extensively evaluate our approach, termed TPS-DPS, on a synthetic system, small peptide, and challenging fast-folding proteins, demonstrating that it produces more realistic and diverse transition pathways than existing baselines. We provide links to our [project page](#) and [code](#).
+
+## 1 INTRODUCTION
+
+In drug discovery and material design, it is crucial to understand the mechanisms of transitions between meta-stable states of molecular systems, such as protein folding (Salsbury Jr, 2010; Piana et al., 2012), chemical reaction (Mulholland, 2005; Ahn et al., 2019), and nucleation (Thanh et al., 2014; Beaupere et al., 2018). Molecular dynamics (MD) simulations have become one of the most widely used tools for sampling these transitions. However, sampling transition paths with unbiased MD simulations is computationally expensive due to high energy barriers, which cause an exponential decay in the probability of making a transition (Pechukas, 1981).
+
+To address this problem, researchers have developed enhanced sampling approaches such as steered MD (SMD; Schlittler et al., 1994; Izrailev et al., 1999), umbrella sampling (Torrie & Valleau, 1977; Kästner, 2011), meta-dynamics (Ensing et al., 2006; Branduardi et al., 2012; Bussi & Branduardi, 2015), adaptive biasing force (ABF; Comer et al., 2015), on-the-fly probability-enhanced sampling (OPES; Invernizzi & Parrinello, 2020) methods. These methods utilize *bias forces* to facilitate transitions across high energy barriers. They require collective variables (CVs), functions of atomic coordinates designed to capture the slow degree of freedom. Although effective for simple systems, the reliance on expensive domain knowledge limits the applicability of the methods to complex systems where CVs are less understood.
+
+Recently, machine learning has emerged as a promising paradigm for CV-free transition path sampling (TPS) (Das et al., 2021; Lelièvre et al., 2023; Holdijk et al., 2024). The key idea is to parameterize the bias force using a neural network and train it to sample transition paths directly via the biased MD simulation. In particular, Lelièvre et al. (2023) considered reinforcement learning to sample paths
+
+<sup>†</sup> Work done in POSTECH
+
+{1}------------------------------------------------
+
+escaping meta-stable states. Das et al. (2021); Hua et al. (2024); Holdijk et al. (2024) considered TPS problem as minimizing the reverse Kullback-Leibler (KL) divergence between the path measures induced by the biased MD and the target path measure. However, minimizing the reverse KL divergence suffers from mode collapse, capturing only a subset of modes of the target distribution (Vargas et al., 2023; Richter & Berner, 2024). Furthermore, Das et al. (2021); Lelièvre et al. (2023); Hua et al. (2024); Holdijk et al. (2024) limited their evaluation to low-dimensional synthetic systems or small peptides. Developing machine learning algorithms that generate accurate and diverse transition pathways for complex molecular systems remains an open challenge.
+
+**Contribution.** In this work, we propose the *diffusion path sampler* (DPS) to solve the transition path sampling problem.<sup>1</sup> Our approach, coined TPS-DPS, (1) trains the bias force by minimizing a recently proposed log-variance divergence (Nijsken & Richter, 2021) between the path measure induced by the biased MD and the target path measure, and (2) uses scale-based parameterization of the bias force to handle large systems including fast-folding proteins. Specifically, to leverage desirable properties of the log-variance divergence, such as robustness of gradient estimator and degree of freedom in reference path measure, we propose to learn a control variate for reducing the variance of gradient estimators and employ *off-policy* training scheme with replay buffer and simulated annealing to improve sample efficiency and prevent the mode collapse.
+
+We also introduce a new scale-based equivariant parameterization for the bias force to frequently sample meaningful paths in training. Our key idea is to predict the atom-wise positive scaling factor of displacement from current molecular states to the target meta-stable state. This guarantees the bias force to decrease the distance between them for every MD step. We also use the Kabsch algorithm (Kabsch, 1976) to align the current molecular states with the target meta-stable state, guaranteeing  $SE(3)$  equivariance of bias force for better generalization across the states.
+
+We extensively evaluate our method on the synthetic double-well potential with dual channels, Alanine Dipeptide, and four fast-folding proteins: Chignolin, Trp-cage, BBA, and BBL (Lindorff-Larsen et al., 2011). We compare TPS-DPS with the ML approach (PIPS; Holdijk et al., 2024), as well as classical non-ML methods, e.g., steered MD (SMD; Schlitter et al., 1994; Izrailev et al., 1999). Our experiments demonstrate that TPS-DPS consistently generates realistic and diverse transition paths, similar to the ground truth ensemble. In addition, we do ablation studies of the proposed components.
+
+## 2 RELATED WORK
+
+**Transition path sampling without ML.** Metadynamics (Branduardi et al., 2012), on-the-fly probability-enhanced sampling (OPES; Invernizzi & Parrinello, 2020), adaptive biasing force (ABF; Comer et al., 2015), and steered molecular dynamics (SMD; Schlitter et al., 1994; Izrailev et al., 1999) were introduced to explore molecular conformations that are difficult to access by unbiased molecular dynamics (MD) within limited simulation times (Hénin et al., 2022). However, they mostly rely on collective variables (CVs) for high-dimensional problems and are inapplicable to systems with unknown CVs. To sample transition paths without CVs, Dellago et al. (1998) proposed shooting methods that use the Markov chain Monte Carlo (MCMC) procedure on path space. However, these methods often suffer from long mixing times in path space, which hinders the exploration of diverse transition paths. Additionally, high rejection rates can further reduce their efficiency.
+
+**Data driven ML approaches.** Recently, generative models have been used to sample new transition paths given a dataset of transition paths. Petersen et al. (2023); Triplett & Lu (2023) and Lelièvre et al. (2023) applied diffusion probabilistic models (Ho et al., 2020) and variational auto-encoders (Kingma & Welling, 2013) for transition path sampling, respectively. However, these methods are limited to small systems and struggle to collect data using unbiased MD simulations due to the high energy barriers. Klein et al. (2024); Schreiner et al. (2024); Jing et al. (2024) proposed to accelerate MD using time-coarsened dynamics, but the time-coarsened dynamics cannot capture the details of the transition, e.g., the transition states. Duan et al. (2023); Kim et al. (2024) used neural networks to generate transition states of a given chemical reaction, but cannot generate transition paths.
+
+**Data free ML approaches.** Without a previously collected dataset, Das et al. (2021); Lelièvre et al. (2023); Sipka et al. (2023); Hua et al. (2024); Holdijk et al. (2024) trained the bias forces to
+
+<sup>1</sup>We coin our method diffusion path sampler since it samples paths using diffusion SDE, similar to diffusion samplers (Zhang & Chen, 2022; Vargas et al., 2023) that use diffusion SDEs for sampling the final state.
+
+{2}------------------------------------------------
+
+sample transition paths using the biased MD. Lelièvre et al. (2023) used reinforcement learning to train the bias forces but focused on escaping an initial meta-stable state rather than targeting a given meta-stable state. Sipka et al. (2023) used differentiable biased MD simulation to train bias potential and introduce partial back-propagation and graph mini-batching techniques to resolve computational issues in differentiable simulation. Das et al. (2021); Hua et al. (2024); Holdijk et al. (2024) considered the TPS problem as minimizing the reverse KL divergence between path distribution from biased MD and transition path distribution. Das et al. (2021); Hua et al. (2024) limited their evaluation to low-dimensional synthetic systems. In this work, we mainly compare our method with (PIPS; Holdijk et al., 2024). Concurrent to our work, Du et al. (2024) considered the TPS problem as minimizing Doob’s Lagrangian objective with boundary constraints. They parameterized marginal distribution as (mixture) Gaussian path distribution to satisfy the boundary constraints without simulation in training time and sampled transition paths with the bias force derived from the Fokker-Planck equation in inference time.
+
+## 3 TRANSITION PATH SAMPLING WITH DIFFUSION PATH SAMPLERS
+
+In this section, we introduce our method, coined transition path sampling with diffusion path sampler (TPS-DPS). Our main idea is to formulate the transition path sampling (TPS) problem as a minimization of the log-variance divergence (Nüsken & Richter, 2021) between two path measures: the path measure induced by DPS and that of transition paths. Our main methodological contribution is twofold: (1) a new off-policy training algorithm that minimizes the log-variance divergence with the learnable control variate, replay buffer, and simulated annealing (2) a  $SE(3)$  equivariant scale-based parameterization of the bias force that has an inductive bias for dense training signals in large systems.
+
+### 3.1 PROBLEM SETUP
+
+Our goal is to sample transition paths from one meta-stable state to another meta-stable state given a molecular system. We provide an example of the problem for Alanine Dipeptide in Figure 1. We view this as a task to sample paths from an unbiased molecular dynamics (MD) in Equation (1) conditioned on its starting and ending points of initial and target meta-stable states, respectively. To solve this task, we train the bias force parameterized by a neural network to amortize the sampling procedure.
+
+**Molecular dynamics.** We consider a MD simulation on time interval  $[0, T]$ , i.e., the motion of a molecular state  $\mathbf{X}_t = (\mathbf{R}_t, \mathbf{V}_t) \in \mathbb{R}^{6N}$  at time  $t$  where  $N$  is the number of atoms,  $\mathbf{R}_t \in \mathbb{R}^{3N}$  is the atom-wise positions and  $\mathbf{V}_t \in \mathbb{R}^{3N}$  is the atom-wise velocities. In particular, we adopt Langevin dynamics (Bussi & Parrinello, 2007) defined as the following SDE:
+
+$$d\mathbf{X}_t = \mathbf{u}(\mathbf{X}_t)dt + \Sigma d\mathbf{W}_t, \quad \mathbf{u}(\mathbf{X}_t) = \left( \mathbf{V}_t, -\frac{\nabla U(\mathbf{R}_t)}{m} - \gamma \mathbf{V}_t \right), \quad \Sigma = \text{diag} \left( \zeta, \sqrt{\frac{2\gamma k_B \lambda}{m}} \right) \quad (1)$$
+
+where  $U$ ,  $m$ ,  $\gamma$ ,  $k_B$ ,  $\lambda$ , and  $\mathbf{W}_t$  denote the potential energy function, the atom-wise masses, the friction term, the Boltzmann constant, the absolute temperature, and the Brownian motion, respectively, and  $\zeta \in \mathbb{R}^{3N}$  is a vector of positive infinitesimal values. MD in Equation (1) induces the path measure, denoted by  $\mathbb{P}_0$ , which refers to the positive measure defined on measurable subsets of the path space  $\mathcal{C}([0, T]; \mathbb{R}^{6N})$  consisting of continuous functions  $\mathbf{X} : [0, T] \rightarrow \mathbb{R}^{6N}$ . The path (probability) measure  $\mathbb{P}_0$  induced by MD assigns high probability to a set of the probable paths when solving MD.
+
+**Transition path sampling.** One of the challenges in sampling transition paths through unbiased MD simulations is the meta-stability: a state remains trapped for a long time in the initial meta-stable state  $\mathcal{A} \subseteq \mathbb{R}^{3N}$  before transitioning into a distinct meta-stable state  $\mathcal{B} \subseteq \mathbb{R}^{3N}$ . To capture the rare event where transition from  $\mathcal{A}$  to  $\mathcal{B}$  occurs, we constrain paths  $\mathbf{X} = (\mathbf{X}_t)_{0 \leq t \leq T}$  sampled from
+
+![Figure 1: Problem setup. The figure shows a 3D visualization of the free energy landscape of Alanine Dipeptide. The landscape is a complex surface with two deep wells labeled 'State A' and 'State B'. A yellow dotted line represents the sampled transition path between these two states. White circles along the path indicate snapshots of the molecular structure at various points. A white star marks the transition state, which is the highest energy point on the path between the two stable states. The axes are labeled with phi and psi, representing torsion angles.](87ee59af1eaa44c9b1555c87d6abe0da_img.jpg)
+
+Figure 1: Problem setup. The figure shows a 3D visualization of the free energy landscape of Alanine Dipeptide. The landscape is a complex surface with two deep wells labeled 'State A' and 'State B'. A yellow dotted line represents the sampled transition path between these two states. White circles along the path indicate snapshots of the molecular structure at various points. A white star marks the transition state, which is the highest energy point on the path between the two stable states. The axes are labeled with phi and psi, representing torsion angles.
+
+Figure 1: **Problem setup.** The sampled transition path (yellow dotted lines) from the state  $\mathcal{A}$  to the state  $\mathcal{B}$  on the free energy landscape of Alanine Dipeptide. We visualize the snapshots (white circles) of the transition path and the transition state (white star).
+
+{3}------------------------------------------------
+
+unbiased MD to satisfy  $\mathbf{R}_0 \in \mathcal{A}$ ,  $\mathbf{R}_T \in \mathcal{B}$  for a fixed time  $T$ . Since the meta-stable state  $\mathcal{A}$  and  $\mathcal{B}$  are not well-specified for many molecular systems, we simplify this task by (1) fixing a local minima  $\mathbf{R}_A, \mathbf{R}_B$  of the potential energy function in the meta-stable states  $\mathcal{A}, \mathcal{B}$  and (2) sampling a transition path  $\mathbf{X}$  that starts from the state  $\mathbf{R}_0 = \mathbf{R}_A$  and ends at the vicinity of  $\mathbf{R}_B$ .
+
+To be specific, we aim to sample from the target path measure  $\mathbb{Q}$ , which is obtained by reweighting the path measure  $\mathbb{P}_0$  with the (normalized) indicator function. The indicator function assigns zero weight to paths that do not reach the vicinity of the target position  $\mathbf{R}_B$ . Formally, the reweighting function is called the Radon–Nikodym derivative defined as follows:
+
+$$\frac{d\mathbb{Q}}{d\mathbb{P}_0}(\mathbf{X}) = \frac{1_{\mathcal{B}}(\mathbf{X})}{Z}, \quad 1_{\mathcal{B}}(\mathbf{X}) = \begin{cases} 1 & \text{if } \|\rho_T \cdot \mathbf{R}_B - \mathbf{R}_T\| \leq \delta, \\ 0 & \text{otherwise,} \end{cases} \quad Z = \mathbb{E}_{\mathbb{P}_0}[1_{\mathcal{B}}(\mathbf{X})], \quad (2)$$
+
+where  $\cdot$  denotes group action associated with the  $SE(3)$  space and  $\rho_T \cdot \mathbf{R}_B$  is the aligned target position by the optimal rotation-translation  $\rho_T \in SE(3)$  to minimize its Euclidean distance to  $\mathbf{R}_T$ , i.e.,  $\rho_T = \operatorname{argmin}_{\rho \in SE(3)} \|\mathbf{R}_T - \rho \cdot \mathbf{R}_B\|$ . Such a transformation can be obtained from the Kabsch algorithm in  $O(N)$  complexity (Kabsch, 1976).
+
+Note that one may consider naïve rejection sampling to sample transition paths, based on running unbiased MD to sample a path  $\mathbf{X}$  from the path measure  $\mathbb{P}_0$  and accepting if the path  $\mathbf{X}$  arrives at the neighborhood of the position  $\mathbf{R}_B$  with the radius  $\delta$ . However, this method struggles to sample transition paths of systems with high energy barriers since the sampled path by unbiased MD rarely reaches the target states, i.e., the rejection ratio is too high.
+
+### 3.2 LOG-VARIANCE MINIMIZATION
+
+In this section, we propose our algorithm to amortize transition path sampling. Our key idea is to train a neural network to induce a path measure that matches the target path measure  $\mathbb{Q}$ , using the log-variance divergence between the path measures. We propose a new training scheme to minimize the log-variance divergence based on learning the control variate of its gradient and a replay buffer to improve sample efficiency and diversity.
+
+**Amortizing transition path sampling with log-variance divergence.** To match the target path measure  $\mathbb{Q}$ , we consider a biased MD defined by a policy  $\mathbf{v}$  (or bias force  $\mathbf{b}$ ) as the following SDE:
+
+$$d\mathbf{X}_t = (\mathbf{u}(\mathbf{X}_t) + \Sigma \mathbf{v}(\mathbf{X}_t))dt + \Sigma d\mathbf{W}_t, \quad \mathbf{v}(\mathbf{X}_t) = \Sigma^{-1} \left( 0, \frac{\mathbf{b}(\mathbf{X}_t)}{m} \right). \quad (3)$$
+
+We also let  $\mathbb{P}_\mathbf{v}$  denote the path measure induced by the SDE. To amortize transition path sampling, we match the path measure  $\mathbb{P}_{\mathbf{v}_\theta}$  of a parameterized policy  $\mathbf{v}_\theta$  with the target path measure  $\mathbb{Q}$  by minimizing the log-variance divergence:
+
+$$D_{\text{LV}}^\mathbb{Q}(\mathbb{P}_{\mathbf{v}_\theta} \| \mathbb{Q}) = \mathbb{V}_\mathbb{P} \left[ \log \frac{d\mathbb{Q}}{d\mathbb{P}_{\mathbf{v}_\theta}} \right] = \mathbb{E}_\mathbb{P} \left[ \left( \log \frac{d\mathbb{Q}}{d\mathbb{P}_{\mathbf{v}_\theta}} - \mathbb{E}_\mathbb{P} \left[ \log \frac{d\mathbb{Q}}{d\mathbb{P}_{\mathbf{v}_\theta}} \right] \right)^2 \right], \quad (4)$$
+
+where  $\mathbb{P}$  is an arbitrary reference path measure with  $\mathbb{E}_\mathbb{P}[\log(d\mathbb{Q}/d\mathbb{P}_{\mathbf{v}_\theta})] < \infty$ . To express the log-variance divergence in detail, we let  $\mathbb{P} = \mathbb{P}_\mathbf{g}$  for some policy  $\tilde{\mathbf{v}}$  and apply the Girsanov’s theorem to Equation (4), deriving the following formulation:
+
+$$D_{\text{LV}}^\mathbb{Q}(\mathbb{P}_{\mathbf{v}_\theta} \| \mathbb{Q}) = \mathbb{E}_{\mathbb{P}_\mathbf{g}} \left[ (F_{\mathbf{v}_\theta, \tilde{\mathbf{v}}} - \mathbb{E}_{\mathbb{P}_\mathbf{g}}[F_{\mathbf{v}_\theta, \tilde{\mathbf{v}}}]^2 \right], \quad (5)$$
+
+$$F_{\mathbf{v}_\theta, \tilde{\mathbf{v}}}(\mathbf{X}) = \frac{1}{2} \int_0^T \|\mathbf{v}_\theta(\mathbf{X}_t)\|^2 dt - \int_0^T (\mathbf{v}_\theta \cdot \tilde{\mathbf{v}})(\mathbf{X}_t) dt - \int_0^T \mathbf{v}_\theta(\mathbf{X}_t) \cdot d\mathbf{W}_t + \log 1_{\mathcal{B}}(\mathbf{X}). \quad (6)$$
+
+The first three terms in Equation (6) correspond to the deviation of the biased MD from the unbiased MD integrated over the path sampled from  $\mathbb{P}_\mathbf{g}$ . The last term reweights the unbiased MD to the target path measure  $\mathbb{Q}$ . As a result, minimizing Equation (5) could be thought as minimizing the variation between  $\mathbb{P}_{\mathbf{v}_\theta}$  and  $\mathbb{Q}$ . We provide the full derivation in Appendix A.1. Compared to KL divergence, the log-variance divergence provides a robust gradient estimator and avoids differentiating through the SDE solver (Richter et al., 2020; Nüsken & Richter, 2021).
+
+**Minimizing with learnable control variate.** To minimize the log-variance divergence, we consider the following loss that replaces the estimation of  $\mathbb{E}_{\mathbb{P}_{\mathbf{v}_\theta}}[F_{\mathbf{v}_\theta, \mathbf{v}_\theta}]$  by learning a scalar parameter  $w$ :
+
+$$\mathcal{L}(\theta, w) = \mathbb{E}_{\mathbb{P}_{\mathbf{v}_\theta}} \left[ (F_{\mathbf{v}_\theta, \mathbf{v}_\theta} - w)^2 \right], \quad (7)$$
+
+{4}------------------------------------------------
+
+#### **Algorithm 1** Training
+
+- 
+- 1: Initialize an empty replay buffer  $\hat{\mathcal{D}}$ , an policy  $v_\theta$ , a scalar parameter  $w$ , the number of rollout  $I$  and training per rollout  $J$ , and an annealing schedule  $\lambda_{\text{start}} = \lambda_1 > \dots > \lambda_I = \lambda_{\text{end}}$ .
+ - 2: **for**  $i = 1, \dots, I$  **do**
+ - 3:   Generate  $M$  paths  $\{\mathbf{x}_{0:L}^{(m)}\}_{m=1}^M$  from the biased MD simulations with  $v_\theta$  at temperature  $\lambda_i$ .
+ - 4:   Update the replay buffer  $\hat{\mathcal{D}} \leftarrow \hat{\mathcal{D}} \cup \{\mathbf{x}_{0:L}^{(m)}\}_{m=1}^M$ .
+ - 5:   **for**  $j = 1, \dots, J$  **do**
+ - 6:     Sample  $K$  data  $\{\mathbf{x}_{0:L}^{(k)}\}_{k=1}^K$  from  $\hat{\mathcal{D}}$ .
+ - 7:     Update  $\theta$  and  $w$  with the gradient of  $\frac{1}{K} \sum_{k=1}^K \left( \log \frac{p_0(\mathbf{x}_{0:L}^{(k)}) 1_{\mathcal{B}}(\mathbf{x}_{0:L}^{(k)})}{p_{v_\theta}(\mathbf{x}_{0:L}^{(k)})} - w \right)^2$ .
+ - 8:   **end for**
+ - 9: **end for**
+- 
+
+where  $w$  is a *control variate* that controls the variance of the gradient estimator of  $\nabla_\theta \mathcal{L}(\theta, w)$  without changing the gradient. Note that we set  $\tilde{v} = v_\theta$  in Equation (6), which implies that the gradient of Equation (7) coincides with the KL divergence (Richter et al., 2020; Nüsken & Richter, 2021). When optimized, the control variate  $w$  estimates the expectation  $\mathbb{E}_{\mathbb{P}_{v_\theta}}[F_{v_\theta, v_\theta}]$  since  $\arg\min_w \mathcal{L}(\theta, w) = \mathbb{E}_{\mathbb{P}_{v_\theta}}[F_{v_\theta, v_\theta}]$ . Thus, jointly optimizing  $(\theta, w)$  with the gradient step can be interpreted as jointly minimizing log-variance divergence and estimating  $\mathbb{E}_{\mathbb{P}_{v_\theta}}[F_{v_\theta, v_\theta}]$  utilizing  $w$ .
+
+**Off-policy training with replay buffer and simulated annealing.** To leverage the degree of freedom in reference path measure for the log-variance divergence, we allow discrepancy between reference path measure and current path measure, called off-policy training, which is widely used in discrete-time reinforcement learning (Mnih et al., 2013; Bengio et al., 2021). For the sample efficiency, we reuse the samples with a replay buffer  $\mathcal{D}$  which stores path samples from the path measure  $\mathbb{P}_{v_\theta}$  associated with previous policies  $v_\theta$ . Our modified loss function  $\mathcal{L}^\mathcal{D}$  with  $\mathcal{D}$  is defined as follows:
+
+$$\mathcal{L}^\mathcal{D}(\theta, w) = \mathbb{E}_{(v_\theta, \mathbf{X}) \sim \mathcal{D}}[(F_{v_\theta, v_\theta}(\mathbf{X}) - w)^2]. \quad (8)$$
+
+The replay buffer also prevents mode collapse, using diverse paths from different path measures. Additionally, in line with other off-policy training algorithms (Malkin et al., 2022; Kim et al., 2023), we utilize the simulated annealing technique to sample diverse paths that cross high-energy barriers.
+
+**Discretization.** To implement the algorithm, we discretize Equation (8). Given a discretization step size  $\Delta t$ , we consider the discretized paths  $\mathbf{x}_{0:L} = (\mathbf{x}_0, \mathbf{x}_1, \dots, \mathbf{x}_L)$  of  $\mathbf{X}$  from MD simulations where  $L = T/\Delta t$  and  $\mathbf{x}_\ell = \mathbf{X}(\ell\Delta t)$ . In discrete cases, the discretized paths  $\mathbf{x}_{0:L}$  from previous policies  $v_\theta$  and their (gradient-detached) policy values  $(v_\theta(\mathbf{x}_0), \dots, v_\theta(\mathbf{x}_L))$  are used to approximate the value  $F_{v_\theta, v_\theta}(\mathbf{X})$  in Equation (6) as follows:
+
+$$\hat{F}_{v_\theta, v_\theta}(\mathbf{x}_{0:L}) = \frac{1}{2} \sum_{\ell=0}^{L-1} \|v_\theta(\mathbf{x}_\ell)\|^2 \Delta t - \sum_{\ell=0}^{L-1} (v_\theta \cdot v_\theta)(\mathbf{x}_\ell) \Delta t - \sum_{\ell=0}^{L-1} v_\theta(\mathbf{x}_\ell) \cdot \epsilon_\ell + \log 1_{\mathcal{B}}(\mathbf{x}_{0:L}), \quad (9)$$
+
+where the noise  $\epsilon_\ell = \Sigma^{-1}(\mathbf{x}_{\ell+1} - \mathbf{x}_\ell - (u(\mathbf{x}_\ell) + \Sigma v_\theta(\mathbf{x}_\ell))\Delta t)$  is the discretized Brownian motions of the Langevin dynamics with policy  $v_\theta$ . For implementation, we further derive a simple discretized loss of Equation (8) from Equation (9) as follows:
+
+$$\mathbb{E}_{\mathbf{x}_{0:L} \sim \hat{\mathcal{D}}} \left[ \left( \log \frac{p_0(\mathbf{x}_{0:L}) 1_{\mathcal{B}}(\mathbf{x}_{0:L})}{p_{v_\theta}(\mathbf{x}_{0:L})} - w \right)^2 \right], \quad (10)$$
+
+where the buffer  $\hat{\mathcal{D}}$  stores paths  $\mathbf{x}_{0:L}$  sampled from the previous policies, and  $p_0$  and  $p_{v_\theta}$  denote discrete time transition probability induced by Equations (1) and (3), respectively. We provide a formal derivation of the discretized loss in Appendix A.2. Note that the same objective was derived in the name of relative trajectory balance by Venkatraman et al. (2024).
+
+We describe our training algorithm in Algorithm 1. Overall, our off-policy training algorithm iterates through four steps: (1) sampling paths from the biased MD simulation with current policy  $v_\theta$  at high temperature, (2) storing sampled paths in the replay buffer  $\hat{\mathcal{D}}$ , (3) sampling a batch of the paths from the replay buffer, and (4) training current policy  $v_\theta$  by minimizing the loss in Equation (10). After training, the biased MD simulation can directly sample transition paths from the target path measure.
+
+{5}------------------------------------------------
+
+### 3.3 PARAMETERIZATION FOR LARGE SYSTEMS
+
+In this section, we introduce new parameterizations of the bias force and the indicator function to sample transition paths of large systems. Our parameterization is designed to alleviate the problem of sparse training signal, where the model struggles to collect meaningful paths that end at the vicinity of the target meta-stable state in training. This problem is especially severe in large systems.
+
+**Bias force parameterization.** To frequently sample the meaningful paths, we aim to parameterize the bias force which guarantees to reduce the distance between the current molecular state and the target meta-stable state for every MD step. This is achieved by predicting the atom-wise positive scaling factor of the direction to the aligned target meta-stable state rather than predicting force or potential directly. Moreover, we design the bias force to satisfy roto-translational equivariance to the current molecular state input  $\mathbf{X}_t$ , aligning with the symmetry of the transition path sampling problem for better generalization and parameter efficiency.
+
+To be specific, we achieve the inductive bias for dense training signals and the  $SE(3)$  equivariance to the current molecular state input  $\mathbf{X}_t$  by parameterizing the bias force as follows:
+
+$$\mathbf{b}(\mathbf{X}_t) = \text{diag}(s_\theta(\rho_t^{-1} \cdot \mathbf{X}_t))(\rho_t \cdot \mathbf{R}_B - \mathbf{R}_t), \quad (11)$$
+
+where  $s_\theta(\cdot) \in \mathbb{R}_+^{3N}$  is a neural network constrained to have positive output elements and predicts atom-wise scaling factors and the optimal roto-translation  $\rho_t = \text{argmin}_{\rho \in SE(3)} \|\mathbf{R}_t - \rho \cdot \mathbf{R}_B\|$  which aligns  $\mathbf{R}_B$  with  $\mathbf{R}_t$ , as in Equation (2). We note that the bias force (divided by atom-wise masses) is positively correlated with the direction to target state, i.e.,  $(\mathbf{b}(\mathbf{X}_t)/\mathbf{m})^\top (\rho_t \cdot \mathbf{R}_B - \mathbf{R}_t) > 0$ .
+
+To formalize the benefit of the positive correlation between the bias force and the direction to the target state, one can prove that there always exists a small enough step size  $\Delta t$  that decreases the distance between the current state  $\mathbf{R}_t$  and the aligned target state  $\rho'_{t+\Delta t} \cdot \mathbf{R}_B$ , i.e.,
+
+$$\|\rho'_{t+\Delta t} \cdot \mathbf{R}_B - \mathbf{R}'_{t+\Delta t}\| < \|\rho_t \cdot \mathbf{R}_B - \mathbf{R}_t\|, \quad (12)$$
+
+where  $\mathbf{R}'_{t+\Delta t} = \mathbf{R}_t + \mathbf{b}(\mathbf{X}_t)\Delta t/\mathbf{m}$  is the position updated by the bias force with step size  $\Delta t$  and  $\rho'_{t+\Delta t} = \text{argmin}_{\rho \in SE(3)} \|\mathbf{R}'_{t+\Delta t} - \rho \cdot \mathbf{R}_B\|$ . We provide the proof of Equation (12) in Appendix A.3.
+
+In the experiments, we also consider other equivariant parameterizations that are less constrained: (1) directly predicting the equivariant bias force  $\mathbf{b}(\mathbf{X}_t) = \rho_t \cdot \mathbf{b}_\theta(\rho_t^{-1} \cdot \mathbf{X}_t) \in \mathbb{R}^{3N}$  and (2) predicting the invariant bias potential  $b_\theta(\rho_t^{-1} \cdot \mathbf{X}_t) \in \mathbb{R}$  to obtain the bias force  $\mathbf{b}(\mathbf{X}_t) = -\nabla b_\theta(\rho_t^{-1} \cdot \mathbf{X}_t) \in \mathbb{R}^{3N}$ . We observe these two parameterizations to be useful for low-dimensional tasks but struggle to produce meaningful paths in large systems during training. As shown in Figure 2, bias forces with the positive scaling parameterization are positively correlated with the direction to the target position regardless of network parameters, unlike direct force parameterizations.
+
+**Indicator function parameterization.** We propose to relax the indicator function  $1_B$  into a radial basis function (RBF) kernel  $\tilde{1}_B(\mathbf{X}) = k(\mathbf{R}_T, \rho^{-1} \cdot \mathbf{R}_B; \sigma^2)$  which measures the similarity between two positions where  $\sigma > 0$  controls the degree of relaxation. The range of RBF kernel  $k$  is bounded by the interval  $(0, 1]$  so that  $\log \tilde{1}_B(\mathbf{X})$  is well-defined and  $\tilde{1}_B(\mathbf{X})$  represents the binary indicator function smoothly. To capture a high training signal from subtrajectories of sampled paths, we propose to take maximum over RBF kernel values of all intermediate states by  $\tilde{1}_B^{\max}(\mathbf{X}) = \max_{t_i \in [0, T]} k(\mathbf{R}_t, \mathbf{R}_B; \sigma^2)$ . To extract the subtrajectory with a high training signal, we can truncate the paths at the time that maximizes RBF kernel values, allowing variable path lengths. Notably, the relaxed indicator function is  $SE(3)$  invariant to  $\mathbf{R}_t$  because of the Kabsch algorithm.
+
+![Figure 2: Visualization of the bias force fields of two different bias force parameterizations with initialized neural networks. (a) Direct prediction: A 2D plot showing a vector field of bias forces. The vectors are mostly horizontal and point towards the right, indicating a strong bias in that direction. (b) Positive scaling: A 2D plot showing a vector field of bias forces. The vectors are mostly radial, pointing outwards from a central white circle, indicating a strong bias towards the target position.](096d7a8a21933900dad68d82ae8a97fb_img.jpg)
+
+Figure 2: Visualization of the bias force fields of two different bias force parameterizations with initialized neural networks. (a) Direct prediction: A 2D plot showing a vector field of bias forces. The vectors are mostly horizontal and point towards the right, indicating a strong bias in that direction. (b) Positive scaling: A 2D plot showing a vector field of bias forces. The vectors are mostly radial, pointing outwards from a central white circle, indicating a strong bias towards the target position.
+
+Figure 2: Visualization of the bias force fields of two different bias force parameterizations with initialized neural networks. (a) directly predicting the bias force and (b) predicting the positive scaling factors of direction to the target position (white circle).
+
+{6}------------------------------------------------
+
+Table 1: **Benchmark scores on the double-well system and Alanine Dipeptide.** All metrics are averaged over 1024 paths for the double-well system, and 64 paths for Alanine Dipeptide. ETS is computed for paths that hit the target meta-stable state, and the best results are highlighted in **bold**. Predicting the bias force, potential, and atom-wise positive scaling are denoted by (F), (P), and (S), respectively. UMD ( $\lambda$ ) denotes unbiased MD with temperature  $\lambda$  and SMD ( $k$ ) denotes steered MD with the force constant  $k$ . Unless otherwise specified, paths are generated by MD simulation at 1200K for double-well and 300K for Alanine Dipeptide.
+
+| Method | RMSD ( $\text{Å}$ ) | THP (%) | ETS ( $\text{kJmol}^{-1}$ ) | Method | RMSD ( $\text{Å}$ ) | THP (%) | ETS ( $\text{kJmol}^{-1}$ ) |
+|-|-|-|-|-|-|-|-|
+| <b>Double-well</b> |  |  |  |  |  |  |  |
+| UMD (1200K) | $2.21 \pm 0.10$ | 0.00 | - | UMD (300K) | $1.59 \pm 0.15$ | 0.00 | - |
+| UMD (2400K) | $2.11 \pm 0.38$ | 3.03 | $1.69 \pm 0.31$ | UMD (3600K) | $1.19 \pm 0.32$ | 6.25 | $812.47 \pm 148.80$ |
+| UMD (3600K) | $1.85 \pm 0.68$ | 12.60 | $2.12 \pm 0.41$ | SMD (10) | $0.86 \pm 0.21$ | 7.81 | $33.15 \pm 6.46$ |
+| UMD (4800K) | $1.54 \pm 0.81$ | 21.58 | $2.77 \pm 0.69$ | SMD (20) | $0.56 \pm 0.27$ | 54.69 | $78.40 \pm 12.76$ |
+| SMD (0.5) | $0.98 \pm 0.90$ | 52.15 | $1.54 \pm 0.21$ | PIPS (F) | $0.66 \pm 0.15$ | 43.75 | $28.17 \pm 10.86$ |
+| SMD (1) | $0.14 \pm 0.08$ | 99.80 | $1.85 \pm 0.16$ | PIPS (P) | $1.66 \pm 0.03$ | 0.00 | - |
+| TPS-DPS (F, Ours) | <b><math>0.01 \pm 0.02</math></b> | <b>99.90</b> | $1.38 \pm 0.16$ | TPS-DPS (F, Ours) | <b><math>0.16 \pm 0.06</math></b> | <b>92.19</b> | $19.82 \pm 15.88$ |
+| TPS-DPS (P, Ours) | <b><math>0.01 \pm 0.03</math></b> | <b>99.71</b> | <b><math>1.36 \pm 0.15</math></b> | TPS-DPS (P, Ours) | <b><math>0.16 \pm 0.10</math></b> | <b>87.50</b> | <b><math>18.37 \pm 10.86</math></b> |
+| TPS-DPS (S, Ours) | <b><math>0.01 \pm 0.03</math></b> | <b>99.80</b> | $1.73 \pm 0.20$ | TPS-DPS (S, Ours) | $0.25 \pm 0.20$ | 76.00 | $22.79 \pm 13.57$ |
+
+![Figure 3: Visualization of potential energy landscapes and distributions in double-well potential. (a) Potential energy landscapes showing the learned bias potential b_theta of TPS-DPS (P). (b) Distributions of the potential energy and y coordinate of transition states from 1024 transition paths sampled by each method.](a6a8016b231533e7f34b550f4676afc6_img.jpg)
+
+Figure 3 consists of two parts. Part (a) shows three heatmaps representing potential energy landscapes:  $U$ ,  $b_\theta$ , and  $U + b_\theta$ . The  $U$  landscape shows a double-well potential. The  $b_\theta$  landscape shows a bias potential that is mostly flat. The  $U + b_\theta$  landscape shows the sum of the two, which is a double-well potential with a higher barrier. Part (b) shows two plots of energy distributions. The left plot shows the energy (kJ/mol) distribution for various methods, with TPS-DPS (F, P, S) showing a sharp peak around 1.75 kJ/mol. The right plot shows the y coordinate distribution for various methods, with TPS-DPS (F, P, S) showing a sharp peak around 0.
+
+Figure 3: Visualization of potential energy landscapes and distributions in double-well potential. (a) Potential energy landscapes showing the learned bias potential b\_theta of TPS-DPS (P). (b) Distributions of the potential energy and y coordinate of transition states from 1024 transition paths sampled by each method.
+
+Figure 3: **Visualization of potential energy landscapes and distributions in double-well potential.** (a) Visualization of the learned bias potential  $b_\theta$  of TPS-DPS (P). (b) Distributions of the potential energy and  $y$  coordinate of transition states from 1024 transition paths sampled by each method.
+
+## 4 EXPERIMENT
+
+In this section, we compare our method, termed TPS-DPS, with both classical non-ML and ML approaches, assessing the accuracy and diversity of sampled transition paths. We begin with the double-well system and Alanine Dipeptide followed by the four fast-folding proteins: Chignolin, Trp-cage, BBA, and BBL. Additionally, we conduct ablation studies to validate the effectiveness of each component in our method. All real-world molecular systems are simulated using the OpenMM library (Eastman et al., 2023). Details on OpenMM simulation and model configurations are provided in Appendices B.1 and B.2, respectively. In Appendix C, we analyze the time complexity of TPS-DPS and evaluate the number of energy evaluations and runtime in training and inference time.
+
+**Evaluation Metrics.** We consider three metrics to evaluate models: (Kabsch) RMSD, THP, and ETS. The root mean square distance (RMSD) measures the ability of the model to produce final positions of paths close to the target position  $R_B$ . The target hit percentage (THP) measures the ability of the model to produce final positions of paths that successfully arrive at the target meta-stable state  $B$ . Finally, the energy of the transition state (ETS) measures the ability of the model to identify probable transition states. For further details, refer to Appendix B.3.
+
+**Baselines.** We compare TPS-DPS with both non-ML and ML baselines. For non-ML baselines, we consider unbiased MD (UMD) with various temperatures and steered MD (SMD; Schlüter et al., 1994; Izrailev et al., 1999) with various force constants and collective variables (CVs). For ML baselines, we consider a CV-free transition path sampling method, path integral path sampling (PIPS; Holdijk et al., 2024) which also trains a bias force by minimizing the KL divergence between path measures induced by the biased MD and the target path measure.
+
+{7}------------------------------------------------
+
+![Figure 4: Visualization of sampled paths on energy landscapes. The figure consists of two rows of six contour plots each. The top row shows energy landscapes for a double-well system, and the bottom row shows Ramachandran plots for Alanine Dipeptide. Each plot displays a path between two meta-stable states (white circles) passing through a saddle point (white star). The methods compared are UMD, SMD (0.5, 1, 10, 20), TPS-DPS (F, P), and Ground Truth. In the top row, TPS-DPS (F) and (P) closely match the Ground Truth path, while UMD fails to escape the initial state and SMD struggles to pass the saddle. In the bottom row, TPS-DPS (F) and (P) again closely match the Ground Truth path, while UMD at 1200K fails to escape the initial state and SMD struggles to pass the saddle points.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 4: Visualization of sampled paths on energy landscapes. The figure consists of two rows of six contour plots each. The top row shows energy landscapes for a double-well system, and the bottom row shows Ramachandran plots for Alanine Dipeptide. Each plot displays a path between two meta-stable states (white circles) passing through a saddle point (white star). The methods compared are UMD, SMD (0.5, 1, 10, 20), TPS-DPS (F, P), and Ground Truth. In the top row, TPS-DPS (F) and (P) closely match the Ground Truth path, while UMD fails to escape the initial state and SMD struggles to pass the saddle. In the bottom row, TPS-DPS (F) and (P) again closely match the Ground Truth path, while UMD at 1200K fails to escape the initial state and SMD struggles to pass the saddle points.
+
+Figure 4: **Visualization of sampled paths on energy landscapes.** For the double-well system, we aim to sample transition paths from the left meta-stable state to the right on the potential energy landscape (top). For Alanine Dipeptide, we aim to sample conformational changes from the  $C5$  (upper left) to the  $C7ax$  (lower right) on the Ramachandran plot (bottom). White circles and stars indicate meta-stable states and saddle points, respectively.
+
+### 4.1 DOUBLE-WELL SYSTEM
+
+We begin by evaluating our method on a synthetic two-dimensional double-well system with dual channels. This system has two global minima representing the meta-stable states and two reaction pathways with the corresponding saddle points. We aim to sample transition paths from the left state  $\mathbf{R}_A$  to the right meta-stable states  $\mathcal{B} = \{\mathbf{R} \mid \|\mathbf{R} - \mathbf{R}_B\| < 0.5\}$ . We collect ground truth path ensembles by rejection sampling which proposes paths sampled from the unbiased MD simulations and accepts if the final states are in the target meta-stable states  $\mathcal{B}$ . We provide more details on the double-well system in Appendix B.4.
+
+As shown in Table 1, Figure 3, and Figure 4, TPS-DPS outperforms baselines regardless of the bias force parameterizations and generates more similar transition paths to the ground truth than baselines. In Figure 3, the bias potential accelerates the transition by increasing the potential energy near the initial meta-stable state while decreasing the potential energy near the two energy barriers. Moreover, the distribution of energy and  $y$  coordinate of the transition states from TPS-DPS is closest to the ground truth compared with other baselines, successfully capturing two reaction channels. In Figure 4, TPS-DPS (F) and (P) generate similar transition paths to the ground truth while UMD at 1200K fails to escape the initial state and SMD struggles to pass the saddle points.
+
+### 4.2 ALANINE DIPEPTIDE
+
+For real-world molecules, we first consider Alanine Dipeptide consisting of two alanine residues and aim to sample conformational changes from the meta-stable state  $C5$  to  $C7ax$  as shown in Figure 4. The target meta-stable states are defined as  $\mathcal{B} = \{\mathbf{R} \mid \|\xi(\mathbf{R}) - \xi(\mathbf{R}_B)\| < 0.75\}$ , where  $\xi(\mathbf{R}) = (\phi, \psi)$  is a well-known collective variable which consists of two backbone dihedral angles. Alanine Dipeptide has two reaction channels with the corresponding saddle points.
+
+In Table 1 and Figure 4, our method shows superior performance regardless of the bias force parameterizations and successfully generates diverse transition paths that capture two reaction channels. Compared to our method, UMD at 300K fails to escape the initial state, SMD with the two backbone torsion CV generates transition paths with less probable transition states, and two-way shooting struggles to find plausible transition states. PIPS generates transition paths with only one reaction channel, suffering from mode collapse.
+
+{8}------------------------------------------------
+
+Table 2: **Benchmark scores on fast-folding proteins.** All metrics are averaged over 64 paths. Unless otherwise specified, paths are generated at 300K for Chignolin and 400K for the others.
+
+| Method | RMSD ( $\text{Å}$ ) | THP (%) | ETS ( $\text{Å}$ )<br>$\text{kJmol}^{-1}$ | Method | RMSD ( $\text{Å}$ ) | THP (%) | ETS ( $\text{Å}$ )<br>$\text{kJmol}^{-1}$ |
+|-|-|-|-|-|-|-|-|
+| <b>Chignolin</b> |  |  |  |  |  |  |  |
+| UMD (300K) | $7.98 \pm 0.41$ | 0.00 | - | <b>Trp-cage</b> |  |  |  |
+| UMD (1200K) | $7.23 \pm 0.93$ | 1.56 | 388.17 | UMD (400K) | $7.94 \pm 0.65$ | 0.00 | - |
+| SMD (10k) | $1.26 \pm 0.31$ | 6.25 | $-527.95 \pm 93.58$ | UMD (1200K) | $8.27 \pm 1.13$ | 0.00 | - |
+| SMD (20k) | <b><math>0.85 \pm 0.24</math></b> | 34.38 | $179.52 \pm 138.87$ | SMD (10k) | $1.68 \pm 0.23$ | 3.12 | $-312.54 \pm 20.67$ |
+| PIPS (F) | $4.66 \pm 0.17$ | 0.00 | - | SMD (20k) | $1.20 \pm 0.20$ | 42.19 | $-226.40 \pm 85.59$ |
+| PIPS (P) | $4.67 \pm 0.32$ | 0.00 | - | PIPS (F) | $7.47 \pm 0.19$ | 0.00 | - |
+| TPS-DPS (F, Ours) | $4.41 \pm 0.49$ | 0.00 | - | PIPS (P) | $6.07 \pm 0.26$ | 0.00 | - |
+| TPS-DPS (P, Ours) | $3.87 \pm 0.42$ | 0.00 | - | TPS-DPS (F, Ours) | $6.35 \pm 0.31$ | 0.00 | - |
+| TPS-DPS (S, Ours) | $1.17 \pm 0.66$ | <b>59.38</b> | <b><math>-780.18 \pm 216.93</math></b> | TPS-DPS (P, Ours) | $3.15 \pm 0.52$ | 12.50 | <b><math>-512.97 \pm 56.89</math></b> |
+| <b>BBA</b> |  |  |  |  |  |  |  |
+| UMD (400K) | $10.03 \pm 0.39$ | 0.00 | - | TPS-DPS (S, Ours) | <b><math>0.76 \pm 0.12</math></b> | <b>81.25</b> | $-317.61 \pm 140.89$ |
+| UMD (1200K) | $10.81 \pm 1.05$ | 0.00 | - | <b>BBL</b> |  |  |  |
+| SMD (10k) | $2.89 \pm 0.32$ | 0.00 | - | UMD (400K) | $18.48 \pm 0.63$ | 0.00 | - |
+| SMD (20k) | $1.66 \pm 0.30$ | 26.56 | $-3104.95 \pm 97.57$ | UMD (1200K) | $18.90 \pm 1.16$ | 0.00 | - |
+| PIPS (F) | $9.84 \pm 0.18$ | 0.00 | - | SMD (10k) | $3.67 \pm 0.22$ | 0.00 | - |
+| PIPS (P) | $9.09 \pm 0.36$ | 0.00 | - | SMD (20k) | $2.97 \pm 0.33$ | 7.81 | $-1738.57 \pm 386.81$ |
+| TPS-DPS (F, Ours) | $9.48 \pm 0.18$ | 0.00 | - | PIPS (F) | $17.92 \pm 0.29$ | 0.00 | - |
+| TPS-DPS (P, Ours) | $3.89 \pm 0.35$ | 0.00 | - | PIPS (P) | $12.67 \pm 0.31$ | 0.00 | - |
+| TPS-DPS (S, Ours) | <b><math>1.21 \pm 0.09</math></b> | <b>84.38</b> | <b><math>-3801.68 \pm 139.38</math></b> | TPS-DPS (F, Ours) | $10.15 \pm 0.54$ | 0.00 | - |
+|  |  |  |  | TPS-DPS (P, Ours) | $6.45 \pm 0.26$ | 0.00 | - |
+|  |  |  |  | TPS-DPS (S, Ours) | <b><math>1.60 \pm 0.19</math></b> | <b>43.75</b> | <b><math>-3616.32 \pm 213.66</math></b> |
+
+![Figure 5: Qualitative evaluation on transition path sampled from TPS-DPS. (a) Alanine Dipeptide: Potential energy (left) and Distance (Rad) (right) vs ps. (b) Chignolin: Potential energy (left) and Distance (Å) (right) vs ps. (c) Visualization of Chignolin: TIC 2 vs TIC 1 heatmap and 3D structures at 0.0, 0.9, 3.6, 4.0, 4.5, and 5.0 ps.](bedcca5cdf168e3508ef511d94ec514c_img.jpg)
+
+Figure 5 consists of three panels. Panel (a) shows the potential energy and distance for Alanine Dipeptide. The left plot shows potential energy fluctuating between -190.0 and -30.0 over 0.5 ps. The right plot shows distance in radians, with a threshold line at approximately 1.2. Panel (b) shows the potential energy and distance for Chignolin. The left plot shows potential energy fluctuating between -1400 and -950 over 5.0 ps. The right plot shows distance in Å, with a threshold line at approximately 10.5. Panel (c) shows a 2D heatmap of TIC 2 vs TIC 1 for Chignolin, with points labeled at 0.0, 0.9, 3.6, 4.0, 4.5, and 5.0 ps. To the right of the heatmap are 3D molecular structures at each time point, with hydrogen bonds highlighted in green and yellow.
+
+Figure 5: Qualitative evaluation on transition path sampled from TPS-DPS. (a) Alanine Dipeptide: Potential energy (left) and Distance (Rad) (right) vs ps. (b) Chignolin: Potential energy (left) and Distance (Å) (right) vs ps. (c) Visualization of Chignolin: TIC 2 vs TIC 1 heatmap and 3D structures at 0.0, 0.9, 3.6, 4.0, 4.5, and 5.0 ps.
+
+Figure 5: **Qualitative evaluation on transition path sampled from TPS-DPS.** (a) Potential energy and the two backbone dihedral angle distances between the current and target states. (b) Potential energy and the two hydrogen bond distances between the current and the target state. (c) Visualization of hydrogen bond formation in Chignolin. We highlight each hydrogen bond in green and yellow.
+
+### 4.3 FAST-FOLDING PROTEINS
+
+Finally, for challenging molecules, we consider four fast-folding proteins (Lindorff-Larsen et al., 2011): Chignolin, Trp-cage, BBA, and BBL with 10, 20, 28, and 47 amino acids, respectively. Proteins fold into stable structures by forming networks of hydrogen bonds. We aim to sample protein folding processes as seen in Figure 7. We define the target meta-stable state as  $\mathcal{B} = \{R \mid \|\xi(R) - \xi(R_B)\| < 0.75\}$  where  $\xi$  consists of the top two components of time-lagged independent component analysis (TICA; Pérez-Hernández et al., 2013). We further describe TICA in Appendix B.4.
+
+As shown in Table 2 and Figure 7, only TPS-DPS (S) successfully samples transition paths that pass probable transition states while TPS-DPS (F) and TPS-DPS (P) fail to hit the target meta-stable state due to the lack of meaningful training signal. While SMD hits the target meta-stable, its transition paths pass less probable transition states. UMD and PIPS fail to hit the target meta-stable state. In Figure 5, we validate the sampled paths using the potential energy and donor-acceptor distance of the two key hydrogen bonds in Chignolin folding, ASP3OD-THR6OG and ASP3N-THR8O used in (Yang et al., 2024). The sampled path of reduces the donor-acceptor distance below the threshold  $3.5 \text{Å}$ . For 3D videos of transition paths of fast-folding proteins, we refer to [project page](#).
+
+{9}------------------------------------------------
+
+![Figure 6(a): Benchmark scores on Alanine Dipeptide. A table showing RMSD, THP, and ETS for various ablation methods. Ours shows the best performance with the lowest RMSD and ETS, and highest THP. Figure 6(b): Loss and RMSD curves over rollouts. Two line plots showing training progress. The left plot shows Loss (log scale) decreasing over 1000 rollouts. The right plot shows RMSD (Å) decreasing over 1000 rollouts. Ours (red) consistently shows lower loss and RMSD compared to other methods.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+| Method | RMSD ( $\text{Å}$ ) | THP (%) | ETS ( $\text{kJmol}^{-1}$ ) |
+|-|-|-|-|
+| <b>Ours</b> | <b><math>0.16 \pm 0.06</math></b> | <b>92.19</b> | <b><math>19.82 \pm 15.88</math></b> |
+| w/ KL | $0.43 \pm 0.34$ | 53.12 | $27.88 \pm 14.38$ |
+| w/ local | $0.24 \pm 0.15$ | 73.44 | $22.53 \pm 14.45$ |
+| w/o replay | $0.33 \pm 0.27$ | 64.06 | $24.38 \pm 12.31$ |
+| w/o annealing | $0.67 \pm 0.21$ | 9.38 | $69.86 \pm 30.15$ |
+| w/o various len | $0.23 \pm 0.11$ | 75.00 | $29.49 \pm 14.13$ |
+| w/o equivariance | $0.34 \pm 0.17$ | 56.25 | $22.12 \pm 16.96$ |
+
+(a) Component-wise performance on Alanine Dipeptide.
+
+(b) Loss and RMSD curves over rollouts.
+
+Figure 6(a): Benchmark scores on Alanine Dipeptide. A table showing RMSD, THP, and ETS for various ablation methods. Ours shows the best performance with the lowest RMSD and ETS, and highest THP. Figure 6(b): Loss and RMSD curves over rollouts. Two line plots showing training progress. The left plot shows Loss (log scale) decreasing over 1000 rollouts. The right plot shows RMSD (Å) decreasing over 1000 rollouts. Ours (red) consistently shows lower loss and RMSD compared to other methods.
+
+Figure 6: **Ablation studies on each proposed component of TPS-DPS (F) in Alanine Dipeptide.**
+
+(a) Benchmark scores on Alanine Dipeptide. (b) Loss and RMSD curves averaged over 8 seeds.
+
+### 4.4 ABLATION STUDY
+
+We conduct ablation studies to verify the effectiveness of the six proposed components: log-variance loss, learnable control variate, replay buffer, simulated annealing, maximum over RBF values for various path lengths, and  $SE(3)$  equivariance. To be specific, we (1) replace the log-variance divergence with the KL divergence, (2) replace the learnable control variate  $w \in \mathbb{R}$  with the local control variate which is Monte-Carlo estimator used in Nüsken & Richter (2021), (3) remove the replay buffer and rely solely on data from the current policy, (4) use only one temperature  $\lambda = 300\text{K}$  in sampling, (5) remove maximum operation over RBF kernel values using only the final state, (6) skip the alignment of neural network input states with the target position by the Kabsch algorithm.
+
+As seen in Figure 6, all the proposed components improve performance. Our loss is smaller than the KL divergence by more than two orders of magnitude and significantly improves performance. Learning the control variate slightly improves performance, showing that utilizing data from previous policies is effective. The replay buffer significantly improves training efficiency, and shows that the large performance gap between our loss and KL divergence comes from the replay buffer. Simulated annealing for biased MD simulation is critical to finding transition paths. RMSD does not decrease without simulated annealing while loss decreases significantly. For the relaxed indicator function, maximum operation accelerates convergence and improves performance with frequent training signals from the subtrajectories. Leveraging the symmetry of the bias force with the Kabsch algorithm improves performance. We further compare with reverse KL divergence in Appendix E.
+
+## 5 CONCLUSION
+
+In this work, we introduced a novel CV-free diffusion path sampler, called TPS-DPS, to amortize the cost of sampling transition paths. We propose the log-variance divergence with the learnable control variate and off-policy training with the replay buffer and simulated annealing. We propose a new scale-based equivariant parameterization of bias force and relaxed indicator function for reaching target meta-stable states and frequent training signals, particularly in large molecules. Evaluations on double-well, Alanine Dipeptide, and four fast-folding proteins demonstrate that TPS-DPS is superior in accuracy and diversity compared to non-ML and ML approaches.
+
+**Limitation.** While our experiments show promise, they are limited to small fast-folding proteins (up to 500 amino acids). The applicability of our method to real-world proteins with more than 500 amino acids remains unexplored. Additionally, integrating various libraries, such as PLUMED (plu, 2019) and DMFF (Wang et al., 2023), for MD with neural network bias force, has not yet been investigated.
+
+Our method does not generalize across unseen pairs of meta-stable states or different molecular systems. These points to an interesting venue for future research, which would be more appealing for practical applications in drug discovery or material design.
+
+ Rest of paper (reference and Appendix) is removed.

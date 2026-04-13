@@ -1,0 +1,288 @@
+
+
+{0}------------------------------------------------
+
+# ADVANTAGE ALIGNMENT ALGORITHMS
+
+Juan Duque\*, Milad Aghajohari\*, Tim Cooijmans, Razvan Ciucă, Tianyu Zhang,  
+Gauthier Gidel, Aaron Courville  
+University of Montreal & Mila  
+firstname.lastname@umontreal.ca
+
+## ABSTRACT
+
+Artificially intelligent agents are increasingly being integrated into human decision-making: from large language model (LLM) assistants to autonomous vehicles. These systems often optimize their individual objective, leading to conflicts, particularly in general-sum games where naive reinforcement learning agents empirically converge to Pareto-suboptimal Nash equilibria. To address this issue, opponent shaping has emerged as a paradigm for finding socially beneficial equilibria in general-sum games. In this work, we introduce Advantage Alignment, a family of algorithms derived from first principles that perform opponent shaping efficiently and intuitively. We achieve this by aligning the advantages of interacting agents, increasing the probability of mutually beneficial actions when their interaction has been positive. We prove that existing opponent shaping methods implicitly perform Advantage Alignment. Compared to these methods, Advantage Alignment simplifies the mathematical formulation of opponent shaping, reduces the computational burden and extends to continuous action domains. We demonstrate the effectiveness of our algorithms across a range of social dilemmas, achieving state-of-the-art cooperation and robustness against exploitation.
+
+## 1 INTRODUCTION
+
+Recent advancements in artificial intelligence, such as language models like GPT (Radford et al., 2018), image synthesis with diffusion models (Ho et al., 2020), and generalist agents like Gato (Reed et al., 2022), suggest a future where AI systems seamlessly integrate into everyday human decision-making. While these systems often optimize for the goals of their individual users, this can lead to conflicts, especially in tasks that involve both cooperative and competitive elements. *Social dilemmas*, as introduced by Rapoport and Chammah (1965), describe scenarios where agents acting selfishly achieve worse outcomes than if they had cooperated. A global example is the climate change problem, where individual and national interests in economic growth often clash with the need for collective action to reduce carbon emissions and mitigate environmental degradation. The challenges we have faced in tackling this problem highlight the complexity of aligning individual interests with collective well-being.
+
+As artificially intelligent systems become ubiquitous, there is a pressing need to develop methods that enable agents to autonomously align their interests with one another. Despite this, the deep reinforcement learning community has traditionally focused on fully cooperative or fully competitive settings, often neglecting the nuances of social dilemmas. Sandholm and Crites (1996) empirically demonstrated that naive reinforcement learning algorithms tend to converge to the worst Pareto sub-optimal Nash equilibria of Always Defect in social dilemmas like the Iterated Prisoner’s Dilemma (IPD). Foerster et al. (2018b), demonstrated that the same is true for policy gradient methods, and introduced *opponent shaping* (LOLA) to address this gap.
+
+LOLA is an opponent shaping algorithm that influences the behavior of other agents by assuming they are naive learners and taking gradients with respect to simulated parameter updates. Following this approach, other opponent shaping algorithms that compute gradients with respect to simulated parameter updates have shown success in partially competitive tasks, including SOS (Letcher et al., 2021), COLA (Willi et al., 2022), and POLA (Zhao et al., 2022). More recently, LOQA (Aghajohari et al., 2024b) proposed an alternative form of opponent shaping by assuming control over the value function of other agents via REINFORCE estimators (Williams, 1992). This new approach to
+
+{1}------------------------------------------------
+
+opponent shaping offers significant computational advantages over previous methods and lays the foundation for our work.
+
+We introduce *Advantage Alignment*, a family of algorithms designed to shape rational opponents by aligning their advantages when their historic interactions have been positive. We make two key assumptions about reinforcement learning agents: (1) they aim to maximize their own expected return, and (2) they take actions proportionally to this expected return. Under these assumptions, we demonstrate that opponent shaping reduces to aligning the advantages of different players and increasing the log probability of an action proportionally to their alignment. We show that this mechanism lies at the heart of existing opponent shaping algorithms, including LOLA and LOQA. By distilling this objective, Advantage Alignment agents can shape opponents without relying on imagined parameter updates (as in LOLA and SOS) or stochastic gradient estimation that relies on automatic differentiation introduced in DiCE (Foerster et al., 2018a) (as in POLA, COLA, and LOQA). Furthermore, we demonstrate that Advantage Alignment preserves Nash Equilibria, ensuring that our algorithms maintain stable strategic outcomes.
+
+We also introduce *Proximal Advantage Alignment*, which formulates Advantage Alignment as a modification to the advantage function used in policy gradient updates. By integrating this modified advantage into the Proximal Policy Optimization (PPO) (Schulman et al., 2017b) surrogate objective, we develop a scalable and efficient opponent shaping algorithm suitable for more complex environments. To identify and overcome challenges that arise from scale—which are often overlooked in simpler settings like the Iterated Prisoner’s Dilemma (Rapoport and Chammah, 1965) and the Coin Game (Forster et al., 2018b)—we apply Advantage Alignment to a continuous variant of the Negotiation Game (Cao et al., 2018) and Melting Pot’s Commons Harvest Open (Agapiou et al., 2023). In doing so, we aim to demonstrate the scalability of our methods and offer insights and solutions applicable to complex, real-world agent interactions.
+
+Our key contributions are:
+
+- We introduce Advantage Alignment and Proximal Advantage Alignment (PAA), two opponent shaping algorithms derived from first principles and based on policy gradient estimators.
+- We prove that LOLA (and its variations) and LOQA implicitly perform Advantage Alignment through different mechanisms.
+- We extend REINFORCE-based opponent shaping to continuous action environments and achieve state-of-the-art results in a continuous action variant of the Negotiation Game (Cao et al., 2018).
+- We apply PAA to the Commons Harvest Open environment in Melting Pot 2.0 (Agapiou et al., 2023), a high dimensional version of the *tragedy of the commons* social dilemma, achieving state-of-the-art results and showcasing the scalability and effectiveness of our methods.
+
+## 2 BACKGROUND
+
+### 2.1 SOCIAL DILEMMAS
+
+Social dilemmas describe situations in which selfish behavior leads to sub-optimal collective outcomes. Such dilemmas are often formalized as normal form games and constitute a subset of general-sum games. A classical example of a social dilemma is the Iterated Prisoner’s Dilemma (IPD) (Rapoport and Chammah, 1965), in which two players can choose one of two actions: cooperate or defect. In the one-step version of the game, the dilemma occurs because defecting is a *dominant* strategy, i.e., independently of what the opponent plays the agent is better off playing defect. However, by the reward structure of the game, both the agent and the opponent would achieve a higher utility if they played cooperate simultaneously. Beyond the IPD, other social dilemmas have been extensively studied in the literature, including the Chicken Game and the Coin Game (Lerer and Peshkavich, 2018), the latter of which has a similar reward structure to IPD but takes place in a grid world. In this paper we introduce a variation of the Negotiation Game (also known as the Exchange Game) (DeVault et al., 2015; Lewis et al., 2017), with a strong social dilemma component. Additionally, we evaluate our method on the Commons Harvest Open environment in Melting Pot 2.0 (Agapiou et al., 2023), which exemplifies a large-scale social dilemma. In this environment, agents must balance short-term personal gains from overharvesting common resources against the long-term collective benefit of sustainable use.
+
+{2}------------------------------------------------
+
+### 2.2 MARKOV GAMES
+
+In this work, we consider fully observable, general sum,  $n$ -player Markov Games (Shapley, 1953) which are represented by a tuple:  $\mathcal{M} = (N, \mathcal{S}, \mathcal{A}, P, \mathcal{R}, \gamma)$ . Here  $\mathcal{S}$  is the state space,  $\mathcal{A} := \mathcal{A}^1 \times \dots \times \mathcal{A}^n$ , is the joint action space for all players,  $P : \mathcal{S} \times \mathcal{A} \rightarrow \Delta(\mathcal{S})$  maps from every state and joint action to a probability distribution over states,  $\mathcal{R} = \{r^1, \dots, r^n\}$  is the set of reward functions where each  $r^i : \mathcal{S} \times \mathcal{A} \rightarrow \mathbb{R}$  maps every state and joint action to a scalar return and  $\gamma \in [0, 1]$  is the discount factor.
+
+### 2.3 REINFORCEMENT LEARNING
+
+Consider two agents playing a Markov Game, 1 (agent) and 2 (opponent), with policies  $\pi^1$  and  $\pi^2$ , parameterized by  $\theta_1$  and  $\theta_2$  respectively. We follow the notation of Agarwal et al. (2021), let  $\tau$  denote a trajectory with initial state distribution  $\mu$  and (unconditional) distribution given by:
+
+$$Pr_{\mu}^{\pi^1, \pi^2}(\tau) = \mu(s_0)\pi^1(a_0|s_0)\pi^2(b_0|s_0)P(s_1|s_0, a_0, b_0)\dots \quad (1)$$
+
+Where  $P(\cdot|s, a, b)$ , often referred as the transition dynamics, is a probability distribution over the next states conditioned on the current state being  $s$ , agent taking action  $a$  and opponent taking action  $b$ . Value-based methods like Q-learning (Watkins and Dayan, 1992) and SARSA (Rummery and Niranjan, 1994) learn an estimate of the discounted reward using the Bellman equation:
+
+$$Q^1(s_t, a_t, b_t) = r^1(s_t, a_t, b_t) + \gamma \cdot \mathbb{E}_{s_{t+1}} [V^1(s_{t+1})|s_t, a_t, b_t]. \quad (2)$$
+
+In policy optimization, both players aim to maximize their expected discounted return by performing gradient ascent with a REINFORCE estimator (Williams, 1992) of the form:
+
+$$\nabla_{\theta_1} V^1(\mu) = \mathbb{E}_{\tau \sim Pr_{\mu}^{\pi^1, \pi^2}} \left[ \sum_{t=0}^{\infty} \gamma^t A^1(s_t, a_t, b_t) \nabla_{\theta_1} \log \pi^1(a_t|s_t) \right]. \quad (3)$$
+
+Here  $A^1(s, a, b) := Q^1(s, a, b) - V^1(s)$  denotes the advantage of the agent taking action  $a$  in state  $s$  while the opponent takes action  $b$ .
+
+## 3 OPPONENT SHAPING
+
+Opponent shaping, first introduced in LOLA (Foerster et al., 2018b), is a paradigm that assumes the learning dynamics of other players can be controlled via some mechanism to incentivize desired behaviors. LOLA and its variants assume that the opponent is a naive learner, i.e. an agent that performs gradient ascent on their value function, and differentiate through an imagined naive update of the opponent in order to shape it.
+
+LOQA (Aghajohari et al., 2024b) performs opponent shaping by controlling the Q-values of the opponent for different actions assuming that the opponent's policy is a softmax over these Q-values:
+
+$$\hat{\pi}^2(b_t|s_t) := \frac{\exp Q^2(s_t, b_t)}{\sum_b \exp Q^2(s_t, b)}, \quad (4)$$
+
+where  $Q^2(s_t, b_t) := \mathbb{E}_{a \sim \pi^1} [Q^2(s_t, a, b_t)]$ . The key idea is that these Q-values depend on  $\pi^1$ , and hence the opponent policy  $\hat{\pi}^2$  can be differentiated w.r.t.  $\theta_1$ :<sup>1</sup>
+
+$$\nabla_{\theta_1} \hat{\pi}^2(b_t|s_t) = \hat{\pi}^2(b_t|s_t) \left( \nabla_{\theta_1} Q^2(s_t, b_t) - \sum_b \hat{\pi}^2(b|s_t) \nabla_{\theta_1} Q^2(s_t, b) \right). \quad (5)$$
+
+This dependency of  $\pi^2$  on  $\theta_1$  leads to the emergence of an extra term in the policy gradient:
+
+$$\nabla_{\theta_1} V^1(\mu) = \mathbb{E}_{\tau \sim Pr_{\mu}^{\pi^1, \pi^2}} \left[ \sum_{t=0}^{\infty} \gamma^t A^1(s_t, a_t, b_t) \underbrace{\left( \nabla_{\theta_1} \log \pi^1(a_t|s_t) + \nabla_{\theta_1} \log \hat{\pi}^2(b_t|s_t) \right)}_{\substack{\text{policy gradient term} \\ \text{opponent shaping term}}} \right]. \quad (6)$$
+
+Aghajohari et al. (2024b) demonstrate an effective way to account for this dependency using REINFORCE. The present work builds on the ideas of LOQA, but reduces opponent shaping to its bare components to derive Advantage Alignment from first principles.
+
+<sup>1</sup>See Appendix A.3 for a derivation of this expression.
+
+{3}------------------------------------------------
+
+#### **Algorithm 1** Advantage Alignment
+
+---
+
+**Initialize:** Discount factor  $\gamma$ , agent Q-value parameters  $\phi^1$ , t Q-value parameters  $\phi_t^1$ , actor parameters  $\theta^1$ , opponent Q-value parameters  $\phi^2$ , t Q-value parameters  $\phi_t^2$ , actor parameters  $\theta^2$   
+**for** iteration= 1, 2, ... **do**  
+  Run policies  $\pi^1$  and  $\pi^2$  for  $T$  timesteps in environment and collect trajectory  $\tau$   
+  Compute agent critic loss  $L_C^1$  using the TD error with  $r^1$  and  $V^1$   
+  Compute opponent critic loss  $L_C^2$  using the TD error with  $r^2$  and  $V^2$   
+  Optimize  $L_C^1$  w.r.t.  $\phi^1$  and  $L_C^2$  w.r.t.  $\phi^2$  with optimizer of choice  
+  Compute generalized advantage estimates  $\{A_1^1, \dots, A_T^1\}$ ,  $\{A_1^2, \dots, A_T^2\}$   
+  Compute agent actor loss,  $L_a^1$ , summing equation 3 and equation 8  
+  Compute opponent actor loss,  $L_a^2$ , summing equation 3 and equation 8  
+  Optimize  $L_a^1$  w.r.t.  $\theta^1$  and  $L_a^2$  w.r.t.  $\theta^2$  with optimizer of choice
+
+---
+
+## 4 ADVANTAGE ALIGNMENT
+
+### 4.1 METHOD DESCRIPTION
+
+Motivated by the goal of scaling opponent shaping algorithms to more diverse and complex scenarios, we derive a simple and intuitive objective for efficient opponent shaping. We begin from the assumptions that agents are learning to maximize their expected return, and will behave in a fashion that is proportional to this goal:
+
+**Assumption 1.** *Each agent  $i$  learns to maximize their value function:  $\max V^i(\mu)$ .*
+
+**Assumption 2.** *Each opponent  $i$  acts proportionally to the exponent of their action-value function:  $\pi^i(a|s) \propto \exp(\beta \cdot Q^i(s, a))$ .*
+
+Using Equation 6 and substituting  $\hat{\pi}^2$  in place of  $\pi^2$  (per Assumption 2), we obtain:
+
+$$\nabla_{\theta_1} V^1(\mu) = \mathbb{E}_{\tau \sim \mathcal{P}_{\mu}^{\pi^1, \pi^2}} \left[ \sum_{t=0}^{\infty} \gamma^t A^1(s_t, a_t, b_t) \left( \nabla_{\theta_1} \log \pi^1(a_t|s_t) + \nabla_{\theta_1} \log \hat{\pi}^2(b_t|s_t) \right) \right].$$
+
+The first term is the usual policy gradient. The second term is the opponent shaping term and will be our focus. Approximating the opponent's policy (right hand side of equation 4) by ignoring the contribution due to the partition function, the opponent shaping term becomes:
+
+$$\beta \cdot \mathbb{E}_{\tau \sim \mathcal{P}_{\mu}^{\pi^1, \pi^2}} \left[ \sum_{t=0}^{\infty} \gamma^t A^1(s_t, a_t, b_t) \nabla_{\theta^1} Q^2(s_t, b_t) \right]. \quad (7)$$
+
+The gradient of the Q-value can be estimated by a REINFORCE estimator, which leads to a nested expectation. Agahjohari et al. (2024b) empirically showed that this nested expectation can be efficiently estimated from a single trajectory. We take the same approach (see Appendix A.1) to obtain:
+
+$$\beta \cdot \mathbb{E}_{\tau \sim \mathcal{P}_{\mu}^{\pi^1, \pi^2}} \left[ \sum_{t=0}^{\infty} \gamma^{t+1} \left( \sum_{k < t} \gamma^{t-k} A^1(s_k, a_k, b_k) \right) A^2(s_t, a_t, b_t) \nabla_{\theta^1} \log \pi^1(a_t|s_t) \right]. \quad (8)$$
+
+The expression above captures the essence of opponent shaping: an agent should align its advantages with those of its opponent in order to steer towards trajectories that are mutually beneficial. More precisely, an agent increases the probability of actions that have high product between the sum of its past advantages and the advantages of the opponent at the current time step. For implementation details of the Advantage Alignment formula see Appendix A.6. Equation 8 depends only on the log probabilities of the agent, which allows us to create a proximal surrogate objective that closely follows the PPO (Schulman et al., 2017b) formulation:
+
+$$\mathbb{E}_{\tau \sim \mathcal{P}_{\mu}^{\pi^1, \pi^2}} \left[ \min \{r_n(\theta_1) A^*(s_t, a_t, b_t), \text{clip}(r_n(\theta_1); 1 - \epsilon, 1 + \epsilon) A^*(s_t, a_t, b_t)\} \right], \quad (9)$$
+
+where  $r_n$  denotes the ratio of the policy (new) after  $n$  updates of the original policy (old), and:
+
+$$A^*(s_t, a_t, b_t) = \left( A^1(s_t, a_t, b_t) + \beta \gamma \cdot \left( \sum_{k < t} \gamma^{t-k} A^1(s_k, a_k, b_k) \right) A^2(s_t, a_t, b_t) \right). \quad (10)$$
+
+{4}------------------------------------------------
+
+![Bar chart showing the probability of cooperation for different states: START, CC, CD, DC, DD. START and CC have high probabilities (~1.0), CD and DD have low probabilities (~0.15), and DC has a high probability (~0.95). Error bars represent one standard deviation.](e0d425c8e4eef259e4c52d81426d93fa_img.jpg)
+
+|  |  |  |
+|-|-|-|
+| $\frac{A_t^2}{\sum_{k < t} \gamma^{t-k} A_k^1}$ | + | - |
+| + | + | - |
+| - | - | + |
+
+(a)
+
+Advantage Alignment (AdAlign)
+
+| State | Probability of Cooperation |
+|-|-|
+| START | ~1.0 |
+| CC | ~0.95 |
+| CD | ~0.15 |
+| DC | ~0.95 |
+| DD | ~0.15 |
+
+(b)
+
+Bar chart showing the probability of cooperation for different states: START, CC, CD, DC, DD. START and CC have high probabilities (~1.0), CD and DD have low probabilities (~0.15), and DC has a high probability (~0.95). Error bars represent one standard deviation.
+
+Figure 1: (a) The sign of the product of the gamma-discounted past advantages for the agent, and the current advantage of the opponent, indicates whether the probability of taking an action should increase or decrease. (b) The empirical probability of cooperation of Advantage Alignment for each previous combination of actions in the one step history Iterated Prisoner’s Dilemma, closely resembles tit-for-tat. Results are averaged over 10 random seeds, the black whiskers show one std.
+
+This surrogate objective in equation 9 is used to formulate the Proximal Advantage Alignment (Proximal AdAlign) algorithm (see appendix A.7 for implementation details).
+
+**Why is Assumption 1 necessary?** Assumption 1 allows the agent to influence the learning dynamics of the opponent, by controlling the values for different actions. After one iteration of the algorithm the agent changes the Q-values of the opponent for different actions and, since the opponent aims to maximize their expected return, it must change its behavior accordingly.
+
+### 4.2 ANALYZING ADVANTAGE ALIGNMENT
+
+Equation 8 yields four possible different cases for controlling the direction of the gradient of the log probability of the policy. As with the usual policy gradient estimator, the sign multiplying the log probability indicates whether the probability of taking an action should increase or decrease. Intuitively, when the interaction with the opponent has been positive (blue in figure 1a) the advantages of the agent align with that of the opponent: the advantage alignment term increases the log probability of taking an action if the advantage of the opponent is positive and decreases it if it is negative. In contrast, if the interaction has been negative (red in figure 1a) the advantages are at odds with each other: the advantage alignment term decreases the log probability of taking an action if the advantage of the opponent is positive and increases it if it is negative. We now relate existing opponent shaping algorithms to advantage alignment, and argue that these algorithms use the same underlying mechanisms. Theorem 1 shows that LOLA update from Foerster et al. (2018b) can be written as a policy gradient method with an opponent shaping term similar to equation 10. This shows the fundamental relationship between opponent-shaping dynamics and advantage multiplications. Theorem 2 proves that LOQA’s opponent shaping term has the same form as that of Advantage Alignment, differing only by a scalar term.
+
+**Theorem 1** (LOLA as an advantage alignment estimator). *Given a two-player game where players 1 and 2 have respective policies  $\pi^1(a|s)$  and  $\pi^2(b|s)$ , where each policy is parametrised such that the set of gradients  $\nabla_{\theta^i} \log \pi^2(a|s)$  for all pairs  $(a, s)$  form an orthonormal basis, the LOLA update for the first player correspond to a reinforce update with the following opponent shaping term*
+
+$$\beta \cdot \mathbb{E}_{\tau \sim P_{\pi^1, \pi^2}} \left[ \sum_{t=0}^{\infty} \gamma^t \left( \sum_{k=t}^{\infty} d_{\gamma, k-t} \gamma^{k-t} A_k^1 A_{k-t}^2 \right) \nabla_{\theta^1} \log \pi^1(a_t|s_t) \right], \quad (11)$$
+
+where  $A_k^i := A^i(s_k, a_k, b_k)$  and  $d_{\gamma, k}$  is the occupancy measure of the tuple  $(a_k, b_k, s_k)$  and  $\beta$  is the step size of the naive learner. See appendix A.2 for a proof.
+
+{5}------------------------------------------------
+
+**Theorem 2** (LOQA as an advantage alignment estimator). *Under Assumption 2, the opponent shaping term in LOQA is equivalent to the opponent shaping term in Equation 8 up to  $(1 - \hat{\pi}^2(b_k|s_k))$*
+
+$$\beta \cdot \mathbb{E}_{\tau \sim P_{\mu}^{\pi^1, \pi^2}} \left[ \sum_{t=0}^{\infty} \gamma^{t+1} \left( \sum_{k < t} \gamma^{t-k} (1 - \hat{\pi}^2(b_k|s_k)) A_k^1 \right) A_t^2 \nabla_{\theta^1} \log \pi^1(a_t|s_t) \right], \quad (12)$$
+
+$\hat{\pi}^2(b_t|s_t)$  approximates the opponent policy as defined in LOQA. For a proof see appendix A.5.
+
+Having established the connection between existing opponent shaping algorithms and Advantage Alignment, we now focus on analyzing the theoretical properties of Advantage Alignment itself. We investigate the impact of the Advantage Alignment term on Nash equilibria. Theorem 3 demonstrates that Advantage Alignment preserves Nash equilibria, ensuring that if agents are already playing equilibrium strategies, the Advantage Alignment updates will not cause the policy gradient to deviate from them locally.
+
+**Theorem 3** (Advantage Alignment preserves Nash equilibria). *Advantage Alignment preserves Nash equilibria. That is, if a joint policy  $(\pi_1^*, \pi_2^*)$  constitutes a Nash equilibrium, then applying the Advantage Alignment formula will not change the policy, as the gradient contribution of the advantage alignment term is zero. The proof can be found in Appendix A.8.*
+
+## 5 EXPERIMENTS
+
+We follow the evaluation protocol of LOQA (Aghajohari et al., 2024b), where the fixed policy that is generated by the algorithm is evaluated *zero-shot* against a distribution of policies.
+
+### 5.1 ITERATED PRISONER’S DILEMMA
+
+We consider the *full history* version of IPD, where a gated recurrent unit (GRU) policy conditions on the full trajectory of observations before sampling an action. In this experiment we follow the architecture used in POLA (Zhao et al., 2022) (for details see appendix B.1). We also consider trajectories of length 16 with a discount factor,  $\gamma$ , of 0.9. As shown in figure 1b, Advantage Alignment agents consistently achieve a policy that resembles *tit-for-tat* (Rapoport and Chammah, 1965) empirically. Tit-for-tat consists of cooperating on the first move and then mimicking the opponent’s previous move in subsequent rounds.
+
+### 5.2 COIN GAME
+
+The Coin Game is a 3x3 grid world environment where two agents, red and blue, take turns collecting coins. During each turn, a coin of either red or blue color spawns at a random location on the grid. Agents receive a reward of +1 for collecting any coin but incur a penalty of -3 if the opponent collects a coin of their color. A Pareto-optimal strategy in the Coin Game is for each agent to collect only the coins matching their color, as this approach maximizes the total returns for both agents. Figure 2 demonstrates that Advantage Alignment agents perform similarly to LOQA agents when evaluated against a league of different policies: Advantage Alignment agents cooperate with themselves, cooperate with Always Cooperate (AC) and are not exploited by Always Defect (AD).
+
+### 5.3 NEGOTIATION GAME
+
+In the original Negotiation Game, two agents bargain over  $n$  types of items over multiple rounds. In each round, both the quantity of items and the value each agent places on them are randomly set, but the agents only know their own values. They take turns proposing how to divide the items over a random number of turns. Agents can end the negotiation by agreeing to a proposal, and rewards are based on how well the agreement matches their private values. If they don’t reach an agreement by the final turn, neither gets a reward. We modify the game first by making the values public, otherwise Advantage Alignment would have an unfair edge over PPO agents by using the opponent’s value function. Secondly, we do one-shot, simultaneous negotiations instead of negotiation rounds lasting multiple iterations. Third, we modify the reward function so that every negotiation yields a reward. For a given item with agent value  $v_a$ , the reward of the agent  $r_a$  depends on the proposal of the agent  $p_a$  and the proposal of the opponent  $p_o$  where  $p_a, p_o \in [0, 5]$ :  $r_a = p_a \cdot v_a / \max(5, p_a + p_o)$ .
+
+{6}------------------------------------------------
+
+![Figure 2: League Results of the Advantage Alignment agents in Coin Game. A heatmap showing pairwise rewards between AdAlign, LOQA, POLA, MFOS, AC, AD, Random, and Return. The diagonal shows self-rewards, and the upper triangle shows rewards for the row agent against the column agent. The color scale ranges from -0.3 (red) to 0.3 (blue).](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+|  | AdAlign | LOQA | POLA | MFOS | AC | AD | Random | Return |
+|-|-|-|-|-|-|-|-|-|
+| AdAlign | 0.28 | 0.28 | 0.24 | 0.01 | 0.31 | 0.15 | -0.18 | 0.3 |
+| LOQA | 0.29 | 0.30 | 0.24 | 0.06 | 0.32 | 0.12 | -0.15 | 0.2 |
+| POLA | 0.18 | 0.17 | 0.19 | 0.01 | 0.29 | 0.07 | -0.13 | 0.1 |
+| MFOS | 0.19 | 0.16 | 0.19 | -0.01 | 0.03 | 0.41 | -0.21 | 0.0 |
+| AC | 0.35 | 0.35 | 0.38 | 0.32 | 0.35 | 0.63 | 0.11 | -0.1 |
+| AD | -0.08 | -0.05 | -0.03 | -0.42 | -0.27 | -0.00 | -0.53 | -0.2 |
+| Random | 0.26 | 0.26 | 0.24 | 0.20 | 0.05 | 0.53 | 0.01 | -0.3 |
+
+Figure 2: League Results of the Advantage Alignment agents in Coin Game. A heatmap showing pairwise rewards between AdAlign, LOQA, POLA, MFOS, AC, AD, Random, and Return. The diagonal shows self-rewards, and the upper triangle shows rewards for the row agent against the column agent. The color scale ranges from -0.3 (red) to 0.3 (blue).
+
+Figure 2: League Results of the Advantage Alignment agents in Coin Game: LOQA, POLA, MFOS, Always Cooperate (AC), Always Defect (AD), Random and Advantage Alignment (AdAlign). Each number in the plot is computed by running 10 random seeds of each agent head to head with 10 seeds of another for 50 episodes of length 16 and averaging the rewards.
+
+Note that the max operation at the denominator serves to break the invariance of the game dynamics to the scale of proposals. For example, without the max operation, there would be no difference between  $p_a = 1, p_o = 1$  and  $p_a = 5, p_o = 5$ . The social dilemma in this version of the negotiation game arises because both agents are incentivized to take as many items as possible, but by doing so, they end up with a lower return compared to the outcome they would achieve if they split the items based on their individual utilities. A Pareto-optimal strategy entails allowing the agent to take all the items that are more valuable to them, and similarly for their opponent (this constitutes the Always Cooperate (AC) strategy in Figure 3a). We experiment with a high-contrast setting where the utilities of objects for the agents are orthogonal to each other: There are two possible combinations of values in this setup:  $v_a = 5, v_b = 1$  or  $v_a = 1, v_b = 5$ .
+
+As shown in Figure 3a, PPO agents do not learn to solve the social dilemma. They learn the naive policy of bidding high for every item which means they get a low return against themselves. PPO agents trained with shared rewards get a high return against themselves, only to be exploited by PPO agents. They do not learn to abandon cooperation and retaliate after they are defected against. Advantage Alignment agents solves the social dilemma. They cooperate with themselves while remaining non-exploitable against Always Defect.
+
+### 5.4 MELTING POT’S COMMONS HARVEST OPEN
+
+In Commons Harvest Open (Agapiou et al., 2023), a group of 7 agents interact in a environment in which there is 6 bushes with different amounts of apples. Agents receive a reward of 1 for any apple consumed. Consumed apples regrow with a probability dependent on the number of apples in their  $L_2$  neighborhood; specifically, if there are no apples nearby, consumed apples do not regrow. This mechanism creates a tension between agents: they must exercise restraint to prevent extinction while also feeling compelled to consume quickly out of fear that others may over-harvest.
+
+{7}------------------------------------------------
+
+![Figure 3: (a) League Results of the Advantage Alignment agents in the Negotiation Game. (b) Sample trajectories of AdAlign vs. AdAlign and PPO vs. PPO in the negotiation game.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 3(a) is a heatmap showing the Return for various agents in a negotiation game. The agents are AC, AD, AdAlign, PPO, and PPO-SR. The diagonal elements are 0.50, 0.25, 0.44, 0.25, and 0.46 respectively. The color scale for Return ranges from 0.22 (blue) to 0.37 (red). The values in the cells represent the average return for 50 episodes of length 16.
+
+Figure 3(b) shows sample trajectories for two agents, Agent 1 (AdAlign) and Agent 2 (AdAlign), over 5 time steps. For each time step, the Utility and Proposal are shown. AdAlign agents defect first (red) and progressively cooperate with each other (blue) while PPO agents Always Defect.
+
+Figure 3: (a) League Results of the Advantage Alignment agents in the Negotiation Game. (b) Sample trajectories of AdAlign vs. AdAlign and PPO vs. PPO in the negotiation game.
+
+Figure 3: (a) League Results of the Advantage Alignment agents in the Negotiation Game: Always Cooperate (AC), an agent which proposes 5 for items which are more valuable to it and 1 for items that are less valuable to it, Always Defect (AD), an agent that proposes 5 regardless of the values, Advantage Alignment (AdAlign), PPO and PPO summing rewards (PPO-SR). Each number in the plot is computed by running 10 random seeds of each agent head to head with 10 seeds of another for 50 episodes of length 16 and averaging the rewards. Note that against Always Defect, Always Cooperate gets an average return of 0.25 while Always Defect gets 0.30. (b) Sample trajectories of AdAlign vs. AdAlign and PPO vs. PPO in the negotiation game. The numbers show the utilities and proposals, which have been rounded to integer values. AdAlign agents defect first (red) and progressively cooperate with each other (blue) while PPO agents Always Defect.
+
+|  | adalign | ppo | ppo_p | exploiter | acb | vmppo | opre | acb_p | opre_p | random |
+|-|-|-|-|-|-|-|-|-|-|-|
+| scenario_0 | 1.78 | 1.15 | 0.33 | 0.91 | 0.87 | 0.93 | 0.84 | 0.95 | 0.53 | 0.00 |
+| scenario_1 | 1.48 | 0.74 | 0.45 | 0.76 | 0.80 | 0.85 | 0.77 | 0.94 | 0.52 | 0.00 |
+| average | 1.63 | 0.94 | 0.39 | 0.83 | 0.83 | 0.89 | 0.81 | 0.94 | 0.52 | 0.00 |
+
+Figure 4: Comparison of different reinforcement learning algorithms in Melting Pot’s 2.0. Commons Harvest Open. The score is the focal return per capita, min-max normalized between a random agent and an exploiter baseline (ACB agent with an LSTM policy/value network) trained for  $10^9$  steps. Following the protocol of the Melting Pot contest, we select the best agent out of 10 seeds and evaluate it 100 times.
+
+There are a number of complications that make the Melting Pot environments particularly challenging. First, the environments are partially-observable: agents can only see a local window around themselves. Second, the partial observations are in the form of high-dimensional raw pixel data. Third, these environments often involve multiple agents—seven in the case of Commons Harvest Open—which increases the complexity of interactions and coordination. Therefore, agents need to remember past interactions with other agents to infer their motives and policies. All these factors, combined with the inherent social dilemma reward structure of the game, make finding policies that are optimal with respect to social *and* individual objectives a non-trivial task.
+
+We train a GTrXL transformer (Parisotto et al., 2019) for 34k steps, with context length of 30, and compare the normalized focal return per capita of our agents against the baselines in Melting Pot 2.0: Advantage-critic baseline (acb) (Espeholt et al., 2018), V-MPO (vmppo) (Song et al., 2019), options as responses (opre) (Vezhnevets et al., 2020), and prosocial versions of opre (opre\_p) and acb (acb\_p) that encourage cooperation. We also compare to our own implementations of PPO (ppo) and PPO
+
+{8}------------------------------------------------
+
+![Figure 5: A 3x3 grid of screenshots from the Commons Harvest evaluation. The rows are labeled 'adalign', 'ppo', and 'ppo_p' on the left. The columns are labeled 'Step 1', 'Step 155', and 'Step 310' at the top. Each screenshot shows a 2D grid world environment with various colored agents (green, yellow, red, blue, purple) and resources (apple bushes). In the 'adalign' row, agents are more spread out and maintain a higher density of resources. In the 'ppo' and 'ppo_p' rows, agents are more concentrated, and resources appear to be depleted more quickly, especially by Step 310.](d4e9f8f6bf5d7853ecae9c9633900af1_img.jpg)
+
+Figure 5: A 3x3 grid of screenshots from the Commons Harvest evaluation. The rows are labeled 'adalign', 'ppo', and 'ppo\_p' on the left. The columns are labeled 'Step 1', 'Step 155', and 'Step 310' at the top. Each screenshot shows a 2D grid world environment with various colored agents (green, yellow, red, blue, purple) and resources (apple bushes). In the 'adalign' row, agents are more spread out and maintain a higher density of resources. In the 'ppo' and 'ppo\_p' rows, agents are more concentrated, and resources appear to be depleted more quickly, especially by Step 310.
+
+Figure 5: Frames of evaluation trajectories for different algorithms. Qualitatively, we demonstrate that Proximal Advantage Alignment (adalign) also outperforms naive PPO (ppo) and PPO with summed rewards. The evaluation trajectories show how adalign agents are able to maintain a bigger number of apple bushes from extinction (2) for a longer time that either ppo or ppo\_p. Note that in the Commons Harvest evaluation two exploiter agents, green and yellow, play against a focal population of 5 copies of the evaluated algorithm.
+
+with summed rewards (ppo\_p). Figure 4 shows that our best advantage alignment agent achieves on average 1.63 normalized per capita focal return in the Commons Harvest evaluation scenarios, significantly outperforming all baselines (see Appendix B.4). Figure 5, qualitatively shows the reason why Proximal Advantage Alignment outperforms PPO and PPO with summed rewards on one of the evaluation scenarios.
+
+## 6 RELATED WORK
+
+The Iterated Prisoner’s Dilemma (IPD) was introduced by [Rapoport and Chammah \(1965\)](#). *Tit-for-tat* was discovered as a robust strategy against a population of opponents in IPD by [Axelrod \(1984\)](#), who organized multiple IPD tournaments. It was discovered only recently that IPD contains strategies that extort rational opponents into exploitable cooperation ([Press and Dyson, 2012](#)). [Sandholm and Crites \(1996\)](#) were the first to demonstrate that two Q-learning agents playing IPD converge to mutual defection, which is suboptimal. Later, [Foerster et al. \(2018b\)](#) demonstrated that the same is true for policy gradient methods. [Bertrand et al. \(2023\)](#) were able to show that with optimistic initialization and *self-play*, Q-learning agents find a *Pavlov* strategy in IPD.
+
+Opponent shaping was first introduced in LOLA [Foerster et al. \(2018b\)](#), as a method for controlling the learning dynamics of opponents in a game. A LOLA agent assumes the opponents are naive learners and differentiates through a one step look-ahead optimization update of the opponent. More formally, LOLA maximizes  $V^1(\theta^1, \theta^2 + \Delta\theta^2)$  where  $\Delta\theta^2$  is a naive learning step in the direction that maximizes the opponent’s value function  $V^2(\theta^1, \theta^2)$ . Variations of LOLA have been introduced
+
+{9}------------------------------------------------
+
+to have formal stability guarantees (Letcher et al., 2021), learn consistent update functions assuming mutual opponent shaping (Willi et al., 2022) and be invariant to policy parameterization (Zhao et al., 2022). More recent work performs opponent shaping by having an agent play against a best response approximation of their policy (Aghajohari et al., 2024a). LOQA (Aghajohari et al., 2024b), on which this work is based, performs opponent shaping by controlling the Q-values of the opponent using REINFORCE (Williams, 1992) estimators.
+
+Another approach to finding socially beneficial equilibria in general sum games relies on modeling the problem as a meta-game, where meta-rewards correspond to the returns on the inner game, meta-states correspond to joint policies of the players, and the meta-actions are updates to these policies. Al-Shedivat et al. (2018) introduce a continuous adaptation framework for multi-task learning that uses meta-learning to deal with non-stationary environments. MFOS (Lu et al., 2022) uses model-free optimization methods like PPO and genetic algorithms to optimize the meta-value of the meta-game. More recently Meta-Value Learning (Cooljmans et al., 2023) parameterizes the meta-value as a neural network and applies Q-learning to capture the future effects of changes to the inner policies. Shaper (Khan et al., 2024), scales opponent shaping to high-dimensional general-sum games with temporally extended actions and long time horizons. It does so, by simplifying MFOS and effectively capturing both intra-episode and inter-episode information.
+
+Melting Pot 2.0 (Agapiou et al., 2023) introduces a comprehensive suite of multi-agent reinforcement learning environments that focus on social interactions and coordination challenges, providing a valuable benchmark for evaluating the scalability and effectiveness of reinforcement learning algorithms in complex, cooperative-competitive settings. The Negotiation Game, introduced by DeVault et al. (2015); Lewis et al. (2017) and subsequently refined by Cao et al. (2018), has proven to be a significant benchmark for studying general-sum games. It integrates elements of strategy and social dilemmas, necessitating that agents balance cooperation and competition to optimize their outcomes. Noukhovitch et al. (2021) analyze this complex benchmark, underscoring its importance in the field. Future investigations will turn towards an even more sophisticated simulation proposed by Zhang et al. (2022), which involves negotiations among countries and regions with diverse resource distributions and preferences in addressing climate change.
+
+## 7 CONCLUSION
+
+In this work, we introduced *Advantage Alignment*, a novel family of algorithms designed to address the fundamental challenge of achieving self-interested cooperation in multi-agent reinforcement learning, particularly in social dilemmas. By deriving our algorithms from first principles, we distilled opponent shaping to its core components, providing a simple yet powerful mechanism to align agents’ advantages and foster mutually beneficial behaviors. Our approach unifies and generalizes existing opponent shaping methods, such as LOLA and LOQA, demonstrating that they implicitly perform Advantage Alignment through different mechanisms. This unification not only simplifies the mathematical formulation of opponent shaping but also reduces computational complexity, enabling more efficient and scalable algorithms.
+
+Our experiments across a range of social dilemmas, including the Iterated Prisoner’s Dilemma, Coin Game, and a continuous action variant of the Negotiation Game, demonstrate that Advantage Alignment consistently achieves state-of-the-art cooperation and robustness against exploitation. Notably, we extended our methods to complex, large-scale, general-sum environments like Melting Pot’s Commons Harvest Open, addressing challenges that arise from partial observability, high-dimensional observations, and multi-agent interactions. In these settings, Advantage Alignment agents learned sophisticated strategies that balance individual and collective interests, showcasing the potential of our algorithms to scale to real-world applications.
+
+The significance of our work lies in providing a principled, efficient, and scalable solution to the longstanding problem of self-interested cooperation in general-sum games. By enabling agents to autonomously align their interests with one another, Advantage Alignment paves the way for more harmonious and socially beneficial interactions in artificial intelligence systems integrated into human decision-making processes. This has profound implications for the development of AI agents in diverse domains, from autonomous vehicles navigating shared environments to AI assistants collaborating with humans and other agents.
+
+ Rest of paper (reference and Appendix) is removed.

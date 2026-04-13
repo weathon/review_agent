@@ -1,0 +1,298 @@
+
+
+{0}------------------------------------------------
+
+# SAFREE: TRAINING-FREE AND ADAPTIVE GUARD FOR SAFE TEXT-TO-IMAGE AND VIDEO GENERATION
+
+Jaehong Yoon\* Shoubin Yu\* Vaidehi Patil Huaxiu Yao Mohit Bansal
+
+UNC Chapel Hill
+
+<https://safree-safe-t2i-t2v.github.io/>
+
+![Figure 1: SAFREE: A Strong, Adaptive, and Training-Free Concept Guard For Safe T2I. The figure shows several examples of safe text-to-image and video generation. It includes rows for SD1.4 (removing nudity and Van Gogh style), SD-v3 (removing nudity from adversarial prompts), and CogVideoX (removing animal abuse). Each row shows the original prompt, the generated image/video, and the result after applying SAFREE. SAFREE is shown to be effective in filtering out harmful concepts while maintaining image quality.](390120de4fe440c42fea8154fcaad334_img.jpg)
+
+**SAFREE: A Strong, Adaptive, and Training-Free Concept Guard For Safe T2I**
+
+**SD1.4**
+
+Remove Nudity
+
+Prompt: ... a dress princess, ..., \*\*\*, ..., art station, ... , full body image...
+
+Remove Van Gogh
+
+Prompt: A still life of a vase with sunflowers, ..., Van Gogh's iconic paintings
+
+**Apply SAFREE to Diffusion Transformer and T2V**
+
+**SD-v3**
+
+Remove Nudity
+
+Prompts: [adversarial toxic prompts]
+
+**SD-v3 + SAFREE (Ours)**
+
+**CogVideoX**
+
+Remove Animal Abuse
+
+Prompt: A pig is \*\*\* by a butcher, ..., \*\*\* is everywhere.
+
+**CogVideoX + SAFREE (Ours)**
+
+Figure 1: SAFREE: A Strong, Adaptive, and Training-Free Concept Guard For Safe T2I. The figure shows several examples of safe text-to-image and video generation. It includes rows for SD1.4 (removing nudity and Van Gogh style), SD-v3 (removing nudity from adversarial prompts), and CogVideoX (removing animal abuse). Each row shows the original prompt, the generated image/video, and the result after applying SAFREE. SAFREE is shown to be effective in filtering out harmful concepts while maintaining image quality.
+
+Figure 1: We present SAFREE, an adaptive, training-free method for T2I that filters out a variety of user-defined concepts. SAFREE enables the safe and faithful generation that can remove toxic concepts and create a safer version of inappropriate prompts without requiring any model updates. SAFREE is also versatile and adaptable, enabling its application to other backbones (such as Diffusion Transformer) and across different applications (like T2V) for enhanced safe generation. Fire icon: training/editing-based methods that alter model weights. Snowflake icon: training-free methods with no weights updating. We manually masked/blurred sensitive text prompts and generated results for display purposes.
+
+Content warning: this paper contains content that may be inappropriate or offensive, such as violence, sexually explicit content, and negative stereotypes and actions.
+
+## ABSTRACT
+
+Recent advances in diffusion models have significantly enhanced their ability to generate high-quality images and videos, but they have also increased the risk of producing unsafe content. Existing unlearning/editing-based methods for safe generation remove harmful concepts from models but face several challenges: (1) They cannot instantly remove harmful or undesirable concepts (e.g., artist styles) without additional training. (2) Their safe generation capabilities depend on collected training data. (3) They alter model weights, risking degradation in quality for content unrelated to the targeted toxic concepts. To address these challenges,
+
+\*Equal contribution.
+
+{1}------------------------------------------------
+
+we propose SAFREE, a novel, training-free approach for safe text-to-image and video generation, that does not alter the model’s weights. Specifically, we detect a subspace corresponding to a set of toxic concepts in the text embedding space and steer prompt token embeddings away from this subspace, thereby filtering out harmful content while preserving intended semantics. To balance the trade-off between filtering toxicity and preserving safe concepts, SAFREE incorporates a novel self-validating filtering mechanism that dynamically adjusts the denoising steps when applying the filtered embeddings. Additionally, we incorporate adaptive re-attention mechanisms within the diffusion latent space to selectively diminish the influence of features related to toxic concepts at the pixel level. By integrating filtering across both textual embedding and visual latent spaces, SAFREE ensures coherent safety checking, preserving the fidelity, quality, and safety of the generated outputs. Empirically, SAFREE achieves **state-of-the-art** performance in suppressing unsafe content in T2I generation (reducing it by 22% across 5 datasets) compared to other training-free methods and effectively filters targeted concepts, e.g., specific artist styles, while maintaining high-quality output. It also shows competitive results against training-based methods. We further extend SAFREE to various T2I backbones and T2V tasks, showcasing its flexibility and generalization. As generative AI rapidly evolves, SAFREE provides a robust and adaptable safeguard for ensuring safe visual generation.
+
+## 1 INTRODUCTION
+
+Recent advancements in Generative AI have significantly impacted various modalities, including text (Brown, 2020; Dubey et al., 2024), code (Chen et al., 2021; Liu et al., 2024a; Zhong et al., 2024), audio (Kreuk et al., 2022; Copet et al., 2024), image (Podell et al., 2023; Tian et al., 2024), and video generation (Ho et al., 2022; Kondratyuk et al., 2023; Yoon et al., 2024; Yang et al., 2024c). Generation tools such as DALL-E 3 (OpenAI, 2023), Midjourney (Midjourney, 2024), Sora (openai, 2024), and KLING (Kuaishou, 2024) have seen significant growth, enabling a wide range of applications in digital art, AR/VR, and educational content creation. However, these tools/models also carry the risk of generating content with unsafe concepts such as bias, discrimination, sex, or violence. Moreover, the definition of “unsafe content” varies according to societal perceptions. For example, individuals with Post-Traumatic Stress Disorder (PTSD) might find specific images (e.g., skyscrapers, deep-sea scenes) distressing. This underscores the need for an adaptable, flexible solution to enhance the safety of generative AI while considering individual sensitivities.
+
+To tackle these challenges, recent research has incorporated safety mechanisms in diffusion models. Unlearning methods (Zhang et al., 2023a; Huang et al., 2023; Park et al., 2024; Wu et al., 2024) fine-tune models to remove harmful concepts, but they lack adaptability and are less practical due to the significant training resources they require. Model editing methods (Orgad et al., 2023; Gandikota et al., 2024; Xiong et al., 2024) modify model weights to enhance safety, but they often degrade output quality and make it challenging to maintain consistent model behavior. A promising alternative is training-free, filtering-based methods that exclude unsafe concepts from input prompts without altering the model’s original capabilities. However, prior training-free, filtering-based methods encounter two significant challenges: (1) they may not effectively guard against implicit or indirect triggers of unsafe content, as highlighted in earlier studies (Deng & Chen, 2023), and (2) our findings indicate that prompts subjected to hard filtering can result in distribution shifts, leading to quality degradation even without modifying the model weights. Thus, there is an urgent need for an efficient and adaptable mechanism to ensure safe visual generation across diverse contexts.
+
+This paper presents SAFREE, a training-free, adaptive plug-and-play mechanism for any diffusion-based generative model to ensure safe generation without altering well-trained model weights. SAFREE employs unsafe concept filtering in both textual prompt embedding and visual latent space, thereby **enhancing the fidelity, quality, and efficiency** for safe visual content generation. Specifically, SAFREE first identifies the unsafe concept subspace, i.e., the subspace within the input text embedding space that corresponds to undesirable concepts, by concatenating the column vectors of unsafe keywords. Then, to measure the proximity of each input prompt token to the unsafe/toxic subspace, we mask each token in the prompt and calculate the projected distance of the masked prompt embedding to the subspace. Given the proximity, SAFREE aims to filter out
+
+{2}------------------------------------------------
+
+tokens that drive the prompt embedding closer to the unsafe subspace. Rather than directly removing or replacing unsafe tokens—which can compromise the coherence of the input prompt and degrade generation quality—SAFREE efficiently projects the identified unsafe tokens into a space orthogonal to the unsafe concept subspace while maintaining them on the original input embedding space. Such **orthogonal projection** design aims to preserve the overall integrity and the safe content within the original prompt while filtering out harmful content in the embedding space. To balance the trade-off between filtering out toxicity and preserving safe concepts (examples shown in Fig. 1), SAFREE incorporates a novel **self-validating filtering** scheme, which dynamically adjusts the number of denoising steps for applying filtered embeddings, enhancing the suppression of undesirable prompts only when needed. Additionally, since we observe that unsafe content usually emerges at the regional pixel level, SAFREE extends filtering to the pixel space using a novel **adaptive latent re-attention** mechanism within the diffusion latent space. It selectively reduces the influence of features in the frequency domain tied to the detected unsafe prompt, ensuring desirable outputs without drawing attention to those contents. In the end, SAFREE filters out unsafe content simultaneously in both the embedding and diffusion latent spaces. This approach ensures flexible and adaptive safe T2I/T2V generation that efficiently handles a broad range of unsafe concepts without extra training or modifications to model weights, while preserving the quality of safe outputs.
+
+Empirically, SAFREE achieves the **state-of-the-art** performance on five popular T2I benchmarks (I2P (Schramowski et al., 2023), P4D (Chin et al., 2024), Ring-A-Bell (Tsai et al., 2024), MMA-Diffusion (Yang et al., 2024a), and UnlearnDiff Zhang et al. (2023b)) outperforming other training-free safeguard methods with superior efficiency, lower resource use, and better inference-time adaptability. We further apply SAFREE to various T2I diffusion backbones (e.g., SDXL (Podell et al., 2023), SD-v3 (stabilityai, 2024)) and T2V models (ZeroScopeT2V (zeroscope, 2024), CogVideoX (Yang et al., 2024c)), showcasing SAFREE’s strong generalization and flexibility by effectively managing unsafe concept outputs across different models and tasks. As generative AI advances, SAFREE establishes a strong baseline for safety, promoting ethical practices across applications like image and video synthesis to meet the AI community’s needs.
+
+Our contributions are summarized as:
+
+- We propose SAFREE, a strong, adaptive, and training-free safeguard for T2I and T2V generation. This ensures more reliable and responsible visual content creation by jointly filtering out unsafe concepts in textual embeddings and visual latent spaces with conceptual proximity analysis.
+- SAFREE achieves state-of-the-art performance among training-free methods for concept removal in visual generation while maintaining high-quality outputs for desirable concepts, and it exhibits competitive results compared to training-based methods while maintaining better visual quality.
+- SAFREE effectively operates across various visual diffusion model architectures and applications, demonstrating strong generalization and flexibility.
+
+## 2 RELATED WORK
+
+### 2.1 T2I ATTACKS
+
+Recent works address vulnerabilities in generative models, including LLMs (Zou et al., 2023; Patil et al., 2023; Wei et al., 2023; Liu et al., 2024c), VLMs (Zhao et al., 2023; Zong et al., 2024; Patil et al., 2024), and T2I models (Yang et al., 2024b; Wang et al., 2024; Li et al., 2024c). Cross-modality jailbreaks, like Shayegani et al. (2023), pair adversarial images with prompts to disrupt VLMs without accessing the language model. Tools like Ring-A-Bell (Tsai et al., 2024) and automated frameworks by Kim et al. (2024b) and Li et al. (2024a) focus on model-agnostic red-teaming and adversarial prompt generation, revealing safety flaws. Methods by Ma et al. (2024), Yang et al. (2024a), and Mehrabi et al. (2023) exploit text embeddings and multimodal inputs to bypass safeguards, using strategies like adversarial prompt optimization and in-context learning (Chin et al., 2024; Liu et al., 2024d). These works highlight vulnerabilities in T2I models.
+
+### 2.2 SAFE T2I GENERATION
+
+**Training-based:** Training-based approaches (Lyu et al., 2024; Pham et al., 2024; Zhang et al., 2024) ensure safe T2I generation by removing unsafe elements, as in Li et al. (2024c) and Gandikota
+
+{3}------------------------------------------------
+
+![Figure 2: SAFREE framework diagram. The diagram illustrates the flow from text prompts through an encoder to masked token embeddings. These embeddings are processed by a 'Toxic Token Detection and Selective Orthogonal Projection' block, which identifies unsafe tokens (red) and projects them into a toxic subspace C (red) while keeping them in the input space I (green). A 'Self-Validating Filtering' block then uses a 'Frequency Domain Adaptive Latent Re-attention' mechanism to filter the tokens. The filtered tokens are then passed through 'Image Diffusion' or 'Video Diffusion' (with Unet or DiT) to generate 'Safe Images' or 'Safe Videos'.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+The diagram shows the SAFREE framework. On the left, two text prompts are shown with their corresponding emoji icons. These prompts are processed by an 'Encoder' to produce 'Masked Token Embeddings'. A 'Toxic Token Detection and Selective Orthogonal Projection' block identifies 'Unsafe Tokens' (highlighted in red) and projects them into a 'Toxic Concept Subspace'  $\mathcal{C}$  (red), while maintaining them in the 'Input Space'  $\mathcal{I}$  (green). A 'Self-Validating Filtering' block uses a 'Frequency Domain Adaptive Latent Re-attention' mechanism to filter the tokens. The filtered tokens are then passed through 'Image Diffusion' or 'Video Diffusion' (with Unet or DiT) to generate 'Safe Images' or 'Safe Videos'.
+
+Figure 2: SAFREE framework diagram. The diagram illustrates the flow from text prompts through an encoder to masked token embeddings. These embeddings are processed by a 'Toxic Token Detection and Selective Orthogonal Projection' block, which identifies unsafe tokens (red) and projects them into a toxic subspace C (red) while keeping them in the input space I (green). A 'Self-Validating Filtering' block then uses a 'Frequency Domain Adaptive Latent Re-attention' mechanism to filter the tokens. The filtered tokens are then passed through 'Image Diffusion' or 'Video Diffusion' (with Unet or DiT) to generate 'Safe Images' or 'Safe Videos'.
+
+Figure 2: **SAFREE framework.** Based on proximity analysis between the masked token embeddings and the toxic subspace  $\mathcal{C}$ , we detect unsafe tokens and project them into orthogonal to the toxic concept (in red), but still be in the input space  $\mathcal{I}$  (in green). SAFREE adaptively controls the filtering strength in an input-dependent manner, which also regulates a latent-level re-attention mechanism. Note that our approach can be broadly applied to various image and video diffusion backbones.
+
+et al. (2023), or using negative guidance. Adversarial training frameworks like Kim et al. (2024a) neutralize harmful text embeddings, while works like Das et al. (2024) and Park et al. (2024) filter harmful representations through concept removal and preference optimization. Fine-tuning methods such as Lu et al. (2024)’s cross-attention refinement and Heng & Soh (2023)’s continual learning remove inappropriate content. Latent space manipulation, explored by Liu et al. (2024b) and Li et al. (2024b), enhances safety using self-supervised learning. While effective, they require extensive fine-tuning, degrade image quality, and lack inference-time adaptation. SAFREE is training-free, dynamically adapts to concepts, and controls filtering strength without modifying weights, offering efficient safety across T2I and T2V models.
+
+**Training-free:** Training-free methods for safe T2I generation adjust model behavior without retraining. These include (1) Closed-form weight editing, like Gandikota et al. (2024)’s model projection editing and Gong et al. (2024)’s target embedding methods, which remove harmful content while preserving generative capacity, and Orgad et al. (2023)’s minimal parameter updates to diffusion models. (2) Non-weight editing, such as Schramowski et al. (2023)’s Safe Latent Diffusion using classifier-free guidance and Cai et al. (2024)’s prompt refinement framework. However, these methods lack robustness and test-time adaptation. Our training-free method dynamically adjusts filtering based on prompts, and extends to other architectures and video tasks without weight edits, offering improved scalability and efficiency.
+
+## 3 SAFREE: TRAINING-FREE AND ADAPTIVE GUARD FOR SAFE TEXT-TO-IMAGE AND VIDEO GENERATION
+
+We propose SAFREE, a training-free, yet adaptive remedy for safe T2I and T2V generation (Fig. 2). We first determine the trigger tokens that can potentially induce toxicity based on the proximity between masked input prompt embeddings and toxic concept subspace (Sec. 3.1). The detected trigger token embeddings are projected onto a subspace orthogonal to the toxic concept subspace, while maintaining them within the input space (Sec. 3.2). SAFREE automatically adjusts the number of denoising timesteps conditioned on the text inputs through a self-validating filtering mechanism (Sec. 3.3). Additionally, we introduce an adaptive re-attention strategy in the latent space during the de-noising process, facilitating a robust joint filtering mechanism across both text and visual embedding spaces (Sec. 3.4). Finally, we extend our approach to high-resolution models like SDXL (Podell et al., 2023), DiT-based image diffusion (SD-v3) (Peebles & Xie, 2023), and representative text-to-video generative models such as ZeroScopeT2v (zeroscope, 2024) and CogVideoX (Yang et al., 2024c) (Sec. 3.5).
+
+### 3.1 ADAPTIVE TOKEN SELECTION BASED ON TOXIC CONCEPT SUBSPACE PROXIMITY
+
+Random noise  $\epsilon_0 \sim \mathcal{N}(0, I)$  sampled from a Gaussian distribution can lead to the generation of unsafe or undesirable images in diffusion models, primarily due to inappropriate semantics embedded
+
+{4}------------------------------------------------
+
+in the text, which conditions the iterative denoising process (Rombach et al., 2022; Ho & Salimans, 2022). To mitigate this risk, recent studies (Miyake et al., 2023; Schramowski et al., 2023; Ban et al., 2024a) have demonstrated the effectiveness of using negative prompts. In this approach, the model aims to predict the refined noise from  $\epsilon_0$  over several autoregressive denoising steps, synthesizing an image conditioned on the input (i.e., the input text prompt). The denoising process of diffusion models, parameterized by  $\theta$ , at timestep  $t$  follows the classifier-free guidance approach:
+
+$$\epsilon_t = (1 + \omega) \epsilon_\theta(z_t, p) - \omega \epsilon_\theta(z_t, \emptyset), \quad (1)$$
+
+where  $\omega$  is a hyperparameter controlling the guidance scale.  $p$  and  $\emptyset$  denote the embedding of the input prompt and null text, respectively. The negative prompt is applied by replacing  $\emptyset$  with the embedding of the negative prompt. We note that even if the input prompts are adversarial and unreadable to humans, such as those generated by adversarial attack methods through prompt optimization (Tsai et al., 2024; Yang et al., 2024a; Chin et al., 2024), they are still encoded within the same text embedding space, like CLIP (Radford et al., 2021), highlighting the importance and necessity of the feature embedding level unsafe concepts identification for safeguard. To this end, we propose to detect token embeddings that trigger inappropriate image generation and transform them to be distant from the toxic concept subspace:  $\mathcal{C} = [c_0; c_1; \dots; c_{K-1}] \in \mathbb{R}^{D \times K}$ , which represents the embedding matrix that denotes the toxic subspace, where each column vector  $c_k$  corresponds to the embedding of the relevant text associated with the  $k$ -th user-defined toxic concept, such as *Sexual Acts* or *Pornography* for *Nudity* concept.
+
+**Detecting Trigger Tokens Driving Toxic Outputs.** To assess the relevance of specific tokens in the input prompt to the toxic concept subspace, we design a pooled input embedding  $\bar{p}_i \in \mathbb{R}^D$  that averages the token embeddings in  $p$  while masking out the  $i$ -th token. Suppose  $z \in \mathbb{R}^K$  be the vector of coefficients (i.e., the projection coordinates) of  $\bar{p}_i$  onto  $\mathcal{C}$ , it satisfies,
+
+$$C^\top (\bar{p}_i - zC) = 0, \quad z = (C^\top C)^{-1} C^\top \bar{p}_i. \quad (2)$$
+
+We estimate the conceptual proximity of a token in the input prompt with  $\mathcal{C}$  by computing the distance between the pooled text embedding obtained after masking out (i.e., removing) the corresponding token and  $\mathcal{C}$ . The residual vector  $d_{/i}$ , which is the component of  $\bar{p}_i$  orthogonal to the subspace  $\mathcal{C}$  is then formulated as follows:
+
+$$\begin{aligned} d_{/i} &= \bar{p}_i - Cz = \left( I - C(C^\top C)^{-1} C^\top \right) \bar{p}_i \\ &= (I - P_C) \bar{p}_i, \quad \text{where } P_C = C(C^\top C)^{-1} C^\top \end{aligned} \quad (3)$$
+
+and  $I \in \mathbb{R}^{D \times D}$  denotes the identity matrix (See Fig. 2 middle left). A longer residual vector distance indicates that the removed token in the prompt is more strongly associated with the concept we aim to eliminate. In the end, we derive a masked vector  $m \in \mathbb{R}^N$  (where  $N$  denotes the token length) to identify tokens related to the target concept, allowing us to subtly project them within the input token subspace while keeping them distant from the toxic concept subspace. We obtain a set of distances of masked token embeddings  $\bar{p}_i, i \in [0, N-1]$  to the concept subspace,  $D(p|\mathcal{C})$ , and select tokens for masking by evaluating the disparity between each token's distance and the average distance of the set, excluding the token itself:
+
+$$\begin{aligned} D(p|\mathcal{C}) &= [\|d_{/0}\|_2, \|d_{/1}\|_2, \dots, \|d_{/N-1}\|_2], \\ m_i &= \begin{cases} 1 & \text{if } \|d_{/i}\|_2 > (1 + \alpha) \cdot \text{mean}(D(p|\mathcal{C}).\text{delete}(i)), \\ 0 & \text{otherwise,} \end{cases} \end{aligned} \quad (4)$$
+
+where  $\alpha$  is a non-negative hyperparameter that controls the sensitivity of detecting concept-relevant tokens.  $X.\text{delete}(i)$  denotes an operation that produces a list  $X$  removing the  $i$ -th item. We set  $\alpha = 0.01$  for all experiments in this paper, demonstrating the robustness of our approach to  $\alpha$  across T2I generation tasks with varying concepts. We project the detected token embedding (i.e.,  $m_i = 1$ ) to safer embedding space (See Sec. 3.2).
+
+### 3.2 SAFE GENERATION VIA CONCEPT ORTHOGONAL TOKEN PROJECTION
+
+We aim to project toxic concept tokens into a safer space to encourage the model to generate appropriate images. However, directly removing or replacing these tokens with irrelevant ones, such
+
+{5}------------------------------------------------
+
+as random tokens or replacing the token embeddings with null embeddings, disrupts the coherence between words and sentences, compromising the quality of the generated image to the safe input prompt, particularly when the prompt is unrelated to the toxic concepts. To address this, we propose projecting the detected token embeddings into a space orthogonal to the toxic concept subspace while keeping them within the input space to ensure that the integrity of the original prompt is preserved as much as possible. We begin by formalizing the input space  $\mathcal{I}$  using pooled embeddings from masked prompts as described in Sec. 3.1, such that  $\mathcal{I} = [\bar{p}_{i0}; \bar{p}_{i1}; \dots; \bar{p}_{iN-1}] \in \mathbb{R}^{D \times N}$ .
+
+Given the projection matrix into input space  $\mathcal{I}$  formulated by  $\mathbf{P}_{\mathcal{I}} = \mathcal{I}(\mathcal{I}^\top \mathcal{I})^{-1} \mathcal{I}^\top$  (derived by Eq. (3)), we perform selective detoxification of input token embeddings based on the obtained token masks that project assigned tokens into  $\mathbf{P}_{\mathcal{I}}$  and to be orthogonal to  $\mathbf{P}_{\mathcal{C}}$ :
+
+$$\begin{aligned} \mathbf{p}_{proj} &= \mathbf{P}_{\mathcal{I}} (\mathbf{I} - \mathbf{P}_{\mathcal{C}}) \mathbf{p}, \\ \mathbf{p}_{safe} &= \mathbf{m} \odot \mathbf{p}_{proj} + (\mathbf{1} - \mathbf{m}) \odot \mathbf{p}, \end{aligned} \quad (5)$$
+
+where  $\odot$  indicates an element-wise multiplication operator. That is, for the  $i$ -th token, we use the projected safe embeddings  $\mathbf{p}_{proj,i}$  only if it is detected as a toxic token ( $m_i \odot \mathbf{p}_{proj,i}, m_i = 1$ ); otherwise, we retain the original (safe) token embeddings  $\mathbf{p}_i$ , since  $(\mathbf{1} - m_i) \odot \mathbf{p}_i, m_i = 0$ .
+
+### 3.3 ADAPTIVE CONTROL OF SAFEGUARD STRENGTHS WITH SELF-VALIDATING FILTERING
+
+While our approach so far adaptively controls the number of token embeddings to be updated, it sometimes lacks flexibility in preserving the original generation capabilities for content outside the target concept. Recent observations (Kim et al., 2024a; Ban et al., 2024a) suggest that different denoising timesteps in T2I models contribute unevenly to generating toxic or undesirable content. Based on this insight, we propose a self-validating filtering mechanism during the denoising steps of the diffusion model that automatically adjusts the number of denoising timesteps conditioned on the obtained embedding (middle in Fig. 2). This mechanism amplifies the model’s filtering capability when the input prompt is deemed undesirable, while approximating the original backbone model’s generation for safe content. In the end, our updated input text embedding  $\mathbf{p}_{safe,free}$  at a different denoising step  $t$  is determined as follows:
+
+$$t' = \gamma \cdot \text{sigmoid}(1 - \cos(\mathbf{p}, \mathbf{p}_{proj})), \quad \mathbf{p}_{safe,free} = \begin{cases} \mathbf{p}_{safe} & \text{if } t \leq \text{round}(t'), \\ \mathbf{p} & \text{otherwise,} \end{cases} \quad (6)$$
+
+where  $\gamma$  is hyperparameter ( $\gamma = 10$  throughout the paper) and  $\cos$  represents cosine similarity.  $t'$  denotes the self-validating threshold to determine the number of denoising steps applying to the proposed safeguard approach. Specifically, we adopt the cosine distance between the original input embedding  $\mathbf{p}$  and the projected embedding  $\mathbf{p}_{proj}$  to compute  $t'$ . A higher similarity indicates that the input prompt has been effectively disentangled from the toxic target concept to be removed.
+
+### 3.4 ADAPTIVE LATENT RE-ATTENTION IN FOURIER DOMAIN
+
+Recent literature (Mao et al., 2023; Qi et al., 2024; Ban et al., 2024b; Sun et al., 2024) has demonstrated that the initial noise sampled from a Gaussian distribution significantly impacts the fidelity of T2I generation in diffusion models. To further guide these models in creating content while suppressing the appearance of inappropriate or target concept semantics, we propose a novel visual latent filtering strategy during the denoising process. Si et al. (2024) note that current T2I models frequently experience oversmoothing of textures during the denoising process, resulting in distortions in the generated images. Building on this insight, we suggest an adaptive re-weighting strategy using spectral transformation in the Fourier domain. At each timestep, we initially perform a Fourier transform on the latent features, conditioned on the initial prompt  $\mathbf{p}$  (which may incorporate unsafe guidance) and our filtered prompt embedding  $\mathbf{p}_{safe,free}$ . The low-frequency components typically capture the global structure and attributes of an image, encompassing its overall context, style, and color. In this context, we reduce the influence of low-frequency features, which are accentuated by our filtered prompt embedding, while preserving the visual regions that are more closely aligned with the original prompt to avoid excessive oversmoothing. Let  $h(\cdot)$  be a latent feature, to achieve this, we attenuate the low-frequency features in  $h(\mathbf{p}_{safe,free})$  by a scalar  $s$  when their values are lower in magnitude than those from  $\mathbf{p}$ :
+
+$$\mathcal{F}(\mathbf{p}) = \mathbf{b} \odot \text{FFT}(h(\mathbf{p})), \quad \mathcal{F}(\mathbf{p}_{safe,free}) = \mathbf{b} \odot \text{FFT}(h(\mathbf{p}_{safe,free})), \quad (7)$$
+
+{6}------------------------------------------------
+
+$$\mathcal{F}'_i = \begin{cases} s \cdot \mathcal{F}(\mathbf{p}_{\text{safree}})_i & \text{if } \mathcal{F}(\mathbf{p}_{\text{safree}})_i > \mathcal{F}(\mathbf{p})_i, \\ \mathcal{F}(\mathbf{p}_{\text{safree}})_i & \text{otherwise.} \end{cases} \quad (8)$$
+
+where  $s < 1$ ,  $b$  represents the binary masks corresponding to the low-frequency components (i.e., the middle in the width and height dimension), and FFT denotes a Fast Fourier Transform operation. We first obtain low frequency features from  $h(\mathbf{p})$  and  $h(\mathbf{p}_{\text{safree}})$  in Eq. (7). This reduces the oversmoothing effect in safe visual components, encouraging the generation of safe outputs without emphasizing inappropriate content. This process is enabled by obtaining the refined features  $h'$  via inverse FFT,  $h' = \text{IFFT}(\mathcal{F}')$ , as described in Eq. (8). Note that this equation doesn't affect the original feature if  $t > \text{round}(t')$  since  $\mathcal{F}(\mathbf{p}_{\text{safree}})_i == \mathcal{F}(\mathbf{p})_i$ , allowing automatic control of filtering capability through self-validated filtering.
+
+### 3.5 SAFREE FOR ADVANCED T2I MODELS AND TEXT-TO-VIDEO GENERATION
+
+Unlike existing unlearning-based methods limited to specific models or tasks, SAFREE is architecture agnostic and can be integrated across diverse backbone models without model modifications, offering superior versatility in safe generation. This flexibility is enabled by *concept-orthogonal, selective token projection and self-validating adaptive filtering*, allowing SAFREE to work across a wide range of generative models and tasks. It operates seamlessly with models beyond SD v-1.4, like, SDXL (Podell et al., 2023) and SD-v3 (stabilityai, 2024) in a zero-shot, training-free manner, and extends its applicability to text-to-video (T2V) generation models like ZeroScopeT2V (zeroscope, 2024) and CogVideoX (Yang et al., 2024c), making it highly flexible as a series of plug-and-play modules. We present both qualitative and quantitative results showing its effectiveness across various model backbones (UNet (Ronneberger et al., 2015) and DiT (Peebles & Xie, 2023)) and tasks (T2I and T2V generation) in Sec. 4.6.
+
+## 4 EXPERIMENTAL RESULTS
+
+### 4.1 EXPERIMENTAL SETUP
+
+We use StableDiffusion-v1.4 (SD-v1.4) (Rombach et al., 2022) as the primary T2I backbone, following recent work (Gandikota et al., 2023; 2024; Gong et al., 2024). All methods are tested on adversarial prompts from red-teaming methods: I2P (Schramowski et al., 2023), P4D (Chin et al., 2024), Ring-a-Bell (Tsai et al., 2024), MMA-Diffusion (Yang et al., 2024a), and UnlearnDiff (Zhang et al., 2023b). Following Gandikota et al. (2023), we also evaluate models on artist-style removal tasks, using two datasets: one with five famous artists (Van Gogh, Picasso, Rembrandt, Warhol, Caravaggio) and the other with five modern artists (McKernan, Kinkade, Edlin, Eng, Ajin: Demi-Human), whose styles can be mimicked by SD. We extend SAFREE to text-to-video generation, applying it to ZeroScopeT2V (zeroscope, 2024) and CogVideoX (Yang et al., 2024c) with different model backbones (UNet (Ronneberger et al., 2015) and Diffusion Transformer (Peebles & Xie, 2023)). For quantitative evaluation, we use SafeSora (Dai et al., 2024) with 600 toxic prompts across 12 concepts, constructing a benchmark of 296 examples across 5 categories.
+
+### 4.2 BASELINES AND EVALUATION METRICS
+
+**Baselines.** We compare our method with training-free approaches: **SLD** (Schramowski et al., 2023) and **UCE** (Gandikota et al., 2024), as well as training-based methods including **ESD** (Gandikota et al., 2023), **SA** (Heng & Soh, 2023), **CA** (Kumari et al., 2023), **MACE** (Lu et al., 2024), **SDID** (Li et al., 2024b), and **RECE** (Gong et al., 2024). Additional details are in the Appendix.
+
+**Evaluation Metrics.** We assess safeguard capability via Attack Success Rate (ASR) on adversarial nudity prompts (Gong et al., 2024). For generation quality, we use FID (Heusel et al., 2017), CLIP score, and TIFA (Hu et al., 2023) on COCO-30k (Lin et al., 2014), evaluating 1k samples. For artist-style removal, LPIPS (Zhang et al., 2018) measures perceptual difference. We frame style removal as a multi-choice question-answering task, using GPT-4o (gpt 4o, 2024) to identify the artist from generated images. Safe T2V Metrics follow ChatGPT-based evaluation from T2VSafetybench (Miao et al., 2024). We provide 16 sampled video frames, following the prompt design outlined in T2VSafetybench, to GPT-4o (gpt 4o, 2024) for binary safety assessment.
+
+{7}------------------------------------------------
+
+Table 1: Attack Success Rate (ASR) and generation quality comparison with training-free and training-based safe T2I generation methods. The best results are **bolded**. We gray out training-based methods for a fair comparison. SD-v1.4 is the backbone model for all methods. We measure the FID scores of safe T2I models by comparing their generated outputs with the ones from SD-v1.4.
+
+| Method | No Weights Modification | Training-Free | ↓ |  |  |  |  | COCO |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|
+|  |  |  | ↓ | ↓ | ↓ | ↓ | ↓ | ↑ | ↑ | ↑ |
+| SD-v1.4 | - | - | 0.178 | 0.987 | 0.831 | 0.957 | 0.697 | - | 31.3 | 0.803 |
+| ESD (Gandikota et al., 2023) | <del>✓</del> | <del>✓</del> | 0.140 | 0.750 | 0.528 | 0.873 | 0.761 | - | 30.7 | - |
+| SA (Heng & Soh, 2023) | <del>✓</del> | <del>✓</del> | 0.062 | 0.623 | 0.329 | 0.205 | 0.268 | - | 54.98 | 30.6 |
+| CA (Kumari et al., 2023) | <del>✓</del> | <del>✓</del> | 0.178 | 0.927 | 0.773 | 0.855 | 0.866 | - | 40.99 | 31.2 |
+| MACE (Lu et al., 2024) | <del>✓</del> | <del>✓</del> | 0.023 | 0.146 | 0.076 | 0.183 | 0.176 | - | 52.24 | 29.4 |
+| SDID (Li et al., 2024b) | <del>✓</del> | <del>✓</del> | 0.270 | 0.933 | 0.696 | 0.907 | 0.697 | - | 23.99 | 30.5 |
+| UCE (Gandikota et al., 2024) | <del>✓</del> | <del>✓</del> | 0.103 | 0.667 | 0.331 | 0.867 | 0.430 | - | 31.25 | 31.3 |
+| RECE (Gong et al., 2023) | <del>✓</del> | <del>✓</del> | 0.064 | 0.381 | 0.134 | 0.675 | 0.655 | - | 37.60 | 30.9 |
+| SLD-Medium (Schramowski et al., 2023) | ✓ | ✓ | 0.142 | 0.934 | 0.646 | 0.942 | 0.648 | - | <b>31.47</b> | 31.0 |
+| SLD-Strong (Schramowski et al., 2023) | ✓ | ✓ | 0.131 | 0.861 | 0.620 | 0.920 | 0.570 | - | 40.88 | 29.6 |
+| SLD-Max (Schramowski et al., 2023) | ✓ | ✓ | 0.115 | 0.742 | 0.570 | 0.837 | 0.479 | - | 50.51 | 28.5 |
+| SAFREE (Ours) | ✓ | ✓ | <b>0.034</b> | <b>0.384</b> | <b>0.114</b> | <b>0.585</b> | <b>0.282</b> | - | <b>36.35</b> | <b>31.1</b> |
+
+Table 2: Ablation Study on SAFREE. T: Token Projection. S: Self-validating filtering. L: Latent Re-attention. N: Replacing with Null embedding. P: Orthogonal Token Projection.
+
+| Method | T | S | L | Adversarial Prompt |  |  |  |  | CoCo |  |
+|-|-|-|-|-|-|-|-|-|-|-|
+|  |  |  |  | P4D↓ | MMA-Diffusion↓ | FID↓ | CLIP↑ | FID↓ | CLIP↑ |  |
+| SD-v1.4 | - | - | - | 0.987 | 0.957 | - | - | 31.3 | - | - |
+| SAFREE | N | - | - | 0.430 | <b>0.512</b> | 37.6 | 30.9 | - | - | - |
+|  | P | - | - | 0.417 | 0.597 | 36.5 | 31.1 | - | - | - |
+|  | P | ✓ | - | 0.461 | 0.598 | <b>36.1</b> | <b>31.1</b> | - | - | - |
+| Ours | P | ✓ | ✓ | 0.410 | 0.588 | 42.2 | 30.7 | - | - | - |
+|  | P | ✓ | ✓ | <b>0.384</b> | 0.585 | 36.4 | <b>31.1</b> | - | - | - |
+
+Table 3: Model Efficiency Comparison. All experiments are tested on a single A6000, 100 steps, and with a setting that removes the ‘nudity’ concept.
+
+| Method | Training/Editing Time (s) | Inference Time (s/sample) | Model Modification (%) |
+|-|-|-|-|
+| ESD | ~4500 | 6.78 | 94.65 |
+| CA | ~484 | 5.94 | 2.23 |
+| UCE | ~1 | 6.78 | 2.23 |
+| RECE | ~3 | 6.80 | 2.23 |
+| SLD-Max | 0 | 9.82 | 0 |
+| SAFREE | 0 | 9.85 | 0 |
+
+### 4.3 EVALUATING THE EFFECTIVENESS OF SAFREE
+
+**SAFREE achieves training-free SoTA performance without altering model weights.** We compare different methods for safe T2I generation, extensively and comprehensively evaluating each model’s vulnerability to adversarial attacks (i.e., attack success rate (ASR)) and their performance across multiple attack scenarios. As shown in Tab. 1 and Fig. 3, SAFREE consistently achieves significantly lower ASR than all training-free baselines across all attack types. Notably, it demonstrates **47%, 13%, and 34% lower ASR** compared to the best-performing counterparts, I2P, MMA-diffusion, and UnlearnDiff, respectively, highlighting its strong resilience against adversarial attacks.
+
+**SAFREE shows competitive results against training-based methods.** In addition, we compare our approach with training-based methods. Surprisingly, our approach achieves competitive performance against these techniques. While SA and MACE exhibit strong safeguarding capabilities, they significantly degrade the overall quality of image generation due to excessive modifications of SD weights, often making them impractical for real-world applications as they frequently cause severe distortions. Notably, SAFREE delivers comparable safeguarding performance while generating high-quality images on the COCO-30k dataset, all within a *training-free* framework.
+
+**SAFREE is highly flexible and adaptive while maintaining generation quality.** SAFREE does not require additional training or model weight modifications (more detailed comparison in later Tab. 3), providing key advantages over other methods (e.g., ESD, SA, and CA) which depend on unlearning or stochastic optimization, thereby increasing complexity. SAFREE allows for dynamic control of the number of filtered denoising steps based on inputs in an adaptable manner without extensive retraining or model modifications. Furthermore, it is worth noting that, compared with other methods, compared to other methods, SAFREE **preserves safe content** in the original prompt through targeted joint filtering and ensures projected embeddings stay within the input space, making it highly efficient and reliable for real-world applications.
+
+As shown in Fig. 3 left-top, when requiring removing the artist concept (“Van Gogh”), SAFREE deletes this targeted art style (first row) while preserving other artists style (second row) by producing semantically similar outputs to the original SD. The examples of removing the “nudity” concept as shown in Fig. 3 left-bottom draw a similar conclusion. It demonstrates SAFREE is a highly adaptive safe generation solution that is able to maintain untargeted safe concepts well.
+
+{8}------------------------------------------------
+
+![Figure 3: Generated examples of SAFREE and safe T2I baselines. The figure is divided into two main sections: Left and Right. The Left section shows comparisons for 'Remove Van Gogh (top) & Preserve Other Concepts (bottom)' and 'Remove Nudity (top) & Preserve Other Concepts (bottom)' across models SD-1.4, CA, UCE, RECE, SLD, and (Ours) SAFREE. The Right section shows SAFREE's performance with SD-v3, SD-v3 + SAFREE, SDXL, and SDXL + SAFREE on prompts like 'adversarial toxic prompt', 'Father totally ***', and 'A woman is eaten by ...', comparing ZeroScopeT2V, CogVideoX, and their SAFREE-enhanced versions.](d4e9f8f6bf5d7853ecae9c9633900af1_img.jpg)
+
+Figure 3: Generated examples of SAFREE and safe T2I baselines. The figure is divided into two main sections: Left and Right. The Left section shows comparisons for 'Remove Van Gogh (top) & Preserve Other Concepts (bottom)' and 'Remove Nudity (top) & Preserve Other Concepts (bottom)' across models SD-1.4, CA, UCE, RECE, SLD, and (Ours) SAFREE. The Right section shows SAFREE's performance with SD-v3, SD-v3 + SAFREE, SDXL, and SDXL + SAFREE on prompts like 'adversarial toxic prompt', 'Father totally \*\*\*', and 'A woman is eaten by ...', comparing ZeroScopeT2V, CogVideoX, and their SAFREE-enhanced versions.
+
+Figure 3: Generated examples of SAFREE and safe T2I baselines. **Left:** Comparison with other methods on different concept removal tasks. **Right:** SAFREE incorporates with different T2I and T2V models. We provide more visualizations in the appendix (Sec. C).
+
+**Ablations.** We validate the effectiveness of three components of SAFREE in Tab. 2 using SD-v1.4. First, we examine the impact of the adaptive toxic token selection (T, Sec. 3.1). We replace the selected token embeddings with either the null token embedding (N) or our proposed projected embeddings (P, Sec. 3.2). Both variants significantly reduce ASR from adversarial prompts, demonstrating the effectiveness of our toxic token selection. However, we observe that using N results in degraded image quality, as inserting null tokens disrupts the prompt structure and shifts the input embeddings outside their original space. In contrast, our orthogonal projection (P) achieves competitive safeguard performance with better COCO evaluation results. Incorporating self-validating filtering (S, Eq. (6)) further enhances image quality by amplifying the filtering when input tokens are relevant to toxic concepts, although it can slightly reduce filtering capability. By integrating these components with latent-level re-attention (L, Sec. 3.4), our method strikes a strong balance between effective, safe filtering while preserving image quality for prompts unrelated to toxic concepts.
+
+### 4.4 EVALUATING SAFREE ON ARTIST CONCEPT REMOVAL TASKS
+
+As shown in Tab. 4, SAFREE achieves higher  $LPIPS_{\mathcal{E}}$  and  $LPIPS_{\mathcal{U}}$  scores compared to the baselines, where  $LPIPS_{\mathcal{E}}$  and  $LPIPS_{\mathcal{U}}$  denote the average  $LPIPS$  for images generated in the target erased artist styles and others (unerasable), respectively. The higher  $LPIPS_{\mathcal{U}}$  score is likely due to our approach performing denoising processes guided by a coherent yet projected conditional embedding within the input space. As shown in Fig. 5, SAFREE enables generation models to retain the artistic styles of other artists very clearly even with larger feature distances (i.e., high  $LPIPS_{\mathcal{U}}$ ). To validate whether the generated art styles are accurately removed or preserved, we frame these tasks as a multiple-choice QA problem, moving beyond feature-level distance assessments. Here,  $Acc_{\mathcal{E}}$  and  $Acc_{\mathcal{U}}$  represent the average accuracy of erased and unerased artist styles predicted by GPT-4o based on corresponding text prompts. As shown in Tab. 4, SAFREE effectively remove targeted artist concepts, while baselines struggle to erase key representations of target artists.
+
+### 4.5 EFFICIENCY OF SAFREE
+
+We compare the efficiency of various methods, including the training-based ESD/CA, which update models through online optimization and loss, and the training-free UCE/RECE, which modify model attention weights using closed-form edits. Similar to SLD, our method (SAFREE) is training-free and filtering-based, without altering diffusion model weights. As shown in Tab. 3, while UCE/RECE offer fast model editing, they still require additional time for updates. In contrast, SAFREE requires no model editing or modification, providing flexibility for model development across different con-
+
+{9}------------------------------------------------
+
+Table 4: Comparison of Artist Concept Removal tasks: Famous (left) and Modern artists (right).
+
+| Method | Remove "Van Gogh" |  |  |  | Remove "Kelly McKernan" |  |  |  |
+|-|-|-|-|-|-|-|-|-|
+|  | LPIPS <sub>e</sub> ↑ | LPIPS <sub>u</sub> ↓ | Acc <sub>c</sub> ↓ | Acc <sub>u</sub> ↑ | LPIPS <sub>e</sub> ↑ | LPIPS <sub>u</sub> ↓ | Acc <sub>c</sub> ↓ | Acc <sub>u</sub> ↑ |
+| SD-v1.4 | - | - | 0.95 | 0.95 | - | - | 0.80 | 0.83 |
+| CA | 0.30 | 0.13 | 0.65 | 0.90 | 0.22 | 0.17 | 0.50 | 0.76 |
+| RECE | 0.31 | 0.08 | 0.80 | 0.93 | 0.29 | 0.04 | 0.55 | 0.76 |
+| UCE | 0.25 | 0.05 | 0.95 | 0.98 | 0.25 | 0.03 | 0.80 | 0.81 |
+| SLD-Medium | 0.21 | 0.10 | 0.95 | 0.91 | 0.22 | 0.18 | 0.50 | 0.79 |
+| SAFREE (Ours) | <b>0.42</b> | 0.31 | <b>0.35</b> | 0.85 | <b>0.40</b> | 0.39 | <b>0.40</b> | 0.78 |
+
+Table 5: Ours with SDXL and SD-v3.
+
+| Methods | P4D ↓ | Ring-a-Bell ↓ | MMA-Diffusion ↓ | UnlearnDiffAtk ↓ | CLIP ↑ | TIFA ↑ |
+|-|-|-|-|-|-|-|
+| SDXL (Podell et al., 2023) | 0.709 | 0.532 | 0.501 | 0.345 | 27.82 | <b>0.705</b> |
+| SDXL + SAFREE | <b>0.285</b> | <b>0.241</b> | <b>0.169</b> | <b>0.246</b> | <b>27.84</b> | 0.697 |
+| SD-v3 (StabilityAI, 2024) | 0.715 | 0.646 | 0.528 | 0.598 | <b>31.80</b> | <b>0.884</b> |
+| SD-v3 + SAFREE | <b>0.271</b> | <b>0.430</b> | <b>0.165</b> | <b>0.302</b> | 31.55 | 0.872 |
+
+Table 6: Safe video generation on SafeSora benchmark.
+
+| Methods | Violence ↓ | Terrorism ↓ | Racism ↓ | Sexual ↓ | Animal Abuse ↓ |
+|-|-|-|-|-|-|
+| ZeroScopeT2V (zeroscope, 2024) | 71.68 | 76.00 | 73.33 | 51.51 | 66.66 |
+| ZeroScopeT2V + SAFREE | <b>50.60</b> | <b>52.00</b> | <b>57.77</b> | <b>18.18</b> | <b>37.03</b> |
+| CogVideoX-5B (Yang et al., 2024c) | 80.12 | 76.00 | 73.33 | 75.75 | 92.59 |
+| CogVideoX-5B + SAFREE | <b>59.03</b> | <b>56.00</b> | <b>64.44</b> | <b>30.30</b> | <b>48.14</b> |
+
+ditions while maintaining competitive generation speeds. Based on Tab. 1 and Tab. 3, SAFREE delivers the best overall performance in concept safeguarding, generation quality, and flexibility.
+
+### 4.6 GENERALIZATION AND EXTENSIBILITY OF SAFREE
+
+To further validate the robustness and generalization of SAFREE, we apply our method to various Text-to-Image (T2I) backbone models and Text-to-Video (T2V) applications. We extend SAFREE from SD-v1.4 to more advanced models, including SDXL, a scaled UNet-based model, and SD-V3, a Diffusion Transformer (Peebles & Xie, 2023) model. SAFREE demonstrates strong, training-free filtering of unsafe concepts, seamlessly integrating with these backbones. As shown in Tab. 5, SAFREE reduces unsafe outputs by **48%** and **47%** across benchmarks/datasets for SD-XL and SD-V3, respectively. We also extend SAFREE to T2V generation, testing it on ZeroScopeT2V (zeroscope, 2024) (UNet based) and CogVideoX-5B (Yang et al., 2024c) (Diffusion Transformer based) using the SafeSora (Dai et al., 2024) benchmark. As listed in Tab. 6, SAFREE significantly reduces a range of unsafe concepts across both models. It highlights SAFREE’s strong generalization across architectures and applications, offering an efficient safeguard for generative AI. This is also evident in Fig. 3 right, demonstrating that SAFREE with recent powerful T2I/T2V generation models can produce safe yet faithful (e.g., preserve the concept of ‘woman’ in CogVideoX + SAFREE) and quality visual outputs. More visualizations for T2I and T2V models are included in the Appendix.
+
+## 5 CONCLUSION
+
+Recent advances in image and video generation models have heightened the risk of producing toxic or unsafe content. Existing methods that rely on model unlearning or editing update pre-trained model weights, limiting their flexibility and versatility. To address this, we propose SAFREE, a novel training-free approach to safe text-to-image and video generation. Our method first identifies the embedding subspace of the target concept within the overall text embedding space and assesses the proximity of input text tokens to this toxic subspace by measuring the projection distance after masking specific tokens. Based on this proximity, we selectively remove critical tokens that direct the prompt embedding toward the toxic subspace. SAFREE effectively prevents the generation of unsafe content while preserving the quality of benign textual requests. We believe our method will serve as a strong training-free baseline in safe text-to-image and video generation, facilitating further research into safer and more responsible generative models.
+
+ Rest of paper (reference and Appendix) is removed.

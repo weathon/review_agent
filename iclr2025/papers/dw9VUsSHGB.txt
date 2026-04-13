@@ -1,0 +1,366 @@
+
+
+{0}------------------------------------------------
+
+# REPOGRAPH: ENHANCING AI SOFTWARE ENGINEERING WITH REPOSITORY-LEVEL CODE GRAPH
+
+Siruo Ouyang<sup>1\*</sup>, Wenhao Yu<sup>2</sup>, Kaixin Ma<sup>2</sup>, Zilin Xiao<sup>3</sup>, Zhihan Zhang<sup>4</sup>, Mengzhao Jia<sup>4</sup>, Jiawei Han<sup>1</sup>, Hongming Zhang<sup>2</sup>, Dong Yu<sup>2</sup>
+
+<sup>1</sup> University of Illinois Urbana-Champaign, <sup>2</sup> Tencent AI Seattle Lab
+
+<sup>3</sup> Rice University, <sup>4</sup> University of Notre Dame  
+siruo2@illinois.edu
+
+## ABSTRACT
+
+Large Language Models (LLMs) excel in code generation yet struggle with modern AI software engineering tasks. Unlike traditional function-level or file-level coding tasks, AI software engineering requires not only basic coding proficiency but also advanced skills in managing and interacting with code repositories. However, existing methods often overlook the need for repository-level code understanding, which is crucial for accurately grasping the broader context and developing effective solutions. On this basis, we present REPOGRAPH, a plug-in module that manages a repository-level structure for modern AI software engineering solutions. REPOGRAPH offers the desired guidance and serves as a repository-wide navigation for AI software engineers. We evaluate REPOGRAPH on the SWE-bench by plugging it into four different methods of two lines of approaches, where REPOGRAPH substantially boosts the performance of all systems, leading to a *new state-of-the-art* among open-source frameworks. Our analyses also demonstrate the extensibility and flexibility of REPOGRAPH by testing on another repo-level coding benchmark, CrossCodeEval. Our code is available at <https://github.com/ozyyshr/RepoGraph>
+
+## 1 INTRODUCTION
+
+Recent advancements in large language models (LLMs) have showcased their powerful capabilities across various natural language processing tasks (OpenAI, 2023; Anil et al., 2023; Dubey et al., 2024), and now, coding-specific LLMs are emerging to tackle complex software engineering challenges (Hou et al., 2023; Fan et al., 2023), such as Code-Llama (Rozière et al., 2023) and StarCoder (Li et al., 2023a). These coding-specific LLMs are capable of assisting users with various software engineering tasks, even achieving human-level performance in many function-level coding tasks, such as program synthesis (Chen et al., 2021; Austin et al., 2021), code annotation (Yao et al., 2019), bug fixing (Tufano et al., 2019), and code translation (Rozière et al., 2020).
+
+Real-world software engineering often extends beyond single function or self-contained code files. Applications are typically built as repositories containing multiple interdependent files, modules, and libraries (Bairi et al., 2024). These complex structures require a holistic understanding of the entire codebase to perform tasks such as code completion (Shrivastava et al., 2023; Ding et al., 2023), feature addition (Liang et al., 2024), or issue resolving (Jimenez et al., 2024). Recent benchmarks like SWE-Bench (Jimenez et al., 2024) have been proposed to evaluate LLMs on real-world GitHub issues. It requires LLMs to modify the repository to resolve the issue, either by fixing a bug or introducing a new feature. This task is particularly challenging because it requires navigating complex code bases, understanding intricate dependencies between code files, and ensuring that changes integrate seamlessly without introducing new issues, which highlights the difficulties in scaling from function-level to repository-level understanding, as expounded in Figure 1.
+
+A key step in addressing repository-level tasks is to understand the structure of a repository and identify related code. To achieve this, retrieval-augmented generation (RAG) and its variants (Xiao et al.,
+
+\*Work done during internship at Tencent AI Seattle Lab.
+
+{1}------------------------------------------------
+
+![Figure 1: Illustration of (a) a function-level coding problem and (b) a repository-level coding problem.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+**(a) Function-level Coding Problem**
+
+**Input text:** Write a python function to find the first repeated character in a given string.
+
+```
+
+1. def first_repeated_char(str1):
+2.     for index, c in enumerate(str1):
+3.         if str1[index+1].count(c) > 1: return c
+4.     return "None"
+
+```
+
+**(b) Repository-level Coding Problem**
+
+**Issue:** modeling's "separability\_matrix" does not compute separability correctly for CompoundModels...
+
+**Code repository:**
+
+- astropy
+ - core.py
+ - fitting.py
+- coordinates
+ - earth.py
+- ...
+
+**(i) Understand intricate dependencies**
+
+**Generated patch:**
+
+```
+
+diff --git a/astropy/modeling/
+separable.py
+--- a/astropy/modeling/separable.py
++++ b/astropy/modeling/separable.py
+@@ -242,7 +242,7 @@ def _cstack(left,
+right):...
+
+```
+
+**(ii) Navigate complex codebases**
+
+**Unit test:**
+
+| test_coord_matrix |  |
+|-|-|
+| test_cdot | ✓ |
+| test_with_oper | ✗ |
+
+**(iii) Resolve without introducing new issues**
+
+Figure 1: Illustration of (a) a function-level coding problem and (b) a repository-level coding problem.
+
+Figure 1: The illustration of (a) a function-level coding problem from HumanEval (Chen et al., 2021) and (b) a repository-level coding problem from SWE-Bench (Jimenez et al., 2024).
+
+2023; Zhang et al., 2023; Phan et al., 2024; Wu et al., 2024) have been leveraged, in a procedural manner, to retrieve relevant code files across the repository first, providing context for LLMs for further edition. However, indexing at file-level can only identify semantically similar but not genuinely related code snippets. Instead of using RAG, recent approaches like Agentless (Xia et al., 2024) construct a skeletal format for each file, and directly prompt LLMs to identify relevant files and code lines. However, this method still treats code repositories as flat documents (Zhang et al., 2024), which suffers from limitations of repository structure such as the intricate inter-dependencies across files. An alternative approach is to design agent frameworks (Yang et al., 2024; Wang et al., 2024), which enables LLMs to interact with repositories using actions. While LLM agents can freely determine the next action based on current observations, without the grasp of global repository structures, they tend to focus narrowly on specific files, resulting in local optimums. Addressing these limitations requires going beyond semantic matching and developing techniques that enable a deeper understanding of the codebase structure. This will allow LLMs to leverage fine-grained context across multiple files and function calls, facilitating more informed, repository-wide decision-making for coding tasks.
+
+Motivated by this, we propose REPOGRAPH, a plug-in module designed to help LLMs-based AI programmers leverage the code structure of an entire repository. REPOGRAPH is a graph structure and operates at the line level, offering a more fine-grained approach compared to previous file-level browsing methods. Each node in the graph represents a line of code, and edges represent the dependencies of code definitions and references. REPOGRAPH is constructed via code line parsing and encodes the structured representation of the entire repository. Sub-graph retrieval algorithms are then used to extract ego-graphs, which represent the relationships of a central node (in our case, specific keywords). These ego-graphs can be smoothly integrated with both procedural and agent frameworks, offering key clues that provide a more comprehensive context for LLMs to solve real-world software engineering problems.
+
+To assess REPOGRAPH's effectiveness and versatility as a plug-in module, we integrate it with four existing software engineering frameworks and evaluate its performance using SWE-bench, a recent benchmark for AI software engineering. Experiment results show that REPOGRAPH boosts the success rate of existing methods for both agent and procedural frameworks by achieving an average relative improvement of 32.8%. We also test REPOGRAPH on CrossCodeEval to verify its transferability to general coding tasks that require repository-level code understanding. Additionally, we systematically analyze different sub-graph retrieval algorithms and integration methods. Together with error analyses, we hope to shed light on future works targeting modern AI software engineering.
+
+## 2 RELATED WORKS
+
+### 2.1 LLM-BASED METHODS FOR AI SOFTWARE ENGINEERING
+
+Recently, there has been a significant increase in research focused on AI-driven software engineering, which can be broadly categorized into two primary approaches: (i) LLM agent-based frameworks and (ii) SWE-featured procedural frameworks. While this field has advanced rapidly, with most methods being released as proprietary solutions for industry applications (Cognition, 2024), our related work section will concentrate specifically on open-source frameworks.
+
+{2}------------------------------------------------
+
+**LLM agent-based framework** equips large language models (LLMs) with a set of predefined tools, allowing agents to iteratively and autonomously perform actions, observe feedback, and plan future steps (Yang et al., 2024; Zhang et al., 2024; Wang et al., 2024; Cognition, 2024; Ouyang et al., 2024; Tang et al., 2025). While the exact set of tools may vary across different agent frameworks, they typically include capabilities such as opening, writing, or creating files, searching for code lines, running tests, and executing shell commands. To solve a problem, agent-based approaches involve multiple actions, with each subsequent turn depending on the actions taken in previous ones and the feedback received from the environment. For example, SWE-agent (Yang et al., 2024) facilitates interactions with the execution environment by designing a special agent-computer interface (ACI). There are various actions, including “search and navigation”, “file viewer and editor”, and “context management”. Another work, AutoCodeRover (Zhang et al., 2024), further offers fine-grained searching methods for LLM agents in better contexts without an execution process. Specifically, it supports class and function-level code search. OpenDevin (Wang et al., 2024), initiated after Devin (Cognition, 2024), is a community-driven platform that integrates widely used agent systems and benchmarks. The action space design of OpenDevin is highly flexible, requiring LLM agents to generate code on the fly.
+
+**SWE-featured procedural frameworks** typically follow a two-step *Localize/Search-Edit* approach, as seen in existing literature (Zhang et al., 2023; Wu et al., 2024; Liang et al., 2024; Xia et al., 2024). The *localize* step focuses on identifying relevant code snippets, while the *edit* step involves completing or revising the code. Some works introduce additional steps to further enhance performance, such as the *Search-Expand-Edit* approach (Phan et al., 2024). Retrieval (Lewis et al., 2020) is a popular technique used for localization, allowing models to search for relevant code snippets from large repositories by treating issue descriptions as queries and code snippets as indexed data. Some approaches use a sliding window to ensure completeness (Zhang et al., 2023). Besides, Agentless (Xia et al., 2024) is a recently developed method that uses LLMs to directly identify relevant elements for editing within code repositories. It first recursively traverses the repository structure to generate a format that aligns files and folders vertically, with indents for sub-directories. This structure and the issue description are then input into the LLM, which performs a hierarchical search to identify the top-ranked suspicious files requiring further inspection or modification.
+
+### 2.2 REPOSITORY-LEVEL CODING CAPABILITY
+
+The evaluation of coding capabilities in AI systems has traditionally focused on function-level or line-level assessments (Lu et al., 2021; Chen et al., 2021; Austin et al., 2021), where individual code snippets or isolated functions are the primary units of analysis. Unlike previous studies, SWE-bench (Jimenez et al., 2024) highlights the trend of repository-level coding, driven by recent advances of coding-specific LLMs (Guo et al., 2024; Li et al., 2023b). It reflects the growing user demand to understand and contribute to entire projects rather than isolated functions (Ouyang et al., 2023), as well as solving real-world problems in an end-to-end and automatic manner.
+
+Table 1: Comparison between our approach REPOGRAPH and existing methods for representing the repository on various aspects. \*RepoUnderstander (Ma et al., 2024) and CodexGraph (Liu et al., 2024) are concurrent works to ours.
+
+| Model | Line-level | File-level | Repo-level |
+|-|-|-|-|
+| DraCo | ✓ | ✓ | X |
+| Aider | X | X | X |
+| RepoUnderstander* | X | ✓ | ✓ |
+| CodexGraph* | X | ✓ | ✓ |
+| REPOGRAPH | ✓ | ✓ | ✓ |
+
+Long before the LLM era, the software engineering community has been studying the navigation of code repositories, including using eye-tracking data (Busjahn et al., 2015) and exploring interconnections (Begel et al., 2010). Then pre-trained code LLMs incorporate repository-level information such as file dependencies. But tasks at the repository level often involve more intricate call relationships within their context. Recent works like RepoCoder (Zhang et al., 2023) and RepoFuse (Liang et al., 2024) have started integrating RAG modules to harness additional information from repositories. Building on this, subsequent research has focused on embedding repository-level context into their methodologies. For instance, DraCo (Cheng et al., 2024) introduces importing relationships between files, CodePlan maintains the code changes by LLMs with incremental dependency analysis, while Aider (Gauthier, 2024) employs PageRank (Page, 1999) to identify the most significant contextual elements. RepoUnderstander (Ma et al., 2024) and CodexGraph (Liu et al., 2024) model
+
+{3}------------------------------------------------
+
+![Figure 2: An in-depth illustration of (a) the construction, (b) the integration with procedural frameworks, and (c) the integration with agent frameworks of REPOGRAPH. (a) shows a code repo structure, a code snippet, and a REPOGRAPH node. (b) shows the integration with procedural frameworks like search term identification, localization, and planning. (c) shows the integration with agent frameworks like search_reporaph(param) and search_dgraph(param).](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+**(a) RepoGraph Construction**
+
+**Code Repo**
+
+- astropy
+ - modeling
+  - core.py
+  - fitting.py
+ - coordinates
+  - earth.py
+ - context.py
+  - logger.py
+
+**Code snippet**
+
+```
+
+Class Model:
+    def __init__(self, ...):
+        self._default_input...
+        def prepare_inputs(...):
+            input = self._validate_input_units()
+            inputs = len(inputs)
+    def hide_invert(...):
+  
+```
+
+**REPOGRAPH**
+
+- reference node → invokes → class
+- definition node → contains → function
+
+**Node information**
+
+- name: Model
+- frame: /astropy/modeling/core.py
+- kind: def
+- category: class
+- line: 523
+- methods: prepare\_inputs, ...
+
+**(b) Integration with Procedural Frameworks**
+
+**Issue Description**
+
+Modeling's "separability matrix" does not compute separability correctly for nested CompoundModels. Consider the following model: ...
+
+**search term identification** → **search\_reporaph(separability\_matrix)** → **localization** → **core modules**
+
+**correct generated patch** → **edition** → **search\_reporaph(model)** → **Model**
+
+**perform in each step of procedural framework** → **add to action space for agent decision-making**
+
+**search\_reporaph(param)**
+
+**Initialization** → **Planning** → **Observation** → **Action** → **search\_dgraph(param)**
+
+**Planning**: Use search\_reporaph to find the dependencies for "separability\_matrix"
+
+**Action**: search\_reporaph(param)
+
+**Observation**: (name: Model, frame: /astropy/modeling/core.py, kind: def, category: class, ...)
+
+**(c) Integration with Agent Frameworks**
+
+Figure 2: An in-depth illustration of (a) the construction, (b) the integration with procedural frameworks, and (c) the integration with agent frameworks of REPOGRAPH. (a) shows a code repo structure, a code snippet, and a REPOGRAPH node. (b) shows the integration with procedural frameworks like search term identification, localization, and planning. (c) shows the integration with agent frameworks like search\_reporaph(param) and search\_dgraph(param).
+
+Figure 2: An in-depth illustration of (a) the construction, (b) the integration with procedural frameworks, and (c) the integration with agent frameworks of REPOGRAPH. Given a code repository, we first utilize AST to construct  $\mathcal{G} = \{\mathcal{V}, \mathcal{E}\}$ , where  $\mathcal{G}$  consists of “reference” and “definition” node,  $\mathcal{E}$  includes “invoke” and “contain” relations (files and code lines shown in corresponding color). The constructed REPOGRAPH are then used in procedural frameworks by adding sub-retrieval results into each step, and agent frameworks by adding graph retrieval as an additional action “search\_reporaph”. A simplified version can be found in Figure 10.
+
+code files as a knowledge graph. Despite similarities in representation, methods vary in how they retrieve information from these structures and utilize it for downstream tasks. Table 1 summarizes the differences between these methods and REPOGRAPH. REPOGRAPH surpasses previous approaches by effectively integrating context at the line, file, and repository levels.
+
+## 3 REPOGRAPH
+
+This section introduces REPOGRAPH, a novel plug-in module that can be seamlessly integrated into existing research workflows for both agent-based and procedural frameworks. The primary goal of REPOGRAPH is to provide a structured way to analyze and interact with complex codebases, enabling detailed tracing of code dependencies, execution flow, and structural relationships across the repository. In the following sections, we will provide a detailed description of REPOGRAPH’s construction, its underlying representation, and its utility across various scenarios. The overall architecture is depicted in Figure 2, highlighting its key components and operational flow.
+
+### 3.1 CONSTRUCTION
+
+Given a repository-level coding task, the first step is to carefully examine the repository structure so that the necessary information can be collected. The input for REPOGRAPH construction is a repository, i.e., a collection of its folders and files, while the output is a structured graph, where each node is a code line, and each edge represents the dependencies in between. REPOGRAPH enables tracing back to the root cause of the current issue and gathering dependent code context to help solve the problem. The construction process of REPOGRAPH could be divided into three key steps.
+
+**Step 1: Code line parsing.** We first traverse the entire repository using a top-down approach to identify all code files as candidates for next-step parsing. This is accomplished by filtering based on file extensions, retaining only those with relevant code file suffixes (e.g., .py) while excluding other file types (e.g., .git or requirements.txt), which might be noisy and irrelevant for coding tasks. For each code file, we utilize tree-sitter<sup>1</sup> to parse the code, leveraging its Abstract Syntax Tree (AST) framework. The AST provides a tree-based representation of the abstract syntactic structure of the source code, enabling the identification of key elements such as functions, classes, variables, types, and other definitions. While recognizing these definitions is crucial, tracing their usage and references throughout the code is equally important. Tree-sitter facilitates this by capturing the definitions
+
+<sup>1</sup><https://pypi.org/project/tree-sitter-languages/>
+
+{4}------------------------------------------------
+
+and tracking where they are utilized or referenced within the codebase. For example, in figure 2, we not only identify definitions like `class Model` and its inherent methods but also references like `self._validate_input_units()`. After processing each line of code with a tree-sitter, we selectively retain lines that involve function calls and dependency relations, discarding extraneous information. Our focus is primarily on the *functions* and *classes*, as these represent the core structural components of the code. By concentrating on these elements and their interrelationships, REPOGRAPH optimizes the analysis process by excluding less significant details, such as individual variables, which tend to be redundant and less relevant for further processing.
+
+**Step 2: Project-dependent relation filtering.** After the previous parsing step, we obtain code lines with calling and dependency relations. However, not all relations are useful for fixing issues. Specifically, many default and built-in function/class calls could distract from the project-related ones. Therefore, we additionally introduce a filtering process that excludes the repository-independent relations. Two types of such relations exist: (i) *global relation* refers to Python standard and built-in functions and classes. (ii) *local relation* are introduced by third-party libraries, which are specific to the current code file. For global relations, we maintain a comprehensive list of methods from standard and built-in libraries, excluding any identified relations from this list. The list is empirically constructed by gathering methods of the builtins library and default methods such as “list” and “tuple”. For example, in figure 2, `line_inputs = len(input)` is excluded since “len” is a default method. For local relations, we parse import statements in the code to identify third-party methods that are included, and exclude them accordingly. A detailed illustration of this step can be found in Figure 11.
+
+**Step 3: Graph organization.** At this stage, we construct REPOGRAPH using code lines as the fundamental building units. The graph can be represented as  $\mathcal{G} = \{\mathcal{V}, \mathcal{E}\}$ , where  $\mathcal{V}$  represents the set of nodes, with each node corresponding to a line of code, and  $\mathcal{E}$  represents the set of edges, capturing the relationships between these code lines. Each node in  $\mathcal{V}$  contains attributes to represent its meta-information, such as `line_number`, `file_name`, `directory`, etc. Additionally, we classify each code line as either a “definition” (def) or a “reference” (ref) to a particular module. A “def” node corresponds to the line where a function, class, or variable is initially defined, while a “ref” node indicates a code line where this entity is referenced or invoked elsewhere in the code. Similar to soft links to “def” nodes, “ref” nodes also represent other variations of invoking methods. For example, in Figure 2, the class definition “`class Model`” would be a “def” node, while any subsequent usages of `Model` would be “ref” nodes. Each “def” node may have multiple “ref” nodes associated with it, as a single function or class can be referenced in various places throughout the code. We define two types of edges:  $\mathcal{E}_{invoke}$  and  $\mathcal{E}_{contain}$ . The triple  $(\mathcal{V}_1, \mathcal{E}_{contain}, \mathcal{V}_2)$  denotes that  $\mathcal{V}_1$  (e.g., a function definition) contains another module  $\mathcal{V}_2$  (e.g., an internal function or class). The edge  $\mathcal{E}_{contain}$  typically connects a “def” node to its internal components. In contrast,  $\mathcal{E}_{invoke}$  represents an invocation relationship, usually connecting a “def” node to a “ref” node, where the reference node includes a dependency on the definition.
+
+### 3.2 UTILITY
+
+The constructed REPOGRAPH serves as a structured representation of the current repository and facilitates better-related information collection and aggregation. For information collection based on REPOGRAPH, specifically, we use one search term each time for subgraph retrieval. Search terms are the key functions or classes that are determined by current states. For example, “separability\_matrix” is the initial search term in Figure 2(c). We retrieve the  $k$ -hop ego-graphs (Hu et al., 2024) with the search term in the center. The ego-graph is crucial for solving the problem because it focuses on the immediate relationships (Jin et al., 2024) around the search term, capturing the relevant dependencies and interactions within the repository, which is key to understanding the functional context. Additionally, the retrieved content explicitly contains information at both the method and line levels and implicitly expresses the grouping at the file level.
+
+This process is abstracted via `search_repograph()` as illustrated in the middle of Figure 2. The retrieved  $k$ -hop ego-graph will be flattened for further processing. We also tried other variants for integration later in Section 5.2 and their performance in Table 4. We narrate how REPOGRAPH could be plugged in with existing representative research lines in the following.
+
+{5}------------------------------------------------
+
+**Integration with procedural framework.** In a procedural framework, LLMs are usually prompted in “localization” and “editing” stages with the given repository context and issue description. In this case, we use *search\_repograph()* before both stages, leveraging our REPOGRAPH to assist in making more informed decisions at each step. For example, in Figure 2, we first include the subgraph of “*separability\_matrix*” for localization, and then use the localized result “*Model*” to search in the edition stage. To implement the strategy, we flatten the context of retrieved ego-graphs and append it as part of the prompt. As a result, the LLM generation is conditioned on both retrieved ego-graphs and the context provided by baseline methods, helping the model preserve nuances.
+
+**Integration with agent framework.** A significant difference in existing agent frameworks is the action space design, as expounded in Section 2. To leverage the power of REPOGRAPH, we put *search\_repograph()* as an additional action in the action space. The agent decides when and where to use this action. The search term is also determined by the agent accordingly. The returned subgraph will be flattened and used as an observation for the next state.
+
+## 4 EXPERIMENTS
+
+### 4.1 SETUP
+
+We evaluated REPOGRAPH as a plug-in component, i.e., integrated into existing baseline models of the two aforementioned research lines to assess its performance. We use the same baseline settings and configurations when incorporating REPOGRAPH to ensure a fair comparison.
+
+**Dataset.** We test REPOGRAPH in SWE-bench-Lite<sup>2</sup>. Each problem in the dataset requires submitting a patch to solve the underlying issue described in the input issue description. The goal is to generate a patch that accurately revises the relevant portions of the codebase within the repository, ensuring that all test scripts included in the dataset are successfully executed.
+
+**Baselines.** We integrate REPOGRAPH with representative methods from both aforementioned research lines. (i) For procedural frameworks, we evaluate the widely used traditional method, RAG (Lewis et al., 2020), as well as Agentless (Xia et al., 2024), an open-source state-of-the-art approach in this direction. For RAG, we follow its initial setting and use BM25 for file-level retrieval. After that, we append the context of REPOGRAPH after the code files as part of the prompt. Agentless first performs a hierarchical localization in terms of “file-class/function-edits” and then conducts repair based on localization. The context of REPOGRAPH is inserted in every step of Agentless. (ii) For agent frameworks, we consider SWE-agent (Yang et al., 2024) and AutoCodeRover (Zhang et al., 2024). For both frameworks, we add an additional action “search\_repograph” for the LLM agent as described in Section 3. All the choices in the two research lines incorporate GPT-4 and GPT-4o-based methods to ensure generalization. Detailed implementations and prompts used can be found in Appendix A.
+
+**Evaluation metrics.** We evaluate all methods across two key dimensions: Accuracy and Average Cost. (i) For accuracy, we report the *resolve rate* and *patch application rate*. The resolve rate represents the percentage of issues successfully resolved across all data points. An issue is considered resolved if the submitted patch passes all test scripts. To assess the patch application rate, we attempt to apply the generated patches to the repository using the *patch* program, counting only successful applications toward this metric. (ii) To evaluate cost efficiency, we report two metrics: *average cost* and *average tokens*, which refer to the inference cost and the number of input/output tokens used when querying the LLMs, respectively.
+
+**Configurations.** We use the same GPT version as in the baselines in the experiments. We used GPT-4o (2024-05-13) and GPT-4-Turbo (gpt-4-1106-preview) from OpenAI for evaluation and analyses in our experiments. All evaluation processes are performed in a containerized Docker environment<sup>3</sup>, ensuring stability and reproducibility, made possible through contributions from the open-source community. Plug-ins with procedural frameworks usually take around 2-3 hours to finish. For agent frameworks, the inference time is larger, up to around 10 hours.
+
+<sup>2</sup>Current leaderboard could be found at <https://www.swebench.com/>
+
+<sup>3</sup><https://github.com/aorwall/SWE-bench-docker>
+
+<sup>5</sup><https://github.com/swe-bench/experiments/tree/main/evaluation/lite>
+
+{6}------------------------------------------------
+
+Table 2: Results of REPOGRAPH with open-source baselines in two research lines, including procedural and agent frameworks. Numbers of accuracy-related metrics are directly taken from the leaderboard, while the cost-related ones are computed from the corresponding trajectories<sup>5</sup>.
+
+| Methods | LLM | Accuracy |  |  | Avg. Cost |  |
+|-|-|-|-|-|-|-|
+|  |  | <i>resolve</i> | # samples | patch apply | \$ cost | # tokens |
+| <i>Procedural frameworks</i> |  |  |  |  |  |  |
+| RAG | GPT-4 | 2.67 | 8 | 29.33 | \$0.13 | 11,736 |
+| +REPOGRAPH | GPT-4 | 5.33 <sup>+2.66</sup> | 16 <sup>+8</sup> | 47.67 <sup>+18.34</sup> | \$0.17 | 15,439 |
+| Agentless | GPT-4o | 27.33 | 82 | 97.33 | \$0.34 | 42,376 |
+| +REPOGRAPH | GPT-4o | 29.67 <sup>+2.34</sup> | 89 <sup>+7</sup> | 98.00 <sup>+0.67</sup> | \$0.39 | 47,323 |
+| <i>Agent frameworks</i> |  |  |  |  |  |  |
+| AutoCodeRover | GPT-4 | 19.00 | 57 | 83.00 | \$0.45 | 38,663 |
+| +REPOGRAPH | GPT-4 | 21.33 <sup>+2.33</sup> | 64 <sup>+7</sup> | 86.67 <sup>+3.67</sup> | \$0.58 | 45,112 |
+| SWE-agent | GPT-4o | 18.33 | 55 | 87.00 | \$2.53 | 498,346 |
+| +REPOGRAPH | GPT-4o | 20.33 <sup>+2.00</sup> | 61 <sup>+6</sup> | 90.33 <sup>+3.33</sup> | \$2.69 | 518,792 |
+
+### 4.2 EXPERIMENT RESULTS
+
+Table 2 presents the main evaluation results of all baseline methods and the corresponding performance with REPOGRAPH (+REPOGRAPH) as a plug-in in the SWE-bench-Lite test set. We also report the number of correct samples for each method. The performance increase is marked by  $\tau_{num}$ . We also tested other (open-source) LLMs using Claude-3.5-Sonnet (claude-3-5-sonnet-20240620) (Anthropic, 2024) from Anthropic in Appendix C. Based on the results, we have the following key observations:
+
+**(i) REPOGRAPH brings consistent performance gain for all combinations of frameworks and LLM model bases.** Specifically, REPOGRAPH achieves an absolute improvement of +2.66 and +2.34 in terms of the resolve rate for RAG and Agentless, respectively, which is 99.63% and 8.56% of relative improvement. The notable improvement demonstrates the effectiveness of our REPOGRAPH in adapting to various scenarios by inducing relevant code context and performing precise code editings. Additionally, our best performance so far by plugging in Agentless, 29.67, achieves the *state-of-the-art* performance on the benchmark<sup>6</sup> among all open-source methods.
+
+**(ii) Performance gain brought by REPOGRAPH is slightly larger on procedural frameworks than agent ones.** With procedural frameworks, REPOGRAPH correctly fixes more issues than agent ones. This could be due to two primary reasons. Firstly, we observed that mature procedural frameworks tend to achieve better baseline performance than agent-based frameworks on SWE-bench. The initial definitive nature of procedural frameworks, with their well-defined running flow and structure, allows them to leverage plug-ins more effectively. Another reason is that this deterministic behavior reduces the complexity that arises from dynamic decision-making, a key characteristic of agent-based systems, thereby enabling a smoother integration of performance improvements.
+
+**(iii) Performance gain brought by REPOGRAPH does not rely on more costs.** We also compute and report each method’s average cost and token consumption. By introducing REPOGRAPH, we manage to reduce the costs associated with managing the entire repository while achieving comparable or even superior performance. As shown in Table 2, the additional token cost introduced by RepoGraph is justified given the significant performance improvement it enables, particularly when compared to the substantially higher costs incurred by previous methods like SWE-agent. This indicates REPOGRAPH ’s performance gains are not mainly due to increased token usage.
+
+**(iv) Average costs are generally larger on agent frameworks with REPOGRAPH.** This phenomenon is especially obvious with SWE-agent, as it allows the agent to freely determine the next action based on the current observation. We also found that the integration with agent frameworks usually leads to larger cost increases, as exemplified by +0.13\$ and +0.18\$ with AutoCodeRover and SWE-agent, respectively. The reason lies in the large exploration space in agent frameworks. The agents might call the *search\_repograph()* action many times, which leads to the explosion of
+
+<sup>6</sup><https://www.swebench.com/>. We kindly request that reviewers refrain from intentionally checking submitter information on the leaderboard to maintain the integrity of the double-blind review process.
+
+{7}------------------------------------------------
+
+prompt contexts. We encourage users to be mindful of cost and to adopt a more granular approach to cost control when integrating REPOGRAPH into the agent framework in the future.
+
+## 5 ANALYSIS
+
+This section presents a detailed analysis to demonstrate that the additional context provided by REPOGRAPH is beneficial for the task. We begin by analyzing localization accuracy in comparison to the gold-standard patch. Next, we explore various REPOGRAPH configurations, focusing on how the additional context can be effectively integrated into the existing system. Finally, we perform an in-depth error analysis, highlighting aspects where REPOGRAPH can be further improved. For more analyses including resolve rate in various aspects and action distributions of agent frameworks, please refer to Appendices C.
+
+### 5.1 LOCALIZATION COVERAGE
+
+A crucial step in issue resolution is accurately identifying the correct locations within the code that require modification. Proper localization is essential, as it forms the foundation for generating an effective and accurate patch. Without this step, the quality of the fix may be compromised, leading to incomplete or incorrect solutions. We compute the percentage of problems where the edit locations match the ground truth patch in three granularity. Namely, file-level, function-level, and line-level. We report that a patch contains the correct location if it edits a *superset* of all locations in the ground truth patch.
+
+Table 3: Percentage of problems for accurate edition localizations with respect to file, function, and line levels. All the numbers are computed from the corresponding generated patches.
+
+| Methods | LLM | file | function | line |
+|-|-|-|-|-|
+| RAG | GPT-4 | 47.3 | 23.3 | 12.7 |
+| +REPOGRAPH | GPT-4 | 51.7 $\pm$ 4.4 | 25.3 $\pm$ 2.0 | 14.3 $\pm$ 1.6 |
+| Agentless | GPT-4o | 68.7 | 51.0 | 34.3 |
+| +REPOGRAPH | GPT-4o | 74.3 $\pm$ 5.6 | 54.0 $\pm$ 3.0 | 36.7 $\pm$ 2.4 |
+| <b>Agent frameworks</b> |  |  |  |  |
+| AutoCodeRover | GPT-4 | 62.3 | 42.3 | 29.0 |
+| +REPOGRAPH | GPT-4 | 69.0 $\pm$ 4.7 | 45.7 $\pm$ 3.4 | 31.7 $\pm$ 2.7 |
+| SWE-agent | GPT-4o | 61.7 | 46.3 | 32.3 |
+| +REPOGRAPH | GPT-4o | 67.3 $\pm$ 5.6 | 49.3 $\pm$ 3.0 | 35.0 $\pm$ 2.7 |
+
+Table 3 presents the results of our analysis. We observed that integrating REPOGRAPH with all baseline methods significantly improves file-level accuracy, whereas the enhancement of accuracy in line-level is comparatively modest. This result aligns with our expectations, as file-level localization is the most coarse-grained, making it inherently easier to improve. In contrast, line-level localization, being the most fine-grained, poses a greater challenge due to its need for more precise identification of code segments. Additionally, we found that although line-level accuracy improvements are more pronounced for agent frameworks, their overall resolve rate is lower than that of procedural frameworks, as shown in Table 2. This discrepancy can be attributed to the fact that localization, while necessary for generating a final patch, is insufficient. The success of the final revision still heavily relies on the underlying capabilities of LLMs. Agent frameworks, designed to operate in a trial-and-error fashion, are particularly susceptible to error accumulation. As these frameworks iteratively refine their patches, small inaccuracies in earlier localization steps can propagate and magnify throughout the process, ultimately reducing the overall resolve rate. Procedural frameworks, on the other hand, follow a more structured and deterministic approach to localization and patch generation. They typically localize and fix issues in a single, more direct step, which can help mitigate the compounding of errors.
+
+### 5.2 INVESTIGATION OF REPOGRAPH VARIANTS
+
+In this section, we investigate the efficacy of various combinations of sub-graph retrieval and integration techniques as outlined in Section 3. We explore two sub-graph retrieval variants and two integration methods. Specifically, for sub-graph retrieval, we index  $k$ -hop ego-graphs where  $k$  is set to 1 and 2. We limit our exploration to  $k$  values up to 2 due to the extensive context required for integration and the potential introduction of noise or irrelevant nodes for  $k \geq 3$ . For the integration methods, we employ two distinct approaches: (i) directly flattening the textual sub-graph by explic-
+
+{8}------------------------------------------------
+
+Table 4: The number of nodes, edges, and tokens of REPOGRAPH and its variants. For different retrieval and integration variants, we report the average number on the test set. “summ.” refers to the summarized version by LLMs of the retrieved ego-graph.
+
+| Metrics | REPOGRAPH | 1-hop + flatten | 1-hop + summ. | 2-hop + flatten | 2-hop + summ. |
+|-|-|-|-|-|-|
+| # Nodes | 1419.3 | 11.6 | 11.6 | 54.5 | 54.5 |
+| # Edges | 26392.1 | 37.1 | 37.1 | 89.9 | 89.9 |
+| # tokens | - | 2310.7 | 717.5 | 10505.3 | 1229.2 |
+| <i>resolve rate</i> | - | 29.67 | 28.33 | 26.00 | 28.67 |
+
+itly detailing the relationships between the search term and its neighboring nodes, and (ii) leveraging an LLM first to summarize the sub-graph in terms of the core modules and salient dependencies, before proceeding with further processing. Detailed implementations of these variants and prompts used can be found in Appendix B.1.
+
+We begin by presenting some statistics for REPOGRAPH and its various configurations. Performance evaluations are conducted on Agentless with REPOGRAPH integrated as a plug-in module. Table 4 reports the number of nodes and edges within the (sub)-graphs. Notably, the average number of nodes and edges for REPOGRAPH across the SWE-bench dataset is quite substantial, featuring over 1,000 nodes and 25,000 edges. This highlights the comprehensive nature of the constructed structure. For the different variants, when  $k = 1$ , the information within REPOGRAPH is concentrated around the search term, resulting in an average of 11.6 nodes and 37.1 edges. As  $k$  increases to 2, the retrieved ego-graph expands exponentially, reaching an average of 54.5 nodes and 89.9 edges. Moreover, directly flattening the retrieved ego-graph often significantly increases the token count, frequently reaching several thousand tokens. However, utilizing an LLM as an additional summarizer greatly reduces the token count, typically around a thousand.
+
+Table 4 presents the resolve rates for four variants of our method. Notably, while the 2-hop variant incorporates additional information, directly flattening this information results in the poorest performance, with a resolve rate of 26.00%, even lower than the original baseline. In contrast, incorporating summarization via the LLM significantly alleviates context length constraints and enhances information organization, thereby improving performance. For the 1-hop variant, however, we observed that adding summarization actually degrades performance, reducing the resolving rate to 28.33%. We hypothesize that this occurs because the flat 1-hop ego-graph already contains comprehensive information that fits within the LLM’s context window; thus, summarization may introduce inevitable information loss.
+
+### 5.3 TRANSFERABILITY TEST
+
+To demonstrate the representational power of REPOGRAPH for repositories and its transferability to tasks requiring an understanding of repository structures, we conducted experiments using the CrossCodeEval benchmark (Ding et al., 2023). CrossCodeEval is a multilingual code completion benchmark that is derived from real-world repositories. It is designed to emphasize numerous cross-file dependencies. We focus on problems using *Python* as the evaluation programming language, leading to 2,665 samples. For evaluation metrics, we follow the settings in the original paper and measure performance with code match and identifier match metrics, assessing accuracy with exact match (EM), edit similarity (ES), and F1 scores. In our experiments, the search terms are determined to be the function within which the current line is to be completed.
+
+Table 5 demonstrates the results on CrossCodeEval using GPT-4o and Deepseek-Coder as the backbone language model. The original LLMs struggle with repository-level tasks, evidenced by an EM score of only 10.8 for code matching and 16.7 for identifier matching. These results indicate significant limitations in handling code structure and variable usage in a broader repository context.
+
+Table 5: Results on the subset of CrossCodeEval with GPT-4o and Deepseek-Coder-V2-Lite-Instruct as the backbone LLMs.
+
+| Methods | Code Match |  | Identifier Match |  |
+|-|-|-|-|-|
+|  | EM | ES | EM | F1 |
+| Deepseek-Coder | 10.2 | 57.3 | 16.6 | 49.1 |
+| +REPOGRAPH | 19.7 | 67.8 | 29.3 | 58.9 |
+| GPT-4o | 10.5 | 59.6 | 16.8 | 47.9 |
+| +REPOGRAPH | 28.7 | 68.9 | 36.0 | 61.3 |
+
+{9}------------------------------------------------
+
+![Figure 3: Venn diagram and error distribution bars for REPOGRAPH and baselines on SWE-Bench-Lite. (a) Procedural framework: Agentless (5 unique), RepoGraph (12 unique), Overlap (77). Error distribution for RepoGraph: Incorrect localization (3), Regressive fix (1), Contextual misalignment (1). (b) Agent framework: SWE-agent (16 unique), RepoGraph (22 unique), Overlap (39). Error distribution for RepoGraph: Incorrect localization (7), Regressive fix (4), Contextual misalignment (5). Legend: Incorrect localization (pink), Regressive fix (yellow), Contextual misalignment (blue).](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 3: Venn diagram and error distribution bars for REPOGRAPH and baselines on SWE-Bench-Lite. (a) Procedural framework: Agentless (5 unique), RepoGraph (12 unique), Overlap (77). Error distribution for RepoGraph: Incorrect localization (3), Regressive fix (1), Contextual misalignment (1). (b) Agent framework: SWE-agent (16 unique), RepoGraph (22 unique), Overlap (39). Error distribution for RepoGraph: Incorrect localization (7), Regressive fix (4), Contextual misalignment (5). Legend: Incorrect localization (pink), Regressive fix (yellow), Contextual misalignment (blue).
+
+Figure 3: Venn diagram of REPOGRAPH and baselines on (a) procedural framework and (b) agent framework on SWE-Bench-Lite. We also plot the error distribution of failing cases against counterparts, e.g., detailed error distribution of 12 cases REPOGRAPH succeeds while Agentless fails.
+
+However, with the integration of the REPOGRAPH method, there is a substantial improvement across all metrics with both LLMs. Particularly, we find that the improvement brought by REPOGRAPH is more pronounced when integrated with GPT-4o. A potential reason is that GPT-4o is better at interpreting the additional context information provided for better code reasoning. These improvements suggest that incorporating repository-level knowledge, as facilitated by REPOGRAPH, greatly enhances the model’s ability to understand and generate more contextually accurate and semantically consistent code.
+
+### 5.4 ERROR ANALYSIS
+
+We want to compare REPOGRAPH with the corresponding baselines to see the distribution of resolved cases and analyze the error reasons for unresolved cases. We plot a Venn diagram for representative methods in both procedural and agent frameworks in Figure 3, respectively. We manually examined all the unique error cases and defined three error categories. (i) **Incorrect localization** refers to the failure in accurately identifying code snippets, (ii) **contextual misalignment** happens when the generated patch fails to align with the broader context of the codebase, and (iii) **regressive fix** introduces new issues in resolving the original issues. More examples are in Appendix D.
+
+We found that the improvement in agent frameworks is more complementary than procedural frameworks, with larger uniquely resolved cases of 22 compared with 12 in procedural frameworks. Together, they make even larger performance of 31.33% and 22.33%. The reason could also be attributed to the determinism of procedural frameworks. As a plug-in module, REPOGRAPH tends to make modifications on existing deterministic processes, resulting in larger overlaps in resolved issues compared with baselines. Agent frameworks, on the other hand, have quite different action distributions with REPOGRAPH as a plug-in (please refer to Appendix A.2). Therefore, the uniquely resolved cases are more compared with procedural frameworks. For error distributions, contextual misalignment is the most prevalent error type, followed by incorrect localization and regressive fixes for all methods, suggesting that while localization is often correct, the applied solutions may regress or fail to integrate contextually. The phenomenon also echoes the conclusion obtained in Section 5.1. This is intuitive as all the existing methods focus on providing a more comprehensive and desired context for LLMs to solve the task, which fundamentally depends on the power of backbone LLMs. We also found that when integrated with REPOGRAPH, the proportion of all three error types decreases (specifically for “incorrect localization”), indicating that REPOGRAPH is specifically useful in aggregating the related contexts of the current to-be-fixed issue.
+
+## 6 CONCLUSION AND DISCUSSION
+
+This paper introduces REPOGRAPH, a plug-in module for modern AI software engineering. REPOGRAPH operates at the code-line level and offers desired navigation through code bases by incorporating and aggregating information at the line level, file level, and repository level through subgraph retrieval of ego-graphs. Extensive experiments on real-world SWE tasks show that REPOGRAPH significantly boosts the performance of both procedural and agent frameworks. In addition, REPOGRAPH is proved to be smoothly and effectively transferred to other tasks that require repository-level understanding. Future work could further investigate the generalizability of REPOGRAPH across different programming languages, frameworks, and developer environments. Real-time execution and feedback could also be explored to further enhance REPOGRAPH towards a dynamic version for better AI software engineering abilities.
+
+ Rest of paper (reference and Appendix) is removed.

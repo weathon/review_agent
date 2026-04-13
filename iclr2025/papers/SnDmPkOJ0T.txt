@@ -1,0 +1,263 @@
+
+
+{0}------------------------------------------------
+
+# REEF: REPRESENTATION ENCODING FINGERPRINTS FOR LARGE LANGUAGE MODELS
+
+Jie Zhang<sup>1,2\*</sup>, Dongrui Liu<sup>1\*</sup>, Chen Qian<sup>1,3</sup>, Linfeng Zhang<sup>4</sup>, Yong Liu<sup>3</sup>, Yu Qiao<sup>1</sup>, Jing Shao<sup>1†</sup>
+
+<sup>1</sup> Shanghai Artificial Intelligence Laboratory <sup>2</sup> University of Chinese Academy of Sciences
+
+<sup>3</sup> Renmin University of China <sup>4</sup> Shanghai Jiao Tong University
+
+## ABSTRACT
+
+Protecting the intellectual property of open-source Large Language Models (LLMs) is very important, because training LLMs costs extensive computational resources and data. Therefore, model owners and third parties need to identify whether a suspect model is a subsequent development of the victim model. To this end, we propose a training-free REEF to identify the relationship between the suspect and victim models from the perspective of LLMs' feature representations. Specifically, REEF computes and compares the centered kernel alignment similarity between the representations of a suspect model and a victim model on the same samples. This training-free REEF does not impair the model's general capabilities and is robust to sequential fine-tuning, pruning, model merging, and permutations. In this way, REEF provides a simple and effective way for third parties and models' owners to protect LLMs' intellectual property together. Our code is publicly accessible at <https://github.com/AI45Lab/REEF>.
+
+## 1 INTRODUCTION
+
+The training process of Large Language Models (LLMs) requires extensive computational resources and time. Therefore, open-source models are usually released with specific licenses (*e.g.*, Apache2.0, and LLaMA 2 Community License (Meta AI, 2023)) to protect their intellectual properties (IPs). Unfortunately, some developers claim to have trained their own LLMs but actually wrapped or fine-tuned based on other base LLMs (*e.g.*, Llama-2 and MiniCPM-V) (OpenBMB, 2023; 01-ai, 2023). It is urgent for model owners and third parties to identify *whether the suspect model is a subsequent development of the victim model that serves as the root origin (e.g., CodeLlama trained from Llama-2) or is developed from scratch (e.g., Mistral)*.
+
+The key is to extract unique features (*i.e.*, fingerprints) that can authenticate the victim model. Watermarking methods artificially inject triggers into the victim model to make it generate specific content for identification (Peng et al., 2023a; Xu et al., 2024). However, watermarks introduce extra training costs and impair the model's general capabilities (Russinovich & Salem, 2024), or even can be removed (Wang & Kerschbaum, 2019; Chen et al., 2023a). More crucially, these methods can not be applied to models that have already been open-released. An alternative is to extract intrinsic features of the victim model, avoiding additional training and the compromise of capabilities. Weight-based fingerprints are one of intrinsic features that allow calculating the similarity between a suspect model and a victim model's weights for identification (Zeng et al., 2023; Refael et al., 2024). However, these methods are fragile to major changes in weights, *e.g.*, weight permutations, pruning, and extensive fine-tuning (Fernandez et al., 2024; Xu et al., 2024). This necessitates extracting more robust intrinsic features as fingerprints to identify victim models and protect their IPs.
+
+In this paper, we propose to solve this problem from the perspective of the *feature representations* of LLMs, beginning with the following visualization analysis. It is generally acknowledged that different models encode informative and intrinsic features based on their training data and model architecture, resulting in distinct feature representations across models (Mikolov et al., 2013; Bolukbasi et al., 2016; Karras et al., 2021; Chen et al., 2023b; Zou et al., 2023; Dang et al., 2024). Figure 1(a) illustrates that the representations of Llama are markedly distinct from those of Baichuan and Qwen, while largely comparable to its fine-tuned models (*i.e.*, Llama-chat and Chinese-llama).
+
+\* Equal contribution † Corresponding author
+
+{1}------------------------------------------------
+
+![Figure 1: (a) t-SNE visualization of different LLMs' representations on the same samples. (b) Performance of classifiers trained on representations from the victim model evaluated on suspect models. (c) Robustness of REEF under variant LLMs that cause ICS (Zeng et al., 2023) ineffective.](49ad3a646d84bcfeac02bdf2b3792a3e_img.jpg)
+
+Figure 1 consists of three subplots. (a) is a t-SNE visualization showing the distribution of representations for Llama-2, Llama-2-chat, Vicuna-1.5, Baichuan-2, and Qwen-1.5. The points are clustered by color: Llama-2 (orange), Llama-2-chat (red), Vicuna-1.5 (green), Baichuan-2 (blue), and Qwen-1.5 (yellow). (b) is a bar chart showing the accuracy of classifiers trained on representations from a victim LLM (Llama) evaluated on suspect models. The x-axis labels are 'Victim LLM', 'Fine-tuned Victim LLM', and 'Unrelated LLMs'. The y-axis is 'Accuracy'. The bars show: Victim LLM (0.8412), Fine-tuned Victim LLM (0.8223, 0.8066), and Unrelated LLMs (0.4558, 0.4512). A dashed line indicates the 'random guess' level at 0.5. (c) is a line plot showing the robustness of REEF under variant LLMs that cause ICS ineffective. The x-axis labels are 'Fine-tuning', 'Pruning', 'Merging', and 'Permutation'. The y-axis is 'Similarity'. The plot shows two series: REEF (orange dots) and ICS (blue dots). REEF maintains high similarity (around 1.0) across all conditions, while ICS shows significantly lower similarity (around 0.2 to 0.5).
+
+Figure 1: (a) t-SNE visualization of different LLMs' representations on the same samples. (b) Performance of classifiers trained on representations from the victim model evaluated on suspect models. (c) Robustness of REEF under variant LLMs that cause ICS (Zeng et al., 2023) ineffective.
+
+Figure 1: (a) t-SNE visualization of different LLMs’ representations on the same samples. (b) Performance of classifiers trained on representations from the victim model evaluated on suspect models. (c) Robustness of REEF under variant LLMs that cause ICS (Zeng et al., 2023) ineffective.
+
+Such findings inspire us to construct representation-based fingerprints. Specifically, we apply neural networks to extract fingerprints of a victim model from its representation space. Figure 1(b) shows that the classifier trained on representations of a victim model (*i.e.*, Llama) can be generalized to its variant models (*e.g.*, Llama-chat and Vicuna), but fail to other models (*e.g.*, Baichuan and Qwen). Although the effectiveness of representation-based fingerprints has been validated, such fingerprints still have limitations. On one hand, the input dimensions of neural networks are fixed, making them inapplicable to model pruning that alters the representation dimensions of the victim model (Frantar & Alistarh, 2023; Xia et al., 2023; 2024), which is prevalent in scenarios such as model compression for deployment on mobile devices. On the other hand, these fingerprints lack robustness against representation permutations, a challenging issue because developers may intentionally manipulate model representations to evade detection (Zeng et al., 2023; Refael et al., 2024).
+
+To this end, we propose a simple and effective approach, namely REEF, which is robust against pruning and evading detection. Specifically, REEF is a representation-based fingerprinting method that compares the Centered Kernel Alignment (CKA) similarity (Kornblith et al., 2019) between the representations of the same samples from a suspect model and a victim model that serves as the root origin. Experimental results indicate that models derived from the victim model exhibit high similarity. Moreover, REEF is resilient to dimensional changes, and we theoretically prove that CKA is invariant to column-wise permutations and scaling transformations. Figure 1(c) demonstrates that REEF maintains its effectiveness even under extreme conditions that cause weight-based methods (Zeng et al., 2023) ineffective. These conditions include extensive fine-tuning (using data with up to 700B tokens (Azerbayev et al., 2023)), a high ratio pruning (up to 90% of parameters (Ma et al., 2023)), model merging (LLMs with different architectures (Wan et al., 2024a)), and permutations (parameter vector direction change through weight rearrangements (Fernandez et al., 2024)).
+
+REEF utilizes the intrinsic feature from the perspective of representations to identify whether a suspect model is derived from a root victim model under the white-box scenario. This training-free REEF does not impair model’s general capabilities and is robust to various subsequent developments compared to weight-based fingerprints and watermarks. Consequently, REEF is a promising method for protecting the IPs of model owners and provides an efficient and effective way for third parties to review models, combating unethical or illegal activities such as unauthorized use or reproduction.
+
+## 2 RELATED WORK
+
+Model fingerprinting protects IPs by allowing model owners and third parties to authenticate model ownership. There are two types of fingerprints for LLMs. One is injected fingerprints, which are artificially added during training or fine-tuning to facilitate model identification, such as watermarking methods (Peng et al., 2023a; Xu et al., 2024). The other is intrinsic fingerprints, which are inherent properties that naturally emerge from the models’ training data and architectures, including model weights (*i.e.*, parameters) and feature representations, also known as embeddings or activations.
+
+**Injected Fingerprint.** Watermarking methods inject a backdoor trigger into a victim model, causing it to produce specific outputs when the trigger is present. This allows for identifying whether a suspect model derives from the victim model. Many approaches embed the watermarks through
+
+{2}------------------------------------------------
+
+backdoor attacks (Adi et al., 2018; Zhang et al., 2018; Li et al., 2019b), and digital signature technology and hash functions (Guo & Potkonjak, 2018; Li et al., 2019a; Zhu et al., 2020) are also used to design trigger words that contain the owner’s identity information to protect the IPs of DNNs. For LLMs, the high computational and time costs of training pose an urgent need to protect their IPs. Researchers propose various methods to inject watermarks as fingerprints to identify the victim model (Li et al., 2023; Peng et al., 2023b; Kirchenbauer et al., 2023; Zhao et al., 2023; Russinovich & Salem, 2024; Xu et al., 2024), but such methods inevitably impair the model’s overall performance.
+
+**Intrinsic Fingerprint.** Such fingerprints use the inherent and native attributes of the victim model, without requiring additional tuning which could impair the model’s general capabilities, and are more stable and can not be removed. Model weights are one of the intrinsic features that can be used to compute the similarity of parameters between a suspect model and a victim model for identification (Zeng et al., 2023; Refael et al., 2024). Semantic analysis methods conduct statistical analysis on the content generated by different models, exploiting the linguistic patterns and semantic preferences exhibited by various LLMs as their unique fingerprints (Iourovitski et al., 2024; Pasquini et al., 2024; McGovern et al., 2024). However, both methods suffer from insufficient robustness (Xu et al., 2024). The internal representations of LLMs are derived from the data, strategies, and frameworks used during the training process, and serve as intrinsic features for model identification (Sevastjanova et al., 2022). For example, the logits space can be leveraged to identify the victim model (Yang & Wu, 2024). However, this approach remains highly sensitive to parameter permutation, posing significant challenges for effective fingerprinting.
+
+## 3 EXPLORING THE POTENTIAL OF FEATURE REPRESENTATIONS AS FINGERPRINTS
+
+In this section, we propose to utilize *feature representations* as LLM fingerprints to identify whether a suspect model is a subsequent development of the victim model in a white-box scenario, based on the following two observations. (1) Feature representations of fine-tuned victim models are similar to feature representations of the original victim model, while the feature representations of unrelated models exhibit distinct distributions, as shown in Figure 1(a). (2) Some high-level semantic concepts are “linearly” encoded in the representation space of LLMs and can be easily classified, such as safety or unsafety and honest or dishonest (Zou et al., 2023; Slobodkin et al., 2023; Qian et al., 2024b; Lu et al., 2025). According to these two observations, we can train a binary classifier on the representations of the victim model and then apply it to various suspect models’ representations, *i.e.*, LLMs derived from the victim model and unrelated LLMs. In this way, such a classifier may generalize to different fine-tuned victim models, because they have similar feature representations.
+
+The binary classifier can employ various Deep Neural Network (DNN) architectures, such as a linear classifier, Multi-Layer Perceptron (MLP), Convolutional Neural Network (CNN), and Graph Convolutional Network (GCN). For training, we use the TruthfulQA dataset (Lin et al., 2022), concatenating each question with its truthful answer as positive samples and with its false answer as negative samples. The dataset is split into training and test sets with a 4:1 ratio. To evaluate the classifier’s performance, we conduct experiments on LLMs of varying sizes. Specifically, we select Llama-2-7b and Llama-2-13b as the victim models, while derived models and unrelated LLMs serve as suspect models for comparison.
+
+**Classifiers trained on representations of a victim model can effectively generalize to its variants but not to others.** Figure 2(a) shows that a classifier trained on the 18th layer representation of Llama-2-7b achieves approximately 80% classification accuracy when applied to its fine-tuned models (*e.g.*, Chinese-llama-2-7b). However, the accuracy drops to around 50% on unrelated models (*e.g.*, Mistral-0.1-7b), which is close to the level of random guessing. Classifiers trained on representations from other layers show the same results, as discussed in Appendix B. Additionally, similar findings are observed for Llama-2-13b (Figure 2(b)), indicating the scalability of the representation-based fingerprints. These experimental results indicate that representations can serve as fingerprints to protect the victim model’s IP.
+
+**Challenges to using the classifier for victim model identification:** (1) DNNs have fixed input dimensions and cannot be applied to models pruned from the victim model, *e.g.*, reducing representation dimensions. For example, the pruned models Sheared-llama-1.3b and Sheared-llama-2.7b
+
+{3}------------------------------------------------
+
+![Figure 2: Accuracies of classifiers trained on representations from the victim model. (a) Llama-2-7b as the victim model. (b) Llama-2-13b as the victim model. Both charts show accuracy for Linear, MLP, CNN, and GCN classifiers across various source models.](e94f3bbb6f7501b9a1344dd0210e5dd8_img.jpg)
+
+Figure 2 consists of two bar charts, (a) and (b), showing the accuracy of four classifiers (Linear, MLP, CNN, GCN) trained on representations from different victim models. Chart (a) uses Llama-2-7b as the victim model, and chart (b) uses Llama-2-13b. Each chart compares the accuracy of the classifiers when trained on representations from various source models. The source models for (a) include Llama-2-7b, Llama-2-7b-chat, Vicuna-1.5-7b, Xwinlm-0.2-7b, Chinese-llama-2-7b, Mistral-0.1-7b, Qwen-1.5-7b, Internlm-7b, and Baichuan-2-7b. The source models for (b) include Llama-2-13b, Llama-2-13b-chat, Vicuna-1.5-13b, Xwinlm-0.2-13b, Chinese-llama-2-13b, Plamo-13b, Qwen-1.5-14b, Internlm-20b, and Baichuan-2-13b. In both charts, the accuracy is generally high (above 0.7) for all classifiers and source models, with some variations. The 'Linear' classifier consistently shows high accuracy, while 'GCN' sometimes shows lower accuracy, particularly in chart (a).
+
+Figure 2: Accuracies of classifiers trained on representations from the victim model. (a) Llama-2-7b as the victim model. (b) Llama-2-13b as the victim model. Both charts show accuracy for Linear, MLP, CNN, and GCN classifiers across various source models.
+
+Figure 2: Accuracies of classifiers trained on representations from the victim model: (a) Llama-2-7b as the victim model, (b) Llama-2-13b as the victim model.
+
+have dimensions of 2048 and 2560, respectively (Xia et al., 2024). However, the classifier trained on Llama-2-7b can only process inputs of 4096 dimensions. (2) DNNs are not robust to permutations of the input feature representations, such as when columns are permuted through coupled matrix multiplications, which malicious developers might use to evade detection (Fernandez et al., 2024).
+
+## 4 ROBUST REPRESENTATION-BASED FINGERPRINTING WITH REEF
+
+To address the challenges of classifiers in victim model identification, we propose REEF, an advanced representation-based fingerprinting approach for open-source LLMs that can adapt to suspect models with varying representation dimensions and is robust to representation permutations.
+
+REEF identifies whether a suspect model is derived from a root victim model, given the representations of these two models on certain examples. Specifically, let  $X \in \mathbb{R}^{m \times p_1}$  denote activations of the  $l$ -th layer from the suspect model on  $m$  examples and  $Y \in \mathbb{R}^{m \times p_2}$  denotes activations of the  $l'$ -th layers from the victim model on same  $m$  examples, where  $p_1$  is independent of  $p_2$ , meaning there is no limitation on dimensional consistency. Therefore, we need a similarity index  $s(\cdot, \cdot)$  to measure representations' similarity between the suspect and victim models. In this way, a high  $s(X, Y)$  score indicates that the suspect model is more likely derived from the victim model. In contrast, a low  $s(X, Y)$  score means that the suspect model is less likely derived from the victim model.
+
+**Centered Kernel Alignment.** CKA (Kornblith et al., 2019) is a similarity index based on Hilbert-Schmidt Independence Criterion (HSIC) (Gretton et al., 2005), which measures the independence between two sets of random variables. The CKA similarity between  $X$  and  $Y$  can be computed as follows
+
+$$\text{CKA}(X, Y) = \frac{\text{HSIC}(X, Y)}{\sqrt{\text{HSIC}(X, X) \cdot \text{HSIC}(Y, Y)}}, \quad (1)$$
+
+where  $\text{HSIC}(X, Y) = \frac{1}{(m-1)^2} \text{tr}(K_X H K_Y H)$ . Specifically,  $H = I - \frac{1}{m} \mathbf{1} \mathbf{1}^\top$  is a centering matrix.  $K_X$  and  $K_Y$  are Gram matrices that measure the similarity of a pair of examples based on kernel function  $k$ , i.e.,  $(K_X)_{ij} = k(X_i, X_j)$  and  $(K_Y)_{ij} = k(Y_i, Y_j)$ .  $X_i$  and  $X_j$  denote the  $i$ -th and  $j$ -th row of  $X$ , respectively.
+
+**Kernel Selection.** In this study, we consider a linear kernel and a Radial Basis Function (RBF) kernel. In the linear kernel case, Gram matrix  $K_X = X X^\top$ . In the RBF kernel case,  $k(X_i, X_j) = \exp(-\|X_i - X_j\|_2^2 / (2\sigma^2))$ . Empirically, we discover that linear and RBF kernels obtain similar experimental results. Please see Section 5.1 for more discussions. Unless otherwise specified, we adopt linear CKA due to its high efficiency.
+
+**Theorem 1** (Proof in Appendix A) Given two matrices  $X \in \mathbb{R}^{m \times p_1}$  and  $Y \in \mathbb{R}^{m \times p_2}$ , the CKA similarity score between  $X$  and  $Y$  is invariant under any permutation of the columns and column-wise scaling transformation. Formally, we have:
+
+$$\text{CKA}(X, Y) = \text{CKA}(X P_1, Y P_2) = \text{CKA}(c_1 X, c_2 Y) \quad (2)$$
+
+{4}------------------------------------------------
+
+![Figure 3: Heatmaps depicting the CKA similarity between the representations of the victim LLM (Llama-2-7B) and those of various suspect LLMs on the same samples. The figure is a grid of heatmaps. The columns represent different suspect LLMs: Llama-2-7b-4bit, Llama-2-7b-chat, Llama-2-7b-alpaca, Vicuna-1.5-7b, Chinese-llama-2-7b, Code-llama-2-7b, Baichuan-2-7b, Qwen-1.5-7b, Internlm-2-7b, Mistral-7b, Falcon-7b, and MPT-7b. The rows are divided into two main sections: 'LLM derived from Victim LLM' (top two rows) and 'Unrelated LLMs' (bottom row). Each heatmap shows similarity scores between layers (0 to 31) of the victim model (x-axis) and the suspect model (y-axis). A color bar on the right indicates similarity from 0.0 (green) to 1.0 (dark blue). The top rows show high similarity (dark blue), while the bottom row shows low similarity (green).](e0d425c8e4eef259e4c52d81426d93fa_img.jpg)
+
+Figure 3: Heatmaps depicting the CKA similarity between the representations of the victim LLM (Llama-2-7B) and those of various suspect LLMs on the same samples. The figure is a grid of heatmaps. The columns represent different suspect LLMs: Llama-2-7b-4bit, Llama-2-7b-chat, Llama-2-7b-alpaca, Vicuna-1.5-7b, Chinese-llama-2-7b, Code-llama-2-7b, Baichuan-2-7b, Qwen-1.5-7b, Internlm-2-7b, Mistral-7b, Falcon-7b, and MPT-7b. The rows are divided into two main sections: 'LLM derived from Victim LLM' (top two rows) and 'Unrelated LLMs' (bottom row). Each heatmap shows similarity scores between layers (0 to 31) of the victim model (x-axis) and the suspect model (y-axis). A color bar on the right indicates similarity from 0.0 (green) to 1.0 (dark blue). The top rows show high similarity (dark blue), while the bottom row shows low similarity (green).
+
+Figure 3: Heatmaps depicting the CKA similarity between the representations of the victim LLM (Llama-2-7B) and those of various suspect LLMs on the same samples.
+
+where  $P_1 \in \mathbb{R}^{p_1 \times p_1}$  and  $P_2 \in \mathbb{R}^{p_2 \times p_2}$  denote permutation matrices,  $c_1 \in \mathbb{R}^+$  and  $c_2 \in \mathbb{R}^+$  are two positive scalars.
+
+Theorem 1 indicates that the CKA similarity score is theoretically invariant and robust to any column-wise permutations and scaling transformations. Kornblith et al. (2019) have shown that CKA is able to the correspondence between representations of different dimensions. Therefore, REEF is highly robust to various subsequent developments of the victim model in practical scenarios, including model pruning and representation permutation, ensuring accurate identification of the victim model through representation-based fingerprints to protect its IP.
+
+## 5 EXPERIMENTS
+
+In this section, we provide a comprehensive evaluation of REEF. Section 5.1 evaluates REEF’s effectiveness in distinguishing LLMs derived from the root victim model from unrelated models. Following this, Section 5.2 assesses REEF’s robustness to subsequent developments of the victim model, such as fine-tuning, pruning, merging, and permutations. Section 5.3 presents ablation studies on REEF across varying sample numbers and datasets. Finally, Section 5.4 discusses REEF’s sensitivity to training data and its capacity for adversarial evasion.
+
+### 5.1 EFFECTIVENESS VERIFICATION
+
+In this subsection, we demonstrate that REEF can effectively model the fingerprint from the representation. The CKA similarity between the victim model’s representations and those of its derived models, as well as unrelated models, shows significant differences. This makes REEF a reliable fingerprinting method for protecting the victim model’s IP.
+
+**Settings.** For the LLMs, we select Llama-2-7b as the victim model and choose a range of suspect models, including quantization and fine-tuned variants of Llama-2-7b (e.g., Llama-2-7b-chat, Code-llama-2-7b, and Llama-2-7b-4bit) as well as unrelated models (e.g., Qwen-1.5-7b, Baichuan-2-7b, and Mistral-7b). We use both a linear kernel and an RBF kernel to compute the layer-wise and inter-layer CKA similarity of representations between the victim and suspect models on 200 samples from the TruthfulQA dataset (Lin et al., 2022). The resulting heatmap is shown in Figure 3.
+
+**REEF can accurately distinguish between models derived from the victim model and unrelated models.** As shown in Figure 3, for LLMs derived from the victim model, the CKA similarity with the victim model is high (higher than 0.8), whereas unrelated LLMs show low similarity (lower than 0.5). This is reflected in the marked color contrast between the first two rows and the third row. To quantify results, the average similarity of LLMs derived from the victim model is 0.9585, which is higher than that of unrelated LLMs, whose average similarity is 0.2361. Additionally, for LLMs derived from the victim model, the similarity is notably high along the diagonal of the heatmaps,
+
+{5}------------------------------------------------
+
+which represents the similarity between corresponding layers of the victim and suspect models, with an average of 0.9930. Furthermore, the inter-layer similarity is also significant, reaching 0.9707.
+
+**Linear and RBF kernels yield similar results in identifying whether a suspect model is derived from the victim model.** As shown in the first two rows of Figure 3, the CKA similarity between the victim model and the LLMs derived from it, calculated using both the linear and RBF kernels, exceeded 0.95. This demonstrates that both kernels are suitable for fingerprinting in REEF. We adopt the linear CKA due to its higher computational efficiency.
+
+**CKA from a single layer is sufficient for fingerprint identification.** The similarities between representations on a specific layer of the victim model and those of the derived and unrelated models differ significantly (e.g., 0.9973 and 0.2223 for layer 18, respectively). Consequently, we focus on reporting the similarity at layer 18 in subsequent experiments, due to its informativeness and efficiency. The complete heatmap results are provided in Appendix C.
+
+### 5.2 ROBUSTNESS VERIFICATION
+
+In this subsection, we apply REEF to suspect models that are developed from a victim model through fine-tuning, pruning, merging, permutations, and scaling transformations (Appendix D provides REEF’s application across more different LLM families, including Qwen and Mistral). These techniques can introduce significant changes to the model’s structure or parameters, making it challenging for existing methods to identify the victim model. However, REEF remains effective in these scenarios, demonstrating its robustness.
+
+#### 5.2.1 BASELINE METHODS
+
+**Weight-based Fingerprinting Methods.** Following Zeng et al. (2023), we use model weight similarity methods, including PCS and ICS, to identify whether a suspect model is derived from a victim model. Specifically, PCS flattens all weight matrices and biases of an LLM into vectors and directly compares the cosine similarity between these vectors for the two models. ICS constructs invariant terms from the weights of the last two layers and calculates the cosine similarity between these invariant terms for the two models. A high cosine similarity indicates that the suspect model is derived from the victim model, and vice versa.
+
+**Representation-based Fingerprinting Methods.** Yang & Wu (2024), referring to the Logits method, implements LLM fingerprinting by analyzing unique attributes of each LLM’s logits output. This method evaluates the similarity between the output spaces of the victim and suspect models. A high similarity suggests that the suspect model is derived from the victim model. We conduct experiments on the TruthfulQA dataset to extract logit output for the suspect models.
+
+#### 5.2.2 FINE-TUNING
+
+Xu et al. (2024) point out that weight-based fingerprints are not reliable when models undergo extensive fine-tuning with larger deviations in parameters. Given this challenge, we seek to assess the robustness of REEF under such demanding scenarios.
+
+**Settings.** We use Llama-2-7b as the victim model and select a diverse set of its fine-tuned models as suspect models, with fine-tuning (FT) data volumes ranging from 5 million to 700 billion tokens. The suspect models include Llama-2-finance-7b, Vicuna-1.5-7b, Wizardmath-7b, Chinese-llama-2-7b, Code-llama-7b, and Llemma-7b, with each model’s fine-tuning data volume being 5M, 370M, 1.8B, 13B, 500B, and 700B tokens, respectively (Chiang et al., 2023; Luo et al., 2023; Cui et al., 2023; Roziere et al., 2023; Azerbayev et al., 2023).
+
+**REEF is robustness to extensive fine-tuning.** As shown in Table 1, even for models fine-tuned on datasets with up to 700B tokens (i.e., Llemma-7B), REEF still achieves a high similarity of 0.9962. In contrast, PCS becomes ineffective as early as fine-tuning with 1.8B tokens (i.e., Wizardmath-7b). ICS performance significantly degrades with increasing fine-tuning data volume, with 13B tokens (i.e., Chinese-llama-2-7b) and 500B tokens (i.e., Code-llama-7B) yielding similarity of 0.4996 and 0.2550, respectively. Although the Logits method shows relatively less degradation, it still exhibits sensitivity to the volume of fine-tuning data. Notably, Logits method is particularly sensitive to changes in the vocabulary, e.g., Chinese-llama-2-7b has expanded its vocabulary during fine-tuning,
+
+{6}------------------------------------------------
+
+Table 1: Similarity of various LLM fingerprinting methods applied to suspect models developed through fine-tuning, pruning, merging, permutations, and scaling transformations. In this table,   indicate similarity greater than 0.8,   indicate similarity between 0.5 and 0.8, and   indicate similarity less than 0.5.
+
+|  | <b>Model Fine-tuning</b> |  |  |  |  |  |
+|-|-|-|-|-|-|-|
+|  | Llama-2-finance-7b<br>(5M Tokens) | Vicuna-1.5-7b<br>(370M Tokens) | Wizardmath-7b<br>(1.8B Tokens) | Chinesellama-2-7b<br>(13B Tokens) | Codellama-7b<br>(500B Tokens) | Llemma-7b<br>(700B Tokens) |
+| <b>PCS</b> | 0.9979 | 0.9985 | 0.0250 | 0.0127 | 0.0105 | 0.0098 |
+| <b>ICS</b> | 0.9952 | 0.9949 | 0.9994 | 0.4996 | 0.2550 | 0.2257 |
+| <b>Logits</b> | 0.9999 | 0.9999 | 0.9999 | 0.7033 | 0.7833 | 0.6367 |
+| <b>REEF</b> | 0.9950 | 0.9985 | 0.9979 | 0.9974 | 0.9947 | 0.9962 |
+|  | <b>Structured Pruning</b> |  |  |  |  |  |
+|  | Sheared-llama-1.3b-pruned | Sheared-llama-1.3b | Sheared-llama-1.3b-sharegpt | Sheared-llama-2.7b-pruned | Sheared-llama-2.7b | Sheared-llama-2.7b-sharegpt |
+| <b>PCS</b> | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 |
+| <b>ICS</b> | 0.4927 | 0.3512 | 0.3510 | 0.6055 | 0.4580 | 0.4548 |
+| <b>Logits</b> | 0.9967 | 0.9999 | 0.9999 | 0.9967 | 0.9999 | 0.9999 |
+| <b>REEF</b> | 0.9368 | 0.9676 | 0.9710 | 0.9278 | 0.9701 | 0.9991 |
+|  | <b>Unstructured Pruning</b> |  |  | <b>Distribution Merging (Fusechat-7b)</b> |  |  |
+|  | Sparse-llama-2.7b | Wanda-llama-2.7b | GBLM-llama-2.7b | Internlm2-chat-20b | Mistral-8x7b-instruct | Qwen-1.5-chat-7b |
+| <b>PCS</b> | 0.9560 | 0.9620 | 0.9616 | 0.0000 | 0.0000 | 0.0000 |
+| <b>ICS</b> | 0.9468 | 0.9468 | 0.9478 | 0.1772 | 0.0105 | 0.0635 |
+| <b>Logits</b> | 0.9999 | 0.9999 | 0.9999 | 0.0000 | 0.0000 | 0.0000 |
+| <b>REEF</b> | 0.9985 | 0.9986 | 0.9991 | 0.9278 | 0.9701 | 0.9991 |
+|  | <b>Weight Merging (Evollm-jp-7b)</b> |  |  | <b>Distribution Merging (Fusellm-7b)</b> |  |  |
+|  | Shisa-gamma-7b-v1 | Wizardmath-7b-1.1 | Abel-7b-002 | Llama-2-7b | Openllama-2-7b | Mpt-7b |
+| <b>PCS</b> | 0.9992 | 0.9990 | 0.9989 | 0.9997 | 0.0194 | 0.0000 |
+| <b>ICS</b> | 0.9992 | 0.9988 | 0.9988 | 0.1043 | 0.2478 | 0.1014 |
+| <b>Logits</b> | 0.9923 | 0.9999 | 0.9999 | 0.9999 | 0.0100 | 0.0000 |
+| <b>REEF</b> | 0.9635 | 0.9526 | 0.9374 | 0.9996 | 0.6713 | 0.6200 |
+|  | <b>Permutation</b> |  |  | <b>Scaling Transformation</b> |  |  |
+|  | Llama-2-7b | Mistral-7b | Qwen-1.5-7b | Llama-2-7b | Mistral-7b | Qwen-1.5-7b |
+| <b>PCS</b> | 0.0000 | 0.0000 | 0.0000 | 0.9999 | 0.9989 | 0.9999 |
+| <b>ICS</b> | 0.1918 | 0.9847 | 0.9912 | 0.9999 | 0.9999 | 0.9998 |
+| <b>Logits</b> | 0.0000 | 0.0000 | 0.0000 | 0.9999 | 0.9999 | 0.9999 |
+| <b>REEF</b> | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+
+yielding a lower similarity than Code-llama-7b (0.7033 vs 0.7833), despite being fine-tuned on a smaller dataset (13B vs 500B tokens).
+
+**Discussion about how much fine-tuning data could make REEF ineffective.** Despite fine-tuning Llama-2-7b to Llemma-7b with 700B tokens (Azerbayev et al., 2023), the fine-tuning data is one-third of Llama-2-7b’s 2T token pre-training data, yet REEF remains effective. We question whether REEF would remain effective with continued increases in fine-tuning data. Before delving into this discussion, two statements are listed: (1) To the best of our know, Llemma-7b is the most extensively fine-tuned Llama-2-7b model, nearly 700B tokens for fine-tuning, and REEF has shown robustness in this context; (2) Code-llama-7b (Roziere et al., 2023) reports that fine-tuning with 500B tokens requires 4.4T of disk size and 25,000 GPU hours, fine-tuning on this scale is costly. Such a considerable cost limits further extensive fine-tuning. REEF appears effective in current fine-tuning scenarios.
+
+#### 5.2.3 MODEL PRUNING
+
+Pruning is widely used in model compression for edge deployment, *e.g.*, serving for mobile devices and autonomous driving (Vadera & Ameen, 2021; Wang et al., 2024; Lin et al., 2024). However, pruning could significantly alter both the structural integrity and representation dimensions of models (Ma et al., 2023; Frantar & Alistarh, 2023; Zhu et al., 2023), posing challenges for fingerprint identification. To this end, we test REEF on various pruned models of the victim model Llama-2-7b.
+
+**Settings.** We use Llama-2-7b as the victim model and various pruned models of it as suspect models. First, we select several pruned models using different pruning strategies, including structured pruning (*e.g.* Sheared-llama (Xia et al., 2024)), and unstructured pruning (*e.g.*, SparseGPT (Frantar & Alistarh, 2023), GBLM-Pruner (Das et al., 2023), and Wanda (Sun et al., 2023)). These methods prune the models at specific ratios, followed by post-training (*e.g.*, continued pre-training or
+
+{7}------------------------------------------------
+
+![Figure 4: (a)-(c) Similarity between pruned models and the victim model across three pruning strategies at various pruning ratios. (d) Perplexity of the three pruning strategies.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 4 consists of four subplots. Subplots (a), (b), and (c) show 'Similarity' on the y-axis (ranging from 0.0 to 1.0) against different pruning ratios. Subplot (a) is for 'Block Pruning' (10% to 90%), (b) is for 'Layer Pruning' (3 to 27 layers), and (c) is for 'Channel Pruning' (10% to 60%). Three methods are compared: REEF (green line with circles), ICS (blue line with circles), and PCS (orange line with circles). REEF maintains high similarity (above 0.8) across all pruning strategies and ratios. ICS shows a significant drop in similarity as the pruning ratio increases. PCS maintains a very low similarity (below 0.2) across all scenarios. Subplot (d) shows 'Perplexity' on the y-axis (ranging from 0 to 50,000) against 'Perplexity of Various Pruning' ratios (10% to 90%). It compares 'Channel' (green line with circles), 'Layer' (blue line with circles), and 'Block' (orange line with circles) pruning. Channel pruning shows a sharp spike in perplexity at 60% (reaching over 40,000), while Layer and Block pruning remain relatively low and stable.
+
+Figure 4: (a)-(c) Similarity between pruned models and the victim model across three pruning strategies at various pruning ratios. (d) Perplexity of the three pruning strategies.
+
+Figure 4: (a)-(c) Similarity between pruned models and the victim model across three pruning strategies at various pruning ratios. (d) Perplexity of the three pruning strategies.
+
+instruction-tuning) to ensure the pruned models maintain their capabilities. Second, we apply LLM-Pruner (Ma et al., 2023) to prune Llama-2-7b into smaller suspect models at arbitrary pruning ratios, without post-training. For example, we apply block pruning to reduce Llama-2-7b’s parameters by 10% to as much as 90%, and layer pruning to reduce the number of layers by 3 to as much as 27.
+
+**REEF is robust to various pruning strategies.** As shown in Table 1, for structured pruned models, REEF consistently achieves accurate fingerprint identification across all Sheared-llama models, with similarities exceeding 0.9278. In contrast, PCS fails in this scenario, consistently yielding a similarity score of zero. ICS does not perform well, *e.g.*, the similarity for the 1.3B pruned model drops to 0.3512. The Logits method, which relies on the output space, remains unaffected unless the pruning alters the logits themselves. For unstructured pruned models, all methods are capable of identifying the victim model, with all similarities exceeding 0.94. In summary, REEF and the Logits method remain robust across all pruned models.
+
+**REEF is robustness to pruning ratio, even up to 90%.** Figure 4 shows that REEF remains effective even with significant pruning, including block pruning of up to 90% of parameters, layer pruning of up to 27 layers, and channel pruning of up to 60%. Figure 4(d) illustrates that perplexities are particularly high in these scenarios, especially with 60% channel pruning. As noted by Ma et al. (2023), channel pruning affects all layers, but the first and last layers are critical for maintaining model integrity, thus pruning is limited to 60%. In contrast, PCS fails in all pruning scenarios, and ICS’s effectiveness diminishes as the pruning ratio increases, ultimately failing under layer pruning. These findings highlight REEF as the most robust and reliable method for fingerprint identification across various pruning ratios.
+
+#### 5.2.4 MODEL MERGING
+
+Model merging is an effective technique that merges multiple separate models with different capabilities to build a universal model without needing access to the original training data or expensive computation (Yang et al., 2024). Differing from other sections, the merged model is derived from several victim models, which pose a challenge in identifying all of them. In this subsection, we study two types of model merging: weight-based and distribution-based.
+
+**Settings.** For weight merging, we select Evollm-jp-7b (Akiba et al., 2024) as the suspect model, which merges three victim models with the same architecture (*i.e.*, Shisa-gamma-7b-v1, Wizardmath-7b-1.1, and Abel-7b-002) by weighted parameters. For distribution merging, we choose Fusellm-7b (Wan et al., 2024a) and Fusechat (Wan et al., 2024b) as suspect models, respectively. Fusellm-7b merges three victim LLMs with distinct architectures but with same scale: Llama-2-7b, Openllama-2-7b, and Mpt-7b. Fusechat merges several chat LLMs of varied architectures and scales, we investigate Internlm2-chat-20b, Mixtral-8x7b-instruct, and Qwen-1.5-chat-72b as suspect models.
+
+**REEF is robust across both weight and distribution merging scenarios.** For weight merging, REEF consistently achieves high accuracy in identifying the origins of merged models, with similarities ranging from 0.9526 to 0.9996, as shown in Table 1. ICS, PCS, and the Logits method also perform well in this scenario. For distribution merging at the same scales (*i.e.*, Fusellm-7b), REEF continues to perform well, accurately identifying the victim model Llama-2-7b with a similarity of 0.9996. Additionally, it remains effective for Openllama-2-7b and Mpt-7b, with similarities of 0.6713 and 0.62, respectively. However, ICS struggles significantly in this scenario, with all three original victim models achieving low similarities. Although PCS and the Logits method can iden-
+
+{8}------------------------------------------------
+
+![Figure 5: Five line plots (a-e) showing CKA similarity between Llama-2-7b and various suspect LLMs across datasets: TruthfulQA, SST2, ConfAlde, PKU-RLHF-10K, and ToxiGen. The x-axis represents sample number (10 to 1000) and the y-axis represents similarity (0.0 to 1.0). A vertical dashed line at 200 samples indicates stabilization. LLMs derived from Llama-2-7b (e.g., Llama-2-7b-chat, Vicuna-1.5-7b) maintain high similarity (near 1.0), while unrelated LLMs (e.g., Openllama-2-7b, Falcon-7b) show a sharp drop in similarity after 200 samples, stabilizing below 0.2.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 5: Five line plots (a-e) showing CKA similarity between Llama-2-7b and various suspect LLMs across datasets: TruthfulQA, SST2, ConfAlde, PKU-RLHF-10K, and ToxiGen. The x-axis represents sample number (10 to 1000) and the y-axis represents similarity (0.0 to 1.0). A vertical dashed line at 200 samples indicates stabilization. LLMs derived from Llama-2-7b (e.g., Llama-2-7b-chat, Vicuna-1.5-7b) maintain high similarity (near 1.0), while unrelated LLMs (e.g., Openllama-2-7b, Falcon-7b) show a sharp drop in similarity after 200 samples, stabilizing below 0.2.
+
+Figure 5: Illustration of the CKA similarity between the representations of the victim LLM (Llama-2-7B) and various suspect LLMs across different datasets as sample number increases.
+
+tify Llama-2-7b, their performance drops sharply for Openllama-2-7b and Mpt-7b, with similarities of nearly 0. For distribution merging at the different scales (*i.e.*, Fusechat-7b), REEF is the only method that continues to work for identifying victim models, while the other methods fail, demonstrating its consistent reliability in this scenario. Based on these findings, REEF is robust across various merging strategies and can identify all victim models for the merged model.
+
+#### 5.2.5 PERMUTATION AND SCALING TRANSFORMATION
+
+There are approaches that could camouflage the model without changing its architecture or affecting its output (Zeng et al., 2023). Malicious developers may modify the model by employing dimension permutation or coupled matrix multiplications to evade some fingerprint detection methods (Fernandez et al., 2024). This section aims to experiment with the robustness of various fingerprinting methods in addressing this type of evasion.
+
+**Settings.** We select Llama-2-7b, Mistral-7b, and Qwen-1.5-7b as victim models, applying column-wise permutations or scaling transformations (with a scaling factor of 0.8) to both their weight matrices and feature representations. These operations simulate evasion techniques that malicious developers might use, enabling us to compare the similarities of the weights and representations before and after the operations.
+
+**REEF is invariant and robust to any column-wise permutations and scaling transformations, as proved by Theorem 1.** As shown in Table 1, the CKA similarity computed by REEF remains consistently at 1 before and after the permutation or scaling transformations, indicating that REEF is invariant to these operations and robust against evasion techniques. However, other methods such as ICS, PCS, and Logits, while robust to scaling transformations, exhibit a significant drop in similarity under permutation, with values nearly dropping to 0. These results further reinforce that REEF is a highly reliable fingerprinting method in practical applications against malicious developers.
+
+### 5.3 ABLATION STUDY
+
+**Number of Samples** To evaluate the impact of sample number on the performance of REEF, we conduct an ablation study using samples from TruthfulQA, ranging from 10 to 1000 in intervals of 10. We use Llama-2-7b as the victim model and select 10 suspect models, consisting of 5 LLMs derived from Llama-2-7b and 5 unrelated LLMs. We then calculate the CKA similarity between the sample representations of each suspect model and those of Llama-2-7b at different sample numbers. Figure 5(a) illustrates the similarities for various models as the number of samples increases.
+
+**REEF is highly efficient regarding the number of samples required for robust model fingerprinting.** Figure 5(a) shows that the similarities for most models stabilize after 200-300 samples, suggesting that REEF can achieve reliable fingerprint identification with a smaller sample number. Notably, LLMs derived from Llama-2-7b (*e.g.*, Chinese-lama-2-7b and Code-llama-7b) consistently maintain high similarities close to 1.0 across all sample numbers. This indicates that these models potentially share the same representation space as the victim model, verifying that representation is an intrinsic feature for fingerprinting. In contrast, unrelated LLMs (*e.g.*, Qwen-7b-v1.5 and Mistral-7b) exhibit lower similarities that gradually decrease and stabilize at levels below 0.2 as the number of samples increases. This suggests that these models are more distinct and require a larger num-
+
+{9}------------------------------------------------
+
+![Figure 6: Heatmaps depicting the CKA similarity between the representations of (a) Llama-2-7b itself, and (b) paired LLMs with the same architecture but different pre-training data. (a) shows a diagonal line of high similarity (dark blue) for Llama-2-7b. (b) shows heatmaps for Openllama-7b, Amber, Llama-3-8b, and Internlm-2-7b, all showing high similarity (light green) across layers, indicating they are different pre-training versions of the same architecture.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 6: Heatmaps depicting the CKA similarity between the representations of (a) Llama-2-7b itself, and (b) paired LLMs with the same architecture but different pre-training data. (a) shows a diagonal line of high similarity (dark blue) for Llama-2-7b. (b) shows heatmaps for Openllama-7b, Amber, Llama-3-8b, and Internlm-2-7b, all showing high similarity (light green) across layers, indicating they are different pre-training versions of the same architecture.
+
+Figure 6: Heatmaps depicting the CKA similarity between the representations of (a) Llama-2-7b itself, and (b) paired LLMs with the same architecture but different pre-training data.
+
+ber of samples for accurate fingerprinting. Overall, few samples from TruthfulQA are effective for REEF in identifying LLMs derived from the victim model compared to unrelated LLMs.
+
+**Different Datasets** To assess the effectiveness of REEF across various data types, we also conduct experiments using SST2 (Socher et al., 2013), ConfAlde (Miresghallah et al., 2023), PKU-SaferLHF (Ji et al., 2024), and ToxiGen (Hartvigsen et al., 2022). Following the same settings described in the previous section, we plot the similarities between the victim model and various suspect models for different datasets as the number of samples increases, as shown in Figure 5(b)-(e).
+
+**REEF is effective across various datasets.** Figure 5(b)-(e) show that the similarity between the victim model and its derived LLMs is significantly higher than the similarity with unrelated LLMs across different datasets. This clear distinction demonstrates that REEF can effectively identify whether a suspect model is derived from the victim model. Furthermore, the gap in the similarity between derived LLMs and unrelated LLMs varies by dataset, *e.g.*, the gap is approximately 0.8 on TruthfulQA and about 0.5 on ToxiGen. A larger gap indicates a stronger identification capability. Our findings suggest that while REEF is effective across diverse datasets, TruthfulQA emerges as the optimal choice for model fingerprinting, as it exhibits the most substantial differentiation in similarity between LLMs derived from the victim model and unrelated LLMs.
+
+### 5.4 FURTHER DISCUSSION
+
+**REEF can distinguish between models with the same architecture but different pre-training data.** Openllama-7b (Geng & Liu, 2023) and Amber (Liu et al., 2023) are open-source LLMs that use the same Llama architecture but are pre-trained on distinct pre-training corpus. In contrast to Figure 6(a), which shows that the layer-wise CKA similarity between Llama-2-7b itself is almost 1, Figure 6(b) clearly demonstrates that REEF effectively identifies the differences between Llama-2-7b and both Openllama-7b and Amber. Similar results are observed across different LLM generations, such as Llama-2-7b versus Llama-3-8b, and Internlm-7b versus Internlm2-7b. Each of these models reflects variations in pre-training data and strategies, which REEF accurately identifies.
+
+**Malicious developers fail to fine-tune models with a customized loss function to evade detection by the REEF.** We assume these developers are aware of the REEF approach and attempt to design customized loss functions during fine-tuning to bypass detection. Since REEF relies on the observation that developed LLMs share similar representational spaces with the victim model. The developer may use the customized loss function to widen the gap between the two representations. Experimental results in Appendix E indicate that such fine-tuning seriously damage the model’s general capabilities and renders the fine-tuned models unusable. This is because the capabilities of LLMs stem from their representational distribution, and such intentional fine-tuning inevitably leads to the model losing its language modeling ability. Therefore, malicious developers are unable to evade REEF detection through this method.
+
+## 6 CONCLUSION
+
+This paper proposes REEF, a robust representation-based fingerprinting method for LLMs in a white-box scenario, which effectively identifies models derived from a victim model that serves as the root origin. REEF does not impair LLMS’s general capability and remains resilient against various subsequent developments, including pruning, fine-tuning, merging, and permutations. Therefore, REEF is highly suitable for protecting model IPs for both third parties and model owners, as a reliable solution for safeguarding models from unauthorized use or reproduction.
+
+ Rest of paper (reference and Appendix) is removed.

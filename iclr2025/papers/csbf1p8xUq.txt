@@ -1,0 +1,324 @@
+
+
+{0}------------------------------------------------
+
+# X-ALMA: PLUG & PLAY MODULES AND ADAPTIVE REJECTION FOR QUALITY TRANSLATION AT SCALE
+
+Haoran Xu<sup>°</sup> Kenton Murray<sup>◊</sup> Philipp Koehn<sup>◊</sup> Hieu Hoang<sup>°</sup> Akiko I. Eriguchi<sup>°</sup> Huda Khayrallah<sup>◊,‡</sup>
+
+<sup>°</sup>Microsoft, <sup>◊</sup>Johns Hopkins University, <sup>◊</sup>Amazon
+
+haoranxu@microsoft.com, {kenton, phi}@jhu.edu,
+
+{hihoan, akikoe}@microsoft.com, hudakh@amazon.com
+
+## ABSTRACT
+
+Large language models (LLMs) have achieved remarkable success across various NLP tasks with a focus on English due to English-centric pre-training and limited multilingual data. In this work, we focus on the problem of translation, and while some multilingual LLMs claim to support for hundreds of languages, models often fail to provide high-quality responses for mid- and low-resource languages, leading to imbalanced performance heavily skewed in favor of high-resource languages. We introduce **X-ALMA**, a model designed to ensure top-tier performance across 50 diverse languages, regardless of their resource levels. X-ALMA surpasses state-of-the-art open-source multilingual LLMs, such as Aya-101 (Üstün et al., 2024) and Aya-23 (Aryabumi et al., 2024), in every single translation direction on the FLORES-200 and WMT’23 test datasets according to COMET-22. This is achieved by plug-and-play language-specific module architecture to prevent language conflicts during training and a carefully designed training regimen with novel optimization methods to maximize the translation performance. After the final stage of training regimen, our proposed **Adaptive-Rejection Preference Optimization (ARPO)** surpasses existing preference optimization methods in translation tasks.<sup>1</sup>
+
+## 1 INTRODUCTION
+
+Large language models (LLMs) such as the GPT series (Brown et al., 2020; OpenAI, 2023), Mistral (Jiang et al., 2023), LLaMA series (Touvron et al., 2023a;b; Dubey et al., 2024), Gemma series (Team et al., 2024a;b), *inter alia* have demonstrated impressive performance across various NLP tasks. However, the efficacy of LLMs has primarily been evaluated on English tasks, with their multilingual capabilities receiving less attention due to the models being predominantly pre-trained on English and the scarcity of multilingual data. Recently, there has been a shift towards multilingual studies in LLMs. For instance, LLaMA 3 and 3.1 (Dubey et al., 2024) expand the vocabulary from 32K to 128K and pre-train on multilingual texts; Üstün et al. (2024) have introduced Aya-101, a multilingual generative model supporting 101 languages; and BigTranslate (Yang et al., 2023) and LLaMAX (Lu et al., 2024) scale LLM-based multilingual translation models to over 100 languages.
+
+Despite the increased language support in LLMs, their performance across most languages falls short of practical application expectations, especially for mid- and low-resource languages (*weakness 1*). Furthermore, the performance of high-resource languages tends to be inferior compared to LLMs trained with fewer languages, a phenomenon known as the ‘curse of multilinguality’ (Conneau et al., 2020) (*weakness 2*). The weaknesses are prevalent in most current state-of-the-art (SoTA) massively multilingual models: overall quality decreases as the number of supported languages increases. Although methods such as building models by focusing on a smaller number of high-resource languages like German and Chinese can achieve satisfactory performance for these languages and mitigate these weaknesses (Aryabumi et al., 2024; Xu et al., 2024a;b; Alves et al.,
+
+<sup>†</sup>Work done at Microsoft.
+
+<sup>1</sup>Code is released at <https://github.com/felixxu/ALMA>. Models and Dataset are released at <https://huggingface.co/X-ALMA>.
+
+{1}------------------------------------------------
+
+2024), they neglect the needs of mid- and low-resource languages. In this work, we address these weaknesses and build a multilingual model that achieves consistently high performance across 50 diverse languages, regardless of resource level, with a focus on multilingual machine translation.
+
+![Figure 1: A scatter plot showing the relationship between the number of languages supported and the average COMET-22 translation performance. The x-axis is 'Number of Languages Supported' on a log scale (1, 4, 16, 64, 256). The y-axis is 'Avg. COMET-22' (83.5 to 89.5). Data points include ALMA-R (6 languages, ~88.5), Aya-23-3B (23 languages, ~87.5), Aya-23-8B (23 languages, ~87.0), X-ALMA (50 languages, ~88.8), Aya-101-13B (101 languages, ~85.8), LLMaMAX3 (102 languages, ~85.0), and NLLB-3.3B (200 languages, ~83.8). A dashed line shows a downward trend. A hollow purple star represents the 'Ideal Model' at approximately (256, 88.8).](e05232e09f8d0a603eef5812f7313d4b_img.jpg)
+
+| Model | Number of Languages Supported | Avg. COMET-22 |
+|-|-|-|
+| ALMA-R | 6 | ~88.5 |
+| Aya-23-3B | 23 | ~87.5 |
+| Aya-23-8B | 23 | ~87.0 |
+| X-ALMA | 50 | ~88.8 |
+| Aya-101-13B | 101 | ~85.8 |
+| LLMaMAX3 | 102 | ~85.0 |
+| NLLB-3.3B | 200 | ~83.8 |
+| Ideal Model | 256 | ~88.8 |
+
+Figure 1: A scatter plot showing the relationship between the number of languages supported and the average COMET-22 translation performance. The x-axis is 'Number of Languages Supported' on a log scale (1, 4, 16, 64, 256). The y-axis is 'Avg. COMET-22' (83.5 to 89.5). Data points include ALMA-R (6 languages, ~88.5), Aya-23-3B (23 languages, ~87.5), Aya-23-8B (23 languages, ~87.0), X-ALMA (50 languages, ~88.8), Aya-101-13B (101 languages, ~85.8), LLMaMAX3 (102 languages, ~85.0), and NLLB-3.3B (200 languages, ~83.8). A dashed line shows a downward trend. A hollow purple star represents the 'Ideal Model' at approximately (256, 88.8).
+
+Figure 1: Depiction of the general inverse trend between the number of supported languages and average translation performance. While many state-of-the-art multilingual models claim to support hundreds of languages, the translation quality is not as high as in models trained on fewer languages, particularly for mid- and low-resource languages. This is reflected in the trend of decreasing average scores as more languages are supported. In contrast, we propose X-ALMA, which extends ALMA-R (Xu et al., 2024a;b) by supporting 44 additional diverse languages with even higher average performance, offering top performance across all supported languages, regardless of resource level.
+
+To visualize these weaknesses, let us closely examine current models in the context of multilingual translation. We evaluate each model on the overlapping set of languages that are supported by the model and the 50 languages we focus on in this paper.<sup>2</sup> As shown in Figure 1, there is a clear trend: as the number of supported languages increases, the average translation performance decreases. This is intuitively understandable, as it is difficult for mid- and low-resource languages to reach the same level of performance as high-resource languages, thus lowering the overall average. For instance, ALMA-R (Xu et al., 2024b) achieves the highest average translation performance across the 6 languages it supports, while NLLB-200 (Team et al., 2022) exhibits the lowest average performance on 50 languages, largely due to poorer results in low-resource languages. Although this comparison is not entirely fair due to the varying number of languages tested, it provides a general indication of above-mentioned weaknesses in multilingual models.<sup>3</sup>
+
+Despite the ability of current multilingual models to support hundreds of languages, the hollow purple star ‘☆’ in the figure represents our ideal model, where the inclusion of more languages does not diminish the average performance. In this work, we introduce our multilingual translation model, **X-ALMA**, represented by the solid golden star ‘★’ in Figure 1, which extends ALMA(-R) (Xu et al., 2024a;b) from 6 languages to 50 languages. ALMA-R is one of top-performing translation models built on LLMs, comparable to WMT winners and GPT-4-turbo. Despite the addition of 44 more languages, X-ALMA even achieves slightly higher average performance compared to ALMA-R.
+
+We summarize our main contributions as follows, including our model architecture design and training methodology.
+
+**Plug-and-Play Architecture:** For capacity reasons, we design X-ALMA with several different modules with each module serving a group of similar languages. These modules can either be plugged into the base model individually for the inference of target languages—reducing the neces-
+
+<sup>2</sup>This is to depict a trend, and we acknowledge that scores are not directly comparable across languages.
+
+<sup>3</sup>Here we evaluated these models using FLORES-200 (Team et al., 2022) test data and reporting the average COMET-22 (Rei et al., 2022) across all languages, to or from English.
+
+{2}------------------------------------------------
+
+sity of loading all expert parameters and saving memory—or all modules can be loaded together in a mixture-of-experts (MoE) way (Shazeer et al., 2017; Lepikhin et al., 2021).
+
+**Effective Training Recipe:** The training regimen for X-ALMA consists of three pre-training stages and two post-training stages, each crucial for achieving optimal performance. Furthermore, in the final stage, we introduce **Adaptive-Rejection Preference Optimization (ARPO)**, designed to maximize performance and address the ‘over-rejection’ issue (detailed explanation in Section 4) in translation preference learning, which current optimization methods struggle to resolve.
+
+**State-of-the-Art Performance and Data Release:** X-ALMA outperforms existing open-source multilingual translation models *across 50 diverse languages for every single direction* only training on publicly available data, as measured by COMET-22. To enable future work, we also release the preference learning data for 50 languages and the model checkpoints.
+
+## 2 BACKGROUND
+
+### 2.1 PROBLEM DEFINITION
+
+We consider a decoder-only LLM, denoted as  $\pi_\theta$ , parameterized by  $\theta$ , for multilingual machine translation tasks. Let  $\mathcal{D}$  represent the multilingual dataset, consisting of pairs of a source sentence  $x$  and the corresponding perfect translation  $y$ , represented as  $\mathcal{D} = \{x, y\}$ . Given a prompt  $\mathcal{I}$  that instructs the model to perform the translation, our goal is to maximize the log-likelihood of the multilingual parallel dataset  $\mathcal{D}$ :  $\max_\theta \mathbb{E}_{(x,y) \sim \mathcal{D}} [\log \pi_\theta(y|x, \mathcal{I})]$ .
+
+### 2.2 RELATED WORK
+
+**Multilingual Translation** Massively Multilingual Translation models (Johnson et al., 2017), including open-source models such as PRISM Thompson & Post (2020a;b), M2M-100 (Fan et al., 2020), and NLLB (Team et al., 2022) combine translation between many language pairs in a single encoder-decoder model. T5 (Raffel et al., 2020) and mT5 (Xue et al., 2021) considered translation one of multitask learning.
+
+**LLM-Based Translation** Initially, decoder-only LLMs struggled to match the performance of conventional encoder-decoder models for MT. For example, GPT-3.5 slightly under-performed the concurrent WMT winners (Hendy et al., 2023), and large open-source models like OPT-175B (Zhang et al., 2022) performed worse than the 1.3B parameter NLLB model (Team et al., 2022), even on high-resource languages, as demonstrated by Zhu et al. (2024b). This lead to an increased interest in smaller LLMs, such as 7B or 13B models, because even smaller models like NLLB-1.3B showed strong translation capabilities. However, first generation LLM-based MT models such as TIM (Zeng et al., 2023), SWIE (Chen et al., 2023), and BayLing (Zhang et al., 2023) still lag behind encoder-decoder models in performance. The under performance of LLMs on translation lead to hybrid approaches combining LLMs with dedicated NMT models (Petrick et al., 2023; Hoang et al., 2024). Recently, GPT-4 (OpenAI, 2023) has been reported to achieve top performance in the WMT competition (Koemi et al., 2023), and smaller LLM-based models, like ALMA-(R) (Xu et al., 2024a;b) and Tower (Alves et al., 2024), have demonstrated comparable performance to GPT-4 by employing their specialized training methods. However, the high performance of LLM-based translation models is limited to a small subset of languages.
+
+**Massively Multilingual LLM** The limited scope of languages in LLM-based MT models stems primarily from English-focused pre-training and the use of restricted vocabularies. However, this limitation has driven interest in expanding these models to support a broader range of languages. The simplest approach to extending current LLM-based MT models involves expanding the vocabulary and training on large amounts of parallel data across additional languages (Yang et al., 2023), but this approach has been shown to degrade model performance. Aya-101 (Üstün et al., 2024) revisits the encoder-decoder architecture, building a multilingual model based on the largest MT5 (Xue et al., 2020), designed not only for translation but also for general multilingual QA. Similarly, LLaMAX (Lu et al., 2024) extends LLaMA-2 and LLaMA-3 to over 100 languages. However, multilingual models often suffer from reduced performance on mid- and low-resource languages, which can also negatively impact high-resource language performance. To mitigate this, the decoder-only model Aya-23 (Aryabumi et al., 2024) focuses exclusively on 23 high-resource languages to maximize
+
+{3}------------------------------------------------
+
+![Figure 2: High-level architecture design of the plug-and-play multilingual model. The diagram shows a central 'BASE MODEL' box containing a 'LANGUAGE-SPECIFIC MODULE'. To the right, three boxes represent 'GROUP 1 MODULE', 'GROUP 2 MODULE', and 'GROUP N MODULE'. Each group module contains a small colored bar representing a language group. Arrows point from the 'LANGUAGE-SPECIFIC MODULE' in the base model to each of the group modules, indicating that the base model's language-specific module is shared across all groups.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 2: High-level architecture design of the plug-and-play multilingual model. The diagram shows a central 'BASE MODEL' box containing a 'LANGUAGE-SPECIFIC MODULE'. To the right, three boxes represent 'GROUP 1 MODULE', 'GROUP 2 MODULE', and 'GROUP N MODULE'. Each group module contains a small colored bar representing a language group. Arrows point from the 'LANGUAGE-SPECIFIC MODULE' in the base model to each of the group modules, indicating that the base model's language-specific module is shared across all groups.
+
+Figure 2: High-level architecture design of the plug-and-play multilingual model. Each language group is assigned a specific module that works alongside the base model. These language-specific modules handle inputs exclusively from their respective language groups, enabling the model to effectively adapt to different linguistic characteristics while leveraging the shared base model for comprehensive multilingual learning.
+
+their performance and avoid the ‘curse of multilinguality’. While limiting the number of supported languages can indeed alleviate some challenges, it reverses the goal of building truly multilingual models and neglects the needs of mid- and low-resource languages. In this paper, we expand ALMA-R from 6 languages to 50, ensuring robust performance across all languages.
+
+## 3 METHODS
+
+### 3.1 MODEL ARCHITECTURE
+
+Our model architecture consists of: (1) a dense base model, and (2) multiple language-specific (LS) modules. The core concept of LS modules is to prevent conflicts between languages during training, such as gradient conflicts (Wang et al., 2021). This design has similarities with the mixture-of-experts (MoE) approach (Shazeer et al., 2017; Lepikhin et al., 2021), but diverges by not using a neural-based gate to assign tokens to experts (LS modules). Instead, similar to Xu et al. (2023), the assignment is hard-gated, i.e., input data is assigned exclusively to the module designated for its language. Consequently, only the base model and the corresponding LS module are activated, depending on the input language. Languages are categorized into distinct groups, with each group sharing a common LS module. An overview of the model architecture is illustrated in Figure 2.
+
+In detail, the base model architecture is built upon the LLaMA-2 architecture (Touvron et al., 2023b). Each LS module comprises low-rank adaptations (LoRAs) (Hu et al., 2021) integrated into all linear layers within the attention and multi-layer perceptron (MLP) layers. The total number of parameters for each LS module is approximately 15% of the base model.
+
+**Why This Design?** While model architectures such as MoE activate only one expert per example, all experts must still reside in GPU memory during training and inference, necessitating high-end GPUs. Moreover, MoE has been reported for its parameter inefficiency in multilingual settings, e.g., hard-gated language assignment can achieve similar performance to MoE while using 4 times fewer parameters (Xu et al., 2023). Compared to MoE, our design offers three distinct model-loading strategies for both training and inference: (1) selectively loading a single, on-demand LS module, which alleviates GPU memory constraints; (2) merging LS modules with the base model to generate a new LS LLM model that retains the same parameter count as the base model, facilitating subsequent use; and (3) loading both the base model and all LS modules as a larger, combined model, similar to the approach employed by MoE.
+
+### 3.2 LANGUAGE GROUPING
+
+In this paper, we consider a total of 50 languages, encompassing 14 scripts and 18 language families, to capture the linguistic diversity. The languages are categorized into 8 groups based on two
+
+{4}------------------------------------------------
+
+Table 1: Language grouping based on linguistic features and balanced number of languages.
+
+| Group ID | Linguistic Feature | Languages |
+|-|-|-|
+| 1 | Germanic languages | af, da, de, is, nl, no, sv, (en) |
+| 2 | Romance Languages | ca, es, gl, it, pt, ro, (en) |
+| 3 | Eastern and Southern Slavic Languages | bg, mk, ru, sr, uk, (en) |
+| 4 | Southeast Asian Languages | fr, id, mg, ms, th, vi, (en) |
+| 5 | Central and Eastern European Languages | cs, el, hu, lt, lv, pl, (en) |
+| 6 | Eurasian Language Mix | et, fi, ja, ka, ko, zh, (en) |
+| 7 | Indo-Aryan Languages | gu, hi, mr, ne, ur, (en) |
+| 8 | Turkic and Semitic Languages | ar, az, fa, he, kk, ky, tr, uz, (en) |
+
+criteria: (1) each group should consist of languages that are as similar as possible, and (2) the number of languages in each group should be balanced. We opted not to use automated tools like Lang2Vec (Littell et al., 2017) for grouping, as we found that manual grouping based on human linguistic knowledge yields more accurate classification in line with our criteria. The specific languages within each group are presented in Table 1 with their ISO-639-1 code. Note that English (en) is included in all groups to ensure that each group can perform English-centric translation. More detailed information on these languages is provided in Appendix A.
+
+### 3.3 TRAINING RECIPE
+
+We provide a comprehensive description of the training recipe for the X-ALMA model, including three pre-training stages and two post-training stages. An overview of this training recipe is depicted in the workflow diagram in Appendix B. The specifics of each stage are elaborated upon as follows.
+
+**Pre-Training Stage 1: Monolingual Fine-Tuning Base Model** The first stage of pre-training is dedicated exclusively to the base model. During this phase, we fine-tune the base model using 20B monolingual tokens from all 50 languages, with a sampling ratio proportional to the size of the available monolingual data for each language, as suggested by Xu et al. (2024a). This stage aims to facilitate the model’s acquisition of fundamental knowledge across all languages.
+
+**Pre-Training Stage 2: Monolingual Fine-Tuning Language-Specific Modules** In all subsequent stages, the base model remains frozen, and the focus shifts to fine-tuning LS modules. During the second stage of pre-training, each LS module is fine-tuned with 10B monolingual tokens exclusively from the languages within its respective group. This stage is designed to enable each LS module to emphasize on learning general knowledge across the specific languages.
+
+**Pre-Training Stage 3: Pseudo-Monolingual Fine-tuning** In this stage, we continue to fine-tune the LS modules using *pseudo-monolingual data* from each module’s language group. This pseudo-monolingual data is constructed from parallel sentences. While previous studies have indicated that simple instruction tuning with a large volume of parallel sentences for instruction tuning can degrade model performance (Xu et al., 2024a; Zhu et al., 2024a), recent research demonstrates that utilizing parallel data in the pre-training stage can enhance multilingual alignment (Alves et al., 2024; Kondo et al., 2024; Lu et al., 2024). Similar to these approaches, we combine each available translation pair to create a new sentence in either a  $\langle \text{source sentence} \rangle \langle \text{target sentence} \rangle$  or  $\langle \text{target sentence} \rangle \langle \text{source sentence} \rangle$  manner, with the order of the source and target sentence in each pair determined randomly. We then concatenate all the combined translations to construct the pseudo-monolingual data. Each LS module is fine-tuned on 1.25B tokens.
+
+**Post-Training Stage 1: Supervised Fine-tuning** Building on the insights from prior research that small but high-quality multilingual datasets are sufficient to yield impressive performance (Maillard et al., 2023; Xu et al., 2024a), we supervised fine-tune (SFT) the model using a small, high-quality parallel dataset at this stage with the translation prompt suggested by Xu et al. (2024a). This fine-tuning is performed using a simple causal language modeling (CLM) loss.
+
+**Post-Training Stage 2: Preference Optimization** We also introduce *Adaptive Rejection Preference Optimization (ARPO)* to further enhance translation quality across all languages. ARPO is designed to address the ‘over-rejection’ issue in MT preference learning, a challenge that other pref-
+
+{5}------------------------------------------------
+
+erence optimization methods struggle to manage effectively. We will elaborate on our motivations, methodology, and preference data construction in the following section.
+
+## 4 ADAPTIVE-REJECTION PREFERENCE OPTIMIZATION
+
+### 4.1 LIMITATIONS IN CURRENT PREFERENCE LEARNING
+
+When constructing preference data for MT, it is essential that the dis-preferred translation is also of high quality to ensure meaningful model improvement (Xu et al., 2024b). This results in a scenario where the preferred and dis-preferred translations are often very similar, differing by only a few words, which is quite different from the preference data used in open-ended question-answering (QA) tasks (A detailed example is shown in Appendix C). While many preference optimization methods have proven effective in various NLP tasks (Rafailov et al., 2024; Azar et al., 2024; Hong et al., 2024; Meng et al., 2024), we find that they are not well-suited for the MT task because they tend to reject the entire dis-preferred translation which is similar to the preferred one. This approach can inadvertently lead to the rejection of most tokens in the preferred translation as well, resulting in a phenomenon we term *over-rejection*, where the writing style of the translation outputs is forced away from the preferred data distribution (further analysis and examples in Section 6.1).
+
+Mathematically speaking, the preference optimization problem can be generally formulated given a dataset  $\mathcal{D} = \left\{ x^{(i)}, y_w^{(i)}, y_l^{(i)} \right\}_{i=1}^N$ , where each data point consists of a prompt (source sentence)  $x$ , a preferred response (translation)  $y_w$ , and a dis-preferred response  $y_l$ , for a total of  $N$  data points:
+
+$$\mathcal{L} = \mathbb{E}_{(x, y_w, y_l) \sim \mathcal{D}} \left[ f \left( r_\theta(y_w|x) - r_\theta(y_l|x) \right) \right], \quad (1)$$
+
+where  $f(\cdot) : \mathbb{R} \rightarrow \mathbb{R}$  is a general non-linear function. In many instances, such as in the DPO method (Rafailov et al., 2024),  $f$  is the negative log-likelihood of the Bradley-Terry objective, i.e.,  $f(\cdot) = -\log \sigma(\cdot)$ . Here,  $r_\theta(y|x)$  represents the reward of  $y$ , calculated according to log-probability of the policy model parameterized by  $\theta$ . In the case of DPO, the reward function is defined as  $r_\theta(y|x) = \beta \log(\pi_\theta(y|x)) - \beta \log(\pi_{\text{ref}}(y|x))$ , where  $\beta$  is a hyperparameter and  $\pi_{\text{ref}}$  is the reference model.
+
+As indicated by Equation 1, when  $y_w$  and  $y_l$  are too similar, the difference between  $r_\theta(y_w|x)$  and  $r_\theta(y_l|x)$  tends to be small and even near 0. Consequently, the near-zero difference between rewards causes the preference loss to a constant value, such as  $f(0) = -\log \sigma(0)$  in the case of DPO. This makes it challenging for the optimization process to distinguish between the two options, hindering meaningful improvements.
+
+The challenge becomes even more pronounced in a finite-data regime. While an infinite number of response pairs with small but precise preference differences could mitigate the optimization difficulties, translation preference data is often sparse and may contain noise (e.g., the AI-labeled preference data used by Xu et al. (2024b) contains only 2K samples per direction). Consequently, the model is prone to overfitting to these minor differences, which poses a significant empirical challenge and can lead to suboptimal learning outcomes, particularly when dealing with a large response (translation) space, as is the case with LLMs.
+
+### 4.2 ADAPTIVE REJECTION
+
+To mitigate the over-rejection, we introduce an adaptive penalty, denoted as  $\tau_\theta$ , which controls the strength of the dis-preferred term in the loss:
+
+$$\mathcal{L}_{\text{ARPO}} = \mathbb{E}_{(x, y_w, y_l) \sim \mathcal{D}} \left[ f \left( r_\theta(y_w|x) - \tau_\theta(y_w, y_l) \cdot r_\theta(y_l|x) \right) \right]. \quad (2)$$
+
+The value of  $\tau_\theta$  is determined by the similarity between  $y_w$  and  $y_l$ , ranging from 0 to 1:
+
+$$\tau_\theta(y_w, y_l) = \min(e^{\eta \cdot z_\theta(y_w, y_l)} - 1, 1), \quad (3)$$
+
+where  $\eta$  is a hyperparameter, and  $z_\theta(y_w, y_l)$  is a function that quantifies the distance between the preferred and dis-preferred responses by measuring absolute difference of their average log-likelihoods:
+
+$$z_\theta(y_w, y_l) = \text{abs} \left( \frac{\log(\pi_\theta(y_w|x))}{|y_w|} - \frac{\log(\pi_\theta(y_l|x))}{|y_l|} \right), \quad (4)$$
+
+{6}------------------------------------------------
+
+When  $y_w$  and  $y_l$  are very similar, the absolute difference between their averaged log-likelihoods is small, resulting in  $\tau_\theta$  close to 0, thereby reducing the impact of the dis-preferred term on the loss and mitigate rejection on this translation. Conversely, when the difference between  $y_w$  and  $y_l$  is large,  $\tau_\theta$  close to 1, turning the loss back to a standard preference optimization loss.
+
+In the multilingual MT task, we start with contrastive preference optimization (CPO) (Xu et al., 2024b), which has proven to be one of the most effective optimization methods for translation.
+
+$$\mathcal{L}_{\text{CPO}} = -\mathbb{E}_{(x, y_w, y_l) \sim \mathcal{D}} \left[ \underbrace{\log \sigma \left( \beta \log \pi_\theta(y_w|x) - \beta \log \pi_\theta(y_l|x) \right)}_{\text{preference loss}} + \underbrace{\log \pi_\theta(y_w|x)}_{\text{BC loss}} \right]. \quad (5)$$
+
+CPO consists of two components: preference loss and behavior cloning (BC) loss (Hejna et al., 2023). The BC loss helps prevent the model from drifting too far from the original task. Then, we incorporate adaptive rejection into the preference term in CPO, resulting in a new loss function:
+
+$$\mathcal{L}_{\text{ARPO}} = -\mathbb{E}_{(x, y_w, y_l) \sim \mathcal{D}} \left[ \log \sigma \left( \beta \log \pi_\theta(y_w|x) - \tau_\theta(y_w, y_l) \cdot \beta \log \pi_\theta(y_l|x) \right) + \log \pi_\theta(y_w|x) \right]. \quad (6)$$
+
+## 5 EXPERIMENTS
+
+### 5.1 DATA
+
+**Monolingual and Parallel Data** Following the introduction of 50 languages in Section 3.2, we focus on 98 English-centric translation directions, both into and from English. We test on Flores-200 test data (Team et al., 2022) and WMT’23 (Kocmi et al., 2023). For pre-training stages 1 and 2, we use monolingual data from OSCAR (Ortiz Su’arez et al., 2019). In pre-training stage 3, we construct pseudo-monolingual data using NLLB (Schwenk et al., 2021; Heffernan et al., 2022; Team et al., 2022)<sup>4</sup> and OPUS (Tiedemann, 2012; Zhang et al., 2020) parallel training data. Web crawled data (included in NLLB) has been shown to contain substantial mis-aligned and mis-translated segments (Khayrallah & Koehn, 2018; Kreutzer et al., 2022) and low-quality machine translated segments (Thompson et al., 2024). Therefore, in the SFT step—building on the insights from Xu et al. (2024a) that a small amount of *high-quality* data can significantly enhance translation performance—we use the Flores-200 dev set and NTREx (Barrault et al., 2019; Federmann et al., 2022) test data as our training data to ensure the quality. Given that both Flores-200 and NTREx are multi-way-parallel datasets (all languages share the same English source sentences), we also incorporate the WMT’15-22 test data in training. The final data size in the SFT stage for each direction ranges from 3K to 7K, with an average of 4K per direction.
+
+**Preference Data Construction** Given the scarcity of preference datasets for multilingual MT, we describe our approach to constructing preference data for 50 languages. Starting with the parallel data used in SFT, for each source sentence  $x$ , we generate a translation  $y_{\text{kalma}}$  using X-ALMA that has been fine-tuned through SFT. Then, the reference translation  $y_{\text{ref}}$  is designated as the preferred translation, and  $y_{\text{kalma}}$  as the dis-preferred one, forming our initial preference dataset, denoted as  $\mathcal{D}_1 = \{x, y_{\text{ref}}, y_{\text{kalma}}\}$ . Unlike Xu et al. (2024b), we avoid the use of reference-free methods like XCOMET (Guerreiro et al., 2023) for ranking translations in preference data construction to avoid potential bias, as the same metrics are used for evaluation. As a result,  $\mathcal{D}_1$  might contain some noise due to the assumption that reference translations are always preferred. To reduce this noise, for high-resource languages, we also employ GPT-4o to produce revised translations  $y_{\text{gpt}}$  conditioned on  $(x, y_{\text{kalma}})$ , drawing on studies that show post-editing by LLMs can improve translation quality (Ki & Carpuat, 2024; Feng et al., 2024; Raunak et al., 2023). We show the prompts in Appendix D. Thus, our second preference dataset is defined as  $\mathcal{D}_2 = \{x, y_{\text{gpt}}, y_{\text{kalma}}\}$ . We then concatenate the two datasets to form the final preference dataset, denoted as  $\mathcal{D} = \mathcal{D}_1 \cup \mathcal{D}_2$ .
+
+### 5.2 EVALUATION
+
+We report COMET-22 (Rei et al., 2022) as our main metric as suggested by Freitag et al. (2023; 2024). In Appendix E, we also include XCOMET-XL (without references) (Guerreiro et al., 2023) as recommended by Xu et al. (2024b), and BLEU (Papineni et al., 2002; Post, 2018) for completeness.
+
+<sup>4</sup><https://huggingface.co/datasets/allenai/nllb>
+
+{7}------------------------------------------------
+
+Table 2: The overall results of Flores test data across each language group in  $\text{en} \rightarrow \text{xx}$ . Scores are reported using COMET-22. X-ALMA outperforms both massively multilingual models, such as Aya-101, and models focus specifically on high-resource languages, like Aya-23. ‘All’ represents the average performance across all languages in the group, while ‘High’ refers to the average performance for high-resource languages in the group. **Bold numbers** represent the highest scores.
+
+| Models | Group 1 |  | Group 2 |  | Group 3 |  | Group 4 |  | Group 5 |  | Group 6 |  | Group 7 |  | Group 8 |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  | All | High | All | High | All | High | All | High | All | High | All | High | All | High | All | High |
+| LLaMA-3.1-8B-Instruct | 80.8 | 79.8 | 83.7 | 84.2 | 79.1 | 69.2 | 76.3 | 85.8 | 79.0 | 81.2 | 71.1 | 71.8 | 70.1 | 69.6 | 78.3 | 84.4 |
+| NLLB-3.3B | 88.2 | 88.8 | 88.3 | 88.1 | 89.4 | 89.1 | 87.1 | 88.2 | 89.2 | 89.8 | 87.5 | 87.5 | 80.1 | 80.9 | 88.1 | 87.5 |
+| LLaMAX3-Alpaca-8B | 86.4 | 86.9 | 86.8 | 86.6 | 85.7 | 82.0 | 81.7 | 86.2 | 86.6 | 87.1 | 86.0 | 87.3 | 76.5 | 76.6 | 82.6 | 83.6 |
+| Aya-101 | 85.0 | 85.7 | 86.8 | 86.2 | 87.7 | 85.6 | 85.8 | 85.5 | 88.4 | 88.7 | 87.5 | 87.3 | 76.2 | 75.5 | 86.8 | 86.3 |
+| Aya-23-8B | 75.1 | 84.7 | 86.6 | 86.6 | 74.4 | 75.7 | 74.6 | 88.7 | 70.6 | 77.3 | 67.1 | 79.8 | 68.9 | 79.3 | 76.0 | 87.9 |
+| Aya-23-35B | 79.6 | 86.5 | 87.1 | 87.0 | 77.6 | 78.5 | 76.7 | 88.6 | 82.1 | 86.0 | 73.9 | 84.4 | 61.9 | 79.1 | 68.8 | 87.8 |
+| X-ALMA (only SFT) | -89.5 <sup>+</sup> | -89.7 <sup>+</sup> | -89.2 <sup>+</sup> | -88.9 <sup>+</sup> | -90.7 <sup>+</sup> | -90.2 <sup>+</sup> | -88.1 <sup>+</sup> | -89.1 <sup>+</sup> | -90.6 <sup>+</sup> | -90.7 <sup>+</sup> | -90.1 <sup>+</sup> | -90.4 <sup>+</sup> | -82.6 <sup>+</sup> | -81.4 <sup>+</sup> | -89.2 <sup>+</sup> | -88.9 <sup>+</sup> |
+| <b>X-ALMA</b> | <b>89.6</b> | <b>89.9</b> | <b>89.4</b> | <b>89.0</b> | <b>90.9</b> | <b>90.5</b> | <b>88.6</b> | <b>89.5</b> | <b>91.0</b> | <b>91.1</b> | <b>90.6</b> | <b>90.8</b> | <b>83.2</b> | <b>81.9</b> | <b>89.4</b> | <b>89.2</b> |
+
+Table 3: The overall COMET-22 scores of Flores test data across each language group in  $\text{xx} \rightarrow \text{en}$ . Similarly, X-ALMA outperforms all baselines.
+
+| Models | Group 1 |  | Group 2 |  | Group 3 |  | Group 4 |  | Group 5 |  | Group 6 |  | Group 7 |  | Group 8 |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  | All | High | All | High | All | High | All | High | All | High | All | High | All | High | All | High |
+| LLaMA-3.1-8B-Instruct | 68.8 | 77.6 | 70.9 | 76.9 | 51.2 | 53.8 | 65.6 | 76.4 | 54.8 | 60.2 | 38.8 | 66.9 | 47.6 | 53.7 | 53.7 | 67.5 |
+| NLLB-3.3B | 79.1 | 81.8 | 84.5 | 85.0 | 84.3 | 83.8 | 81.1 | 85.4 | 74.9 | 76.0 | 76.1 | 77.3 | 88.3 | 88.9 | 79.5 | 81.6 |
+| LLaMAX3-Alpaca-8B | 88.3 | 88.5 | 88.1 | 87.9 | 87.0 | 86.8 | 86.2 | 87.9 | 87.0 | 87.2 | 81.7 | 87.7 | 83.6 | 88.9 | 84.7 | 87.7 |
+| Aya-101 | 87.2 | 88.2 | 87.6 | 87.6 | 85.4 | 85.5 | 86.2 | 87.6 | 86.3 | 86.5 | 86.5 | 86.7 | 84.8 | 87.5 | 85.9 | 87.1 |
+| Aya-23-8B | 84.6 | 88.2 | 87.9 | 87.7 | 83.3 | 79.8 | 88.5 | 82.9 | 85.2 | 79.9 | 86.1 | 71.8 | 89.1 | 76.7 | 88.0 | 88.0 |
+| Aya-23-35B | 87.4 | 88.9 | 88.5 | 88.6 | 86.3 | 86.2 | 82.3 | 88.7 | 86.4 | 87.2 | 85.9 | 88.0 | 79.4 | 89.6 | 82.7 | 88.6 |
+| X-ALMA (only SFT) | -89.1 <sup>+</sup> | -89.2 <sup>+</sup> | -88.5 <sup>+</sup> | -88.6 <sup>+</sup> | -87.9 <sup>+</sup> | -87.7 <sup>+</sup> | -87.7 <sup>+</sup> | -88.8 <sup>+</sup> | -87.9 <sup>+</sup> | -88.1 <sup>+</sup> | -88.2 <sup>+</sup> | -88.3 <sup>+</sup> | -89.3 <sup>+</sup> | -89.8 <sup>+</sup> | -87.5 <sup>+</sup> | -88.4 <sup>+</sup> |
+| <b>X-ALMA</b> | <b>89.4</b> | <b>89.5</b> | <b>89.2</b> | <b>89.0</b> | <b>88.1</b> | <b>87.8</b> | <b>88.0</b> | <b>88.9</b> | <b>88.2</b> | <b>88.4</b> | <b>88.7</b> | <b>88.8</b> | <b>89.6</b> | <b>90.1</b> | <b>88.0</b> | <b>88.9</b> |
+
+### 5.3 TRAINING SETUP
+
+We use ALMA-13B-Pretrain (Xu et al., 2024a) as our backbone model, which is pre-trained on 6 languages and based on LLaMA-2 (Touvron et al., 2023b). Following Xu et al. (2024a), we pre-train the backbone model with a batch size of 256, a warm-up ratio of 0.01, and sequences containing up to 512 tokens. In the post-training stage, the model is fine-tuned for many-to-many multilingual translation manner using 1 epoch with a batch size of 128, and other settings remain unchanged. For preference learning, we set  $\eta$  as 1.5 and  $\beta$  as 0.1 for all experiments.
+
+### 5.4 BASELINES
+
+We use the strongest open-source massively multilingual translation models as our baselines, including NLLB-200 (Team et al., 2022), Aya-101 (Üstün et al., 2024), and LLaMAX3-Alpaca (Lu et al., 2024). Additionally, we compare our model’s translation performance with Aya-23-8B and Aya-35B (Aryabumi et al., 2024) to demonstrate that increasing the number of supported languages does not compromise the performance of high-resource languages, effectively mitigating the curse of multilingualism. We also include LLaMA-3.1-8B-Instruct as a baseline to assess the performance of one of the latest strong LLMs in multilingual translation.
+
+### 5.5 RESULTS
+
+We present the average performance for each language group in both  $\text{en} \rightarrow \text{xx}$  and  $\text{xx} \rightarrow \text{en}$  directions on the Flores-200 test data in Tables 2 and 3. The results for WMT’23 in both directions are provided in Table 4. Detailed results for each translation direction can also be found in Appendix E.
+
+**Compared with SoTA Multilingual Open Models:** General instruction-tuned LLaMA-3.1 significantly lags behind models specifically designed for translation, so we primarily focus on other models. X-ALMA outperforms other massively multilingual models such as NLLB-3.3B, LLaMAX3-Alpaca-8B, and Aya-101 on average across all language groups, both into and from English for both Flores-200 and WMT’23 test sets. Furthermore, X-ALMA surpasses Aya-23-8B and Aya-23-35B—both of which are tailored for high-resource languages—on average across all high-resource languages in each group. In fact, as detailed in Appendix E, X-ALMA surpasses all baselines in all translation directions according to COMET-22 and outperforms in 97 out of 98 directions based on XCOMET-XL, achieving top translation performance for all languages considered.
+
+{8}------------------------------------------------
+
+Table 4: Results on WMT’23 dataset reported using COMET-22. The symbol  $\rightarrow$  represents translations from English into the target language, while  $\leftarrow$  indicates translations into English.
+
+| Models | de |  | zh |  | ja |  | ru |  | uk |  | he |  | Avg. |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  | $\rightarrow$ | $\leftarrow$ | $\rightarrow$ | $\leftarrow$ | $\rightarrow$ | $\leftarrow$ | $\rightarrow$ | $\leftarrow$ | $\rightarrow$ | $\leftarrow$ | $\rightarrow$ | $\leftarrow$ | $\rightarrow$ | $\leftarrow$ |
+| ALMA-R-13B | 84.0 | 85.5 | 85.0 | 80.6 | - | - | 85.5 | <b>83.3</b> | - | - | - | - | - | - |
+| TowerStruct-7B-v0.2 | 83.1 | 84.6 | 85.6 | 80.5 | - | - | 85.3 | 83.1 | - | - | - | - | - | - |
+| NLLB-5.3B | 79.7 | 66.6 | 79.6 | 67.8 | 81.6 | 65.8 | 83.8 | 76.7 | 82.8 | 79.0 | 83.6 | 79.9 | 81.8 | 72.6 |
+| Llama3-8B | 73.3 | 79.4 | 81.5 | 79.3 | 81.8 | 80.1 | 81.6 | 81.3 | 80.6 | 84.9 | 82.5 | 83.0 | 80.2 | 81.3 |
+| Aya-101 | 75.1 | 81.6 | 78.6 | 73.7 | 84.6 | 77.3 | 83.1 | 81.4 | 82.7 | 84.5 | 82.0 | 82.9 | 81.0 | 80.2 |
+| Aya-23-8B | 80.4 | 82.1 | 85.3 | 78.8 | 86.5 | 80.2 | 84.3 | 81.6 | 84.3 | 85.0 | 84.3 | 84.9 | 84.2 | 82.1 |
+| Aya-23-35B | 80.7 | 82.3 | 84.6 | 79.7 | 86.4 | 81.6 | 84.7 | 82.2 | 84.0 | 85.7 | 84.1 | 85.9 | 84.1 | 82.9 |
+| X-ALMA (only SFT) | 84.1 | 85.3 | 86.1 | 80.3 | 86.8 | 81.6 | 85.9 | 82.4 | 85.3 | 86.4 | 86.1 | 84.4 | 85.7 | 83.4 |
+| X-ALMA | <b>84.4</b> | <b>85.7</b> | <b>86.7</b> | <b>80.9</b> | <b>87.5</b> | <b>82.4</b> | <b>86.3</b> | <b>83.3</b> | <b>85.5</b> | <b>86.8</b> | <b>86.2</b> | <b>85.6</b> | <b>86.1</b> | <b>84.1</b> |
+
+Table 5: Average performance comparison of various preference optimization methods for en $\rightarrow$ xx and xx $\rightarrow$ en on Group 6.
+
+| Models | Avg. en $\rightarrow$ xx |  |  | Avg. xx $\rightarrow$ en |  |  |
+|-|-|-|-|-|-|-|
+|  | BLEU | COMET-22 | XCOMET-XL | BLEU | COMET-22 | XCOMET-XL |
+| XALMA (only SFT) | 26.5 | 90.1 | 80.3 | 32.1 | 88.2 | 77.4 |
+| + DPO | 0.7 | 53.6 | 51.1 | 7.1 | 79.2 | 64.6 |
+| + BC | 23.5 | 90.2 | 80.0 | 27.8 | 87.5 | 77.4 |
+| + SimPO | 0.0 | 16.7 | 1.5 | 0.0 | 16.4 | 8.9 |
+| + BC | 23.3 | 89.7 | 78.7 | 26.6 | 87.1 | 76.5 |
+| + KTO | 22.1 | 89.8 | 79.2 | 26.4 | 87.1 | 76.5 |
+| + BC | 26.4 | 90.3 | 80.4 | 29.2 | 87.5 | 77.1 |
+| + ORPO | 23.0 | 85.8 | 75.9 | 22.7 | 81.8 | 70.8 |
+| + CPO | 22.2 | 90.2 | 79.9 | 26.5 | 87.8 | 77.0 |
+| + ARPO (final X-ALMA) | <b>27.8</b> | <b>90.6</b> | <b>81.3</b> | <b>32.2</b> | <b>88.7</b> | <b>78.4</b> |
+
+**Effectiveness of ARPO:** ARPO delivers consistent improvements compared to SFT-only models in Flores-200 and WMT’23. Similarly, as shown in the full results in Appendix E, *ARPO enhances performance in every translation direction as measured by COMET-22 and delivers improvements in 95 out of 98 directions according to XCOMET-XL*. We also compare the effectiveness of ARPO against other preference optimization methods in Section 6.1.
+
+## 6 ANALYSIS
+
+All analyses are conducted on languages in Group 6, as it is the most challenging group to learn due to its mix of typologically diverse Asian and European languages.
+
+### 6.1 PREFERENCE OPTIMIZATION COMPARISON
+
+Here, we compare ARPO with other popular optimization methods, including DPO (Rafailov et al., 2024), KTO (Ethayarajh et al., 2024), ORPO (Hong et al., 2024), SimPO (Meng et al., 2024), and the original CPO (Xu et al., 2024b). As indicated by CPO findings, directly applying preference learning to the MT task can harm the model, but adding a behavior cloning (BC) regularizer can stabilize training and improve the performance (Xu et al., 2024b). Following them, we also incorporate a BC regularizer into optimization methods that do not originally include it to provide a fair comparison. Table 5 presents the comparison of preference optimization methods across all three metrics. As shown, ARPO clearly outperforms all baselines.
+
+**Over-Rejection** Over-rejection manifests itself under the significant shift in writing style away from the preferred data distribution. We observe a clear and big BLEU scores drop across all other preference optimization methods, indicating a decline in lexical matching. However, for certain methods, such as DPO + BC, KTO + BC, and CPO, both COMET scores do not decrease as drastically (and in some cases even improve slightly for en $\rightarrow$ xx), suggesting that the models still produce accurate translations that maintain the same semantic meaning, but with a different writing style. Some translation examples generated by CPO are provided in Appendix F. Unlike ARPO, methods such as CPO tend to produce a wider range of writing styles to convey the same meaning
+
+{9}------------------------------------------------
+
+as the reference, many of which are accurate and non-detrimental. However, excessive shifts in writing style still can introduce translation errors that negatively impact overall quality. These small number of errors, concealed within a lot of stylistic deviations, are where over-rejection occurs. As hypothesized in Section 4, the significant style shift is caused by the model rejecting dis-preferred translations that are similar to preferred ones, leading to an excessive rejection of certain writing styles from the preferred data. However, ARPO addresses this issue by *constraining the stylistic variation within a more controlled range*, thereby mitigating errors caused by over-rejection.
+
+For other methods such as naive DPO and SimPO, which even though work well in other NLP tasks, the over-rejection severely impairs the model’s ability to generate meaningful translations. The introduction of ARPO significantly mitigate the over-rejection issue (stable BLEU scores) and maximize the translation qualities (the highest scores in two COMET metrics).
+
+### 6.2 ABLATION STUDY
+
+**Training Recipe** We investigate the impact of each step in the training recipe on model performance. The average results for Group 6, both into and from English, are presented in the left part of Figure 3. The results show a clear trend of consistent performance improvement with each step in the training process. Note that ‘None’ is the initial checkpoint in our recipe, ALMA-13B-Pretrain.
+
+**Parallel Data for SFT** For SFT, we use high-quality parallel data from three sources: NTREx, WMT, and the Flores-200 dev set. Here, we investigate how combining parallel datasets affects performance *during the SFT stage*. As shown on the right of Figure 3, using only NTREx data already achieves impressive average translation performance for Group 6. Adding high-quality WMT data further boosts average performance, particularly for translations into English data. We hypothesize that this improvement stems from the increased diversity of English data, which mitigates overfitting to the NTREx English domain—a known issue with multi-way-parallel data, as observed by Aharoni et al. (2019). Conversely, incorporating more Flores-200 dev data (also multi-way-parallel) into training does not result in significant gains, also suggesting that the strong translation performance is not driven by in-domain Flores-200 data.
+
+![Figure 3: Two bar charts showing ablation study results. The left chart shows performance improvements across training stages for xx->en and en->xx directions. The right chart compares the impact of different parallel data combinations (NTREx, WMT, Flores-200) for the same directions.](33228b4227fa57e1477b27b9e07483e6_img.jpg)
+
+**Left Chart: Average COMET-22 scores by training stage**
+
+| Direction | None | Pre Stage 1 | Pre Stage 2 | Pre Stage 3 | Post Stage 1 | Post Stage 2 |
+|-|-|-|-|-|-|-|
+| xx->en | 64.5 | 76.8 | 83.4 | 83.6 | 90.1 | 90.6 |
+| en->xx | 78.2 | 86.2 | 86.3 | 87.6 | 88.2 | 88.7 |
+
+**Right Chart: Average COMET-22 scores by parallel data combination**
+
+| Direction | NTREx | NTREx + WMT | NTREx + WMT + FLORES |
+|-|-|-|-|
+| xx->en | 89.5 | 90.4 | 90.4 |
+| en->xx | 88.0 | 88.3 | 88.3 |
+
+Figure 3: Two bar charts showing ablation study results. The left chart shows performance improvements across training stages for xx->en and en->xx directions. The right chart compares the impact of different parallel data combinations (NTREx, WMT, Flores-200) for the same directions.
+
+Figure 3: **Left:** ablation study on each stage of the training recipe, demonstrating that adding each stage leads to consistent performance improvements. **Right:** ablation study on the impact of parallel data composition during the SFT stage. Adding WMT data to NTREx significantly enhances model performance, while adding Flores-200 data provides no noticeable improvement.
+
+## 7 CONCLUSION
+
+We tackled the challenge of achieving high translation quality while scaling to a large number of languages, a limitation seen in many state-of-the-art multilingual models. We have introduced X-ALMA, an LLM-based multilingual translation system that prioritizes translation quality across all supported 50 languages, regardless of resource level. X-ALMA surpasses SoTA open models such as Aya-101 and Aya-23 in all translation directions on the FLORES-200 and WMT’23 test datasets, as measured by COMET-22. X-ALMA is built on a plug-and-play architecture with language-specific modules, complemented by a carefully designed training recipe. In particular, the final stage of the recipe, ARPO, achieves further performance gains and outperforms existing preference optimization methods in translation tasks, while successfully mitigating the over-rejection issue.
+
+ Rest of paper (reference and Appendix) is removed.

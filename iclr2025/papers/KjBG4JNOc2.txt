@@ -1,0 +1,312 @@
+
+
+{0}------------------------------------------------
+
+# ENHANCING PREDICTION PERFORMANCE THROUGH INFLUENCE MEASURE
+
+Shuguang Yu<sup>a,\*</sup>, Wengjian Xu<sup>a</sup>, Xinyi Zhou<sup>a</sup>, Xuechun Wang<sup>a</sup>, Hongtu Zhu<sup>b</sup>, and Fan Zhou<sup>a,†</sup>
+
+<sup>a</sup>Shanghai University of Finance and Economics, Shanghai, China
+
+<sup>b</sup>University of North Carolina at Chapel Hill, North Carolina, USA
+
+## ABSTRACT
+
+In the field of machine learning, the pursuit of accurate models is ongoing. A key aspect of improving prediction performance lies in identifying which data points in the training set should be excluded and which high-quality, potentially unlabeled data points outside the training set should be incorporated to improve the model’s performance on unseen data. To accomplish this, an effective metric is needed to evaluate the contribution of each data point toward enhancing overall model performance. This paper proposes the use of an influence measure as a metric to assess the impact of training data on test set performance. Additionally, we introduce a data selection method to optimize the training set as well as a dynamic active learning algorithm driven by the influence measure. The effectiveness of these methods is demonstrated through extensive simulations and real-world datasets.
+
+## 1 INTRODUCTION
+
+To build effective machine learning models, the significance of individual training data points cannot be overstated. Each data point in the training set contributes uniquely to the model’s learning process, shaping its performance, generalization, and resilience to various challenges (Blum & Langley, 1997). Simply evaluating the model’s performance on the provided data is insufficient; understanding the influence of individual training examples and making informed decisions about their inclusion or exclusion is critical for developing effective and reliable models.
+
+Recent advancements in machine learning have highlighted the importance of strategic data selection and management during training. Techniques such as active learning (Settles, 2009) promote the iterative selection of the most uncertain unlabeled data points for labeling and inclusion in the training set. However, estimating uncertainty in deep neural networks (DNNs) is challenging due to their tendency to exhibit overconfidence (Ren et al., 2021). To address this, methods like deep Bayesian approaches (Gal et al., 2017), query-by-committee (Gorritz et al., 2017), Variational Auto-Encoders (Sinha et al., 2019), adversarial learning (Ducoffe & Precioso, 2018; Mayer & Timofte, 2020), graph convolutional networks (Caramalau et al., 2021), and noise stability (Li et al., 2024) have been proposed to improve uncertainty estimates. However, these approaches assume a well-trained model and fail to consider how model parameters might evolve when the training data is modified.
+
+To bridge this gap, recent studies have focused on quantifying the impact of individual training examples on model behavior, with the main challenge being the identification of an appropriate evaluation metric. The Shapley value has emerged as a promising solution, inspiring a number of Shapley-value-based approaches (Ghorbani & Zou, 2019; Jia et al., 2019a;b; Ghorbani et al., 2020; Kwon & Zou, 2022; Wang & Jia, 2023). However, these methods often require multiple model retraintings and evaluations, making them computationally expensive.
+
+Techniques such as influence functions (Koh & Liang, 2017; Pruthi et al., 2020; Yeh et al., 2018; Chen et al., 2021) offer insights into the effect of individual data points on model predictions, helping to identify and mitigate harmful or overly influential examples. For instance, Chhabra et al. (2024) apply influence functions to measure the impact of training data on a specific model, improving
+
+<sup>\*</sup>The first four authors have contributed equally to this paper.
+
+<sup>†</sup>Corresponding author. Email: zhoufan@mail.shufe.edu.cn
+
+{1}------------------------------------------------
+
+performance by pruning detrimental data points. Their method is highly efficient as it avoids the need for model retraining. However, these algorithms may still fail in certain cases, as demonstrated in the following simple example.
+
+**Binary Classification via Logistic Regression.** We consider a logistic regression model  $p(x) = (1 + e^{-x\beta})^{-1}$ , where  $\beta \in \mathbb{R}$  represents the coefficients. For a training set  $\mathcal{Z} = \{(x_i, y_i)\}_{i=1}^n$  and a validation set  $\mathcal{V}$ , the influence function in Chhabra et al. (2024) for example is defined as
+
+$$\mathcal{I}(-x_i) = \sum_{(x,y) \in \mathcal{V}} \partial_\beta L(y, x; \hat{\beta}) [\sum_{i=1}^n \partial_\beta^2 L(y_i, x_i; \hat{\beta})]^{-1} \partial_\beta L(y_i, x_i; \hat{\beta}),$$
+
+where  $\partial_\beta = \partial/\partial\beta$ ,  $x \in \mathbb{R}$ ,  $y \in \{0, 1\}$  is a binary classification label,  $L$  represents the cross-entropy loss, and  $\hat{\beta} = \arg \min_{\beta \in \mathbb{R}} n^{-1} \sum_{i=1}^n L(y_i, x_i; \beta)$ . According to Chhabra et al. (2024), samples  $x_i$  with negative influence function values negatively impact the model's performance on the validation set and should be removed. For all training samples  $x_i$ , the term  $\sum_{(x,y) \in \mathcal{V}} \partial_\beta L(y, x; \hat{\beta}) \sum_{i=1}^n \partial_\beta^2 L(y_i, x_i; \hat{\beta})^{-1}$  remains constant, with only  $\partial_\beta L(y_i, x_i; \hat{\beta})$  varying. In the simple logistic regression scenario, we have  $\partial_\beta L(y_i, x_i; \hat{\beta}) = [(1 + e^{-x_i\hat{\beta}})^{-1} - y_i]x_i$ . Assuming  $\sum_{(x,y) \in \mathcal{V}} \partial_\beta L(y, x; \hat{\beta}) \sum_{i=1}^n \partial_\beta^2 L(y_i, x_i; \hat{\beta})^{-1} > 0$  and  $x_i > 0$ , the training sample influence is negative if and only if  $y_i = 1$ . However, it is clearly incorrect to solely remove data points from one class, as outliers in the other class may also negatively influence the model's performance. For higher-dimensional  $x_i$ , as shown in Section 6 using both simulated and real-world data, our method consistently outperforms the approach proposed by Chhabra et al. (2024) and others.
+
+Given the limitations of existing methods, we draw inspiration from local influence measures developed in the statistical community (Zhu et al., 2007; 2011; Shu & Zhu, 2019; Sui et al., 2023) to propose a novel metric in this article. Our approach differs from previous ones that typically evaluate the impact of perturbations on data samples or model parameters with a fixed model assumption. Instead, our measure directly assesses the effect of minor perturbations to training samples on the model's performance on a validation set, allowing the model to adapt to these changes. To implement this, we have developed a new perturbation manifold and expanded the local influence framework. Using this innovative approach, we introduce two key metrics: one for data trimming, aimed at identifying and removing training set anomalies that compromise model performance on the test set, and another for active learning, which focuses on selecting the most impactful unlabeled data to enhance the prediction performance. Moreover, acknowledging the challenges of slow computation and high memory usage inherent in calculating exact local influence measures, we propose two approximation methods. Our experiments on real-world datasets demonstrate that these approximations achieve performance comparable to exact calculations while significantly reducing computational overhead.
+
+We summarize our contributions as follows,
+
+- (i) Unlike existing local influence measures, we propose a new metric that evaluates the impact of perturbations to training samples on the model's performance on validation data.
+- (ii) The proposed metric is applicable to both data trimming and active learning. For data trimming, it evaluates the effects of minor perturbations to each sample, offering deeper insights into how individual samples impact model performance. In the context of active learning, the method captures the relationship between training samples, unlabeled data, and parameter updates.
+- (iii) We propose two approximation methods to alleviate the high computational cost of calculating local influence measures. These algorithms significantly reduce computational overhead while maintaining better performance than other methods, as demonstrated in our experiments.
+
+## 2 A NEW INFLUENCE MEASURE
+
+In this section, we begin by presenting essential background information, including the Perturbation Manifold, before formally defining the proposed metric.
+
+**Perturbation Manifold.** Our definition of the perturbation manifold closely follows that of Shu & Zhu (2019). Given an input sample  $z = (x, y)$  in the training set  $\mathcal{Z} = \{z_i\}_{i=1}^n$  and a machine
+
+{2}------------------------------------------------
+
+learning model with an estimated parameter vector  $\hat{\theta}$ , which is trained on  $\mathcal{Z}$ , the prediction probability for class  $c \in \{1, \dots, K\}$  is denoted as  $P(c|x, \hat{\theta})$ . Let  $\omega = (\omega_1, \dots, \omega_p)^\top$  be a perturbation vector that varies within an open subset  $\Omega \subset \mathbb{R}^p$ . The perturbation  $\omega$  is applied to  $x$ , thereby affecting the learning of the parameter vector  $\hat{\theta}$ . We denote the parameter vector obtained by the model after perturbing the training sample  $x$  with  $\omega$  as  $\hat{\theta}(x+\omega)$  with  $\hat{\theta}(x) = \hat{\theta}$ . We define  $P(c|x+\omega, \hat{\theta}(x+\omega))$  as the prediction probability under the perturbation  $\omega$  such that  $\sum_{c=1}^K P(c|x+\omega, \hat{\theta}(x+\omega)) = 1$ . It is assumed that there exists a  $\omega_0 \in \Omega$  such that  $P(c|x+\omega_0, \hat{\theta}(x+\omega_0)) = P(c|x, \hat{\theta})$ . Additionally, we assume that  $\{P(c|x+\omega, \hat{\theta}(x+\omega))\}_{c=1}^K$  is positive and sufficiently smooth for all  $\omega \in \Omega$ .
+
+Following the development in (Zhu et al., 2007; 2011), we define  $\mathcal{M} = \{P(c|x+\omega, \hat{\theta}(x+\omega)) : \omega \in \Omega\}$  as a perturbation manifold. The tangent space of  $\mathcal{M}$  at  $\omega$  is denoted by  $T_\omega$ , which is spanned by  $\{\partial l(\omega|c, x, \hat{\theta}(x))/\partial \omega_i\}_{i=1}^p$ , where  $l(\omega|c, x, \hat{\theta}(x)) = \log P(c|x+\omega, \hat{\theta}(x+\omega))$ . Let  $G_z(\omega) = \sum_{c=1}^K \partial_\omega^\top l(\omega|c, x, \hat{\theta}(x)) \partial_\omega l(\omega|c, x, \hat{\theta}(x)) P(c|x+\omega, \hat{\theta}(x+\omega))$  with  $\partial_\omega = (\partial/\partial \omega_1, \dots, \partial/\partial \omega_p)$ . If  $G_z(\omega)$  is positive definite, then  $\mathcal{M}$  is a Riemannian manifold (Shu & Zhu, 2019) with  $G_z(\omega)$  serving as the Riemannian metric tensor (Amari, 2012; Amari & Nagaoka, 2000).
+
+Although  $G_z(\omega)$  is often not positive definite in classification problems, we can still reduce the dimensionality of the perturbations and reconstruct a Riemannian manifold (Shu & Zhu, 2019).
+
+**The Influence Measure.** Let  $L(y', x'; \theta)$  denote the loss function of the model with parameter  $\theta$  on  $z' = (x', y') \notin \mathcal{Z}$ , we can get the expression for the (first-order) influence measure:
+
+$$\text{FI}(z', z) = \partial_\omega L(y', x'; \hat{\theta}(x+\omega_0)) G_z^\perp(\omega_0) \partial_\omega^\top L(y', x'; \hat{\theta}(x+\omega_0)), \quad (2.1)$$
+
+where  $G_z^\perp(\omega_0)$  is the pseudoinverse of  $G_z(\omega_0)$ .
+
+We consider a linear perturbation approach where applying perturbation  $\omega$  to the training sample  $z$  transforms  $(x, y)$  into  $(x+\omega, y)$ . Consequently, the parameter vector updates to  $\hat{\theta}(x+\omega) := n^{-1} \arg \min_{\theta \in \Theta} \{\sum_{i=1}^n L(y_i, x_i; \theta) + L(y, x+\omega; \theta) - L(y, x; \theta)\}$ , with  $\omega_0 = 0$ . Using the chain rule, we can derive the expression for  $\partial_\omega L(y', x'; \hat{\theta}(x+\omega_0))$ :
+
+$$\partial_\omega L(y', x'; \hat{\theta}(x+\omega_0)) = \partial_\theta L(y', x'; \hat{\theta}(x)) \partial_\omega \hat{\theta}(x+\omega)|_{\omega=\omega_0}. \quad (2.2)$$
+
+Here,  $\partial_\omega \hat{\theta}(x+\omega)|_{\omega=\omega_0} \approx n^{-1} H_\theta^{-1} \partial_\omega \partial_\theta L(y, x; \hat{\theta}(x))$ , whose derivation is detailed in Appendix A), where  $H_\theta := n^{-1} \sum_{i=1}^n \partial_\theta^2 L(y_i, x_i; \hat{\theta}(x))$ . The term  $\partial_\omega \partial_\theta L(y, x; \hat{\theta}(x))$  represents the gradient of the loss function  $L$  first taken with respect to the model parameters  $\theta$  and then with respect to  $x$ , evaluated at the perturbed training sample  $(x, y)$ .
+
+For the computation of  $G_z(\omega_0)$ ,  $P(c|x+\omega_0, \hat{\theta}(x+\omega_0))$  can be directly obtained using the learned model parameter vector  $\hat{\theta}$  and the unperturbed sample point  $x$ . The calculation of  $\partial_\omega l(\omega_0|c, x, \hat{\theta}(x))$  requires the application of the chain rule:
+
+$$\partial_\omega l(\omega_0|c, x, \hat{\theta}(x)) = \partial_\omega \log P(c|x+\omega_0, \hat{\theta}(x+\omega_0)) \quad (2.3)$$
+
+$$\begin{aligned} &= \partial_\theta \log P(c|x+\omega_0, \hat{\theta}(x+\omega_0)) \cdot \partial_\omega \hat{\theta}(x+\omega)|_{\omega=\omega_0} \\ &\quad + \partial_x \log P(c|x+\omega_0, \hat{\theta}(x+\omega_0)). \end{aligned}$$
+
+All differentiation operations can be easily computed using backpropagation (Goodfellow et al., 2016) in deep learning libraries such as TensorFlow (Abadi et al., 2016) and PyTorch (Paszke et al., 2017). This entire process is efficient and does not require retraining the model parameters.
+
+**Theorem 1.** If  $\varphi$  represents a diffeomorphism of  $\omega$ , then  $\text{FI}(z', z)$  is invariant under any reparameterization associated with  $\varphi$ .
+
+Compared to widely used measures in Euclidean spaces, such as the Jacobian norm (Novak et al., 2018) and Cook’s local influence measure (Cook, 2018), Theorem 1 demonstrates that  $\text{FI}(z', z)$  remains invariant under any diffeomorphic transformation (e.g., scaling) of the perturbation vector  $\omega$ . The proof of Theorem 1 can be found in Shu & Zhu (2019).
+
+The significance of Theorem 1 is especially pronounced when there are scale differences among the dimensions of  $x$ . For instance, if certain dimensions have significantly larger values than others, the contribution of perturbations to those dimensions may appear exaggerated. However, our  $\text{FI}(z', z)$  mitigates this scaling issue by employing the metric tensor of the perturbation manifold instead of that of the standard Euclidean space.
+
+{3}------------------------------------------------
+
+## 3 FI FOR DATA TRIMMING.
+
+The primary goal of data trimming is to eliminate training samples that may compromise the model’s performance on datasets beyond the training set. Since our proposed influence measure (FI) quantifies the impact of each training sample on the model’s performance on validation sets, it serves as a natural tool for data trimming.
+
+From a model robustness perspective, if a small perturbation in a training sample leads to a significant effect on the model’s performance on the validation set, that sample should be excluded, which aligns with the principle of our proposed metric. Given the inherent challenge of ensuring that all samples in the training set are entirely accurate, a sample with excessive influence could severely degrade the model’s overall performance if it contains any contamination. Therefore, to enhance prediction performance on an unseen data set, such samples should be removed from the training set.
+
+Following the setup of Chhabra et al. (2024), we introduce a training set  $\mathcal{Z}$ , a validation set  $\mathcal{V}$ , and a base model  $\mathcal{F}$ . In this context, we assess the impact of each training sample on the model’s performance by computing the FI for each training tuple  $z_i \in \mathcal{Z}$  with respect to  $\mathcal{V}$ . To achieve this, we extend Equation equation 2.1 to encompass the entire validation set. This involves replacing the loss function for an individual validation sample with the mean loss function across the entire validation set, as follows:
+
+$$\text{FI}^{util}(z) = \partial_{\omega} L(\mathcal{V}; \hat{\theta}(\mathbf{x} + \omega_0)) G_{\mathbf{z}}^{\dagger}(\omega_0) \partial_{\omega}^{\top} L(\mathcal{V}; \hat{\theta}(\mathbf{x} + \omega_0)), \quad (3.1)$$
+
+where  $\partial_{\omega} L(\mathcal{V}; \hat{\theta}(\mathbf{x} + \omega_0)) := \frac{1}{|\mathcal{V}|} \sum_{(\mathbf{x}', y') \in \mathcal{V}} \partial_{\omega} L(y', \mathbf{x}'; \hat{\theta}(\mathbf{x} + \omega_0))$ .
+
+The algorithm for computing  $\text{FI}^{util}$  is outlined in Algorithm 1. After computing these values, we can sort all data points in the training set in descending order based on their  $\text{FI}^{util}$  values and remove the top  $b$  points to enhance the model’s performance on the test set. For the detailed data trimming algorithm, please refer to Algorithm 3.
+
+### --- Algorithm 1 Calculation of $\text{FI}^{util}$ ---
+
+**Input:** Training set  $\mathcal{Z}$ , Validation set  $\mathcal{V}$ , Base model  $\mathcal{F}$
+
+**Output:** Influence measure vector  $\text{FI}^{util} \in \mathbb{R}^{|\mathcal{Z}| \times 1}$
+
+```
+
+1: procedure  $\text{FI}^{util}$ -CALCULATION( $\mathcal{Z}, \mathcal{V}, \mathcal{F}$ )
+2:   Train  $\mathcal{F}$  with  $\mathcal{Z}$ , and obtain the parameter vector  $\hat{\theta}$ 
+3:   Generate an empty vector  $\text{FI}^{util}$  of size  $|\mathcal{Z}| \times 1$ 
+4:   Calculate  $\frac{1}{|\mathcal{V}|} \sum_{(\mathbf{x}', y') \in \mathcal{V}} \partial_{\theta} L(y', \mathbf{x}'; \hat{\theta})$  and  $H_{\hat{\theta}}$ 
+5:   for every  $z_i$  in  $\mathcal{Z}$  do
+6:     Calculate  $G_{z_i}(\omega_0)$  and  $\partial_x \partial_{\theta} L(y_i, \mathbf{x}_i; \hat{\theta})$ 
+7:      $\partial_{\omega} L(\mathcal{V}; \hat{\theta}) \leftarrow \left[ \frac{1}{|\mathcal{V}|} \sum_{(\mathbf{x}', y') \in \mathcal{V}} \partial_{\theta} L(y', \mathbf{x}'; \hat{\theta}) \right] H_{\hat{\theta}}^{-1} \partial_x \partial_{\theta} L(y_i, \mathbf{x}_i; \hat{\theta})$ 
+8:      $\text{FI}^{util}[i] \leftarrow \partial_{\omega} L(\mathcal{V}; \hat{\theta}) G_{z_i}^{\dagger}(\omega_0) \partial_{\omega}^{\top} L(\mathcal{V}; \hat{\theta})$ 
+9:   end for
+10:  return  $\text{FI}^{util}$ 
+11: end procedure
+
+```
+
+---
+
+## 4 FI FOR ACTIVE LEARNING.
+
+In active learning, the primary objective is to identify the most uncertain or informative samples from an unlabeled pool for annotation, typically in sequential batches. After each round of annotation, the newly labeled data are combined with the existing labeled set to retrain the model and improve its performance. Li et al. (2024) argue that if a small perturbation to the model parameters leads to significant changes in the prediction for a given sample, this indicates high uncertainty for that sample under the current model, suggesting that it should be labeled and added to the training set. Our approach is more fundamental: since the model parameters are derived from the training data, we directly assess how perturbations to the training samples influence the model’s predictions for the unlabeled samples. If slight perturbations to most training samples substantially alter the model’s
+
+{4}------------------------------------------------
+
+prediction for a given sample, it likely contains missing information from the training set and should therefore be included.
+
+We now introduce a method for active learning using the proposed FI. For an unlabeled sample  $\mathbf{x}_{unlabel}$ , we first assign it a predicted label and treat it as a validation sample. Next, we calculate the influence measure of  $\mathbf{x}_{unlabel}$  with respect to each point in the training set. The overall influence measure  $FI^{active}(\mathbf{x}_{unlabel})$  is derived by aggregating these individual measures either by averaging or using specific quantiles of these FI values. The  $FI^{active}(\mathbf{x}_{unlabel})$  is defined as follows:
+
+$$FI^{active}(\mathbf{x}_{unlabel}) = g(\{FI(\mathbf{z}_{unlabel}, \mathbf{z}_i)\}_{i=1}^n), \quad (4.1)$$
+
+where  $g$  represents the aggregation function,  $\mathbf{z}_{unlabel} = (\mathbf{x}_{unlabel}, y_{pred})$ , and  $y_{pred}$  is the predicted label assigned by the current model for  $\mathbf{x}_{unlabel}$ .
+
+During each round of active learning, we begin by applying Algorithm 2 to compute  $FI^{active}$ . We then sort all the samples in the unlabeled pool in descending order based on their  $FI^{active}$  values. The top-ranked samples are labeled and added to the training set. In the subsequent round, the model is retrained,  $FI^{active}$  is recalculated, and the process is repeated. For the detailed active learning algorithm, please refer to Algorithm 4.
+
+### --- Algorithm 2 Calculation of $FI^{active}$
+
+**Input:** Labeled pool of training data  $\mathcal{L}$ , Unlabeled pool of training data  $\mathcal{U}$ , Base model  $\mathcal{F}$ , Aggregation function  $g$
+
+**Output:** Influence measure vector  $FI^{active} \in \mathbb{R}^{|\mathcal{U}| \times 1}$
+
+```
+
+1: procedure  $FI^{active}$ -CALCULATION( $\mathcal{L}, \mathcal{U}, \mathcal{F}, g$ )
+2:   Train  $\mathcal{F}$  with  $\mathcal{L}$ , and obtain the parameter vector  $\hat{\theta}$ 
+3:   Generate an empty vector  $FI^{active}$  of size  $|\mathcal{U}| \times 1$ 
+4:   Calculate  $\mathbf{H}_{\hat{\theta}}$ 
+5:   for every  $\mathbf{x}_i^U$  in  $\mathcal{U}$  do
+6:     Obtain an estimated label  $\hat{y}_i$  with  $\mathcal{F}$ 
+7:     Calculate  $\partial_{\theta} L(\hat{y}_i, \mathbf{x}_i^U; \hat{\theta})$ 
+8:      $\mathcal{J} \leftarrow \emptyset$ 
+9:     for every  $\mathbf{z}_j^L$  in  $\mathcal{L}$  do
+10:       Calculate  $\mathbf{G}_{\mathbf{z}_j^L}^{\mathcal{L}}(\omega_0)$  and  $\partial_{\mathbf{x}} \partial_{\theta} L(y_j^L, \mathbf{x}_j^L; \hat{\theta})$ 
+11:        $\partial_{\omega} L(\hat{y}_i, \mathbf{x}_i^U; \hat{\theta}) \leftarrow \partial_{\theta} L(\hat{y}_i, \mathbf{x}_i^U; \hat{\theta}) \mathbf{H}_{\hat{\theta}}^{-1} \partial_{\mathbf{x}} \partial_{\theta} L(y_j^L, \mathbf{x}_j^L; \hat{\theta})$ 
+12:        $\mathcal{J} \leftarrow \mathcal{J} \cup \{\partial_{\omega} L(\hat{y}_i, \mathbf{x}_i^U; \hat{\theta}) \mathbf{G}_{\mathbf{z}_j^L}^{\mathcal{L}}(\omega_0) \partial_{\omega}^T L(\hat{y}_i, \mathbf{x}_i^U; \hat{\theta})\}$ 
+13:     end for
+14:      $FI^{active}[i] \leftarrow g(\mathcal{J})$ 
+15:   end for
+16:   return  $FI^{active}$ 
+17: end procedure
+
+```
+
+---
+
+## 5 APPROXIMATION METHODS
+
+The data selection processes described in the previous two sections have two main drawbacks. First, computing FI requires substantial storage for second-order derivatives, particularly in models with numerous parameters or high-dimensional data. To address this issue, we propose the KFSVD approximation method, which combines the Kronecker-factored (K-FAC) approximation (Martens & Grosse, 2015; Nickel et al., 2023) and Truncated Singular Value Decomposition (Truncated-SVD) approximation (Golub & Reinsch, 1971) to effectively reduce storage requirements. Second, the necessity to compute the  $FI^{util}$  for all data points in the data trimming algorithm, as well as the need to recalculate  $FI^{active}$  for all unlabeled data in each round of the active learning algorithm, significantly decreases computational efficiency. To mitigate this, we implement a subsampling approximation that enhances overall performance. The details of these two approximation methods are as follows.
+
+**KFSVD approximation**, which combines K-FAC approximation with Truncated-SVD approximation to mitigate memory consumption associated with the Hessian matrix  $\mathbf{H}_{\hat{\theta}}$  and the second-order
+
+{5}------------------------------------------------
+
+partial derivatives  $\partial_x \partial_\theta L(y, x; \hat{\theta}(x))$ . The K-FAC algorithm is a widely recognized technique for approximating the Hessian matrix, which not only accelerates computations but also significantly reduces storage requirements. Meanwhile, the Truncated-SVD approximation employs power iteration and related techniques to compute the top- $k$  eigenvalues and their corresponding eigenvectors of  $\partial_x \partial_\theta L(y, x; \hat{\theta}(x))$ , thereby providing an effective approximation of these second-order partial derivatives. Assuming the dimensionality of the sample covariates is  $d$  and the number of model parameters is  $p$ , the Truncated-SVD approximation enables the decomposition of the second-order partial derivatives as  $\partial_x \partial_\theta L(y, x; \hat{\theta}(x)) = U_{p \times k} \Lambda_{k \times k} V_{d \times k}^\top$ , where  $\Lambda_{k \times k}$  is a diagonal matrix containing the top- $k$  eigenvalues of  $\partial_x \partial_\theta L(y, x; \hat{\theta}(x))$  and  $U_{p \times k}$  and  $V_{d \times k}$  are comprised of  $k$  orthogonal vectors. Algorithm 5 and 7 provide the detailed procedures for calculating  $\text{FI}^{\text{util}}$  and  $\text{FI}^{\text{active}}$  using the KFSVD approximation.
+
+**Subsampling approximation**, which utilizes subsampling and random forest techniques to enhance computational efficiency. Specifically, we extract a small subset of samples (e.g., 20%) and compute their FI using Algorithm 5 or 7. These computed values are then used to sort the samples. The features of each sample, along with their corresponding ranks, serve as covariates and target variables to create a new dataset. Subsequently, we train a regression model using random forests on this dataset and leverage the trained model to predict the ranks of other samples. Selections are based on these predicted ranks. Since the computation of FI is the most time-consuming part of the workflow, the overall acceleration is directly correlated with the proportion of samples for which we choose to compute FI accurately. For instance, selecting 20% of the samples can reduce the total processing time to  $\frac{1}{5}$  of the original duration when the dataset is sufficiently large.
+
+In practice, we integrate both approximation methods to develop the comprehensive  $\text{FI}^{\text{util}}$ -based data trimming algorithm and  $\text{FI}^{\text{active}}$ -based active learning algorithm. These algorithms effectively address the storage and computational efficiency challenges inherent in calculating FI. The detailed procedures are outlined in Algorithm 6 and 8.
+
+To better illustrate the computational advantages of the proposed two approximation methods, we analyze their complexity in terms of both memory usage and computational speed. This analysis is also compared with the complexity of *Influence Value* (IV) as introduced by Chhabra et al. (2024).
+
+**Time Complexity.** The following are the time complexities of FI and IV:
+
+- $\text{FI}^{\text{util}}$  without approximation methods:  $\mathcal{O}(p^3 + nd^3 + ndp)$ . Here,  $n$  is the maximum value of the sample sizes of the training set and the validation set,  $d$  is the dimension of the covariates, and  $p$  is the dimension of the model parameters. The term  $\mathcal{O}(p^3)$  comes from computing the inverse of the Hessian matrix. The  $\mathcal{O}(nd^3)$  term is due to inverting  $G$ , repeated  $n$  times. The  $\mathcal{O}(ndp)$  term corresponds to computing  $\partial_x \partial_\theta L$  for  $n$  times.
+- $\text{FI}^{\text{util}}$  with approximation methods:  $\mathcal{O}(\alpha ndT \log(\alpha n) + \alpha n(p + d)ks + \alpha nd^3 + \sum_{i=1}^L p_i^3)$ . Here,  $\alpha \in (0, 1]$  is the proportion of data for which we compute FI accurately during subsampling,  $T$  is the number of decision trees in the random forest,  $k$  is the Truncated-SVD parameter,  $s$  is the number of iterations for computing each eigenvalue during power iteration, and  $\{p_1, p_2, \dots, p_L\}$  represent the number of parameters in each layer of an  $L$ -layer neural network.
+- $\text{FI}^{\text{active}}$  without approximation methods:  $\mathcal{O}(p^3 + n^2 d^3 + n^2 dp)$ . Here,  $n$  is the maximum value of the sample sizes of the labeled dataset and the unlabeled dataset.
+- $\text{FI}^{\text{active}}$  with approximation methods:  $\mathcal{O}(\alpha ndT \log(\alpha n) + \alpha n^2(p + d)ks + \alpha n^2 d^3 + \sum_{i=1}^L p_i^3)$ .
+- IV:  $\mathcal{O}(p^3 + np)$ .
+
+By employing two approximation techniques, we can significantly reduce the computational gap between our method and compared methods like IV. When the dataset is large enough, setting  $\alpha n$  as a constant allows us to achieve better computational complexity than IV. For complex models (e.g., neural networks) where  $p$  is sufficiently large, the  $p^3$  term dominates the computational complexity of IV. In such cases, our method's computational costs could be lower than IV.
+
+**Memory Usage.** Below is a discussion of the space complexities associated with FI and IV:
+
+- In the computation of FI, the highest storage requirements are for the Hessian matrix and  $\partial_x \partial_\theta L$ , which together occupy a space of  $\mathcal{O}(p^2 + dp)$ .
+
+{6}------------------------------------------------
+
+- After using the KFSVD approximation method, the space requirement of FI is reduced to  $\mathcal{O}(\sum_{i=1}^L p_i^2 + (p+d)k)$ .
+- In the computation of IV, it is necessary to store sample information and the Hessian matrix, resulting in a space complexity of  $\mathcal{O}(p^2 + d)$ .
+
+After applying approximation techniques, our algorithm achieves a space complexity similar to that of the IV. In fact, when  $p$  is large, our method offers an advantage.
+
+## 6 EXPERIMENTAL RESULTS
+
+In this section, we present experimental results that illustrate how our newly proposed metrics,  $FI^{util}$  and  $FI^{active}$ , contribute to enhancing model prediction performance. We compare our algorithms with state-of-the-art strategies in both data trimming and active learning scenarios, thereby validating the effectiveness of our approach on both simulated and real-world datasets.
+
+### 6.1 DATA TRIMMING
+
+In this subsection, we conduct simulations using both linear and nonlinear models to demonstrate how our algorithm enhances data trimming efficiency and evaluate the effectiveness of the proposed FI on real-world datasets. The latest data trimming method, IV, serves as the primary baseline for comparison in these experiments.
+
+#### Validation on 2D Linear Model.
+
+Logistic regression is utilized for this binary classification task. We begin by generating several datasets by sampling from two isotropic 2D Gaussian distributions. Each dataset comprises 150 training samples, 100 validation samples, and 600 test samples. The experimental settings for this scenario are consistent with those of the study by Chhabra et al. (2024). To account for the randomness inherent in the sampling process, we analyze our method on datasets generated under the same distribution but with different random seeds. As shown in Table 1, our method consistently enhances model performance compared to theirs in most cases, particularly when trimming 5, 10, and 20 samples, with thirty different random seeds employed each time. Moreover, it is evident from Figure 1.C that IV tends to trim samples from a specific class under certain conditions. In this context, Figure 1.D clearly demonstrates that in some scenarios IV fails, while our method continues to perform effectively.
+
+**Table 1: Comparison of two methods on linear model.** Number of cases where FI outperforms IV across 30 random seeds, along with performance improvements.  $Acc\_FI$ : the mean accuracy by FI, and  $Acc\_IV$ : by IV.
+
+| # of deleted points | # of better case | Acc_FI(%) | Acc_IV(%) |
+|-|-|-|-|
+| 5 | 23 | 96.22 $\pm$ 0.65 | 95.77 $\pm$ 0.76 |
+| 10 | 28 | 96.20 $\pm$ 0.65 | 94.84 $\pm$ 1.07 |
+| 20 | 30 | 96.23 $\pm$ 0.64 | 93.36 $\pm$ 2.21 |
+
+![Figure 1: Performance under Linear Model. Four scatter plots (A, B, C, D) showing Feature 1 vs Feature 2. Plot A shows the full training set. Plot B shows 'Trimmed Samples (Ours)' with a green diagonal line. Plot C shows 'Trimmed Samples (IV)' with a green diagonal line. Plot D shows 'Test Set Performance' with three lines: green (no trimming), red (FI trimming), and blue (IV trimming). Legend: Acc: 0.863 (red), Acc: 0.978 (green), Acc: 0.995 (blue).](ab9eb65dcbc2696ec77b66f70f9e0e91_img.jpg)
+
+Figure 1: Performance under Linear Model. Four scatter plots (A, B, C, D) showing Feature 1 vs Feature 2. Plot A shows the full training set. Plot B shows 'Trimmed Samples (Ours)' with a green diagonal line. Plot C shows 'Trimmed Samples (IV)' with a green diagonal line. Plot D shows 'Test Set Performance' with three lines: green (no trimming), red (FI trimming), and blue (IV trimming). Legend: Acc: 0.863 (red), Acc: 0.978 (green), Acc: 0.995 (blue).
+
+**Figure 1: Performance under Linear Model.** Different colored points represent different classes. A shows the training set. B and C respectively denote the samples to be trimmed by FI and IV. D denotes test set. **Green** line: boundary without trimming; **Red** line: boundary after FI trimming; and **Blue** line: boundary after IV trimming.
+
+{7}------------------------------------------------
+
+**Validation on 2D Nonlinear Model.** After demonstrating the effectiveness of our method in linear scenarios, we now extend our examination to nonlinear cases. To achieve this, we construct a binary classification dataset that is non-linearly separable, with each class represented by a crescent-shaped region. A more intuitive understanding can be obtained from Figure 9. We employ a neural network that includes an input layer, two hidden layers with ReLU activation functions, and an output layer with a sigmoid activation function. Similar to the linear case, we conduct repeated experiments in the nonlinear scenario. Each dataset comprises 500 training samples, 250 validation samples, and 250 test samples. As shown in Table 2, our method achieves a higher average accuracy and outperforms the other methods in most cases across the 20 repetitions. Figure 9 illustrates instances where utilizing IV to remove training points can lead to a deterioration in model performance under certain conditions.
+
+**Validation on the Real-World Datasets.** In this study, we assess the efficacy of our method by utilizing four real-world datasets: two tabular datasets, *Adult* (Kohavi, 1996) and *Bank* (Moro et al., 2014); a visual dataset, *CelebA* (Liu et al., 2015); and a textual dataset, *Jigsaw Toxicity* (Noever, 2018). Additional details regarding the datasets and experiments can be found in Appendices C & D.1. Both  $FI^{util}$  and IV are evaluated on the validation set, with Logistic Regression serving as the base model. The results on the test sets of these datasets are presented in Figure 2. Ablation experiments are also conducted in the Appendix E.1 to assess the impact of perturbations on model performance.
+
+**Table 2: Comparison of two methods on nonlinear model.** Number of cases where FI outperform IV across 20 random seeds, along with performance improvements. *Acc\_FI*: the mean accuracy by FI, and *Acc\_IV*: by IV.
+
+| # of deleted points | # of better case | Acc_FI(%) | Acc_IV(%) |
+|-|-|-|-|
+| 5 | 17 | 89.90 $\pm$ 2.16 | 87.50 $\pm$ 2.46 |
+| 10 | 17 | 90.24 $\pm$ 2.05 | 88.02 $\pm$ 2.62 |
+| 20 | 15 | 90.32 $\pm$ 1.67 | 87.80 $\pm$ 2.54 |
+
+As illustrated in Figure 2, our findings indicate that under a limited budget  $b$ , our  $FI^{util}$  data trimming method consistently outperforms two baseline models, IV and Random Trimming. Among the four datasets examined, Random Trimming demonstrates no improvement in model performance. Although IV exhibits a notable enhancement on *Adult* and *Bank*, it tends to remove important data points on *CelebA*, resulting in decreased performance, and shows no improvement on *Jigsaw Toxicity* compared to Random Trimming. This suggests that IV may fail in certain scenarios. In contrast, our method consistently achieves the maximum improvements across all datasets, particularly on the *Bank* dataset, where accuracy increases by more than 10%. Even on *CelebA*, where IV fails completely, our model still enhances the test set accuracy, further demonstrating the robustness of our approach. To ensure a more rigorous comparison between FI and IV, we also perform K-fold cross-validation in Appendix E.5. The results demonstrate that our method consistently outperforms IV, highlighting the robustness and stability of our approach.
+
+The experimental results above show that our method performs better on real-world datasets than on simulated ones. This is largely due to the simplicity of the simulated datasets, which are two-dimensional with clear boundaries effectively separating the classes and contain no erroneous data points. In such cases, a sufficiently large dataset allows the model to easily find the optimal boundary, minimizing the advantages of data trimming. In contrast, real-world datasets are typically high-dimensional and more complex, often containing errors. Here, the benefits of removing potentially erroneous high-influence points become more evident. To support this, we introduce noise into the real-world datasets and conduct further experiments; the details of the noise addition method are given in Appendix D.1, and the results are shown in Figure 8. The findings clearly demonstrate that both FI and IV outperform Random Trimming, with our method retaining significant advantages over IV, further confirming its effectiveness.
+
+Finally, although the Shapley-value-based method is time-consuming, we conduct a comparison with our approach using specific datasets. And we also examine the potential impact of the masking effect. Details of both analyses are presented in Appendix E.4.
+
+### 6.2 ACTIVE LEARNING
+
+In this section, we primarily conduct numerical experiments on three simple tabular datasets and three complex image datasets to demonstrate the effectiveness of the proposed FI metric in active learning. We compare our method with two state-of-the-art active learning baselines including IV
+
+{8}------------------------------------------------
+
+![Figure 2: Accuracy curves for three data trimming methods (FIours, IV, Random) on four datasets: Adult, Bank, CelebA, and Jigsaw Toxicity. The x-axis represents the number of data points (Dot num) and the y-axis represents Accuracy. FIours (red line with circles) consistently shows the highest accuracy across all datasets, while IV (blue line with circles) and Random (grey line with circles) show lower accuracy.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 2: Accuracy curves for three data trimming methods (FIours, IV, Random) on four datasets: Adult, Bank, CelebA, and Jigsaw Toxicity. The x-axis represents the number of data points (Dot num) and the y-axis represents Accuracy. FIours (red line with circles) consistently shows the highest accuracy across all datasets, while IV (blue line with circles) and Random (grey line with circles) show lower accuracy.
+
+**Figure 2:** Accuracy curves of three data trimming methods on test sets of *Adult*, *Bank*, *CelebA* and *Jigsaw Toxicity*.
+
+(Chhabra et al., 2024) and BALD (Gal et al., 2017; Kirsch et al., 2019; 2023). Random Selection is also included as a baseline. All results are averaged over three runs to ensure a reliable evaluation.
+
+Note that, IV, as proposed by Chhabra et al. (2024), originally calculates influence values only once during the initial selection, which can hinder overall performance since these values are not updated with subsequent labelings. To ensure fairness in our comparisons, we modified IV to recalculate influence values in each round of selection, and this updated version is used in our experiments.
+
+For our method, the aggregation function  $g(\{\text{FI}(\mathbf{z}_{unlabel}, \mathbf{z}_i)\}_{i=1}^n)$  in Equation 4.1 denotes the operation of calculating the mean of the data points from the set  $\{\text{FI}(\mathbf{z}_{unlabel}, \mathbf{z}_i)\}_{i=1}^n$  that fall between the 10th and 90th percentiles, sorted in descending order. In other words, we compute the mean of the middle 80% of the data after sorting. This approach effectively excludes extreme values, thereby enhancing the robustness of our final result.
+
+**Tabular Datasets.** For the tabular datasets, we employed a Logistic Regression model. The total number of annotation rounds for each experiment, along with the settings for the unlabeled pool size and acquisition size, are detailed in Table 4. As shown in Figure 3, our method outperforms the other approaches on these simple tabular datasets. Random Selection performs reasonably well initially, but as data volume increases, improvements in model performance diminish. BALD shows comparable performance to Random Selection on tabular datasets. IV initially underperforms compared to Random Selection, but as more data is added, its performance improves and eventually becomes comparable to BALD. Our method starts similarly to BALD, but its focus on more challenging samples allows it to quickly address missing information once the model achieves a certain accuracy. As a result, in the latter stages of each graph, our method distinctly diverges from the others.
+
+![Figure 3: Classification performance (Test Accuracy) versus Dataset Size for three datasets: Adult, CelebA, and Jigsaw Toxicity. The x-axis represents Dataset Size and the y-axis represents Test Accuracy. Four methods are compared: Random (blue dashed line), FIours (red solid line), IV (green dashed line), and BALD (orange dashed line). FIours consistently achieves the highest test accuracy across all datasets, especially in the later stages of training.](e8ff6e66c77a8e96203c9f8db8f0986f_img.jpg)
+
+Figure 3: Classification performance (Test Accuracy) versus Dataset Size for three datasets: Adult, CelebA, and Jigsaw Toxicity. The x-axis represents Dataset Size and the y-axis represents Test Accuracy. Four methods are compared: Random (blue dashed line), FIours (red solid line), IV (green dashed line), and BALD (orange dashed line). FIours consistently achieves the highest test accuracy across all datasets, especially in the later stages of training.
+
+**Figure 3:** Classification performance due to the different active learning methods on *Adult*, *CelebA*, and *Jigsaw Toxicity*.
+
+**Image Classification.** The data in the tabular datasets have been processed, resulting in high test accuracy with logistic regression. In contrast, for the image datasets—*MNIST* (Lecun et al., 1998), *EMNIST* (Cohen et al., 2017), and *CIFAR-10* (Krizhevsky, 2012)—the input consists of raw images, and we employ a Convolutional Neural Network (CNN) as the classifier. To simplify the computation of  $\text{FI}^{\text{active}}$ , we utilize the outputs from the last layer of the neural network and focus on the parameters of that layer. However, during each training iteration, all parameters of the neural network are updated,
+
+{9}------------------------------------------------
+
+not just those of the final layer. The settings for the unlabeled pool size and acquisition size for each image dataset are provided in Table 5. Experimental results indicate that our method maintains comparable time consumption to other approaches, even with complex image data (see Table 9 for details). Our primary focus in active learning is enhancing model accuracy rather than speed. We developed CNNs tailored for *MNIST* and *EMNIST*, with specifications in Table 6. For *CIFAR-10*, we adopted a model architecture from Trockman & Kolter (2022). As shown in Figure 4, both BALD and IV methods are suited to different scenarios, but our method consistently outperforms others across all datasets, particularly in more complex situations. In fact, the *MNIST* dataset, being relatively straightforward, does not fully showcase the advantages of our proposed method. To address this limitation, we constructed more challenging variants of the *MNIST* dataset, specifically unbalanced and redundant versions. Furthermore, we evaluated our method on two more complex datasets, *Office-31* and *AG News*, and experimented with fine-tuning pre-trained models. Comparative analyses conducted on these datasets demonstrate the superior efficacy of our method, as detailed in Appendix E.3. Additionally, Figure 5 visually represents the selection preferences of  $FI^{active}$ , highlighting its tendency to identify points that are more challenging for the current model to distinguish.
+
+To deepen our analysis, we present ablation experiments in Appendix E.1 to better understand the trade-offs between potential performance reduction and quantified computational cost reduction, and we also conduct a comparison with the Shapley-value-based method in Appendix E.4.
+
+![Figure 4: Classification performance due to the different active learning methods on MNIST, EMNIST, and CIFAR-10. The figure contains three line plots showing Test Accuracy vs. Dataset Size for Random, FI(ours), IV, and Bald methods. FI(ours) consistently outperforms the other methods across all datasets.](f519a5be118c846f631c992412353fb9_img.jpg)
+
+Figure 4 displays three line plots showing Test Accuracy (Y-axis) versus Dataset Size (X-axis) for three datasets: MNIST, EMNIST, and CIFAR-10. The methods compared are Random (blue dashed line), FI(ours) (red solid line), IV (green dashed line), and Bald (orange dashed line). In all cases, FI(ours) achieves the highest test accuracy, followed by Bald, IV, and Random. The performance gap is most pronounced in the EMNIST dataset.
+
+Figure 4: Classification performance due to the different active learning methods on MNIST, EMNIST, and CIFAR-10. The figure contains three line plots showing Test Accuracy vs. Dataset Size for Random, FI(ours), IV, and Bald methods. FI(ours) consistently outperforms the other methods across all datasets.
+
+**Figure 4:** Classification performance due to the different active learning methods on *MNIST*, *EMNIST*, and *CIFAR-10*.
+
+![Figure 5: Images with the highest FI^active selected in the first round of active learning for the MNIST problem, along with their corresponding prediction probability distributions. The figure shows three examples: Ground Truth 5 (predicted as 9), Ground Truth 5 (predicted as 3), and Ground Truth 4 (predicted as 8).](8ee3b76dd49f31624d287885bc2c81ee_img.jpg)
+
+Figure 5 shows three examples of images with the highest  $FI^{active}$  selected in the first round of active learning for the *MNIST* problem. Each example includes the Ground Truth digit, the selected image, and a bar chart showing the prediction probability distribution for digits 0-9. The first example shows a Ground Truth of 5, but the selected image is a 9, with a high probability for digit 9. The second example shows a Ground Truth of 5, but the selected image is a 3, with a high probability for digit 3. The third example shows a Ground Truth of 4, but the selected image is a 4, with a high probability for digit 4.
+
+Figure 5: Images with the highest FI^active selected in the first round of active learning for the MNIST problem, along with their corresponding prediction probability distributions. The figure shows three examples: Ground Truth 5 (predicted as 9), Ground Truth 5 (predicted as 3), and Ground Truth 4 (predicted as 8).
+
+**Figure 5:** Images with the highest  $FI^{active}$  selected in the first round of active learning for the *MNIST* problem, along with their corresponding prediction probability distributions.
+
+## 7 CONCLUSION
+
+In this paper, we introduce a novel local influence metric that evaluates the impact of perturbations to training samples on model performance concerning validation samples. This metric is applicable in both data trimming and active learning, offering valuable insights into the contributions of individual samples and their relationships with unlabeled data. Furthermore, we propose two approximation methods to mitigate the computational costs associated with calculating local influence measures. Our experimental results demonstrate that these algorithms effectively reduce costs while outperforming other state-of-the-art methods.
+
+ Rest of paper (reference and Appendix) is removed.

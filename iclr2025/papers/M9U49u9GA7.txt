@@ -1,0 +1,284 @@
+
+
+{0}------------------------------------------------
+
+# SiDyP: SIMPLEX DIFFUSION WITH DYNAMIC PRIOR FOR DENOISING LLAMA-GENERATED LABELS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+The traditional process of creating labeled datasets is not only labor-intensive but also expensive. Recent breakthroughs in open-source large language models (LLMs), such as Llama-3, have opened a new avenue in generating labeled datasets automatically for various natural language processing (NLP) tasks to provide an alternative to such expensive annotation process. However, the reliability of such auto-generated labels remains a significant concern due to inherent inaccuracies. When learning from such noisy labels, the model’s generalization is likely to be harmed as it is prone to overfit those label noises. In this paper, we propose the **Simplex Diffusion with a Dynamic Prior (SiDyP)** model to calibrate classifier’s predication, thus enhancing its robustness towards noisy labels. Our framework leverages simplex diffusion model to iteratively correct noisy labels conditioned on training dynamic trajectories obtained from classifier finetuning. **The Prior in SiDyP refers** to the potential true label candidates which was obtained according to neighborhood label distribution in text embedding space. **It is Dynamic because we** progressively distill these candidates based on the feedback of the diffusion model. Our SiDyP model can increase the performance of the BERT classifier fine-tuned on both zero-shot and few-shot Llama-3 generated noisy label datasets by an average of 5.33% and 7.69% respectively. Our extensive experiments, which explore different LLMs, diverse noise types (real-world and synthetic), ablation studies, and multiple baselines, demonstrate the effectiveness of SiDyP across a range of NLP tasks. We will make code and data publicly (under a CC BY 4.0 license) available on GitHub upon publication of the work.
+
+## 1 INTRODUCTION
+
+In the realm of machine learning, the effectiveness of Deep Neural Networks (DNNs) in a variety of applications is largely contingent on the availability of well-annotated datasets (Fisher, 1936; Deng et al., 2009; Touvron et al., 2023a). Traditionally, this annotation process has been carried out manually by subject matter experts (Ratner et al., 2017), ensuring high accuracy but at a substantial cost in terms of time and resources. In response to these constraints, the field has gradually pivoted towards alternative strategies such as active learning (Ren et al., 2021; Kartchner et al., 2020; Yu et al., 2022), transfer learning (Pan & Yang, 2009; Howard & Ruder, 2018), and weak supervision (Stephan et al., 2022; Yu et al., 2020; Lison et al., 2021). These methods help alleviate some of the burdens of manual annotation, yet they often introduce a new challenge: the incorporation of noise in the training data.
+
+The susceptibility of DNNs, especially pre-trained language models to the noise inherent in training data is a formidable challenge, particularly for models like BERT (Devlin et al., 2019b), which can inadvertently fit to inaccuracies. This issue is compounded by weak supervision types—described by Zhou (2018) as incomplete, inexact, and inaccurate supervision—that introduce various forms of label noise. Without appropriate denoising, these models risk learning from erroneous data rather than genuine patterns. Robust denoising strategies, therefore, play a crucial role in refining training datasets. By systematically identifying and amplifying the impact of mislabeled data, these strategies ensure that models are trained on more accurate representations of the data, as demonstrated by efforts in advanced denoising techniques (Ratner et al., 2017; Yu et al., 2020; Zhang et al., 2022; Zhuang et al., 2023).
+
+{1}------------------------------------------------
+
+Transitioning to the era of advanced open-source language models like Llama-3 (Dubey et al., 2024), the capabilities for initial data annotation have seen remarkable improvements (Tan et al., 2024; Yu et al., 2023; Brown et al., 2020). LLMs can generate initial labels for datasets, leveraging its extensive training on diverse textual data. Although numerous methods have been proposed to enhance the capabilities of LLMs, aiming to improve the accuracy and reliability of their annotation (Yu et al., 2023; Yu & Bach, 2023; Wang et al., 2023; Oliveira et al., 2024; Li et al., 2024; Burns et al., 2023), complete immunity to inaccuracies in LLM-generated labels is unattainable, necessitating a robust mechanism to mitigate the harmful impact of their noisy labels. However, LLM-generated label noise is under exploration as previous studies mainly focus on either synthetic noise or real-world noise (Han et al., 2018b; Bae et al., 2022; Zhuang et al., 2023; Wei et al., 2020; Chen et al., 2023a). Synthetic noise is often impractical since it fails to reflect real-world scenarios, where no gold-standard dataset exists for injection. On the other hand, real-world noise is costly to obtain, as it requires subject matter experts (Ratner et al., 2017) to create labeling functions. To bridging this gap, we propose an innovative denoising approach that strengthens classifiers' resilience to LLM-generated noisy labels.
+
+Our approach aims to purify noisy labels via transition matrix-based methods (Patrini et al., 2017; Yao et al., 2021; Zhang et al., 2021b; Xia et al., 2020; Berthon et al., 2021). Adopting the framework from Bae et al. (2022), our denoising method consists of two stages: finetuning pre-trained language classifiers (PLCs) and denoising via generative models. Finetuning a PLC on a noisy dataset yields data's embedding dynamic trajectories (Zhuang et al., 2023) and prior probability  $p(\hat{y}|x)$ . By referring to the neighbor's label distribution in embedding space, we are able to collect a list of potential true label candidates and their corresponding weights. We design a simplex diffusion (Mahabadi et al., 2024) label model to reconstruct true labels from noisy labels and training dynamics. The potential true label candidates are refined progressively throughout the training of the diffusion model based on its prediction. The overall framework is presented in Figure 1.
+
+![Diagram of the SiDyP framework. The process starts with 'Noisy Datasets' and 'Original Datasets'. 'Original Datasets' are used for 'Zero-shot / Few-shot Prompting' of 'LLaMA-3' to generate 'False Labels'. 'Noisy Datasets' are processed through 'Stage I: Pre-trained classifier finetuning' using multiple models (Model 1 to Model M). Each model outputs a prediction $\hat{y}^{(m)}$ and a weight $W^{(m)}$. These are used for 'Label Candidate Retrieval' to produce $y^{(1)}_{\text{uncertain}}, w^{(1)}$ and $y^{(2)}_{\text{uncertain}}, w^{(2)}$. 'Stage II: Denoising Labels via Simplex Diffusion Model' takes these candidates and weights to produce refined labels $y^{(1)}_{\text{refined}}, w^{(1)}$ and $y^{(2)}_{\text{refined}}, w^{(2)}$. A 'Co-Regularization' step is shown with bar charts and KL divergence. The final 'Model Inference' formula is $p(y|x) = \frac{1}{M} \sum_{m=1}^M \sum_{c} F_{\psi}^m(\hat{y} = c|x) \cdot p_{\theta}^m(y|\hat{y} = c, W)$.](4792a2ccd62226861fadc22117edb7b1_img.jpg)
+
+The diagram illustrates the SiDyP framework. At the top, 'Noisy Datasets' and 'Original Datasets' are shown. 'Original Datasets' are used for 'Zero-shot / Few-shot Prompting' of 'LLaMA-3' to generate 'False Labels'. 'Noisy Datasets' are processed through 'Stage I: Pre-trained classifier finetuning' using multiple models (Model 1 to Model M). Each model outputs a prediction  $\hat{y}^{(m)}$  and a weight  $W^{(m)}$ . These are used for 'Label Candidate Retrieval' to produce  $y^{(1)}_{\text{uncertain}}, w^{(1)}$  and  $y^{(2)}_{\text{uncertain}}, w^{(2)}$ . 'Stage II: Denoising Labels via Simplex Diffusion Model' takes these candidates and weights to produce refined labels  $y^{(1)}_{\text{refined}}, w^{(1)}$  and  $y^{(2)}_{\text{refined}}, w^{(2)}$ . A 'Co-Regularization' step is shown with bar charts and KL divergence. The final 'Model Inference' formula is 
+$$p(y|x) = \frac{1}{M} \sum_{m=1}^M \sum_{c} F_{\psi}^m(\hat{y} = c|x) \cdot p_{\theta}^m(y|\hat{y} = c, W)$$
+
+Diagram of the SiDyP framework. The process starts with 'Noisy Datasets' and 'Original Datasets'. 'Original Datasets' are used for 'Zero-shot / Few-shot Prompting' of 'LLaMA-3' to generate 'False Labels'. 'Noisy Datasets' are processed through 'Stage I: Pre-trained classifier finetuning' using multiple models (Model 1 to Model M). Each model outputs a prediction \$\hat{y}^{(m)}\$ and a weight \$W^{(m)}\$. These are used for 'Label Candidate Retrieval' to produce \$y^{(1)}\_{\text{uncertain}}, w^{(1)}\$ and \$y^{(2)}\_{\text{uncertain}}, w^{(2)}\$. 'Stage II: Denoising Labels via Simplex Diffusion Model' takes these candidates and weights to produce refined labels \$y^{(1)}\_{\text{refined}}, w^{(1)}\$ and \$y^{(2)}\_{\text{refined}}, w^{(2)}\$. A 'Co-Regularization' step is shown with bar charts and KL divergence. The final 'Model Inference' formula is \$p(y|x) = \frac{1}{M} \sum\_{m=1}^M \sum\_{c} F\_{\psi}^m(\hat{y} = c|x) \cdot p\_{\theta}^m(y|\hat{y} = c, W)\$.
+
+Figure 1: The SiDyP framework, containing (1) pre-trained classifier fine-tuning; (2) dynamic label candidates retrieval and distillation; (3) denoising label using simplex diffusion; (4) co-regularization between multiple model branches; (5) inference process to predict refined labels from noisy labels.
+
+The main contribution of our work include:
+
+- We evaluate previous state-of-the-art baselines, validated on both synthetic and real-world noise, under a novel type of noise: LLM-generated label noise. To the best of our knowledge, this is the first study aimed at enhancing learning under LLM-generated label noise.
+
+{2}------------------------------------------------
+
+- We propose SiDyP, a robust framework using dynamic priors to derive reliable true labels and the simplex denoising label diffusion model to calibrate classifier’s predication.
+- We conduct extensive experiments of our frameworks compared to 5 state-of-the-art baselines across 4 NLP tasks, 5 LLMs, and 3 different type of noises. Our approach outperforms all the baselines in all the experiments. The effectiveness of each component is also verified.
+
+## 2 BACKGROUND AND MOTIVATION
+
+**Problem Definition** Let  $\mathcal{X} \in \mathbb{R}^d$  and  $\mathcal{Y} = \{0, 1, \dots, c\}$  be the  $d$ -dimension input and the target label in a classification task with  $c$  classes. Following the joint probability distribution  $P$  over  $\mathcal{X} \times \mathcal{Y}$ , the i.i.d samples forms a gold classification dataset,  $\mathcal{D} = \{x_i, y_i\}_{i=1}^N$ . Our assumption of learning from noisy labels indicates that the only accessible dataset is  $\mathcal{D}_{\text{train}} = \{x_i, \tilde{y}_i\}_{i=1}^N$ , sampling from  $P$  over  $\mathcal{X} \times \tilde{\mathcal{Y}}$  where  $\tilde{\mathcal{Y}}$  are potential noisy targets. For a traditional classification problem, the training objective of a classifier  $f_\theta$  is to minimize the true risk  $R_L(f_\theta) := \mathbb{E}_P[L(f_\theta(x), y)]$ . However, in the realm of learning from noisy labels, the only accessible risk function is the noisy empirical risk  $\tilde{R}_L^{\text{emp}}(f_\theta) := \mathbb{E}_P[L(f_\theta(x), \tilde{y})]$  due to the absence of true labels  $y$ . Therefore, our goal is to find a function minimizing the true risk  $R_L(f_\theta)$  during learning with noisy empirical risk  $\tilde{R}_L^{\text{emp}}(f_\theta)$ .
+
+With the only observable target labels being noisy, we manage to train a model that generates probability distribution of true label  $y$  given arbitrary input  $x$ ,  $p(y|x)$ . Taking advantage of noisy labels in our training dataset, we can decompose our objective further as:
+
+$$p(y|x) = \sum_{\tilde{y}} p(\tilde{y}|x)p(y|\tilde{y}, x)$$
+
+In this revised objective, the prior  $p(\tilde{y}|x)$  can be directly estimated by finetuning a PLC  $F_\psi$  on the accessible noisy dataset. We can approximate the posterior  $p(y|\tilde{y}, x)$ , expressing the probability distribution of true label  $y$  given noisy label  $\tilde{y}$  and input  $x$ , by a generative model. Unlike synthetic noise, which has been extensively studied, LLM-generated label noise is more intricate, contextually influenced, and reflective of real-world class relationships (we include a more detailed discussion in Appendix G). This triggers a more challenging estimation of the posterior as the relation between  $\tilde{y}$  and  $y$  becomes less predictable and more context-dependent. To tackle this, we begin by focusing on these two key aspects:
+
+1. How can a promising and reliable true label be derived from the noisy dataset?
+2. How can we estimate such probabilistic relation between true labels, corrupted labels, and input features accurately?
+
+We define corrupted labels as one which is mislabeled thus incorrect. In the following sections, we introduce our true label candidates dynamic distillation (Section 3) and simplex denoising label diffusion model (Section 4) to address these two concerns respectively. We also adopt training dynamics during PLC fine-tuning and co-regularization mechanism (Appendix C) to make SiDyP tolerant to noises.
+
+## 3 TRUE LABEL CANDIDATES DYNAMIC DISTILLATION
+
+Extracting true labels from a noisy dataset is crucial, as it directly impacts the quality of the subsequent generative posterior approximation. Our derivation of true label is based on the assumption that textual embeddings are robust enough to discriminate between clean and corrupted data samples (Ortego et al., 2021). Texts belonging to the same class typically exhibit similar semantics, making them more likely to cluster together in the embedding space. Therefore, the neighboring labels reveal information about the true labels. Different from prior works (Zhuang et al., 2023; Bae et al., 2022), we retrieve a list of true label candidates for each individual data sample (Algorithm 1). These true label candidates are distilled according to our diffusion model’s feedback during training (Algorithm 2).
+
+{3}------------------------------------------------
+
+### 3.1 LABEL CANDIDATE RETRIEVAL
+
+Our main purpose is re-assigning labels to noisy samples leveraging true label information in embedding space. First, we need to discriminate noisy samples in the dataset. During the PLC fine-tuning in Stage I, there exist training dynamics in embedding space. The noisy samples tend to exhibit larger mean and standard deviation of Euclidean distances towards their assigned labels (incorrect) compared to clean samples (Zhuang et al., 2023). We split the original dataset into  $D_{\text{train}}^{\text{noisy}}$  and  $D_{\text{train}}^{\text{clean}}$  by cutting off the top  $\sigma$  percent of training trajectories, where  $\sigma$  is the estimated error rate. We apply K Nearest Neighbor (KNN) algorithm on  $D_{\text{train}}^{\text{noisy}}$  with  $D_{\text{train}}^{\text{clean}}$  as the reference. Instead of assigning a single deterministic label, a list of label candidates and its corresponding weights (probability) are generated by KNN classifier. We manage to alleviate the uncertainty injected into training of diffusion model in Stage II by two filters: (1) we preserve the candidate if its associated probability greater than a threshold  $\lambda$ . These data instances are regarded as deterministic instance since their potential true label is single and certain. The remaining data instances are regarded as uncertain and linked with a list of candidates. (2) For uncertain data instances, we extract the two candidates with highest probabilities. If their summation is greater than a specified threshold  $\gamma$ , we then eliminate other candidates and only preserve these two dominant candidates.
+
+#### --- Algorithm 1: Potential True Label Candidates Retrieval ---
+
+**Input:**  $D_{\text{train}}^{\text{noisy}}: \{\mathbf{x}_i, \tilde{\mathbf{y}}_i\}_1^n, \mathcal{M}_{\text{train}}, \mathcal{C}_{\text{knn}}, K, \lambda, \gamma$
+
+**Output:**  $D_{\text{train}}^{\text{certain}}: \{\mathbf{x}_i, \mathbf{y}_i^1\}_1^m, D_{\text{train}}^{\text{uncertain}}: \{\mathbf{x}_i, (\mathbf{y}_i^0, \mathbf{y}_i^1, \dots)\}_i^{n-m}, \mathcal{W}_{\text{train}}^{\text{uncertain}}: \{(\mathbf{w}_i^0, \mathbf{w}_i^1, \dots)\}_i^{n-m}$
+
+```
+
+1 Split  $D_{\text{train}}^{\text{noisy}}$  into  $\{D_{\text{train}}^{\text{clean}}, D_{\text{train}}^{\text{noisy}}\}$  according to noisy marker  $\mathcal{M}_{\text{train}}$ 
+2 Fit  $D_{\text{train}}^{\text{clean}}$  into KNN classifier  $\mathcal{C}_{\text{knn}}$ 
+3 Predict  $\mathcal{P}_{\text{train}}: \{(\mathbf{p}_i^0, \mathbf{p}_i^1, \dots)\}_1^n$  of entire dataset  $D_{\text{train}}^{\text{noisy}}$  using  $\mathcal{C}_{\text{knn}}$  based on  $K$  neighbors
+4 Initialize  $D_{\text{train}}^{\text{certain}} = \{\}, D_{\text{train}}^{\text{uncertain}} = \{\}$  and  $\mathcal{W}_{\text{train}}^{\text{uncertain}} = \{\}$ 
+5 for  $i = 0$  to  $n$  do
+6    $\mathbf{p}_i^{\text{max}} = \max\{(\mathbf{p}_i^0, \mathbf{p}_i^1, \dots)\}$ 
+7   if  $\mathbf{p}_i^{\text{max}} \geq \lambda$  then
+8     Insert  $(\mathbf{x}_i, \mathbf{y}_i^{\text{max}})$  into  $D_{\text{train}}^{\text{certain}}$ 
+9   else
+10     $\mathbf{p}_i^{\text{max1}}, \mathbf{p}_i^{\text{max2}} = \text{top2}\{(\mathbf{p}_i^0, \mathbf{p}_i^1, \dots)\}$ 
+11    if  $\mathbf{p}_i^{\text{max1}} + \mathbf{p}_i^{\text{max2}} \geq \gamma$  then
+12      Insert  $(\mathbf{x}_i, \{\mathbf{y}_i^{\text{max1}}, \mathbf{y}_i^{\text{max2}}\})$  into  $D_{\text{train}}^{\text{uncertain}}$ 
+13       $\mathbf{p}_i^{\text{max1}}, \mathbf{p}_i^{\text{max2}} = \text{softmax}(\mathbf{p}_i^{\text{max1}}, \mathbf{p}_i^{\text{max2}})$ 
+14      Insert  $(\mathbf{p}_i^{\text{max1}}, \mathbf{p}_i^{\text{max2}})$  into  $\mathcal{W}_{\text{train}}^{\text{uncertain}}$ 
+15    else
+16      Insert  $(\mathbf{x}_i, \{\mathbf{y}_i^0, \mathbf{y}_i^1, \dots\})$  into  $D_{\text{train}}^{\text{uncertain}}$ 
+17      Insert  $(\mathbf{p}_i^0, \mathbf{p}_i^1, \dots)$  into  $\mathcal{W}_{\text{train}}^{\text{uncertain}}$ 
+
+```
+
+---
+
+### 3.2 CANDIDATE DYNAMIC DISTILLATION
+
+Our true label candidates distillation is established based on the observation that the generative model gains the capability to calibrate certain amount of noisy data instances after training on our derived deterministic (certain) dataset. Adhere to the observation, we first train our generative model only on deterministic dataset for  $\alpha$  warm-up epochs. We rely on such capable model to evaluate our uncertain dataset over a specified iteration  $\beta$ . During each evaluation, if model's predicted label lies in the candidate lists, the matched label candidate will increase accordingly. The weight list will then be normalized as well to maintain a summation to 1. After candidate weight update and model evaluation for uncertain data samples, we sample a specific label candidate from the candidate list multinomially based on the candidate weights. We treat such a sample label as the true label in this training epoch. The generative model is then trained on both deterministic pair and uncertain pair. Subsequently, the loss of generative model for uncertain sample is weighted by the sampled candidate's weight.
+
+{4}------------------------------------------------
+
+#### **Algorithm 2:** Distill True Label from Candidates during Training
+
+**Input:**  $\mathcal{G}_{\text{model}}, \mathcal{D}_{\text{train}}^{\text{certain}} : \{\mathbf{x}_i, \mathbf{y}_i\}_i^m, \mathcal{D}_{\text{train}}^{\text{uncertain}} : \{\mathbf{x}_i, (\mathbf{y}_i^0, \mathbf{y}_i^1, \dots)\}_i^{n-m}, \mathcal{W}_{\text{train}}^{\text{uncertain}} : \{(\mathbf{w}_i^0, \mathbf{w}_i^1, \dots)\}_i^{n-m}, \alpha, E, \beta$
+
+**Output:**  $\mathcal{G}_{\text{model}}$
+
+```
+
+1 for  $e = 0$  to  $E$  do
+2   if  $e \leq \alpha$  then
+3      $\{\bar{\mathbf{y}}_i\}_i^m = \mathcal{G}_{\text{model}}[\{\mathbf{x}_i\}_i^m]$  for  $\mathcal{D}_{\text{train}}^{\text{certain}}$ 
+4      $\text{loss} = \mathcal{F}_{\text{loss}}[\{\bar{\mathbf{y}}_i\}_i^m, \{\mathbf{y}_i\}_i^m]$ 
+5     Optimize  $\mathcal{G}_{\text{model}}$ 
+6   else
+7     for  $i = 0$  to  $\beta$  do
+8        $\{\bar{\mathbf{y}}_i\}_i^{n-m} = \mathcal{G}_{\text{model}}[\{\mathbf{x}_i\}_i^{n-m}]$  for  $\mathcal{D}_{\text{train}}^{\text{uncertain}}$ 
+9       if  $\{\bar{\mathbf{y}}_i\}_i^{n-m}$  in  $(\mathbf{y}_i^0, \mathbf{y}_i^1, \dots)$  then
+10        Increase corresponding  $\mathbf{w}_i^*$  by  $\frac{1-\mathbf{w}_i^*}{\beta}$ 
+11         $(\mathbf{w}_i^0, \mathbf{w}_i^1, \dots) = \text{softmax}[(\mathbf{w}_i^0, \mathbf{w}_i^1, \dots)]$ 
+12       $\{\mathbf{y}_i\}_i^{n-m} = \text{sample}(\mathbf{y}_i^0, \mathbf{y}_i^1, \dots)$  multinomially according to  $\mathcal{W}_{\text{train}}^{\text{uncertain}}$ 
+13       $\{\bar{\mathbf{y}}_i\}_i^{n-m} = \mathcal{G}_{\text{model}}[\{\mathbf{x}_i\}_i^{n-m}]$  for  $\mathcal{D}_{\text{train}}^{\text{uncertain}}$ 
+14       $\{\bar{\mathbf{y}}_i\}_i^m = \mathcal{G}_{\text{model}}[\{\mathbf{x}_i\}_i^m]$  for  $\mathcal{D}_{\text{train}}^{\text{certain}}$ 
+15       $\text{certain\_loss} = \mathcal{F}_{\text{loss}}[\{\bar{\mathbf{y}}_i\}_i^m, \{\mathbf{y}_i\}_i^m]$ 
+16       $\text{uncertain\_loss} = \{\bar{\mathbf{w}}_i\}_i^{n-m} \times \mathcal{F}_{\text{loss}}[\{\bar{\mathbf{y}}_i\}_i^{n-m}, \{\mathbf{y}_i\}_i^{n-m}]$ 
+17       $\text{loss} = \text{certain\_loss} + \text{uncertain\_loss}$ 
+18      Optimize  $\mathcal{G}_{\text{model}}$ 
+
+```
+
+## 4 SIMPLEX DENOISING LABEL DIFFUSION MODEL
+
+In terms of posterior approximation via generative models, we tackle it from the perspective of denoising diffusion models, which is designed for reconstructing high-fidelity data from pure noise iteratively. We view the true label inference as an progressively denoising process from noisy label based on input feature  $x$ . In this paper, we apply simplex diffusion model (Mahabadi et al., 2024), one of the continuous diffusion model, to approximate the true label posterior probability from noisy labels. Simplex diffusion model diffuses in simplex probability space, which aligns with our attempt to estimate the posterior distribution.
+
+**Label Simplex Representation** True label  $y$  will be represented in one-hot encoded format  $y \in \{0, 1\}^C$ . For specific category  $c$ ,  $y_c = 1$  and  $y_i = 0$  where  $i \neq c$ . Given the discrete nature of one-hot data representation, we need to first map such categorical data to continuous space to fit our continuous simplex diffusion model. We map the one-hot label representation  $y \in \{0, 1\}^C$  to  $k$ -logit simplex to generate  $s^y \in \{\pm k\}^C$ , whose  $i$ -th component satisfies
+
+$$s_{(i)}^c = \begin{cases} k, & \text{if } i = c, \\ -k & \text{otherwise.} \end{cases} \quad (1)$$
+
+where  $k \in \mathbb{R}$  is a hyperparameter.
+
+**Training** Let  $y \in p_{\text{data}}$  be the one-hot representation of a label with  $C$  classes and  $s^y = \{\pm k\}^C$  be its  $k$ -logit simplex representation of  $y$ . The simplex diffusion model forward process  $q(s_t^y | s_{t-1}^y)$  is defined as a Gaussian-Markov process that produces a sequence of latent variables  $s_1^y, \dots, s_T^y$  by gradually adding Gaussian noise at each time step  $t = 1, 2, \dots, T$  with variance  $\beta_t \in \mathbb{R}_{>0}$ :
+
+$$q(s_t^y | s_{t-1}^y) = \mathcal{N}(s_t^y | (1 - \beta_t)s_{t-1}^y, \beta_t \mathbf{I}) \quad (2)$$
+
+Let  $\epsilon_t \sim \mathcal{N}(0, k^2 \mathbf{I})$  as we convert data into simplex space,  $\alpha_t = 1 - \beta_t$ , and  $\bar{\alpha}_t = \prod_{j=1}^t \alpha_j$ . Sampling  $s_t^y$  at an arbitrary time step  $t$  has a closed-form solution:
+
+{5}------------------------------------------------
+
+$$s_t^y = \sqrt{\alpha_t} s_0^y + \sqrt{1 - \alpha_t} \epsilon_t \quad (3)$$
+
+Given a well-behaved noise schedule  $\{\beta_t\}_{t=1}^T$ , a little amount of Gaussian noise with variance  $\beta_t$  is injected, while a large amount  $1 - \beta_t$  of previous sample  $s_{t-1}^y$  is preserved for each time step  $t$ . At the last time step  $t = T$ , our original data is expected to be no different from pure Gaussian distribution  $\mathcal{N}(0, \mathbf{I})$ . Therefore, in the denoising process, we can sample random noise from a standard Gaussian distribution and recover it sequentially to samples from  $p_{\text{data}}$ . Such an approximation of the reverse process  $q(s_{t-1}^y | s_t, s_0)$  can be delivered via a neural network with parameters  $\theta$ ,  $p_\theta(s_{t-1}^y | s_t^y)$ . In the context of our posterior estimation, neural network is conditioned on  $s^{\tilde{y}}$ , where  $\tilde{y}$  is the noisy label, to approximate  $s_{t-1}^y$  at time step  $t$ . The reverse process then is parameterized as
+
+$$p_\theta(s_{t-1}^y | s_t^y, s^{\tilde{y}}, \mathbf{x}) = \mathcal{N}(\mu_\theta(s_t^y, t | s^{\tilde{y}}, \mathbf{x}), \Sigma_\theta(s_t^y, t | s^{\tilde{y}}, \mathbf{x})) \quad (4)$$
+
+As cross-entropy loss is typical in classification problem, we adopt it between the ground truth label and the model prediction given a noisy logit simplex  $s_t$  at time step  $t$ .
+
+$$\mathcal{L} = \mathbb{L}_{t, q(s_0^y | s^{\tilde{y}}, \mathbf{x}_i), q(s_t^y | s_0^y, s^{\tilde{y}}, \mathbf{x}_i)} \left[ - \sum_{i=1}^L \log p_\theta(y_i | s^{y_i}, t, s^{\tilde{y}_i}, \mathbf{x}_i) \right] \quad (5)$$
+
+**Noise Schedule** One important component in the diffusion forward process is the noise schedule. We follow the following cosine schedule for  $\alpha_t$ :
+
+$$\bar{\alpha}_t = \frac{f(t)}{f(0)}, \quad f(t) = \cos \left( \frac{t}{T} + \frac{s}{1+s} \cdot \frac{\pi}{2} \right)^2 \quad (6)$$
+
+**Inference** During the inference of the simplex diffusion model,  $s_T$  is sampled from the prior  $\mathcal{N}(0, k^2 \mathbf{I})$ . The model predictions are iteratively denoised for  $t = T, \dots, 1$  starting from  $k$ -logit simplex Gaussian noise. This reverse process can be approximated via an adjustment of Equation (3):
+
+$$s_{t-1} = \sqrt{\alpha_{t-1}} \hat{\mathcal{S}}_\theta(s_t, t | s^{\tilde{y}}, \mathbf{x}) + \sqrt{1 - \alpha_{t-1}} \epsilon_t \quad (7)$$
+
+where  $\hat{\mathcal{S}}_\theta$  is the model prediction of the ground-truth,  $s^{\tilde{y}}$  is noisy label simplex and  $\mathbf{x}$  is the input embedding, on which the model is conditioned. The model prediction  $\hat{\mathcal{S}}_\theta(s_t, t | s^{\tilde{y}}, \mathbf{x})$  is regarded as the hypothetical ground-truth and corrupt it by  $(t - 1)$  time steps. To construct the model prediction, we project the logits produced by the underlying conditional model via argmax to match the initial  $k$ -logit representation:
+
+$$s_{(i)}^c = \begin{cases} k, & \text{if } i = \text{argmax}(s^y), \\ -k & \text{otherwise.} \end{cases} \quad (8)$$
+
+## 5 EXPERIMENTS & RESULTS
+
+First, we introduce the tasks and datasets (20News Group, NumClaim, TREC, SemEval) that our experiments are conducted on (Section 5.1). Then, we describe our experimental setup (Section 5.2). Subsequently, we present the results of LLMs noise (Section 5.3) and synthetic noise, and real world noise (Section 5.4). Finally, we validate the effectiveness of each component in our framework (Section 5.5).
+
+### 5.1 TASKS AND DATASETS
+
+{6}------------------------------------------------
+
+For our experiments, we include financial numerical claim detection from [Shah et al. \(2024\)](#), question classification from [Li & Roth \(2002\)](#), semantic relation classification task from [Hendrickx et al. \(2019\)](#), and news topic modeling task from [Lang \(1995\)](#). A summary of datasets used with the train-validation-test split is provided in table 1. We provide brief details about each task and dataset in Appendix A.
+
+### 5.2 EXPERIMENTAL SETUP
+
+**Baselines** We compare SiDyP with the most relevant state-of-the-art baselines from three different categories in the realm of learning from noisy labels: (1) *Basic Performances* without specific design tackling noisy labels ([Devlin et al., 2019a](#)); (2) *Multi-Model Training Strategies*: **Co-Teaching** ([Han et al., 2018a](#)) and **JoCoR** ([Wei et al., 2020](#)). **Co-Teaching** trains two networks simultaneously and selects small-loss instances as clean samples for subsequent training. **JoCoR** also trains two networks simultaneously and use co-regularization to achieve agreement to filter out noisy samples by selecting instances with small losses; (3) *Generative Models for Noisy Matrix Estimation*: **NPC** ([Bae et al., 2022](#)) and **DyGen** ([Zhuang et al., 2023](#)). **NPC** utilize a generative model to calibrate the prediction of classifiers trained on noisy labels via a transition matrix. **DyGen** leverages the training dynamics to detect noisy samples and use a generative model to calibrate.
+
+**Evaluation** We evaluate all the experiments using accuracy on clean test datasets. We only run the model on the test dataset at the point when the validation accuracy achieves the highest during training. The reported test performances of all baselines and our SiDyP is selected by this procedure. **Given that the success of existing weakly-supervised learning methods relies heavily on clean validation samples** ([Zhu et al., 2023](#)), **we use noisy validation sets for model selections in all experiments**. All experiments are run under 5 random seeds. We report the mean of the performances and the standard deviation.
+
+**Implementation Details** We implement SiDyP using PyTorch ([Paszke et al., 2019](#)) and HuggingFace ([Wolf et al., 2020](#)). We use BERT ([Devlin et al., 2019a](#)) as our PLC in Stage I. For our baselines which contains PLC fine-tuning on noisy label datasets (**NPC**, **DyGen**, **GaDyP**), we use only one coherent PLC results for their individual post process to ensure a fair comparison as random seeds affect network initialization, synthetic noise generation, etc. More training details are revealed in Appendix D.
+
+### 5.3 LLMs NOISE EXPERIMENTS
+
+We run extensive experiments on various tasks and diversified LLM noises. First, we examine our framework in NumClaim, TREC, and SemEval labelled by Llama-3-70b-chat-hf ([Dubey et al., 2024](#)) in both zero-shot and few-shot manner. We only prompt 20News Group in zero-shot manner as it is a document level task, and Llama-3-70b has a context length limitation of 8192, which is not sufficient for few-shot learning. Then, to test SiDyP under diversified LLM noises, we prompt Meta-Llama-3.1-70B-Instruct-Turbo ([Dubey et al., 2024](#)), Meta-Llama-3.1-405B-Instruct-Turbo ([Dubey et al., 2024](#)), gpt-4o ([OpenAI et al., 2024](#)), and Mixtral-8x22B-Instruct-v0.1 ([Jiang et al., 2024](#)) in both zero-shot and few-shot prompting manners on SemEval task. We address the experiment details and results in the following.
+
+**LLM Prompting** For both zero-shot and few-shot manners, we use same prompts of same tasks for different LLMs (See prompting details in Appendix B.2). Notably, when prompting the LLM to label data, it is not guaranteed that it would follow the instructions and output in the specified format. It leads to missing labels for some data samples in our annotated datasets. Although we observe that the portion of missing labels is trivial (i.e. highest missing label ratio (only 0.014%) happens in 20News Group dataset. See full statistics in Appendix E), we still want to preserve those data samples to maintain data’s integrity for training. Therefore, we randomly assign a label to those
+
+| Dataset | # Labels | Dataset Size |  |  |
+|-|-|-|-|-|
+|  |  | Train | Valid | Test |
+| NumClaim | 2 | 1715 | 429 | 537 |
+| TREC | 6 | 5033 | 500 | 500 |
+| SemEval | 9 | 1749 | 178 | 600 |
+| 20News | 20 | 9051 | 2263 | 7532 |
+
+Table 1: Summary of datasets used. Dataset size denotes the number of samples in the benchmark.
+
+{7}------------------------------------------------
+
+missing-label samples according to a uniform distribution over all labels. We use the dataset after random assignment for both training and validation. We do not apply random assignment for test dataset and report LLMs' raw accuracy in Table 2 and 3.
+
+**Results** Table 2 shows the results of Llama-3-70b on all four tasks. Our method (SiDyP) outperforms all baselines by a notable margin 2.05& across all tasks in both prompting manners. There are averagely 6.34% samples of a fine-tuned PLC, and 5.77% of raw Llama-3-70b labelled samples successfully corrected by SiDyP. The performance gain on SemEval task is the most significant, achieving an average increase of 3.7%. This indicates that SiDyP is robust to high noise ratio dataset. Although the base performance of NumClaim is competitive, SiDyP is able to bring an average of 20.19% marginal increase. For NumClaim in few-shot manner, our method is the only one to outperform Llama-3-70b raw labelling accuracy and fine-tuned PLC. We also observe that both methods of multi-model training strategies struggle in these tasks. We think it's because of its training from scratch as PLC possesses prior knowledge that would be helpful despite that they are prone to noisy labels. Transition matrix-based methods performs generally better as it leverages pre-trained models and calibrate it via a post-process.
+
+| Datasets (→)<br>Method (↓) | NumClaim |  | TREC |  | SemEval |  | 20News |
+|-|-|-|-|-|-|-|-|
+|  | Zero-shot | Few-shot | Zero-shot | Few-shot | Zero-shot | Few-shot | Zero-shot |
+| Llama-3-70b | 89.94 | 95.53 | 81.80 | 84.00 | 47.50 | 48.50 | 74.04 |
+| PLC | 90.54±0.72 | 95.11±0.30 | 80.64±0.94 | 77.72±1.34 | 51.59±0.44 | 50.46±0.72 | 71.2±0.52 |
+| Co-teaching | 82.31±1.11 | 83.77±4.05 | 69.20±2.09 | 67.20±2.21 | 46.53±4.16 | 44.29±6.18 | 35.28±12.18 |
+| JoCoR | 83.35±1.97 | 85.82±2.05 | 70.80±3.00 | 65.82±2.17 | 45.66±3.25 | 44.11±2.23 | 42.39±11.98 |
+| NPC | 90.83±0.62 | 95.04±0.61 | 79.48±1.97 | 78.88±1.47 | 50.73±1.70 | 47.53±1.26 | 70.60±0.51 |
+| DyGen | <u>91.13±0.30</u> | <u>95.41±0.28</u> | <u>82.88±0.71</u> | <u>84.80±0.86</u> | <u>60.86±0.81</u> | <u>60.79±2.23</u> | <u>71.42±0.31</u> |
+| <b>SiDyP</b> | <b>93.63±0.84</b> | <b>95.97±0.15</b> | <b>84.76±0.79</b> | <b>85.60±0.44</b> | <b>64.26±0.27</b> | <b>64.79±0.96</b> | <b>72.66±0.58</b> |
+
+Table 2: Performance comparison of Llama-3-70b on zero-shot and few-shot learning tasks across multiple datasets, including NumClaim, TREC, SemEval, and 20News. Results are reported as classification accuracy with mean and standard deviations of 5 runs under different seed. **Bold** represents the best performance, while underline presents the second-best performance. Same seed setting and presentation apply in the following tables.
+
+**Robustness Check for Diversified LLMs** Instead of limiting to Llama-3-70b, we extend our experiments to a variety of LLMs of different families with different sizes. We follow the same prompting and assignment procedure as describe above (See details in Appendix B.1). We aim to check the robustness of our SiDyP framework under multiple LLM-generated label noise. Table 3 shows the results of various types of LLM label noise on SemEval. Our method (SiDyP) achieves a significantly better performance compared to all baselines across all LLMs and both prompting manners. Specifically, SiDyP obtain an average of 4.47% performance gain than the second best baseline. Comparing to a fine-tuned PLC on noisy dataset, our method is able to boost the performance by an average of 8.02%. Notably, a significant average increase of 11.73% than LLMs raw accuracy is brought by our method. Combining all, we validate that our method is robust and resilient to different types of LLM noise and different prompting methods.
+
+### 5.4 SYNTHETIC AND REAL-WORLD NOISE EXPERIMENTS
+
+Observing significant performance improvement in LLM-generated label noises, we further test our method under different families of noises, synthetic and real-world, on SemEval task. We reveal the experiment details and results below.
+
+**Noise Generation** We inject three types of synthetic noises, including **Symmetric Noise (SN)**, **Asymmetric Noise (ASN)**, and **Instance-Dependent Noise (IDN)**. Symmetric Noise flips labels
+
+{8}------------------------------------------------
+
+| Dataset (→) |  | SemEval |  |  |  |  |  |  |  |
+|-|-|-|-|-|-|-|-|-|-|
+| Method (↓) | Llama-3.1-70b |  | Llama-3.1-405b |  | GPT4o |  | Mixtral-8x22b |  |  |
+|  | Zero-shot | Few-shot | Zero-shot | Few-shot | Zero-shot | Few-shot | Zero-shot | Few-shot |  |
+| Base | 52.66 | 55.16 | 55.16 | 52.16 | 56.50 | 57.66 | 42.66 | 40.83 |  |
+| PLC | 60.26 $\pm$ 0.89 | 57.70 $\pm$ 1.10 | 54.76 $\pm$ 1.24 | 53.96 $\pm$ 0.12 | 58.63 $\pm$ 0.86 | 61.56 $\pm$ 0.93 | 49.29 $\pm$ 1.31 | <u>46.33<math>\pm</math>1.32</u> |  |
+| Co-teaching | 52.50 $\pm$ 5.35 | 54.09 $\pm$ 3.56 | 45.51 $\pm$ 1.96 | 51.36 $\pm$ 0.89 | 52.13 $\pm$ 5.36 | 60.91 $\pm$ 5.58 | 39.3 $\pm$ 6.79 | 27.35 $\pm$ 2.55 |  |
+| JoCoR | 45.06 $\pm$ 0.97 | 44.26 $\pm$ 9.55 | 45.39 $\pm$ 4.29 | 50.28 $\pm$ 3.07 | 53.31 $\pm$ 5.43 | 53.05 $\pm$ 4.78 | 32.94 $\pm$ 8.73 | 27.26 $\pm$ 1.46 |  |
+| NPC | 60.13 $\pm$ 0.77 | 57.49 $\pm$ 3.00 | 55.06 $\pm$ 2.99 | <u>54.53<math>\pm</math>1.24</u> | 59.56 $\pm$ 0.90 | 61.40 $\pm$ 1.53 | 47.56 $\pm$ 1.26 | 41.96 $\pm$ 0.70 |  |
+| DyGen | <u>68.53<math>\pm</math>0.88</u> | <u>64.53<math>\pm</math>2.85</u> | <u>59.69<math>\pm</math>1.31</u> | 51.69 $\pm$ 2.02 | <u>62.63<math>\pm</math>0.91</u> | <u>64.03<math>\pm</math>0.82</u> | <u>50.63<math>\pm</math>6.43</u> | 40.23 $\pm$ 1.41 |  |
+| <b>SiDyP</b> | <b>71.66<math>\pm</math>0.91</b> | <b>67.43<math>\pm</math>1.36</b> | <b>62.76<math>\pm</math>0.99</b> | <b>60.46<math>\pm</math>2.06</b> | <b>66.86<math>\pm</math>0.48</b> | <b>68.83<math>\pm</math>1.07</b> | <b>57.96<math>\pm</math>1.94</b> | <b>50.66<math>\pm</math>2.02</b> |  |
+
+Table 3: Performance comparison of Llama-3.1-70b, Llama-3.1-405b, GPT4o, and Mixtral-8×22b on zero-shot and few-shot learning tasks on SemEval. "Base" represents LLM's raw accuracy on test sets.
+
+uniformly to other classes (Zhuang et al., 2023; Bae et al., 2022; Han et al., 2018a). Asymmetric Noise flips labels with similar classes (Zhuang et al., 2023; Bae et al., 2022). Instance-Dependent Noise flips label with a probability proportional to the features of the sample (Zhuang et al., 2023; Bae et al., 2022). As synthetic noise is controlled, we use the noise ratio of 50% to make a comparison with LLM noise. We choose 50% because LLM noises ratio on SemEval are around 50%. For real-world noise, we take majority vote on the 164 labeling functions' output provided in WRENCH (Zhang et al., 2021a) for the SemEval dataset.
+
+**Results** In Table 4, we present the results of various synthetic noises and real-world noises on SemEval. SiDyP achieves an average of 2.80% increase compared to the second-best baseline. We observe that the performance increase between SiDyP and a strong baseline DyGen on LLM noises (5.21%) is higher than it on synthetic noises (3.26%). This is because DyGen performs better on synthetic datasets as such noises are less intricate (Zhuang et al., 2023). It further validates that LLM-generated label noises align more with real-world noise, making it more challenging for other baselines to arrive at accurate estimates. SiDyP, on the other hand, is resilient to all types of label noise, and brings improvement consistently. Moreover, all baselines are prone to the real-world noise as they struggle to be comparable with Base and PLC performances. SiDyP is the only one outperforming them by 3.36% and 1.73% increase respectively.
+
+### 5.5 EFFECTIVENESS OF DIFFERENT COMPONENTS
+
+We investigate the effectiveness of each component in our SiDyP framework on Llama-3-70b labelled SemEval dataset in both zero-shot and few-shot manners. We eliminate them individually to validate their impact on performances: (1) Replacing our dynamic distillation priors with fix certain priors (for each sample, it's only associated with one fix certain label) in Stage II; (2) Substituting Stage II's generative model, simplex diffusion model with Dirichlet variational auto-encoder (VAE) (Joo
+
+{9}------------------------------------------------
+
+et al., 2019) and Gaussian diffusion model (Sohl-Dickstein et al., 2015; Han et al., 2022; Chen et al., 2023b). Table 5 indicates the result. All experiments are conducted using same PLC fine-tuned results, and share the same value of hyper-parameters. Our simplex denoising label diffusion model surpasses Dirichlet VAE by an average of 2.17%. We believe such an enhancement comes from the de-noising capability of diffusion model. Moreover, it outperforms the Gaussian diffusion model by 8.58%. Our simplex denoising label diffusion model, which diffuses in probability simplex space, constructs a more reliable and accurate label probability from noisy labels. Besides, our dynamic prior distillation brings 1.53% increase. We further validate the improvement source of our dynamic prior by comparing the portion of correct labels we collect with fix prior method (See Appendix F for more details). Combining all, it confirms that our candidate retrieval algorithm could derive more true labels, and our prior distillation could find the correct labels among the candidates.
+
+## 6 RELATED WORK
+
+Weak-supervision in machine learning includes incomplete, inexact, and inaccurate categories, each tailored to specific imperfections in data (Zhou, 2018). Inexact supervision deals with broad labels, while inaccurate supervision, where labels are erroneous, employ techniques like data programming (Ratner et al., 2017), human-in-the-loop strategies (Zhang et al., 2022), and contrastive loss for enhanced learning from data similarities and differences (Yu et al., 2020). Zhang et al. (2021a) apply
+
+a two-stage model to manage inaccurate supervision, initially denoising data before training on refined labels. In the landscape of learning from noisy labels, Iscen et al. (2022) proposed that there supposed to be similarities among training instances in the feature/embedding space, leading to the consistency of labels between data instances and their neighbors. NPC proposed by Bae et al. (2022), lies in the class of transition matrix base method. The true label is inferred by a prior, estimated by a pretrained classifier, and a posterior, approximated by a generative model. DyGen (Zhuang et al. (2023)) infers true label based on the training dynamics during finetuning the pretrained language model. The feasibility of Diffusion Models in classification problems are explored and validated by Han et al. (2022). Chen et al. (2023a) is the very first to exploit the Gaussian diffusion model in the context of noisy label learning. LLMs have also been leveraged to iteratively expand label space under extremely weak supervision. X-MLClass (Li et al., 2024) demonstrated significant improvements in label discovery and multi-label classification accuracy in open-world settings. Additionally, explanation-aware ensembling methods like EASE (Yu et al., 2023) further illustrate how LLMs can be used to improve in-context learning by effectively guiding predictions and mitigating label noise.
+
+## 7 DISCUSSION
+
+In this paper, we propose a denoising framework, SiDyP, to enhance the learning from Llama-3 generated labels noise. Leveraging the principle of partial label learning and neighbor consistency, our label candidate retrieval and prior dynamic refinement algorithm alleviate the harm of incorrect labels during the training of a classifier. We introduce a simplex diffusion model to reconstruct categorical label data and utilize it as a posterior probability distribution estimator to calibrate the inaccurate prior distribution. Our framework boosts few-shot Llama-3 classification accuracy by a 7.69% average increase across all datasets of diverse noise ratios. We believe that our work sheds light on the realm of employing the diffusion model in the context of learning from noisy labels as well as the topics of calibrating incorrect llm-generated datasets.
+
+| Datasets (→) | SemEval |  |  |
+|-|-|-|-|
+|  | Method (↓) | Zero-shot | Few-shot |
+| FP + Dir-VAE |  | 60.86 $\pm$ 0.81 | 60.79 $\pm$ 2.23 |
+| FP + Sim-Diff |  | 62.73 $\pm$ 1.06 | 63.26 $\pm$ 1.06 |
+| DP + Gau-Diff |  | 54.53 $\pm$ 3.48 | 57.36 $\pm$ 3.64 |
+| DP + Sim-Diff (SiDyP) |  | <b>64.26<math>\pm</math>0.27</b> | <b>64.79<math>\pm</math>0.96</b> |
+
+Table 5: Different components efficacy on zero-shot and few-shot labelled SemEval by Llama-3-70b. "FP"=fix prior. "DP"=our dynamic prior. "Dir-VAE"=Dirichlet VAE. "Gau-Diff"=Gaussian diffusion model. "Sim-Diff"=simplex diffusion model.
+
+ Rest of paper (reference and Appendix) is removed.

@@ -1,0 +1,340 @@
+
+
+{0}------------------------------------------------
+
+# CLIQUEFORMER: MODEL-BASED OPTIMIZATION WITH STRUCTURED TRANSFORMERS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Expressive large-scale neural networks enable training powerful models for prediction tasks. However, in many engineering and science domains, such models are intended to be used not just for prediction, but for design—e.g., creating new proteins that serve as effective therapeutics, or creating new materials or chemicals that maximize a downstream performance measure. Thus, researchers have recently grown an interest in building deep learning methods that solve offline *model-based optimization* (MBO) problems, in which design candidates are optimized with respect to surrogate models learned from offline data. However, straightforward application of predictive models that are effective at predicting in-distribution properties of a design are not necessarily the best suited for use in creating new designs. Thus, the most successful algorithms that tackle MBO draw inspiration from reinforcement learning and generative modeling to meet the in-distribution constraints. Meanwhile, recent theoretical works have observed that exploiting the structure of the target black-box function is an effective strategy for solving MBO from offline data. Unfortunately, discovering such structure remains an open problem. In this paper, following first principles, we develop a model that learns the structure of an MBO task and empirically leads to improved designs. To this end, we introduce *Cliqueformer*—a scalable transformer-based architecture that learns the black-box function’s structure in the form of its *functional graphical model* (FGM), thus bypassing the problem of distribution shift, previously tackled by conservative approaches. We evaluate Cliqueformer on various tasks, ranging from high-dimensional black-box functions from MBO literature to real-world tasks of chemical and genetic design, consistently outperforming the baselines.
+
+## 1 INTRODUCTION
+
+Most of the common use cases of deep learning (DL) so far have taken the form of prediction tasks (Hochreiter & Schmidhuber, 1997; He et al., 2016; Krizhevsky et al., 2017; Vaswani et al., 2017). However, in many applications, e.g. protein synthesis or chip design, we might want to use powerful models to instead solve *optimization* problems. Clearly, accurate predictions of a target score of an object could be used to find a design of the object that maximizes that score. Such a methodology is particularly useful in engineering problems in which evaluating solution candidates comes with big risk. For example, synthesizing a proposed protein requires a series of wet lab experiments and induces extra cost and human effort (Gómez-Bombarelli et al., 2018; Brookes et al., 2019). Thus, to enable proposing *de-novo* generation of strong solution candidates, researchers have drawn their attention to offline *black-box optimization* (BBO), often referred to as *model-based optimization* (MBO). In this paradigm, first, a surrogate model of the score is learned from offline data. Next, a collection of designs is trained to maximize the surrogate, and then proposed as candidates for maximizers of the target score (Gómez-Bombarelli et al., 2018; Kumar et al., 2021).
+
+Unfortunately, model-based optimization (MBO) introduces unique challenges not encountered in classical prediction tasks. The most significant issue arises from the incomplete coverage of the design space by the data distribution. This limitation leads to a phenomenon known as *distribution shift*, where optimized designs drift away from the original data distribution. Consequently, this results in poor proposals with significantly overestimated scores (Trabucco et al., 2022; Geng,
+
+{1}------------------------------------------------
+
+054 (2023). To address it, popular MBO algorithms have been employing techniques from offline reinforcement learning (Kumar et al., 2020; Trabucco et al., 2021) and generative modeling (Kumar & Levine, 2020; Mashkaria et al., 2023) to enforce the in-distribution constraint. Meanwhile, much of the recent success of DL has been driven by domain-specific neural networks that, when scaled together with the amount of data, lead to increasingly better performance. While researchers have managed to establish such models in several fields, it is not immediately clear how to do it in MBO. Recent theoretical work, however, has shown that MBO methods can benefit from information about the target function’s *structure*, which can be implemented as a decomposition of the surrogate over the target’s *functional graphical model* (Grudzien et al., 2024, FGM). This insight opens up new possibilities for developing more effective MBO models by injecting such structure into their architecture. However, how to integrate such decompositions into scalable neural networks remains an open question, and addressing this challenge is the focus of this work.
+
+![Figure 1: Three plots illustrating the first building block of the LRBF tasks. (a) Contour curves in XY-planes showing a 3D surface. (b) Chain of triangles FGM showing a graph structure. (c) Score vs Dimension plot comparing Cliqueformer (blue line) and COMs (red line) across dimensions 11, 21, 31, 41, and 51. Cliqueformer maintains a high score around 0.7, while COMs' score drops from 0.6 to 0.2.](e05232e09f8d0a603eef5812f7313d4b_img.jpg)
+
+055  
+056  
+057  
+058  
+059  
+060  
+061  
+062  
+063  
+064  
+065  
+066  
+067  
+068  
+069  
+070  
+071  
+072  
+073  
+074  
+075
+
+(a) Contour curves in XY-planes      (b) Chain of triangles FGM      (c) Score vs Dimension
+
+Figure 1: Three plots illustrating the first building block of the LRBF tasks. (a) Contour curves in XY-planes showing a 3D surface. (b) Chain of triangles FGM showing a graph structure. (c) Score vs Dimension plot comparing Cliqueformer (blue line) and COMs (red line) across dimensions 11, 21, 31, 41, and 51. Cliqueformer maintains a high score around 0.7, while COMs' score drops from 0.6 to 0.2.
+
+076  
+077  
+078  
+079  
+080  
+081  
+082
+
+Figure 1: The first building block of the LRBF tasks are 3D radial-basis functions (left). These functions are applied to triplets arranged in a chain of triangles FGM (center) and linearly mixed. Then, an observable designs are produced with non-linear transformations of the chain and, together with their values, form a dataset. We show the score (right) of our structure-learning **Cliqueformer** and structure-oblivious **COMs** (Trabucco et al., 2021), against the dimension of LRBF functions, modulated only by varying the number of triangles. Cliqueformer, unlike COMs, sustains strong performance across all dimensions. More results in Section 5.
+
+083  
+084  
+085  
+086  
+087  
+088  
+089  
+090  
+091  
+092  
+093  
+094  
+095  
+096  
+097  
+098  
+099  
+100  
+101  
+102  
+103  
+104  
+105  
+106  
+107
+
+In contrast to previous works, in our paper, we develop a scalable model that tackles MBO by learning the structure of the black-box function through the formalism of functional graphical models. Our architecture aims to solve MBO by 1) decomposing the predictions over the *cliques* of the function’s FGM, and 2) enforcing the cliques’ marginals to have wide coverage with our novel form of the variational bottleneck (Kingma & Welling, 2013; Alemi et al., 2016). However, building upon our Theorem 2, we do not follow Grudzien et al. (2024) during the FGM discovery step, and instead subsume it in the learning algorithm. To enable scaling to high-dimensional problems and large datasets, we employ the transformer backbone (Vaswani et al., 2017). Empirically, we demonstrate that our model, **Cliqueformer**, inherits the scalability guarantees of MBO with FGM (see Figure 1). We further demonstrate its superiority to baselines in a suite of tasks with latent radial-basis functions (Grudzien et al., 2024) and real-world chemical (Hamidieh, 2018) and DNA design tasks (Trabucco et al., 2022; Uehara et al., 2024).
+
+## 2 PRELIMINARIES
+
+In this section, we provide the necessary background on model-based optimization. Additionally, we cover the basics of functional graphical models on top of which we build **Cliqueformer**.
+
+### 2.1 MODEL-BASED OPTIMIZATION
+
+We consider a model-based optimization problem, where we are given a dataset  $\mathcal{D} = \{\mathbf{x}^i, y^i\}_{i=1}^N$  of examples  $\mathbf{x} \in \mathcal{X}$ , following distribution  $p(\mathbf{x})$ , and their values  $y = f(\mathbf{x}) \in \mathbb{R}$  under an unknown (black-box) function  $f : \mathcal{X} \rightarrow \mathbb{R}$ . Our goal is to optimize this function offline—to find its maximizer
+
+$$\mathbf{x}^* = \arg \max_{\mathbf{x} \in \mathcal{X}} f(\mathbf{x}) \quad (1)$$
+
+by only using information provided in  $\mathcal{D}$  (Kumar & Levine, 2020). Sometimes, a more general objective in terms of a *policy* over  $\pi(\mathbf{x})$  is also used,  $\eta(\mathbf{x}) = \mathbb{E}_{\mathbf{x} \sim \pi}[f(\mathbf{x})]$ . In either form, unlike in
+
+{2}------------------------------------------------
+
+Bayesian optimization, we cannot make additional queries to the black-box function (Brochu et al., 2010; Kumar & Levine, 2020). This formulation represents settings in which obtaining such queries is prohibitively costly, such as tests of new chemical molecules or of new hardware architectures (Kim et al., 2016; Kumar et al., 2021).
+
+To solve MBO, it is typical to learn a model  $f_\theta(\mathbf{x})$  of  $f(\mathbf{x})$  parameterized by a vector  $\theta$  with a regression method and data from  $\mathcal{D}$ ,
+
+$$L(\theta) = \mathbb{E}_{(\mathbf{x}, y) \sim \mathcal{D}} [(f_\theta(\mathbf{x}) - y)^2] + \text{Reg}(\theta) \quad (2)$$
+
+where  $\text{Reg}(\theta)$  is an optional regularizer. Classical methods choose  $\text{Reg}(\theta)$  to be identically zero, while conservative methods use the regularizer to bring the values of examples out of  $\mathcal{D}$  down. For example, the regularizer of Conservative Objective Model’s (Trabucco et al., 2021, COMs) is
+
+$$\text{Reg}_{\text{com}}(\theta) = \alpha (\mathbb{E}_{\mathbf{x} \sim \mu_{\theta_\perp}} [f_\theta(\mathbf{x})] - \mathbb{E}_{\mathbf{x} \sim \mathcal{D}} [f_\theta(\mathbf{x})]), \quad \alpha > 0,$$
+
+where  $(\cdot)_\perp$  is the stop-gradient operator and  $\mu_{\theta_\perp}(\mathbf{x})$  is the distribution obtained with a few gradient ascent steps on  $\mathbf{x}$  initialized from  $\mathcal{D}$ . This distribution depends on the value of  $\theta$  but is not differentiated through while computing the loss’s gradient, and thus we denote it by  $\theta_\perp$ . Unfortunately, in addition to the extra computational cost that the inner-loop gradient ascent induces, COMs’s regularizer limits the amount of improvement that it allows its designs to make. This is particularly frustrating since recent work on functional graphical models (Grudzien et al., 2024, FGM) delivered a premise of large improvements in the case when the black-box function’s graph can be discovered, as we explain in the next subsection.
+
+### 2.2 FUNCTIONAL GRAPHICAL MODELS
+
+An FGM of a high-dimensional function  $f(\mathbf{x})$  is a graph over individual components of  $\mathbf{x}$  that separates  $x_i, x_j \in \mathbf{x}$  if their contributions to  $f(\mathbf{x})$  are independent of each other. Knowing such a structure of  $f$  one can eliminate interactions between independent variables from a model that approximates it, and thus prevent an MBO algorithm from exploiting them. We summarize basic properties of FGMs below. In what follows, we denote  $\mathcal{X}_{-i}$  as the design (input) space without the  $i^{\text{th}}$  subspace, and  $\mathbf{x}_{-i}$  as its element<sup>1</sup>. We also write  $[K]$  to denote the set  $\{1, \dots, K\}$ .
+
+**Definition 1.** Let  $\mathbf{x} = (x_v \mid v \in \mathcal{V})$  be a joint variable with index set  $\mathcal{V}$ , and  $f(\mathbf{x})$  be a real-valued function. An FGM  $\mathcal{G} = (\mathcal{V}, \mathcal{E})$  of  $f(\mathbf{x})$  is a graph where the edge set  $\mathcal{E} \subset \mathcal{X}^2$  is such that,
+
+$$\exists f_{-i} : \mathcal{X}_{-i} \rightarrow \mathbb{R} \text{ and } f_{-j} : \mathcal{X}_{-j} \rightarrow \mathbb{R}, \text{ with } f(\mathbf{x}) = f_{-i}(\mathbf{x}_{-i}) + f_{-j}(\mathbf{x}_{-j}), \text{ implies } (i, j) \notin \mathcal{E}.$$
+
+See Figure 2 for illustration.
+
+The basic result about FGMs is that they allow for decomposition of the target function into sub-functions with smaller, partially-overlapping inputs, from the FGM’s set of maximal cliques  $\mathcal{C}$ ,
+
+$$f(\mathbf{x}) = \sum_{C \in \mathcal{C}} f_C(\mathbf{x}_C). \quad (3)$$
+
+Intuitively, the decomposition enables more efficient learning of the target function since it can be constructed by adding together functions defined on smaller inputs, which are easier to learn. This, in turn, allows for more efficient MBO since the joint solution  $\mathbf{x}^*$  can be recovered by stitching individual solutions  $\mathbf{x}_C^*$  to smaller problems. This intuition is formalized by the following theorem.
+
+**Theorem 1** (Grudzien et al. (2024)). Let  $f(\mathbf{x})$  be a real-valued function,  $\mathcal{C}$  be the set of maximal cliques of its FGM, and  $\Pi$  be a policy class. Let  $C_{\text{stat}}$  and  $C_{\text{opt}}$  be constants that depend on the probability distribution of  $\mathbf{x}$  and function approximator class’s complexity, respectively, defined in Appendix A. Then, the regret of MBO with the FGM information is given by,
+
+<sup>1</sup>For example, if  $\mathcal{X} = \mathcal{X}_1 \times \mathcal{X}_2 \times \mathcal{X}_3$  and  $\mathbf{x} = (x_1, x_2, x_3)$ , then  $\mathcal{X}_{-2} = \mathcal{X}_1 \times \mathcal{X}_3$ , and  $\mathbf{x}_{-2} = (x_1, x_3)$ .
+
+{3}------------------------------------------------
+
+$$\eta(\pi^*) - \eta(\hat{\pi}_{FGM}) \leq C_{stat} C_{cpx} \max_{\pi \in \Pi, \mathbf{x} \in \mathcal{X}, C \in \mathcal{C}} \frac{\pi(\mathbf{x}_C)}{p_C(\mathbf{x}_C)}.$$
+
+The implication of this theorem is that the FGM-equipped function approximator does not require the dataset to cover the entire design space. Rather, it only requires that the individual cliques of the space be covered, which is a much milder requirement, especially when the cliques are small. In the next section, we show how these results can be combined with a transformer, mitigate the distribution shift problem, and enable efficient MBO.
+
+## 3 CLIQUEFORMER
+
+This section introduces a neural network model designed to solve MBO problems through standard end-to-end training on offline datasets. We present a new theoretical result, outline the key desiderata for such a model, and propose an architecture—*Cliqueformer*—that addresses these requirements.
+
+### 3.1 NON-UNIQUENESS OF STRUCTURE DISCOVERY
+
+The regret bound from Theorem 1 applies to methods that use the target function’s FGM in their function approximation. It implies that such methods can solve even very high-dimensional problems if their underlying FGMs have low-dimensional cliques or, simply speaking, are *sparse*. Since, in general, no assumptions about the input can be made, this motivates learning a representation of the input for which one can make distributional assumptions and infer the FGM with statistical tests. Following this reasoning, Grudzien et al. (2024) offer a heuristic technique for discovering an FGM over learned, latent, normally-distributed variables. However, as we formalize with the following theorem, even such attempts are futile in dealing with black-box functions.
+
+**Theorem 2.** *Let  $d \geq 2$  be an integer and  $\mathbf{x} \in \mathbb{R}^d$  be a random variable with positive density in  $\mathbb{R}^d$ . There exists a function  $f(\mathbf{x})$  and two different reparameterizations,  $\mathbf{z} = z(\mathbf{x})$  and  $\mathbf{v} = v(\mathbf{x})$ , of  $\mathbf{x}$ , that both follow a standard-normal distribution, but the FGM of  $f$  with respect to  $\mathbf{z}$  is a complete graph (has all possible edges), and with respect to  $\mathbf{v}$  it is an empty graph (has no edges).*
+
+*Proof Sketch.* The proof is a construction. We first map  $\mathbf{x}$  to a standard-normal variable  $\mathbf{z}$  with tools from high-dimensional statistics. We then introduce scalar variable  $y$  that is a function of  $\mathbf{z}$  and has a complete FGM. We then show that we can rotate  $\mathbf{z}$  onto another normal variable  $\mathbf{v}$  with respect to which  $y$  is a function with an empty FGM (see Figure 3 for illustration). We complete the proof by showing how to express  $y$  as a function of  $\mathbf{x}$ . The full proof can be found in Appendix A.
+
+The theorem implies that FGM is not a fixed attribute of a function that can be estimated from the data, but instead should be viewed as a property of the input’s reparameterization. Furthermore, different reparameterizations feature different FGMs with varied levels of decomposability, some of which may not significantly simplify the target function. This motivates a reverse approach that starts by defining a desired FGM and learning representations of the input that align with the graph. In the next subsection, we introduce *Cliqueformer*, where the FGM is specified as a hyperparameter of the model and a representation of the data that follows its structure is learned.
+
+### 3.2 ARCHITECTURE
+
+The goal of this subsection is to derive an MBO model that can simultaneously learn the target function as well as its structure, and thus be readily applied to MBO. First, we would like the model to decompose its prediction into a sum of models defined over small subsets of the input variables in the manner of Equation (3). As discussed in the previous subsection, efforts to discover such a structure are impractical since there exists a plethora of reparameterizations of the data and their
+
+![Figure 3: Illustration of construction in the proof of Theorem 2 for d = 2. The plot shows a 2D coordinate system with axes z1 and z2. A red arrow represents the vector z, and a blue arrow represents the vector v. The vector z is rotated 90 degrees counter-clockwise to become v. The plot also shows concentric circles representing the contours of a function f(z) and straight lines representing the contours of the same function f(v). A color bar on the right indicates the value of the function, ranging from 0 to 1.](9d82062b2c703dc7a51722f8978bb856_img.jpg)
+
+Figure 3: Illustration of construction in the proof of Theorem 2 for d = 2. The plot shows a 2D coordinate system with axes z1 and z2. A red arrow represents the vector z, and a blue arrow represents the vector v. The vector z is rotated 90 degrees counter-clockwise to become v. The plot also shows concentric circles representing the contours of a function f(z) and straight lines representing the contours of the same function f(v). A color bar on the right indicates the value of the function, ranging from 0 to 1.
+
+Figure 3: Illustration of construction in the proof of Theorem 2 for  $d = 2$ . Red axes represent  $\mathbf{z}$  and blue axes represent  $\mathbf{v}$ . When considered a function of  $\mathbf{z}$ , the contour curves (straight lines) of  $f$  are a function of both  $z_1$  and  $z_2$ , but as a function of  $\mathbf{v}$ , they only depend on  $v_1$ . The density of the Gaussian distribution (green curves) are identical circles for both variables.
+
+{4}------------------------------------------------
+
+corresponding FGMs of varied decomposabilities. Thus, instead, we propose that the FGM be defined first, and a representation of the data be learned to align with the chosen structure.
+
+**Desideratum 1.** *The model should follow a pre-defined FGM decomposition in a learned space.*
+
+Accomplishing this desideratum is simple. A model that we train should, after some transformations, split the input’s representations, denoted as  $\mathbf{z}$ , into partially-overlapping cliques,  $(\mathbf{z}_{C_1}, \dots, \mathbf{z}_{C_{N_{\text{clique}}}})$ , and process them independently, followed by a summation. To implement this, we specify how many cliques we want to decompose the function into,  $N_{\text{clique}}$ , as well as their dimensionality,  $d_{\text{clique}}$ , and the size of their *knots*—dimensions at which two consecutive cliques overlap,  $d_{\text{knot}} = |\mathbf{z}_{C_i} \cap \mathbf{z}_{C_{i+1}}|$ . Then, we pass each clique through an MLP network that is also equipped with a trigonometric clique embedding, similar to Vaswani et al. (2017) to express a different function for each clique,
+
+$$f_\theta(\mathbf{z}) = \frac{1}{N_{\text{clique}}} \sum_{i=1}^{N_{\text{clique}}} f_\theta(\mathbf{z}_{C_i}, \mathbf{c}_i), \text{ where } [\mathbf{c}_{i,2j} \quad \mathbf{c}_{i,2j+1}] = [\sin(i \cdot \omega_j) \quad \cos(i \cdot \omega_j)],$$
+
+and  $\omega_j = 10^{-8j/d_{\text{model}}}$ . Here, we use the arithmetic mean over cliques rather than summation because, while being functionally equivalent, it provides more stability when  $N_{\text{clique}} \rightarrow \infty$ . Pre-defining the cliques over the representations allows us to avoid the problem of discovering arbitrarily dense graphs, as explained in Subsection 3.1. This architectural choice implies that the regret from Theorem 1 will depend on the coverage of such representations’ cliques,  $\max_{i \in [N_{\text{clique}}]} 1/e_\theta(\mathbf{z}_{C_i})$ , where  $e_\theta(\mathbf{z}) = \mathbb{E}_{\mathbf{x} \sim \mathcal{D}}[e_\theta(\mathbf{z}|\mathbf{x})]$  is the marginal distribution of the representations learned by an encoder  $e_\theta$ . This term can become dangerously large if individual distributions  $e_\theta(\mathbf{z}_C)$  put disproportionately more density to some regions of the latent space than to others. Thus, to prevent that, we propose to train the latent space so that the distribution of cliques attain wide coverage.
+
+**Desideratum 2.** *The model should learn representations whose cliques have distributions featured by wide coverage.*
+
+To meet this requirement, we leverage tools from representation learning, but in a novel way. Namely, we put a variational bottleneck (Kingma & Welling, 2013; Higgins et al., 2016; Alemi et al., 2016, VIB) on **individual** cliques of our representations that brings their distribution closer to a prior with wide coverage, which we choose to be the standard-normal prior. To implement it, when computing the loss for a single example, we sample a single clique to compute the VIB for at random, as opposed to computing it for the joint latent variable like in the classical VIB,
+
+$$\text{VIB}(\mathbf{x}, \theta) = \mathbb{E}_{i \sim U[N_{\text{clique}}]} [\text{KL}(e_\theta(\mathbf{z}_{C_i}|\mathbf{x}), p_C(\mathbf{z}_{C_i}))], \quad (4)$$
+
+where  $e_\theta(\mathbf{z}_C|\mathbf{x})$  is the density of clique  $C$  produced by our learnable encoder  $e_\theta(\mathbf{z}|\mathbf{x})$ , and  $p_C(\mathbf{z}_C)$  is the density of  $\mathbf{z}_C$  under the standard-normal distribution. Note that it is not equivalent to the classical, down-weighted VIB in expectation either since our cliques overlap, meaning that knots contribute to the VIB more often than regular dimensions. Together with the model  $f_\theta$  and the encoder  $e_\theta$ , we train a decoder  $d_\theta(\mathbf{x}|\mathbf{z})$  that reconstructs the designs from the latent variables. Putting it all together, the training objective of our model is a VIB-style likelihood objective with a regression term,
+
+$$L_{\text{clique}}(\theta) = \mathbb{E}_{(\mathbf{x}, \mathbf{y}) \sim \mathcal{D}, \mathbf{z} \sim e_\theta(\cdot|\mathbf{z}), i \sim U[N_{\text{clique}}]} [\text{VIB}(\mathbf{x}, \theta) - \log d_\theta(\mathbf{x}|\mathbf{z}) + \tau \cdot (\mathbf{y} - f_\theta(\mathbf{z}))^2], \quad (5)$$
+
+where  $\tau$  is a positive coefficient that we set to 10 in our experiments.
+
+Since in our neural network we impose the FGM decomposition of the predictive module in the latent space, we need to endow our model with high expressivity to learn representations that meet such demands. Thus, we model our encoder  $e_\theta$  and decoder  $d_\theta$  with transformer networks (Vaswani et al., 2017). To leverage such an architecture, the encoder begins by mapping the input vector  $\mathbf{x} \in \mathbb{R}^d$  into  $d$  vectors of dimensionality  $d_{\text{model}}$ , which it then processes as if they were a sequence of token embeddings. After a series of transformer blocks, the network then maps the sequence into a normal distribution over representations,  $e_\theta(\mathbf{z}|\mathbf{x})$ . A vector  $\mathbf{z}$  can then be sampled from that distribution and arranged into  $N_{\text{clique}}$  cliques with dimensionality  $d_{\text{clique}}$  and knot size of  $d_{\text{knot}}$ . The new sequence can then be fed into the predictive model  $f_\theta$  and to the decoder  $d_\theta$ , which is a transformer too. For illustration of the information flow in Cliqueformer’s training consult Figure 4.
+
+### 3.3 OPTIMIZING DESIGNS WITH CLIQUEFORMER
+
+Once Cliqueformer is trained, we use it to optimize new designs. Typically, MBO methods initialize this step at a sample of designs  $(\mathbf{x}^{i_b})_{b=1}^B$  drawn from the dataset (Trabucco et al., 2021). Since in
+
+{5}------------------------------------------------
+
+![Figure 4: Illustration of information flow in Cliqueformer's training. The diagram shows the flow from Input x to a Transformer Encoder, which produces a Representation z. This representation is then passed to a Transformer Decoder for Reconstruction x-hat, which is compared against the original input x using a Reconstruction Loss. Simultaneously, the representation z is processed by a series of MLPs to produce a Prediction y-hat, which is compared against a Target y using a Prediction Loss. The representation z is also processed by a Variational Information Bottleneck (VIB) block, which contributes to a VIB Loss.](191a4a245a7d36d03be9a990d0f758f5_img.jpg)
+
+Figure 4: Illustration of information flow in Cliqueformer's training. The diagram shows the flow from Input x to a Transformer Encoder, which produces a Representation z. This representation is then passed to a Transformer Decoder for Reconstruction x-hat, which is compared against the original input x using a Reconstruction Loss. Simultaneously, the representation z is processed by a series of MLPs to produce a Prediction y-hat, which is compared against a Target y using a Prediction Loss. The representation z is also processed by a Variational Information Bottleneck (VIB) block, which contributes to a VIB Loss.
+
+Figure 4: Illustration of information flow in Cliqueformer’s training. Data are shown in navy, learnable variables in blue, neural modules in pink, and loss functions in green. The input  $\mathbf{x}$  is passed to a transformer encoder to compute representation  $\mathbf{z}$  which is decomposed into cliques with small overlapping knots (highlighted in colors on the figure). The representation goes to the parallel MLPs whose outputs, added together, predict target  $\mathbf{y}$ . The representation  $\mathbf{z}$  is also fed to a transformer decoder that tries to recover the original input  $\mathbf{x}$ . Additionally, the representation goes through an information bottleneck from Equation (4) during training.
+
+#### Algorithm 1 MBO with Cliqueformer
+
+- 1: Initialize the encoder, decoder, and predictive model  $(e_\theta, d_\theta, f_\theta)$ .
+- 2: **for**  $t = 1, \dots, T_{\text{model}}$  **do**
+- 3:   Take a gradient step on the parameter  $\theta$  with respect to  $L_{\text{clique}}(\theta)$  from Equation (5).
+- 4: **end for**
+- 5: Sample  $B$  examples  $\mathbf{x}^{(i_b)} \sim \mathcal{D}$ ,  $b \in [B]$ , from the dataset.
+- 6: Encode the examples with the encoder  $\mathbf{z}^{(i_b)} \sim e_\theta(\mathbf{z}|\mathbf{x}^{(i_b)})$ , for  $b \in [B]$ .
+- 7: **for**  $t = 1, \dots, T_{\text{design}}$  **do**
+- 8:   Decay the representation  $\mathbf{z}$  of the design,  $\mathbf{z}^{(i_b)} \leftarrow (1 - \lambda)\mathbf{z}^{(i_b)}$ ,  $\forall b \in [B]$ .
+- 9:   Take a gradient ascent step on the parameter  $\mathbf{z}$  with respect to  $\hat{\eta}(\mathbf{z})$  from Equation (6).
+- 10: **end for**
+- 11: Propose solution candidates by decoding the representations,  $\mathbf{x}^* \sim d_\theta(\mathbf{z}|\mathbf{z}^*)$ .
+
+our algorithm the optimization takes place in the latent space  $\mathcal{Z}$ , we perform this step by encoding the sample of designs with Cliqueformer’s encoder,  $\mathbf{z}^{i_b} \sim e_\theta(\mathbf{z}|\mathbf{x}^{i_b})$ . We then optimize the representation  $\mathbf{z}^{i_b}$  of design  $\mathbf{x}^{i_b}$  to maximize our model’s value,
+
+$$L_{\text{mbo}}((\mathbf{z}^{i_b})_{b=1}^B) = \frac{1}{B} \sum_{b=1}^B f_\theta(\mathbf{z}^{i_b}), \quad (6)$$
+
+at the same time minding the enumerator of the regret bound from Theorem 1. That is, we don’t want the optimizer to explore regions under which the marginal densities  $e_\theta(\mathbf{z}_C) = \mathbb{E}_{\mathbf{x} \sim \mathcal{D}}[e_\theta(\mathbf{z}_C|\mathbf{x})]$  are small. Fortunately, since the encoder was trained with standard-normal prior on the cliques,  $p(\mathbf{z}_C) = N(0_{d_{\text{clique}}}, I_{d_{\text{clique}}})$ , we know that values of  $\mathbf{z}$  closer to the origin have unilaterally higher marginals. This simple property of standard-normal distribution allows us to confine the optimizer’s exploration to designs with in-distribution cliques by exponentially decaying the design at every optimization step. Thus, we use AdamW as our optimizer (Loshchilov et al., 2017). We provide the pseudocode of the whole procedure of designgn with Cliqueformer in Algorithm 1.
+
+## 4 RELATED WORK
+
+The idea of using machine learning models in optimization problems has existed for a long time, and has been mainly cultivated in the literature on Bayesian optimization (Williams & Rasmussen, 2006; Brochu et al., 2010; Snoek et al., 2012, BO). The BO paradigm relies on two core assumptions: availability of data of examples paired with their target function values, as well as access to an oracle that allows a learning algorithm to query values of proposed examples. Thus, similarly to
+
+{6}------------------------------------------------
+
+reinforcement learning, the challenge of BO is to balance exploitation and exploration of the black-box function modeled by a Gaussian process. Recently, to help BO tackle very high-dimensional problems, techniques of decomposing the target function have become more popular (Kandasamy et al., 2015; Rolland et al., 2018). Most commonly, these methods decompose the target function into functions defined on the input’s partitions. While such models are likely to deviate far from the functions’ ground-truth structure, one can derive theoretical guarantees for a range of such decompositions under the BO’s query budget assumptions (Zionek & Bou-Ammar, 2023). However, these results do not apply to our setting of offline MBO, where no additional queries are available and the immediate reliability on the model is essential. Furthermore, instead of partitioning the input, we decompose our prediction over a latent variable that is learned by a transformer, enabling the model to acquire an expressive structure over which the decomposition is valid.
+
+Offline model-based optimization (MBO) has been recently attracting attention of researchers and practitioners from domains where BO assumptions cannot be easily met, offering an attractive premise of producing solutions directly after training on static datasets, without the need for additional queries. One of the first tasks tackled by MBO was molecule design (Gómez-Bombarelli et al., 2018), where a variational auto-encoder (Kingma & Welling, 2013, VAE) was used to learn continuous representations of molecular data. In contrast to our work, however, this work does not study learning structural properties of the target function, but rather is a proof of concept of applying deep learning to molecular design. A data type-agnostic algorithm was introduced by Brookes et al. (2019), dubbed Conditioning by Adaptive Sampling (CBaS), that iteratively refines its design proposals in response to predictions of a non-differentiable oracle. While one can use this refinement procedure in combination with trainable models by means of *auto-focusing* (Fannjiang & Listgarten, 2020), this setting is different from ours since we assume the ability to model the black-box function with a neural network. Since such a model is differentiable, we can simply rely on automatic differentiation (Paszke et al., 2019) to refine our designs. Trabucco et al. (2021) introduced a neural network-based method, exactly for our setting, dubbed Conservative Objective Models (COMs), where a surrogate model is trained to both predict values of examples that can be found in the dataset, and penalize those that are not. COMs differs from our work fundamentally, since its contribution lies in the formulation of the conservative regularizer applied to arbitrary neural networks, while we focus on scalable model architectures that facilitate computational design. Another recent line of work proposes to tackle the design problem through means of generative modeling. BONET (Mashkaria et al., 2023) and DDOM (Krishnamoorthy et al., 2023) are examples of works that bring the most recent novelties of the field to address design tasks. BONET does so by training a transformer to generate sequences of designs that monotonically improve in their value, and DDOM by training a value-conditioned diffusion model. That is, these methods attempt to generate high-value designs through novel conditional generation mechanisms. Instead, we model MBO as a maximization problem, and propose a scalable model that acquires the structure of the black-box function through standard gradient-based learning. To this end, we bring powerful techniques from deep learning and generative modeling, like transformers (Vaswani et al., 2017) and variational-information bottlenecks (Kingma & Welling, 2013; Alemi et al., 2016).
+
+The work of Grudzien et al. (2024) introduced the theoretical foundations of functional graphical models (FGMs), including Theorem 1. However, as we have shown in Theorem 2, their graph discovery heuristic for neural networks renders learning the black-box function’s structure an open problem. Our work addresses this issue by subsuming the graph discovery step in the architecture of our *Cliqueformer* that learns to abide by a pre-defined FGM. As such, the model learns the structure of the target function, as well as learns to predict its value, in synergy within an end-to-end training.<sup>2</sup>
+
+## 5 EXPERIMENTS
+
+In this section, we provide the empirical evaluation of *Cliqueformer*. We begin by benchmarking *Cliqueformer* against prior methods on tasks from the MBO literature. Then, we finish by evaluating the benefit of the novel FGM decomposition layer in *Cliqueformer* through an ablation study.
+
+### 5.1 BENCHMARKING
+
+We compare our model to three classes of algorithms, each represented by a proven prior method. As a *naïve* baseline, we employ gradient ascent on a learned model (*Grad. Asc.*). To compare to
+
+<sup>2</sup>For more related work, please see Appendix D.
+
+{7}------------------------------------------------
+
+| Task | Grad.Asc. | RWR | COMs | DDOM | Transformer | Cliqueformer |
+|-|-|-|-|-|-|-|
+| LRBF 11 | $-\infty \pm 0.00$<br>0% | $0.08 \pm 0.08$<br>1% | <b>0.66</b> $\pm 0.04$<br>72% | $-\infty \pm 0.00$<br>0% | $0.47 \pm 0.05$<br>60% | $0.65 \pm 0.07$<br>74% |
+| LRBF 31 | $-\infty \pm 0.00$<br>0% | $0.31 \pm 0.10$<br>3% | $0.50 \pm 0.05$<br>32% | $-\infty \pm 0.00$<br>0% | $-\infty \pm 0.00$<br>0% | <b>0.64</b> $\pm 0.05$<br>76% |
+| LRBF 41 | $-\infty \pm 0.00$<br>0% | $0.35 \pm 0.08$<br>3% | $0.45 \pm 0.06$<br>16% | $-\infty \pm 0.00$<br>0% | $0.20 \pm 0.01$<br>75% | <b>0.66</b> $\pm 0.05$<br>72% |
+| LRBF 61 | $-\infty \pm 0.00$<br>0% | $0.29 \pm 0.10$<br>4% | $0.25 \pm 0.04$<br>7% | $-\infty \pm 0.00$<br>0% | $0.16 \pm 0.03$<br>64% | <b>0.66</b> $\pm 0.05$<br>68% |
+| Superconductor | $1.13 \pm 0.08$ | $1.03 \pm 0.07$ | $0.97 \pm 0.08$ | $1.22 \pm 0.08$ | $0.96 \pm 0.05$ | <b>1.43</b> $\pm 0.04$ |
+| TF-Bind-8 | $0.99 \pm 0.00$ | <b>1.58</b> $\pm 0.03$ | $1.57 \pm 0.02$ | $1.55 \pm 0.03$ | $1.48 \pm 0.03$ | <b>1.58</b> $\pm 0.01$ |
+| DNA HEPG2 | <b>2.16</b> $\pm 0.07$ | $1.91 \pm 0.12$ | $1.20 \pm 0.09$ | $1.82 \pm 0.10$ | $2.13 \pm 0.06$ | $2.10 \pm 0.07$ |
+| DNA k562 | $2.11 \pm 0.06$ | $1.91 \pm 0.11$ | $1.80 \pm 0.12$ | $2.61 \pm 0.21$ | $2.60 \pm 0.19$ | <b>3.15</b> $\pm 0.07$ |
+| Ave.score $\uparrow$ | 0.80 | 0.93 | 0.93 | 0.90 | 1.00 | <b>1.36</b> |
+| Ave.rank $\downarrow$ | 4.75 | 3.88 | 3.63 | 4.50 | 4.25 | <b>1.38</b> |
+
+Table 1: Experimental results of Cliqueformer and the baselines. Each score is the mean of values of  $TopK=10$  of  $B=1000$  designs, averaged over 5 runs. The values were normalized with the min-max scheme, where the minimum and the maximum are taken from the dataset, so that the scores of the designs in the dataset are in range  $[0, 1]$ . We note that, unlike Trabucco et al. (2022), we take the maximum from the data available for the MBO model training (the union of the train and test data), and not from the oracle training data, to make the results more interpretable (see Appendix C). We also provide the standard deviation estimates as the standard deviation for each of the  $TopK$  samples, averaged over the runs. Additionally, for LRBF tasks, we provide the average validity in blue, calculated as the percentage of valid designs from the  $B$  produced candidates, averaged across the runs. We provide average score (the higher the better) and the average rank for each method. For the average score  $-\infty$  was taken into calculation as zero.
+
+exploratory methods, we use Reward-Weighted Regression (Peters & Schaal, 2007, *RWR*) which learns by regressing the policy against its most promising perturbations. To represent the recently proposed *conservative* algorithms, we compare to state-of-the-art Conservative Objective Models (Trabucco et al., 2021; Kumar et al., 2021, *COMs*). For COMs, we use the recommended hyperparameter setting from (Trabucco et al., 2021). While Cliqueformer can be tuned for each specific task, we keep most of the hyperparameters the same: refer to Appendix C for more details.
+
+For every method, we report an empirical estimate of its  $100^{th}$  percentile, similarly to Trabucco et al. (2021). We estimate it by averaging the values of the top 10 designs out of 1000 candidates, averaged across 5 seeds. In the following paragraphs, we introduce benchmark tasks, from MBO literature, that we use in our experiments.
+
+**Latent Radial-Basis Functions (LRBF).** This is a suite of tasks designed to expose vulnerability of MBO models (Grudzien et al., 2024). The data pairs  $(\mathbf{x}, \mathbf{y})$  are generated by first drawing a standard normal vector  $\mathbf{z} \sim N(0_{d_z}, I_{d_z})$ , then computing  $\mathbf{y}$  as a sum of radial-basis functions of  $d_C$ -dimensional cliques of a pre-defined FGM. The observed vector  $\mathbf{x}$  is a non-linear transformation of  $\mathbf{z}$ , i.e.,  $\mathbf{x} = T(\mathbf{z}) \in \mathcal{T} \subset \mathbb{R}^d$ , where  $d > d_z$ , while  $\mathbf{z}$  itself is hidden from the data. Such tasks allow us to study whether an MBO method learns to produce *valid* designs by verifying that *ground-truth* inputs  $\mathbf{z}$  can be recovered from them. That is, a design  $\tilde{\mathbf{x}}$  for which the map  $T^{-1}(\tilde{\mathbf{x}})$  is ill-defined is considered invalid. In our experiments, an invalid design receives a value of  $-\infty$ . We report the average validity of designs produced by the methods in blue. The results in Table 1 show that the most able method at keeping its proposals at the manifold of valid designs is Cliqueformer. Importantly, this ability does not diminish even in higher-dimensional tasks, while the second-best such method, COMs, gradually loses this ability. We also use these tasks to study if a model is capable of exploiting the RBF’s structure in the optimization step by varying the effective dimensionality  $d_z$  of the data while keeping  $d_C$  fixed. While the naive and the exploratory baseline perform poorly on these tasks overall, COMs’s performance clearly drops as the task dimension increases. Meanwhile, as predicted by Theorem 1, Cliqueformer attains similar, strong performance across all tasks.
+
+**Superconductor.** This task poses a challenge of designing a superconducting material, represented by an 81-dimensional vector, with as high critical temperature as possible (Hamidieh, 2018). It tests
+
+{8}------------------------------------------------
+
+abilities of MBO models in real-world continuous problems. As the very high score of gradient ascent shows, in contrast to LRBF, this task rewards greedy optimizer updates. While we developed Cliqueformer paying attention to distribution shift, its ability to compose individual in-distribution cliques into a joint solution (*stitching*) allows for large improvements that outperform all baselines.
+
+**TFBind-8 & DNA Enhancers.** In these discrete tasks we optimize DNA sequences of length 8 and 200, respectively. In TFBInd-8 the target is the sequence’s binding affinity with a particular transcription factor, while in DNA Enhancers we maximize HEPG2 and k562 activity levels. Being low-dimensional, TFBInd-8 (Trabucco et al., 2022) is a tested that allows us to verify MBO models’ ability to solve discrete tasks. Cliqueformer solves this problem very efficiently, largely improving upon the dataset, but it is worth noting that most baselines, with the exception of gradient ascent, performed similarly. Thus, while the TFBInd-8 task does not favor greedy design optimization, Cliqueformer is still able to leverage its other strengths to achieve great performance. Then, we use the DNA Enhancers tasks (Uehara et al., 2024) to study the scalability of our method to very high-dimensional problems and large datasets (approximately  $2 \times 10^5$  examples in this case). The results in Table 1 and the high score of gradient ascent show that these tasks favor direct, greedy optimization of designs more than they benefit from conservatism of COMs. Nevertheless, Cliqueformer is able to greatly exceed the quality of observed designs, and performs on par with gradient ascent in HEPG2, and greatly outperforms all baselines in k562, confirming its ability to learn structure within discrete and very high-dimensional data. Overall, averaging across all tested tasks, Cliqueformer achieves the best overall performance.
+
+### 5.2 ABLATIONS
+
+While the decomposing elements of Cliqueformer are novel, other components, such as transformer blocks (Vaswani et al., 2017) and variational information bottlenecks (Kingma & Welling, 2013; Alemi et al., 2016), are components proposed in prior work (albeit for a different purpose). In this subsection, we verify the utility of the decomposing component with an ablation study, in which we sweep over the number of cliques of Cliqueformer for a few representative tasks. In each of the tested tasks we fix the size of the latent variable  $\mathbf{z}$  and sweep over the number of cliques  $N_{\text{clique}}$  into which it can be decomposed. We cover the case  $N_{\text{clique}} = 1$  to compare Cliqueformer to an FGM-oblivious VAE with transformer backbone and AdamW design optimizer.
+
+![Figure 5: Ablation experiments on the number of cliques used in the FGM decomposition of Cliqueformer. The figure contains three line plots: (a) TFBInd-8, (b) Superconductor, and (c) Lat. RBF 41. Each plot shows 'Scores' on the y-axis and 'Number of Cliques' on the x-axis (log-scale). In (a), the score peaks at 4 cliques. In (b), the score peaks at 4 cliques. In (c), the score peaks at 2 cliques. All plots show a sharp drop in score at 4 cliques for (a) and (b), and at 4 cliques for (c).](925f55ce69802b9d3b00546382663ee2_img.jpg)
+
+Detailed description of Figure 5: The figure consists of three subplots labeled (a), (b), and (c). Each subplot is a line graph with 'Scores' on the y-axis and 'Number of Cliques' on the x-axis. The x-axis is on a log-scale with values 1, 2, 4, 8, 16, 32. The y-axis represents the final score of the model. In all three plots, the score generally increases as the number of cliques increases from 1 to an optimal point, after which it decreases. An 'x' marks the optimal number of cliques for each task. In (a) TFBInd-8, the optimal number of cliques is 4. In (b) Superconductor, the optimal number of cliques is 4. In (c) Lat. RBF 41, the optimal number of cliques is 2.
+
+| Task | Number of Cliques | Scores |
+|-|-|-|
+| (a) TFBInd-8 | 1 | 0.55 |
+|  | 2 | 1.15 |
+|  | 4 | 1.45 (Optimal) |
+|  | 8 | 1.35 |
+|  | 16 | 1.30 |
+| (b) Superconductor | 1 | 1.05 |
+|  | 2 | 0.95 |
+|  | 4 | 1.35 (Optimal) |
+|  | 8 | 0.85 |
+|  | 16 | 0.95 |
+| (c) Lat. RBF 41 | 1 | 0.65 |
+|  | 2 | 0.68 (Optimal) |
+|  | 4 | 0.62 |
+|  | 8 | 0.65 |
+|  | 16 | 0.68 |
+
+Figure 5: Ablation experiments on the number of cliques used in the FGM decomposition of Cliqueformer. The figure contains three line plots: (a) TFBInd-8, (b) Superconductor, and (c) Lat. RBF 41. Each plot shows 'Scores' on the y-axis and 'Number of Cliques' on the x-axis (log-scale). In (a), the score peaks at 4 cliques. In (b), the score peaks at 4 cliques. In (c), the score peaks at 2 cliques. All plots show a sharp drop in score at 4 cliques for (a) and (b), and at 4 cliques for (c).
+
+Figure 5: Ablation experiments on the number of cliques used in the FGM decomposition of Cliqueformer. For each task, we fix the size of the latent variable and the overlap size, and sweep over possible  $N_{\text{clique}}$  values. We use TFBInd-8 (left), Superconductor (center), and Lat. RBF 41 (right) tasks. The x-axis (log-scale) denotes the number of cliques, and the y-axis is the final score of the model.
+
+Results in Figure 5 show that Cliqueformer does benefit from the FGM decomposition in all tested tasks. However, the results suggest that the optimal number of cliques varies between tasks – e.g., 4 for TFBInd-8 and Superconductor, but 2 for LRBF 41. In our experiments, we consistently obtained good performance by setting the clique size to  $d_{\text{clique}} = 3$  and choosing the number of cliques so that the total latent dimension approximately matches that of the design. For DNA Enhancers, we doubled the clique size and halved the number of cliques to decrease the computational cost of attention. More details of hyperparameters can be found in Appendix C. An in-depth analysis of the relation between hyperparameters and the performance is an exciting avenue of future work.
+
+{9}------------------------------------------------
+
+## 6 CONCLUSION
+
+In this work, we proposed Cliqueformer, a scalable architecture for model-based optimization. We derived its building blocks following recent advances in MBO theory centered in functional graphical models, equipping it with an ability to acquire structure of the black-box target function. This ability sets the model free from requiring explicit conservative regularization or iterative retraining to propose in-distribution designs. Empirically, Cliqueformer outperforms all baselines across all tested tasks. Cliqueformer opens an exciting avenue of research in MBO focused on scaling design datasets and large neural networks.
+
+## REPRODUCIBILITY STATEMENT
+
+We provide our code base, implemented in Pytorch, in the supplementary material. It contains files with default hyper-parameters for both Cliqueformer and the baselines. We also set default random seeds in the training script (`training.py`) that can be used to reproduce some of our runs exactly. This script saves a pre-trained model that one can use to optimize designs with by running `optimize.py`. To enable reproducing Cliqueformer’s performance, we provide a table with hyper-parameters in Appendix C. We ran most of our experiments on a machine with an Nvidia Titan X GPU, with the exception of DNA Enhancers tasks which we ran on a Google TPU v3-8.
+
+Due to lack of the off-the-shelf availability of Design Bench, we scraped the data of the benchmark tasks from prior works’ repositories. We adopted the implementation of LRBF tasks from Grudzien et al. (2024)’s code at
+
+<https://colab.research.google.com/drive/1qt4M3C35bvjRHPipBxE3zPc5zvX6AAU4?usp=sharing>
+
+We used Superconductor data from Fannjiang & Listgarten (2020)’s code on
+
+<https://github.com/clarafy/autofocused-oracles>.
+
+Following the authors, we train a boosted tree model to serve as an oracle for new designs. We used TFBinder-8 from
+
+[https://huggingface.co/datasets/beckhamc/design\\_bench\\_data/tree/main/tf\\_bind\\_8-SIX6\\_REF\\_R1](https://huggingface.co/datasets/beckhamc/design_bench_data/tree/main/tf_bind_8-SIX6_REF_R1),
+
+which comes with values for all possible designs that can be looked up at evaluation. We obtained the DNA Enhancers data from the recent tutorial on offline fine-tuning of generative models at
+
+[https://github.com/masa-ue/RLfinetuning\\_Diffusion\\_Bioseq/tree/master/tutorials/Human-enhancer](https://github.com/masa-ue/RLfinetuning_Diffusion_Bioseq/tree/master/tutorials/Human-enhancer),
+
+whose pre-trained oracle we used for evaluation.
+
+We will release publically our code on github upon the paper’s publication.
+
+ Rest of paper (reference and Appendix) is removed.

@@ -1,0 +1,326 @@
+
+
+{0}------------------------------------------------
+
+# SCREENWRITER: AUTOMATIC SCREENPLAY GENERATION AND MOVIE SUMMARISATION
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+The proliferation of creative video content has driven demand for textual descriptions or summaries that allow users to recall key plot points or get an overview without watching. The volume of movies available for viewing and speed of turnover motivate automatic summarisation, which is challenging, requiring the identification of character intentions and long-range temporal dependencies. The few existing methods attempting this task rely heavily on textual screenplays as input, greatly limiting their applicability. In this work, we propose the task of automatic screenplay generation, and a method, ScreenWriter, that operates only on video and produces output which includes dialogue, speaker names, scene breaks, and visual descriptions. ScreenWriter introduces a novel algorithm to segment the video into scenes based on the sequence of visual vectors, and a novel method for the challenging problem of determining character names, based on a database of actors' faces. We further demonstrate how automatically generated screenplays can be used to create plot synopses with a hierarchical summarisation method based on scene breaks. We test the quality of the final summaries on the recent MovieSum dataset, which we augment with videos, and show that they are superior to several comparison models that assume access to goldstandard screenplays.
+
+## 1 INTRODUCTION
+
+Thanks to the proliferation of streaming services and digital content providers, a large number of movies are being released and made available every year. Automatic approaches to understanding and summarising their content are paramount to enabling users to browse or skim through them, and quickly recall key plot points, characters, and events without the need to re-watch from the beginning. Aside from practical utility, movie summarisation is an ideal testbed for real-world video and natural language understanding. Movies are often based on elaborate stories, with non-linear structure and multiple characters whose emotions and actions are often not accompanied with verbal cues. The summarisation task requires identifying beliefs and intentions of characters as well as reasoning over very long narratives (there are usually hundreds of pages in a transcript and tens of thousands of frames in a video), involving multiple modalities.
+
+Most previous work on movie summarisation has focused primarily on the textual modality, under the assumption that screenplays (or at least human-authored transcripts) are readily available (Gorinski & Lapata, 2015; Chen et al., 2022; Agarwal et al., 2022). Movie summarisation is commonly viewed as a type of long-form summarisation, a task which has improved dramatically in recent years. This is partly due to large models with longer context windows, and the design of methods specifically for this task, such as dividing the input into chunks and forming a hierarchical summarisation structure (Chen et al., 2023a; Pang et al., 2023) or summarising chunks iteratively (Chang et al., 2023). Video understanding through generating descriptions for videos, has also received much attention, largely independently from long-form summarisation, focussing instead on short video clips lasting a few minutes (Tapaswi et al., 2016; Lei et al., 2018; Rafiq et al., 2023). Two notable exceptions are Papalampidi & Lapata (2023) and Mahon & Lapata (2024) who consider textual *and* visual modalities, aiming to summarise movies and television shows, respectively. However, they both require a textual transcript with information about scene breaks, and character names prefacing the lines actors speak. The assumption of having available written transcripts and/or screenplays is unrealistic, as most video providers do not have access to screenplays un-
+
+{1}------------------------------------------------
+
+less they have produced the content themselves. Additionally, there are often differences between original screenplays, and what is acted and shown in the movie.
+
+In this paper, we address the challenging tasks of generating automatic screenplays and plot summaries of movies by leveraging only video and audio input, without relying on transcripts or text. As a result, our method, ScreenWriter is applicable to the large quantity of movie videos which exist without accompanying screenplays or human-annotated transcripts. A naive solution is to apply a speech-to-text model from which we could then build a rudimentary screenplay automatically. Using speech-to-text off the shelf for movie understanding is problematic for several reasons. Firstly, it does not contain scene breaks, which can provide useful structural and semantic information (Gorinski & Lapata, 2015; Papalampidi et al., 2019). Secondly, it does not contain descriptions of events outside of dialogue such as characters fighting or kissing. And perhaps most importantly, it lacks character names. Speaker diarization aims to determine whether different utterances are spoken by the same speaker, but this speaker is still indicated with an arbitrary ID, rather than a character name.
+
+ScreenWriter attempts to reconstruct screenplays and their structure as accurately as possible. It eschews the above mentioned pitfalls by segmenting the video into scenes using a novel parameter-free method based on the minimum description length principle coupled with a dynamic programming search algorithm. It associates speaker IDs to character names through a novel method which exploits a database of actor face images, coupled with the name of the character they played (which is readily available online). By computing distances between face feature vectors in the same scene as the utterance, we formulate the task as an instance of the linear sum assignment problem, which can then be solved efficiently by known algorithms. Additionally, we add event descriptions (as an approximation to action lines which describe what the camera sees) using an image-to-text model on keyframes detected in each scene. We further demonstrate that automatically generated screenplays are good enough to produce textual summaries: we condense each scene independently and then fuse the information from all scenes into a final synopsis using zero-shot prompting.
+
+ScreenWriter, and the accompanying summarisation method, is therefore modular, based on a number of interacting components that separately solve different subtasks. This design differs from recent work Song et al. (2024) proposing to modify transformer memory in order to handle longer video sequences. Scaling such end-to-end models to full-length movies remains a significant challenge due to memory constraints and the complexity of extracting useful information from large inputs.<sup>1</sup> Our approach, which breaks the task into subproblems which are then solved separately, mitigates this issue and allows for more efficient processing and summarisation. In summary, our contributions include:
+
+- Proposing the new task of screenplay generation from video (and audio), and a modular framework, ScreenWriter, to address this task;
+- A novel, parameter free method for detecting scene boundaries in video;
+- A novel algorithm for detecting character names based on a database of actors' faces;
+- A-proof-of-concept summariser which takes automatic screenplays from ScreenWriter as input and produces textual synopses following a hierarchical method with zero-shot prompting.
+
+## 2 RELATED WORK
+
+**Video Understanding** The problem of generating descriptions for videos has received significant attention in the literature. Traditional video description approaches often extract features from individual frames and fuse them into a single feature vector to generate a textual description (Zhang et al., 2021; Pan et al., 2020; Ye et al., 2022). SwinBERT (Lin et al., 2022) introduces an end-to-end video network that samples frames densely, avoiding the need for image-based encoders. Similarly, Lei et al. (2020) use a memory-augmented vision transformer to generate descriptions for short videos. In the area of video segmentation, Souček & Lokoč (2020) introduce TransNet v2, a deep learning model for shot transition detection. However, shot boundaries are easier to detect than scene boundaries because there is a more striking pixel-level discontinuity.
+
+<sup>1</sup>At  $1,024 \times 1,024$  frame size, and 10 frames per second, a 75min movie would consume over 500GB when represented as a 4d 32-bit float tensor.
+
+{2}------------------------------------------------
+
+Despite this progress, many popular video description datasets (Chen & Dolan, 2011; Xu et al., 2016) contain videos that are only  $\sim 10$ s in length, which are much shorter than full-length movies. YouCook (Zhou et al., 2018a), a dataset with longer videos (about 5 minutes on average), remains insufficient for capturing the complexities of movie understanding and summarisation. Egoschema (Mangalam et al., 2023) explores video understanding for clips of  $\sim 3$  minutes, focusing on human activity and behavior, but this too is far shorter and more constrained than full movie summarisation. Some methods have started to tackle movie content, but in the form of much shorter clips. Wu & Krahenbuhl (2021) use YouTube movie clips for small tasks like classifying movie year or genre, but lack a comprehensive approach for understanding/summarising an entire movie. Chen et al. (2023b) propose Movies2Scenes, a method that uses movie metadata to learn scene representations, though it relies on predefined scenes based on shot transitions rather than semantically meaningful boundaries. Han et al. (2024) address the problem of assigning names to characters within a local movie clip, using a “character bank” of images which is then used to prompt a LLM for character names. This differs from our method in the use of a LLM for name assignment, and in that we are assigning names to speaker IDs that arise from speaker diarization, rather than to dialogue directly. Moreover, our assignment concerns the entire movie, rather than a short snippet. Some works aim to summarise short videos, a task referred to as video captioning. Sridevi & Kharde (2020) summarizes short videos using a two-stream CNN. Seo et al. (2022) use a bidirectional model that uses both video and audio to produce video captions. Zhou et al. (2018b) propose a single masked transformer objective to detect and then caption all events in a moderate length (3min) video Unsupervised pertaining has also been explored, e.g. by Yang et al. (2023), who train a video-captioning model using transcribed utterances as pseudo-captions. Some systems based on large proprietary models have been proposed for longer videos. Zhang et al. (2024); Lin et al. (2023), include multiple modules, including visual GPT-4, and use PysceneDetect for scene breaks. Wu et al. (2024) prompts an LLM to predict scene breaks from transcribed speech and captions, which is then used for video question-answering.
+
+**Long-form summarisation** Recent work has started to address the task of summarising much longer videos. Papalampidi et al. (2021) describe a method for summarising full-length movies by creating shorter videos containing their most informative scenes which they assume to be ‘turning points’ (i.e., key events in a movie). Papalampidi & Lapata (2023) produce text summaries of TV show episodes, by converting visual features into embeddings alongside word embeddings from the transcript. Mahon & Lapata (2024) also summarise TV show episodes from video and text input, by converting the video to text, and then treating it as a text-only problem. Our method differs from all of these approaches in that it only requires video as input, tackling the more challenging task of understanding who is speaking and what they are doing (this information is taken for granted in screenplays and human-authored transcripts).
+
+**Movie Datasets** Datasets containing videos for full-length feature movies are few and far between possibly due to copyright restrictions and the computational overhead of storing and processing lengthy videos. Papalampidi et al. (2024) introduce TRIPOD, a dataset consisting of screenplays, their movies, and corresponding trailers, however no summaries or synopses are provided. MovieNet (Huang et al., 2020) contains summaries and other annotations for movies, but not the videos themselves, which are specifically the focus of the present work.<sup>2</sup> Papalampidi & Lapata (2023) release SummScreen<sup>2D</sup> a dataset consisting of soap opera episodes, their (crowd-sourced) transcripts, and summaries. However, these episodes are not self-contained, as they typically refer to events or characters from previous episodes. In addition, they tend to be relatively short, and dialogue-heavy, with recurring scene locations. In this work, we wish to explore longer videos of 70+ minutes, and move away from the niche domain of soap operas. In experiments, we use the recent MovieSum dataset (Saxena & Keller, 2024) which contains screenplays and their Wikipedia plot summaries. We augment this dataset with videos that we privately procure for the test set.
+
+## 3 SCREENWRITER
+
+Figure 1 provides a graphic depiction of ScreenWriter. As mentioned earlier, the input to ScreenWriter is the video (including audio) for a full movie. We extract keyframes from the movie and
+
+<sup>2</sup>The MovieNet website claims that videos will be released soon, but at the time of writing, despite several years wait, they have not appeared.
+
+{3}------------------------------------------------
+
+162  
+163  
+164  
+165  
+166  
+167  
+168  
+169  
+170  
+171  
+172  
+173  
+174  
+175  
+176  
+177  
+178  
+179  
+180  
+181  
+182  
+183  
+184  
+185  
+186  
+187  
+188  
+189  
+190  
+191  
+192  
+193  
+194  
+195  
+196  
+197  
+198  
+199  
+200  
+201  
+202  
+203  
+204  
+205  
+206  
+207  
+208  
+209  
+210  
+211  
+212  
+213  
+214  
+215
+
+![Figure 1: A flowchart illustrating the Screenwriter pipeline. The process starts with a 'Full Movie' icon leading to a 'Raw Transcript' box. The 'Raw Transcript' leads to a 'Character Bank (IMDB)' box and a 'Scene Segmentation' icon (a hand holding a pen). The 'Scene Segmentation' icon leads to a list of scenes: 'Scene 1', 'Scene 2', ..., 'Scene n'. Each scene leads to a 'Scene i Captions' box. The 'Scene i Captions' boxes lead to a list of summaries: 'Scene 1 Summary', ..., 'Scene n Summary'. The 'Scene n Summary' leads to a 'Final Summary' box. The 'Character Bank (IMDB)' also leads to the 'Final Summary' box.](9e6062272bbe3ddbb7c0606721d64cf0_img.jpg)
+
+Figure 1: A flowchart illustrating the Screenwriter pipeline. The process starts with a 'Full Movie' icon leading to a 'Raw Transcript' box. The 'Raw Transcript' leads to a 'Character Bank (IMDB)' box and a 'Scene Segmentation' icon (a hand holding a pen). The 'Scene Segmentation' icon leads to a list of scenes: 'Scene 1', 'Scene 2', ..., 'Scene n'. Each scene leads to a 'Scene i Captions' box. The 'Scene i Captions' boxes lead to a list of summaries: 'Scene 1 Summary', ..., 'Scene n Summary'. The 'Scene n Summary' leads to a 'Final Summary' box. The 'Character Bank (IMDB)' also leads to the 'Final Summary' box.
+
+Figure 1: Screenwriter produces a screenplay from the input video/audio (top left), by first extracting the raw transcript, segmenting the video into scenes, and generating visual descriptions from each scene (top right). Then from these outputs, and the character bank (bottom left), it assigns character names and generates the screenplay (centre). Given the generated screenplay, we can then produce summaries for each scene (centre right), and fuse into a single summary for the entire movie (bottom right).
+
+use our novel scene segmentation algorithm (see Section 3.2) to partition the resulting sequence of frames into different scenes. In parallel, a text-to-speech model with speaker diarization yields a transcript with numeric speaker IDs instead of character names. For each movie, we assume access to a database consisting of actors faces and their character names (such a database can be easily constructed by scraping the faces of the characters from the movie’s IMDB page). We extract facial features from each keyframe in each scene, and from each scraped character image, and use our novel name assignment algorithm to replace (some of) the numeric IDs in the transcript with actual character names (see Section 2). Finally, to insert visual information into the screenplay about what is happening on camera, we extract textual descriptions from three evenly spaced keyframes in each scene using a multimodal large language model. We now describe these components in detail.
+
+### 3.1 TRANSCRIPT GENERATION
+
+The first step in ScreenWriter is to extract the audio from the movie, using an automatic transcription model with speaker diarization (Bain et al., 2023). This produces a transcript with each utterance marked by a speaker ID. The speaker ID is the same for the same character throughout the movie (up to the accuracy of the diarization), but the character names are lacking. We also extract key frames from the entire video, and store the timestamps of these keyframes. These will be used to compute speaker names and visual information, which we will add to the diarized transcript to form a screenplay. It is also on this sequence of keyframes that the scene breaks are computed. There is an average of around 1,000 detected keyframes for a feature-length movie.
+
+### 3.2 SCENE DETECTION
+
+ScreenWriter extracts visual features from each keyframe, and applies a novel algorithm to segment the resulting sequence of visual feature vectors. There are two parts to our algorithm: the *definition of a cost* for a particular partition into scenes, and the *search* for the partition that minimizes this cost. The first part, the cost definition, is formulated using the minimum description length principle, which claims the correct representation of the data is the one using the fewest bits. We assume that the vectors for each scene are encoded with respect to their collective mean. That is, for each scene in the given partition, we calculate the mean of all vectors in that scene, and hence, the probability of each vector,  $p(v)$ , under the multivariate normal distribution with this mean. To reduce run time, we use a single fixed covariance calculated from the entire sequence of vectors. The Kraft-McMillan inequality (Kraft, 1949; McMillan, 1956) then determines that under the optimal encoding, the number of bits needed to represent  $v$  is  $-\log_2 p(v)$ . The sum of this value across all  $N$  vectors  $v$  in the video, plus the number of bits to represent the mean vectors themselves, gives the total bitcost for a given partition. The mean vectors require  $dm$  bits, where  $d$  is the dimensionality, and  $m$  is the floating point precision, for which we use the standard of 32. Partitions with more scenes require more bits for the mean vectors, but also have mean vectors that better cover the keyframe features, leading to decreased  $-\log_2 p(v)$  on average. This trade-off encourages a partition with neither too few nor too many scene breaks.
+
+The second part, the search for the minimizer of the above cost, can be solved exactly using dynamic programming. Let  $B(i, j)$  be the cost of having a single scene that runs from keyframes  $i$  to  $j$ , and let  $C(i, j)$  be the minimum cost of all keyframes from  $i$  to  $j$ , under all possible partitions. Then we
+
+{4}------------------------------------------------
+
+#### **Algorithm 1** Scene Boundary Detection
+
+```
+
+1: Input: Video file
+2: Extract keyframes,  $kf_0, \dots, kf_N$ 
+3: Extract visual features  $v_0, \dots, v_N$  from each keyframe
+4:  $L \leftarrow 50$  ▷ maximum scene length
+5:  $B \leftarrow N \times N$  empty matrix ▷  $B[i, j]$  will hold the cost of a scene from  $v_i$  to  $v_j$ 
+6:  $\Sigma \leftarrow$  empirical covariance matrix of  $v_0, \dots, v_N$ 
+7:  $d \leftarrow$  dimensionality of  $v_i$ 
+8:  $m \leftarrow$  floating point precision of  $v_i$ 
+
+9: Cost Definition: Compute and store costs for all possible scenes
+10: for  $0 \leq i \leq N - L$  do
+11:   for  $j=i, \dots, i+L$  do
+12:      $\mu_{i,j} \leftarrow \frac{1}{j-i+1} \sum_{k=i}^j v_k$ 
+13:      $C \leftarrow dm$ 
+14:     for  $k = i, \dots, j$  do
+15:        $p(v_k) \leftarrow \frac{1}{(2\pi)^{d/2} |\Sigma|^{1/2}} \exp\left(-\frac{1}{2}(v_k - \mu_{i,j})^\top \Sigma^{-1}(v_k - \mu_{i,j})\right)$ 
+16:        $C \leftarrow C - \log p(v_k)$ 
+17:      $B[i, j] \leftarrow C$ 
+
+18: Search: Minimize the bitcost by dynamic programming
+19:  $C \leftarrow B$  ▷ will hold optimal costs
+20:  $P \leftarrow N \times N$  matrix of empty sets ▷ will hold optimal partitions
+21: for  $i=N-1, \dots, 0$  do
+22:   for  $j = i, \dots, \min(N, i+L)$  do
+23:     if  $B[i, j] + C[j, N] < C[i, N]$  then
+24:        $C[i, N] \leftarrow B[i, j] + C[j, N]$ 
+25:        $P[i, N] \leftarrow \{j\} \cup P[j, N]$ 
+
+26: Output: Optimal scene partition,  $P[0, N]$ 
+
+```
+
+have the recurrence relation
+
+$$C(i, j) = \min_{i \leq k \leq j} B(i, k) + C(k, j). \quad (1)$$
+
+Thus, we can compute the optimal partition by iteratively computing and caching  $C(i, N)$  for  $i = N - 1, \dots, 0$ . This is guaranteed to find the global optimum. It runs in  $O(N^2)$ , but by imposing a fixed threshold of the maximum number  $L$  of keyframes in a scene, this becomes  $O(N)$ . In our experiments, we find that setting  $L = 50$  produces no change in the solution. The full scene detection method is shown in Algorithm 1.
+
+### 3.3 CHARACTER NAME IDENTIFICATION
+
+To replace the arbitrary speaker IDs with character names, we first create a database of images of actors' faces paired with the name of the character they played from the IMDb movie page. As some of these images may contain multiple faces, or no faces, or even an entirely different character, we filter them to ensure a higher proportion contain only the face of the correct character, keeping only images with exactly one detected face, and for which the detected gender matches the name gender. Finally, we verify the faces in all pairs of remaining images against each other, using the DeepFace<sup>3</sup> library, to create a graph where images are connected if and only if they are verified as being the same person, and then exclude all images that are not part of the largest clique. In total, we filter out about 40% of images on average. This produces a name bank of character names paired with a set of images of the face of that character.
+
+For each scene, and for each character in our name bank, we define the cost of putting that character name in that scene as the minimum distance between an image of that character's face, and a face detected in any keyframe from the scene. The distance is the Euclidean distance of the DeepFace feature vectors. This avoids the incorrect assumption that the character speaking must be in shot, and
+
+<sup>3</sup><https://github.com/serengil/deepface>
+
+{5}------------------------------------------------
+
+![Figure 2: Computing the cost of assigning the character Clarice Starling (Jodie Foster) to three different scenes of The Silence of the Lambs (1991).](c54b3ca7603d65d4589151bc3a49d054_img.jpg)
+
+The figure illustrates the cost of assigning the character Clarice Starling (Jodie Foster) to three different scenes. It is divided into three vertical panels, each showing 'Actor Faces' on the left and 'Scene Faces' on the right, connected by arrows representing similarity scores.
+
+- Scene 1:** Shows two actor faces and three scene faces. The similarity scores are 0.89, 0.77, 0.82, 0.17, 0.81, and 0.18. The total cost is 0.16.
+- Scene 2:** Shows two actor faces and three scene faces. The similarity scores are 0.78, 0.66, 0.75, 0.95, 0.72, and 0.66. The total cost is 0.55.
+- Scene 3:** Shows two actor faces and three scene faces. The similarity scores are 0.17, 0.67, 0.11, 0.09, 0.39, and 0.14. The total cost is 0.09.
+
+Figure 2: Computing the cost of assigning the character Clarice Starling (Jodie Foster) to three different scenes of The Silence of the Lambs (1991).
+
+Figure 2: Computing the cost of assigning the character Clarice Starling (Jodie Foster) to three different scenes of *The Silence of the Lambs* (1991). After computing the cost of assigning a character to a each scene, we then compute the cost of assigning a character to a speaker ID as the mean of the cost of assigning them to all scenes that speaker ID appears in.
+
+instead makes the much weaker assumption that a character speaking must appear directly at some point in the scene. Thus, if we are considering assigning the character Clarice Starling to scene 3, then we compute the distance between the face feature vectors for all scraped images of the actor Jodie Foster in that role, and the face feature vectors of all faces detected in any keyframe in scene 3; the smallest distance is the cost of assigning Clarice Starling to scene 3. Computing the distance between vectors is extremely fast, taking  $< 1s$  for all considered assignments on the entire movie, and the feature vectors can be cached after being extracted once. An example of this cost computation is shown in Figure 2. Using this cost, we define the cost of assigning each character to each speaker ID, as the sum of assigning that character to all scenes that that speaker ID appears in For example, if Speaker18 appears in scenes 1 and 3 but not 2, then the cost of assigning Clarice Starling to Speaker18 is the mean of the cost of assigning Clarice Starling to scenes 1 and 3. This allows us to treat the name-speaker ID assignment problem as an instance of the linear sum assignment problem, which can be solved efficiently using the Kuhn-Munkres algorithm (Kuhn, 1956; Munkres, 1957).
+
+Specifically, we define a matrix  $S$  whose  $i, j$ th entry is the cost of assigning speaker  $j$  to name  $i$ . Let  $m, n,$  and  $k$  be the numbers of character names in the database, scenes in the movie, and unique speaker IDs in the transcript. Using matrix notation, we can then write  $S = AB$ , where  $A$  is the  $m \times n$  speaker ID-scene cost matrix, whose  $i, j$ th entry is the cost of assigning speaker  $j$  to scene  $i$ , and  $B$  is a  $n \times k$  matrix whose  $i, j$ th entry is  $1/a$  if speaker ID  $j$  appears in scene  $i$ , where  $a$  is the number of scenes speaker  $j$  appears in, and 0 otherwise. Because speaker diarization is imperfect and often mistakenly splits the same character into multiple IDs, we duplicate each matrix column three times, which allows up the three different speaker IDs assigned to the same character name. We also define a cost of leaving a SpeakerID unassigned as expected value of the cost of assigning a random speaker ID to a random character, which means that an ID remains unassigned if it is no closer to any character than a random speaker ID and character are to each other. The full name-assignment method is shown in Algorithm 2 in Appendix A.
+
+### 3.4 SCREENPLAY GENERATION
+
+After running the assignment algorithm from Section 3.3, we can replace the common speaker IDs in the automated, diarized transcript with the corresponding character names. Also, by matching the utterance times with the keyframe timestamps, we can insert the scene breaks from Section 3.2 into the transcript. Finally, we include descriptions of the visual contents of the scene by selecting three evenly spaced keyframes from that screen, applying an image captioning model (Peng et al., 2023), and inserting the output to the corresponding timestamped location of the transcript. In the caption, we replace occurrences of the nouns ‘person’, ‘woman’, ‘man’, ‘girl’, and ‘boy’ (and their determiners) with a character name, if this can be inferred from gender matching with the speaker names. For example, if the only non-male name in the script is ‘Clarice Starling’, then the occurrence of ‘a woman’ in the caption is replaced with ‘Clarice Starling’. The result of adding names, scene breaks and visual descriptions to the transcript is an automatically generated screenplay. We show an example of ScreenWriter output in Figure 3.
+
+{6}------------------------------------------------
+
+324 **Dr. Hannibal Lecter:** Billy is not a real transsexual. But he *Dr. Hannibal Lecter*  
+325 thinks he is. He tries to be. He's tried to be a lot of things, I *sits in a chair, and*  
+326 expect. *Clarice Starling*  
+327 **Clarice Starling:** What did you mean, Doctor? *stands next to him*  
+328 **Dr. Hannibal Lecter:** There are three major centers for transsexual *holding a book.*  
+329 surgery. Johns Hopkins, University of Minnesota and Columbus Medical ![A scene from The Silence of the Lambs showing Dr. Hannibal Lecter sitting in a chair and Clarice Starling standing next to him holding a book.](35e4f762fc1cfea5610d92e2d225d5b4_img.jpg)  
+330 Center. I wouldn't be surprised if Billy had applied for sex  
+331 reassignment at one or all of them and been rejected.  
+332 **Clarice Starling:** On what basis would they reject him?  
+333 **Dr. Hannibal Lecter:** Look for severe childhood disturbances  
+334 associated with violence. Our Billy wasn't born a criminal, Clarice.  
+335 He was made one through years of systematic abuse. Billy hates his  
+336 own identity, you see. But his pathology is a thousand times more  
+337 savage and more terrifying.  
+338 **Jame Gumb:** It rubs the lotion on its skin. It does this whenever *Catherine Martin is*  
+339 it's told. *trapped in a hole.*  
+340 **Catherine Martin:** Mr, my family will pay cash. Whatever ransom ![A scene from The Silence of the Lambs showing Catherine Martin trapped in a hole.](b6a97e4835c8c5eb846fcac2cc15117e_img.jpg)  
+341 you're asking for, they'll pay it.  
+342 **Jame Gumb:** It rubs the lotion on its skin or else it gets the hose  
+343 again. Yes, you will, precious. You will get the hose.  
+344 **Jame Gumb:** Okay. Okay. Okay. Okay. Okay.  
+345 **Catherine Martin:** Mr, if you let me go, I won't. I won't press  
+346 charges. I promise. See, my mom is a real important woman. I guess  
+347 you already know that.  
+348 **Jame Gumb:** Now it places the lotion in the basket.
+
+Figure 3: Example of a snippet from the generated screenplay for *The Silence of the Lambs* (1991). The left side shows the transcribed text, with the names inferred by our method. The right side shows the *visual captions*, along with the keyframe from which they were derived. The horizontal line shows the inferred scene break.
+
+### 3.5 MOVIE SUMMARY GENERATION
+
+We experimentally show that the generated screenplay can be used as a basis for movie summarisation. We adopt a hierarchical summarisation approach (Pang et al., 2023; Chang et al., 2023), as it has been shown to be particularly suited to long inputs that exceed the context window size of large language models, and in our case can leverage the organization of the content into scenes. We first summarise the transcript dialogue of each scene, and then fuse the resulting sequence of summaries, along with the visual information for each scene into a single summary for the entire movie (see Figure 1). Our summariser is implemented using a widely-used open-source LLM library (Dubey et al., 2024) with zero-shot prompting.
+
+## 4 EXPERIMENTAL SETTING
+
+**Implementation Details** Keyframes are extracted using FFmpeg’s scene detect filter. The full command is given in Appendix B. Visual features are extracted from keyframes using CLIP (Radford et al., 2021). The precise model used in the experiments of Section 5 is ‘CLIP-ViT-g-14-laion2B-s12B-b42K’ from [https://github.com/mlfoundations/open\\_clip](https://github.com/mlfoundations/open_clip). This speaker diarization model is WhisperX (Bain et al., 2023), an extension of Open AI’s Whisper model which can perform speaker diarization and accurate utterance timestamping. For visual descriptions, we use Kosmos 2 (Peng et al., 2023), which has been pretrained on several multimodal corpora as well as grounded image-text pairs (spans from the text are associated with image regions) and instruction-tuned on various vision-language instruction datasets. Our summarisation model is built on top of Llama 3.1 70B (Touvron et al., 2023). We use short simple prompts for Llama and Kosmos, which are given in full in Appendix C. We instruct summaries to be a maximum of 635 words (the mean in our test set), and truncate summaries to 650 words if they are longer.
+
+**Dataset** We take screenplays (for comparison models and some testing, see below) and gold summaries from the recently released MovieSum dataset (Saxena & Keller, 2024). For all 200 movies in the test set, we purchased the corresponding videos to use as input to our model. We were able to find videos for 175/200 test set instances. These movies span multiple fiction genres: drama, action, thriller, comedy, horror, etc. They have an average run time of 118min (range 84–228), with release dates ranging from 1950 to 2023. The gold summaries average 635 words in length. The mean
+
+{7}------------------------------------------------
+
+number of scenes in the gold script is 151. Because all stages of our method are zero-shot, we do not need video inputs for the training set.
+
+**Evaluation Metrics** Automated evaluation metrics are crucial for our task and for related long-form applications where human evaluation is extremely labor-intensive, costly, and difficult to design Krishna et al. (2023). As there is no single agreed-upon metric for automatically evaluating summarisation, we report several complementary metrics aimed at assessing different aspects of summary quality. **Rouge** (Lin, 2004) assesses informativeness against the reference summaries; **PRISMA** (Mahon & Lapata, 2024) measures factual precision and recall with respect to the gold summary; we use GPT4-turbo for both fact the extraction and evaluation stages; **SummaC** (Laban et al., 2022) uses NLI to measure consistency between the input document (gold screenplay) and generated summary; we use the SummaCConv version with 50 evenly-spaced bins; **AlignScore** (Zha et al., 2023) scores the ‘informational alignment’ between the source (gold screenplay) and the generated summary; we use the base-model checkpoint provided by the authors, and the recommended ‘nli’ setting with sentence chunk splitting. For both Alignscore and PRISMA we score duplicated information as incorrect, to penalize LLM outputs that repeat the same sentences over and over. To measure the accuracy of our scene detection method, we use standard partition quality metrics: cluster accuracy, adjusted Rand index and normalized mutual information, as defined in Mahon & Lukasiewicz (2024).
+
+## 5 RESULTS
+
+**Scene Detection** To measure the accuracy of our scene segmentation method in isolation, we compare the partitions it produces to that arising from the ground truth scene breaks given in the gold screenplay. We perform dynamic time warping (Myers & Rabiner, 1981) on the dialogue lines in the gold screenplay and the timestamped utterances from the automatic transcript, in order to produce timestamps for the ground truth scene breaks. A naive metric would be the distance between the  $n$ th predicted break and the  $n$ th ground truth break, but this is inappropriate because a model that failed to predict the very first break, but got every other one exactly right, would then get a low score. Instead we treat scene break detection as a partition problem. Specifically, we consider the video as divided into 0.1s segments, where two segments are in the same element of the partition if and only if there is no scene break between them.
+
+Table 1: Cluster accuracy ‘acc’, adjusted Rand index (‘ari’) and normalized mutual information (‘nmi’) of our predicted scene breaks, compared to SceneDetect and Yeung & Yeo (1996) as well as uniformly into 60, 75 and 90 and the true number of scenes (‘uniform oracle’).
+
+|  | acc | ari | nmi |
+|-|-|-|-|
+| unif-60 | 0.461 | 0.278 | 0.720 |
+| unif-75 | 0.441 | 0.244 | 0.712 |
+| unif-90 | 0.430 | 0.216 | 0.704 |
+| unif-oracle | 0.436 | 0.228 | 0.710 |
+| yeung96 | 0.321 | 0.220 | 0.541 |
+| psd | 0.394 | 0.061 | 0.596 |
+| ours | <b>0.564</b> | <b>0.375</b> | <b>0.746</b> |
+
+Table 1 shows the accuracy of the predicted scene breaks, using the standard clustering metrics as defined above. As comparison models, we use the popular SceneDetect library<sup>4</sup> based on pixel discontinuities, the method of Yeung & Yeo (1996), which iteratively merges nearby similar shots into scenes, as well as various versions of splitting the input into uniformly-sized scenes: splitting into 60, 75 and 90 scenes (unif-60, unif-75 and unif-90, respectively), and splitting into the ground truth number of scenes for each movie. Note that our method makes no restrictions on the possible number of scenes, it is free to predict only one scene, or as many scene as there are 0.1s segments (~60,000). In practice, it predicts somewhere between 25 and 107 scenes across the test set. We observe that our minimum description length inspired algorithm is superior to baselines based on uniform segmentation, even when the number of scenes is known in advance (see row unif-oracle). Many occasions where the model fails to predict a scene boundary occur when the scenes on either side appear visually similar. For example, in *The Witch* (2015), many scenes take place with the same background and characters, which presents only minor visual differences for the algorithm to detect. This suggests that many of the errors in our scene detection arise from insufficient signal in the visual feature vectors, rather than from the algorithm itself, and that future work which augments these vectors with, e.g., elements from dialogue or audio, would improve accuracy.
+
+<sup>4</sup><https://www.scedetect.com/>
+
+{8}------------------------------------------------
+
+**Name Assignment** Table 2 presents evaluation of our name assignment algorithm against two baselines which assign names randomly and assign all IDs the most common name, i.e., the main character. As can be seen, though there is room for improvement, our approach is more accurate by a wide margin. Multiple factors contribute to the errors in name assignment: some incorrect faces being retrieved from the database (though this is low due to our clique-based filtering procedure), inaccuracies in the face feature vectors, such that the same person can sometimes receive dissimilar vectors in different contexts while different people can receive sometimes similar vectors, and the speaker diarization performed by WhisperX, which sometimes gives the same character a different speaker ID, or gives the same speaker ID to two different characters. This last error is especially problematic because it makes it impossible for the assignment algorithm to find a solution with zero mistakes. We expect that future improvements in speaker diarization and face verification will reduce the prevalence of these errors. Indeed, this is one of the advantages of a modular framework: improvements in specific areas can be incorporated into the framework without needing to change the other modules.
+
+Table 2: Accuracy of our assigned character names assigned compared to assigning names randomly ('random') and assigning the most common name, i.e., the main character, to all lines. Scores are averaged both across all movies ('acc movie-wise') and across all script lines in all movies ('acc line-wise').
+
+|  | ours | most common | random |
+|-|-|-|-|
+| acc movie-wise | 61.12 | 19.35 | 2.97 |
+| acc line-wise | 65.72 | 19.62 | 2.61 |
+
+**Summarisation** In Table 3, we evaluate the summaries generated by our method. We benchmark against three baselines: 'name-only prompt' uses the parametric knowledge of the LLM without any content input, e.g., the prompt is 'Summarize the movie *The Silence of the Lambs*<sup>5</sup>'; 'full script' uses the entire gold screenplay as input in the prompt, and for 'whisperX' the input is the WhisperX transcript. We also compare to two existing models: Otter (Li et al., 2023), an end-to-end video description model based on video-llama2; and the modular model of Mahon & Lapata (2024) which takes videos and gold screenplays as input (described in Section 2). For Otter, we divide the input video into 3min chunks, and combine the model description of each chunk. We compare only to open-source models. We do not know the training setup or internals of closed-source proprietary models, so we would argue there is little to be learnt by comparison with them.
+
+Our summaries obtain highest scores, across all metrics. The improvement is largest for the fact-based metrics of PRISMA (comprised of fact-prec and fact-rec), and Alignscore. The existing models, Otter and multimodal modular, especially struggle with such metrics. We find that Otter is mostly able to capture surface-level detail, with descriptions such as "a woman gets out of a car and goes into a building", but is unable to construct a narrative such as "a woman drives to the bank to deposit the money", so ends up capturing very little of the plot. The low scores of multimodal modular, on the other hand, are largely due to the older, smaller backbone model (BART, Lewis et al. (2020)), which often becomes decoupled from the input and produces unrelated output, highlighting the importance of incorporating current LLMs into video summarisation models. Giving only the movie name in the prompt produces reasonably high-quality summaries, confirming that Llama3.1 has significant information about these movies stored parametrically. However, these summaries are short, and when asked for a longer summary, the model repeats the same information over and over. Surprisingly, giving the full gold screenplay as input does not produce better summaries than our method or than some other baselines. This shows there is still difficulty in summarising very long text inputs. It appears that when prompted with the name only, the Llama-3.1 very likely effectively regurgitates an existing online summary. When given a very long prompt composed of the transcript or screenplay, it tries to actually summarise the information given, during which it can make mistakes. We provide example summary output in Appendix D.
+
+Table 4 shows the results of removing the main components of our model. In 'w/o names', we omit replacing speaker IDs with character names. This causes summary quality to drop, which shows that not only is our name assignment more accurate than baseline methods (see Table 2), but it is sufficiently accurate to lead to improved downstream summaries. In 'w/o scene breaks', we feed the entire ScreenWriter input to Llama 3.1, instead of our hierarchical approach of first summarising
+
+<sup>5</sup>Precise prompts are given in Appendix C.
+
+{9}------------------------------------------------
+
+Table 3: Summarisation results on MovieSum. Best results are **in bold**, second best are *italicised*..
+
+|  | r1 | r2 | r1-sum | fact-prec | fact-rec | PRISMA | alignscore | summacc |
+|-|-|-|-|-|-|-|-|-|
+| name-only prompt | <i>43.46</i> | <i>9.53</i> | <i>41.17</i> | <i>50.40</i> | <i>43.04</i> | <i>44.16</i> | <i>53.11</i> | <i>26.57</i> |
+| full script | 42.39 | 9.32 | 39.94 | 48.77 | 52.73 | 49.05 | 68.59 | 25.83 |
+| whisperX | 42.37 | 9.22 | 39.94 | 46.73 | 53.65 | 48.00 | 68.57 | 25.86 |
+| Otter | 27.93 | 3.06 | 26.73 | 11.67 | 8.95 | 5.18 | 45.90 | 24.37 |
+| multi-modular | 20.59 | 2.79 | 19.97 | 23.16 | 23.19 | 19.28 | 46.32 | 26.97 |
+| ours | <b>46.48</b> | <b>10.32</b> | <b>44.50</b> | <b>55.24</b> | <b>54.77</b> | <b>53.57</b> | <b>72.76</b> | <b>27.24</b> |
+
+Table 4: Ablation studies on summarisation results on MovieSum. Setting ‘w/o names’ does *not* replace speaker IDs with character names using our assignment method. Setting ‘w/o scene breaks’ summarises the entire screenplay in one pass, rather than splitting it into scenes using our algorithm and summarising each separately.
+
+|  | r1 | r2 | r1-sum | fact-prec | fact-rec | PRISMA | alignscore | summacc |
+|-|-|-|-|-|-|-|-|-|
+| w/o names | 45.46 | 10.43 | 43.40 | 49.93 | 53.64 | 49.00 | 63.67 | 26.45 |
+| w/o scene breaks | 38.87 | 8.45 | 36.82 | 48.32 | 51.79 | 48.11 | 71.95 | 26.31 |
+| unif-breaks | 38.87 | 8.45 | 36.82 | 46.58 | 50.69 | 48.11 | 57.62 | 25.73 |
+| ours | 46.48 | 10.32 | 44.50 | 55.24 | 54.77 | 53.57 | 72.76 | 27.24 |
+
+scenes and then fusing these to a final summary. The drop in summary performance in this setting shows the effectiveness of the hierarchical summarisation method enabled by the scene breaks in ScreenWriter. In ‘unif-breaks’, we still adopt the hierarchical summarisation method, but instead of using our scene breaks, split scenes into uniform chunks of length 250 tokens, which is the mean scene length from our predicted segmentation. This setting also reduces summary quality, which shows that not only is our scene segmentation more accurate than baseline methods (Table 1), but it is sufficiently accurate to lead to improved downstream summaries.
+
+## 6 CONCLUSION
+
+In this work, we proposed the task of generating automatic screenplays for movies from only video and audio input. Our model, Screenwriter, produces screenplays automatically (including dialogue, speaker names, scene breaks and visual descriptions) based on two novel algorithms: one for segmenting the video into scenes, based on the minimum description length principle and dynamic-programing for search, and one for assigning character names to dialogue utterances using a database of names and actor faces. Experimental results show that the output of ScreenWriter together with a hierarchical summarisation method can be used to generate movie plot synopses from only video and audio input. To the best of our knowledge, this is the first attempt to address this task. In the future, we would like to extend ScreenWriter’s capabilities to other types of long videos, including documentaries, current affairs television programmes, and sports games, and explore personalised summary generation.
+
+## ETHICS STATEMENT
+
+Copyright is a concern when working with movies. We respected this by purchasing all the movies used for testing.
+
+## 7 REPRODUCIBILITY STATEMENT
+
+We specify the novel algorithms in detail in Section 3. We list the specific models used for our method and for comparison models in Section 4. We specify prompts used in Appendix C. Addi-
+
+ Rest of paper (reference and Appendix) is removed.

@@ -1,0 +1,311 @@
+
+
+{0}------------------------------------------------
+
+# SPARQ: OUTLIER-FREE SPEECHLM WITH FAST ADAPTATION AND ROBUST QUANTIZATION
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+We propose **SpARQ** (outlier-free **SpeechLM** for **Fast Adaptation and Robust Quantization**) to tackle the outlier problem of **Speech** and **Language** multi-modal **Models (SpeechLMs)**. Our primary observation is that outliers stemming from cross-modal (speech and text) low-rank adaptation and post-training quantization stages affect the performance of the current SpeechLMs. Methodologically, **SpARQ** leverages a pretrained language model as its foundation, substituting the traditional attention layer with a novel stabilized outlier-free layer. This modification eliminates outliers typically arising during cross-modal low-rank adaptation and post-training quantization. The model is then fine-tuned on multi-modal data using proposed outlier-free architecture, allowing it to handle textLM, speechLM, ASR, and TTS tasks through a unified interface while maintaining compatibility with parameters adapted from standard pretrained LLMs. Consequently, on the OPT-1.3b model, the proposed framework achieves relative performance improvements: 41% in cross-modal low-rank adaptation and 45% in post-training quantization, along with a 1.33x training speedup. We benchmark it against state-of-the-art low-rank adaptation and post-training quantization methods.
+
+## 1 INTRODUCTION
+
+SpeechLM leverages pretrained language models to significantly enhance speech recognition and synthesis technologies, transforming our ability to understand and generate natural speech (Nguyen et al., 2024). Traditional Automatic Speech Recognition (ASR) (Park et al., 2019) and Text-to-Speech (TTS) (Hayashi and Watanabe, 2020) systems rely on specialized components like feature extraction, acoustic or linguistic modeling, and waveform synthesis. In contrast, as illustrated in Figure 1, SpeechLM integrates these modalities within a single Large Language Model (LLM) framework, using a unified token space for both speech and text as input and output. This integration enables ASR, TTS, speech generation (SpeechLM), and text generation (textLM) tasks within the same framework (Maiti et al., 2023; Yang et al., 2023), leveraging the robust capabilities of text-based language models to enhance performance, efficiency, and adaptability in speech-related applications.
+
+However, efficiently adapting LLMs to handle speech remains a major challenge (Mehrish et al., 2023). While some speech and audio understanding models (Chu et al., 2023; Wang et al., 2023a; Gong et al., 2023; 2024) have employed efficient techniques like low-rank adaptation or freezing the entire LLM when integrating new inputs, these methods have not been applied to the SpeechLM framework for generating outputs in both speech and text modalities (Maiti et al., 2023; Yang et al., 2023; Zhang et al., 2024; Défossez et al., 2024). The fundamental differences between text and speech modalities—such as variable sequence lengths and data representations—complicate this adaptation process. Consequently, there is a pressing need for methods to achieve the efficiency gains of low-rank adaptation and post-training quantization for the SpeechLM framework.
+
+Studies have shown that transformer-based models often focus on less informative tokens, resulting in inefficiencies due to outliers (Clark et al., 2019; Kovaleva et al., 2019; Zhao et al., 2024; Huang et al., 2024). In multimodal frameworks, outliers present in pretrained LLMs and multimodal generation tasks (Zhang et al., 2020) exacerbate these challenges, and as demonstrated in (Crabbé et al., 2024), multimodal models exhibit a substantial number of outliers in their attention mechanisms. During low-rank adaptation, outliers from the pretrained model mix with those introduced by the multimodal data, leading to distorted outputs and diminished performance. Similarly, in post-training quantization, outliers inherited from the pretrained model negatively impact the quality of the final output.
+
+{1}------------------------------------------------
+
+![Diagram illustrating the SpeechLM System architecture. The system takes a text input (TXT) and a speech input (Wav) as inputs. The text input is processed by a Text Tokenizer to produce Text Tokens. The speech input is processed by a Hubert Encoder to produce Speech Tokens. These tokens are then fed into a Decoder-Only Language Model. The model outputs a sequence of tokens, including special tokens 'ST' (start of text) and 'GS' (generate speech), which are then decoded back into the original modality (Text or Speech) by a Speech Decoder.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+The diagram shows the architecture of the SpeechLM system. On the left, a 'TXT' icon represents a text input, and a 'Wav' icon represents a speech input. The text input is processed by a 'Text Tokenizer' to produce 'Text Tokens' (represented by a sequence of colored squares). The speech input is processed by a 'Hubert Encoder' to produce 'Speech Tokens' (also represented by a sequence of colored squares). These tokens are fed into a 'Decoder-Only Language Model' (a large purple box). The model outputs a sequence of tokens, including special tokens 'ST' (start of text) and 'GS' (generate speech), which are then decoded back into the original modality (Text or Speech) by a 'Speech Decoder'.
+
+Diagram illustrating the SpeechLM System architecture. The system takes a text input (TXT) and a speech input (Wav) as inputs. The text input is processed by a Text Tokenizer to produce Text Tokens. The speech input is processed by a Hubert Encoder to produce Speech Tokens. These tokens are then fed into a Decoder-Only Language Model. The model outputs a sequence of tokens, including special tokens 'ST' (start of text) and 'GS' (generate speech), which are then decoded back into the original modality (Text or Speech) by a Speech Decoder.
+
+Figure 1: **Illustration of the SpeechLM System.** The language model is trained using a next-token prediction objective. Speech tokens are generated by encoding speech with the HuBERT encoder and can be decoded back to their original modality. We train the SpeechLM models on a combination of sequences: text-only, speech-only, speech-to-text (ASR), and TTS. In the figure, we demonstrate an ASR example that uses special tokens "ST" (start of text) and "GS" (generate speech) alongside text and speech tokens.
+
+To address these issues and enable efficient fine-tuning and post-training quantization (e.g., SmoothQuant (Xiao et al., 2023)) in transformer-based models with multimodal inputs, we propose a novel stabilized outlier-free layer as a substitute for the conventional attention mechanism (Vaswani et al., 2017). Unlike prior work that applies outlier mitigation during pretraining, we apply our approach during the domain adaptation fine-tuning procedure for low-rank adaptation (LoRA) and post-training quantization on pretrained LLMs. Our design builds upon the outlier-free Hopfield layer introduced by (Hu et al., 2024a), which has been proven to effectively identify and filter out outliers.
+
+Our approach enhances transformer-based pretrained Language Learning Models (LLMs) through the integration of a specialized stabilization module within the outlier-free layer. This innovative design enables direct parameter adaptation of existing pretrained vanilla LLMs, eliminating the need for training an outlier-efficient model from scratch. Such an approach preserves the inherent capabilities of pretrained transformers while substantially reducing computational overhead. The framework’s effectiveness is further amplified through the incorporation of low-rank adaptation techniques, such as LoRA (Hu et al., 2021), alongside post-training quantization methods. These implementations yield marked performance improvements compared to conventional transformer-based models. Through this enhancement strategy, we have developed a solution that not only optimizes efficiency but also increases practical applicability, making it valuable in resource-constrained environments where training capabilities may be limited.
+
+**Contributions.** We propose Stabilized Outlier-free SpeechLM with Fast Adaptation and Robust Quantization (SpARQ) for multi-modal speech-text tasks. Our contributions are as follows:
+
+- **Methodological Innovation:** We present a stabilized outlier-free layer as a replacement for the standard transformer attention mechanism in the SpeechLM model. This layer mitigates outliers that emerge during text-based LLM adaptation to multi-modal generation, improving performance in speech applications while maintaining stability through LoRA and quantization processes. The outlier-free layer works in concert with LoRA to minimize trainable parameters in LLM-to-SpeechLM adaptation, resulting in enhanced quantized model performance.
+- **Efficient Adaptation of Pretrained LLMs:** The stabilization module in our outlier-free layer enables direct parameter initialization from transformer-based LLMs to outlier-free SpeechLM. This method matches the performance of full LLM retraining under outlier-free conditions. The integration with LoRA delivers superior results in ASR and TTS tasks compared to standard transformer-based SpeechLM architectures. Our approach optimizes resource utilization while maintaining performance, making it ideal for deployment in computationally constrained environments.
+- **Empirical Validation:** Our work presents the first successful implementation of this approach in a multi-modal SpeechLM framework that combines speech and text generation through LoRA, QLoRA, and post-training quantization techniques. Using the Open Pretrained Transformer (OPT) as our foundation, we conducted comprehensive evaluations of our method’s performance and efficiency. Benchmarks against current low-rank adaptation methods and post-training quantization techniques demonstrate the framework’s effectiveness. The results show relative performance gains of 41% in cross-modal post-training quantization and 45% in low-rank adaptation compared to standard frameworks.
+
+{2}------------------------------------------------
+
+**Organization.** Section 2 includes a description of recent work in SpeechLM and Low-rank adaptation fine-tuning. Section 3 details the system settings of SpeechLM and the outlier-efficient architecture in our framework. Section 4 presents the numerical evaluation results demonstrating the efficiency of our framework. Section 5 provides a conclusion and discusses future research directions.
+
+## 2 RELATED WORK
+
+**Discrete Speech Representation.** Recent advances in Self-Supervised Learning (SSL) for speech have improved our ability to derive meaningful representations from raw audio data. These advancements enable the extraction of discrete speech tokens from SSL models like HuBERT (Hsu et al., 2021) and w2v-BERT (Chung et al., 2021) for various speech-processing applications. These SSL models generate semantic tokens by clustering learned features, capturing the linguistic content of the speech. This approach transforms speech into pseudo-text, facilitating applications in speech-based natural language understanding and generation. Models like HuBERT cluster continuous speech features into discrete tokens that represent phonetic or sub-word units, improving the accuracy and efficiency of high-level speech processing tasks, such as TTS (Hayashi and Watanabe, 2020), speech-to-speech translation (S2ST) (Lee et al., 2021), and ASR (Park et al., 2019).
+
+**Speech and Text LMs.** Joint modeling of speech and text has gained significant attention in recent studies. Initial approaches (Ao et al., 2021; Chen et al., 2022) proposed learning shared speech-text representations with separate encoders and decoders, requiring alignment losses for cross-modal transfer. Recent methods employ a single model for multiple tasks. For example, SpeechGPT (Zhang et al., 2023) combines audio generation with textLMs. PolyVoice applies speechLM to S2ST (qian Dong et al., 2023). SpiritLM (Nguyen et al., 2024) excels in speech and expressive speech generation, also adapted for related speech tasks, and Voxlm (Maiti et al., 2024) conducts speech/text generation along with ASR and TTS. We utilize textually pre-trained OPT (Zhang et al., 2022) for better initialization inspired by (Maiti et al., 2024; Hassid et al., 2024) and leverage different speech tokens, ensuring full reproducibility of our work.
+
+**Low-Rank Adaptation and Post Training Quantization.** Low-Rank Adaptation (Xin et al., 2024) and Post Training Quantization (PTQ) (Gholami et al., 2022) are essential techniques for reducing the memory footprint and latency of large foundation models (Bommasani et al., 2021), i.e. huge transformer-based models. Those large foundation models play a crucial role not only in machine learning area but also in a huge scientific area, such as (Zhou et al., 2024) for genomics, (Wang et al., 2023b; Wu et al., 2023) for financial, and (Maiti et al., 2024) for speech. However, large foundation models are resource-intensive. Low-Rank Adaptation and PTQ play crucial roles in deploying these large models on edge devices with limited resources. Significant contributions have been made in the area of Low-Rank Adaptation (Dettmers et al., 2024; Li et al., 2023; Hu et al., 2021) and PTQ (Zafir et al., 2019; Dettmers et al., 2022). However, these methods typically do not address the outlier problem during the Low-Rank Adaptation and quantization processes, as highlighted by (Hu et al., 2024a). To tackle this issue, we propose the Outlier-Free Layer to manage outliers effectively during both the Low-Rank Adaptation and quantization processes.
+
+## 3 METHODOLOGY
+
+This section introduces the Stabilized Outlier-Free SpeechLM system, which adapts LLMs to speech and text modalities by replacing standard transformer layers with a stabilized Outlier-Free Layer. This layer mitigates challenges posed by outliers during cross-modal low-rank adaptation and post-training quantization, addressing instabilities encountered with existing outlier layers.
+
+### 3.1 SPEECHLM SETUP
+
+Our goal is to model both speech and text modalities within a unified framework. To achieve this, we convert continuous speech signals into discrete tokens  $s_i \in \mathcal{V}_{\text{sp}}$ , using a speech tokenizer, such as a HuBERT model with  $k$ -means clustering. These speech tokens are integrated with text tokens  $t_i \in \mathcal{V}_{\text{txt}}$  to form a shared vocabulary  $\mathcal{V}_{\text{joint}} = \mathcal{V}_{\text{txt}} \cup \mathcal{V}_{\text{sp}}$ . We combine tokenized training data from multiple tasks to create a joint dataset and train a subword model (e.g., BPE or SentencePiece) on this data. We model the probability of a text utterance  $T = (t_i)$  as  $p(T) = \prod_i p(t_i | t_1, \dots, t_{i-1})$ . Similarly, continuous speech signals are converted into discrete tokens  $S = (s_i)$  and modeled likewise. The joint probability of speech and text tokens  $J = (j_i \in \mathcal{V}_{\text{joint}})$  is expressed as  $p(J) = \prod_i p(j_i | j_1, \dots, j_{i-1})$ . To enable the model to handle multiple tasks within this unified framework, we incorporate four special tokens to indicate tasks: start of speech (SS)/text (ST) and generate speech (GS)/text (GT), following (Maiti et al., 2023). In SpeechLM and textLM tasks, GS and GT appear at the beginning of sentences. For
+
+{3}------------------------------------------------
+
+![Figure 2: Illustration of the SpARQ Framework and Outlier-free Layer. The diagram is divided into three parts: a) Vanilla SpeechLM Framework, b) Proposed SpARQ Framework, and c) Proposed Layer. Part (a) shows a 'Vanilla Transformer' block with 'Self-Attention Module' and 'Feed Forward Network' leading to a 'Softmax' function, which produces a distribution with outliers. Part (b) shows the 'Proposed SpARQ Framework' where the 'Softmax' is replaced by an 'Outlier-free Transformer' block, which includes 'Max-shift Normalization' and 'Outlier-free Activation', resulting in a cleaner distribution. Part (c) shows the 'Proposed Layer' in detail, with 'Input' entering 'Max-shift Normalization' followed by 'Outlier-free Activation' to produce the 'Output'.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 2: Illustration of the SpARQ Framework and Outlier-free Layer. The diagram is divided into three parts: a) Vanilla SpeechLM Framework, b) Proposed SpARQ Framework, and c) Proposed Layer. Part (a) shows a 'Vanilla Transformer' block with 'Self-Attention Module' and 'Feed Forward Network' leading to a 'Softmax' function, which produces a distribution with outliers. Part (b) shows the 'Proposed SpARQ Framework' where the 'Softmax' is replaced by an 'Outlier-free Transformer' block, which includes 'Max-shift Normalization' and 'Outlier-free Activation', resulting in a cleaner distribution. Part (c) shows the 'Proposed Layer' in detail, with 'Input' entering 'Max-shift Normalization' followed by 'Outlier-free Activation' to produce the 'Output'.
+
+Figure 2: Illustration of the SpARQ Framework and Outlier-free Layer. The vanilla SpeechLM framework employs a pretrained LLM as its backbone for processing cross-modal inputs (text and speech). However, this approach often results in output outliers, as illustrated in Figure a). To address this issue, we propose SpARQ, which replaces the original softmax activation function with an outlier-free layer. Figure b) demonstrates SpARQ’s effectiveness in reducing outliers. The structure of our outlier-free layer, detailed in Figure c), comprises a max-shift normalization followed by a  $\text{softmax\_1}$  activation function.
+
+ASR and TTS tasks, sentences start with SS or ST and use GT or GS as prediction start tokens. This setup enables unified next-token prediction across all tasks.
+
+**Modality Fusion.** SpeechLM accepts both speech and text inputs within the shared vocabulary  $\mathcal{V}_{\text{joint}}$ , formed by combining text characters and discrete speech tokens obtained using  $k$ -means clustering on pre-trained HuBERT features (Hsu et al., 2021), as described earlier. For speech synthesis, we use HiFi-GAN (Kong et al., 2020), incorporating x-vector (Snyder et al., 2018) as the speaker embedding, both pretrained on LJSpeech (Ito., 2017). Additionally, to enhance contextual information and reduce sequence length, we apply sentencepiece subword modeling (Kudo and Richardson, 2018) within  $\mathcal{V}_{\text{joint}}$  (Radford et al., 2019; Song et al., 2020; Chang et al., 2023). During training, we employ teacher forcing in an autoregressive manner. At each timestep  $i$ , SpARQ predicts the distribution  $\tilde{p}^i = \text{SpARQ}(j_1, \dots, j_{i-1})$ , and the cross-entropy loss is computed as:
+
+$$L_{CE}(p_i, \tilde{p}^i) = - \sum_{c=1}^{|\mathcal{V}_{\text{joint}}|} p_i(c) \log \tilde{p}^i(c),$$
+
+where  $p_i$  is the true probability distribution. During inference, the model predicts the next tokens conditioned on the input as  $p(\cdot | \text{condition})$ . For TTS, given a text utterance  $T_{\text{test}}$ , it predicts speech tokens  $\hat{S}$ . For ASR, given speech tokens  $S_{\text{test}}$ , it predicts text  $\hat{T}$ . For speech or text continuation, it predicts continued speech tokens  $\hat{S}$  or text  $\hat{Y}$  based on the respective prefixes. The model is trained on these cross-modality tasks using the task-specific tokens introduced earlier.
+
+### 3.2 OUTLIER FREE ARCHITECTURE
+
+The Outlier-free layer is our proposed solution to mitigate challenges posed by outliers during the model’s cross-modal low-rank adaptation and post-training quantization processes. The proposed outlier efficient architecture is shown in Figure 2.
+
+**Problem Setup.** We consider a multimodality speech-text framework where the input is a  $d$ -dimensional speech-text sequence of length  $L$ , represented as a matrix  $X \in \mathbb{R}^{d \times L}$  for compatibility with the transformer architecture. The matrix  $X$  is then processed by transformer layers, which are composed of multiple self-attention mechanisms followed by feed-forward neural networks.
+
+**Motivational Example.** Studies by (Clark et al., 2019) and (Kovaleva et al., 2019) find that in BERT, certain tokens such as delimiters and punctuation marks receive disproportionately high attention weights compared to other tokens. Additionally, as stated in (Bondarenko et al., 2024) and (Hu et al., 2024a), tokens, despite having low informational value, tend to attract significant attention probabilities. Such behaviors lead to excessive computational and memory demands during the model training process and contribute to significant performance degradation during model quantization. As demonstrated in (Crabbé et al., 2024), multimodal models exhibit a substantial number of outlier in their attention. We use this observation as a starting point by considering the following attention mechanism:
+
+$$\text{Output} = \text{Residual}(\text{Softmax}(\text{XW}_q \text{XW}_k^T / \sqrt{d}) \text{XW}_v + X). \quad (3.1)$$
+
+With the given formula, if the attention input  $X$  already holds sufficient information, the transformer should prevent from making updates. However, due to the characteristics of the  $\text{Softmax}$  function, tokens with smaller values receive disproportionately high attention weights. This results in a broad distribution of attention scores and introduces outliers that negatively impact the model’s performance. Furthermore, cross-modal inputs (text and speech) may inherently possess distinct statistical characteristics. This can complicate the normalization of attention scores and potentially
+
+{4}------------------------------------------------
+
+introduce additional outliers that affect the model’s performance. We provide a visualization of the outliers in the SpeechLM system in Appendix A.
+
+Given this challenge, we would like to develop a transformer architecture that can efficiently solve the challenge in Equation (3.1). To achieve this, we propose an outlier-free layer consisting of a stabilized layer and a memory-associated activation function. There is a huge amount of work proposed to reduce the outlier challenges in each of the model stages, pre-training (Hu et al., 2024a), fine-tuning (Chen et al., 2024; Hu et al., 2024b), and inference (Xiao et al., 2023; Bondarenko et al., 2024). Following (Miller, 2023; Hu et al., 2024a), we use outlier-free memory associated ( $\text{Softmax}_1$ ) function (as shown in 3.2) for input vector  $S$  to tackle the challenge of the outliers in LLMs. We term this architecture outlier-free Transformer, and briefly comment on it. Firstly, our proposed architecture is applied to the attention mechanism in the transformer layer with the activation function  $\text{Softmax}_1$ . Secondly, we introduce a stabilized layer to ensure numerical stability in the  $\text{Softmax}_1$  function, forming a stabilized outlier-free layer as:
+
+$$\text{Softmax}_1(S) = \frac{\exp(S)}{1 + \sum_{i=1}^L \exp(S_i)}, \text{ where } S = S - \max(S). \quad (3.2)$$
+
+With the model size increasing, the  $\text{Softmax}_1$  function in (Hu et al., 2024a) brings gradient problem due to the numerical instability in  $\text{Softmax}_1$  function (Alman and Song, 2024). Recent works (Hu et al., 2024b; Jiang et al., 2023) provide theory support for the essential of the stabilized layer, and we have tried different stabilized methods as shown in Table 7.
+
+### 3.3 INTEGRATING THE OUTLIER-FREE ARCHITECTURE INTO SPEECHLM
+
+We accommodate the outlier-free architecture into the SpeechLM framework to create our proposed SpARQ system. This integration enables efficient adaptation of pre-trained LLMs to the multi-modal speech-text setting and facilitates effective post-training quantization.
+
+Two main challenges arise in this process. First, adapting text-only pre-trained LLMs to a multi-modal environment involves handling an expanded vocabulary  $V_{\text{joint}}$ , longer sequences due to speech tokens—which are about five times more numerous than text tokens—and the presence of outliers that hinder both low-rank adaptation and post-training quantization. This complexity makes applying parameter-efficient training methods like LoRA and quantization techniques challenging. Second, since the pre-trained LLMs are based on vanilla transformer architectures, replacing the standard transformer layers with the outlier-free layers can introduce instability. The model parameters are not initially optimized for the new architecture, necessitating a stabilization mechanism to ensure training proceeds smoothly without significant perturbations.
+
+**Cross-Modal Adaptation.** To address the first challenge, we utilize our stabilized outlier-free layers to mitigate the impact of outliers during adaptation. By effectively handling outliers, our approach enables both efficient low-rank adaptation techniques like LoRA and robust post-training quantization methods such as SmoothQuant. This allows the model to manage the expanded vocabulary and longer sequences more effectively, facilitating parameter-efficient training and quantization. Consequently, we reduce trainable parameters and computational overhead compared to full fine-tuning methods used in previous works (Maiti et al., 2023; Nguyen et al., 2024), and improve quantization performance.
+
+**Stabilized Outlier-Free Adaptation.** For the second challenge, we incorporate a stabilization module within the outlier-free layers. This addition mitigates instability caused by layer replacement, allowing us to initialize directly from pre-trained vanilla LLM parameters without extensive pretraining specific to the outlier-free architecture. As a result, we achieve effective cross-modal learning with improved training stability and significant performance gains in ASR and TTS tasks compared to traditional transformer-based SpeechLM systems.
+
+### 3.4 THEORETICAL JUSTIFICATIONS
+
+Building on the theoretical advantages of the outlier-free transformer reported by (Hu et al., 2024a), we provide two additional justifications for applying LoRA to the outlier-free transformer.
+
+**Expressiveness.** We provide the expressive guarantee of Low-Rank Adaption for transformer model with  $\text{Softmax}_1$ . We identify the conditions for the existence of low-rank adapters for exact adaptation. We summarize our main findings in the following informal theorem.
+
+**Proposition 3.1** (Expressiveness of LoRA  $\text{Softmax}_1$  (Informal Version of Theorem C.1)). Let  $f^*$  and  $\bar{f}$  denote the pretrained and target transformer models, respectively, using the Stabilized Outlier-Free
+
+{5}------------------------------------------------
+
+layer (3.2) as the backbone. Under mild non-singularity and LoRA-rank conditions, there exist low-rank adapters such that the modified model  $f$  is exactly equal to  $\bar{f}$ .
+
+**Training Efficiency.** We find that the attention weights are concentrated on significant tokens, enabling less training time cost during fine-tuning compared to the vanilla version, as shown in Table 3. We provide a theoretical justification for why we observe improved LoRA training efficiency.
+
+**Proposition 3.2** (Fast LoRA Requires Proper Normalization (Informal Version of Proposition C.1)). Let  $X \in \mathbb{R}^{d \times L}$  be the input sequence, and let  $r$  denote the rank of the LoRA adapters for a pretrained transformer model. Sub-quadratic time-efficient LoRA training up to a precision of  $\epsilon = O((\log L)^{-4})$  is achievable if the following conditions hold: (i) long sequence setting with  $d = O(\log L)$ , (ii) mild rank  $r < d$ , and (iii) proper normalization of the input and model weights.
+
+**Remark 3.1.** Our outlier-free layer ensures proper normalization of the model weights. Our stabilization technique ensures proper normalization of the model input.
+
+We defer more comprehensive theoretical justifications to Appendix C.
+
+## 4 EXPERIMENTAL STUDIES
+
+In this section, we conducted experiments to validate our proposed framework’s effectiveness, comparing its performance against state-of-the-art methods described in (Maiti et al., 2023). Our evaluation utilized three sizes of OPT pretrained models: OPT-125m, OPT-350m, and OPT-1.3b.
+
+**Computational Resource.** We perform all experiments using 4 NVIDIA A100 GPU with 80GB of memory and a 24-core Intel(R) Xeon(R) Gold 6338 CPU operating at 2.00GHz. Our code is developed in PyTorch and utilizes the Hugging Face Transformer Library for experimental execution.
+
+**Models.** Following (Maiti et al., 2023), we validate our method using different sizes of Open Pretrained Transformer (OPT) models. We employ the same BPE model as (Maiti et al., 2023) for four tasks: textLM, speechLM, ASR, and TTS. The training procedure for all OPT models follows (Hu et al., 2024a).
+
+**Datasets.** Our experiments utilize four datasets across different tasks. For textLM, we use LibriSpeech (Panayotov et al., 2015), comprising 40 million text utterances. SpeechLM employs LibriLight (LL) (Kahn et al., 2020), which contains 60,000 hours of audiobook recordings from 7,000 speakers, totaling 12 million utterances. For ASR tasks, we use the English Multilingual LibriSpeech (MLS) dataset (Pratap et al., 2020). TTS experiments are conducted using LibriTTS (LT) (Zen et al., 2019) and VCTK (VC) (Veaux et al., 2017) datasets.
+
+**Evaluation Metrics.** We employ specific metrics for each task in our evaluation process. For speech and text generation tasks, we assess models with identical vocabulary sizes using perplexity (PPL). In ASR tasks, we utilize Word Error Rate (WER) as our primary metric. For TTS evaluation, we employ Hifi-gan (Kong et al., 2020) as the vocoder and measure intelligibility using the WER derived from whisper decoding results. Notably, lower scores in these metrics indicate superior performance. Additionally, to evaluate the model performance on the next-token prediction, we report the model’s next-token accuracy in the ablation study Section 4.3.
+
+### 4.1 POST-TRAINING QUANTIZATION (PTQ)
+
+To evaluate the efficiency of our method, we employ the proposed Outlier-free layer in all OPT models (Zhang et al., 2022) as a substitute for the standard attention layer as described in (Vaswani et al., 2017). We utilize the pre-trained OPT model checkpoints with the SPARQ framework (Hu et al., 2024a), and fine-tune the model at full rank according to the approach outlined in (Maiti et al., 2023). We then evaluate them on the test datasets using FP16 (16-bit floating-point) and perform state-of-the-art Post-training Quantization (PTQ) methods to assess the performance drop from FP16. We conduct each evaluation 3 times with different random seeds and present the average and standard deviation for each metric. Since the standard deviations of all results are less than 2%, we omit them in our result tables.
+
+**Baselines.** Following (Maiti et al., 2023), we validate our method with three different quantization methods: SmoothQuant (Xiao et al., 2023), AffineQuant (Ma et al., 2024), and OmniQuant (Shao et al., 2023). We consistently apply the same hyperparameters detailed in their respective studies. Specifically, the hyperparameters for SmoothQuant follow the guidelines set forth in (Xiao et al., 2023). Similarly, for AffineQuant, we adhere to the parameters described in (Ma et al., 2024). Lastly,
+
+{6}------------------------------------------------
+
+**Table 1: Comparing SpARQ with Vanilla Framework in a Post-Training Quantization (PTQ) setting.**
+
+Experiments were conducted across three quantization methods (SmoothQuant, AffineQuant, OmniQuant) on a low bit weight and activation quantization setting – weight 4 bits and activation 4 bits (W4A4). Evaluation metrics included Text PPL, SpeechLM PPL, ASR WER, and TTS WER. We assessed the average performance drop across these four tasks post-quantization. Results show SpARQ consistently outperforms Vanilla framework, exhibiting smaller performance drops when applying low bit quantization methods, demonstrating its superior efficiency in PTQ settings.
+
+| Model | Method | #Bits | Quantization Method | TextLM PPL (↓) | SpeechLM PPL (↓) | ASR WER (↓) | TTS WER (↓) | Avg Performance Drop (↓) |
+|-|-|-|-|-|-|-|-|-|
+| OPT-125m | Vanilla | W16/A16 | - | 22.56 | 59.42 | 12.40 | 12.08 | - |
+|  |  | W4/A4 | SmoothQuant | 45.23 | 96.87 | 52.31 | 48.79 | 197.31% |
+|  |  | W4/A4 | AffineQuant | 31.25 | 80.19 | 29.44 | 28.34 | 86.37% |
+|  |  | W4/A4 | OmniQuant | 31.28 | 80.21 | 31.98 | 29.55 | 94.04% |
+|  | SpARQ | W16/A16 | - | 22.70 | 59.45 | 12.61 | 12.11 | - |
+|  |  | W4/A4 | SmoothQuant | 37.14 | 84.55 | 35.32 | 36.73 | <b>112.05%</b> |
+|  |  | W4/A4 | AffineQuant | 26.11 | 68.42 | 14.33 | 15.71 | <b>18.52%</b> |
+|  |  | W4/A4 | OmniQuant | 26.12 | 68.63 | 14.53 | 16.01 | <b>19.63%</b> |
+| OPT-350m | Vanilla | W16/A16 | - | 13.13 | 43.10 | 8.42 | 17.56 | - |
+|  |  | W4/A4 | SmoothQuant | 36.74 | 75.38 | 40.17 | 70.53 | 233.37% |
+|  |  | W4/A4 | AffineQuant | 27.28 | 66.31 | 36.84 | 40.83 | 157.92% |
+|  |  | W4/A4 | OmniQuant | 27.85 | 67.83 | 37.54 | 41.37 | 162.73% |
+|  | SpARQ | W16/A16 | - | 13.47 | 43.34 | 9.81 | 17.31 | - |
+|  |  | W4/A4 | SmoothQuant | 23.48 | 62.17 | 36.22 | 40.83 | <b>130.71%</b> |
+|  |  | W4/A4 | AffineQuant | 22.82 | 51.74 | 25.78 | 28.44 | <b>78.97%</b> |
+|  |  | W4/A4 | OmniQuant | 22.83 | 52.08 | 26.11 | 29.15 | <b>81.05%</b> |
+| OPT-1.3b | Vanilla | W16/A16 | - | 12.62 | 41.33 | 8.00 | 18.73 | - |
+|  |  | W4/A4 | SmoothQuant | 36.74 | 87.46 | 48.96 | 53.15 | 249.63% |
+|  |  | W4/A4 | AffineQuant | 24.31 | 61.74 | 43.68 | 32.47 | 165.33% |
+|  |  | W4/A4 | OmniQuant | 24.43 | 62.38 | 44.52 | 33.03 | 169.34% |
+|  | SpARQ | W16/A16 | - | 12.95 | 42.48 | 8.25 | 12.07 | - |
+|  |  | W4/A4 | SmoothQuant | 23.83 | 58.33 | 32.27 | 33.12 | <b>146.72%</b> |
+|  |  | W4/A4 | AffineQuant | 20.81 | 48.84 | 22.78 | 25.46 | <b>90.68%</b> |
+|  |  | W4/A4 | OmniQuant | 20.88 | 48.97 | 23.58 | 26.83 | <b>96.15%</b> |
+
+for OmniQuant, the hyperparameters are in line with those specified in (Shao et al., 2023). This approach ensures that our evaluations are based on standardized settings, allowing for accurate comparisons and assessments of each quantization method.
+
+**Results.** Table 1 demonstrates SpARQ’s superior performance over standard training frameworks in W4A4 post-training quantization scenarios using state-of-the-art PTQ methods. Under AfflineQuant, the vanilla framework experiences performance drops of 86.37%, 107.78%, and 165.33% for OPT-125m, OPT-350m, and OPT-1.3b respectively. SpARQ reduces these declines to 18.52%, 64.96%, and 90.68%. For OPT-1.3b, SpARQ achieves a 45% relative improvement in average W4A4 quantization performance, highlighting its robustness in low-bit quantization for large models. Additional Weight-8bit-Activation-8bit (W8A8) quantization results appear in Appendix D.
+
+### 4.2 LOW-RANK ADAPTATION METHODS
+
+To show the effectiveness of the SpARQ framework in the cross-modal low-rank adaptation process, we compare SpARQ with the vanilla training framework across two different LoRA techniques.
+
+**LoRA Methods.** We compare SpARQ with the vanilla training framework across two different LoRA methods: LoRA (Hu et al., 2021) and QLoRA (Dettmers et al., 2024). We fine-tune the model without using any adaptation method as the full-rank baseline, following the setting in (Maiti et al., 2023). For the LoRA method, following (Hu et al., 2021), we fine-tune the model with low-rank adaptations using a rank of 128 and an alpha value of 256. For the QLoRA method, following (Dettmers et al., 2024), we fine-tune the model with quantized low-rank adaptations, maintaining the same rank and alpha value as specified in LoRA, but using Int8 (Dettmers et al., 2022) quantization instead of 4-bit NormalFloat (NF4) (Dettmers et al., 2024).
+
+**Results.** In Table 2, our results demonstrate the effectiveness of SpARQ in cross-modal low-rank adaptation. As a result, the SpARQ framework offers a performance improvement of relative 41% in low-rank adaptation over the vanilla framework in OPT-1.3b. Specifically, SpARQ exhibits a smaller performance drop across all three model sizes. However, we observe a significant decline in performance when using LoRA, with WER dropping from 8.00% to 46.92% for ASR and from
+
+{7}------------------------------------------------
+
+Table 2: **Comparing SpARQ with Vanilla Framework in a Low-Rank Adaptation Setting.** We conduct experiments on SpARQ with vanilla attention across two Low-Rank Adaptation methods (LoRA, QLoRA). The evaluation metrics include Text Perplexity (PPL), SpeechLM PPL, and Word Error Rate (WER) in Automatic Speech Recognition (ASR) and Text-to-Speech (TTS). We also measure the average performance drop after low-rank adaptation to assess the efficiency of SpARQ in the low-rank adaptation setting. In most configurations, SpARQ results in better fine-tuning performance compared to vanilla attention.
+
+| Model | Method | Low-Rank Adaptation Method | TextLM PPL (↓) | SpeechLM PPL (↓) | ASR WER (↓) | TTS WER (↓) | Average Performance Drop (↓) |
+|-|-|-|-|-|-|-|-|
+| OPT-125m | Vanilla | Full | 22.56 | 59.42 | 12.40 | 12.08 | - |
+|  |  | LoRA | 25.69 | 62.16 | 12.39 | 15.47 | 11.61% |
+|  |  | QLoRA | 25.97 | 62.43 | 12.86 | 15.02 | 12.06% |
+|  | SpARQ | Full | 22.58 | 59.46 | 12.61 | 12.11 | - |
+|  |  | LoRA | 25.77 | 62.23 | 12.56 | 11.80 | <b>3.96%</b> |
+|  |  | QLoRA | 25.77 | 62.23 | 13.42 | 12.46 | <b>7.03%</b> |
+| OPT-350m | Vanilla | Full | 13.13 | 43.10 | 8.42 | 17.56 | - |
+|  |  | LoRA | 17.87 | 51.65 | 93.91 | 97.06 | 233.98% |
+|  |  | QLoRA | 18.07 | 51.50 | 76.02 | 98.63 | 211.49% |
+|  | SpARQ | Full | 13.47 | 43.34 | 9.81 | 17.31 | - |
+|  |  | LoRA | 17.71 | 51.13 | 18.52 | 75.18 | <b>106.68%</b> |
+|  |  | QLoRA | 16.64 | 48.34 | 22.30 | 83.36 | <b>123.93%</b> |
+| OPT-1.3b | Vanilla | Full | 12.62 | 41.33 | 8.00 | 18.73 | - |
+|  |  | LoRA | 17.14 | 50.22 | 46.92 | 94.53 | 237.12% |
+|  |  | QLoRA | 17.87 | 51.43 | 87.64 | 43.11 | 369.20% |
+|  | SpARQ | Full | 12.95 | 42.48 | 8.20 | 12.07 | - |
+|  |  | LoRA | 16.83 | 49.51 | 8.25 | 74.21 | <b>140.44%</b> |
+|  |  | QLoRA | 17.54 | 50.99 | 43.18 | 94.23 | <b>290.16%</b> |
+
+18.73% to 94.53% for TTS in vanilla OPT-1.3b. One possible explanation for this substantial performance drop is that larger models have greater difficulty forgetting the original knowledge learned from text and adapting to new knowledge in a different modality, especially with a limited number of fine-tuning epochs. This anomaly aligns with the findings of (Von Oswald et al., 2019; Ramasesh et al., 2021). On the other hand, although the SpARQ models experience a performance drop with low-rank adaptation, the decline is minimal for ASR (8.20% to 8.25%) and remains better than the vanilla version for TTS (12.07% to 74.21%) for OPT-1.3b.
+
+### 4.3 ABLATION STUDY
+
+This section presents experimental results across three key areas. We analyze outlier differences between vanilla and SpARQ frameworks, evaluate our training methodology’s contribution to efficiency, and examine stabilization methods’ impact on model convergence. These analyses reveal critical factors driving our framework’s performance improvements.
+
+**Outlier in the SpeechLM System.** Our quantitative assessment of outlier effects compares vanilla and SpARQ frameworks using maximum infinity norm and average kurtosis metrics (lower values indicate better performance). The evaluation spans three tasks and three low-rank adaptation methods. Results in Figure 3 show SpARQ’s consistent reduction of outlier effects across all scenarios. This improvement manifests in both uni-modal (text or speech) and cross-modal (text and speech) tasks, maintaining consistency across all low-rank adaptation methods. The findings demonstrate SpARQ’s enhanced stability in managing diverse input modalities and adaptation techniques, yielding superior SpeechLM performance.
+
+Table 3: **Comparison of the Full Fine-tuning Training Time (Per Epoch) between the Vanilla Framework and SpARQ.**
+
+| Model | Method | Training Time per Epoch |
+|-|-|-|
+| OPT-350m | Vanilla | 74 mins |
+|  | SpARQ | <b>58 mins</b> |
+| OPT-1.3b | Vanilla | 84 mins |
+|  | SpARQ | <b>63 mins</b> |
+
+**Efficient Training.** To evaluate the efficiency of our proposed framework, SpARQ, we compared its training speed with the vanilla training framework. We measured the training time per epoch for both methods in two different model sizes. As shown in Table 3, SpARQ consistently accelerates training across various model sizes. Specifically, SpARQ achieves a 1.28x speedup for OPT-350m and a 1.33x speedup for OPT-1.3b compared to the vanilla framework.
+
+{8}------------------------------------------------
+
+![Figure 3: Outlier Comparison between Vanilla and SpARQ Framework. The figure consists of three bar charts (a, b, c) comparing the Vanilla Framework (dark blue) and SpARQ Framework (light blue) across three modalities: Text, Speech, and Speech & Text. Each chart shows 'Max Inf Norm' and 'Average Kurtosis' for three methods: Full-FT, Lora, and QLora. In all cases, the SpARQ Framework shows significantly lower outlier norms and kurtosis compared to the Vanilla Framework.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+**a). Outlier in Text Modalities**
+
+| Method | Max Inf Norm (Vanilla) | Max Inf Norm (SpARQ) | Average Kurtosis (Vanilla) | Average Kurtosis (SpARQ) |
+|-|-|-|-|-|
+| Full-FT | 17.43 | 8.15 | 10.15 | 9.82 |
+| Lora | 39.62 | 30.46 | 12.00 | 10.80 |
+| QLora | 33.14 | 31.33 | 8.76 | 9.99 |
+
+**b). Outlier in Speech Modalities**
+
+| Method | Max Inf Norm (Vanilla) | Max Inf Norm (SpARQ) | Average Kurtosis (Vanilla) | Average Kurtosis (SpARQ) |
+|-|-|-|-|-|
+| Full-FT | 24.95 | 7.46 | 9.35 | 7.30 |
+| Lora | 39.82 | 27.27 | 17.60 | 16.22 |
+| QLora | 26.27 | 25.85 | 9.79 | 10.83 |
+
+**c). Outlier in Speech & Text Modalities**
+
+| Method | Max Inf Norm (Vanilla) | Max Inf Norm (SpARQ) | Average Kurtosis (Vanilla) | Average Kurtosis (SpARQ) |
+|-|-|-|-|-|
+| Full-FT | 13.31 | 5.44 | 11.70 | 5.08 |
+| Lora | 22.93 | 19.82 | 7.99 | 5.28 |
+| QLora | 23.11 | 20.45 | 9.83 | 4.41 |
+
+Figure 3: Outlier Comparison between Vanilla and SpARQ Framework. The figure consists of three bar charts (a, b, c) comparing the Vanilla Framework (dark blue) and SpARQ Framework (light blue) across three modalities: Text, Speech, and Speech & Text. Each chart shows 'Max Inf Norm' and 'Average Kurtosis' for three methods: Full-FT, Lora, and QLora. In all cases, the SpARQ Framework shows significantly lower outlier norms and kurtosis compared to the Vanilla Framework.
+
+Figure 3: **Outlier Comparison between Vanilla and SpARQ Framework.** We evaluate the average kurtosis and maximum infinity norms of outliers for (a) text modalities using TextLM data, (b) speech modalities using SpeechLM data, and (c) speech-text cross-modalities using ASR data. Outliers are measured at the sentence level for all scenarios. For ASR, we include both speech and corresponding ground-truth text as input.
+
+**Different Stabilized Methods.** To investigate the efficacy of various input vector stabilization techniques, we conducted a systematic comparative analysis of three normalization strategies:  $L_1$  normalization, max-shift normalization, and mean-centering normalization. Our experimental results, presented in Table 7, reveal that max-shift normalization uniquely achieves model stabilization and resolves gradient-related issues. In contrast, both  $L_1$  and mean-centering normalizations proved ineffective, resulting in numerical instabilities during the training process. These instabilities are denoted as ‘N/A’ in our results, indicating that the model encountered NaN (Not a Number) losses, rendering training infeasible. These findings underscore the critical role of appropriate normalization in maintaining model stability and highlight the superior performance of max-shift normalization in our framework.
+
+Table 4: **Comparison of Different Stabilized Methods.**
+
+| Model | Stabilized Method | Val Accuracy (%) |
+|-|-|-|
+| OPT-1.3b | N/A | N/A |
+|  | $L_1$ | N/A |
+|  | Max-Shift | <b>34.6</b> |
+|  | Mean-Centering | N/A |
+
+## 5 DISCUSSION AND CONCLUSION
+
+We introduce SpARQ, an outlier-robust multi-modal foundation model for speech-text tasks. SpARQ addresses the computational challenges arising from outlier effects in modality fusion and cross-modality adaptation of SpeechLM. Our approach mitigates outlier impacts in transformer-based models and enhances both low-rank adaptation and post-training quantization performance. SpARQ demonstrates significant improvements over existing methods, achieving a 41% relative performance gain in cross-modal low-rank adaptation (Section 4.2) and 45% in quantization (Section 4.1).
+
+**Limitations and Future Work.** SpARQ currently has two key limitations. First, it does not support LoftQ and other SVD-based low-rank adaptation methods that operate on weight matrices. Second, due to computational constraints, SpARQ uses neither the 6.7B parameter OPT model nor other large decoder-based models for pretraining. Future work will expand SpARQ to incorporate SVD-based methods and evaluate performance with larger decoder architectures, including 3B Llama2 and 6.7B OPT models. Additionally, the framework’s focus on reducing computational demands could inadvertently amplify biases inherited from pre-trained models. Further investigation is necessary to understand and address the impact of biases within our framework.
+
+**Broader Impact.** Our methodology advances foundation model fine-tuning and inference through insights from associative memory models, enhancing both low-rank adaptation and post-training quantization. This solution enables edge computing deployment of large foundation models and resource-efficient fine-tuning. However, the approach may amplify existing training data biases, potentially disadvantaging underrepresented groups.
+
+{9}------------------------------------------------
+
+## REFERENCES
+
+- Josh Alman and Zhao Song. Fast attention requires bounded entries. *Advances in Neural Information Processing Systems*, 36, 2024.
+- Junyi Ao, Rui Wang, Long Zhou, Chengyi Wang, Shuo Ren, Yu Wu, Shujie Liu, Tom Ko, Qing Li, Yu Zhang, et al. Speech5t: Unified-modal encoder-decoder pre-training for spoken language processing. *arXiv preprint arXiv:2110.07205*, 2021.
+- Rishi Bommasani, Drew A Hudson, Ehsan Adeli, Russ Altman, Simran Arora, Sydney von Arx, Michael S Bernstein, Jeannette Bohg, Antoine Bosselut, Emma Brunskill, et al. On the opportunities and risks of foundation models. *arXiv preprint arXiv:2108.07258*, 2021.
+- Yelysei Bondarenko, Markus Nagel, and Tijmen Blankevoort. Understanding and overcoming the challenges of efficient transformer quantization, 2021. URL <https://arxiv.org/abs/2109.12948>.
+- Yelysei Bondarenko, Markus Nagel, and Tijmen Blankevoort. Quantizable transformers: Removing outliers by helping attention heads do nothing. *Advances in Neural Information Processing Systems*, 36, 2024.
+- Xuankai Chang, Brian Yan, Yuya Fujita, Takashi Maekaku, and Shinji Watanabe. Exploration of efficient end-to-end asr using discretized input from self-supervised learning. *arXiv preprint arXiv:2305.18108*, 2023.
+- Jiun-Man Chen, Yu-Hsuan Chao, Yu-Jie Wang, Ming-Der Shieh, Chih-Chung Hsu, and Wei-Fen Lin. Quanttune: Optimizing model quantization with adaptive outlier-driven fine tuning, 2024.
+- Zhehuai Chen, Yu Zhang, Andrew Rosenberg, Bhuvana Ramabhadran, Pedro Moreno, Ankur Bapna, and Heiga Zen. Maestro: Matched speech text representations through modality matching. *arXiv preprint arXiv:2204.03409*, 2022.
+- Yunfei Chu, Jin Xu, Xiaohuan Zhou, Qian Yang, Shiliang Zhang, Zhijie Yan, Chang Zhou, and Jingren Zhou. Qwen-audio: Advancing universal audio understanding via unified large-scale audio-language models. *arXiv preprint arXiv:2311.07919*, 2023.
+- Yu-An Chung, Yu Zhang, Wei Han, Chung-Cheng Chiu, James Qin, Ruoming Pang, and Yonghui Wu. W2v-bert: Combining contrastive learning and masked language modeling for self-supervised speech pre-training. In *2021 IEEE Automatic Speech Recognition and Understanding Workshop (ASRU)*, pages 244–250. IEEE, 2021.
+- Kevin Clark, Urvashi Khandelwal, Omer Levy, and Christopher D Manning. What does bert look at? an analysis of bert’s attention. *arXiv preprint arXiv:1906.04341*, 2019.
+- Jonathan Crabbé, Pau Rodríguez, Vaishaal Shankar, Luca Zappella, and Arno Blaas. Robust multimodal models have outlier features and encode more concepts, 2024. URL <https://openreview.net/forum?id=7ffJo4vtTY>.
+- Alexandre Défossez, Laurent Mazaré, Manu Orsini, Amélie Royer, Patrick Pérez, Hervé Jégou, Edouard Grave, and Neil Zeghidour. Moshi: a speech-text foundation model for real-time dialogue, 2024.
+- Tim Dettmers, Mike Lewis, Younes Belkada, and Luke Zettlemoyer. Gpt3. int8 (): 8-bit matrix multiplication for transformers at scale. *Advances in Neural Information Processing Systems*, 35: 30318–30332, 2022.
+- Tim Dettmers, Artidoro Pagnoni, Ari Holtzman, and Luke Zettlemoyer. Qlora: Efficient finetuning of quantized llms. *Advances in Neural Information Processing Systems*, 36, 2024.
+- Carl Eckart and Gale Young. The approximation of one matrix by another of lower rank. *Psychometrika*, 1(3):211–218, 1936.
+- Amir Gholami, Sehoon Kim, Zhen Dong, Zhewei Yao, Michael W Mahoney, and Kurt Keutzer. A survey of quantization methods for efficient neural network inference. In *Low-Power Computer Vision*, pages 291–326. Chapman and Hall/CRC, 2022.
+
+ Rest of paper (reference and Appendix) is removed.

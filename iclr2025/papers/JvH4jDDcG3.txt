@@ -1,0 +1,313 @@
+
+
+{0}------------------------------------------------
+
+# TOWARDS CALIBRATED DEEP CLUSTERING NETWORK
+
+Yuheng Jia<sup>1,2</sup>, Jianhong Cheng<sup>1</sup>, Hui Liu<sup>2</sup>, Junhui Hou<sup>3\*</sup>
+
+<sup>1</sup>School of Computer Science and Engineering, Southeast University
+
+<sup>2</sup>Yam Pak Charitable Foundation School of Computing and Information Sciences, Saint Francis University
+
+<sup>3</sup>Department of Computer Science, City University of Hong Kong  
+ {yhjia,chengjh}@seu.edu.cn, h2liu@sfu.edu.hk,  
+ jh.hou@cityu.edu.hk
+
+## ABSTRACT
+
+Deep clustering has exhibited remarkable performance; however, the over-confidence problem, i.e., the estimated confidence for a sample belonging to a particular cluster greatly exceeds its actual prediction accuracy, has been overlooked in prior research. To tackle this critical issue, we *pioneer* the development of a calibrated deep clustering framework. Specifically, we propose a novel dual-head (calibration head and clustering head) deep clustering model that can effectively calibrate the estimated confidence and the actual accuracy. The calibration head adjusts the overconfident predictions of the clustering head, generating prediction confidence that matches the model learning status. Then, the clustering head dynamically selects reliable high-confidence samples estimated by the calibration head for pseudo-label self-training. Additionally, we introduce an effective network initialization strategy that enhances both training speed and network robustness. The effectiveness of the proposed calibration approach and initialization strategy are both endorsed with solid theoretical guarantees. Extensive experiments demonstrate the proposed calibrated deep clustering model not only surpasses the state-of-the-art deep clustering methods by  $5\times$  on average in terms of expected calibration error, but also significantly outperforms them in terms of clustering accuracy. Code is available at <https://github.com/ChengJianH/CDC>.
+
+## 1 INTRODUCTION
+
+Clustering aims to categorize input samples into distinct groups, where samples within the same group exhibit greater similarity than those in other groups, without utilizing any ground-truth supervisory information. Recently, deep learning-based clustering methods, a.k.a. deep clustering, have showcased remarkable clustering performance owing to the powerful feature representation capability of deep neural networks (Li et al., 2021; Qian, 2023). However, training a deep clustering network is challenging as no supervisory information is available. Existing methods solve the training dilemma by introducing some side tasks in the training process. For example, DEC (Xie et al., 2016) introduces the auto-encoder during the training, and (Chhabra et al., 2022) adopts a generative adversarial network.
+
+The pseudo-labeling-based methods first extract features by self-supervised learning (like MoCo (Chen et al., 2020b)), then add a clustering head to produce the clustering prediction, and further use the model’s own outputs as pseudo labels to guide the unsupervised clustering network training, have become mainstream in deep clustering (Van Gansbeke et al., 2020; Niu et al., 2022; Qian, 2023). Although those methods have achieved remarkable clustering performance, they have two drawbacks. **First**, they generally use a *fixed threshold* to select the pseudo labels, which ignores the learning status of the model, i.e., in the early training stages, a higher threshold will select fewer and class-imbalanced training samples, which depress the convergence speed, while in the later training
+
+\*Corresponding author.
+
+{1}------------------------------------------------
+
+![Figure 1: Reliability diagrams and training process for different methods on CIFAR-20. (a) Supervised: Expected Outputs (blue) and Outputs (orange) are perfectly aligned along the diagonal. (b) SCAN: Expected Outputs are significantly higher than Outputs, indicating overconfidence. (c) SPICE: Similar overconfidence problem. (d) LS: Over-penalizes high-reliable samples. (e) CDC: Expected Outputs and Outputs are well-aligned. (f) Training Process: Bar chart showing ACC (%) for MoCo with K-means: Random (10.4%), Rethink (50.7%), and CDC (52.7%).](49ad3a646d84bcfeac02bdf2b3792a3e_img.jpg)
+
+Figure 1: Reliability diagrams and training process for different methods on CIFAR-20. (a) Supervised: Expected Outputs (blue) and Outputs (orange) are perfectly aligned along the diagonal. (b) SCAN: Expected Outputs are significantly higher than Outputs, indicating overconfidence. (c) SPICE: Similar overconfidence problem. (d) LS: Over-penalizes high-reliable samples. (e) CDC: Expected Outputs and Outputs are well-aligned. (f) Training Process: Bar chart showing ACC (%) for MoCo with K-means: Random (10.4%), Rethink (50.7%), and CDC (52.7%).
+
+Figure 1: Reliability diagrams of different methods on CIFAR-20. In the ideal case, the **confidence** of a model’s output should be roughly equal to its **accuracy**, which means the confidence of the output is well-calibrated. However, the previous deep clustering models faced a severe overconfidence problem, i.e., the estimated confidence largely exceeds its real accuracy. We propose a calibrated deep clustering (CDC) model that enhances both confidence calibration and clustering performance.
+
+stages, the fixed threshold is more likely to introduce noisy pseudo-labels due to the increasing predicted confidence. *More critically*, those methods all implicitly assume that the output confidence of the model can reflect the true probability of a sample belonging to a certain cluster. However, those methods all face a *serious overconfidence problem*, i.e., the predicted confidence of the model’s output will largely exceed the actual prediction accuracy. As shown in Fig. 1, the overconfidence problem of the state-of-the-art (SOTA) deep clustering methods like SCAN (Van Gansbeke et al., 2020) and SPICE (Niu et al., 2022) is even worse than the supervised learning model, as they rely on the pseudo-labels to train the network, and the inevitable noise in the pseudo-labels aggravates the overconfidence problem. Accurate confidence estimation is important for a machine learning model, especially in building trustworthy decision-making systems like medical diagnosis (Mimori et al., 2021), autonomous vehicles (Feng et al., 2019), and financial trading (Zhao et al., 2020), suggesting when we can trust the prediction of a learning model. However, confidence calibration has not been studied in deep clustering networks, and common calibration methods like Temperature Scaling (Guo et al., 2017a) rely on a labeled validation set, which is not accessible in deep clustering. Moreover, as shown in Fig. 1-(d), the regularization-based calibration methods like Label Smoothing (LS) (Müller et al., 2019) will over-penalize the high-reliable samples, making the prediction of reliable and unreliable samples indistinguishable. *Second*, the current methods initialize the clustering head randomly, which is unstable and will destroy the feature learned by self-supervised learning, i.e., as shown in Fig. 1-(f), the clustering accuracy (ACC) of MoCo equipped with K-means is 50.7%, while its performance will degrade to 10.4% after random initialization.
+
+**Our Contributions.** *Pioneering a novel approach*, we delve into the development of a meticulously calibrated deep clustering network (CDC). Our method centers on a dual-head network structure featuring a clustering head and a calibration head. The calibration head introduces a novel calibration technique that refines the prediction confidences from the clustering head across all samples, thereby providing precise confidence estimations. Simultaneously, the clustering head leverages the calibrated confidences from the calibration head to monitor class-specific learning progress and strategically select high-confidence samples for effective pseudo-labeling. This symbiotic relationship between the two heads enhances the overall performance by exchanging critical information. Additionally, we introduce a potent initialization technique for both heads. As illustrated in Fig. 1(f), our method exhibits exceptional clustering performance post the proposed initialization strategy. More importantly, the efficacy of our calibration approach and initialization strategy is underpinned by theoretical demonstrations.
+
+Extensive evaluations on six benchmark datasets showcase the superiority of our method over state-of-the-art deep clustering methods by nearly  $5\times$  on average in terms of expected calibration error (ECE) and substantial advancements in clustering accuracy.
+
+## 2 RELATED WORK
+
+**Deep Clustering.** Deep clustering methods can be broadly classified into two categories: (1) *Clustering based on representation learning* which first learns a representation of the data and then applies a clustering technique like K-means (Huang et al., 2014; Qi et al., 2024) and Spectral Clustering (Jia et al., 2021; Peng et al., 2021) to obtain the final clustering, (2) *Iterative deep clustering with self-supervision* which aims to learn the data representation and performs clustering simultaneously under the supervision of self-training (Xie et al., 2016; Guo et al., 2017b), self-labeling (Van Gansbeke et al., 2020; Niu et al., 2022; Qian, 2023) and contrastive information (Li et al.,
+
+{2}------------------------------------------------
+
+2021; Shen et al., 2021). Unlike previous methods that primarily rely on data-intrinsic features, recent methods such as SIC (Cai et al., 2023) and TAC (Li et al., 2024) use the vision-language model CLIP to mine clusters based on neighborhood consistency or pseudo labels from the textual space, which facilitates image clustering. Overall, self-labeling methods have demonstrated superior performance by selecting high-confidence instances through thresholding soft assignment probabilities and updating the entire network by minimizing the cross-entropy loss of the selected instances. However, they typically employ a fixed threshold for pseudo-label assignment, neglecting the model’s learning status. How to determine a suitable threshold is still a challenging task.
+
+**Confidence Calibration.** Accurate confidence estimation is crucial for real-world applications like self-driving cars (Feng et al., 2019) and disease diagnosis (Mimori et al., 2021), where prediction systems must not only be accurate but also indicate their likelihood of error, enhancing system interpretability. However, modern neural networks usually face the overconfidence problem, i.e., the estimated confidence by a neural network usually exceeds its real prediction accuracy (Minderer et al., 2021). To address this, calibration methods in **supervised learning** are broadly divided into two categories: (1) *Post-calibration methods* calibrate the model’s output after model training. An example is Temperature Scaling (Guo et al., 2017a), which adjusts the softmax using a labeled validation set. (2) *Regularization-based methods* penalize the confidence of the model’s predictions during the training process via some regularization techniques like Label Smoothing (Müller et al., 2019), which uses soft labels to reduce overfitting, and Focal Loss (Mukhoti et al., 2020), which emphasizes difficult samples and penalizes overconfident predictions. The  $L_1$  Norm (Joo & Chung, 2020) is also used as an additional regularization to manage confidence levels. Recent studies have also investigated calibration under **unsupervised domain adaptation**. For instance, (Wang et al., 2020) developed a transferable calibration framework that reduces errors by accurately assessing discrepancies between source and target domains, while (Wang et al., 2023a) employs a differentiable density ratio estimator to manage uncertainties under domain shifts. These studies tackle calibration in the domain adaptation setting, where labeled source data is available.
+
+As demonstrated in Fig. 1(b) and (c), deep clustering methods exhibit a more pronounced overconfidence issue compared to supervised learning models. This heightened problem stems from state-of-the-art deep clustering techniques relying on pseudo-labeling, where incorrect pseudo-labels exacerbate the overconfidence challenge. **Regrettably**, past research has largely overlooked this issue. Furthermore, conventional calibration techniques are unsuitable for directly addressing overconfidence in unsupervised clustering because post-calibration methods necessitate a labeled validation set for tuning hyperparameters, while regularization techniques can compromise the quality of selected pseudo-labels and, consequently, impair clustering performance. Consequently, this paper explores the development of a calibrated deep clustering neural network to simultaneously enhance clustering performance and achieve precise confidence estimation.
+
+## 3 PROPOSED METHOD
+
+**Overview.** As shown in Fig. 2, our model consists of a dual-head network comprising a clustering head and a calibration head. Initially, we pre-train the backbone network using MoCo-v2 (Chen et al., 2020b) and implement a feature prototype-based initialization strategy to bolster the initial discriminative capabilities of both heads (Sec. 3.3). Subsequently, we proceed to train the clustering head by leveraging high-confidence pseudo-labels through a cross-entropy loss, where the calibration head provides the confidence levels for the samples (Sec. 3.2). Concurrently, the calibration head undergoes training with a novel calibration approach to gauge and estimate sample confidence from the clustering head (Sec. 3.1). Both heads are optimized simultaneously to facilitate mutual enhancement. (Sec. 3.4)
+
+**Notation.** Denote by  $\mathcal{D}_u = \{\mathbf{x}_i : i \in \{1, 2, \dots, N\}\}$  a training set of  $N$  unlabeled samples. Weak and strong augmentation strategies from (Van Gansbeke et al., 2020) are used to obtain  $\mathcal{W}(\mathbf{x}_i)$  and  $\mathcal{A}(\mathbf{x}_i)$  for each sample  $\mathbf{x}_i$ . Let  $f(\Theta; \mathbf{x}_i)$  be the feature extractor,  $g(\theta_{clu}; \cdot)$  be the clustering head,  $g(\theta_{cal}; \cdot)$  be the calibration head,  $\sigma(\cdot)$  be the softmax function, and  $C$  be the predetermined classes.
+
+### 3.1 CALIBRATION HEAD
+
+In each training batch, we select  $B$  samples from  $\mathcal{D}_u$ . In the remainder of this paper, all the operators are batch-wise without special mention.
+
+{3}------------------------------------------------
+
+![Figure 2: Illustration of the proposed CDC framework. The diagram shows the flow of data and forward/backward propagation. On the left, 'Unlabeled Samples' are processed through 'strongly-augmented' (A(x_i)), 'no augmented' (x_i), and 'weekly-augmented' (W(x_i)) paths. These lead to 'FeaModel' blocks (f(theta; .)) which share parameters. The output z_i^s from the strongly-augmented path goes to 'CluHead' (g(theta_clu; .)), which produces p_i^{c,clu}. The output z_i^w from the weekly-augmented path goes to 'CalHead' (g(theta_cal; .)), which produces p_i^{c,cal}. The CluHead output is filtered by a 'Filter' block (containing a histogram and a sample filter icon) to produce a 'pseudo label' y_i. The CalHead output is also filtered by a 'Filter' block and an 'argmax' block to produce a 'pseudo label' y_i. The 'Filter' block also receives input from the 'CluHead' output. The 'Filter' block is connected to a 'Loss function' (L_cal) and a 'Weights trainable module' (W^{(1)} in R^{d x d}, W^{(2)} in R^{d x C}). The 'Weights trainable module' is connected to an 'Initialized MLP' block. The 'Pretext FeaModel' block is connected to the 'FeaModel' blocks via a 'Copy' arrow. The 'Initialized MLP' block is connected to the 'FeaModel' blocks via a 'Copy' arrow. The legend indicates: Forward propagation (solid red arrow), Data flow (solid black arrow), Output view (green box), Back propagation (dashed red arrow), Sample filter (circle with slash), Loss function (red box), and Weights trainable module (orange box).](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 2: Illustration of the proposed CDC framework. The diagram shows the flow of data and forward/backward propagation. On the left, 'Unlabeled Samples' are processed through 'strongly-augmented' (A(x\_i)), 'no augmented' (x\_i), and 'weekly-augmented' (W(x\_i)) paths. These lead to 'FeaModel' blocks (f(theta; .)) which share parameters. The output z\_i^s from the strongly-augmented path goes to 'CluHead' (g(theta\_clu; .)), which produces p\_i^{c,clu}. The output z\_i^w from the weekly-augmented path goes to 'CalHead' (g(theta\_cal; .)), which produces p\_i^{c,cal}. The CluHead output is filtered by a 'Filter' block (containing a histogram and a sample filter icon) to produce a 'pseudo label' y\_i. The CalHead output is also filtered by a 'Filter' block and an 'argmax' block to produce a 'pseudo label' y\_i. The 'Filter' block also receives input from the 'CluHead' output. The 'Filter' block is connected to a 'Loss function' (L\_cal) and a 'Weights trainable module' (W^{(1)} in R^{d x d}, W^{(2)} in R^{d x C}). The 'Weights trainable module' is connected to an 'Initialized MLP' block. The 'Pretext FeaModel' block is connected to the 'FeaModel' blocks via a 'Copy' arrow. The 'Initialized MLP' block is connected to the 'FeaModel' blocks via a 'Copy' arrow. The legend indicates: Forward propagation (solid red arrow), Data flow (solid black arrow), Output view (green box), Back propagation (dashed red arrow), Sample filter (circle with slash), Loss function (red box), and Weights trainable module (orange box).
+
+Figure 2: Illustration of the proposed CDC framework. The calibration head (CalHead) penalizes the overconfident predictions from the clustering head (CluHead). The clustering head, in turn, uses the calibrated confidence provided by the calibration head to select high-confidence samples for training. Note that the calibration head has the same structure as the clustering head.
+
+The calibration head serves the purpose of aligning the output confidence of the model with its true accuracy. However, the well-known calibration methods are not directly applicable here: (1) *Post-calibration methods* like Temperature Scaling requires a labeled validation set to tune its hyperparameter, which is not accessible in unsupervised clustering tasks. (2) *Regularization-based methods* like Label Smoothing (LS), Focal Loss (FL), and  $L_1$  Norm (L1) penalize the prediction confidence of all the samples, which are harmful for failure detection, i.e., misclassification errors cannot be detected by filtering out low-confidence predictions. As indicated in Fig. 1-(e), although LS promotes the ECE performance, it will also reduce the high-confidence predictions.
+
+Therefore, we selectively penalize confidence for samples in unreliable regions while preserving confidence in reliable regions. To this end, we first use the K-means algorithm to divide the embeddings matrix (before the clustering head and calibration head) into  $K$  mini-clusters and record the average prediction of each mini-cluster in the clustering head as  $\hat{q}_k = \frac{\sum_{x_i \in Q_k} p_i^{c,clu}}{|Q_k|}$ , where  $Q_k$  denotes the samples belonging to the  $k$ -th mini-cluster,  $|Q_k|$  is the total number of samples in that mini-cluster, and the prediction of the clustering head is  $p_i^{c,clu} = \sigma(g(\theta_{clu}; f(\Theta; x_i)))$ . Then, we take the average prediction of each mini-cluster by the clustering head as the target distribution of the samples in that mini-cluster of the calibration head, i.e.,
+
+$$\mathcal{L}_{cal} = -\frac{1}{B} \sum_k \sum_{x_i \in Q_k} \hat{q}_k \log(p_i^{cal}), \quad (1)$$
+
+where the prediction of the calibration head is  $p_i^{cal} = \sigma(g(\theta_{cal}; f(\Theta; x_i)))$ . The above calibration method aligns the feature representation of the samples with their output in the clustering head.
+
+Furthermore, we add a negative entropy loss to make the predicted class distribution more uniform, avoiding all samples being divided into the same cluster:
+
+$$\mathcal{L}_{en} = \frac{1}{C} \sum_{j=1}^C p_{:,j}^{cal} \log p_{:,j}^{cal}, \quad (2)$$
+
+where  $p_{:,j}^{cal}$  denotes the  $j$ -th column of the calibration head for a batch of samples. Combining Eqs. (1) and (2), the overall loss of the calibration head is:
+
+$$\mathcal{L} = \mathcal{L}_{cal} + w_{en} \mathcal{L}_{en}, \quad (3)$$
+
+where we set hyperparameter  $w_{en} = 1$  for simplicity.
+
+**Theoretical Analysis.** Assuming K-means divides features into  $(a + b)$  regions, where  $a$  regions are *reliable regions* that do not cross clustering decision boundaries, and the set of samples in the
+
+{4}------------------------------------------------
+
+reliable regions are denoted as  $T$ , and  $b$  regions are *unreliable regions* that cross the clustering decision boundaries with samples in the unreliable regions denoted as  $F$ . We use expected calibration error (ECE) (Naeini et al., 2015) to measure the difference between the confidence of predictions and the actual accuracy, serving as an indicator of how well-calibrated the confidence estimates are. To calculate ECE, all  $N$  samples' confidence scores are grouped into  $l$  bins and computed by  $ECE = \sum_{i=1}^l \frac{|B_i|}{N} |acc(B_i) - avg.conf.(B_i)|$ , where  $acc(\cdot)$  and  $avg.conf.(\cdot)$  means accuracy and average confidence in each bin.
+
+**Theorem 1** (Region-aware Penalty). *Let  $Con^{fclu}$  and  $Con^{fcal}$  be the average confidence of the predictions before and after calibration, respectively. Then, confidence penalty occurs only in unreliable regions with  $\mathbb{E}_F [Con^{fcal}] \leq \mathbb{E}_F [Con^{fclu}]$  while not in reliable regions with  $\mathbb{E}_T [Con^{fcal}] = \mathbb{E}_T [Con^{fclu}]$ . Proof. See Appendix A.3.*
+
+**Theorem 2** (Improve Calibration). *The calibration errors given by the clustering head and the calibration head are denoted as  $ECE^{fclu}$  and  $ECE^{fcal}$ . Under some mild conditions, we have  $ECE^{fcal} \leq ECE^{fclu}$ . Proof. See Appendix A.4.*
+
+Theorem 1 indicates that the proposed calibration method only penalizes the confidence of the unreliable samples, which avoids the over-punishment problem on the high confidence prediction samples by the previous regularization-based calibration methods. Theorem 2 indicates the proposed calibration method can promote calibration theoretically.
+
+**Remark.** Considering the characteristics of the calibration head outlined earlier, we implement two specific designs:
+
+- *Stop gradient.* Given the incorporation of uncertain samples within the calibration head, we focus solely on optimizing the calibration head, steering clear of network-wide loss optimization.
+- *Dual-head decoupling.* To address conflicts between calibrated and overconfident predictions within the same head, we adopt a dual-head framework to effectively separate and manage these divergent predictions.
+
+### 3.2 CLUSTERING HEAD
+
+Due to the lack of ground-truth information, the most crucial issue in training the clustering head is generating highly reliable pseudo labels. Previous methods (Van Gansbeke et al., 2020; Niu et al., 2022; Qian, 2023) usually adopt a *fixed* and *predefined* threshold to select samples as the pseudo labels. However, such a fashion overlooks the fact that the model's output confidence continuously increases during the training process. Specifically, in the early training strategy, the threshold is typically set too high, resulting in the selection of only a limited number of samples and slowing down the training speed. As training progresses, the confidence of all samples increases, leading to the selection of more samples as pseudo labels. Consequently, more incorrect pseudo labels are included, reducing the clustering performance. Furthermore, as previously analyzed, deep clustering networks face a significant overconfidence problem, which hinders the model's ability to perceive its *learning status*, further complicating the determination of an appropriate threshold. Additionally, previous methods utilize a single global threshold for all classes, which biases the model towards selecting more samples from easy classes (those with higher confidence) while disregarding hard classes (those with lower confidence).
+
+To address these challenges, we use the confidence of the calibration head estimates to determine the threshold *dynamically for different classes*. This approach allows a more accurate estimation of the model's learning status and helps mitigate the discrepancies in data utilization across categories.
+
+Specifically, we first sort all samples in class  $c$  by their probability values in descending order, and then select the top  $\lfloor B/C \rfloor$  samples with the highest probabilities to get  $TOP(c)$ , where  $\lfloor \cdot \rfloor$  denotes the lower approximation operator. Then, we determine the number of samples selected as the pseudo-labels for the  $c$ -th cluster via
+
+$$M(c) = \lfloor \sum_{x_i \in TOP(c)} p_i^{w,cal} \rfloor, \forall c = 1, 2, \dots, C, \quad (4)$$
+
+where  $p_i^{w,cal}$  denotes the confidence of the weak augmentation of  $x_i$  estimated by the calibration head. As the calibration head is well-calibrated, the average confidence of each cluster estimated
+
+{5}------------------------------------------------
+
+by the calibration head can well capture the learning status of each cluster, i.e., if  $M(c)$  is large (resp. small), the model is more (resp. less) confident about the prediction for the samples in the  $c$ -th cluster; accordingly, we should select more (resp. less) samples from this cluster as the pseudo-labels. Finally, we select the top  $M_c$  samples from each cluster to constitute the final pseudo-labeled samples:  $S = \{(x_i, y_i)\}$ , where  $y_i = \operatorname{argmax}_c p_i^{w,cal}$  returns the cluster index producing the largest prediction as the pseudo label for  $x_i$ .
+
+After selecting the pseudo labels, we use the cross-entropy loss to optimize the parameters of the feature extractor and the clustering head:
+
+$$\mathcal{L}_{clu} = -\frac{1}{|S|} \sum_{x_i \in S} y_i \log p_i^{s,clu}, \quad (5)$$
+
+where  $|S|$  denotes the total number of selected pseudo-labeled samples,  $p_i^{s,clu}$  denotes the confidence of the strong augmentation of  $x_i$  estimated by the clustering head.
+
+### 3.3 INITIALIZATION OF CLUSTERING AND CALIBRATION HEADS
+
+After pre-training the backbone using MoCo-v2, a clustering head, typically a multilayer perceptron (MLP), is added to generate clustering predictions. Figure 1-(f) illustrates that the MoCo-v2 pre-trained backbone yields a quite discriminative representations, for example, applying K-means to MoCo-v2 pre-trained features on the CIFAR-20 dataset achieves a clustering accuracy of about 50.7%. In contrast, a randomly initialized clustering head on this backbone only reaches an accuracy of 10.4%. This indicates that the discriminative power of the pre-trained backbone does not automatically transfer to the clustering head. Consequently, the common practice of random initialization can result in low-quality pseudo-labels and poor clustering performance.
+
+Therefore, we propose a feature prototype-based initialization strategy for the clustering head (also the same approach for the calibration head) to extend the discriminative capabilities of the pre-trained backbone. As detailed in the lower right corner of Fig. 2, we employ a three-layer MLP for the clustering head. This MLP consists of  $D$  input units,  $H$  hidden units, and  $C$  output units. The variables include  $z \in \mathbb{R}^{N \times D}$  (input),  $h \in \mathbb{R}^{N \times H}$  (hidden),  $o \in \mathbb{R}^{N \times C}$  (output), and two linear layer weights  $W^{(1)} \in \mathbb{R}^{H \times D}$  and  $W^{(2)} \in \mathbb{R}^{C \times H}$ . To initialize the first linear layer  $W^{(1)}$ , we perform K-means clustering on the input variable  $z$ , and split it into  $H$  mini-clusters. Then we use each clustering center (prototype) to initialize  $W^{(1)}$ , i.e.,
+
+$$W^{(1)} = \text{Kmeans}_H(z), \quad (6)$$
+
+where  $\text{Kmeans}_H(z)$  returns  $H$  prototypes of  $z$  by the K-means clustering. Note that we set the bias of the linear layer to 0. By the above setting, one neuron of the output will denote a prototype, and this neuron will yield large values (resp. small values) for samples belonging to (resp. not belonging) the mini-cluster related to that prototype, marking it has the discriminative ability transferred from the pre-trained backbone. Besides, the MLP also embeds a BN layer and a ReLU layer. For the second layer weight  $W^{(2)}$ , we apply the same strategy by initializing with K-means on  $h$ , resulting in  $W^{(2)} = \text{Kmeans}_C(h)$ . After the initialization with feature prototypes, we further orthogonalize the weights to improve the discriminative ability of the network.
+
+**Proposition 1.** Assuming  $z^*$  as the prototype obtained by applying K-means to the features  $z$ , when the linear layer weights  $W = z^*$ , the cluster assignment of the output  $Wz$  aligns well with  $z^*$ .
+
+*Proof.* See Appendix A.1 □
+
+Proposition 1 demonstrates that the proposed strategy can effectively propagate the discriminability from the feature space to the output space, thereby outperforming random initialization.
+
+### 3.4 JOINT TRAINING AND FINAL PREDICTION
+
+**Joint Optimization.** After the pre-training by MoCo-v2, and the initialization of the clustering head and the calibration head, we optimize the clustering head and feature extractor by minimizing Eq. 5
+
+{6}------------------------------------------------
+
+and optimize the calibration head by minimizing Eq. 3. The overall training process of our model is summarized in Algorithm 1.
+
+**Final Prediction.** The clustering head achieves clustering results similar to that of the calibration head but with a worse ECE. Therefore, we use the calibration head to make the final prediction of  $i$ -th sample  $\mathbf{x}_i$ , i.e.,  $p_i^{cal} = \sigma(g(\theta_{cal}; f(\Theta; \mathbf{x}_i)))$ .
+
+#### --- **Algorithm 1:** The training process of Calibrated Deep Clustering ---
+
+**Data:** Training dataset  $\mathcal{D}_u = \{\mathbf{x}_i : i \in \{1, 2, \dots, N\}\}$
+
+**Input:**  $C$  predefined clusters,  $K$  mini-clusters; feature extractor  $f(\Theta; \cdot)$ , the clustering head  $g(\theta_{ctu}; \cdot)$ , the calibration head  $g(\theta_{cal}; \cdot)$ , and softmax function  $\sigma(\cdot)$ .
+
+#### **Initialization:**
+
+Learning feature extractor  $\Theta$  via MoCo-v2;
+
+Initializing MLPs  $\theta_{ctu}$  and  $\theta_{cal}$  by the proposed initialization approach;
+
+```
+
+for epoch  $\leftarrow 1$  to EPOCHS do
+  for b  $\leftarrow 1$  to  $\lfloor N/B \rfloor$  do
+    Establish batch dataset  $\mathcal{D}_b \subseteq \mathcal{D}_u$ ;
+     $p_i^{w.cal} \xleftarrow{no\ grad.} \sigma(g(\theta_{cal}; f(\Theta; \mathcal{W}(\mathbf{x}_i))))$ ;
+    Establish pseudo-labeled samples  $S$  by Eqs. 4;
+     $\mathbf{z}_i \xleftarrow{no\ grad.} f(\Theta; \mathbf{x}_i)$ ;
+     $p_i^{ctu} \xleftarrow{no\ grad.} \sigma(g(\theta_{ctu}; f(\Theta; \mathbf{x}_i)))$ ;
+    Employ K-means on  $\mathbf{z}$  to get partition  $Q_b$ ;
+    Calculate mini-clusters target distribution  $\hat{q}_k$ ;
+    for sub_iter  $\leftarrow 1$  to  $\lfloor B/B_s \rfloor$  do
+      Establish sub-batch dataset  $\mathcal{D}_{sub} \subseteq \mathcal{D}_b$ ;
+       $p_{i_{sub}}^{ctu} \leftarrow \sigma(g(\theta_{ctu}; f(\Theta; \mathcal{A}(\mathbf{x}_{sub}))))$ ;
+      Calculate  $\mathcal{L}_{ctu}$  by Eq. 5, update  $\Theta$  and  $\theta_{ctu}$ ;
+       $p_{i_{sub}}^{cal} \leftarrow \sigma(g(\theta_{cal}; f(\Theta; \mathbf{x}_{sub})))$ ;
+      Calculate  $\mathcal{L}_{cal}$  and  $\mathcal{L}_{en}$  by Eqs. 1-2, update  $\theta_{cal}$ ;
+    end
+  end
+end
+
+```
+
+---
+
+## 4 EXPERIMENTS
+
+### 4.1 EXPERIMENT SETTINGS
+
+**Datasets and Backbones.** We conducted experiments on six widely used benchmark datasets, CIFAR-10, CIFAR-20 (Krizhevsky et al., 2009), STL-10 (Coates et al., 2011), ImageNet-10, ImageNet-Dogs (Chang et al., 2017), and Tiny-ImageNet (Le & Yang, 2015). Similar to (Huang et al., 2022) and (Niu et al., 2022), we used ResNet-34 and MLP (512d-BN (Ioffe & Szegedy, 2015)-ReLU (Nair & Hinton, 2010)-Cd) for all experiments.
+
+**Implementation Details.** The comparison methods can be divided into two types. (1) *Clustering based on representation learning* which can achieve clustering by using K-means (Lloyd, 1982): MoCo-v2 (Chen et al., 2020b), SimSiam (Chen et al., 2020a), BYOL (Grill et al., 2020), DMICC (Li et al., 2023), ProProS (Huang et al., 2022) and CoNR (Yu et al., 2024). (2) *Iterative deep clustering with self-supervision*: DivClust (Metaxas et al., 2023), CC (Li et al., 2021), TCC (Shen et al., 2021), TCL (Li et al., 2022), SeCu (Qian, 2023), SCAN (Van Gansbeke et al., 2020), and SPICE (Niu et al., 2022). More details are shown in B.1.
+
+For CDC, we trained the model for 100 epochs using the Adam optimizer with a learning rate of 5e-5 for the encoder and 1e-4 for the MLP. The learning rate of the encoder on CIFAR-20 and Tiny-ImageNet was adjusted to 1e-5 for better learning of noisy pseudo labels. We set  $B=1,000$  for CIFAR-10, CIFAR-20, and STL-10,  $B=500$  for ImageNet-10 and ImageNet-Dogs,  $B=5,000$  for Tiny-ImageNet. We set  $K=500$  for CIFAR-10,  $K=40$  for CIFAR-20 and ImageNet-Dogs,  $K=150$  for STL-10 and ImageNet-10, and  $K=1,000$  for Tiny-ImageNet. For simplicity, the predictions of the clustering and calibration heads are denoted as **CDC-CIu** and **CDC-Cal**, respectively.
+
+{7}------------------------------------------------
+
+Table 1: The clustering performance ACC, ARI (%) and calibration error ECE (%) of various deep clustering methods trained on six image benchmarks. The best and second-best results are highlighted in **bold** and underlined, respectively. ↑ (↓) means the higher (resp. lower), the better.
+
+| Method | CIFAR-10 |  |  | CIFAR-20 |  |  | STL-10 |  |  | ImageNet-10 |  |  | ImageNet-Dogs |  |  | Tiny-ImageNet |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  | ACC↑ | ARI↑ | ECE↓ | ACC↑ | ARI↑ | ECE↓ | ACC↑ | ARI↑ | ECE↓ | ACC↑ | ARI↑ | ECE↓ | ACC↑ | ARI↑ | ECE↓ | ACC↑ | ARI↑ | ECE↓ |
+| K-means | 22.9 | 4.9 | N/A | 13.0 | 2.8 | N/A | 19.2 | 6.1 | N/A | 24.1 | 5.7 | N/A | 10.5 | 2.0 | N/A | 2.5 | 0.5 | N/A |
+| MoCo-v2 | 82.9 | 64.9 | N/A | 50.7 | 26.2 | N/A | 68.8 | 45.5 | N/A | 56.7 | 30.9 | N/A | 62.8 | 48.1 | N/A | 25.2 | 11.0 | N/A |
+| Simiam | 70.7 | 53.1 | N/A | 33.0 | 16.2 | N/A | 49.4 | 34.9 | N/A | 78.4 | 68.8 | N/A | 44.2 | 27.3 | N/A | 19.0 | 8.4 | N/A |
+| BYOL | 57.0 | 47.6 | N/A | 34.7 | 21.2 | N/A | 56.3 | 38.6 | N/A | 71.5 | 54.1 | N/A | 58.2 | 44.2 | N/A | 11.2 | 4.6 | N/A |
+| DMICc | 82.8 | 69.0 | N/A | 46.8 | 29.1 | N/A | 80.0 | 62.5 | N/A | 96.2 | 91.6 | N/A | 58.7 | 43.8 | N/A | - | - | - |
+| ProPos | 94.3 | 88.4 | N/A | 61.4 | 45.1 | N/A | 86.7 | 73.7 | N/A | 96.2 | 91.8 | N/A | 77.5 | 67.5 | N/A | 29.4 | 17.9 | N/A |
+| CoNR | 93.2 | 86.1 | N/A | 60.4 | 44.3 | N/A | 92.6 | 84.6 | N/A | 96.4 | 92.2 | N/A | <b>79.4</b> | 66.7 | N/A | 30.8 | 18.4 | N/A |
+| DivClust | 81.9 | 68.1 | - | 43.7 | 28.3 | - | - | - | - | 93.6 | 87.8 | - | 52.9 | 37.6 | - | - | - | - |
+| CC | 85.2 | 72.8 | 6.2 | 42.4 | 28.4 | 29.7 | 80.0 | 67.7 | 11.9 | 90.6 | 85.3 | 8.1 | 69.6 | 56.0 | 19.3 | 12.1 | 5.7 | <b>3.2</b> |
+| TCC | 90.6 | 73.3 | - | 49.1 | 31.2 | - | 81.4 | 68.9 | - | 89.7 | 82.5 | - | 59.5 | 41.7 | - | - | - | - |
+| TCL | 88.7 | 78.0 | - | 53.1 | 35.7 | - | 86.8 | 75.7 | - | 89.5 | 83.7 | - | 64.4 | 51.6 | - | - | - | - |
+| SeCu-Size | 90.0 | 81.5 | 8.1 | 52.9 | 38.4 | <u>13.1</u> | 80.2 | 63.1 | 9.9 | - | - | - | - | - | - | - | - | - |
+| SeCu | 92.6 | 85.4 | 4.9 | 52.7 | 39.7 | 41.8 | 83.6 | 69.3 | 6.5 | - | - | - | - | - | - | - | - | - |
+| SCAN-2 | 84.1 | 74.1 | 10.9 | 50.0 | 34.7 | 37.1 | 87.0 | 75.6 | 7.4 | 95.1 | 89.4 | 2.7 | 63.3 | 49.6 | 26.4 | 27.6 | 15.3 | 27.4 |
+| SCAN-3 | 90.3 | 80.8 | 6.7 | 51.2 | 35.6 | 39.0 | 91.4 | 82.5 | 6.6 | 97.0 | 93.6 | <u>1.5</u> | 72.2 | 58.7 | 19.5 | 25.8 | 13.4 | 48.8 |
+| SPICE-2 | 84.4 | 70.9 | 15.4 | 47.6 | 30.3 | 52.3 | 89.6 | 79.2 | 10.1 | 92.1 | 83.6 | 7.8 | 64.6 | 47.7 | 35.3 | 30.5 | 16.3 | 48.5 |
+| SPICE-3 | 91.5 | 83.4 | 7.8 | 58.4 | 42.2 | 40.6 | 93.0 | 85.5 | 6.3 | 95.9 | 91.2 | 4.1 | 67.5 | 52.6 | 32.5 | 29.1 | 14.7 | N/A |
+| CDC-Clu (Ours) | <b>94.9</b> | <b>89.4</b> | <u>1.4</u> | <b>61.9</b> | <b>46.7</b> | <b>28.0</b> | <b>93.1</b> | <b>85.8</b> | <b>4.8</b> | <b>97.2</b> | <b>94.0</b> | <b>1.8</b> | <b>79.3</b> | <b>70.3</b> | <b>17.1</b> | <b>34.0</b> | <b>20.0</b> | <b>37.8</b> |
+| CDC-Cal (Ours) | <b>94.9</b> | <b>89.5</b> | <b>1.1</b> | <b>61.7</b> | <b>46.6</b> | <b>4.9</b> | <b>93.0</b> | <b>85.6</b> | <b>0.9</b> | <b>97.3</b> | <b>94.1</b> | <b>0.8</b> | <b>79.2</b> | <b>70.0</b> | <b>7.7</b> | <b>33.9</b> | <b>19.9</b> | <b>11.0</b> |
+| Supervised | 89.7 | 78.9 | 4.0 | 71.7 | 50.2 | 11.0 | 80.4 | 62.2 | 10.0 | 99.2 | 98.3 | 0.9 | 93.1 | 85.7 | 0.9 | 47.7 | 24.3 | 5.1 |
+| +MoCo-v2 | 94.1 | 87.5 | 2.4 | 83.2 | 68.4 | 6.7 | 90.5 | 80.7 | 3.5 | 99.9 | 99.8 | 0.4 | 99.5 | 99.0 | 0.9 | 53.8 | 30.9 | 8.4 |
+
+**Evaluation Metrics.** We used three common clustering metrics: clustering Accuracy (ACC) (Li & Ding, 2006), Normalized Mutual Information (NMI) (Strehl & Ghosh, 2002), and Adjusted Rand Index (ARI) (Hubert & Arabie, 1985) to evaluate the clustering performance, and used the expected calibration error (ECE) (Naeini et al., 2015) to evaluate the calibration performance. Moreover, we applied the failure rejection ability metrics AUROC, AURC, and FPR95 (Zhu et al., 2022) to evaluate the separation quality of low-confidence and high-confidence predictions.
+
+### 4.2 MAIN RESULTS
+
+**Superior Clustering Ability.** As shown in Tab. 1, applying K-means to the pre-trained features significantly outperforms directly applying K-means to the raw features, demonstrating the importance of deep representation learning in clustering. Along this line, ProPos and CoNR have continuously improved the clustering performance but cannot provide confidence prediction. For self-labeling-based methods, CDC-Cal outperforms DivClust, CC, SeCu, SCAN, and SPICE on almost all the datasets, validating the importance of dynamic threshold setting. On CIFAR-10 and STL-10, CDC-Cal with the same pre-trained model (MoCo-v2) increases accuracy by 0.8% and 2.5% than supervised learning. On large-scale datasets, CDC-Cal has achieved improvements of 1.4%, 11.7%, and 4.8% on ImageNet-10, ImageNet-Dogs, and Tiny-ImageNet. Meanwhile, the results of the clustering head CDC-Clu are close to those of the calibration head CDC-Cal. In summary, our method ranks first in 11 out of 12 cases in all the clustering metrics, suggesting its superior clustering ability.
+
+**Excellent Calibration Performance.** The calibration error of CDC-Cal is far superior to that of CDC-Clu and all the compared methods. CC does not apply the pseudo-labeling strategy, so its ECE is relatively low. This explains that overfitting to the wrong pseudo-labels is a reason for the high calibration error. SPICE-2 uses dual-softmax losses to encourage sharper predictions, which leads to more severe overconfidence than SCAN, while our calibration head significantly reduces the calibration error on CIFAR-10 (15.4%→1.1%), CIFAR-20 (52.3%→4.9%), and STL-10 (7.8%→0.8%) compared to SPICE-2. Fig. 1 provides a visual comparison of the ECE on CIFAR-20, where our method achieves well-aligned predictions and better clustering performance simultaneously.
+
+**Competitive Failure Rejection Ability.** Fig. 3 compares different regularization-based calibration methods. CDC-Cal improves AUROC by 8.6%, decreases AURC by 10.6%, and decreases FPR95 by 6.5% compared to the second-best method, demonstrating its effective error rejection capability. The second line of Fig. 3 further demonstrates our method can better separate correct and mis-
+
+{8}------------------------------------------------
+
+classified samples compared with the regularization-based calibration methods, which is beneficial for selecting reliable pseudo-labels for feedback into the network. Although Focal Loss (FL) may produce a lower ECE than our method, its clustering ACC is much worse. Besides, our method outperforms FL on all the failure rejection metrics (AUROC, AURC, and FPR95), suggesting our method can better separate the correct prediction and the wrong prediction.
+
+![Figure 3: Failure rejection ability comparison on CIFAR-20. The top row shows bar charts for (a) ACC (%), (b) AUROC (%), (c) AURC (%), (d) FPR95 (%), and (e) ECE (%). The bottom row shows density plots of confidence for correct (green) and wrong (red) samples for (f) SCAN, (g) LS, (h) FL, (i) LI, and (j) CDC-Cal(Ours).](91be14371a97fb5ce9eeb29ae18d07c3_img.jpg)
+
+Figure 3 consists of ten subplots. The top row contains five bar charts comparing five methods (SCAN, LS, FL, LI, CDC) across five metrics. The bottom row contains five density plots showing the distribution of confidence scores for correct (green) and wrong (red) samples for the same methods.
+
+| Metric | SCAN | LS | FL | LI | CDC |
+|-|-|-|-|-|-|
+| (a) ACC (%) ↑ | 53.2 | 56.6 | 54.4 | 58.4 | 61.7 |
+| (b) AUROC (%) ↑ | 66.6 | 64.3 | 66.1 | 68.4 | 77.9 |
+| (c) AURC (%) ↓ | 39.2 | 36.1 | 35.2 | 31.0 | 20.4 |
+| (d) FPR95 (%) ↓ | 81.7 | 79.9 | 81.7 | 75.7 | 73.4 |
+| (e) ECE (%) ↓ | 40.6 | 4.4 | 2.7 | 11.9 | 4.9 |
+
+Figure 3: Failure rejection ability comparison on CIFAR-20. The top row shows bar charts for (a) ACC (%), (b) AUROC (%), (c) AURC (%), (d) FPR95 (%), and (e) ECE (%). The bottom row shows density plots of confidence for correct (green) and wrong (red) samples for (f) SCAN, (g) LS, (h) FL, (i) LI, and (j) CDC-Cal(Ours).
+
+Figure 3: The failure rejection ability comparison on CIFAR-20. The second row shows the confidence distribution of correct and misclassified samples, demonstrating that our method has a stronger ability to separate failure predictions.
+
+![Figure 4: Training process on CIFAR-10 and ImageNet-Dogs. (a) CIFAR-10: Accuracy (%) vs Epoch. (b) ImageNet-Dogs: Accuracy (%) vs Epoch. Both plots show Pretrain, CC, SCAN2, SCAN3, and CDC methods. CDC-Cal is highlighted with a yellow line. Vertical dashed lines indicate 'Random Init.' and 'CDC Init.' stages.](891ff9b651838b7f59e9a1612a739e15_img.jpg)
+
+Figure 4 shows two line plots of Accuracy (%) vs Epoch. Plot (a) is for CIFAR-10 and plot (b) is for ImageNet-Dogs. Both plots compare Pretrain, CC, SCAN2, SCAN3, and CDC methods. A yellow line represents CDC-Cal. Vertical dashed lines indicate 'Random Init.' and 'CDC Init.' stages.
+
+Figure 4: Training process on CIFAR-10 and ImageNet-Dogs. (a) CIFAR-10: Accuracy (%) vs Epoch. (b) ImageNet-Dogs: Accuracy (%) vs Epoch. Both plots show Pretrain, CC, SCAN2, SCAN3, and CDC methods. CDC-Cal is highlighted with a yellow line. Vertical dashed lines indicate 'Random Init.' and 'CDC Init.' stages.
+
+Figure 4: The training process on CIFAR-10 and ImageNet-Dogs. CDC-Cal has (i) fewer training stages, (ii) better initialization strategy, and (iii) more stable performance improvement.
+
+### 4.3 ABLATION STUDY
+
+**I. Initialization.** Fig. 4 shows the benefits of our initialization strategy in improving training speed and stability. Our method can transform the discriminative ability of the pre-trained features to the clustering head directly. Tab. 2-I quantitatively demonstrates that prototype-based initialization leads to a notable enhancement in clustering performance. Specifically, when we exclude the initialization stage from our method (w/o Init.+CDC), the clustering performance experiences a significant decline, showing the efficacy of the initialization strategy.
+
+**II. Confidence-Aware Selection.** Tab. 2-II shows that if we fix the threshold at certain values, the clustering performance will drop significantly, suggesting the effectiveness of the proposed confidence-aware thresholding strategy.
+
+**III. Single-head Setting.** Tab. 2-III shows in a single-head setting, the network employs its own overconfident predictions for confidence-aware sample selection, which may lead to the selection of numerous incorrect pseudo-labels, resulting in performance degradation including both the clustering performance and the calibration performance.
+
+{9}------------------------------------------------
+
+Table 2: The ablation results of the proposed model.
+
+| Type | Settings | CIFAR-10 |  |  |  | CIFAR-20 |  |  |  | STL-10 |  |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  |  | ACC $\uparrow$ | NMI $\uparrow$ | ARI $\uparrow$ | ECE $\downarrow$ | ACC $\uparrow$ | NMI $\uparrow$ | ARI $\uparrow$ | ECE $\downarrow$ | ACC $\uparrow$ | NMI $\uparrow$ | ARI $\uparrow$ | ECE $\downarrow$ |
+| I | After Randomly Init. | 19.1 | 7.6 | 3.1 | 8.5 | 10.4 | 5.7 | 1.0 | 4.9 | 19.2 | 6.0 | 2.4 | 8.5 |
+|  | After Proposed Init. | 87.2 | 79.8 | 76.1 | 1.0 | 56.4 | 56.9 | 41.2 | 5.2 | 89.8 | 80.9 | 79.3 | 2.7 |
+|  | w/o Init.+CDC | 89.4 | 86.5 | 83.5 | 3.3 | 44.4 | 52.3 | 31.0 | 11.9 | 73.3 | 70.0 | 60.6 | 17.9 |
+| II | Fixed Thre. (0.99) | 80.6 | 69.8 | 65.8 | 6.5 | 54.9 | 55.9 | 37.1 | 15.1 | 89.6 | 81.0 | 79.3 | 1.0 |
+|  | Fixed Thre. (0.95) | 91.9 | 85.2 | 83.9 | 3.5 | 50.8 | 49.2 | 30.5 | 12.6 | 91.8 | 84.0 | 83.3 | 1.1 |
+|  | Fixed Thre. (0.90) | 92.7 | 86.5 | 85.3 | 3.2 | 43.3 | 43.2 | 27.3 | 4.1 | 93.0 | 86.1 | 85.7 | 1.0 |
+|  | Fixed Thre. (0.80) | 93.6 | 87.5 | 86.9 | 1.7 | 49.9 | 50.5 | 33.6 | 3.9 | 93.0 | 86.1 | 85.7 | 2.0 |
+|  | CDC-Cal (Ours) | 94.9 | 89.3 | 89.5 | 1.1 | 61.7 | 60.9 | 46.6 | 4.9 | 93.0 | 85.8 | 85.6 | 0.9 |
+| III | Single-head (Clu) | 93.9 | 88.0 | 87.5 | 2.3 | 59.7 | 61.3 | 45.3 | 31.6 | 92.6 | 85.3 | 84.9 | 5.1 |
+| IV | Single-head (Clu+Cal) | 94.8 | 89.0 | 89.1 | 1.8 | 57.8 | 58.7 | 43.1 | 21.2 | 93.0 | 85.7 | 85.5 | 3.0 |
+| V | Cal (w/o Stop Gradient) | 93.0 | 86.0 | 85.7 | 2.0 | 49.6 | 52.1 | 34.2 | 12.4 | 86.7 | 76.3 | 63.9 | 2.5 |
+
+**IV. Dual-head Decoupling.** Tab. 2-IV shows that combining the conflicting losses of encouraging overconfidence and penalizing confidence in a single head (Clu+Cal) will decrease both the calibration performance and the clustering performance especially on CIFAR-20.
+
+**V. Stop Gradient for the Calibrating Head.** If we do not stop the gradient for the calibration head, the clustering performance will degrade significantly, especially on CIFAR-20 and STL-10. This is because the calibration loss relies on unreliable regions to provide penalties, which will include unreliable information in the feature extractor if we do not stop the gradient.
+
+**VI. Mini-cluster Number K.** The value of K represents the number of regions and directly influences the confidence penalty. The choice of K depends on the complexity of the dataset. For challenging datasets with over-confident predictions, a lower K value is needed to increase the confidence penalty, with the extreme case being  $K = 1$ , where all samples approach a uniform distribution, resulting in the maximum penalty. For simpler datasets, a higher K value is necessary to reduce the confidence penalty. If K equals the number of samples, each sample is independent, and the penalty is zero. Fig. 5 shows how this trend affects confidence. On CIFAR-20, variations of K by  $\pm 20\%$  lead to ACC changes of  $\pm 1.3\%$  and ECE changes of  $\pm 0.5\%$ , which is acceptable. More ablation studies are shown in the Appendix B.5.
+
+![Figure 5: Two line graphs showing the robustness of ACC and ECE to varying K. (a) ACC varying K: The x-axis is 'Percentage Change K' from -20 to 20. The y-axis is 'ACC (%)' from 50 to 65. Two lines are shown: CIFAR-20 (orange) and STL-10 (green). Both lines are nearly horizontal, with CIFAR-20 around 58% and STL-10 around 63%. (b) ECE varying K: The x-axis is 'Percentage Change K' from -20 to 20. The y-axis is 'ECE (%)' from 0 to 1. Two lines are shown: CIFAR-20 (orange) and STL-10 (green). Both lines are nearly horizontal, with CIFAR-20 around 0.5% and STL-10 around 0.1%.](33228b4227fa57e1477b27b9e07483e6_img.jpg)
+
+Figure 5: Two line graphs showing the robustness of ACC and ECE to varying K. (a) ACC varying K: The x-axis is 'Percentage Change K' from -20 to 20. The y-axis is 'ACC (%)' from 50 to 65. Two lines are shown: CIFAR-20 (orange) and STL-10 (green). Both lines are nearly horizontal, with CIFAR-20 around 58% and STL-10 around 63%. (b) ECE varying K: The x-axis is 'Percentage Change K' from -20 to 20. The y-axis is 'ECE (%)' from 0 to 1. Two lines are shown: CIFAR-20 (orange) and STL-10 (green). Both lines are nearly horizontal, with CIFAR-20 around 0.5% and STL-10 around 0.1%.
+
+Figure 5: The ACC and ECE are robust to varying K.
+
+## 5 CONCLUSION
+
+In this paper, we have introduced a novel calibrated deep clustering model that outperforms SOTA deep clustering models in terms of both clustering performance and calibration performance. Notably, our model is the first deep clustering method capable of calibrating the output confidence. In particular, the expected calibration error of our is 5 times better than certain compared methods. To achieve these results, we proposed a dual-head clustering network consisting of a clustering head and a calibration head. The clustering head utilizes the calibrated confidence estimated by the calibration head to select highly reliable pseudo-labels. The calibration head, on the other hand, calibrates the output confidence of all samples using a novel regularization loss. Additionally, we introduced an effective initialization strategy for both the clustering head and the calibration head, significantly promoting training stability. Through our calibrated deep clustering neural network, the output confidence of the model is well aligned with its true accuracy. Moreover, as we do not need any label to train the network, the above benefit can be gained quite easily.
+
+ Rest of paper (reference and Appendix) is removed.

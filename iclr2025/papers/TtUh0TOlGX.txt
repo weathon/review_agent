@@ -1,0 +1,331 @@
+
+
+{0}------------------------------------------------
+
+# REGULARIZATION BY TEXTS FOR LATENT DIFFUSION INVERSE SOLVERS
+
+Jeongsol Kim\*, Geon Yeong Park\*, Hyungjin Chung, Jong Chul Ye  
+ KAIST  
+ \*: Equal Contribution  
+ {jeongsol, pky3436, hj.chung, jong.ye}@kaist.ac.kr
+
+![Figure 1: Representative solutions obtained by TReg for various inverse problems. The figure is divided into four sections: Super-resolution(x16), Gaussian Deblur, Image Inpainting, and Non-linear problem. Each section shows a 'Measurement' image and its corresponding 'TReg' solution. Super-resolution shows four landscape images with yellow boxes highlighting details. Gaussian Deblur shows three images: a landscape, a plate of food, and a child's face. Image Inpainting shows four cat images with different eye colors. Non-linear problem shows a Fourier transform image and its reconstruction using LDPS and TReg methods.](64662465bba247703fdec49c8f3309f9_img.jpg)
+
+Figure 1: Representative solutions obtained by TReg for various inverse problems. The figure is divided into four sections: Super-resolution(x16), Gaussian Deblur, Image Inpainting, and Non-linear problem. Each section shows a 'Measurement' image and its corresponding 'TReg' solution. Super-resolution shows four landscape images with yellow boxes highlighting details. Gaussian Deblur shows three images: a landscape, a plate of food, and a child's face. Image Inpainting shows four cat images with different eye colors. Non-linear problem shows a Fourier transform image and its reconstruction using LDPS and TReg methods.
+
+Figure 1: Representative solutions obtained by TReg for various inverse problems. TReg optimizes both data consistency *and* the semantic alignment of the solution with textual cues, by reducing the solution space with text-conditional latent regularizer. This serves as an effective semantic guidance throughout the reconstruction process.
+
+## ABSTRACT
+
+The recent development of diffusion models has led to significant progress in solving inverse problems by leveraging these models as powerful generative priors. However, challenges persist due to the ill-posed nature of such problems, often arising from ambiguities in measurements or intrinsic system symmetries. To address this, here we introduce a novel latent diffusion inverse solver, regularization by text (TReg), inspired by the human ability to resolve visual ambiguities through perceptual biases. TReg integrates textual descriptions of preconceptions about the solution during reverse diffusion sampling, dynamically reinforcing these descriptions through null-text optimization, which we refer to as adaptive negation. Our comprehensive experimental results demonstrate that TReg effectively mitigates ambiguity in inverse problems, improving both accuracy and efficiency.
+
+## 1 INTRODUCTION
+
+Consider a given forward measurement process:
+
+$$\mathbf{y} = \mathcal{A}(\mathbf{x}) + \epsilon \quad (1)$$
+
+where  $\mathcal{A} : \mathbb{R}^m \mapsto \mathbb{R}^n$  describes forward measurement operator,  $\mathbf{y} \in \mathbb{R}^n$  and  $\mathbf{x} \in \mathbb{R}^m$  represents the measurement and the true image, respectively, and  $\epsilon \in \mathbb{R}^n$  denotes the measurement noise that follows the Gaussian distribution  $\mathcal{N}(0, \sigma_0^2 \mathbf{I}_n)$ . Then, an inverse solver attempts to recover  $\mathbf{x}$  from the measurement  $\mathbf{y}$ . Unfortunately, most inverse problems are ill-posed, meaning that many different visual inputs can produce identical measurements due to significant information loss during the measurement process. For example, consider Fourier phase retrieval—reconstructing
+
+{1}------------------------------------------------
+
+the phase information of a signal from its Fourier intensity measurements. Because of intrinsic system symmetries for shifts, rotations, and flips, it causes an input to be mapped to multiple symmetry-related outputs when inverting such systems.
+
+Traditionally, regularization techniques have been extensively studied to address the ambiguity in inverse problems. Methods such as sparsity ( $L_1$  norm), total variation (TV), and regularization by denoising (RED) have been widely employed, leveraging the statistical properties of natural images (Boyd et al., 2011; Venkatakrishnan et al., 2013; Romano et al., 2017). With the advent of diffusion models, a new class of Diffusion Inverse Solvers (DIS) (Kawar et al., 2022; Wang et al., 2022; Chung et al., 2022a; Mardani et al., 2023; Chung et al., 2023d; Rout et al., 2024) has emerged, offering superior reconstruction performance. The main idea is to leverage the diffusion model, which learns the score function of the prior distribution, to mitigate the ill-posedness of inverse problems.
+
+While diffusion models have significantly advanced the solution of inverse problems, it is important to acknowledge the unresolved ill-posedness in certain challenging imaging systems. For instance, in Fourier phase retrieval, Diffusion Posterior Sampling (DPS) (Chung et al., 2022a; Rout et al., 2024) recover solutions more effectively than traditional methods, but it still cannot fully overcome the intrinsic symmetry, as shown in Figure 6. This limitation arises because the diffusion prior is based on image statistics, which alone may be insufficient to break the symmetry and guarantee a unique solution. A similar challenge is in systems with severely degraded measurements. Therefore, inverse problem solvers must incorporate additional cues to reduce ambiguity and fully resolve the problem.
+
+In search of additional cues, we focus on *text* descriptions which may provide contextual information to resolve ambiguities during the sampling process, enriching the reconstructed solutions with relevant semantic content. While text conditions play a crucial role in the success of latent diffusion models, current DIS approaches based on LDM often do not fully leverage this descriptive conditioning to resolve uncertainties in recovered solutions. For instance, P2L (Chung et al., 2023d) leverages prompt embeddings as additional parameters for fine-tuning to improve alignment between solutions and measurements. However, this method primarily focuses on data consistency and thus lacks robust alignment with textual prompts. Thus, there remains a significant gap between how human perception resolves ambiguities by linguistic conditions and how DIS manage them. Bridging this gap may lead to more effective solver for addressing inverse problems.
+
+To this end, we introduce a novel concept called Regularization by Text (TReg), implemented through latent diffusion models. TReg leverages textual descriptions that encapsulate the preconceived description of the desired solution during the reverse sampling process, framing this as a latent optimization problem to mitigate the ill-posedness. Ideally, the concepts described in the text should be exclusively reflected in the outcomes. However, we observed that manually crafted descriptions can introduce noise, leading to blurry outcomes or artifacts. To avoid this, we propose an innovative null-text optimization technique called adaptive negation, applied throughout the reverse diffusion sampling process. This method dynamically adjusts the influence of the textual guidance, ensuring that only the intended concepts align with the evolving state of the reverse sampling. As a result, TReg, when guided by a regularization prompt such as "photography of face," can break symmetries in Fourier phase retrieval and consistently produce a unique, true solution, as demonstrated in Figure 6. Furthermore, our method functions as a zero-shot inverse problem solver, robustly applicable across various domains, as illustrated in Figure 1.
+
+## 2 BACKGROUNDS
+
+### 2.1 LATENT DIFFUSION MODEL
+
+Image diffusion models that operate on the pixel space are compute-heavy. So the latent diffusion model (LDM) (Rombach et al., 2022) has emerged as a class of diffusion-based generative models (Sohl-Dickstein et al., 2015; Ho et al., 2020; Song et al., 2020b), where the diffusion process is operated on low dimensional latent space instead of the pixel space. Specifically, the LDMs are first trained as a variational autoencoder by maximizing the evidence lower bound (ELBO) (Rombach et al., 2022; Kingma & Welling, 2013). Thus, the latent is represented as:
+
+$$z = \mathcal{E}_\phi(z) := \mathcal{E}_\phi^\mu(z) + \mathcal{E}_\phi^\sigma(z) \odot \epsilon, \quad \epsilon \sim \mathcal{N}(0, \mathbf{I}), \quad (2)$$
+
+{2}------------------------------------------------
+
+where  $\odot$  denotes the element-by-element multiplication, and  $\mathcal{E}_\phi^\mu, \mathcal{E}_\phi^\sigma$  are parts of the encoder that outputs the mean and the variance of the encoder distribution. In this paper, we assume that  $\mathcal{E}_\phi^\sigma(\mathbf{x})$  is isotropic, i.e.  $\mathcal{E}_\phi^\sigma(\mathbf{x}) = \sigma_\epsilon \mathbf{1}$ . The resulting pixel domain representation can be obtained by
+
+$$\mathbf{x} = \mathcal{D}_\varphi(\mathbf{z}) \quad (3)$$
+
+where  $\mathcal{D}_\varphi$  is the decoder.
+
+Then, the forward diffusion is defined given the latent representation of the clean image  $\mathbf{z}_0 = \mathcal{E}_\phi(\mathbf{x}) \in \mathbb{R}^d$  which perturbs  $\mathbf{z}_0$  as  $\mathbf{z}_t = \sqrt{\alpha_t} \mathbf{z}_0 + \sqrt{1 - \alpha_t} \boldsymbol{\epsilon}$  following forward VP-SDE. Accordingly, the residual denoiser  $\boldsymbol{\epsilon}_\theta(\cdot, t)$  is trained to estimate the noise  $\boldsymbol{\epsilon}$  from  $\mathbf{z}_t$  by epsilon matching:
+
+$$\min_{\boldsymbol{\epsilon}_\theta} \mathbb{E}_{\boldsymbol{\epsilon}_\phi(\mathbf{x}), \boldsymbol{\epsilon} \sim \mathcal{N}(0, \mathbf{I}), t} [\|\boldsymbol{\epsilon} - \boldsymbol{\epsilon}_\theta(\mathbf{z}_t, t)\|_2^2], \quad (4)$$
+
+where  $\boldsymbol{\epsilon}_\theta$  is often parameterized as time-conditional UNet (Ronneberger et al., 2015) in practice. Notably, the optimal solution  $\boldsymbol{\epsilon}_\theta^*$  of (4) serves as an alternative approximation of a score function as  $\nabla_{\mathbf{z}_t} \log p(\mathbf{z}_t) = -\boldsymbol{\epsilon}_\theta^*(\mathbf{z}_t, t)/t$  (Song et al., 2020b). Based on this, the generative reverse sampling from the posterior distribution  $p_\theta(\mathbf{z}_{t-1} | \mathbf{z}_t, \mathbf{z}_0)$  can be performed as
+
+$$\hat{\mathbf{z}}_{0|t} = \mathbb{E}[\mathbf{z}_0 | \mathbf{z}_t] = (\mathbf{z}_t - \sqrt{1 - \alpha_t} \boldsymbol{\epsilon}_\theta(\mathbf{z}_t, t)) / \sqrt{\alpha_t} \quad (5)$$
+
+$$\mathbf{z}_{t-1} = \sqrt{\alpha_{t-1}} \hat{\mathbf{z}}_{0|t} + \sqrt{1 - \alpha_{t-1}} \boldsymbol{\epsilon}_\theta(\mathbf{z}_t, t), \quad (6)$$
+
+which corresponds to a single iterate of deterministic DDIM sampling (Song et al., 2020a).
+
+For a text-conditional sampling, Classifier Free Guidance (CFG) (Ho & Salimans, 2021) is widely leveraged based on the sharpened posterior distribution. Let  $\emptyset$  denotes null-text embedding and  $\mathbf{c}$  represents target text embedding. Then, we have  $\boldsymbol{\epsilon}_\theta^\omega(\mathbf{z}_t, \mathbf{c}, t) = \boldsymbol{\epsilon}_\theta(\mathbf{z}_t, \emptyset, t) + \omega(\boldsymbol{\epsilon}_\theta(\mathbf{z}_t, \mathbf{c}, t) - \boldsymbol{\epsilon}_\theta(\mathbf{z}_t, \emptyset, t))$  where  $\omega$  is a scale for the guidance. For the brevity, we will use  $\boldsymbol{\epsilon}_\theta(\mathbf{z}, \emptyset, t) = \hat{\boldsymbol{\epsilon}}_\emptyset$ ,  $\boldsymbol{\epsilon}_\theta(\mathbf{z}, \mathbf{c}, t) = \hat{\boldsymbol{\epsilon}}_\mathbf{c}$ , and  $\boldsymbol{\epsilon}_\theta^\omega(\mathbf{z}, \mathbf{c}, t) = \hat{\boldsymbol{\epsilon}}_\mathbf{c}^\omega$ . For the details, please refer to Appendix A.6.
+
+### 2.2 DIFFUSION INVERSE SOLVERS
+
+Recently diffusion models have been emerged as powerful generative priors for inverse problems (Kawar et al., 2022; Song et al., 2022; Wang et al., 2022; Chung et al., 2022a; Mardani et al., 2023; Chung et al., 2023b). Earlier techniques in inverse imaging relied on an alternating projection method (Song et al., 2020b; Choi et al., 2021; Chung et al., 2022b), enforcing hard measurement constraints between denoising steps in either pixel or measurement spaces. More advanced strategies have been proposed to approximate the gradient of the log posterior within diffusion models, broadening the scope to tackle nonlinear problems (Chung et al., 2022a). The field has seen further expansion with methods addressing blind inverse problem (Chung et al., 2023a), 3D (Chung et al., 2023c; Lee et al., 2023), and problems of unlimited resolution (Bond-Taylor & Willcocks, 2023).
+
+Traditionally, these methods have utilized image-domain diffusion models, but a shift has been observed towards latent diffusion models such as latent DPS (LDPS) with a fixed point of autoencoder process (Rout et al., 2024), LDPS with history update (He et al., 2023), Resample (Song et al., 2023), and leveraging prompt tuning to improve the reconstruction (Chung et al., 2024). Despite these innovations, the use of text embedding for regularization is often overlooked, missing an opportunity to fully leverage the power of multi-modal latent space—an aspect we aim to address in following.
+
+## 3 MAIN CONTRIBUTION: REGULARIZATION BY TEXT
+
+In this section, we present *TReg*, an iterative refinement process for solving inverse problems by fully leveraging informative text conditioning. Our framework is based on a text-conditioned latent optimization objective, which, when minimized during the reverse sampling process, progressively improves both data consistency and the alignment of the estimated solution with the provided textual cue. This regularized sampling process produces a solution that aligns to human perceptual priors. For textual alignment, our framework incorporates two key components: **(1)** text-conditional latent regularization and **(2)** adaptive negation. Specifically, the text embedding is jointly optimized to align with the current latent representation, mitigating the unintended signal components introduced by hand-crafted text descriptions. We begin by outlining the overall latent optimization framework.
+
+{3}------------------------------------------------
+
+### 3.1 LATENT OPTIMIZATION FOR TEXTUAL CONSTRAINT
+
+Consider a probability density of posterior distribution  $p(\mathbf{x}|\mathbf{y}, \mathbf{z})$  where  $\mathbf{z}$  denotes latent vector of clean image  $\mathbf{x}$  and  $\mathbf{y}$  denotes the measurement. By the Bayes' rule, we can see that
+
+$$p(\mathbf{x}|\mathbf{y}, \mathbf{z}) \propto p(\mathbf{y}|\mathbf{x}, \mathbf{z})p(\mathbf{x}|\mathbf{z}) \propto p(\mathbf{z}|\mathbf{x}, \mathbf{y})p(\mathbf{y}|\mathbf{x})p(\mathbf{x}|\mathbf{z}), \quad (7)$$
+
+where we assume  $p(\mathbf{x}|\mathbf{z}) := \delta(\mathbf{x} - \mathcal{D}_\varphi(\mathbf{z}))$  given a well pre-trained autoencoder as in (3). Then, the objective of the maximum a posteriori (MAP) problem is defined as
+
+$$\ell_{\text{MAP}}(\mathbf{z}) = -\log p(\mathbf{z}|\mathcal{D}_\varphi(\mathbf{z}), \mathbf{y}) - \log p(\mathbf{y}|\mathcal{D}_\varphi(\mathbf{z})) = \frac{\|\mathbf{z} - \mathcal{E}_\phi^\mu(\mathcal{D}_\varphi(\mathbf{z}))\|_2^2}{2\sigma_\xi^2} + \frac{\|\mathbf{y} - \mathcal{A}(\mathcal{D}_\varphi(\mathbf{z}))\|_2^2}{2\sigma^2}, \quad (8)$$
+
+where the second equality holds due to the noisy measurement in (1) and VAE prior in (2).
+
+While optimizing (8) during reverse sampling approximates posterior sampling, it does not guarantee semantic alignment between the estimated solution and the textual descriptions. To address this, we propose a text-conditional latent regularizer which drives the sampling trajectory towards clean manifold that optimally aligns with the text condition  $\mathbf{c}$ :
+
+$$\ell_{\text{TReg}}(\mathbf{z}) = \|\mathbf{z} - \hat{\mathbf{z}}_{0|t}\|^2, \quad (9)$$
+
+where the input latent  $\mathbf{z}$  is conditioned on the text condition  $\mathbf{c}$ , and  $\hat{\mathbf{z}}_{0|t}$  refers to a text-conditioned denoised estimate  $\hat{\mathbf{z}}_{0|t} = \hat{\mathbf{z}}_{0|t}(\mathbf{c}) = (\mathbf{z}_t - \sqrt{1 - \bar{\alpha}_t}\hat{\mathbf{e}}_t^\omega)/\sqrt{\bar{\alpha}_t}$  derived by the Tweedie's formula (Robbins, 1992; Efron, 2011). Thus  $\hat{\mathbf{z}}_{0|t}$  serves as a pivot, preventing the sampling trajectory from deviating significantly from the proper text-conditioned sampling path. By combining (8) and (9), the resulting proximal optimization framework is defined as follows:
+
+$$\min_{\mathbf{x}, \mathbf{z}} \quad \ell_{\text{MAP}}(\mathbf{z}) + \gamma \ell_{\text{TReg}}(\mathbf{z}) = \ell_{\text{MAP}}(\mathbf{z}) + \gamma \|\mathbf{z} - \hat{\mathbf{z}}_{0|t}\|^2 \quad (10)$$
+
+$$\text{s.t.} \quad \mathbf{x} = \mathcal{D}_\varphi(\mathbf{z}),$$
+
+where we initialize the input latent  $\mathbf{z}_0$  as  $\hat{\mathbf{z}}_{0|t}$ , the initial clean estimate of the sampling process at time  $t$ . While one may use off-the-shelf optimizers, we aim to solve (10) by leveraging variable splitting inspired by the alternating direction method of multipliers (Boyd et al., 2011).
+
+Namely, using the decoder approximation and setting  $\mathbf{x} = \mathcal{D}_\varphi(\mathbf{z})$ , the optimization problem with respect to  $\mathbf{x}$  becomes
+
+$$\min_{\mathbf{x}} \quad \frac{\|\mathbf{y} - \mathcal{A}(\mathbf{x})\|_2^2}{2\sigma^2} + \frac{\|\mathbf{z} - \mathcal{E}_\phi^\mu(\mathbf{x})\|_2^2}{2\sigma_\xi^2} + \lambda \|\mathbf{x} - \mathcal{D}_\varphi(\mathbf{z}) + \boldsymbol{\eta}\|_2^2. \quad (11)$$
+
+Here, for simplicity, we set dual variable  $\boldsymbol{\eta}$  as a zero vector and do not consider its update. Then, from the initialization with  $\mathbf{z} = \hat{\mathbf{z}}_{0|t}$ , we have
+
+$$\hat{\mathbf{x}}_0(\mathbf{y}) = \arg \min_{\mathbf{x}} \quad \frac{\|\mathbf{y} - \mathcal{A}(\mathbf{x})\|_2^2}{2\sigma^2} + \lambda \|\mathbf{x} - \mathcal{D}_\varphi(\hat{\mathbf{z}}_{0|t})\|_2^2, \quad (12)$$
+
+which can be solved with negligible computation cost such as conjugate gradient (CG) if  $\mathcal{A}$  is a linear operation. Subsequently, using the encoder approximation and setting  $\mathbf{z} = \mathcal{E}_\phi^\mu(\mathbf{x})$  with  $\boldsymbol{\eta} = \mathbf{0}$ , the optimization problem with respect to  $\mathbf{z}$  is derived as
+
+$$\hat{\mathbf{z}}_0^{\text{ema}} = \arg \min_{\mathbf{z}} \quad \zeta \|\mathbf{z} - \hat{\mathbf{z}}_0(\mathbf{y})\|_2^2 + \gamma \|\mathbf{z} - \hat{\mathbf{z}}_{0|t}\|^2 = \bar{\alpha}_{t-1} \hat{\mathbf{z}}_0(\mathbf{y}) + (1 - \bar{\alpha}_{t-1}) \hat{\mathbf{z}}_{0|t}, \quad (13)$$
+
+where the second equality is a closed-form solution with the initialization of  $\hat{\mathbf{z}}_0(\mathbf{y}) := \mathcal{E}_\phi(\hat{\mathbf{x}}_0(\mathbf{y}))$ . Here,  $\zeta, \gamma$  are empirically chosen to satisfy  $\bar{\alpha}_{t-1} = \zeta/(\zeta + \gamma)$  to hold the second equality of (13). Specifically, we set the interpolation coefficient to prioritize  $\hat{\mathbf{z}}_0(\mathbf{y})$  during the final phase of reverse sampling, ensuring fine-grained refinement for improved data consistency. Meanwhile, the text-conditioned pivot relatively dominates the early stages of the sampling process, establishing the coarse layout and improving text adherence. Note that the estimated solution  $\hat{\mathbf{z}}_0^{\text{ema}}$  is obtained by the interpolation between initial text-conditioned estimate  $\hat{\mathbf{z}}_{0|t}$  and  $\hat{\mathbf{z}}_0(\mathbf{y})$  derived with the measurement  $\mathbf{y}$ . Finally, by integrating the updated latent  $\hat{\mathbf{z}}_0^{\text{ema}}$ , a single iterate of the resulting DDIM sampling (Song et al., 2020a) at  $t$  reads:
+
+$$\mathbf{z}'_{t-1} = \sqrt{\bar{\alpha}_{t-1}} \hat{\mathbf{z}}_0^{\text{ema}} + \sqrt{1 - \bar{\alpha}_{t-1}} \hat{\mathbf{e}}_t, \quad (14)$$
+
+{4}------------------------------------------------
+
+![Figure 2: (a) Concept of adaptive negation. (b) Adaptive negation is crucial to avoid artifacts on reconstruction.](e0d425c8e4eef259e4c52d81426d93fa_img.jpg)
+
+Figure 2(a) shows three graphs of CLIP similarity vs. concepts. The first graph, 'Concept Emphasize', shows a sharp peak at the 'Desired concept  $c$ '. The second graph, 'Concept Negation', shows a sharp dip at the 'Undesired concept  $c_\emptyset$ '. The third graph, 'Adaptive Negation', shows a broad peak at the 'Desired concept  $c$ ' and a broad dip at the 'Undesired concept  $c_\emptyset$ '. Figure 2(b) shows three images of a baby fox. The first image is a measurement. The second image, 'Without Adaptive Negation', shows artifacts (yellow boxes) and a patch of the image with the text '020808'. The third image, 'With Adaptive Negation', shows a clean reconstruction with no artifacts.
+
+Figure 2: (a) Concept of adaptive negation. (b) Adaptive negation is crucial to avoid artifacts on reconstruction.
+
+Figure 2: (a) Concept of adaptive negation. Compared to concept emphasize and negation which targets a specific concept, the adaptive negation tries to suppress concepts except the desired one. (b) Adaptive negation is crucial to avoid artifacts on reconstruction.
+
+where  $\tilde{\epsilon}_t$  denotes the total noise given by
+
+$$\tilde{\epsilon}_t := \frac{\sqrt{1 - \tilde{\alpha}_{t-1} - \eta^2 \tilde{\beta}_t^2 \tilde{\epsilon}_c^\omega + \eta \tilde{\beta}_t \epsilon}}{\sqrt{1 - \tilde{\alpha}_{t-1}}}. \quad (15)$$
+
+In (14),  $\eta \in [0, 1]$  is a parameter controlling the stochasticity of the update rule. Empirically, we find that  $\eta \tilde{\beta}_t = \sqrt{\tilde{\alpha}_{t-1}} \sqrt{1 - \tilde{\alpha}_{t-1}}$  results in robust performance. In other words, the total noise is computed by  $\tilde{\epsilon}_t := \sqrt{1 - \tilde{\alpha}_{t-1}} \tilde{\epsilon}_\theta + \sqrt{\tilde{\alpha}_{t-1}} \epsilon$ . For the convergence analysis, please refer to the Appendix B.
+
+### 3.2 ADAPTIVE NEGATION FOR TEXTUAL CONSTRAINT
+
+The primary component of the proposed optimization framework includes  $\hat{z}_{0|t}$ , a pivot for sampling paths conditioned on text embeddings, which effectively narrows the solution space. While conditioning on a well-chosen embedding is crucial for semantic alignment, relying on error-prone, hand-crafted prompts can result in suboptimal reconstructions, as illustrated in Figure 2(b).
+
+To mitigate this, we propose the joint optimization of the text embedding during the reverse sampling process in an adaptive manner based on image representations. Specifically, we employ concept negation (Ho & Salimans, 2021) to suppress invalid concepts which relatively enhances the intended semantic contents, as shown in Figure 2(a). We prioritize concept negation over concept emphasis via direct prompt tuning (Lester et al., 2021), as the latter may disrupt the original intended semantic contents embedded in the text prompt.
+
+Here, the null-text embedding  $c_\emptyset$  in CFG is regarded as a representation of concepts to be suppressed. The goal of adaptive negation is to update  $c_\emptyset$  to exclude concepts that is already captured by the latent  $z$  through latent optimization. During the reverse sampling, we update  $c_\emptyset$  to minimize the following similarity in the CLIP (Radford et al., 2021) embedding space:
+
+$$\ell_\emptyset(c_\emptyset) = \langle \mathcal{T}_{img}(\hat{x}_0(y)), c_\emptyset \rangle, \quad (16)$$
+
+where  $\mathcal{T}_{img}$  denotes CLIP image encoder, and  $\hat{x}_0(y)$  denotes clean estimates on pixel space which is the solution of (12). By optimizing (16),  $c_\emptyset$  is “adaptively” updated to encode concepts that are not prominent in the image representations, thereby allowing it to represent complementary concepts. The computational cost of this optimization is negligible as shown in Table 4, since it only involves the optimization of  $c_\emptyset$  without backpropagating through the denoiser.
+
+{5}------------------------------------------------
+
+### 3.3 LATENT DPS WITH UPDATED NULL-TEXT
+
+Based on the defined proximal optimization on clean latent domain, we found that alternating latent DPS steps further improves the data consistency, especially for the image inpainting and phase retrieval problems. In this case, we obtain the standard LDPS gradient with null text embedding  $c_{\emptyset}$ , and update the intermediate noisy sample:
+
+$$z_{t-1} = z'_{t-1} - \rho_t \nabla_{z_t} \|\mathcal{A}(\mathcal{D}_\varphi(\hat{z}_{0|t}(\tilde{c}_\emptyset))) - y\|^2 \quad (17)$$
+
+where  $\rho_t$  denotes the step size that weights the likelihood, similar to (Chung et al., 2022a; Rout et al., 2024). In image super-resolution and deburring, we bypass the DPS update for computational efficiency. Nevertheless, our algorithm can effectively solve the problem and shows comparable performance with DPS update as shown in Figure 7. To sum up, the proposed algorithm is described as in Algorithm 1.
+
+## 4 EXPERIMENTS
+
+The goal of text regularization (TReg) is to refine the solution space and reduce ambiguity by leveraging text prompts as additional cues. We assume that both the measurement and a text prompt describing the solution are provided for the inverse problem. To highlight the effectiveness of ambiguity reduction, we evaluate TReg under extreme measurement conditions, in contrast to other inverse problem solvers. Our evaluation focuses on two key aspects: (1) the effectiveness of TReg in resolving ambiguity through text, and (2) the accuracy of the resulting solution, which includes alignment with both the text and the measurements. For further details on the experimental settings, please refer to the Appendix.
+
+### 4.1 EXPERIMENTAL SETTINGS
+
+**Forward models.** For linear inverse problems, we select bicubic super-resolution with scale factor 16, Gaussian deblur with kernel size 61 and sigma 5.0, and box inpainting where the masked reason is designed to encompasses the eyes and mouth of either animal or human. The forward operators are defined by following Kawar et al. (2022); Wang et al. (2022); Song et al. (2022); Chung et al. (2023b). For non-linear inverse problems, we choose Fourier phase retrieval and gamma correction. For details of the forward operators, please refer to Appendix. For all tasks, we add measurement noise that follows the Gaussian distribution with zero mean and noise scale  $\sigma_0^2 = 0.01$ .
+
+**Dataset and text prompt.** We prepare measurement-text sets where the text describes solution. The simplest way is to leverage the ground-truth class label as a text description. However, to further explore the capability of TReg reducing solution space according to given text description, we provide perceptually estimated (non-ground-truth) classes as text cues. Here, we should carefully set proper class for measurement to avoid ignoring the provided guidance.<sup>1</sup>
+
+We decide to use Food-101 dataset (Bossard et al., 2014) for quantitative evaluation since it contains complex patterns, leading to high ambiguity. Also, given that all images fall under the ‘food’ category, it is more straightforward to select an appropriate  $c$  aligned with the original caption. Specifically, we
+
+#### --- Algorithm 1 Inverse problem solving with TReg ---
+
+**Require:** Pretrained LDM  $\epsilon_\theta$ , Null text embedding  $c_{\emptyset}$ , Text embedding  $c$ , VAE encoder  $\mathcal{E}_\phi$ , VAE decoder  $\mathcal{D}_\phi$ , Forward operation  $\mathcal{A}$ , Measurement  $y$ , CLIP image encoder  $\mathcal{T}_{img}$ , Update Range  $\Gamma$ <sup>a</sup>
+
+**Initialization**  $z_T \sim \mathcal{N}(0, \mathbf{I})$
+
+**for**  $t \in [T, 1]$  **do**
+
+$\hat{z}_{0|t} = (z_t - \sqrt{1 - \bar{\alpha}_t} \tilde{e}_\emptyset^\omega) / \sqrt{\bar{\alpha}_t}$
+
+$\tilde{e}_t \leftarrow$  Compute noise using (15)
+
+**if**  $t \in \Gamma$  **then**
+
+// Latent Optimization
+
+$\hat{x}_0 \leftarrow \mathcal{D}(\hat{z}_{0|t})$
+
+$\hat{x}_0(y) \leftarrow$  Equation (12)
+
+$\hat{z}_0(y) \leftarrow \mathcal{E}(\hat{x}_0(y))$
+
+$\hat{z}_0^{ema} \leftarrow \bar{\alpha}_{t-1} \hat{z}_0(y) + (1 - \bar{\alpha}_{t-1}) \hat{z}_{0|t}$
+
+$z_{t-1} \leftarrow \sqrt{\bar{\alpha}_{t-1}} \hat{z}_0^{ema} + \sqrt{1 - \bar{\alpha}_{t-1}} \tilde{e}_t$
+
+// Adaptive Negation
+
+$c_\emptyset \leftarrow c_\emptyset - \eta \nabla_{\emptyset} \text{sim}(\mathcal{T}_{img}(\hat{x}_0(y)), c_\emptyset)$
+
+**else**
+
+$z_{t-1} \leftarrow \sqrt{\bar{\alpha}_{t-1}} \hat{z}_{0|t} + \sqrt{1 - \bar{\alpha}_{t-1}} \tilde{e}_t$
+
+**end if**
+
+**end for**
+
+---
+
+<sup>a</sup>Please refer to Appendix A.4.
+
+<sup>1</sup>For example, “dog” for the measurement generated by baby image cannot effectively reduce solution space.
+
+{6}------------------------------------------------
+
+![Figure 3: TReg effectively reduce ambiguity of solution with text-based regularization. (a) Given measurement and text description. (b) Multiple reconstructions and pixel-wise variance without and with text regularization. (c) Variance measured over white dotted line on uncertainty map.](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+Figure 3 consists of three parts: (a) shows a blurry measurement of a bear with the text description "Bear"; (b) displays a grid of reconstructions for "Without TReg" and "With TReg" across four samples, alongside uncertainty maps; (c) is a line graph of uncertainty over a white dotted line on the uncertainty map, comparing "Without TReg" (red line) and "With TReg" (green line).
+
+Figure 3: TReg effectively reduce ambiguity of solution with text-based regularization. (a) Given measurement and text description. (b) Multiple reconstructions and pixel-wise variance without and with text regularization. (c) Variance measured over white dotted line on uncertainty map.
+
+Figure 3: TReg effectively reduce ambiguity of solution with text-based regularization. (a) Given measurement and text description. (b) Multiple reconstructions and pixel-wise variance without and with text regularization. (c) Variance measured over white dotted line on uncertainty map.
+
+leverage 250 images from each of the "fried rice" and "ice cream" classes. For the case that given text description is different from the original classes, we use "*spaghetti*" for "fried rice" and "*macarons*" for "ice cream". For the qualitative comparison, we additionally use a validation set of ImageNet, AFHQ, FFHQ and LHQ datasets. Used text prompt is provided with reconstructed samples.
+
+**Baselines.** As the first attempt to solve inverse problems using text-driven regularization, we establish baselines by combining 1) data consistency-preserving methods and 2) text-guided editing methods. Notably, these baselines involve sequential processing, while the proposed method stands out for its efficiency, eliminating the need for pre/post-hoc techniques. For data consistency methods, we utilize the measurement itself and PSLD (Rout et al., 2024) which is an LDM-based inverse problem solver. Regarding text-guided editing methods, we opt for state-of-the-art techniques, namely Delta Denoising Score (DDS) (Hertz et al., 2023) and Plug-and-Play diffusion (PnP) (Tumanyan et al., 2023). Since PnP involves an inversion process, we handle it as a two-stage approach. Also, we use PSLD with text guidance as our baseline by computing estimated noise via CFG. For the inpainting task, we utilize Stable-Inpaint, a fine-tuned stable diffusion model for the inpainting task, and Repaint (Lugmayr et al., 2022) as our baseline. Finally, in the Fourier phase retrieval task, we compared the results with and without the text prompt using our framework to emphasize the effect of text guidance in breaking symmetry. In other words, for the baseline, we provided null text for the text condition.
+
+### 4.2 EXPERIMENTAL RESULTS
+
+**Ambiguity reduction.** To assess the effectiveness of TReg in reducing ambiguity in reconstruction through text regularization, we quantify pixel-level variance across multiple reconstructions from blurry measurements with and without text descriptions (Figure 3).<sup>2</sup> Specifically, for the reconstruction without text description, we use a null-text  $e_{\emptyset}$  as a text description for the solution. All other components such as latent optimization (Section 3.1) and adaptive negation (Section 3.2) are retained.
+
+As shown in Figure 3(b), TReg leads to consistent solutions corresponding to the given text description, while reconstructed images exhibit multiple solutions, such as a car in the background or a bedroom, in the absence of text regularization. This discrepancy is clearly observed in pixel-level variance in Figure 3(c). While solutions with TReg are successfully refined, some residual uncertainties are observed, especially at head positioning or mouth shape. However, it is noteworthy that those residual uncertainties do not violate the data consistency and text description, and TReg is effective in resolving ambiguity via text.
+
+**Accuracy of obtained solution: use true class as  $c$ .** TReg is an inverse problem solver that uses text description of solution to refine the solution space. To evaluate the accuracy of obtained solution via TReg, we first prepare set of measurement-text pairs where the original class of measurement is given as text. For both SR and Gaussian deblur tasks, we report PSNR and FID of reconstructions
+
+<sup>2</sup>Specifically, we repeat reconstruction 10 times with different random seeds for a single measurement. The true image is sampled from ImageNet validation set.
+
+{7}------------------------------------------------
+
+![Figure 4: Reconstruction by TReg. The figure shows a 3x6 grid of images. The first three columns are labeled 'Measurement (Deblur)', 'TReg', and 'Ground Truth' for a panda, a football helmet, and a truck. The next three columns are labeled 'Measurement (SR)', 'TReg', and 'Ground Truth' for a frog, a flower, and a braid. The 'Measurement' images are blurry or low-resolution versions of the 'Ground Truth' images. The 'TReg' images are reconstructions that closely match the 'Ground Truth' images.](892f25e3d71d8e315a2a51092a8a8da7_img.jpg)
+
+Figure 4: Reconstruction by TReg. The figure shows a 3x6 grid of images. The first three columns are labeled 'Measurement (Deblur)', 'TReg', and 'Ground Truth' for a panda, a football helmet, and a truck. The next three columns are labeled 'Measurement (SR)', 'TReg', and 'Ground Truth' for a frog, a flower, and a braid. The 'Measurement' images are blurry or low-resolution versions of the 'Ground Truth' images. The 'TReg' images are reconstructions that closely match the 'Ground Truth' images.
+
+Figure 4: Reconstruction by TReg where the original class is given as text description: "A photo of <class>."
+
+| Class: Ice-Cream |  | SRx16 |  | Deblur |  |
+|-|-|-|-|-|-|
+| Method | PSNR ↑ | FID ↓ | PSNR ↑ | FID ↓ |  |
+| DDRM | 16.98 | 268.5 | 17.41 | 223.2 |  |
+| PGDM | 14.95 | 260.5 | 13.87 | 295.8 |  |
+| PSLD | 17.73 | 280.1 | 21.89 | 213.6 |  |
+| PSLD + CFG | 16.47 | 176.1 | 20.76 | 192.9 |  |
+| Our (w/o AN) | <b>22.05</b> | 144.4 | <b>23.91</b> | 131.2 |  |
+| Our (w/ AN) | 21.09 | <b>124.2</b> | <u>23.73</u> | <b>120.6</b> |  |
+
+Table 1: Quantitative result for text "ice cream".
+
+| Class: Fried-rice |  | SRx16 |  | Deblur |  |
+|-|-|-|-|-|-|
+| Method | PSNR ↑ | FID ↓ | PSNR ↑ | FID ↓ |  |
+| DDRM | 16.71 | 244.0 | 17.08 | 195.3 |  |
+| PGDM | 14.58 | 246.6 | 14.01 | 276.2 |  |
+| PSLD | 17.32 | 320.3 | 21.09 | 187.3 |  |
+| PSLD + CFG | 14.97 | 150.8 | 20.49 | 168.3 |  |
+| Our (w/o AN) | <b>21.26</b> | 132.0 | <b>22.99</b> | 133.4 |  |
+| Our (w/ AN) | 19.98 | <b>97.40</b> | <u>22.83</u> | <b>112.1</b> |  |
+
+Table 2: Quantitative result for text "fried rice".
+
+| # stages | Method | Fried Rice → Spaghetti (SRx16) |  |  | Ice Cream → Macaron (SRx16) |  |  | Fried Rice → Spaghetti (Deblur) |  |  | Ice Cream → Macaron (Deblur) |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  |  | LPIPS ↓ | CLIP-sim ↑ | y-MSE ↓ | LPIPS ↓ | CLIP-sim ↑ | y-MSE ↓ | LPIPS ↓ | CLIP-sim ↑ | y-MSE ↓ | LPIPS ↓ | CLIP-sim ↑ | y-MSE ↓ |
+| 1 | Ours | <u>0.762</u> | <b>0.303</b> | <u>0.005</u> | <u>0.271</u> | <u>0.314</u> | <u>0.004</u> | <b>0.737</b> | <u>0.300</u> | <b>0.013</b> | <b>0.743</b> | <u>0.312</u> | <b>0.011</b> |
+|  | PSLD | <b>0.756</b> | 0.265 | 0.020 | <b>0.743</b> | 0.293 | 0.020 | 0.798 | 0.274 | <b>0.013</b> | 0.750 | 0.252 | <b>0.011</b> |
+|  | PuP | 0.826 | 0.251 | <b>0.005</b> | 0.808 | 0.239 | <u>0.005</u> | 0.798 | 0.259 | 0.015 | 0.752 | 0.248 | <b>0.011</b> |
+| 2 | PSLD+DDS | 0.788 | 0.247 | <u>0.010</u> | <u>0.772</u> | <b>0.328</b> | 0.008 | 0.768 | 0.247 | 0.014 | 0.752 | 0.300 | 0.015 |
+|  | PSLD+PuP | 0.801 | <u>0.291</u> | 0.014 | <u>0.784</u> | 0.306 | 0.008 | <u>0.761</u> | <b>0.312</b> | 0.016 | <u>0.751</u> | <b>0.319</b> | <u>0.013</u> |
+
+Table 3: Quantitative evaluation of SRx16 and Gaussian Deblurring task. Mean values are reported. **Bold**: the best score, underline: the second best.
+
+in Table 1 and 2. Evaluation demonstrates the effectiveness of proposed method compared to other diffusion-based inverse solvers. The proposed solver without adaptive negation tends to achieve higher PSNR than with adaptive negation, since it obtains blurry images with missing details. Thus, FID score is improved with adaptive negation which is aligned with qualitative comparison in Figure 2. Also, TReg effectively reconstruct solutions for other dataset such as ImageNet (Figure 4) which implies the robustness of the proposed solver to various image domain based on powerful diffusion prior. For more analysis, please refer to Appendix section G.
+
+#### Accuracy of obtained solution: use different class as $c$ .
+
+Using TReg, we can find solution of inverse problem according to text prompt. To examine this property, we solve the aforementioned problems where the given text is different with the original class of the measurement. The proper solution should satisfy 1) data consistency with measurement and 2) alignment with given prompt. We evaluate the quality of obtained solution based on three metrics: LPIPS, the mean squared error on measurement domain, namely y-MSE<sup>3</sup>, and the CLIP similarity between reconstruction and given text prompt following the prior works in image editing (Tumanyan et al., 2023; Hertz et al., 2023; Park et al., 2024). Note that there is no ground truth in this case, so we do not evaluate PSNR or SSIM.
+
+<sup>3</sup>This is equivalent to data consistency loss,  $\|y - \mathcal{A}(\mathbf{x})\|_2^2$ .
+
+{8}------------------------------------------------
+
+![Figure 5: Reconstructions when given text prompt differs from the original class. The figure is a grid of images arranged in 4 rows and 8 columns. The columns are labeled: Measurement, Ours w/ text, Ours w/o text, P2L, PSLD + text, PnP, PSLD + PnP, and PSLD + DDS. The rows are labeled: Super-resolution (x16), Gaussian Deblur, and two unlabeled rows. Each cell shows a reconstruction of a scene (e.g., a person, a building, a landscape) based on a different text prompt than the original class. The 'Ours w/ text' column shows reconstructions that are more consistent with the given text prompt than the other methods.](d4e9f8f6bf5d7853ecae9c9633900af1_img.jpg)
+
+Figure 5: Reconstructions when given text prompt differs from the original class. The figure is a grid of images arranged in 4 rows and 8 columns. The columns are labeled: Measurement, Ours w/ text, Ours w/o text, P2L, PSLD + text, PnP, PSLD + PnP, and PSLD + DDS. The rows are labeled: Super-resolution (x16), Gaussian Deblur, and two unlabeled rows. Each cell shows a reconstruction of a scene (e.g., a person, a building, a landscape) based on a different text prompt than the original class. The 'Ours w/ text' column shows reconstructions that are more consistent with the given text prompt than the other methods.
+
+Figure 5: Reconstructions when given text prompt differs from the original class.
+
+Table 3 shows that TReg achieves superior performance compared to baselines. Specifically, TReg find solution with high quality while preserving data consistency, as evidenced by lower LPIPS and y-MSE values. For some cases, PSLD gives lower LPIPS but solutions lose data consistency and exhibit large y-MSE values, which is also shown in the fourth column of Figure 5. TReg is comparable to or outperforms baseline methods, emphasizing that TReg is better than a straightforward application of image editing algorithms in solving text-guided inverse problems. For more analysis, please refer to Appendix section H.
+
+Direct application of the editing algorithm to the measurement, referred to as PnP, yields sub-optimal performance across all metrics. In the case of y-MSE, PnP achieves a lower value due to minimal alterations made to the measurement, as depicted in the last column of Figure 5. Also, the performance of sequential approaches shows that reconstruction error is accumulated at each stage, resulting in substantial errors in the final outcome. In contrast, TReg effectively integrates the given text prompt while preserving robust data consistency, thereby validating its efficacy. Meanwhile, we also compare the results of our method without text prompt. When text is replaced by null-text (third column in Figure 5), it provides a solution that aligns well with the given measurement but generates arbitrary structures. This result highlights the impact of TReg that reduces the ambiguity of inverse problem solving. PSLD with CFG guidance (fourth column in Figure 5) also fails to appropriately reflect given text prompt, as there is no consideration for text-guidance in solving inverse problems.
+
+### 4.3 ADDITIONAL RESULTS ON NON-LINEAR INVERSE PROBLEMS
+
+Although we propose solving latent optimization (10) using variable splitting for computational efficiency, any off-the-shelf optimizer could be employed to address, for example, non-linear inverse problems. We demonstrate in Figure 6 that TReg improves the accuracy of solutions for non-linear problems through text regularization. Specifically, the results for Fourier Phase Retrieval emphasize that current diffusion-based inverse problem solvers, such as Latent DPS, are still insufficient for breaking the symmetry caused by the loss of phase information. In contrast, text regularization via TReg successfully breaks this symmetry and consistently produce a unique solution across multiple trials. Additionally, for non-uniform deblurring with gamma correction, TReg enhances reconstruction quality compared to Latent DPS. Notably, text conditioning through CFG in the latent DPS introduces unintended noisy structures, which are absent when using TReg.
+
+## 5 RELATED WORK
+
+Leveraging text prompts for inverse problem solving has been studied in several recent works. TextIR (Bai et al., 2023) incorporates text embedding from CLIP during the training of an image restoration network to constrain the solution space in the case of extreme inverse problems. DA-
+
+{9}------------------------------------------------
+
+![Figure 6: Reconstructions for non-linear inverse problems. The top section shows Fourier Phase Retrieval results for two faces, comparing Ground Truth, Measurement, Reconstructions via LDPS, and Reconstructions via TReg (photography of face). The bottom section shows Non-uniform w/ gamma correction results for a bowl of ice cream, comparing Measurement, PSLD, PSLD + CFG, TReg ('ice cream'), and Ground Truth.](625e10f48104ba2b06b2220a9b224712_img.jpg)
+
+Figure 6: Reconstructions for non-linear inverse problems. The top section shows Fourier Phase Retrieval results for two faces, comparing Ground Truth, Measurement, Reconstructions via LDPS, and Reconstructions via TReg (photography of face). The bottom section shows Non-uniform w/ gamma correction results for a bowl of ice cream, comparing Measurement, PSLD, PSLD + CFG, TReg ('ice cream'), and Ground Truth.
+
+Figure 6: Reconstructions for non-linear inverse problems: Fourier Phase retrieval and Non-uniform deburring with gamma correction.
+
+CLIP (Luo et al., 2023) takes a similar approach of leveraging the embeddings and applies it to diffusion bridges. P2L (Chung et al., 2023d) proposes to automatically tune text embedding on-the-fly while running a generic diffusion inverse problem solver (More discussions in Appendix C). Notably, the latter two methods (Luo et al., 2023; Chung et al., 2023d) are focused on improving the overall performance rather than constraining the solution space. TextIR has similar objective to *TReg*, but requires task-specific training. In this regard, to the best of our knowledge, *TReg* is the first general diffusion-based inverse problem solver that does not require task-specific training, while being able to incorporate a null text optimization approach. Experimental results and visualizations demonstrated that text-driven regularization effectively reduces the uncertainty of solving inverse problems, and further enables text-guided control of signal reconstruction.
+
+## 6 CONCLUSION
+
+This study introduced a novel concept of latent diffusion inverse solver with *regularization by texts*, namely *TReg*. The proposed solver minimizes ambiguity in solving inverse problems, effectively reducing uncertainty and improving accuracy in visual reconstructions, bridging the gap between human perception and machine-based interpretation. To achieve this, we derived LDM-based reverse sampling steps to minimize data consistency with text-driven regularization, consisting of adaptive negation. Specifically, to effectively integrate textual cues and guide reverse sampling, the paper introduced a null text optimization approach. Experimental results and visualizations demonstrated that text-driven regularization effectively reduces the uncertainty of solving inverse problems, and further enables text-guided control of signal reconstruction.
+
+## ACKNOWLEDGMENTS
+
+This work was supported by the National Research Foundation of Korea under Grant RS-2024-00336454 and by the Institute for Information & Communications Technology Planning & Evaluation
+
+ Rest of paper (reference and Appendix) is removed.

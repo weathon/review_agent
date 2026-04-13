@@ -1,0 +1,254 @@
+
+
+{0}------------------------------------------------
+
+# STYLE OUTWEIGHS SUBSTANCE: FAILURE MODES OF LLM JUDGES IN ALIGNMENT BENCHMARKING
+
+Benjamin Feuer<sup>4,2</sup>, Micah Goldblum<sup>3</sup>, Teresa Datta<sup>1</sup>, Sanjana Nambiar<sup>2</sup>, Raz Besaleli, Samuel Dooley, Max Cembalest, John P. Dickerson<sup>1</sup>
+
+<sup>1</sup> Arthur AI, <sup>2</sup> NYU, <sup>3</sup> Columbia University
+
+## ABSTRACT
+
+The release of ChatGPT in November 2022 sparked an explosion of interest in post-training and an avalanche of new preference optimization (PO) methods. These methods claim superior alignment by virtue of better correspondence with human pairwise preferences, often measured by LLM-judges. In this work, we attempt to answer the following question – *do LLM-judge preferences translate to progress on other, more concrete metrics for alignment, and if not, why not?* We define a concrete metric for alignment, and introduce SOS-BENCH (Substance Outweighs Style Benchmark), the largest standardized, reproducible LLM meta-benchmark to date. We find that (1) LLM-judge preferences do not correlate with concrete measures of safety, world knowledge, and instruction following; (2) LLM-judges have powerful implicit biases, prioritizing style over factuality and safety; and (3) the supervised fine-tuning (SFT) stage of post-training has a large impact on alignment, with data scaling and prompt diversity as the driving factors. Our codebase and complete results can be found at <https://github.com/penfever/sos-bench>.
+
+## 1 INTRODUCTION
+
+The release of ChatGPT in November 2022 sparked an explosion of interest in post-training and an avalanche of new preference optimization (PO) methods and data curation strategies for supervised fine tuning (SFT). Many of these recent works evaluate primarily or exclusively using LLM-judge preference benchmarks such as MT-Bench, Alpaca Eval, and Arena-Hard-Auto (Dubois et al., 2024; Li et al., 2024c; Zheng et al., 2023). Such benchmarks employ LLM-judges that are intended to automate evaluation and align with human preferences.
+
+These are becoming standard in part because they are seen as robust predictors of a wide range of desirable downstream model behaviors. In abstracts of recent works which solely or primarily report PO benchmark scores, authors claim that their methods improve instruction following, reduce harm, improve reasoning, boost response accuracy, and result in higher language generation quality (Meng et al., 2024; Wang et al., 2024a; Wu et al., 2024a; Hong et al., 2024). Implicit in these claims rests an assumption that the Bradley-Terry model, which converges to a local minimum over undifferentiated, pairwise preferences, will necessarily and naturally converge on these desiderata as well.<sup>1</sup>
+
+Is this actually the case? Do LLM-judge preferences translate to progress on other, more concrete metrics for alignment, and if not, why not?
+
+Our contributions are as follows –
+
+<sup>\*</sup>Correspondence to: [bf996@nyu.edu](mailto:bf996@nyu.edu). Sponsored by Arthur AI.
+
+<sup>1</sup>By undifferentiated, we mean that the preference need not be justified nor linked to any concrete judgment criteria. By pairwise, we mean that a preference is expressed as a binary choice, with one absolute winner and one absolute loser. We direct the reader to Brandt et al. (2016), Chapter 17, for a nuanced differentiation between preference aggregation and value judgment aggregation through a computational social choice lens.
+
+{1}------------------------------------------------
+
+- We establish a common framework for systematically evaluating LLM-judge pipelines and for analyzing potential confounds at each stage of these pipelines.
+- We find that LLM-judges for alignment benchmarking have powerful implicit biases. Specifically, they prioritize stylistic preferences over other important considerations, like factuality and safety.
+- As a complement to LLM-judge benchmarks, we introduce SOS-BENCH, a new alignment benchmark with ground truth, designed to gauge progress on alignment with *helpful, honest, harmless* (HHH) principles (Askill et al., 2021).
+- We conduct (to the best of our knowledge) the largest controlled meta-analysis of publicly available post-training methods to date, and show that data scaling in the SFT stage as well as prompt diversity are the most important predictors of improved alignment.
+
+We conclude with some practical recommendations for the research community.
+
+![Figure 1: Comparison of Standard Benchmarks and LLM Judge Benchmarks. The diagram shows two flowcharts. The left side, 'Standard Benchmarks', shows a linear process: Ground Truth -> Metric -> Score (LLM B: 60.0, LLM A: 40.0). The right side, 'LLM Judge Benchmarks', shows a more complex process: Judge Template -> LLM Judge -> Judgments -> Metric -> Ranking (LLM B: 60.0, LLM A: 40.0). Both sides include a sub-diagram for Questions -> Chat Template A/B -> LLM A/B -> Responses A/B.](4792a2ccd62226861fadc22117edb7b1_img.jpg)
+
+The diagram is split into two main columns: 'Standard Benchmarks' on the left and 'LLM Judge Benchmarks' on the right.   
+**Standard Benchmarks:** A box labeled 'GROUND TRUTH' points down to a diamond labeled 'METRIC'. This diamond points down to a box labeled 'SCORE' which contains 'LLM B: 60.0' and 'LLM A: 40.0'.   
+**LLM Judge Benchmarks:** A box labeled 'JUDGE TEMPLATE' points down to a diamond labeled 'LLM JUDGE'. This diamond points down to a box labeled 'JUDGMENTS'. Below 'JUDGMENTS' is a diamond labeled 'METRIC', which points down to a box labeled 'RANKING' containing 'LLM B: 60.0' and 'LLM A: 40.0'.   
+ Both columns share a common sub-diagram on their right side: A box labeled 'QUESTIONS' points down to two boxes, 'CHAT TEMPLATE A' and 'CHAT TEMPLATE B'. These point down to diamonds 'LLM A' and 'LLM B' respectively. These diamonds point down to boxes 'RESPONSES A' and 'RESPONSES B'.   
+ In the 'Standard Benchmarks' column, an arrow from the 'QUESTIONS' box points to the 'METRIC' diamond. In the 'LLM Judge Benchmarks' column, an arrow from the 'QUESTIONS' box points to the 'LLM JUDGE' diamond.
+
+Figure 1: Comparison of Standard Benchmarks and LLM Judge Benchmarks. The diagram shows two flowcharts. The left side, 'Standard Benchmarks', shows a linear process: Ground Truth -> Metric -> Score (LLM B: 60.0, LLM A: 40.0). The right side, 'LLM Judge Benchmarks', shows a more complex process: Judge Template -> LLM Judge -> Judgments -> Metric -> Ranking (LLM B: 60.0, LLM A: 40.0). Both sides include a sub-diagram for Questions -> Chat Template A/B -> LLM A/B -> Responses A/B.
+
+Figure 1: **The LLM-judge pipeline introduces new potential confounds in evaluation, compared to standard benchmarks.** We diagram the LLM-judge pipeline for alignment benchmarking and observe that it is more complex than that of most standard benchmarks; (a) it replaces an explainable, deterministic metric with an opaque LLM-judge. (b) it does not attempt to establish any verifiable ground truth. (c) it contains a relatively small number of questions covering an very wide range of topics, resulting in limited coverage of any particular knowledge domain. (d) it introduces novel confounds in the form of the judging template (explicit bias) and the judge’s unstated internal preferences (implicit bias).
+
+## 2 PRELIMINARIES
+
+**Post-training.** Post-training, popularized by ChatGPT, consists of all parametric updates to the model after the pretraining run is completed. The conceptual goal of post-training is transforming a text completion model into a useful AI assistant. It typically encompasses two stages: supervised instruction fine-tuning (SFT) and preference optimization (PO).
+
+**LLM judges.** LLM judges are LLMs which are prompted to generate decisions over content; in the case of the benchmarks we consider in this paper, we are particularly interested in *preference* judges, which attempt to approximate human pairwise preferences over model outputs.
+
+**Established benchmarks of model alignment.** There are at least two distinct trends in benchmarking model alignment which are commonly used today. The first, older method, is to assemble a large test set of either static or dynamically updated questions with ground truth answers, and evaluate models against them. Stanford’s HELM benchmark, HuggingFace’s Open LLM Leaderboards, and Abacus AI’s LiveBench are examples of this approach (Liang et al., 2023; White et al., 2024).
+
+{2}------------------------------------------------
+
+Model authors will often aggregate such measures into large scale comparisons. In the next section, we describe in detail the second and most commonly used style of benchmarks in the alignment literature, LLM-judge benchmarks.
+
+## 3 LLM-JUDGE PREFERENCE BENCHMARKS
+
+LLM-judge preference benchmarks (hereafter referred to as LLM-judge benchmarks), such as Arena-Hard-Auto, Alpaca Eval, and MT Bench, have become quite popular since their introduction shortly after the initial release of Llama. Today, many papers report solely or primarily on these benchmarks. This abrupt surge in their use invites closer consideration of their properties and design.
+
+**The Arena-Hard-Auto Pipeline.** For convenience, we summarize the steps in the arena-hard-auto judgment pipeline here. The chosen LLM judge conducts a pairwise comparison against a baseline model (GPT-4-0314 in the original paper), scoring outputs on 5-point Likert scale. The judge generates its own response to the question before judging, and uses chain-of-thought prompting for consistent judgments. The paper implements a two-game setup to avoid position bias, aggregating 1000 judgments per model using Bradley-Terry, resulting in final scores and confidence intervals through bootstrapping. This judgment pipeline has been shown to have strong correlation with the judgments of humans Li et al. (2024c) 95% confidence intervals are reported as part of the benchmark; these can be as high as 4% for judgments close to the 50th percentile score. However, we believe that these uncertainty estimates are too conservative – therefore, in Appendix I.3, we independently ablate these choices for a single judge, and find that the choice of baseline and judge template are the most impactful factors. Surprisingly, we find that replacing the carefully filtered Arena-hard questions with questions from popular non-technical subreddits such as AskHistorians has little effect on the ranking, suggesting that LLM judge scores are produced in a manner only modestly dependent on the knowledge domain.
+
+**Pairwise preference benchmark scores are inconsistent with static benchmarks, but consistent with each other.** In Table 1 we compare the ranking of eight top-performing LLMs on LiveBench, HELM, Arena-Hard-Auto, and ChatBot Arena (White et al., 2024; Liang et al., 2023). We find that LLM-judges of alignment indeed have preferences that closely (albeit imperfectly) correlate with those of humans, but that their correlation with static benchmarks is weak. Similar effects can be observed on the leaderboard of BenchBench, a recent paper which aims to standardize benchmark agreement testing. (Perlitz et al., 2024). When we aggregate using standard benchmarks (HELM, HuggingFace OpenLLM Leaderboard 2, LiveBench and OpenCompass), the highest overall BenchBench score is 2.2, and the highest pairwise preference score is 0.69. Conversely, if we instead aggregate using preference benchmarks (Alpaca Eval, MT-Bench, Arena-Hard, Chatbot Arena) the highest overall score is 1.8, and the highest standard benchmark score is 1.4. Such measures, however, cannot tell us which benchmark regime we ought to trust more, or why (Perlitz et al., 2024). In order to understand this point better, we introduce a framework for interpreting and comparing them to one another.
+
+**Towards a universal framework for LLM-judge benchmarks.** We observe that all pipelines which employ LLMs as surrogates for human pairwise preferences necessarily make use of certain components. In order to facilitate analysis of these systems, we diagram their common architectural flow in Figure 1.
+
+From this, it quickly becomes clear that there are several key structural distinctions to be made between LLM-judge benchmarks and standard NLP benchmarks:
+
+- **Most standard benchmark metrics are model-free; all LLM-judge benchmarks require a judge model.** The most commonly used standard benchmarking metrics, such as BLEU, are model-free. While both the choice of metric and the choice of judge can be a potential confound, the opacity of LLMs makes their behavior much more challenging to interpret, compared to deterministic model-free metrics. Despite this, it is not yet standard practice to ablate this choice, or ensemble across judges, most likely for reasons of cost.
+- **Standard benchmark scores are reference-based; LLM-judge benchmarks are comparison-based.** The choice of baseline response to which assistants are compared
+
+{3}------------------------------------------------
+
+represents another potential confound, as pairwise preferences over texts do not obey the transitive property.<sup>2</sup>
+
+- **Standard benchmarks contain many questions on a narrow subject; LLM-judge benchmarks contain a small number of questions on a wide range of subjects.** Because of their high unit costs, LLM-judge benchmarks are smaller than standard NLP benchmarks like GLUE and MMLU; Arena-Hard has a test set of 500 questions. The authors have justified this choice by demonstrating that their benchmarks nevertheless correlate strongly with preference reports on ChatBot Arena. But this does not guarantee that a preference score on a broad range of topics and people will correlate well with individual use cases, as capabilities are vector-valued, not scalar-valued. To the extent that strong correlations are achievable, they would only be so if the judgment criteria were consistent across all tasks and all judges, which would tend to favor stylistic factors.
+- **Standard benchmarks specify a metric, but LLM-judge benchmarks must specify both a metric and judging criteria.** This introduces a new potential confound not present in standard benchmarks; the instructions to the judge may be underspecified, unclear, or may simply not reflect best practices in model alignment with human preference.
+
+While the first three concerns might be expected to ameliorate over time, as LLMs become less expensive to operate, the fourth concern is foundational – there is no way for a judge to complete a preference-selection task without some degree of inductive bias (Ethayarajh et al., 2024). We observe that such a bias may be *explicit* (i.e., it may be introduced via the instructions to the judge) or *implicit* (i.e., representing a fixed value system the judge brings to the task either independently of, or in violation of, the instructions). A reasonable desideratum for an objective LLM-judge benchmark would be to make as many biases as possible *explicit*, and to curb the use of *implicit* bias.<sup>3</sup> In service of this goal, we devote our next section to developing an understanding of implicit bias in LLM judges.
+
+Table 1: **Pairwise preference benchmarks do not track established benchmarks.** We report Pearson’s R as a measure of the strength of correlation between pairs of traditional benchmarks and pairwise preference benchmarks. LiveBench and HELM are strongly correlated, as are Arena-Hard and ChatBot Arena. All other pairs show comparatively weaker correlation.
+
+| Benchmark Pair | Correlation |
+|-|-|
+| LiveBench, HELM | 0.94 |
+| Arena-Hard, ChatBot Arena | 0.81 |
+| HELM, ChatBot Arena | 0.68 |
+| LiveBench, ChatBot Arena | 0.65 |
+| LiveBench, Arena-Hard | 0.51 |
+| HELM, Arena-Hard | 0.40 |
+
+## 4 IMPLICIT BIAS IN LLM-JUDGES
+
+Intuitively, we might expect that given a set of judging criteria and no explicit instructions on how to prioritize them, LLMs would assign equal weight to all criteria. However, we find that this is not the case. Rather, LLMs demonstrate powerful implicit biases *between* judging criteria. They heavily reweight criteria while determining their final preference, all but ignoring some and emphasizing
+
+<sup>2</sup>It is worth noting that reference-based labels also can fall short of the idealized ground truth, in particular on open-ended generative tasks such as summarization.
+
+<sup>3</sup>We define inductive bias as a valuable factor in machine learning, which allows the LLM to make predictions on new data based on what it learned. Implicit inductive bias we define, with some subjectivity, as any decision criteria which do not intuitively derive from the instructions provided to the judge. We note that this term is sometimes used in the ML literature to refer to the tendency of optimizers to more frequently visit some minima than others; this is not the sense in which we use the term.
+
+{4}------------------------------------------------
+
+others. LLMs also exhibit implicit bias *within* judging criteria, with certain kinds of violations scored far more harshly than others.
+
+**Experimental setting.** We conduct our experiments on a series of post-trained LLAMA-3-8B base models, LLAMA-3 base without post-training, opt-125m, and several GPT checkpoints (Dubey et al., 2024; Brown et al., 2020; Zhang et al., 2022; Xu et al., 2024b; Meng et al., 2024). As of this writing, all of the checkpoints are available on HuggingFace; we provide names and references for all the post-training methods we consider in Appendix C. Our LLM-judge benchmark is Arena-Hard-Auto, from Li et al. (2024c). We choose to make a case study of this LLM-judge benchmark because it is very popular in the literature and it makes some of the strongest claims to alignment with human preference. Unless otherwise noted, we use the standard settings for Arena-Hard-Auto, which as of this writing uses GPT-4-0314 as a baseline model and GPT-4-1106-preview as a judge. For reasons of cost, in Table 3, we substitute gpt-4o-mini-2024-07-18 for the standard judge. In order to conduct our experiment, we also modify the judge template. The judge template we use can be found in Appendix F.2. Following the authors, we report scores in the form of win-rates over a baseline model, and report pairwise preferences in the form of Likert scores.
+
+### 4.1 GIVEN EXPLICIT JUDGMENT CRITERIA, LLM-JUDGES IMPLICITLY REWEIGHT THEM
+
+In order to conduct these experiments, we alter the judge template to provide the judge with explicit biases, while leaving room for implicit ones as well. In addition to an overall preference, we instruct the judge to state a preference on five fine-grained criteria: **completeness, conciseness, style, safety, correctness**. Correctness and completeness assess honesty, safety assesses harmlessness, and completeness, style and conciseness assess helpfulness.
+
+![Scatter Plot of Arena-Hard Scores by Factor and Method. The plot shows Arena-Hard Score (0-100) on the y-axis for six factors on the x-axis: Overall, Style (R=1.00), Completeness (R=0.98), Correctness (R=0.74), Safety (R=0.70), and Conciseness (R=0.75). Data points are shown for various LLM methods including GPT-4o-Turbo, Magpie+DPO, Magpie, Meta-Llama-3-8B-Instruct, GPT-4-0314, TuL2+DPO, GPT-4-0613, GPT-3.5-0125, WildChat, TuL2, Baichuan, Meta-Llama-3-8B, and OPT-125m. The 'Style' factor shows a perfect correlation with the 'Overall' score for most models, while 'Correctness' and 'Conciseness' show lower correlations.](6bbc398f520a7bcc5491cab18d3e4cac_img.jpg)
+
+Scatter Plot of Arena-Hard Scores by Factor and Method. The plot shows Arena-Hard Score (0-100) on the y-axis for six factors on the x-axis: Overall, Style (R=1.00), Completeness (R=0.98), Correctness (R=0.74), Safety (R=0.70), and Conciseness (R=0.75). Data points are shown for various LLM methods including GPT-4o-Turbo, Magpie+DPO, Magpie, Meta-Llama-3-8B-Instruct, GPT-4-0314, TuL2+DPO, GPT-4-0613, GPT-3.5-0125, WildChat, TuL2, Baichuan, Meta-Llama-3-8B, and OPT-125m. The 'Style' factor shows a perfect correlation with the 'Overall' score for most models, while 'Correctness' and 'Conciseness' show lower correlations.
+
+Figure 2: **Judges implicitly reweight explicit criteria.** When asked to render an overall judgment using a set of explicit criteria, models will implicitly weight some of those criteria more than others. We report the LLM’s overall judgment as Arena-Hard Score, alongside independent LLM judgments of five key factors in the response. Style is perfectly correlated with the overall score (Pearson’s R).
+
+In Figure 2, we show that the style score correlates perfectly with the overall score. By contrast, safety scores for most models are nearly identical, and conciseness is only weakly correlated. Given a set of criteria, LLM-judges implicitly favor completeness and style, and this behavior is strongly
+
+{5}------------------------------------------------
+
+conserved across judges: see Table 2. When seen in this light, the unintuitive ranking of an 8B fine-tune above GPT-4 makes more sense; the fine-tune has produced verbose, didactic, blandly polite responses to every prompt, a set of behaviors we could collectively term *stylistic reward hacking*. It is important to note that factors are not necessarily independent; we analyze the degree and direction of cross-correlation using factor analysis in Appendix K.
+
+### 4.2 LLM-JUDGES IMPLICITLY WEIGHT CRITERIA VIOLATIONS DIFFERENTLY
+
+In these experiments, we introduce systematic criteria violations into the model responses for the top performing model (Magpie+DPO) and recompute the model’s LLM-judge score, while leaving the rest of the pipeline unaffected. We then report the loss, expressed as the percentage difference between the base score and the new score. We hope to gain some indication of whether the model has understood the explicit instructions for each criteria, and how it will weight violations of those criteria. We provide samples of the altered responses in Appendix G.
+
+For all of our interventions, the transforming model was GPT-4o-mini, and it was given instructions not to change or remove any factual claims in the original response. To create our undiverse intervention, we prompted GPT to transform each response and make it as repetitive as possible, eliminating synonyms and unusual words. The exact prompts we use can be found in Appendix H. To create our wrong intervention, the research team reviewed each response and changed one salient fact in the model response; e.g., if a model asserted that a condition always held, we altered it to say that it never held. For our concise intervention, we prompted GPT to compress each response as much as possible. Finally, for our sarcastic response, we instructed GPT to rewrite the responses in an obnoxious and irritating tone (without writing anything offensive or harmful).
+
+The results, in Table 3, show that, far from treating all violations equally, LLM judges are highly critical of unconventional stylistic changes, such as making the assistant’s tone sarcastic, but fairly lenient on major factual errors in the response. It is not clear that these implicit biases accurately reflect our priorities in model alignment; sarcasm, while probably not desirable in most cases, is only a minor violation of helpfulness, whereas incorrect answers strongly violate the honesty principle.
+
+## 5 SOS-BENCH
+
+New, objective measures of progress in alignment can help the research community make progress faster. Fortunately, there exist many useful static benchmarks of various aspects of LLM behavior and performance; by categorizing and unifying these disparate works, we can produce a large-scale meta-benchmark to measure progress on certain key aspects of alignment.
+
+SOS-BENCH (Substance Over Style Benchmark) combines 19 existing world knowledge, instruction following, and safety benchmarks for a holistic view of model performance. For the complete list of benchmarks we use, please refer to Table 8. All of the questions in our benchmark contain ground truth answers, and aggregates are reported using the average of normalized accuracies (by the size of the test set), with 95% confidence intervals.
+
+Table 2: **The reweighting is stable across judges.** We query a panel of four judges (gpt-3.5-turbo-1106, gpt-4o-mini-2024-07-18, gpt-4o-2024-08-06, claude-3-5-sonnet-20241022) and find that style predicts overall score almost perfectly for every judge in our panel (we report the average correlation and standard deviation).
+
+| Factor | Spearman | Pearson | Std |
+|-|-|-|-|
+| Style | 1 | 0.999 | 0 |
+| Completeness | 0.964 | 0.963 | 0.04 |
+| Correctness | 0.906 | 0.881 | 0.079 |
+| Safety | 0.827 | 0.727 | 0.147 |
+| Conciseness | 0.097 | 0.114 | 0.128 |
+
+{6}------------------------------------------------
+
+**Comparing SOS-BENCH to existing evaluations.** All in all, we test models on 152,380 data points; to the best of our knowledge, this is almost 7x larger than the largest previous open source LLM benchmark which end users can run themselves, HuggingFace’s OpenLLM Leaderboard 2. While individual model releases and technical reports also release meta-benchmark results, they suffer from two failings: they are not always reproducible, and the aggregations of results, which are different for each model release, are vulnerable to cherry picking. By combining scale and standardization, we hope to create a reliable, concrete alignment measure.
+
+Table 3: **Judges implicitly disfavor certain violations.** When a systematic violation is introduced across all responses, judges weight each violation very differently. This effect occurs without any change to the judge’s instructions, making it an *implicit* bias. Sarcasm and conciseness are heavily penalized, while incorrect and bland responses are only weakly penalized.
+
+| Intervention | Loss |
+|-|-|
+| Base | 00% |
+| Bland | 08% |
+| Wrong | 13% |
+| Concise | 63% |
+| Sarcastic | 96% |
+
+**Measuring alignment.** We subdivide our benchmark into three factors (world knowledge, instruction following, and safety) and report the results for each. For the sake of comparison, we also report results from Arena-Hard-Auto. For results on individual benchmarks, we refer the reader to <https://github.com/penfever/sos-bench>.
+
+**A concrete measure of alignment.** No measure of alignment can cover all of the factors worthy of consideration; prior work has variously emphasized accuracy, calibration, robustness, fairness, bias, toxicity, and efficiency, among other factors (Liang et al., 2023). We choose to focus on a representative subset of tasks, namely, the widely disseminated Helpful, Honest and Harmless (HHH) principles (Askell et al., 2021). These principles, popularized by the AI startup Anthropic, have the virtues of being widely recognized and largely uncontroversial, and therefore make a suitable starting point. Concretely, we propose that if model A is better on objective measurements of all three factors with respect to model B, then model A is better aligned than model B. As objective measurements of HHH principles remain aspirational for the time being, we propose the following conceptual mapping;
+
+Model A is more honest than model B IFF it exhibits statistically superior performance on measures of **world knowledge**. Although there is more to honesty than world knowledge, it is not possible for a model to tell the truth if it does not know what the truth is. Model A is more helpful than model B IFF it exhibits statistically superior performance on measures of **instruction following**, because a model that correctly understands instructions is always at least as helpful as a model which fails to understand them, all else equal. Model A is more harmless than model B IFF it exhibits statistically superior performance on measures of **safety**, such as red-teaming or refusal benchmarks.
+
+## 6 RESULTS
+
+**Data scaling improves alignment in the SFT stage of post-training.** Contrary to recent work from Zhou et al. (2023a), in Figure 3 we show that when it comes to the SFT stage of model post-training, the scale of data used during post-training and the diversity of prompts, rather than the curation method or several other potential factors we consider, are the strongest predictors of downstream task performance. The only outlier measure is Arena-Hard (Arena), our LLM-Judge benchmark. This observation is consistent with our hypotheses in Section 3 and Section 4.
+
+Interestingly, although all measures of alignment are positively affected by data scaling, the magnitude is much greater for instruction following (helpfulness). This makes intuitive sense, given that enhancing LLM responses to declarative commands is one of the primary goals in alignment.
+
+{7}------------------------------------------------
+
+![Figure 3: A log-log plot showing Metric Avg (Y-axis, ranging from -10 to 50) versus Dataset Size (K) (X-axis, ranging from 0.1 to 1K). Four metrics are plotted: WK (blue circles), IF (red squares), Safety (green diamonds), and Arena (purple plus signs). Each metric has a dashed regression line and a shaded 95% confidence interval. The regression equations and R-squared values are: WK (R² = 0.928), IF (R² = 0.854), Safety (R² = 0.759), and Arena (R² = 0.278). The plot shows that as dataset size increases, all metrics generally improve, with Safety and IF showing the steepest slopes.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+WK, IF, Safety, Arena vs Dataset Size (Log Scale)
+
+Figure 3: A log-log plot showing Metric Avg (Y-axis, ranging from -10 to 50) versus Dataset Size (K) (X-axis, ranging from 0.1 to 1K). Four metrics are plotted: WK (blue circles), IF (red squares), Safety (green diamonds), and Arena (purple plus signs). Each metric has a dashed regression line and a shaded 95% confidence interval. The regression equations and R-squared values are: WK (R² = 0.928), IF (R² = 0.854), Safety (R² = 0.759), and Arena (R² = 0.278). The plot shows that as dataset size increases, all metrics generally improve, with Safety and IF showing the steepest slopes.
+
+Figure 3: **More is more in alignment.** In the SFT stage of post-training, the size of the dataset, rather than the method used to curate the data, is the strongest predictor of alignment. We report average normalized accuracy on the y axis, and dataset size (in 1000s) on the X axis. The shaded region represents 95% confidence intervals.
+
+Table 4: **Generalist post-training outperforms specialists, even on specialist datasets.** Generalist post-training on large scale data outperforms a wide range of specialist methods in the literature, even on benchmarks in their domain. Dataset sizes are reported in 1000s. The best overall model is in **bold**, and the best performing specialist is noted in *italics*.
+
+| DS Name | Data Qty (K) | Coding-Avg | Math-Avg | NLP-Avg |
+|-|-|-|-|-|
+| Llama 3 Instruct | 3000 | 18.3 $\pm$ 6.9 | <b>13.8</b> $\pm$ 2.1 | 39.0 $\pm$ 1.6 |
+| Bagel | 4000 | <b>18.6</b> $\pm$ 6.9 | 10.7 $\pm$ 1.7 | <b>39.2</b> $\pm$ 1.6 |
+| Numina-CoT | 860 | 05.3 $\pm$ 3.7 | <i>13.0</i> $\pm$ 2.0 | 29.2 $\pm$ 1.4 |
+| Replete Coder | 2830 | 05.3 $\pm$ 3.7 | 07.3 $\pm$ 1.3 | 35.4 $\pm$ 1.5 |
+| FLAN | 1875 | 04.0 $\pm$ 3.1 | 07.5 $\pm$ 1.3 | 34.1 $\pm$ 1.5 |
+| Tulu-Human | 106 | 01.0 $\pm$ 1.3 | 03.5 $\pm$ 0.9 | 35.2 $\pm$ 1.5 |
+| MetaMath | 400 | <i>12.6</i> $\pm$ 5.6 | 03.3 $\pm$ 0.9 | 32.2 $\pm$ 1.4 |
+| Code Llama 3 | 800 | 09.3 $\pm$ 5.1 | 03.7 $\pm$ 0.9 | 27.1 $\pm$ 1.4 |
+
+**Specialist post-training methods underperform generalist methods.** We ablate the importance of prompt diversity in Table 4 by running our benchmark suite on a pool of specialist datasets designed to improve performance on one narrow task. We find that, when starting from a base checkpoint, data scaling without prompt diversity leads to overall poorer model performance compared to generalist scaling, including on specialized benchmarks. We define prompt diversity as the breadth of domain knowledge and the variation in semantic structures among prompts.
+
+**Preference optimization trades world knowledge for improved safety and instruction following.** We also conduct experiments on the second stage of post training. Somewhat surprisingly, the most significant effect we detect is a degradation in world knowledge; see Table 5. There are improvements in instruction following and safety, but they are of much smaller magnitude than the improvements during SFT. The finding that world knowledge can degrade is consistent with prior
+
+{8}------------------------------------------------
+
+Table 5: **Two-stage post-training trades world knowledge for instruction following and safety.** The magnitude of the improvements are much smaller than in the SFT stage, and are often not statistically significant. The magnitude of the losses in world knowledge is larger and usually statistically significant. The most significant positive effects of post-training are on LLM-judged benchmarks.
+
+| Dataset | DS Size (K) | WK | IF | SAFETY | ARENA |
+|-|-|-|-|-|-|
+| Tulu-SFT-Mix | 330 | $25.5 \pm 0.5$ | $43.8 \pm 3.6$ | $50.6 \pm 0.3$ | 04.3 |
+| Tulu-SFT-Mix + DPO | 390 | $24.5 \pm 0.5$ | $44.5 \pm 3.6$ | $51.0 \pm 0.3$ | 12.4 |
+| <i>2-STAGE DELTA</i> | N/A | <b>-1.0</b> | <b>0.7</b> | <b>0.4</b> | <b>8.09</b> |
+| Magpie | 450 | $23.6 \pm 0.5$ | $36.6 \pm 3.4$ | $43.9 \pm 0.3$ | 18.0 |
+| Magpie + DPO | 510 | $21.8 \pm 0.5$ | $38.5 \pm 3.4$ | $48.9 \pm 0.3$ | 40.8 |
+| <i>2-STAGE DELTA</i> | N/A | <b>-1.8</b> | <b>1.9</b> | <b>5.0</b> | <b>22.8</b> |
+| UltraChat | 200 | $23.2 \pm 0.5$ | $41.4 \pm 3.5$ | $47.9 \pm 0.3$ | 09.2 |
+| UltraChat + DPO | 260 | $21.4 \pm 0.5$ | $39.4 \pm 3.5$ | $48.5 \pm 0.3$ | 13.8 |
+| <i>2-STAGE DELTA</i> | N/A | <b>-1.8</b> | <b>-2.0</b> | <b>0.6</b> | <b>4.61</b> |
+
+work from Bai et al. (2022), although they claim that the degradation is limited to small models. We leave the ablation of model size to future work, but note that new methods for preference optimization are often demonstrated only on small models, making this an important research consideration. There are at least two other confounds which could affect this result; the first is the choice of 2-stage dataset (we used UltraFeedback from Ding et al. (2023) for all experiments), and the choice of DPO as preference optimization algorithm. We leave the ablation of the stage-two dataset to future work, but expect the effect of this choice to be significant if it involves data scaling. We ablate the latter, and find that some other methods, most notably ORPO from Hong et al. (2024), perform better than DPO in this particular experiment; however, no method is Pareto-dominant over the baseline. See Appendix E for extended results. All in all, we conclude that methods research in preference optimization shows marked promise, but will require more robust and careful benchmarking to instill confidence in the results.
+
+## 7 RECOMMENDATIONS
+
+Prominent researchers have urged the alignment community to converge on more precise definitions of the problem they aim to solve, as well as better measures of progress (Carlini, 2024). While there is some value in the ability to closely approximate the pairwise, undifferentiated preferences of an ‘average’ human, the outsized influence of subjective design decisions such as judge instructions, inherent hackability, high unit cost, small test sets, and non-reproducibility of LLM-judges render them unsuitable for their current primary role in measuring progress in model alignment and post-training. The model alignment process necessitates trade-offs, and we cannot make those trade-offs consciously when undocumented implicit biases dominate our key metrics. We call on the research community to develop more targeted benchmarks for specific HHH factors of interest, such as the recent IFEval (Zhou et al., 2023b) for instruction following and FLASK (Ye et al., 2024) for particular skill sets, and recommend that reviewers insist that authors who wish to make broad claims about their method support those claims with general-purpose alignment benchmarks such as SOS-BENCH. We also call on the research community to move beyond the Bradley-Terry model, towards more sophisticated approaches to post-training.
+
+## 8 RELATED WORK
+
+A series of recent works have offered various critiques on the use of LLM-judges (Chen et al., 2024; Bavaresco et al., 2024; Wei et al., 2024; Sorensen et al., 2024). Several known confounds for pairwise benchmarks are well-established in the literature, in particular a bias by both humans and LLMs in favor of longer responses and a preference of LLMs for the style of their own output; efforts have been made to control for length as a confound (Panickssery et al., 2024; Park et al., 2024; Dubois et al., 2024; Wu & Aji, 2023). There also exists considerable prior literature critiquing
+
+{9}------------------------------------------------
+
+human judgment bias and proposing mechanisms for collective decision making, including social choice theory and prospect theory (Ge et al., 2024; Ethayarajh et al., 2024). Finally, there exists a literature on the limitations of RLHF and pairwise preferences, including findings that universal AI alignment using RLHF is impossible (Singhal et al., 2024; Casper et al., 2023; Lambert & Calandra, 2024; Mishra, 2023; Lambert et al., 2023). Extending prior work, our research focuses on novel *semantic* biases, and also introduces the concept of an implicit weighting of factors on the part of LLM judges. Finally, our work draws on all of the aforementioned traditions to produce a meta-analysis on the progress, or lack thereof, of methods for LLM post-training.
+
+Data scaling laws have been across a wide range of machine learning disciplines, including computer vision and natural language understanding (Miller et al., 2021; Hoffmann et al., 2022). The research community has even offered prizes to any important problems which defy this trend (McKenzie et al., 2024). In contrast, some authors contend that scaling laws do not apply in this setting (Zhou et al., 2023a). To the best of our knowledge, ours is the first work to document data scaling effects in post-training.
+
+Similar to some aspects of our work is the excellent contribution of Ye et al. (2024), who propose judging a fine-grained evaluation of LLM skills instead of coarse preferences. We report both fine and coarse preferences, and use the explicit fine-grained preferences to reveal the implicit LLM bias in determining coarse preference.
+
+## 9 IMPACT / LIMITATIONS
+
+This paper presents work whose goal is to advance the field of Machine Learning. There are many potential societal consequences of our work; in particular, we wish to briefly highlight certain fairness considerations. By making explicit the criteria we use to judge alignment, it would be easy to unintentionally introduce explicit harms that unfairly impact specific groups. Therefore, we encourage the community to make judging templates narrow whenever possible and expose them to critique. Our proposed concrete measure of alignment assumes that there is a unitary better aligned model, which is itself a controversial assumption.
+
+Because of the high unit cost of LLM-judge benchmarks, we base our empirical LLM-judge analysis solely on results from Arena-Hard-Auto (Li et al., 2024c). In Section 3, we provide evidence that LLM-judge benchmarks correlate strongly with human preference (this is also established in prior work), and therefore can be expected to correlate with one another as well.
+
+Nevertheless, it is possible that varying components in the LLM-judge pipeline would alter its behavior substantially, and therefore, we do not recommend treating our results as concrete evidence that all LLM-judge benchmarks will follow any particular inductive bias.
+
+Also for reasons of cost, we generate most of our systematic violations using GPT-4o-Mini, rather than human annotators. We also note that we explore only a small subset of many possible violations and many possible judgment criteria in this work. We consider this an important area for future research. Another important extension of this work are evaluations in languages other than English.
+
+Our work advocates for the development of explicit inductive bias in LLM-judges. If implemented naively, this could lead to Goodhart effects. It is therefore essential that special research emphasis be placed on the development and standardization of judging templates and metrics, and that these factors be continuously optimized to combat overfitting (Manheim & Garrabrant, 2019).
+
+## 10 REPRODUCIBILITY STATEMENT
+
+We have tried to ensure that the research described in this paper is reproducible. Our benchmark comparisons in Section 3 and Table 1 can be reproduced using the LiveBench, ChatBot Arena, Arena-Hard-Auto, HELM and BenchBench leaderboards, which are publicly available. The checkpoints used in our experiments in Section 4 will be made available once our work is de-anonymized; our chat templates and experimental details are in the appendix. Our repository and code for Section 5 is already publicly available, and our list of benchmarks is documented in Table 8 as well.
+
+ Rest of paper (reference and Appendix) is removed.

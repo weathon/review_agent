@@ -1,0 +1,353 @@
+
+
+{0}------------------------------------------------
+
+# MODEL-BASED OFFLINE REINFORCEMENT LEARNING WITH LOWER EXPECTILE Q-LEARNING
+
+**Kwanyoung Park**
+
+**Youngwoo Lee**
+
+Yonsei University
+
+<https://kwanyoungpark.github.io/LEQ/>
+
+## ABSTRACT
+
+Model-based offline reinforcement learning (RL) is a compelling approach that addresses the challenge of learning from limited, static data by generating imaginary trajectories using learned models. However, these approaches often struggle with inaccurate value estimation from model rollouts. In this paper, we introduce a novel model-based offline RL method, Lower Expectile Q-learning (LEQ), which provides a low-bias model-based value estimation via lower expectile regression of  $\lambda$ -returns. Our empirical results show that LEQ significantly outperforms previous model-based offline RL methods on long-horizon tasks, such as the D4RL AntMaze tasks, matching or surpassing the performance of model-free approaches and sequence modeling approaches. Furthermore, LEQ matches the performance of state-of-the-art model-based and model-free methods in dense-reward environments across both state-based tasks (NeoRL and D4RL) and pixel-based tasks (V-D4RL), showing that LEQ works robustly across diverse domains. Our ablation studies demonstrate that lower expectile regression,  $\lambda$ -returns, and critic training on offline data are all crucial for LEQ.
+
+## 1 INTRODUCTION
+
+One of the major challenges in offline reinforcement learning (RL) is the overestimation of values for out-of-distribution actions due to the lack of environment interactions (Levine et al., 2020; Kumar et al., 2020). Model-based offline RL addresses this issue by generating additional (imaginary) training data using a learned model, thereby augmenting the given offline data with synthetic experiences that cover out-of-distribution states and actions (Yu et al., 2020; Kidambi et al., 2020; Yu et al., 2021; Argenson and Dulac-Arnold, 2021; Sun et al., 2023). While these approaches have demonstrated strong performance in simple, short-horizon tasks, they struggle with noisy model predictions and value estimates, particularly in long-horizon tasks (Park et al., 2024). This challenge is evident in their poor performances (i.e. near zero) on the D4RL AntMaze tasks (Fu et al., 2020).
+
+Typical model-based offline RL methods alleviate the inaccurate value estimation problem (mostly overestimation) by penalizing Q-values estimated from model rollouts with uncertainties in model predictions (Yu et al., 2020; Kidambi et al., 2020) or value predictions (Sun et al., 2023; Jeong et al., 2023). While these penalization terms prevent a policy from exploiting erroneous value estimates, the policy now does not maximize the true value, but maximizes the value penalized by heuristically estimated uncertainties, which can lead to sub-optimal behaviors. This is especially problematic in long-horizon, sparse-reward tasks, where Q-values are similar across nearby states (Park et al., 2024).
+
+Another way to reduce bias in value estimates is using multi-step returns (Sutton, 1988; Hessel et al., 2018). CBOP (Jeong et al., 2023) constructs an explicit distribution of multi-step Q-values from thousands of model rollouts and uses this value as a target for training the Q-function. However, CBOP is computationally expensive for estimating a target value and uses multi-step returns solely for Q-learning, not for policy optimization.
+
+To tackle these issues in model-based offline RL, we introduce a simple yet effective model-based offline RL algorithm, Lower Expectile Q-learning (LEQ). As illustrated in Figure 1, LEQ uses expectile regression with a small  $\tau$  for both policy and Q-function training, providing an efficient and elegant way to achieve conservative Q-value estimates. Moreover, we propose to optimize both
+
+{1}------------------------------------------------
+
+![Figure 1: Lower Expectile Q-learning (LEQ). (left) Diagram showing an agent generating imaginary trajectories using a world model. (right) Return distribution plot showing the lower expectile of returns.](49ad3a646d84bcfeac02bdf2b3792a3e_img.jpg)
+
+The figure is divided into two parts. The left part shows a state  $s$  and an action  $a$  leading to a tree of possible trajectories. A specific trajectory  $\mathcal{T}_i$  is highlighted in bold, while others like  $\mathcal{T}_1$  and  $\mathcal{T}_K$  are shown as dashed lines. A legend indicates that a solid circle represents an 'Imagined trajectory  $\mathcal{T}_i$ ' and a dashed circle represents 'Possible trajectories  $\mathcal{T}_1, \dots, \mathcal{T}_K$ '. The right part is a plot of the 'Return distribution' with the horizontal axis labeled  $R(\mathcal{T})$ . It shows a bell-shaped curve with several points marked:  $R(\mathcal{T}_1)$ ,  $R(\mathcal{T}_i)$ , and  $R(\mathcal{T}_K)$ . A blue dot on the curve represents the 'Lower expectile of returns', labeled as  $\hat{T}Q_\phi(s, a) = \mathbb{E}^\epsilon[R(\mathcal{T})]$ .
+
+Figure 1: Lower Expectile Q-learning (LEQ). (left) Diagram showing an agent generating imaginary trajectories using a world model. (right) Return distribution plot showing the lower expectile of returns.
+
+Figure 1: **Lower Expectile Q-learning (LEQ)**. (left) In model-based offline RL, an agent can generate imaginary trajectories using a world model. (right) For conservative Q-evaluation of the policy, LEQ learns the **lower expectile** of the target  $Q$ -distribution from a few sampled rollouts  $\mathcal{T}_i$ , without estimating the entire  $Q$ -distribution with exhaustive rollouts.
+
+policy and  $Q$ -function using  $\lambda$ -returns (i.e. TD( $\lambda$ ) targets) of long (10-step) model rollouts, allowing the policy to directly learn from low-bias multi-step returns (Schulman et al., 2016).
+
+The experiments on the D4RL AntMaze, MuJoCo Gym (Fu et al., 2020), NeoRL (Qin et al., 2022), and V-D4RL (Lu et al., 2023) benchmarks show that LEQ improves model-based offline RL across diverse domains. To the best of our knowledge, LEQ is the first model-based offline RL algorithm capable of outperforming model-free offline RL algorithms on the long-horizon AntMaze tasks (Fu et al., 2020; Jiang et al., 2023). Moreover, LEQ matches the top scores across various benchmarks, while prior methods demonstrate superior performances only for a specific domain.
+
+## 2 RELATED WORK
+
+**Offline RL** (Levine et al., 2020) aims to solve an RL problem only with pre-collected datasets, outperforming behavioral cloning policies (Pomerleau, 1989). While it is possible to apply off-policy RL algorithms on fixed datasets, these algorithms suffer from the overestimation of  $Q$ -values for actions unseen in the offline dataset (Fujimoto et al., 2019; Kumar et al., 2019; 2020) since the overestimated values cannot be corrected through interactions with environments as in online RL.
+
+**Model-free offline RL** algorithms have addressed this value overestimation problem on out-of-distribution actions by (1) regularizing a policy to only output actions in the offline data (Peng et al., 2019; Kostrikov et al., 2022; Fujimoto and Gu, 2021) or (2) adopting a conservative value estimation for executing actions different from the dataset (Kumar et al., 2020; An et al., 2021). Despite their strong performances on the standard offline RL benchmarks, model-free offline RL policies tend to be constrained to the support of the data (i.e. state-action pairs in the offline dataset), which may lead to limited generalization capability.
+
+**Model-based offline RL** approaches have tried to overcome this limitation by suggesting a better use of the limited offline data – learning a world model and generating imaginary data with the learned model that covers out-of-distribution actions. Similar to Dyna-style online model-based RL (Sutton, 1991; Hafner et al., 2019; 2021; 2023), an offline model-based RL policy can be trained on both offline data and model rollouts. But, again, learned models may be inaccurate on states and actions outside the data support, making a policy easily exploit the learned models.
+
+Recent model-based offline RL algorithms have adopted the conservatism idea from model-free offline RL, penalizing policies incurring (1) uncertain transition dynamics (Yu et al., 2020; Kidambi et al., 2020; Yu et al., 2021) or (2) uncertain value estimation (Sun et al., 2023; Jeong et al., 2023). This conservative use of model-generated data enables model-based offline RL to outperform model-free offline RL in widely used offline RL benchmarks (Sun et al., 2023). However, uncertainty estimation is difficult and often inaccurate (Yu et al., 2021). Instead of relying on such heuristic (Yu et al., 2020; Kidambi et al., 2020; Sun et al., 2023) or expensive (Jeong et al., 2023) uncertainty
+
+{2}------------------------------------------------
+
+|  |  |
+|-|-|
+| <b>Q-learning</b> | <b>Lower Expectile Q-learning</b> |
+| $\mathcal{L}_Q(\phi) = (Q_\phi(\mathbf{s}_t, \mathbf{a}_t) - Q_t^\lambda(\mathcal{T}))^2 \implies$ | $ \tau - \mathbb{1}(Q_t^\lambda(\mathcal{T}) > Q_\phi(\mathbf{s}_t, \mathbf{a}_t))  \cdot \mathcal{L}_\phi(\phi)$ |
+| $\nabla_\theta \mathcal{L}_\pi(\theta) = -\nabla_\theta \pi_\theta(\mathbf{s}_t) \cdot \nabla_{\mathbf{a}_t} Q_t^\lambda(\mathcal{T}) \implies$ | $ \tau - \mathbb{1}(Q_t^\lambda(\mathcal{T}) > Q_\phi(\mathbf{s}_t, \mathbf{a}_t))  \cdot \nabla_\theta \mathcal{L}_\pi(\theta)$ |
+
+Figure 2: **Comparison of standard Q-learning and Lower Expectile Q-learning (LEQ).** LEQ generalizes standard Q-learning (with  $\lambda$ -returns  $Q_t^\lambda(\mathcal{T})$ ) by multiplying a simple asymmetric weight “ $|\tau - \mathbb{1}(Q_t^\lambda(\mathcal{T}) > Q_\phi(\mathbf{s}_t, \mathbf{a}_t))|$ ” to the Q-learning objectives.  $\mathcal{T} = (\mathbf{s}_0, \mathbf{a}_0, r_0, \mathbf{s}_1, \mathbf{a}_1, r_1, \dots, \mathbf{s}_T)$  is a model-generated trajectory and  $\tau \leq 0.5$  is the expectile hyperparameter controlling the degree of conservatism. When  $\tau = 0.5$ , LEQ reduces to standard Q-learning.
+
+estimation, we propose to learn a conservative value function via expectile regression with a small  $\tau$ , which is simple, efficient, yet effective, as illustrated in Figure 2.
+
+**Expectile regression for offline RL** has been first introduced by IQL (Kostrikov et al., 2022), which has been extended to model-based offline RL, such as IQL-TD-MPC (Chitnis et al., 2024). IQL uses “*upper expectile*” to approximate the “*max operation*” in  $V(s) = \max_a Q(s, a)$  without querying out-of-distribution actions. On the other hand, our work **fundamentally differs from IQL-like approaches** in that our method uses “*lower expectile*” to get “*conservative return estimates*” from trajectories generated by potentially inaccurate model rollouts.
+
+## 3 PRELIMINARIES
+
+**Problem setup.** We formulate our problem as a Markov Decision Process (MDP) defined as a tuple,  $\mathcal{M} = (\mathcal{S}, \mathcal{A}, r, p, \rho, \gamma)$  (Sutton and Barto, 2018).  $\mathcal{S}$  and  $\mathcal{A}$  denote the state and action spaces, respectively.  $r: \mathcal{S} \times \mathcal{A} \rightarrow \mathbb{R}$  denotes the reward function.  $p: \mathcal{S} \times \mathcal{A} \rightarrow \Delta(\mathcal{S})^1$  denotes the transition dynamics.  $p(s_0) \in \Delta(\mathcal{S})$  denotes the initial state distribution and  $\gamma$  is a discounting factor. The goal of RL is to find a policy,  $\pi: \mathcal{S} \rightarrow \Delta(\mathcal{A})$ , that maximizes the expected return,  $\mathbb{E}_{\mathcal{T} \sim p(\cdot | \pi, s_0 \sim \rho)} \left[ \sum_{t=0}^{T-1} \gamma^t r(\mathbf{s}_t, \mathbf{a}_t) \right]$ , where  $\mathcal{T}$  is a sequence of transitions with a finite horizon  $T$ ,  $\mathcal{T} = (\mathbf{s}_0, \mathbf{a}_0, r_0, \mathbf{s}_1, \mathbf{a}_1, r_1, \dots, \mathbf{s}_T)$ , following  $\pi(\mathbf{a}_t | \mathbf{s}_t)$  and  $p(\mathbf{s}_{t+1} | \mathbf{s}_t, \mathbf{a}_t)$  starting from  $\mathbf{s}_0 \sim \rho(\cdot)$ .
+
+In this paper, we consider the offline RL setup (Levine et al., 2020), where a policy  $\pi$  is trained with a fixed given offline dataset,  $\mathcal{D}_{\text{env}} = \{\mathcal{T}_1, \mathcal{T}_2, \dots, \mathcal{T}_N\}$ , without any additional online interactions.
+
+**Model-based offline RL.** As an offline RL policy is trained from a fixed dataset, one of the major challenges in offline RL is the limited data support; thus, lack of generalization to out-of-distribution states and actions. Model-based offline RL (Kidambi et al., 2020; Yu et al., 2020; 2021; Rigter et al., 2022; Sun et al., 2023; Jeong et al., 2023) tackles this problem by augmenting the training data with imaginary training data (i.e. model rollouts) generated from the learned transition dynamics and reward model,  $p_\psi(\mathbf{s}_{t+1}, r_t | \mathbf{s}_t, \mathbf{a}_t)$ .
+
+The typical process of model-based offline RL is as follows: (1) pretrain a model (or an ensemble of models) and an initial policy from the offline data, (2) generate short imaginary rollouts  $\{\mathcal{T}\}$  using the pretrained model and add them to the training dataset  $\mathcal{D}_{\text{model}} \leftarrow \mathcal{D}_{\text{model}} \cup \{\mathcal{T}\}$ , (3) perform an offline RL algorithm on the augmented dataset  $\mathcal{D}_{\text{model}} \cup \mathcal{D}_{\text{env}}$ , and repeat (2) and (3).
+
+**Expectile regression.** Expectile is a generalization of the expectation of a distribution  $X$ . While the expectation of  $X$ ,  $\mathbb{E}[X]$ , can be viewed as a minimizer of the least-square objective,  $\mathbb{E}_{x \sim X}[L_2(y - x)] = \mathbb{E}_{x \sim X}[\frac{1}{2}(y - x)^2]$ ,  $\tau$ -expectile of  $X$ ,  $\mathbb{E}^\tau[X]$ , can be defined as a minimizer of the asymmetric least-square objective  $\mathbb{E}_{x \sim X}[L_2^\tau(y - x)]$ , where  $L_2^\tau(\cdot)$  is defined as:
+
+$$L_2^\tau(u) = |\tau - \mathbb{1}(u > 0)| \cdot u^2, \quad (1)$$
+
+where  $|\tau - \mathbb{1}(u > 0)|$  is an asymmetric weighting of least-squared objective with  $0 \leq \tau \leq 1$ .
+
+We refer to a  $\tau$ -expectile with  $\tau < 0.5$  as a *lower expectile* of  $X$ . When  $\tau < 0.5$ , the objective assigns a high weight  $1 - \tau$  for smaller  $x$  and a low weight  $\tau$  for bigger  $x$ . Thus, minimizing the objective with  $\tau < 0.5$  leads to a *conservative* statistical estimate compared to the expectation.
+
+<sup>1</sup> $\Delta(\mathcal{X})$  denotes the set of probability distributions over  $\mathcal{X}$ .
+
+{3}------------------------------------------------
+
+#### **Algorithm 1** LEQ: Lower Expectile Q-learning with $\lambda$ -returns
+
+---
+
+**Input:** Offline dataset  $\mathcal{D}_{\text{env}}$ , expectile  $\tau \leq 0.5$ , imagination length  $H$ , dataset expansion length  $R$ .
+
+- 1: Initialize world models  $\{p_{\psi_1}, \dots, p_{\psi_M}\}$ , policy  $\pi_\theta$ , and Q-function  $Q_\phi$
+- 2: Pretrain  $\{p_{\psi_1}, \dots, p_{\psi_M}\}$  on  $\mathcal{D}_{\text{env}}$   $\triangleright \mathcal{L}_{\text{wm}}(\psi) = -\mathbb{E}_{(s, a, r, s') \in \mathcal{D}_{\text{env}}} \log p_\psi(s', r | s, a)$
+- 3: Pretrain  $\pi_\theta$  and  $Q_\phi$  on  $\mathcal{D}_{\text{env}}$   $\triangleright$  using BC for  $\pi_\theta$  and FQE (Le et al., 2019) for  $Q_\phi$
+- 4:  $\mathcal{D}_{\text{model}} \leftarrow \emptyset$
+- 5: **while** not converged **do**
+- 6:   *// Expand dataset using model rollouts*
+- 7:    $s_0 \sim \mathcal{D}_{\text{env}}$   $\triangleright$  start dataset expansion from any state in  $\mathcal{D}_{\text{env}}$
+- 8:   **for**  $t = 0, \dots, R - 1$  **do**
+- 9:      $\mathcal{D}_{\text{model}} \leftarrow \mathcal{D}_{\text{model}} \cup \{s_t\}$
+- 10:      $a_t = \pi_\theta(s_t)$
+- 11:      $s_{t+1}, r_t \sim p_\psi(\cdot | s_t, a_t)$ , where  $p_\psi \sim \{p_{\psi_1}, \dots, p_{\psi_M}\}$   $\triangleright$  sample  $p_\psi$  every step
+- 12:   *// Generate imaginary data,  $\mathcal{T} = \{(s_0, a_0, r_0, \dots, s_{H-1}, a_{H-1}, r_{H-1}, s_H)_i\}$*
+- 13:    $s_0 \sim \mathcal{D}_{\text{model}}$   $\triangleright$  start imaginary rollout from any state in  $\mathcal{D}_{\text{model}}$
+- 14:   **for**  $t = 0, \dots, H - 1$  **do**
+- 15:      $a_t = \pi_\theta(s_t)$
+- 16:      $s_{t+1}, r_t \sim p_\psi(\cdot | s_t, a_t)$ , where  $p_\psi \sim \{p_{\psi_1}, \dots, p_{\psi_M}\}$   $\triangleright$  sample  $p_\psi$  every step
+- 17:   *// Update critic using both model-generated data and offline data*
+- 18:   Update critic  $Q_\phi$  to minimize  $\mathcal{L}_\phi^\lambda(\phi)$  in Eq. (7) using  $\mathcal{T}$  and  $\{s, a, r, s'\} \sim \mathcal{D}_{\text{env}}$
+- 19:   *// Update actor using only model-generated data*
+- 20:   Update actor  $\pi_\theta$  to minimize  $\hat{\mathcal{L}}_\pi^\lambda(\theta)$  in Eq. (11) using  $\mathcal{T}$
+
+---
+
+## 4 APPROACH
+
+The primary challenge of model-based offline RL is inherent errors in a world model and critic outside the support of offline data. Conservative value estimation can effectively handle such (falsely optimistic) errors. In this paper, we introduce Lower Expectile Q-learning (LEQ), an efficient model-based offline RL method that achieves conservative value estimation via expectile regression of Q-values with lower expectiles when learning from model-generated data (Section 4.1). Additionally, we address the noisy value estimation problem (Park et al., 2024) using  $\lambda$ -returns on 10-step imaginary rollouts (Section 4.2). Finally, we train a deterministic policy conservatively by maximizing the lower expectile of  $\lambda$ -returns (Section 4.3). The overview of LEQ is described in Algorithm 1.
+
+### 4.1 LOWER EXPECTILE Q-LEARNING
+
+Most offline RL algorithms primarily focus on learning a conservative value function for out-of-distribution actions. In this paper, we propose Lower Expectile Q-learning (LEQ), which learns a conservative Q-function via expectile regression with small  $\tau$ , avoiding unreliable uncertainty estimation and exhaustive Q-value estimation.
+
+As illustrated in Figure 1, the target value for  $Q_\phi(s, a)$ , where  $a \leftarrow \pi_\theta(s)$ , can be estimated by rolling out an ensemble of world models and averaging  $r + \gamma Q_\phi(s', a')$  over all possible  $s'$ :
+
+$$\hat{y}_{\text{model}} = \mathbb{E}_{\psi \sim \{\psi_1, \dots, \psi_M\}} \mathbb{E}_{(s', r) \sim p_\psi(\cdot | s, a)} [r + \gamma Q_\phi(s', \pi_\theta(s'))]. \quad (2)$$
+
+This target value has three error sources: the predicted future state and reward  $s', r \sim p_\psi(\cdot | s, a)$  and future Q-value  $Q_\phi(s', \pi_\theta(s'))$ . Thus, the target value from model-generated data,  $\hat{y}_{\text{model}}$ , is more prone to overestimation than the original target Q-value,  $\hat{y}_{\text{env}}$ , computed from  $(s, a, r, s') \sim \mathcal{D}_{\text{env}}$ :
+
+$$\hat{y}_{\text{env}} = r + \gamma Q_\phi(s', \pi_\theta(s')). \quad (3)$$
+
+To mitigate the overestimation of  $\hat{y}_{\text{model}}$  from inaccurate  $H$ -step model rollouts, we propose to use lower expectile regression on target Q-value estimates with small  $\tau$ . As illustrated in Figure 2, expectile regression with small  $\tau$  learns a Q-function predicting Q-values lower than the expectation, i.e., a *conservative estimate* of a target Q-value. Another advantage of using lower expectile regression is that we do not have to exhaustively evaluate Q-values to get  $\tau$ -expectiles as Jeong et al. (2023);
+
+{4}------------------------------------------------
+
+instead, we can learn a conservative Q-function with sampling:
+
+$$L_{Q, \text{model}}(\phi) = \mathbb{E}_{\mathbf{s}_0 \in \mathcal{D}_{\text{model}}, \mathcal{T} \sim p_\psi, \pi_\theta} \left[ \frac{1}{H} \sum_{t=0}^{H-1} L_2^2(Q_\phi(\mathbf{s}_t, \pi_\theta(\mathbf{s}_t)) - \hat{y}_{\text{model}}) \right]. \quad (4)$$
+
+Additionally, we train the Q-function with the transitions in the dataset  $\mathcal{D}_{\text{env}}$ , which do not have the risk of overestimation caused by the inaccurate model, using the standard Bellman update:
+
+$$L_{Q, \text{env}}(\phi) = \mathbb{E}_{(\mathbf{s}, \mathbf{a}, \mathbf{r}, \mathbf{s}') \in \mathcal{D}_{\text{env}}} \left[ \frac{1}{2} (Q_\phi(\mathbf{s}, \mathbf{a}) - \hat{y}_{\text{env}})^2 \right]. \quad (5)$$
+
+To stabilize training of the Q-function, we adopt EMA regularization (Hafner et al., 2023), which prevents drastic change of Q-values by regularizing the difference between the predictions from  $Q_\phi$  and ones from its exponential moving average  $Q_{\hat{\phi}}$ :
+
+$$L_{Q, \text{EMA}}(\phi) = \mathbb{E}_{(\mathbf{s}, \mathbf{a}) \in \mathcal{D}_{\text{env}}} [(Q_\phi(\mathbf{s}, \mathbf{a}) - Q_{\hat{\phi}}(\mathbf{s}, \mathbf{a}))^2]. \quad (6)$$
+
+Finally, by combining the three aforementioned losses, we define the critic loss as follows:
+
+$$L_Q(\phi) = \beta L_{Q, \text{model}}(\phi) + (1 - \beta) L_{Q, \text{env}}(\phi) + \omega_{\text{EMA}} L_{Q, \text{EMA}}(\phi). \quad (7)$$
+
+### 4.2 LOWER EXPECTILE Q-LEARNING WITH $\lambda$ -RETURN
+
+To further improve LEQ, we use  $\lambda$ -return instead of 1-step return for Q-learning.  $\lambda$ -return allows a Q-function and policy to learn from low-bias multi-step returns (Schulman et al., 2016). Using  $N$ -step returns  $G_{t:t+N}(\mathcal{T}) = \sum_{i=0}^{N-1} \gamma^i r_{t+i} + \gamma^N Q_\phi(\mathbf{s}_{t+N}, \mathbf{a}_{t+N})$ , we define  $\lambda$ -return of an  $H$ -step trajectory  $\mathcal{T}$  in timestep  $t$ ,  $Q_t^\lambda(\mathcal{T})$  as:<sup>2</sup>
+
+$$Q_t^\lambda(\mathcal{T}) = \frac{1 - \lambda}{1 - \lambda^{H-t-1}} \sum_{i=1}^{H-t} \lambda^{i-1} G_{t:t+i}(\mathcal{T}). \quad (8)$$
+
+Then, we can rewrite the Q-learning loss in Equation (4) with  $\lambda$ -return targets:
+
+$$L_{Q, \text{model}}^\lambda(\phi) = \mathbb{E}_{\mathbf{s}_0 \in \mathcal{D}_{\text{model}}, \mathcal{T} \sim p_\psi, \pi_\theta} \left[ \sum_{t=0}^{H-1} L_2^2(Q_\phi(\mathbf{s}_t, \pi_\theta(\mathbf{s}_t)) - Q_t^\lambda(\mathcal{T})) \right]. \quad (9)$$
+
+### 4.3 LOWER EXPECTILE POLICY LEARNING WITH $\lambda$ -RETURN
+
+For policy optimization, we use a deterministic policy  $\mathbf{a} = \pi_\theta(\mathbf{s})$  and update the policy using the deterministic policy gradients similar to DDPG (Lillicrap et al., 2016).<sup>3</sup> To provide more accurate learning targets for the policy, instead of maximizing the immediate Q-value,  $Q_\phi(\mathbf{s}, \mathbf{a})$ , we maximize the lower expectile of  $\lambda$ -return, analogous to our conservative critic learning in Section 4.2:
+
+$$\mathcal{L}_\pi^\lambda(\theta) = -\mathbb{E}_{\mathbf{s}_0 \in \mathcal{D}_{\text{model}}} \left[ \sum_{t=0}^{H-1} \mathbb{E}_{\mathcal{T} \sim p_\psi, \pi_\theta} [Q_t^\lambda(\mathcal{T})] \right]. \quad (10)$$
+
+However, because of the expectile term,  $\mathbb{E}^\tau[Q_t^\lambda]$ , we cannot directly compute the gradient of  $\mathcal{L}_\pi^\lambda(\theta)$ . To change the expectile to expectation, we use the relationship  $\mathbb{E}^\tau[Q_t^\lambda] = \frac{\mathbb{E}[|\tau - 1|(\mathbb{E}^\tau[Q_t^\lambda] > Q_t^\lambda) \cdot Q_t^\lambda]}{\mathbb{E}[|\tau - 1|(\mathbb{E}^\tau[Q_t^\lambda] > Q_t^\lambda)]}$ , and optimize the unnormalized version,  $\mathbb{E}[|\tau - 1|(\mathbb{E}^\tau[Q_t^\lambda] > Q_t^\lambda) \cdot Q_t^\lambda]$ . By approximating  $\mathbb{E}^\tau[Q_t^\lambda]$  with the learned Q-estimator  $Q_\phi(\mathbf{s}_t, \mathbf{a}_t)$ , we derive a differentiable surrogate loss of Equation (10):
+
+$$\hat{\mathcal{L}}_\pi^\lambda(\theta) = -\mathbb{E}_{\mathbf{s}_0 \in \mathcal{D}_{\text{model}}, \mathcal{T} \sim p_\psi, \pi_\theta} \left[ \sum_{t=0}^{H-1} |\tau - 1| (Q_\phi(\mathbf{s}_t, \mathbf{a}_t) > Q_t^\lambda(\mathcal{T})) \cdot Q_t^\lambda(\mathcal{T}) \right]. \quad (11)$$
+
+Intuitively, this surrogate loss sets a higher weight  $(1 - \tau)$  on a conservative  $\lambda$ -return estimates (i.e.  $Q_\phi(\mathbf{s}_t, \mathbf{a}_t) > Q_t^\lambda(\mathcal{T})$ ), encouraging a policy to optimize for this conservative  $\lambda$ -return. On the other hand, an optimistic  $\lambda$ -return estimates (i.e.  $Q_\phi(\mathbf{s}_t, \mathbf{a}_t) < Q_t^\lambda(\mathcal{T})$ ) has a less impact to the policy with a smaller weight  $(\tau)$ . We provide a proof in Appendix B showing that the proposed surrogate loss provides a better approximation of Equation (10) than the immediate Q-value,  $Q_\phi(\mathbf{s}_t, \mathbf{a}_t)$ .
+
+<sup>2</sup>Our  $\lambda$ -return slightly differs from (Sutton, 1988) that puts a high weight to the last  $N$ -step return,  $G_{t:H}(\mathcal{T})$ .
+
+<sup>3</sup>LEQ also works with a stochastic policy; but, a deterministic policy is sufficient for our experiments.
+
+{5}------------------------------------------------
+
+### 4.4 EXPANDING DATASET WITH MODEL ROLLOUTS
+
+One of the problems of offline RL is that data distribution is limited to the offline dataset  $\mathcal{D}_{\text{env}}$ . To tackle this problem, we expand the dataset using simulated trajectories, which we refer to as  $\mathcal{D}_{\text{model}}$  (Yu et al., 2021). To diversify the simulated trajectories in  $\mathcal{D}_{\text{model}}$ , we use a *noisy exploration policy*, which adds a noise  $\epsilon \sim N(0, \sigma_{\text{exp}}^2)$ , to the current policy and generate a trajectory of length  $R$ .
+
+## 5 EXPERIMENTS
+
+In this paper, we propose a novel model-based offline RL method with simple, efficient, yet accurate conservative value estimation. Through our experiments, we aim to answer the following questions: (1) Can **LEQ** solve diverse domains of problems, including both dense-reward tasks and long-horizon sparse-reward tasks? (2) Can **LEQ** be applied to pixel-based environments? (3) How individual components of **LEQ** affect the performance?
+
+### 5.1 TASKS
+
+To verify the strength of our low-bias model-based conservative value estimation in diverse domains, we test **LEQ** on four benchmarks: D4RL AntMaze, D4RL MuJoCo Gym (Fu et al., 2020), NeoRL (Qin et al., 2022), and V-D4RL (Lu et al., 2023). We first test on long-horizon AntMaze tasks: umaze, medium, large from D4RL, and ultra from Jiang et al. (2023), as shown in Figure 3. We also evaluate **LEQ** on locomotion tasks (Figure 4): state-based tasks from D4RL, NeoRL and pixel-based tasks from V-D4RL. Please refer to Appendix A for more experimental details.
+
+### 5.2 COMPARED OFFLINE RL ALGORITHMS
+
+**Model-free offline RL.** We consider behavioral cloning (**BC**) (Pomerleau, 1989); **TD3+BC** (Fujimoto and Gu, 2021), which combines BC loss to TD3; **CQL** (Kumar et al., 2020), which penalizes out-of-distribution actions; and **IQL** (Kostrikov et al., 2022), which uses upper-expectile regression to estimate the value function. For locomotion tasks, we also compare with **EDAC** (An et al., 2021), which penalizes Q-values based on its uncertainty. For pixel-based tasks, we compare with **DrQ+BC** (Lu et al., 2023), which combines BC loss to DrQ-v2 (Yarats et al., 2022); **ACRO**, which learns representations with a multi-step inverse dynamics model.
+
+**Model-based offline RL.** We consider **MOPO** (Yu et al., 2020) and **MOBILE** (Sun et al., 2023), which penalize Q-values according to the transition uncertainty and the Bellman uncertainty of a world model, respectively; **COMBO** (Yu et al., 2021), which combines CQL with MBPO; **RAMBO** (Rigter et al., 2022), which trains an adversarial world model against the policy; and **CBOP** (Jeong et al., 2023), which utilizes multi-step returns for critic updates; **IQL-TD-MPC** (Chitnis et al., 2024), which extends TD-MPC (Hansen et al., 2022) to offline setting with IQL. For pixel-based environments, we consider **OfflineDV2** (Lu et al., 2023), which penalizes Q-values according to the dynamics errors, and **ROSMO** (Liu et al., 2023), which uses one-step model rollouts for policy improvement. **LEQ** follows **MOBILE** for most implementation details but implemented in JAX (Bradbury et al., 2018), which makes it 6 times faster than the PyTorch versions of **MOBILE** and **CBOP**. Please refer to Table 4 for detailed comparison.
+
+**Sequence modeling for offline RL.** We consider **TT** (Janner et al., 2021), which trains a Transformer model (Vaswani, 2017) to predict offline trajectories and applies beam search to find the best
+
+![Figure 3: AntMaze tasks. Four grid worlds of increasing complexity: (a) Umaze, (b) Medium, (c) Large, and (d) Ultra. Each maze has a start (blue square) and a goal (yellow star).](abf2f799abc5d215de1ce8a2d5e2712f_img.jpg)
+
+Figure 3: AntMaze tasks. Four grid worlds of increasing complexity: (a) Umaze, (b) Medium, (c) Large, and (d) Ultra. Each maze has a start (blue square) and a goal (yellow star).
+
+(a) Umaze (b) Medium (c) Large (d) Ultra
+
+Figure 3: AntMaze tasks.
+
+![Figure 4: Locomotion tasks. Three 3D rendered scenes of a robot: (a) Hopper, (b) Walker2d, and (c) HalfCheetah. The robot is shown in various poses on a checkered floor.](f0200666838a543ef56e6baba94f5e95_img.jpg)
+
+Figure 4: Locomotion tasks. Three 3D rendered scenes of a robot: (a) Hopper, (b) Walker2d, and (c) HalfCheetah. The robot is shown in various poses on a checkered floor.
+
+(a) Hopper (b) Walker2d (c) HalfCheetah
+
+Figure 4: Locomotion tasks.
+
+{6}------------------------------------------------
+
+![Figure 5: AntMaze results. A series of bar charts showing average success rates for various AntMaze tasks. The tasks include Average, umaze, medium-play, large-play, ultra-play, umaze-diverse, medium-diverse, large-diverse, and ultra-diverse. For each task, three methods are compared: Model-free (green), Model-based (grey), and LEQ (Ours) (blue). LEQ consistently outperforms the other two methods across all tasks, especially in the more complex and diverse maze environments.](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+Figure 5: AntMaze results. A series of bar charts showing average success rates for various AntMaze tasks. The tasks include Average, umaze, medium-play, large-play, ultra-play, umaze-diverse, medium-diverse, large-diverse, and ultra-diverse. For each task, three methods are compared: Model-free (green), Model-based (grey), and LEQ (Ours) (blue). LEQ consistently outperforms the other two methods across all tasks, especially in the more complex and diverse maze environments.
+
+Figure 5: **AntMaze results.** Each graph displays the average success rate over 100 trials. LEQ significantly outperforms prior model-based approaches, which achieve near-zero scores, and also surpasses model-free baselines.
+
+![Figure 6: NeoRL results. A series of bar charts showing average normalized scores for various NeoRL tasks. The tasks include Average, hopper-L, hopper-H, walker2d-M, halfcheetah-L, halfcheetah-H, hopper-M, walker2d-L, walker2d-H, and halfcheetah-M. For each task, three methods are compared: Model-free (green), Model-based (grey), and LEQ (Ours) (blue). LEQ consistently achieves higher normalized scores than the other methods, particularly in the Hopper and Walker2d domains.](a6a8016b231533e7f34b550f4676afc6_img.jpg)
+
+Figure 6: NeoRL results. A series of bar charts showing average normalized scores for various NeoRL tasks. The tasks include Average, hopper-L, hopper-H, walker2d-M, halfcheetah-L, halfcheetah-H, hopper-M, walker2d-L, walker2d-H, and halfcheetah-M. For each task, three methods are compared: Model-free (green), Model-based (grey), and LEQ (Ours) (blue). LEQ consistently achieves higher normalized scores than the other methods, particularly in the Hopper and Walker2d domains.
+
+Figure 6: **NeoRL results.** Each graph displays the average normalized score over 100 trials. LEQ achieves better performance than prior methods, particularly in Hopper and Walker2d domains.
+
+trajectory; and **TAP** (Jiang et al., 2023), which improves TT by quantizing the action space with VQ-VAE (Van Den Oord et al., 2017).
+
+### 5.3 RESULTS ON LONG-HORIZON ANTMAZE TASKS
+
+As shown in Figure 5, **LEQ** significantly outperforms the prior *model-based* approaches. For example, **LEQ** achieves 60.2 and 55.8 for *large-diverse* and *ultra-diverse*, while the second best method, **IQL-TD-MPC** (Chitnis et al., 2024), scores only 4.0 and 3.6, respectively. We believe these performance gains come from our conservative value estimation, which works more stable than the uncertainty-based penalization of prior works. Moreover, **LEQ** even significantly outperforms the *model-free* approaches in *umaze*, *large*, and *ultra* mazes, and outperforms *sequence modeling* methods, **TT** and **TAP**, which serve as strong baselines for AntMaze tasks, in the most challenging *ultra* mazes, showing the advantage of utilizing low-bias multi-step return on long-horizon tasks.
+
+Despite its superior performance, **LEQ** shows high variance in the performance on *antmaze-medium*. We found that the *medium* mazes include states separated by walls that are very close to each other (denoted as red circles in Figure 7), such that all of the learned world models falsely believe the agent can pass through the walls. This incorrect prediction makes the agent to plan faster, but impossible trajectories as shown in Figure 7. We believe that this could be addressed by employing improved world models or increasing the number of ensembles for the world models.
+
+![Figure 7: Failure in medium mazes. Two side-by-side images of a medium maze. The left image shows a red trajectory that appears to pass through a wall (indicated by a red circle). The right image shows a more successful trajectory that avoids the wall. The maze consists of blue walls and yellow floor areas.](48d61f7cf40bacce4d63f9e98ea225fb_img.jpg)
+
+Figure 7: Failure in medium mazes. Two side-by-side images of a medium maze. The left image shows a red trajectory that appears to pass through a wall (indicated by a red circle). The right image shows a more successful trajectory that avoids the wall. The maze consists of blue walls and yellow floor areas.
+
+Figure 7: **Failure in medium mazes.** The agent plans impossible trajectories on certain states (red circles).
+
+{7}------------------------------------------------
+
+![Figure 8: D4RL results. A grid of bar charts showing average normalized scores for 12 tasks. The tasks are arranged in two rows: Average, hopper-r, hopper-mr, walker2d-r, walker2d-mr, halfcheetah-r, halfcheetah-mr (top row); Average, hopper-m, hopper-me, walker2d-m, walker2d-me, halfcheetah-m, halfcheetah-me (bottom row). Each chart compares Model-free (green), Model-based (grey), and LEQ (Ours) (blue) methods. LEQ consistently achieves high scores, often comparable to or exceeding the best model-based methods.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 8: D4RL results. A grid of bar charts showing average normalized scores for 12 tasks. The tasks are arranged in two rows: Average, hopper-r, hopper-mr, walker2d-r, walker2d-mr, halfcheetah-r, halfcheetah-mr (top row); Average, hopper-m, hopper-me, walker2d-m, walker2d-me, halfcheetah-m, halfcheetah-me (bottom row). Each chart compares Model-free (green), Model-based (grey), and LEQ (Ours) (blue) methods. LEQ consistently achieves high scores, often comparable to or exceeding the best model-based methods.
+
+Figure 8: **D4RL results.** Each graph displays the average normalized score over 100 trials. LEQ achieves comparable results with state-of-the-art model-based and model-free offline RL methods.
+
+![Figure 9: V-D4RL results. A grid of bar charts showing average normalized scores for 8 tasks. The tasks are arranged in two rows: Average, walker_walk-r, walker_walk-mr, cheetah_run-r, cheetah_run-mr (top row); Average, walker_walk-m, walker_walk-me, cheetah_run-m, cheetah_run-me (bottom row). Each chart compares Model-free (green), Model-based (grey), and LEQ (Ours) (blue) methods. LEQ shows comparable results with state-of-the-art offline visual control methods.](d864789b0d8384da1d22fd6a5d76bbdf_img.jpg)
+
+Figure 9: V-D4RL results. A grid of bar charts showing average normalized scores for 8 tasks. The tasks are arranged in two rows: Average, walker\_walk-r, walker\_walk-mr, cheetah\_run-r, cheetah\_run-mr (top row); Average, walker\_walk-m, walker\_walk-me, cheetah\_run-m, cheetah\_run-me (bottom row). Each chart compares Model-free (green), Model-based (grey), and LEQ (Ours) (blue) methods. LEQ shows comparable results with state-of-the-art offline visual control methods.
+
+Figure 9: **V-D4RL results.** Each graph displays the average normalized score over 100 trials. LEQ shows comparable results with state-of-the-art offline visual control methods.
+
+### 5.4 RESULTS ON MUJOCo GYM LOCOMOTION TASKS
+
+For the NeoRL benchmark in Figure 6, **LEQ** outperforms most of the prior works, especially in the Hopper and Walker2d domains. Furthermore, for D4RL MuJoCo Gym tasks in Figure 8, **LEQ** achieves comparable results with the best score of prior works in 7 out of 12 tasks. These results show that **LEQ** serves as a general offline RL algorithm, widely applicable to various domains.
+
+Similar to antmaze-medium, **LEQ** experiences high variance in MuJoCo tasks. During training, **LEQ** often achieves high performance, but then, suddenly falls back to 0, as shown in Figure 10. This is mainly because the learned models sometimes fail to capture failures (e.g. hopper and walker falling off) and predict an optimistic future (e.g. hopper and walker walking forward).
+
+![Figure 10: High variance during training. Two line graphs showing Return vs. Iterations (x10^6). The left graph is for Hopper-H (NeoRL) and the right is for walker2d-m (D4RL). Both graphs show a highly oscillatory return, with sharp drops to zero followed by rapid recovery, indicating instability during training.](643d86ebba41e16a88461bfcb3741de6_img.jpg)
+
+Figure 10: High variance during training. Two line graphs showing Return vs. Iterations (x10^6). The left graph is for Hopper-H (NeoRL) and the right is for walker2d-m (D4RL). Both graphs show a highly oscillatory return, with sharp drops to zero followed by rapid recovery, indicating instability during training.
+
+Figure 10: **High variance during training.** Our algorithm experiences oscillation due to optimistic imaginations near the initial states.
+
+### 5.5 RESULTS WITH VISUAL INPUTS
+
+As shown in Figure 9, **LEQ** combined with DreamerV3 (Hafner et al., 2023) performs on par with the state-of-the-art methods on V-D4RL datasets, demonstrating its scalability to visual observations. Notably, **LEQ** achieves the highest score on the *walker\_walk-medium\_expert* dataset among model-based methods, where **OfflineDV2** and **MOPO** struggles. **LEQ** also outperforms model-free approaches on random datasets and *walker\_walk-medium\_replay* dataset, highlighting the strength of model-based methods in datasets with diverse state-action distributions.
+
+{8}------------------------------------------------
+
+Table 1: **Impact of lower expectile Q-learning and  $\lambda$ -returns on AntMaze.** We ablate the effects of lower expectile and  $\lambda$ -returns on the critic and policy updates in **LEQ**. The design choices from **LEQ** are colored in **blue** and other options are colored in **red**. The results are averaged over 5 seeds.
+
+| conservatism | Design choices |  | umaze |  | medium |  | large |  | ultra |  | Total |
+|-|-|-|-|-|-|-|-|-|-|-|-|
+|  | critic update | policy update | umaze | diverse | play | diverse | play | diverse | play | diverse |  |
+| Lower expectile | $\lambda$ -returns | $\lambda$ -returns | <b>94.4</b> <small>±6.3</small> | <b>71.0</b> <small>±12.3</small> | 50.2 <small>±30.9</small> | 46.2 <small>±23.2</small> | <b>58.6</b> <small>±5.1</small> | <b>60.2</b> <small>±18.3</small> | 25.8 <small>±18.2</small> | 55.8 <small>±18.3</small> | <b>461.8</b> |
+| Lower expectile | $H$ -step | $H$ -step | <b>83.0</b> <small>±3.4</small> | 60.7 <small>±10.4</small> | 46.3 <small>±33.4</small> | 0.0 <small>±0.0</small> | <b>57.0</b> <small>±23.6</small> | 33.3 <small>±6.0</small> | 0.0 <small>±0.0</small> | 0.0 <small>±0.0</small> | 296.3 |
+| Lower expectile | 1-step | $Q(s, a)$ | <b>89.0</b> <small>±4.4</small> | 37.0 <small>±32.8</small> | 55.8 <small>±28.7</small> | 29.8 <small>±24.5</small> | 34.2 <small>±13.4</small> | 49.3 <small>±9.0</small> | <b>42.2</b> <small>±13.2</small> | 35.6 <small>±23.0</small> | 373.5 |
+| Lower expectile | $\lambda$ -returns | $Q(s, a)$ | 81.0 <small>±10.5</small> | 46.2 <small>±16.0</small> | <b>61.8</b> <small>±12.4</small> | 40.6 <small>±11.4</small> | 39.2 <small>±12.5</small> | 40.5 <small>±11.7</small> | <b>42.8</b> <small>±21.8</small> | 47.5 <small>±5.9</small> | 410.3 |
+| Lower expectile | $\lambda$ -returns | <b>AWR</b> | 69.2 <small>±7.5</small> | 44.4 <small>±18.4</small> | 0.6 <small>±0.6</small> | 0.0 <small>±0.0</small> | 0.0 <small>±0.0</small> | 0.0 <small>±0.0</small> | 0.0 <small>±0.0</small> | 0.0 <small>±0.0</small> | 114.2 |
+| <b>MOBILE</b> | $\lambda$ -returns | $\lambda$ -returns | 84.3 <small>±3.5</small> | 40.3 <small>±20.4</small> | 51.3 <small>±9.0</small> | 39.7 <small>±12.3</small> | 28.3 <small>±21.5</small> | 33.7 <small>±10.0</small> | 38.0 <small>±27.1</small> | 23.3 <small>±4.9</small> | 338.9 |
+| <b>MOBILE</b> | 1-step | $Q(s, a)$ | 59.5 <small>±3.5</small> | 46.5 <small>±1.5</small> | 57.0 <small>±11.0</small> | <b>54.0</b> <small>±9.0</small> | 23.5 <small>±19.5</small> | 38.5 <small>±1.5</small> | 39.5 <small>±11.5</small> | 20.5 <small>±20.5</small> | 339.0 |
+
+### 5.6 ABLATION STUDIES
+
+To deeply understand how **LEQ** (**LEQ- $\lambda$** ) work, we conduct ablation studies in AntMaze environments and answer to the following five questions: (1) Is **lower expectile Q-learning** better than prior uncertainty-based penalization methods? (2) Does **lower expectile policy learning** better than existing policy learning methods? (3) Does  **$\lambda$ -return** help? (4) Which factor enables **LEQ** to work in AntMaze? and (5) How do **imagination length  $H$**  and **data expansion** affect the performance?
+
+(1) **Lower expectile Q-learning.** We compare our *lower expectile Q-learning* with the conservative value estimator in **MOBILE** (Sun et al., 2023), which penalizes Q-values based on the standard deviation of Q-ensemble networks. In Table 1, replacing lower expectile Q-learning with **MOBILE** decreases the success rate, both with  $\lambda$ -returns (461.8 vs 338.9) and without them (373.5 vs 339.0).
+
+(2) **Lower expectile policy learning.** We also compare our *lower expectile policy learning* with **AWR** (Peng et al., 2019) and directly maximizing  $Q(s, a)$ . As shown in Table 1, **LEQ** shows better performance compared to **AWR** (461.8 vs 114.2) and maximizing the  $Q$ -values (461.8 vs 410.3).
+
+(3)  **$\lambda$ -returns.** The first three rows of Table 1 show the effect of  $\lambda$ -returns in **LEQ**. Substituting  $\lambda$ -returns with  $H$ -step returns (461.8 vs 290.3) or 1-step returns (461.8 vs 373.5) significantly decreases the performance. Moreover, while **LEQ** shows better performance than **MOBILE** without  $\lambda$ -returns (373.5 vs 339.0), the performance of **LEQ** gets significantly better with  $\lambda$ -returns, compared to **MOBILE** with  $\lambda$ -returns (461.8 vs 338.9).
+
+(4) **What makes model-based offline RL work in AntMaze?** **LEQ** shows outstanding performance compared to previous offline model-based RL methods, especially in large and ultra mazes. To understand which aspects of **LEQ** enabled this success, we applied its changes to **MOBILE** and analyzed the impact. The results are detailed in Table 2.
+
+We first re-implement **MOBILE** with some technical tricks used in **LEQ** (denoted as **MOBILE\***): LayerNorm (Ba et al., 2016), SymLog (Hafner et al., 2023), single Q-network, and no target Q-value clipping. However, **MOBILE\*** still achieves a barely non-zero score, 14.0.
+
+Table 2: **Impact of hyperparameters in **MOBILE\*** on AntMaze.** **MOBILE\*** uses the hyperparameters from **MOBILE**:  $\beta = 0.95$ ,  $\gamma = 0.99$ , and  $R = 5$ , whereas **LEQ** uses  $\beta = 0.25$ ,  $\gamma = 0.997$ , and  $R = 10$ . The results show that  $\beta$  is the most critical hyperparameter that makes **MOBILE\*** work in AntMaze.
+
+| Hyperparameters. |  | umaze | diverse | medium |  | large |  | ultra |  | Total |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|
+| $\beta$ | $\gamma$ |  |  | play | diverse | play | diverse | play | diverse |  |  |
+| 0.25 | 0.997 | 10 | 53.8 <small>±26.8</small> | <b>22.3</b> <small>±22.2</small> | 54.0 <small>±5.8</small> | <b>49.5</b> <small>±6.2</small> | <b>28.3</b> <small>±6.0</small> | <b>28.0</b> <small>±11.4</small> | <b>25.5</b> <small>±6.9</small> | <b>23.8</b> <small>±15.8</small> | <b>285.3</b> |
+| 0.25 | 0.997 | 5 | <b>74.0</b> <small>±6.9</small> | 3.7 <small>±2.6</small> | 54.7 <small>±27.9</small> | 28.0 <small>±9.6</small> | 18.7 <small>±18.6</small> | 8.0 <small>±13.4</small> | 9.7 <small>±8.2</small> | 9.0 <small>±3.7</small> | 205.7 |
+| 0.25 | 0.99 | 10 | 39.7 <small>±24.4</small> | 5.0 <small>±7.1</small> | 39.3 <small>±27.9</small> | 38.0 <small>±15.0</small> | 0.0 <small>±0.0</small> | 3.7 <small>±5.2</small> | 0.0 <small>±0.0</small> | 0.0 <small>±0.0</small> | 125.7 |
+| 0.25 | 0.99 | 5 | <b>77.0</b> <small>±6.4</small> | 20.4 <small>±15.7</small> | <b>64.6</b> <small>±11.1</small> | 31.6 <small>±16.9</small> | 2.6 <small>±2.8</small> | 7.2 <small>±4.9</small> | 4.6 <small>±5.0</small> | 5.0 <small>±4.6</small> | 213.0 |
+| 0.95 | 0.997 | 10 | 0.0 <small>±0.0</small> | 0.0 <small>±0.0</small> | 1.8 <small>±3.0</small> | 0.5 <small>±0.9</small> | 0.2 <small>±0.4</small> | 2.2 <small>±2.3</small> | 1.0 <small>±1.7</small> | 0.0 <small>±0.0</small> | 5.7 |
+| 0.95 | 0.997 | 5 | 0.0 <small>±0.0</small> | 0.0 <small>±0.0</small> | 7.2 <small>±4.1</small> | 1.6 <small>±2.1</small> | 9.6 <small>±7.1</small> | 5.4 <small>±4.9</small> | 0.0 <small>±0.0</small> | 1.8 <small>±2.7</small> | 25.6 |
+| 0.95 | 0.99 | 10 | 0.0 <small>±0.0</small> | 0.0 <small>±0.0</small> | 5.0 <small>±5.1</small> | 0.6 <small>±1.2</small> | 7.4 <small>±14.8</small> | 1.6 <small>±3.2</small> | 0.0 <small>±0.0</small> | 0.0 <small>±0.0</small> | 14.6 |
+| 0.95 | 0.99 | 5 | 1.0 <small>±2.0</small> | 0.0 <small>±0.0</small> | 6.4 <small>±5.5</small> | 5.0 <small>±5.0</small> | 0.8 <small>±1.6</small> | 0.8 <small>±1.2</small> | 0.0 <small>±0.0</small> | 0.0 <small>±0.0</small> | 14.0 |
+
+{9}------------------------------------------------
+
+Table 3: **LEQ with different imagination length  $H$  and data expansion.** A longer  $H$  can mitigate critic biases, while increasing model errors, which leads to poor performance. Each number is averaged over 5 random seeds.
+
+| Dataset | $H = 10$ (ours) | $H = 5$ | $H = 15$ | w/o dataset expansion |
+|-|-|-|-|-|
+| antmaze-umaze | <b>94.4</b> $\pm 6.3$ | <b>95.2</b> $\pm 1.7$ | <b>98.6</b> $\pm 0.5$ | <b>97.4</b> $\pm 1.4$ |
+| antmaze-umaze-diverse | <b>71.0</b> $\pm 12.3$ | <b>67.2</b> $\pm 9.1$ | <b>70.7</b> $\pm 15.2$ | 63.0 $\pm 23.2$ |
+| antmaze-medium-play | 58.8 $\pm 33.0$ | 46.4 $\pm 31.9$ | <b>76.3</b> $\pm 17.2$ | 58.2 $\pm 28.0$ |
+| antmaze-medium-diverse | <b>46.2</b> $\pm 23.2$ | 18.6 $\pm 28.7$ | 30.3 $\pm 40.1$ | 28.6 $\pm 33.7$ |
+| antmaze-large-play | 58.6 $\pm 19.1$ | 48.6 $\pm 15.4$ | <b>62.0</b> $\pm 9.9$ | 56.0 $\pm 9.8$ |
+| antmaze-large-diverse | <b>60.2</b> $\pm 18.2$ | 35.2 $\pm 18.7$ | 33.0 $\pm 3.2$ | <b>57.0</b> $\pm 4.5$ |
+| antmaze-ultra-play | 25.8 $\pm 18.2$ | <b>54.2</b> $\pm 10.8$ | 0.0 $\pm 0.0$ | 39.2 $\pm 15.1$ |
+| antmaze-ultra-diverse | <b>55.8</b> $\pm 18.3$ | 39.4 $\pm 6.1$ | 0.0 $\pm 0.0$ | 36.0 $\pm 12.0$ |
+| <b>Total</b> | <b>470.4</b> | 404.8 | 371.0 | 435.4 |
+
+We found that reducing the ratio  $\beta$  between the losses from imaginary rollouts and dataset transitions is key to make **MOBILE\*** work (i.e. achieving meaningful performances in umaze and medium mazes, with a total score of 213.0). This adjustment also allows for a higher discount rate and longer imagination horizon, yielding the best results for **MOBILE\***. We suggest that utilizing the true transition from the dataset is important in long-horizon tasks, which has been undervalued in prior works. We provide additional extensive ablation results on **LEQ** in Appendix E.
+
+**(5) Imagination length  $H$  and dataset expansion.** As shown in Table 3, the performance increases when it goes to  $H = 10$  from  $H = 5$ , but it drops when  $H = 15$ . This result shows the trade-off of using the world model – the further the agent imagines, the more the agent becomes robust to the error of the critic, but the more it becomes prone to the error from the model prediction.
+
+We also evaluate **LEQ** without the dataset expansion. In AntMaze, the results with and without the dataset expansion are similar, as shown in Table 3. On the other hand, the dataset expansion makes the policy more stable and better in the D4RL MuJoCo tasks (in Appendix, Table 20).
+
+## 6 LIMITATIONS
+
+Following prior work on model-based offline RL (Sun et al., 2023; Jeong et al., 2023), we assume access to the ground-truth *termination function* of a task, different from online model-based RL approaches, which learn a termination function from interactions. As shown in Table 22, Using a learned termination function instead of the ground-truth termination function results in a significant performance drop (461.8  $\rightarrow$  232.6), particularly in diverse datasets (233.2  $\rightarrow$  66.8), where termination signals are limited because the dataset is collected by navigating to randomly selected goals. While relying on the ground-truth termination function simplifies the problem, it limits the applicability of the method to scenarios where this information is readily available. Extending the proposed approach to learn terminal signals from the dataset would be an immediate next step.
+
+## 7 CONCLUSION
+
+In this paper, we propose a novel offline model-based reinforcement learning method, LEQ, which uses *expectile regression* to get a *conservative evaluation* of a policy from model-generated trajectories. Expectile regression eases the pain of constructing the whole distribution of Q-targets and allows for learning a conservative Q-function via sampling. Combined with  $\lambda$ -returns in both critic and policy updates for the imaginary rollouts, the policy can receive learning signals that are more robust to both model errors and critic errors. We empirically show that LEQ robustly improves the performance of model-based approaches in various domains, including state-based locomotion, long-horizon navigation, and visual control tasks.
+
+## ACKNOWLEDGMENTS
+
+We would like to thank Junik Bae for helpful discussion. This work was supported in part by the Institute of Information & Communications Technology Planning & Evaluation (IITP) grant
+
+ Rest of paper (reference and Appendix) is removed.

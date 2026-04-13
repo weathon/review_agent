@@ -1,0 +1,354 @@
+
+
+{0}------------------------------------------------
+
+# MITIGATING OBJECT HALLUCINATION IN LARGE VISION-LANGUAGE MODELS VIA IMAGE-GROUNDED GUIDANCE
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+The advancement of Large Vision-Language Models (LVLMs) has increasingly highlighted the critical issue of their tendency to hallucinate non-existing objects in the images. To address this issue, previous works focused on using specially curated datasets or powerful LLMs (e.g., GPT-3.5) to rectify the outputs of LVLMs. However, these approaches require either expensive training/fine-tuning or API access to advanced LLMs for post-generation correction. In response to these limitations, we propose **Mitigating hallucinAtion via image-gRounded guIdaNcE (MARINE)**, a framework that is both *training-free* and *API-free*. MARINE effectively and efficiently reduces object hallucinations during inference by introducing image-grounded guidance to LVLMs. This is achieved by leveraging open-source vision models to extract object-level information, thereby enhancing the precision of LVLM-generated content. Our framework’s flexibility further allows for the integration of multiple vision models, enabling more reliable and robust object-level guidance. Through comprehensive evaluations across 5 popular LVLMs with diverse evaluation metrics and benchmarks, we demonstrate the effectiveness of MARINE, which even outperforms existing fine-tuning-based methods. Remarkably, it reduces hallucinations consistently in GPT-4V-assisted evaluation while maintaining the detailedness of LVLMs’ generations.
+
+## 1 INTRODUCTION
+
+The advent of Large Language Models (LLMs) has motivated advancements in extending their remarkable capabilities to multimodal data. Grounded in the development of pre-trained vision-language models (Radford et al., 2021; Jia et al., 2021; Alayrac et al., 2022) that align visual and textual embedding spaces, Large Vision Language Models (LVLMs) have gained substantial attention in both architectural development (Liu et al., 2023d; Zhu et al., 2023; Ye et al., 2023; Dai et al., 2023a; Gao et al., 2023), alignment (Yu et al., 2024; Zhou et al., 2024; Deng et al., 2024) and benchmarking datasets (Xu et al., 2023; Lu et al., 2024; Zhang et al., 2024a). However, similar to the hallucination issues in textual LLMs (Ji et al., 2023), where irrelevant content is generated with input prompts, LVLMs face a specific challenge known as object hallucination: generating non-existing objects for a given image (Li et al., 2023b; Wang et al., 2023b; Zhou et al., 2023; Fu et al., 2023; Lovenia et al., 2023; Jing et al., 2023). Such a problem is particularly concerning as it compromises the model’s accuracy and reliability, especially considering the growing application of LVLMs to safety-critical downstream tasks such as medical imaging (Chambon et al., 2022; Bazi et al., 2023).
+
+In response to the pressing issue of object hallucinations in LVLMs, early attempts (Liu et al., 2023a;b; Gunjal et al., 2023; Wang et al., 2023a) focused on addressing the bias by curating high-quality datasets for fine-tuning or leveraging advanced GPT queries (Yin et al., 2023), such as GPT-4, to post-process the generated captions. However, these methods can be infeasible to implement. For instance, creating extensive, high-quality datasets for fine-tuning LVLMs is costly and requires significant human annotation. Additionally, relying on advanced GPT models for post-processing is expensive and can raise privacy concerns, especially in sensitive fields like medical imaging. Most importantly, these approaches do not address the *intrinsic* causes of object hallucination in LVLMs. Specifically, fine-tuning simply provides more data for the LVLM to learn, which can lead to overfitting to a particular dataset, as seen with methods like LURE (Zhou et al., 2023). Post-processing methods may also introduce new hallucinations, as they do not inherently correct the root cause of hallucinations in LLMs or LVLMs but just overwrite the generated response.
+
+{1}------------------------------------------------
+
+![Figure 1: Illustration of the MARINE framework. The diagram shows an input image of a desk with a keyboard and a cup. A Vision Encoder (LVLM) and a Vision Toolbox (containing Guidance Models) process the image. The LVLM produces an alignment (LVLM) and the Vision Toolbox produces image-grounded guidance (focusing on visible objects). The LVLM also produces a task description 'Describe this image in detail.' which is tokenized. The LLM Decoder uses the task description and the image-grounded guidance to produce output logits. The logits are controlled by the guidance strength gamma. The final output is 'This image shows a keyboard and a magazine'.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+The diagram illustrates the MARINE framework. An input image of a desk with a keyboard and a cup is processed by a Vision Encoder (LVLM) and a Vision Toolbox containing Guidance Models. The LVLM produces an alignment (LVLM) and the Vision Toolbox produces image-grounded guidance (focusing on the visible objects in this image). The LVLM also produces a task description 'Describe this image in detail.' which is tokenized. The LLM Decoder uses the task description and the image-grounded guidance to produce output logits. The logits are controlled by the guidance strength  $\gamma$ . The final output is 'This image shows a keyboard and a magazine'.
+
+Figure 1: Illustration of the MARINE framework. The diagram shows an input image of a desk with a keyboard and a cup. A Vision Encoder (LVLM) and a Vision Toolbox (containing Guidance Models) process the image. The LVLM produces an alignment (LVLM) and the Vision Toolbox produces image-grounded guidance (focusing on visible objects). The LVLM also produces a task description 'Describe this image in detail.' which is tokenized. The LLM Decoder uses the task description and the image-grounded guidance to produce output logits. The logits are controlled by the guidance strength gamma. The final output is 'This image shows a keyboard and a magazine'.
+
+Figure 1: Illustration of MARINE framework, which introduces a vision toolbox with one or multiple guidance models to enrich the visual context of the original LVLM. The output logits are controlled to place more importance on the guided generation with the guidance strength  $\gamma$ .
+
+In this paper, we investigate the intrinsic causes of object hallucination in LVLMs. Specifically, these deficiencies may stem from the three main components of the LVLMs: 1) insufficient visual context provided by the visual encoder (Zhang et al., 2023b), 2) misalignment between the vision and text domains, and 3) inherent hallucinations common in general language models. To address the first two LVLM-specific causes, we introduce Mitigating hallucinAtion via image-gRounded guidaNcE (MARINE). MARINE mitigates hallucination issues arising from the visual encoder and domain misalignment by leveraging external guidance from image-grounded models, such as object detection models. Our approach leverages the inherent advantage of these image-grounded models, which are specifically designed and trained for more detailed visual information extraction. These models provide higher quality, fine-grained visual encoding compared to the standard visual encoders in LVLMs, which are primarily optimized for grasping the overall context of an image. Furthermore, we integrate the guidance from image-grounded models into text descriptions, allowing the LVLM to process the information without requiring additional alignment procedures. As a result, MARINE is a training-free, API-free<sup>1</sup> method that addresses object hallucination at inference time by targeting its two root causes.
+
+As shown in Figure 1, MARINE incorporates one or more image-grounding models to enrich the visual context of LVLMs. The guidance are then aggregated as prompt input to the LLM decoder to improve the response quality. Empirical evaluations are conducted on five widely-recognized LVLMs across benchmarks including MSCOCO (Lin et al., 2014), LLaVA-QA90 task (Liu et al., 2023d), A-OKVQA (Schwenk et al., 2022), and GQA (Hudson & Manning, 2019). We present results based on guidance from an aggregated source of DETR (DEtection TRansformer) (DETR) (Carion et al., 2020) and RAM++ (Huang et al., 2023b). We also include ideal results based on ground truth object oracle, denoted as MARINE-Truth. Our experimental results demonstrate that, in comparison with state-of-the-art algorithms, MARINE exhibits further reduced hallucination, as measured by popular hallucination metrics such as CHAIR (Rohrbach et al., 2018) and POPE (Li et al., 2023b), as well as additional metrics considered in this study including the recall and GPT-4V’s evaluation of the responses. These results confirm that MARINE can effectively mitigate object hallucinations without requiring additional training resources or access to advanced LLMs. To summarize, our contribution are listed as follows:
+
+- We introduce MARINE, a universal framework and aggregating a toolbox of image-grounded visual models to guide the generation process of LVLMs. MARINE leverages the intrinsic advantages of these visual models in providing the detailed information of the input image and help mitigate the hallucinations in LVLMs.
+- Through extensive evaluations on various datasets, we demonstrate that MARINE consistently outperform the baselines in hallucination mitigation while maintaining overall performance across multiple tasks (image captioning, VQA).
+- MARINE provides a favorable trade-off between latency and accuracy, with the lowest computational overhead compared to existing baselines. The minimal increase in latency comparing to the
+
+<sup>1</sup>The term “API-free” in denotes the elimination of any need for API calls to OpenAI. We note that Woodpecker requires 3-5k input tokens for an API call to each short captioning task.
+
+{2}------------------------------------------------
+
+baselines, combined with the high accuracy of our results, positions **MARINE** as a practical and scalable solution for real-world applications without significant computational cost.
+
+## 2 RELATED WORK
+
+**Object Hallucination in Large Vision-Language Models.** Since the introduction of recent Large Vision-Language Models (LVLMs) (Liu et al., 2023d; Zhu et al., 2023; Ye et al., 2023; Dai et al., 2023a; Gao et al., 2023), the hallucination phenomenon in these models has gathered significant attention in the research community. This issue was first highlighted by Li et al. (2023b) with subsequent studies (Wang et al., 2023b; Zhou et al., 2023; Fu et al., 2023; Lovenia et al., 2023) that, LVLMs exhibit similar hallucination problems as the textual LLMs. Notably, different from textual LLMs, LVLMs are prone to a unique type of hallucination called ‘object hallucination’ (Rohrbach et al., 2018), where the model falsely perceives the presence of non-existent objects in images. In response to object hallucination problems, efforts have been made to mitigate object hallucination in smaller image captioning models (Biten et al., 2022; Dai et al., 2023b). Regarding the recent development of LVLMs, several works (Liu et al., 2023b; Gunjal et al., 2023) proposed vision-language fine-tuning datasets aimed for improved robustness. Wang et al. (2023a) leveraged the vision-language model to generate more diverse instruction-tuning data and iteratively correct the inaccuracies in data. Zhai et al. (2023) introduced a GPT-4 assisted evaluation method and also a fine-tuning strategy using the MSCOCO dataset. Most related to our setting, Yin et al. (2023) proposed Woodpecker, a five-stage training-free method eventually leveraging GPT-3.5 API for hallucination correction. Concurrently, several works (Leng et al., 2023; Huang et al., 2023a; Chen et al., 2024; Liu et al., 2024; Wan et al., 2024; Zhang et al., 2024b) began to focus on the training-free setting and can similarly be formulated as approaches using Classifier-Free Guidance (CFG). However, these approaches and **MARINE** differ in the focus of their method designs within the larger framework of CFG. With detailed discussion deferred to Appendix A, we highlight that **MARINE** operates at the image level and uniquely employs a vision toolbox to ensemble information from multiple vision models, producing guidance that reaches a consensus among the models for more accurate results. These approaches are further complementary to **MARINE**, and integrating them could pave the way for a more effective strategy in future research.
+
+**Controllable Generation.** Controllable text generation (Prabhumoye et al., 2020; Hu & Li, 2021; Zhang et al., 2023a) has emerged as a vital research domain, focusing on the generation of natural sentences with controllable attributes such as persona (Prabhumoye et al., 2020; Hu & Li, 2021; Zhang et al., 2023a) and politeness (Niu & Bansal, 2018; Madaan et al., 2020). Among the various approaches, fine-tuning has been recognized as the most straightforward approach, achieved either through full fine-tuning (Li & Liang, 2021; Ouyang et al., 2022; Carlsson et al., 2022) or integrating tunable adaptors (Lin et al., 2021; Ribeiro et al., 2021). While fine-tuning has been effective in a wide range of applications, it is also expensive in computation as the size of LLMs is growing tremendously. Recently, there has been a development on controllable generation with diffusion models (Li et al., 2022; Lin et al., 2023b), extending to controllable text-to-image generation (Yang et al., 2023). Particularly, the use of classifier guidance (Dhariwal & Nichol, 2021) and classifier-free guidance (Ho & Salimans, 2021) has become prominent in refining the quality of generated outputs. Most recently, Sanchez et al. (2023) applied classifier-free guidance to language models in the *single-modal* setting to improve their performance at inference time. Our approach methodologically resembles classifier-free guidance for LVLMs’ text generation, while specifically addressing the *multi-modal* context and focusing on reducing hallucinations.
+
+## 3 PRELIMINARIES
+
+**Notation.** We use lower case letters, lower case bold face letters, and upper case bold face letters to denote scalars, vectors, and matrices respectively. We use the symbol  $p$  to represent the conditional probability of LLM’s response. And we denote the sequence of tokens generated before the  $t$ -th token as  $\mathbf{y}_{<t} = [y_1, \dots, y_{t-1}]$  for  $t > 1$ .  $\mathbf{y}_{<t}$  is an empty sequence when  $t = 1$ .
+
+**Generative language models.** Let  $p_\theta$  denotes an LLM parameterized by  $\theta$ . Consider a sequence  $\mathbf{x} = [x_1, \dots, x_n]$  as the input prompt, where each  $x_i$  is a token from a predefined vocabulary. The LLM then generates the response sequence  $\mathbf{y} = [y_1, \dots, y_m]$  by sampling from the conditional probability distribution  $p_\theta(\cdot | \mathbf{x})$ , where  $y_t$  denotes individual token for  $1 \leq t \leq m$ . The conditional distribution  $p_\theta(\mathbf{y} | \mathbf{x})$  can therefore be expressed as  $p_\theta(\mathbf{y} | \mathbf{x}) = \prod_{t=1}^m p_\theta(y_t | \mathbf{x}, \mathbf{y}_{<t})$ , where  $\mathbf{y}_{<t} = [y_1, \dots, y_{t-1}]$  for  $t > 1$  and is empty for  $t = 1$ . In the case of LVLMs, visual tokens  $\mathbf{b} = [v_1, \dots, v_k]$
+
+{3}------------------------------------------------
+
+are additionally included. These tokens are generated from a pre-trained visual encoder and mapped into the token space through a linear projection. The conditional distribution of output  $y$  given the visual tokens  $b$  and textual prompt  $x$  is expressed as  $p_\theta(y|b, x) = \prod_{t=1}^T p_\theta(y_t|b, x, y_{<t})$ , where  $p_\theta$  is approximated by LVLMMs.
+
+**Guidance in generative models.** The process of a guided generation involves getting the output  $y$  conditioned on input  $x$ , which encodes the desired properties of the output  $y$ . This guidance can be generally added to the model by two distinct approaches: classifier guidance (Dhariwal & Nichol, 2021) and classifier-free guidance (Ho & Salimans, 2021). As a top-level view, both methods formulate the conditional probability distribution of output  $y$  conditioned on guidance  $x$  as
+
+$$p(y|x) \propto p_\theta(y)p(x|y)^\gamma, \quad (3.1)$$
+
+where  $p_\theta(y)$  is the original generative model and  $p(x|y)$  is the posterior distribution of  $x$  given  $y$  and  $\gamma$  is the guidance strength. In the classifier guidance, the posterior distribution  $p(x|y)$  in equation 3.1 is replaced by a classifier  $p_\phi(x|y)$  parameterized by  $\phi$ , which requires additional training step and calculating  $\nabla_x \log p_\phi(x|y)$ . The classifier-free guidance, on the other hand, removes the necessity of the parameterized classifier  $f_\phi$ . Instead, according to the Bayes rule, the posterior distribution can be approximated by  $p_\theta(x|y) \propto p_\theta(y|x)/p_\theta(y)$ , where  $p_\theta(y|x)$  is the generative model when taking  $x$  as prompt input. Plugging this back into equation 3.1 yields the guided distribution that can be approximated by
+
+$$\hat{p}_\theta(y|x) \propto p_\theta(y) \cdot p_\theta(y|x)^\gamma / p_\theta(y)^\gamma = p_\theta(y|x)^\gamma / p_\theta(y)^{\gamma-1}.$$
+
+As a result, the guided LLM  $\hat{p}_\theta$  places more importance on the prompt  $x$  during generation with the increasing value of  $\gamma$ , thereby producing texts that better align with the desired behavior from the prompt (Sanchez et al., 2023).
+
+## 4 METHOD
+
+The existing architecture of LVLMMs is usually composed of a visual encoder, a visual and textual domain alignment layer, and the LLM itself. Therefore, besides the inherent language priors of LLMs (Biten et al., 2022), object hallucination may arise from (1) deficiencies in the visual encoder providing insufficient visual information (Zhang et al., 2023b) and (2) misalignment between the visual and textual domains. To mitigate object hallucinations, we introduce MARINE, a framework containing two major components to address the aforementioned challenges: (1) introducing additional visual information from a set of vision models and (2) using the additional aggregated visual features to guide the LVLMM’s generation. In Figure 1, we present the framework overview.
+
+### 4.1 VISUAL GUIDANCE FROM IMAGE-GROUNDED FEATURES
+
+To introduce image-grounded guidance to mitigate hallucinations, our approach integrates additional object detection models, which differ from the visual encoders used in LVLMM that are usually pre-trained from CLIP (Radford et al., 2021). This integration leverages the object detection models to extract detailed visual information from images. Upon acquiring these extra visual information from different image-grounded models, we aggregate and translate the collected information into textual information. This aggregation can be done by the language model (Lin et al., 2023a) or rule based algorithm (Bird et al., 2009). Such an information aggregation is effective and efficient, as it eliminates the necessity of fine-tuning the alignment layer while retaining the rich information encoded by various of image grounding models. We subsequently employ a simple prompt “focusing on the visible objects in this image:” and concatenate it with the aggregated object information, denoted as the guidance prompt  $c$ .
+
+### 4.2 GUIDED TEXT GENERATION WITH VISUAL INFORMATION
+
+We tackle the object hallucination problem of LVLMMs by specifically placing importance on the additional image-grounded information we introduced. In addition to the visual tokens  $b$  extracted from the original LVLMM and textual prompt  $x$ , we extract the auxiliary visual tokens  $c$  from the additional guidance models. The generation of the  $t$ -th token in the output  $y$  of our classifier-free guided LVLMM  $p_\theta$  is expressed as
+
+$$\hat{p}_\theta(y_t|b, c, x, y_{<t}) \propto p_\theta(y_t|b, c, x, y_{<t})^\gamma / p_\theta(y_t|b, x, y_{<t})^{\gamma-1},$$
+
+{4}------------------------------------------------
+
+where  $\mathbf{c}$  denotes our control guidance and  $\gamma$  is the control strength. The sampling of output generation is given by
+
+$$\hat{p}_\theta(\mathbf{y}|\mathbf{b}, \mathbf{c}, \mathbf{x}) = \prod_{t=1}^m \hat{p}_\theta(y_t|\mathbf{b}, \mathbf{c}, \mathbf{x}, \mathbf{y}_{<t}) \propto \prod_{t=1}^m \frac{p_\theta(y_t|\mathbf{b}, \mathbf{c}, \mathbf{x}, \mathbf{y}_{<t})^\gamma}{p_\theta(y_t|\mathbf{b}, \mathbf{x}, \mathbf{y}_{<t})^{\gamma-1}} = \frac{p_\theta(\mathbf{y}|\mathbf{b}, \mathbf{c}, \mathbf{x})^\gamma}{p_\theta(\mathbf{y}|\mathbf{b}, \mathbf{x})^{\gamma-1}}.$$
+
+We can further view MARINE in the logit space, where the  $t$ -th token is therefore sampled from the logit space by
+
+$$\log \hat{p}_\theta(y_t|\mathbf{b}, \mathbf{c}, \mathbf{x}, \mathbf{y}_{<t}) = \gamma \log p_\theta(\mathbf{y}|\mathbf{b}, \mathbf{c}, \mathbf{x}, \mathbf{y}_{<t}) + (1 - \gamma) \log p_\theta(\mathbf{y}|\mathbf{b}, \mathbf{x}, \mathbf{y}_{<t}).$$
+
+This linear combination of logits implies that the conditional generation on the additional image-grounded guidance acts as a controllable gate. Only objects with relatively high probabilities in both branches could appear at top when sampling. Specifically, setting  $\gamma = 0$  recovers the original LLM generation without control guidance and setting  $\gamma = 1$  produces the LLM generation entirely based on the control. Meanwhile, for  $\gamma \in (0, 1)$ , MARINE yields a combination of the original generation  $p_\theta(\mathbf{y}|\mathbf{b}, \mathbf{x})$  and the generation conditioned on the guidance  $p_\theta(\mathbf{y}|\mathbf{b}, \mathbf{c}, \mathbf{x})$ . This strikes a balance between a better ability to follow instructions to generate high-quality answers and the increased accuracy and detail in image descriptions. The formulation therefore shares resemblance to the classifier-free guidance introduced for LLMs (Sanchez et al., 2023), which places importance on the textual prompt itself to better align the LLM generation with user intention in the *single-modal* setting. We summarize MARINE in Algorithm 1. In detail, MARINE aggregates the collected visual information  $\{\mathbf{c}_i\}$ , using function Aggr., which can be a small language model for information aggregation (Lin et al., 2023a), or a rule-based algorithms like majority voting (as similarly used by Wang et al.). Notably, MARINE only double the LLM inference time of in Line 7 and Line 9, while adding the guidance from each single image grounded model will significantly increase the inference time when the number of image grounded models increase.
+
+#### --- **Algorithm 1** Mitigating hallucinAtion via image-gRounded guIdaNcE (MARINE) ---
+
+- 1: **Input:** LLM parameter  $\theta$ , input prompt  $\mathbf{x}$ , visual tokens  $\mathbf{b}$  from LVLMM’s original vision tower
+ - 2: **Input:** auxiliary visual tokens  $\{\mathbf{c}_i\}_{i=1}^M$  from  $M$  image grounding models, guidance scale  $\gamma$
+ - 3: Initialize empty output  $\mathbf{y} = []$ .
+ - 4: Aggregate visual information as textual prompt  $\mathbf{c} = \text{Aggr.}(\{\mathbf{c}_i\}_{i=1}^M)$
+ - 5: **for**  $t = 0, 1, \dots, T$  **do**
+ - 6:   Construct unconditional input  $\mathbf{x}_{\text{uncond}}^{(t)} = [\mathbf{b}, \mathbf{x}, \mathbf{y}_{<t}]$ .
+ - 7:   Generate unconditional output logits using LLM:  $\ell_{\text{uncond}}^{(t)} = \log p_\theta(\mathbf{x}_{\text{uncond}}^{(t)})$ .
+ - 8:   Construct conditional input  $\mathbf{x}_{\text{cond}}^{(t)} = [\mathbf{b}, \mathbf{c}, \mathbf{x}, \mathbf{y}_{<t}]$ .
+ - 9:   Generate conditional output logits using LLM:  $\ell_{\text{cond}}^{(t)} = \log p_\theta(\mathbf{x}_{\text{cond}}^{(t)})$ .
+ - 10:   Update output logits  $\ell^{(t)} = \gamma \ell_{\text{cond}}^{(t)} + (1 - \gamma) \ell_{\text{uncond}}^{(t)}$ .
+ - 11:   Sample token  $y_t$  from logit space denoted by  $\ell^{(t)}$ .
+ - 12:   Let  $\mathbf{y} = [\mathbf{y}, y_t]$ .
+ - 13: **end for**
+ - 14: **Output:**  $\mathbf{y}$ .
+- 
+
+## 5 EXPERIMENTS
+
+In this section, we evaluate MARINE in mitigating object hallucinations across various LVLMMs, showing that it outperforms state-of-the-art methods on established metrics across different question formats.
+
+### 5.1 EXPERIMENT SETUP
+
+**Models.** To demonstrate the broad applicability of our approach across different LVLM architectures, we apply and evaluate MARINE to recent widely-used models including *LLaVA* (Liu et al., 2023d), *LLaVA-v1.5* (Liu et al., 2023c), *MiniGPT-v2* (Chen et al., 2023), *mPLUG-Owl2* (Ye et al., 2023) and *InstructBLIP* (Liu et al., 2023c). To address the object hallucination problems in text generation, we incorporate the DEtection TRansformer (DETR) (Carion et al., 2020) and RAM++ (Huang et al., 2023b) as the additional vision models for guidance.
+
+**Guidance from Multiple Sources.** Our framework’s compatibility with various vision models allows for the incorporation of multiple sources to enhance precision and robustness. By considering
+
+{5}------------------------------------------------
+
+object-level information from DETR and RAM++ simultaneously, we generate guidance that reflects consensus across these models. This approach significantly improves the accuracy and reliability of the guidance provided to the LVLM.
+
+**Datasets and evaluations.** In alignment with established evaluations from previous studies (Dai et al., 2023b; Yin et al., 2023), we assess our method using the following metrics:
+
+- **Caption Hallucination Assessment with Image Relevance (CHAIR)** (Rohrbach et al., 2018). It involves prompting the LVLMs to generate a description for the input image, and then comparing this generation with ground truth objects present in the image. CHAIR quantifies hallucination both at instance level and sentence level, respectively defined as  $\text{CHAIR}_I$  and  $\text{CHAIR}_S$ :
+
+$$\text{CHAIR}_I = \frac{|\{\text{hallucinated objects}\}|}{|\{\text{all mentioned objects}\}|}, \quad \text{CHAIR}_S = \frac{|\{\text{captions with hallucinated objects}\}|}{|\{\text{all captions}\}|}.$$
+
+In addition to these metrics, we incorporate an instance-level Recall score in our evaluation to evaluate whether the descriptions accurately include the necessary visual content from the image:
+
+$$\text{Recall} = |\{\text{non-hallucinated objects}\}| / |\{\text{all existing objects}\}|.$$
+
+- **Polling-based Object Probing Evaluation (POPE)** (Li et al., 2023b). POPE formulates a binary classification task by prompting LVLMs with questions such as “Is there a keyboard in this image?” to answer “yes” or “no”. We specifically focus on the adversarial setting, which is considered the most challenging setting. Results for the random and popular settings are detailed in Appendix E. We report the accuracy and F1 score of the LVLMs’ responses, and the proportion of “yes” answers.
+- **GPT-4V-aided Evaluation** (Yin et al., 2023). The GPT-4V-aided evaluation compares the outputs of two LVLM assistants using GPT-4V as a judge. In this evaluation, we utilize the LLaVA-QA90 task (Liu et al., 2023d)<sup>2</sup> (including conversations, visual perceptions, and complex reasoning tasks) and additionally consider the image captioning task.
+
+Consistent with Li et al. (2023b), we randomly sampled a subset of 500 images from MSCOCO (Lin et al., 2014) dataset for CHAIR evaluation. For the POPE evaluation, we created 3000 questions across three datasets—500 images each from MSCOCO, A-OKVQA (Schwenk et al., 2022), and GQA (Hudson & Manning, 2019). For the GPT-4V-aided evaluation, we utilized 90 questions from the LLaVA-QA90 task and randomly selected 50 MSCOCO images for image captioning task.
+
+**Baselines.** In addition to comparing with the performance of the original LVLM sampling method, we also consider the following popular methods for mitigating hallucinations.
+
+- **Greedy-Decoding**, which adopts the greedy sampling strategy, by generating tokens with the highest posterior probability to address hallucinations arising from.
+- **LURE** (Zhou et al., 2023), which identifies and masks potentially hallucinated words and fine-tune a MiniGPT4 model to rectify object hallucinations in the generated descriptions.
+- **LURE with Cutoff**. The original LURE method tends to generate long descriptions regardless of the provided instructions, which sometimes results in even worse performance as unnecessary information is included. Therefore, we also introduce a modified baseline, where we truncate the LURE’s output to match the length (in terms of the number of sentences) of the original generations.
+- **Woodpecker** (Yin et al., 2023), which leverages GPT-3.5 to correct hallucinations in LVLM generation with five steps toward the correction.
+- **VCD** (Leng et al., 2023), which distorts the image inputs to impose penalties on logit outputs.
+- **OPERA** (Huang et al., 2023a), which penalizes logits to mitigate over-trust in beam-search decoding and adjusts token selection.
+
+Lastly, the performance of MARINE improves in correlation with the advancement of the control guidance extractor used. Consequently, to demonstrate the potential upper bound of MARINE’s performance, we consider a version utilizing a ground-truth oracle extractor, which we denote as MARINE-Truth. Further details on model architectures, datasets and evaluation metrics are deferred to Appendix C.
+
+**Hyperparameter Setting.** The hyperparameters for our method are fixed across tasks, with key settings including a guidance strength of 0.7, noise intensity for DETR at 0.95, a detection threshold for RAM++ of 0.68, and a greedy sampling approach with a random seed of 242.
+
+<sup>2</sup>[https://github.com/haotian-liu/LLaVA/blob/main/playground/data/coco2014\\_val\\_gpt4\\_qa\\_30x3.jsonl](https://github.com/haotian-liu/LLaVA/blob/main/playground/data/coco2014_val_gpt4_qa_30x3.jsonl)
+
+{6}------------------------------------------------
+
+Table 1: Evaluation with CHAIR score across multiple LVLM architectures comparing our method with several baselines. We report CHAIR<sub>S</sub>, CHAIR<sub>I</sub> and the recall score. The **bold** numbers indicate the best results among the methods evaluated and the underscored numbers represent the second-best results. We show MARINE-Truth as a reference performance of MARINE.
+
+| Method | LLaVA |  |  | LLaVA-v1.5 |  |  | MiniGPTv2 |  |  | mPLUG-Owl2 |  |  | InstructBLIP |  |  | Average |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  | C <sub>S</sub> ↓ | C <sub>I</sub> ↓ | R ↑ | C <sub>S</sub> ↓ | C <sub>I</sub> ↓ | R ↑ | C <sub>S</sub> ↓ | C <sub>I</sub> ↓ | R ↑ | C <sub>S</sub> ↓ | C <sub>I</sub> ↓ | R ↑ | C <sub>S</sub> ↓ | C <sub>I</sub> ↓ | R ↑ | C <sub>S</sub> ↓ | C <sub>I</sub> ↓ | R ↑ |
+| CHAIR |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Greedy | 26.6 | 10.5 | 47.4 | 8.8 | 4.6 | 41.1 | 8.2 | <u>4.2</u> | 41.1 | 6.2 | 3.4 | 38.8 | 5.0 | 3.2 | 33.2 | 11.0 | 5.2 | 40.3 |
+| LURE | 33.8 | 11.6 | <b>54.8</b> | 38.9 | 11.2 | <b>56.3</b> | 36.2 | 11.4 | <b>54.6</b> | 33.9 | 10.8 | <b>55.9</b> | 38.1 | 12.1 | <b>54.5</b> | 36.2 | 11.4 | <b>55.2</b> |
+| LURE w/ cutoff | 24.4 | 9.3 | 50.2 | 18.4 | 6.8 | <u>47.3</u> | 12.5 | 6.2 | 42.0 | 15.4 | 6.6 | <u>45.5</u> | 9.6 | 6.4 | 34.5 | 16.1 | 7.1 | 43.9 |
+| Woodpecker | 19.5 | <u>8.9</u> | 44.3 | 8.5 | 4.5 | 38.4 | <u>7.5</u> | 4.5 | 37.0 | 8.0 | 4.3 | 37.5 | 8.0 | 6.2 | 32.6 | 10.3 | 5.7 | 38.0 |
+| VCD | 28.1 | 11.0 | 46.6 | <u>7.3</u> | <u>4.1</u> | 40.8 | <b>6.8</b> | <u>3.9</u> | 38.2 | 5.9 | 3.4 | 37.7 | <u>7.4</u> | <u>1.5</u> | 33.7 | <u>10.1</u> | <u>4.8</u> | 39.4 |
+| OPERA | <u>22.4</u> | <u>9.9</u> | 43.6 | 11.0 | 6.7 | 40.2 | 9.2 | 5.0 | 41.3 | 5.8 | <u>3.2</u> | 38.4 | 4.6 | 2.7 | <u>38.0</u> | 10.6 | 5.5 | 40.3 |
+| <b>MARINE</b> | <b>17.8</b> | <b>7.2</b> | <b>50.8</b> | <b>6.2</b> | <b>3.0</b> | <b>44.1</b> | <b>11.8</b> | <b>4.9</b> | <b>49.7</b> | <b>4.2</b> | <b>2.3</b> | <b>41.4</b> | <b>2.2</b> | <b>1.3</b> | <b>36.3</b> | <b>8.4</b> | <b>3.7</b> | <b>44.5</b> |
+| MARINE-Truth | 19.6 | 5.1 | 79.0 | 6.0 | 2.5 | 55.3 | 12.6 | 3.8 | 70.5 | 3.8 | 1.7 | 48.0 | 3.0 | 1.8 | 35.9 | 8.9 | 2.9 | 57.5 |
+
+Table 2: Evaluation with POPE score in adversarial setting across multiple LVLM architectures comparing our method with several baselines. We report the POPE accuracy (%), F1 score (%) and the yes ratio (%). The **bold** numbers indicate the best results among the methods evaluated and the underscored numbers represent the second-best results. We show MARINE-Truth as a reference performance of MARINE.
+
+| Method | LLaVA |  |  | LLaVA-v1.5 |  |  | MiniGPTv2 |  |  | mPLUG-Owl2 |  |  | InstructBLIP |  |  | Average |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  | Acc ↑ | F1 ↑ | Yes | Acc ↑ | F1 ↑ | Yes | Acc ↑ | F1 ↑ | Yes | Acc ↑ | F1 ↑ | Yes | Acc ↑ | F1 ↑ | Yes | Acc ↑ | F1 ↑ | Yes |
+| Greedy | 51.8 | 67.4 | 97.7 | 79.4 | <u>81.6</u> | 61.6 | 82.7 | 81.7 | <u>44.5</u> | 72.5 | 77.5 | 72.4 | <u>79.8</u> | <b>81.4</b> | 58.6 | 73.2 | 77.9 | 67.0 |
+| LURE | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
+| Woodpecker | <b>77.5</b> | <b>77.6</b> | <b>50.5</b> | <u>80.5</u> | 80.6 | <b>50.5</b> | 79.5 | 77.8 | 42.5 | 77.5 | 76.9 | <u>47.5</u> | 79.0 | 78.6 | <b>48.0</b> | <u>78.8</u> | <u>78.3</u> | <u>47.8</u> |
+| VCD | 54.6 | 68.5 | 94.0 | 78.2 | 80.7 | 62.8 | 81.4 | 80.2 | 44.1 | 72.3 | 77.0 | 70.5 | 79.7 | <u>80.9</u> | <u>56.7</u> | 73.2 | 77.5 | 65.6 |
+| OPERA | 51.7 | 67.4 | 98.0 | 77.5 | 80.1 | 63.2 | <u>82.9</u> | 81.9 | 44.3 | 70.3 | 79.1 | 84.6 | <b>79.8</b> | <b>81.4</b> | 58.6 | 72.4 | 78.0 | 69.7 |
+| <b>MARINE</b> | <b>66.9</b> | <b>72.9</b> | <b>72.3</b> | <b>85.0</b> | <b>84.3</b> | <b>45.7</b> | <b>83.0</b> | <b>82.9</b> | <b>49.4</b> | <b>82.8</b> | <b>82.7</b> | <b>49.2</b> | <b>81.7</b> | <b>79.4</b> | 38.8 | <b>79.9</b> | <b>80.4</b> | <b>51.1</b> |
+| MARINE-Truth | 75.6 | 80.1 | 72.3 | 92.0 | 92.5 | 57.0 | 86.9 | 88.3 | 62.5 | 93.4 | 93.76 | 56.2 | 93.8 | 93.8 | 51.0 | 88.3 | 89.7 | 59.8 |
+
+### 5.2 RESULTS
+
+Experimental results on object hallucination metrics (CHAIR and POPE) are presented in Table 1 and Table 2. Overall, MARINE achieves superior performances across different LVLM architectures and evaluation metrics, ranked as the best or second-best on the majority of the evaluation metrics.
+
+**Results on CHAIR.** Table 1 presents the evaluation of various mitigation methods using CHAIR scores across multiple LVLM architectures. The results demonstrate that MARINE consistently outperforms other state-of-the-art methods, achieving the highest average scores in both CHAIR<sub>S</sub> and CHAIR<sub>I</sub> and the second-best Recall score. Specifically, MARINE surpasses the second-best performing method by an average margin of 1.7 on CHAIR<sub>S</sub> and 1.1 on CHAIR<sub>I</sub>. Notably, MARINE exhibits exceptional performance on LLaVA architectures, with improvements in CHAIR scores of up to 8.8 compared to its original performance. In contrast, methods such as LURE and Woodpecker show less effectiveness in hallucination mitigation. The reference method, MARINE-Truth, generally achieves the strongest results, as expected given its access to ground-truth guidance. However, MARINE’s performance closely approximates that of its ground-truth counterpart, indicating successful leveraging of multiple guidance models to provide reliable control in LVLM generation.
+
+**Results on POPE.** The POPE evaluation, presented in Table 2, further validates the superior performance of MARINE against existing baselines across various question formats. MARINE consistently outperforms all other methods by a substantial margin, demonstrating average improvements of 6.7% in accuracy and 3.5% in F1 score relative to the original outputs across models. Even when compared to the second-best method, Woodpecker, MARINE maintains a performance edge of 1.1% and 2.1% respectively in accuracy and F1 score. Moreover, MARINE effectively mitigates the LVLMs’ biased tendency towards affirmative responses, as evidenced by a more balanced “yes” ratio (closer to 50%, representing a 15.9% shift towards unbiased answers). This improvement notably addresses the overconfidence issue prevalent in existing models.
+
+**Results on GPT-4V-aided evaluation.** Following Yin et al. (2023), we leverage GPT-4V<sup>3</sup> to evaluate and compare the performance of the original LVLMs and LVLMs with MARINE on LLaVA-QA90 and an image captioning task. This GPT-4V-assisted evaluation introduces a qualitative
+
+<sup>3</sup>We used gpt-4-1106-vision-preview in obtaining our final experiment results. As OpenAI continues to update its API, different versions may result in slightly different values.
+
+{7}------------------------------------------------
+
+Table 3: Results of GPT-4V-aided evaluation. The accuracy and detailedness metrics are on a scale of 10, and a higher score indicates better performance. The symbols  $\times$  and  $\checkmark$  indicate performance metrics without and with our method, respectively.
+
+| Task | Metrics | LLaVA |  | mPLUG-Owl2 |  |
+|-|-|-|-|-|-|
+|  |  | $\times$ | $\checkmark$ | $\times$ | $\checkmark$ |
+| LLaVA-QA90 | Acc $\uparrow$ | $5.82 \pm 0.10$ | <b><math>5.94 \pm 0.05</math></b> | $6.03 \pm 0.13$ | <b><math>6.35 \pm 0.21</math></b> |
+|  | Detail $\uparrow$ | $4.59 \pm 0.08$ | $4.59 \pm 0.08$ | $5.06 \pm 0.05$ | <b><math>5.16 \pm 0.10</math></b> |
+| Image Captioning | Acc $\uparrow$ | $5.27 \pm 0.20$ | <b><math>6.11 \pm 0.23</math></b> | $7.97 \pm 0.25$ | <b><math>8.63 \pm 0.20</math></b> |
+|  | Detail $\uparrow$ | <b><math>4.39 \pm 0.29</math></b> | $4.36 \pm 0.17$ | $5.74 \pm 0.24$ | <b><math>6.19 \pm 0.23</math></b> |
+
+Table 4: POPE results across three datasets. We report the average score under random, popular, adversarial settings. The detailed POPE results can be found in the appendix E. The **bold** numbers indicate the best results. The ideal yes ratio for a non-biased LVLM is 50%.
+
+| Dataset | w/MARINE | LLaVA |  |  | mPLUG-Owl2 |  |  |
+|-|-|-|-|-|-|-|-|
+|  |  | Accuracy $\uparrow$ | FI $\uparrow$ | Yes(%) | Accuracy $\uparrow$ | FI $\uparrow$ | Yes(%) |
+| MSCOCO (Lin et al., 2014) | $\times$ | 54.2 | 68.5 | 95.5 | 76.7 | 80.4 | 68.2 |
+|  | $\checkmark$ | <b>72.2</b> | <b>76.4</b> | <b>66.9</b> | <b>85.5</b> | <b>85.0</b> | <b>46.5</b> |
+| A-OKVQA (Schwenk et al., 2022) | $\times$ | 51.8 | 67.5 | 97.9 | 69.6 | 76.5 | 78.5 |
+|  | $\checkmark$ | <b>64.3</b> | <b>72.8</b> | <b>80.2</b> | <b>82.0</b> | <b>83.5</b> | <b>57.2</b> |
+| GQA (Hudson & Manning, 2019) | $\times$ | 52.0 | 67.6 | 97.8 | 73.7 | 78.7 | 72.6 |
+|  | $\checkmark$ | <b>62.5</b> | <b>71.8</b> | <b>81.8</b> | <b>80.1</b> | <b>80.6</b> | <b>51.1</b> |
+
+perspective beyond the numerical metrics of CHAIR and POPE, offering a richer assessment of model performance. The evaluation prompt is detailed in Appendix C.5. As shown in Table 3, GPT-4V consistently assigns higher accuracy with equal detailedness scores to models enhanced by MARINE, highlighting its ability to produce more precise and detailed descriptions, which demonstrates the robustness of our method in real-world visual tasks.
+
+**Additional Results on Other Vision-Language Tasks.** To further evaluate the generalizability of our approach beyond object hallucination and the MSCOCO dataset, we extended our evaluations to additional datasets including A-OKVQA and GQA and included more general caption quality metrics. As shown in Table 4, the POPE results on datasets such as MSCOCO, A-OKVQA, and GQA demonstrate that our method consistently mitigates hallucinations across various datasets with different image distributions. Figure 2 presents a comprehensive evaluation of the image captioning task on MSCOCO and LLaVA-QA90, using metrics including BLEU(Papineni et al., 2002), ROUGE(Lin, 2004), CIDEr(Vedantam et al., 2015) and SPICE(Anderson et al., 2016). These results demonstrate that, although our method primarily targets hallucination mitigation, it maintains the overall performance of LVLMs on broader tasks, with no significant trade-offs in caption or VQA quality.
+
+![Figure 2: Radar charts showing performance on image captioning tasks. (a) Image captioning task: Performance metrics (BLEU_1, BLEU_2, BLEU_3, BLEU_4, ROUGE_L, CIDEr, SPICE) for LLaVA (dashed line) and mPLUG-Owl2 (solid line) with and without MARINE. (b) LLaVA-QA90 task: Performance metrics (BLEU_1, BLEU_2, BLEU_3, BLEU_4, ROUGE_L, CIDEr, SPICE) for LLaVA (dashed line) and mPLUG-Owl2 (solid line) with and without MARINE. In both cases, the addition of MARINE (solid lines) generally leads to improved performance across most metrics compared to the baseline (dashed lines).](aa14b9ec884bf40ce06c161be468cd84_img.jpg)
+
+Figure 2: Radar charts showing performance on image captioning tasks. (a) Image captioning task: Performance metrics (BLEU\_1, BLEU\_2, BLEU\_3, BLEU\_4, ROUGE\_L, CIDEr, SPICE) for LLaVA (dashed line) and mPLUG-Owl2 (solid line) with and without MARINE. (b) LLaVA-QA90 task: Performance metrics (BLEU\_1, BLEU\_2, BLEU\_3, BLEU\_4, ROUGE\_L, CIDEr, SPICE) for LLaVA (dashed line) and mPLUG-Owl2 (solid line) with and without MARINE. In both cases, the addition of MARINE (solid lines) generally leads to improved performance across most metrics compared to the baseline (dashed lines).
+
+Figure 2: MARINE leads to consistent enhancement in the text qualities on general metrics. Dashed lines and solid lines represent without or with MARINE. Higher scores indicate better quality and greater similarity between the generated captions and the reference texts.
+
+{8}------------------------------------------------
+
+Table 5: Inference Latency Comparison. We report both the latency and the ratio to the latency of greedy decoding of the original LVLM model.
+
+|  | Greedy | LURE | Woodpecker* | VCD | OPERA | <b>MARINE</b> (ours) |
+|-|-|-|-|-|-|-|
+| Training Cost | 0 | 10min on A100 80G | 0 | 0 | 0 | 0 |
+| Inference Latency <sup>(ms/oken)</sup> | 26.3 ( $\times 1.0$ ) | 179.9 ( $\times 6.84$ ) | 94.5 ( $\times 3.59$ )* | 53.4 ( $\times 2.03$ ) | 185.1 ( $\times 7.0$ ) | <b>52.2</b> ( $\times 1.98$ ) |
+
+\*Woodpecker requires GPT API key access and the latency may depend on OPENAI API.
+
+Table 6: Ablation study comparing the performance of combining DETR and RAM++ models versus using individual vision models. This approach leverages multiple object detectors to provide more reliable and robust object-level guidance, resulting in superior performance on CHAIR metrics.
+
+| Model<br>CHAIR | LLaVA |  | LLaVA-v1.5 |  | mPLUG-Owl2 |  |
+|-|-|-|-|-|-|-|
+|  | $C_S \downarrow$ | $C_I \downarrow$ | $C_S \downarrow$ | $C_I \downarrow$ | $C_S \downarrow$ | $C_I \downarrow$ |
+| <i>Ensembling Models</i> |  |  |  |  |  |  |
+| MARINE | <b>17.8</b> | <b>7.2</b> | <b>6.2</b> | <b>3.0</b> | <b>4.2</b> | <b>2.3</b> |
+| <i>Single Models</i> |  |  |  |  |  |  |
+| MARINE-DETR only | 27.6 | 8.4 | 10.5 | 4.3 | 5.3 | 2.7 |
+| MARINE-RAM only | 29.0 | 9.1 | 6.6 | 3.7 | 5.2 | 2.8 |
+
+Table 7: Effect of Integration Methods for Image-Grounding Models.
+
+| Model<br>CHAIR | LLaVA |  | LLaVA-v1.5 |  | mPLUG-Owl2 |  |
+|-|-|-|-|-|-|-|
+|  | $C_S \downarrow$ | $C_I \downarrow$ | $C_S \downarrow$ | $C_I \downarrow$ | $C_S \downarrow$ | $C_I \downarrow$ |
+| MARINE-intersection (ours) | <b>17.8</b> | <b>7.2</b> | 6.2 | 3.0 | <b>4.2</b> | <b>2.3</b> |
+| MARINE-union | 30.4 | 9.7 | <b>5.4</b> | <b>2.7</b> | 4.8 | 2.7 |
+
+**Latency Analysis** Mitigating object hallucination often requires additional computational resources, a characteristic common to many existing methods which typically involve additional post-generation correction models (Zhou et al., 2023; Zhai et al., 2023; Yin et al., 2023), object detectors (Yin et al., 2023), or more complex decoding processes (Huang et al., 2023a; Leng et al., 2023) to reduce hallucinations. Furthermore, to assess the practical feasibility of our approach in terms of computational costs, we have compared our method with existing baselines on LLaVA-7B. As demonstrated in Table 5, our method increases the decoding time by factors of 1.98, which is the lowest costs among existing baselines, suggesting MARINE can be widely applied with negligible cost. Our method offers the most favorable trade-offs between latency and accuracy in hallucination mitigation. Detailed experiment setting is in Appendix C.6.
+
+### 5.3 ABLATION STUDY
+
+**How Does Incorporating Multiple Sources to Form Guidance Impact Performance?** We perform an ablation study to assess the impact of incorporating DETR and RAM++ compared to using each model individually, as presented in Table 6. Notably, DETR allows for highly accurate object detection, while RAM++ excels in extensive recognition tasks, adding fine-grained details to image understanding. Combining the strengths of these image-grounding models, we achieve significant performance improvements on the CHAIR metrics. This demonstrates that leveraging complementary visual contexts can substantially enhance overall model effectiveness.
+
+**Which Method of Integrating Image-Grounding Models Works Best?** We investigate two approaches for integrating image-grounding models: using either the intersection or union of detected objects. As shown in Table 7, the intersection-based method outperforms the union, significantly reducing object hallucination. This result highlights the importance of precision and consistency in guidance, as taking intersection ensures consensus across models, leading to more reliable guidance. The detailed experimental setup and prompt templates are provided in Appendix C.
+
+**Effect of Guidance Strength.** Figure 3 shows that increasing guidance strength from 0 to 1 leads to a notable decrease in CHAIR scores. This trend suggests that higher guidance strength makes LVLMs rely more on image-grounded features provided by DETR, thereby enhancing their ability to produce accurate descriptions. It’s crucial to note that, although some models exhibit optimal performance at a guidance strength of  $\gamma = 1$ , excessively strong guidance can adversely affect the models’ ability to adhere to provided instructions. Experimental evidence is detailed in Appendix E. This observation highlights the necessity of having a balanced guidance strength that ensures high-quality, accurate outputs while adhering closely to the given instructions. Based on our findings, we recommend
+
+{9}------------------------------------------------
+
+486  
+487  
+488  
+489  
+490  
+491  
+492  
+493  
+494  
+495  
+496  
+497  
+498  
+499  
+500  
+501  
+502  
+503  
+504  
+505  
+506  
+507  
+508  
+509  
+510  
+511  
+512  
+513  
+514  
+515  
+516  
+517  
+518  
+519  
+520  
+521  
+522  
+523  
+524  
+525  
+526  
+527  
+528  
+529  
+530  
+531  
+532  
+533  
+534  
+535  
+536  
+537  
+538  
+539
+
+![Figure 3: Ablation study on the effect of guidance strength (gamma) on the performance of LLaVA and mPLUG-Owl2 using CHAIR metrics. The figure contains three line plots: (a) CHAIR_S, (b) CHAIR_I, and (c) Recall. In (a) and (b), LLaVA (blue dashed line) starts high (approx. 0.25 and 0.10 respectively) and decreases as gamma increases, while mPLUG-Owl2 (orange dashed line) remains low (approx. 0.05 and 0.02). In (c), LLaVA starts at approx. 0.475 and increases to approx. 0.500, while mPLUG-Owl2 starts at approx. 0.400 and increases to approx. 0.425.](7801d00a216dc4dc8a7d210dcb5fe3c5_img.jpg)
+
+Figure 3: Ablation study on the effect of guidance strength (gamma) on the performance of LLaVA and mPLUG-Owl2 using CHAIR metrics. The figure contains three line plots: (a) CHAIR\_S, (b) CHAIR\_I, and (c) Recall. In (a) and (b), LLaVA (blue dashed line) starts high (approx. 0.25 and 0.10 respectively) and decreases as gamma increases, while mPLUG-Owl2 (orange dashed line) remains low (approx. 0.05 and 0.02). In (c), LLaVA starts at approx. 0.475 and increases to approx. 0.500, while mPLUG-Owl2 starts at approx. 0.400 and increases to approx. 0.425.
+
+Figure 3: Ablation study on the effect of guidance strength ( $\gamma$ ) on the performance of LLaVA and mPLUG-Owl2 using CHAIR metrics, with  $\gamma$  ranging from 0 to 1.
+
+a guidance strength within the range of  $\gamma \in (0.3, 0.7)$  as the most effective for maintaining this balance.
+
+**Examples of MARINE’s Guided Generation.** In Figure 4, we provide specific generation examples of LLaVA based on queries from different tasks, with or without MARINE. In the first example, LLaVA incorrectly identifies a white chair in the image, an instance of hallucination as the object present is a white bird instead. In contrast, MARINE successfully mitigates this hallucination, correctly guiding the model to recognize the object as a white bird. Similarly, in the second example, LLaVA erroneously state that the skateboard rider is holding onto the trucks. With MARINE, the model’s response is more accurate, focusing on verifiable visual elements and correctly stating that the person is standing on the skateboard without introducing non-existent details.
+
+![Figure 4: Examples of hallucination mitigation by our proposed MARINE across multiple tasks. The figure shows two examples. Example 1: Query: 'Is there a chair in the image?' LLaVA: 'Yes, there is a white chair in the image.' LLaVA w/ MARINE: 'No, there is no chair in the image. The only object present is a white bird.' Example 2: Query: 'What is the position of the skateboard in the image?' LLaVA: 'The skateboard is on the ground, with the rider standing on it and holding onto the trucks.' LLaVA w/ MARINE: 'The skateboard is on the ground, with the person standing on it.'](d3f6de4fe9f9138fc6afc584b5104433_img.jpg)
+
+Figure 4: Examples of hallucination mitigation by our proposed MARINE across multiple tasks. The figure shows two examples. Example 1: Query: 'Is there a chair in the image?' LLaVA: 'Yes, there is a white chair in the image.' LLaVA w/ MARINE: 'No, there is no chair in the image. The only object present is a white bird.' Example 2: Query: 'What is the position of the skateboard in the image?' LLaVA: 'The skateboard is on the ground, with the rider standing on it and holding onto the trucks.' LLaVA w/ MARINE: 'The skateboard is on the ground, with the person standing on it.'
+
+Figure 4: Examples of hallucination mitigation by our proposed MARINE across multiple tasks: POPE on the GQA dataset, LLaVA-QA90 task on the MSCOCO dataset, and image captioning. Hallucinated objects generated by LVLM are highlighted in red.
+
+## 6 CONCLUSIONS, LIMITATIONS AND FUTURE WORK
+
+In this paper, we introduced a training-free and API-free framework MARINE to mitigate object hallucination in LVLMs during its text generation process. Leveraging a pre-trained object grounding vision encoder for a novel guidance framework in the multi-modal setting, MARINE effectively and cost-efficiently reduces the hallucinations of five widely-used LVLMs, as assessed by various metrics across different tasks. The inherent compatibility of the MARINE with various vision models and projection functions further underscores its flexibility. In contrast to post-generation correction methods, MARINE strikes a balance between efficiency, instruction-following ability and effectiveness in reducing object hallucinations.
+
+**Limitations and future work.** While MARINE has demonstrated impressive performance by utilizing guidance from image-grounded models, there remains potential for further improvement through the integration of advanced aggregation methods, such as multi-agent debate (Du et al., 2023), into the MARINE framework. Additionally, although MARINE is specifically designed to mitigate object hallucination, which is the most significant issue in LVLMs, extending its application to address other types of hallucinations in both LLMs and LVLMs across a broader range of benchmarks would be highly advantageous.
+
+ Rest of paper (reference and Appendix) is removed.

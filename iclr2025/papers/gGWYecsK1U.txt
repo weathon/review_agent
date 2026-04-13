@@ -1,0 +1,355 @@
+
+
+{0}------------------------------------------------
+
+# INTEGRATIVE DECODING: IMPROVE FACTUALITY VIA IMPLICIT SELF-CONSISTENCY
+
+Yi Cheng<sup>1</sup>\*, Xiao Liang<sup>2</sup>, Yeyun Gong<sup>3</sup>, Wen Xiao<sup>4</sup>, Song Wang<sup>4</sup>, Yuji Zhang<sup>5</sup>, Wenjun Hou<sup>1</sup>, Kaishuai Xu<sup>1</sup>, Wenge Liu<sup>1</sup>, Wenjie Li<sup>1</sup>, Jian Jiao<sup>3</sup>, Qi Chen<sup>3</sup>, Peng Cheng<sup>3</sup>, Wayne Xiong<sup>3</sup>
+
+<sup>1</sup>The Hong Kong Polytechnic University <sup>2</sup>Tsinghua University <sup>3</sup>Microsoft Research
+
+<sup>4</sup>Microsoft Azure AI <sup>5</sup>University of Illinois at Urbana-Champaign
+
+alyssa.cheng@connect.polyu.hk
+
+## ABSTRACT
+
+Self-consistency-based approaches, which involve repeatedly sampling multiple outputs and selecting the most consistent one as the final response, prove to be remarkably effective in improving the factual accuracy of large language models. Nonetheless, existing methods usually have strict constraints on the task format, largely limiting their applicability. In this paper, we present *Integrative Decoding* (ID), to unlock the potential of self-consistency in open-ended generation tasks. ID operates by constructing a set of inputs, each prepended with a previously sampled response, and then processes them concurrently, with the next token being selected by aggregating of all their corresponding predictions at each decoding step. In essence, this simple approach implicitly incorporates self-consistency in the decoding objective. Extensive evaluation shows that ID consistently enhances factuality over a wide range of language models, with substantial improvements on the TruthfulQA (+11.2%), Biographies (+15.4%) and LongFact (+8.5%) benchmarks. The performance gains amplify progressively as the number of sampled responses increases, indicating the potential of ID to scale up with repeated sampling.<sup>1</sup>
+
+## 1 INTRODUCTION
+
+Despite notable advancements across various domains, Large Language Models (LLMs) remain notorious for their tendency to produce non-factual and erroneous content, a phenomenon commonly known as hallucinations (Lewis et al., 2020; Ji et al., 2023). Prior research has shown that “repeated sampling” is a very effective methodology for enhancing factual accuracy (Wang et al., 2023; Shi et al., 2022; Chen et al., 2023). It involves sampling multiple responses to the same prompt, followed by a careful selection of the most accurate one or the synthesis of a refined output from the sampled responses. Notably, as the number of sampled responses increases, its performance gains often continue to rise in an almost log-linear manner, as recently highlighted by Brown et al. (2024). This suggests the existence of “inference-time scaling laws,” implying the potential of repeated sampling to progressively push the model closer to its theoretical performance ceilings. Despite this immense promise, a central challenge in this methodology remains: how to effectively identify the non-factual content within the sample collection and thereby produce a final, accurate output.
+
+The degree of “*self-consistency*” (SC), which measures the consistency level among LLMs’ different outputs, has proven to be a useful indicator to address this issue (Wang et al., 2023; Shi et al., 2022; Chen et al., 2023; Thirukovalluru et al., 2024; Malon & Zhu, 2024; Mündler et al., 2024; Manakul et al., 2023). It has been observed that statements consistently present across a range of sampled responses are more likely to be truthful, as opposed to those appearing sporadically or inconsistently across outputs. However, most SC-based methods for improving factuality impose strict constraints on the format of task output, largely limiting their applicability. Due to the difficulty in measuring consistency across responses, previous studies usually only consider tasks where they can easily define consistency as the exact matches between the answers parsed from the responses (Wang et al., 2023; Huang et al., 2023a; Shi et al., 2022; Li et al., 2022), such as arithmetic problems and
+
+\*This work was conducted during Yi Cheng’s internship at Microsoft Research.
+
+<sup>1</sup>All codes and data are available at <https://github.com/YiCheng98/IntegrativeDecoding>.
+
+{1}------------------------------------------------
+
+Table 1: Comparisons between ID and previous approaches that utilize self-consistency to improving factuality on open-ended-generation tasks. “Input length” indicates the length relative to that of one sampled response from standard prompting (with  $k$  representing the number of sampled responses).
+
+| Method | How to Check Self-consistency | Input Length | Inference Latency | Balance Information | Factuality Improvement |
+|-|-|-|-|-|-|
+| USC (Chen et al., 2023) | Prompting | $\times k$ | Medium | ✓ | Medium |
+| SR (Madaan et al., 2024) | CoT Reasoning | $\times k$ | Medium | ✗ | Medium |
+| FSC (Wang et al., 2024a) | CoT Reasoning | $\times k$ | Medium | ✗ | High |
+| SE-SL (Wang et al., 2024b) | Numerous Prompting | $\times 1$ | High | ✓ | High |
+| SE-RG (Wang et al., 2024b) | Prompting & Clustering | $\times 1$ | High | ✗ | High |
+| Integrative Decoding | ICL & Decoding-time<br>Implicit Integration | $\times 1$ | Medium | ✓ | Higher |
+
+multiple choice question. This naturally leads us to ask: *how can we further unlock the potential of self-consistency and repeated sampling in open-ended generation tasks?*
+
+One straightforward way is to concatenate all sampled responses in a prompt and directly instruct the LLM to select the most self-consistent one from them, as done in Chen et al. (2023). Nonetheless, such practice substantially increases the input length, posing excessive demands on the model’s long-text processing capability. Another line of research treats each response as a collection of statements and then assesses the consistency level between each pair of statements through clustering (Thirukovalluru et al., 2024) or iterative LLM prompting (Mündler et al., 2024; Wang et al., 2024a,b). This requires numerous iterations of inference, particularly for longer outputs, leading to inefficiencies. Due to these issues, prior attempts to apply SC in open-ended tasks cannot generalize effectively to long-form generations and they struggle to scale up with an increasing number of sampled responses.
+
+In this paper, we present *Integrative Decoding* (ID), a novel decoding strategy designed to improve factuality by implicitly incorporating self-consistency within its decoding objective. ID begins by repeated sampling. For each sampled response in the collection, ID constructs a new input by concatenating the response with the original prompt. Essentially, this input instructs the model to respond to the instruction again with reference to a previously sampled response. Then, ID processes these inputs concurrently for decoding, with the next token being selected by integrating all their predictions at each inference step. During this process, each input acts like a “representative” for the sampled response within it, voting for the tokens that are semantically consistent with the response it represents. ID effectively aggregates their votes and thereby achieves the optimal overall consistency across all sampled responses. Compared with existing approaches that utilize self-consistency to improve factuality on open-ended generation tasks, ID does not rely on additional prompting or chain-of-thought reasoning to explicitly verify consistency; moreover, it can achieve substantial improvement in factuality with relatively low inference latency and a slight burden on the model’s long-text processing capabilities (see Table 1 for detailed comparisons).
+
+We evaluate ID over six series of LLMs with varying scales. ID consistently enhances the factuality over all these LLMs by a large margin on the TruthfulQA (+11.2%), Biographies (+15.4%) and LongFact (+8.5%) datasets, demonstrating robustness from sentence- to document-level generations. Moreover, the performance gains of ID progressively amplify as the number of sampled responses increases, indicating its potential to scale up with repeated sampling.
+
+## 2 METHOD
+
+**Preliminaries: Self-consistency as an Indicator for Factuality** Previous studies found that the degree of self-consistency between LLM’s different sampled responses can serve as a useful indicator for hallucination detection (Manakul et al., 2023; Farquhar et al., 2024). The facts that are consistently supported by LLMs’ different sampled responses are more likely to be factual, compared to those that only appear sporadically or inconsistently across multiple outputs. Formally, given a prompt  $x$  and its response  $\hat{y}$  that consists of a series of statements  $\mathcal{S} = \{s_1, s_2, \dots, s_n\}$ , the factuality score of  $s_i$  can be estimated by measuring its consistency with other sampled responses
+
+{2}------------------------------------------------
+
+$\mathcal{R} = \{r_1, r_2, \dots, r_k\}$  in response to the same prompt  $\mathbf{x}$  as:
+
+$$f(s_i) = \frac{1}{|\mathcal{R}|} \sum_{r_j \in \mathcal{R}} P(\text{consistent}|s_i, r_j), \quad (1)$$
+
+where  $f(s_i)$  refers to the estimated factuality score of the statement  $s_i$  and  $P(\text{consistent}|s_i, r_j)$  is the probability that  $s_i$  is supported by the response  $r_j$ . These responses can be obtained through sampling algorithms, such as temperature sampling (Ficler & Goldberg, 2017) or nucleus sampling Holtzman et al. (2020). The overall factuality score of the response  $\hat{\mathbf{y}}$  can thereby be estimated as:
+
+$$F(\hat{\mathbf{y}}) = \frac{1}{|\mathcal{S}| \cdot |\mathcal{R}|} \sum_{s_i \in \mathcal{S}} \sum_{r_j \in \mathcal{R}} P(\text{consistent}|s_i, r_j) = \frac{1}{|\mathcal{R}|} \sum_{r_j \in \mathcal{R}} \bar{f}(\hat{\mathbf{y}}, r_j), \quad (2)$$
+
+where  $\bar{f}(\hat{\mathbf{y}}, r_j) = \frac{1}{|\mathcal{S}|} \sum_{s_i \in \mathcal{S}} P(\text{consistent}|s_i, r_j)$ , representing the overall degree of  $\hat{\mathbf{y}}$  being supported by the response  $r_j$ .
+
+**Formalization of Decoding Objective** The established insights about the role of self-consistency in hallucination detection indicate that the response most consistent with the others tends to be the most factual one. This motivates us to develop a decoding method that, given several sampled responses, can generate a new output, maintaining strong overall consistency with all of them while maintaining its own coherence. Formally, given an input prompt  $\mathbf{x}$ , a decoding method searches for an output  $\hat{\mathbf{y}}$  by solving:
+
+$$\hat{\mathbf{y}} = \arg \max_{\mathbf{y} \in \mathcal{Y}} H(\mathbf{x}, \mathbf{y}), \quad (3)$$
+
+where  $\mathcal{Y}$  refers to the set of all possible token sequences and  $H(\mathbf{x}, \mathbf{y})$  is the objective function.
+
+Common decoding algorithms, such as beam search, consider the decoding objective  $H(\mathbf{x}, \mathbf{y})$  as  $\log p_\theta(\mathbf{y}|\mathbf{x}) = \sum_{t=1}^{|\mathbf{y}|} \log p_\theta(y_t|y_{<t}, \mathbf{x})$ , where  $\theta$  refers to the model’s parameters and  $p_\theta(y_t|y_{<t}, \mathbf{x})$  represents its predicted token probability distribution at the  $t$ -th decoding step. Note that we omit the input prompt  $\mathbf{x}$  here and in the following to reduce clutter.
+
+The objective of our method, by contrast, is composed of two parts:  $H(\mathbf{x}, \mathbf{y}) = F(\mathbf{y}) + \lambda \cdot G(\mathbf{x}, \mathbf{y})$ , where  $\lambda$  is a constant weight.  $G(\mathbf{x}, \mathbf{y})$  can be viewed as the common decoding objective, which measures whether the concatenation of  $\mathbf{x}$  and  $\mathbf{y}$  is a coherent and contextually appropriate text.  $F(\mathbf{y})$  is used to measure truthfulness of  $\mathbf{y}$ , which additionally emphasizes factuality in the decoding objective. Then, we adapt this objective function by replacing  $F(\mathbf{y})$  based on Equation 2:
+
+$$H(\mathbf{y}) = \sum_{r_j \in \mathcal{R}} [\bar{f}(\mathbf{y}, r_j) + \alpha \cdot G(\mathbf{x}, \mathbf{y})], \quad (4)$$
+
+where  $\mathcal{R}$  is a set of sampled responses to the prompt  $\mathbf{x}$  and  $\alpha$  is a constant term.
+
+**Integrative Decoding** However, computing Equation 4 directly poses significant challenges, especially for the part of  $\bar{f}(\mathbf{y}, r_j)$ . Previous studies typically rely on LLMs to ascertain whether the statements in  $\mathbf{y}$  are supported by  $r_j$  (Mündler et al., 2024; Manakul et al., 2023). This process is not only computationally expensive, but also requires sophisticated prompt design to comprehensively measure  $\bar{f}(\mathbf{y}, r_j)$ .
+
+To address this, our method incorporates an estimation of Equation 4 as follows. Crucially, the part of  $\bar{f}(\hat{\mathbf{y}}, r_j) + \alpha \cdot G(\mathbf{x}, \mathbf{y})$  in Equation 4 is approximated as the LLM’s predicted probability for the output sequence when instructed to *respond to  $\mathbf{x}$  again with reference to a previously sampled response  $r_j$* . Specifically, this involves constructing a new input  $q_j$ , which is sequentially structured as  $[\mathbf{x}; r_j; \mathbf{x}]$ .<sup>2</sup> Formally, we assume that:
+
+$$\log p_\theta(\mathbf{y}|\mathbf{x}; r_j; \mathbf{x}) \propto \bar{f}(\mathbf{y}, r_j) + \alpha \cdot G(\mathbf{x}, \mathbf{y}). \quad (5)$$
+
+This assumption is reasonable because when  $q_j$  serves as the input, the LLM’s in-context learning abilities naturally incline it to produce content consistent with  $r_j$  within the input, thus promoting
+
+<sup>2</sup>Note that, in practice,  $q_j$  is not a strict concatenation of  $\mathbf{x}$ ,  $r_j$ , and  $\mathbf{x}$ . Additional clarifying instructions, such as “answer this question again”, need to be inserted after  $r_j$  to avoid confusion. We omit these details in the representation of  $q_j$  here to reduce clutter.
+
+{3}------------------------------------------------
+
+![Figure 1: Workflow of integrative decoding. Step 1: Sample a set of responses. Step 2: Integrative Decoding. The diagram shows the process of sampling multiple responses from an LLM and then decoding them together to select the next token based on integrated logits.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+**Step 1: Sample a set of responses**
+
+Prompt: Write a biography of Harry Potter. → LLM $\theta$  →  $r_1, r_2, r_3, r_4$
+
+$r_1$ : Harry Potter, one of the most famous wizards in the magical world, began his life under tragic circumstances. **Born on July 31, 1980**, to James ...
+
+$r_2$ : Harry James Potter, **born in 1981** entered the world under the shadow of a dark prophecy. Living initially in ...
+
+$r_3$ : Harry Potter is a beloved fictional character created by British author J.K. Rowling. He is the protagonist of ... **Born on May 28, 1980**, Harry ...
+
+$r_4$ : Harry Potter is an iconic character created by J.K. Rowling. **Born on July 31, 1980** Harry James Potter became an orphan at the age of one ...
+
+**Step 2: Integrative Decoding**
+
+New input  $q_j$  is formatted as: Prompt  $r_j$  Prompt
+
+New Input  $q_1$ : Write a biography of Harry Potter. Harry Potter, one of the most famous wizards in the magical world, began his life under tragic and extraordinary circumstances. **Born on July 31, 1980**, to James and Lily Potter, ... Answer the above question again. Write a biography of Harry Potter.
+
+Preceding Output  $y_{<t}$ : (shared by all inputs) Harry Potter is a fictional character created by British author J.K. Rowling. **Born on**
+
+LLM $\theta$  →  $\text{logit}_\theta(y_t|y_{<t}, q_1)$ ,  $\text{logit}_\theta(y_t|y_{<t}, q_2)$ ,  $\text{logit}_\theta(y_t|y_{<t}, q_3)$ ,  $\text{logit}_\theta(y_t|y_{<t}, q_4)$
+
+Next Token Selection:  $\sum_{j=1}^k \text{logit}_\theta(y_t|y_{<t}, q_j)$
+
+July (all inputs universally use this same next token), May, June
+
+Figure 1: Workflow of integrative decoding. Step 1: Sample a set of responses. Step 2: Integrative Decoding. The diagram shows the process of sampling multiple responses from an LLM and then decoding them together to select the next token based on integrated logits.
+
+Figure 1: The workflow of integrative decoding: (1) sample multiple responses from the LLM; (2) form a set of new inputs by concatenating a sampled response and the original prompt; they are concurrently processed for decoding, with the next token being selected by integrating their predicted logits at each inference step. This strategy essentially incorporates the overall consistency with all sampled responses in its decoding objective (see Section 2).
+
+$\bar{f}(\mathbf{y}, r_j)$ . Concurrently, the LLM also ensures that the combination  $\mathbf{x} \circ \mathbf{y}$  remains coherent and contextually appropriate, enhancing  $G(\mathbf{x}, \mathbf{y})$ . In other words, the LLM tends to choose the output that is not only consistent with  $r_j$  but also maintains its own coherence. This supports the validity of Equation 5 as a plausible assumption.
+
+Then, we replace Equation 4 with:
+
+$$H(y) = \sum_{r_j \in R} \log p_\theta(\mathbf{y} | [\mathbf{x}; r_j; \mathbf{x}]). \quad (6)$$
+
+which ideally should be computed as:
+
+$$H(\mathbf{y}) = \sum_{r_j \in R} \sum_{t=1}^{|\mathbf{y}|} \log p_\theta(y_t | y_{<t}, [\mathbf{x}; r_j; \mathbf{x}]), \quad (7)$$
+
+Nonetheless, due to the prohibitively large searching space for  $y \in \mathcal{Y}$ , it is extremely difficult to compute Equation 7. To enhance computational efficiency, we adopt the strategy commonly used in greedy algorithms by making locally optimal decisions at each decoding step. Specifically, at the  $t$ -th decoding step, we choose the next token  $\hat{y}_t$  by:
+
+$$\hat{y}_t = \arg \max_{y_t \in \mathcal{V}} \sum_{r_j \in R} \log p_\theta(y_t | y_{<t}, [\mathbf{x}; r_j; \mathbf{x}]). \quad (8)$$
+
+Based on the above analysis, we can summarize the workflow to produce the result  $\hat{\mathbf{y}}$  as depicted in Figure 1. It begins by sampling multiple responses  $\mathcal{R} = \{r_1, r_2, \dots, r_k\}$  and then constructing a set of new inputs  $\mathcal{Q} = \{q_1, q_2, \dots, q_k\}$  to prompt the model respond to the original instruction again with reference to a previously sampled response. Subsequently, these inputs are fed to the LLM, which can be processed in one batch concurrently. At the  $t$ -th decoding step, we integrate all predicted probability logits in this batch and select the next token as illustrated in Equation 8. All sequences in the batch universally take the same next token and then continue the generation process. Consequently, all inputs in the batch result in the same output  $\hat{\mathbf{y}}$ , which is used as the final response to the prompt  $\mathbf{x}$ .
+
+{4}------------------------------------------------
+
+Table 2: Evaluation results on three open-ended benchmarks. Responses on TruthfulQA are brief *sentences*, Biographies are short *paragraphs*, and LongFact requires *document-level* responses. The three benchmarks pose increasing levels of difficulty for factuality enhancement. The best results are highlighted in blue and the second best are in green. The results indicating a performance drop (i.e., worse than the standard greedy decoding) are marked in grey.
+
+| Method | TruthfulQA |  |  | Biographies |  | LongFact |  |  |
+|-|-|-|-|-|-|-|-|-|
+|  | % Truth | % Info | % T*I | # Correct | % Acc. | Prec. | R@128 | F1@128 |
+| LLaMA2 | Greedy | 50.7 | 96.3 | 48.9 | 0.81 | 75.6 | 88.1 | 80.5 |
+|  | DoLa | 49.5 ( <sub>1.2</sub> ) | 95.6 ( <sub>-0.7</sub> ) | 47.3 ( <sub>1.6</sub> ) | 0.78 ( <sub>-0.03</sub> ) | 15.6 ( <sub>-0.6</sub> ) | 88.0 ( <sub>-0.1</sub> ) | 75.5 ( <sub>-0.1</sub> ) |
+|  | USC | 46.3 ( <sub>3.4</sub> ) | 96.1 ( <sub>-0.2</sub> ) | 44.5 ( <sub>4.4</sub> ) | 0.84 ( <sub>+0.03</sub> ) | 16.7 ( <sub>+0.5</sub> ) | 86.5 ( <sub>-1.6</sub> ) | 72.1 ( <sub>-3.5</sub> ) |
+|  | SR | 53.9 ( <sub>+3.2</sub> ) | 96.3 ( <sub>+0.0</sub> ) | 51.9 ( <sub>+3.0</sub> ) | 0.82 ( <sub>+0.01</sub> ) | 16.6 ( <sub>+0.4</sub> ) | 86.8 ( <sub>-1.3</sub> ) | 58.2 ( <sub>-17.4</sub> ) |
+|  | SE-SL | 50.5 ( <sub>-0.2</sub> ) | 96.1 ( <sub>-0.2</sub> ) | 48.5 ( <sub>-0.4</sub> ) | 0.75 ( <sub>-0.06</sub> ) | 15.0 ( <sub>-1.2</sub> ) | 88.2 ( <sub>+0.1</sub> ) | 74.7 ( <sub>+0.9</sub> ) |
+|  | SE-RG | 45.4 ( <sub>3.3</sub> ) | 94.6 ( <sub>-1.7</sub> ) | 42.9 ( <sub>6.0</sub> ) | 0.82 ( <sub>+0.01</sub> ) | 16.4 ( <sub>+0.2</sub> ) | 85.2 ( <sub>-2.9</sub> ) | 54.5 ( <sub>-21.1</sub> ) |
+|  | FSC | 52.4 ( <sub>+1.7</sub> ) | 95.6 ( <sub>-0.7</sub> ) | 50.1 ( <sub>+1.2</sub> ) | 0.82 ( <sub>+0.01</sub> ) | 16.4 ( <sub>+0.2</sub> ) | 88.0 ( <sub>-0.1</sub> ) | 64.0 ( <sub>-11.6</sub> ) |
+|  | ID | 55.9 ( <sub>+5.2</sub> ) | 99.0 ( <sub>+2.7</sub> ) | 55.3 ( <sub>+6.4</sub> ) | 0.87 ( <sub>+0.06</sub> ) | 17.3 ( <sub>+1.1</sub> ) | 89.0 ( <sub>+0.9</sub> ) | 77.5 ( <sub>+1.9</sub> ) |
+| LLaMA3 | Greedy | 53.4 | 96.6 | 51.6 | 1.28 | 26.6 | 90.0 | 70.7 |
+|  | DoLa | 54.1 ( <sub>+0.7</sub> ) | 97.6 ( <sub>+1.0</sub> ) | 52.8 ( <sub>+1.2</sub> ) | 1.30 ( <sub>+0.02</sub> ) | 27.1 ( <sub>+0.5</sub> ) | 90.3 ( <sub>+0.3</sub> ) | 70.5 ( <sub>-0.2</sub> ) |
+|  | USC | 56.8 ( <sub>+3.4</sub> ) | 98.3 ( <sub>+1.7</sub> ) | 55.9 ( <sub>+4.3</sub> ) | 1.34 ( <sub>+0.06</sub> ) | 27.9 ( <sub>+1.3</sub> ) | 89.7 ( <sub>+0.3</sub> ) | 71.8 ( <sub>+1.1</sub> ) |
+|  | SR | 57.8 ( <sub>+4.4</sub> ) | 97.1 ( <sub>+0.5</sub> ) | 56.1 ( <sub>+4.5</sub> ) | 1.62 ( <sub>+0.34</sub> ) | 34.0 ( <sub>+7.4</sub> ) | 89.4 ( <sub>+0.6</sub> ) | 46.1 ( <sub>-24.6</sub> ) |
+|  | SE-SL | 58.0 ( <sub>+4.6</sub> ) | 98.3 ( <sub>+1.7</sub> ) | 57.1 ( <sub>+5.5</sub> ) | 1.48 ( <sub>+0.20</sub> ) | 32.8 ( <sub>+6.2</sub> ) | 92.5 ( <sub>+2.5</sub> ) | 68.0 ( <sub>+2.7</sub> ) |
+|  | SE-RG | 54.4 ( <sub>+1.0</sub> ) | 96.3 ( <sub>-0.3</sub> ) | 52.4 ( <sub>+0.8</sub> ) | 1.60 ( <sub>+0.32</sub> ) | 34.5 ( <sub>+7.9</sub> ) | 91.8 ( <sub>+1.8</sub> ) | 47.7 ( <sub>-23.0</sub> ) |
+|  | FSC | 56.5 ( <sub>+3.1</sub> ) | 93.4 ( <sub>-3.2</sub> ) | 52.8 ( <sub>+1.2</sub> ) | 1.33 ( <sub>+0.05</sub> ) | 27.9 ( <sub>+1.3</sub> ) | 92.5 ( <sub>+2.5</sub> ) | 47.3 ( <sub>-23.4</sub> ) |
+|  | ID | 63.4 ( <sub>+10.0</sub> ) | 99.0 ( <sub>+2.4</sub> ) | 62.8 ( <sub>+11.2</sub> ) | 2.00 ( <sub>+0.72</sub> ) | 42.0 ( <sub>+15.4</sub> ) | 92.2 ( <sub>+2.2</sub> ) | 77.7 ( <sub>+7.0</sub> ) |
+| Mistral2 | Greedy | 74.9 | 99.8 | 74.7 | 2.93 | 18.6 | 91.2 | 61.1 |
+|  | DoLa | 74.4 ( <sub>-0.5</sub> ) | 99.8 ( <sub>+0.0</sub> ) | 74.2 ( <sub>-0.5</sub> ) | 0.94 ( <sub>+0.01</sub> ) | 18.8 ( <sub>+0.2</sub> ) | 91.2 ( <sub>+0.0</sub> ) | 61.0 ( <sub>-0.1</sub> ) |
+|  | USC | 76.6 ( <sub>+1.7</sub> ) | 99.8 ( <sub>+0.0</sub> ) | 76.4 ( <sub>+1.7</sub> ) | 0.94 ( <sub>+0.01</sub> ) | 18.8 ( <sub>+0.2</sub> ) | 90.6 ( <sub>+0.6</sub> ) | 61.3 ( <sub>+0.2</sub> ) |
+|  | SR | 78.0 ( <sub>+3.1</sub> ) | 99.5 ( <sub>-0.3</sub> ) | 77.7 ( <sub>+3.0</sub> ) | 0.97 ( <sub>+0.04</sub> ) | 19.8 ( <sub>+1.2</sub> ) | 91.2 ( <sub>+0.0</sub> ) | 63.0 ( <sub>+1.9</sub> ) |
+|  | SE-SL | 76.8 ( <sub>+1.9</sub> ) | 99.5 ( <sub>-0.3</sub> ) | 76.8 ( <sub>+2.1</sub> ) | 1.16 ( <sub>+0.23</sub> ) | 23.3 ( <sub>+4.7</sub> ) | 91.6 ( <sub>+0.4</sub> ) | 58.5 ( <sub>-2.6</sub> ) |
+|  | SE-RG | 72.9 ( <sub>-2.0</sub> ) | 97.8 ( <sub>-2.0</sub> ) | 71.3 ( <sub>-3.4</sub> ) | 1.10 ( <sub>+0.17</sub> ) | 22.0 ( <sub>+3.4</sub> ) | 90.9 ( <sub>-0.3</sub> ) | 44.2 ( <sub>-16.9</sub> ) |
+|  | FSC | 78.0 ( <sub>+3.1</sub> ) | 99.5 ( <sub>-0.3</sub> ) | 77.7 ( <sub>+3.0</sub> ) | 0.87 ( <sub>+0.06</sub> ) | 17.5 ( <sub>-1.1</sub> ) | 91.3 ( <sub>+0.1</sub> ) | 57.8 ( <sub>-3.3</sub> ) |
+|  | ID | 78.8 ( <sub>+3.9</sub> ) | 99.5 ( <sub>-0.3</sub> ) | 78.4 ( <sub>+3.7</sub> ) | 1.11 ( <sub>+0.18</sub> ) | 22.6 ( <sub>+4.0</sub> ) | 91.8 ( <sub>+0.6</sub> ) | 68.5 ( <sub>+7.4</sub> ) |
+| Qwen2 | Greedy | 56.3 | 97.1 | 54.7 | 1.45 | 29.1 | 90.0 | 57.1 |
+|  | DoLa | 56.1 ( <sub>-0.2</sub> ) | 96.6 ( <sub>-0.5</sub> ) | 54.2 ( <sub>-0.5</sub> ) | 1.46 ( <sub>+0.01</sub> ) | 29.2 ( <sub>+0.1</sub> ) | 89.5 ( <sub>-0.5</sub> ) | 56.6 ( <sub>-0.5</sub> ) |
+|  | USC | 58.3 ( <sub>+2.0</sub> ) | 97.6 ( <sub>+0.5</sub> ) | 56.9 ( <sub>+2.2</sub> ) | 1.44 ( <sub>-0.01</sub> ) | 28.8 ( <sub>-0.3</sub> ) | 87.9 ( <sub>-2.1</sub> ) | 57.3 ( <sub>+0.2</sub> ) |
+|  | SR | 59.4 ( <sub>+3.1</sub> ) | 97.6 ( <sub>+0.5</sub> ) | 58.3 ( <sub>+3.6</sub> ) | 1.42 ( <sub>+0.03</sub> ) | 28.6 ( <sub>-0.5</sub> ) | 85.0 ( <sub>-5.0</sub> ) | 45.8 ( <sub>-11.3</sub> ) |
+|  | SE-SL | 57.1 ( <sub>+0.8</sub> ) | 97.1 ( <sub>+0.0</sub> ) | 55.4 ( <sub>+0.7</sub> ) | 1.48 ( <sub>+0.03</sub> ) | 29.5 ( <sub>+0.4</sub> ) | 91.2 ( <sub>+1.2</sub> ) | 55.9 ( <sub>-1.2</sub> ) |
+|  | SE-RG | 62.9 ( <sub>+6.6</sub> ) | 94.9 ( <sub>-2.2</sub> ) | 59.7 ( <sub>+5.0</sub> ) | 1.54 ( <sub>+0.09</sub> ) | 30.8 ( <sub>+1.7</sub> ) | 91.3 ( <sub>+1.3</sub> ) | 44.3 ( <sub>+1.2</sub> ) |
+|  | FSC | 57.3 ( <sub>+1.0</sub> ) | 98.0 ( <sub>+0.9</sub> ) | 56.2 ( <sub>+1.5</sub> ) | 1.55 ( <sub>+0.10</sub> ) | 31.1 ( <sub>+2.0</sub> ) | 91.3 ( <sub>+1.3</sub> ) | 38.6 ( <sub>+0.5</sub> ) |
+|  | ID | 60.0 ( <sub>+3.7</sub> ) | 99.0 ( <sub>+1.9</sub> ) | 59.4 ( <sub>+4.7</sub> ) | 1.74 ( <sub>+0.29</sub> ) | 35.5 ( <sub>+6.4</sub> ) | 91.7 ( <sub>+1.7</sub> ) | 64.2 ( <sub>+7.1</sub> ) |
+| Gemma2 | Greedy | 68.1 | 98.5 | 67.1 | 1.80 | 37.2 | 95.7 | 58.3 |
+|  | DoLa | 68.1 ( <sub>+0.0</sub> ) | 98.8 ( <sub>+0.3</sub> ) | 67.2 ( <sub>+0.1</sub> ) | 1.74 ( <sub>+0.06</sub> ) | 35.9 ( <sub>-1.3</sub> ) | 96.1 ( <sub>+0.4</sub> ) | 59.0 ( <sub>+0.7</sub> ) |
+|  | USC | 71.0 ( <sub>+2.9</sub> ) | 98.5 ( <sub>+0.0</sub> ) | 69.9 ( <sub>+2.8</sub> ) | 2.08 ( <sub>+0.28</sub> ) | 42.2 ( <sub>+5.0</sub> ) | 95.6 ( <sub>-0.1</sub> ) | 58.7 ( <sub>+0.4</sub> ) |
+|  | SR | 64.2 ( <sub>-3.9</sub> ) | 98.8 ( <sub>+0.3</sub> ) | 63.4 ( <sub>-3.7</sub> ) | 1.80 ( <sub>+0.00</sub> ) | 38.9 ( <sub>+1.7</sub> ) | 96.0 ( <sub>+0.3</sub> ) | 42.2 ( <sub>-16.1</sub> ) |
+|  | SE-SL | 69.8 ( <sub>+1.7</sub> ) | 98.3 ( <sub>-0.2</sub> ) | 68.3 ( <sub>+1.2</sub> ) | 2.29 ( <sub>+0.49</sub> ) | 47.3 ( <sub>+10.1</sub> ) | 97.1 ( <sub>+1.4</sub> ) | 56.1 ( <sub>-2.2</sub> ) |
+|  | SE-RG | 70.5 ( <sub>+2.4</sub> ) | 97.8 ( <sub>-0.7</sub> ) | 68.9 ( <sub>+1.8</sub> ) | 2.40 ( <sub>+0.60</sub> ) | 50.5 ( <sub>+13.3</sub> ) | 96.7 ( <sub>+1.0</sub> ) | 42.6 ( <sub>+13.5</sub> ) |
+|  | FSC | 69.8 ( <sub>+1.7</sub> ) | 98.3 ( <sub>-0.2</sub> ) | 68.3 ( <sub>+1.2</sub> ) | 1.70 ( <sub>-0.10</sub> ) | 36.0 ( <sub>-1.2</sub> ) | 95.8 ( <sub>+0.1</sub> ) | 50.4 ( <sub>-7.9</sub> ) |
+|  | ID | 77.1 ( <sub>+9.0</sub> ) | 99.0 ( <sub>+0.5</sub> ) | 76.3 ( <sub>+9.2</sub> ) | 2.52 ( <sub>+0.72</sub> ) | 52.4 ( <sub>+15.2</sub> ) | 97.1 ( <sub>+1.4</sub> ) | 69.7 ( <sub>+11.4</sub> ) |
+| GLM4 | Greedy | 58.5 | 97.8 | 57.2 | 1.44 | 28.7 | 87.2 | 62.7 |
+|  | DoLa | 59.0 ( <sub>+0.5</sub> ) | 97.6 ( <sub>-0.2</sub> ) | 57.6 ( <sub>+0.4</sub> ) | 1.41 ( <sub>-0.03</sub> ) | 28.3 ( <sub>-0.4</sub> ) | 86.9 ( <sub>-0.3</sub> ) | 61.6 ( <sub>-1.1</sub> ) |
+|  | USC | 61.5 ( <sub>+3.0</sub> ) | 99.0 ( <sub>+1.2</sub> ) | 60.9 ( <sub>+3.7</sub> ) | 1.40 ( <sub>-0.04</sub> ) | 28.0 ( <sub>-0.7</sub> ) | 85.9 ( <sub>-1.3</sub> ) | 65.9 ( <sub>+3.2</sub> ) |
+|  | SR | 63.4 ( <sub>+4.9</sub> ) | 98.1 ( <sub>+0.3</sub> ) | 62.2 ( <sub>+5.0</sub> ) | 1.34 ( <sub>+0.10</sub> ) | 27.5 ( <sub>-1.2</sub> ) | 88.7 ( <sub>+1.5</sub> ) | 36.8 ( <sub>-25.9</sub> ) |
+|  | SE-SL | 61.0 ( <sub>+2.5</sub> ) | 98.5 ( <sub>+0.7</sub> ) | 60.1 ( <sub>+2.9</sub> ) | 1.37 ( <sub>+0.07</sub> ) | 27.3 ( <sub>-1.4</sub> ) | 88.9 ( <sub>+1.7</sub> ) | 62.5 ( <sub>-0.2</sub> ) |
+|  | SE-RG | 64.1 ( <sub>+5.6</sub> ) | 97.8 ( <sub>+0.0</sub> ) | 62.7 ( <sub>+5.5</sub> ) | 1.36 ( <sub>-0.08</sub> ) | 27.2 ( <sub>-1.5</sub> ) | 88.0 ( <sub>+0.8</sub> ) | 48.7 ( <sub>-14.0</sub> ) |
+|  | FSC | 63.4 ( <sub>+4.9</sub> ) | 97.8 ( <sub>+0.0</sub> ) | 62.0 ( <sub>+4.8</sub> ) | 1.58 ( <sub>+0.14</sub> ) | 31.7 ( <sub>+3.0</sub> ) | 90.3 ( <sub>+3.1</sub> ) | 38.4 ( <sub>+24.3</sub> ) |
+|  | ID | 65.1 ( <sub>+6.6</sub> ) | 99.0 ( <sub>+1.2</sub> ) | 64.5 ( <sub>+7.3</sub> ) | 1.81 ( <sub>+0.37</sub> ) | 36.2 ( <sub>+7.5</sub> ) | 89.2 ( <sub>+2.0</sub> ) | 66.4 ( <sub>+3.7</sub> ) |
+
+## 3 EXPERIMENTS
+
+### 3.1 SETUP
+
+**Benchmarks and Evaluation Metrics** We consider three open-ended generation benchmarks:
+
+- **TruthfulQA** (Lin et al., 2022) consists of 817 questions that many humans would answer falsely due to misconception. We employ GPT-4 (Bubeck et al., 2023) to assess the truthfulness (*Truth*) and informativeness (*Info*) scores of each generated answer. The product of these two scores ( $T^*I$ )
+
+{5}------------------------------------------------
+
+is considered as the major metric on this benchmark. During evaluation, the reference answers annotated in the dataset are included in the prompt as reference when using GPT-4 to assess truthfulness. The informativeness score assesses whether the response contains valid information that directly answers the question. GPT-4 is employed to evaluate this in a few-shot manner, using the evaluation samples provided by Lin et al. (2022) as the demonstration examples.
+
+- **Biographies** (Du et al., 2024) requires generating bullet point biographies for computer scientists, with a total of 250 samples. Specifically, we prompt the model to list 5 major achievements or contributions made by the scientist in question. Following Du et al. (2024), we use GPT-4 to assess the factuality of each bullet statement by referring to the related information extracted from Wikipedia. The proportion (*%Accuracy*) and the number (*#Correct*) of factual statements are adopted as the evaluation metrics. Note that *%Accuracy* is not simply *#Correct* divided by five since the model may occasionally generate fewer than five statements when it is uncertain.
+- **LongFact-Objects** (Wei et al., 2024) requests detailed descriptions for a queried object and expects a document-level response that is typically very long, often exceeding a thousand tokens (see Appendix G for detailed examples). The evaluation process is similar to the one described in Wei et al. (2024), which involves splitting the long response into a series of atomic facts and then assessing their truthfulness separately. We employ LLaMA3.1-70B-Instruct to divide atomic facts and use GPT-4 to assess whether each fact is truthful. The adopted metrics include the proportion of truthful facts (*Precision*), the number of truthful facts divided by 128 (*Recall@128*), and the *F1@128* score that integrates the previous two metrics. 120 samples are used for evaluation. Evaluation results of recall and F1 metrics at other intervals are provided in Appendix C.3.
+
+**Compared Methods** We compare our method with (1) *greedy decoding* (**Greedy**) and (2) *decoding by contrasting layers* (Chuang et al., 2024b, **DoLa**). In addition, we also compare it with five ensemble-based methods that also involves repeated sampling to produce a refined result, including: (3) *Universal Self-Consistency* (Chen et al., 2023, **USC**) concatenates the sampled responses in one prompt and directly instructs the LLM to select the most consistent one from them; (4) *Self-reflection* (Madaan et al., 2024, **SR**) also concatenates the sampled responses as an input, and asks the model to reflect on them and extract the factual information in them to produce a new response; (5) *Selection-based self-endorsement* (Wang et al., 2024b, **SE-SL**) prompts the LLM to divide the response into a sequence of facts and then calculates a self-endorsement score for each response by checking the consistency between each fact within it and all other sampled responses, selecting the response with the highest score as the final output; (6) *Regeneration-based self-endorsement* (**SE-RG**) is a variant of SE-SL, which regenerates a new output with some of the facts extracted from the sampled responses (7) *Fine-grained Self-consistency* (Wang et al., 2024a, **FSC**) instructs the LLM to extract common segments among sampled responses and regenerate a new output accordingly.
+
+**Base Models** Our main experiments are conducted on LLaMA-2-7B-chat (Touvron et al., 2023), LLaMA-3-8B-Instruct (Dubey et al., 2024), Mistral-7B-Instruct-v0.2 (Jiang et al., 2023), Gemma-2-9B-it (Team et al., 2024), Qwen2-7B-Instruct (Yang et al., 2024), and GLM-4-9B-chat (GLM et al., 2024). We refer to them as LLaMA2, LLaMA3, Mistral2, Gemma2, Qwen2, GLM4, respectively.
+
+**Implementation Details** The prompt templates used for different approaches are provided in Appendix F. The sampled responses were all obtained via temperature sampling with  $T = 0.7$  when implementing USC, SR, and ID in the main experiments. For USC, SR, and ID, we searched for the optimal number of sampled responses to integrate from  $k = \{1, 4, 8, 12, 16\}$  using the validation sets and employ it for evaluation on the test sets. We selected the optimal  $k$  according to the *%Truth* score on TruthfulQA and the *%Accuracy* metric on Biographies. Due to high evaluation costs on LongFact, we did not conduct optimal  $k$  searching on it. We directly set  $k = 16$  for ID. For USC, FSC and SR, we set  $k = 4$  because these methods require including all sampled responses in the prompt. Since the responses on LongFact is very lengthy, setting  $k$  higher than 4 would exceed the context length limits of many LLMs.
+
+### 3.2 MAIN RESULTS
+
+**Integrative decoding leads to substantial improvements in factuality across all six LLMs.** As shown in Table 2, the absolute improvements on TruthfulQA, Biographies, and LongFact are 3.7-10%, 1.1-15.4%, and 1.6-8.5%, respectively (in terms of *%Truth*, *%Accuracy*, and *F1@128*).
+
+{6}------------------------------------------------
+
+Among the six LLMs, the overall improvement is the most substantial over LLaMA3 and Gemma2. The improvement on LLaMA2, though evident, is the least among all six LLMs. This suggests that the effects of integrative decoding is more evident on stronger LLMs.
+
+**Integrative decoding achieves robust balance between factuality and informativeness.** Across metrics that assess informativeness (i.e., % Info, # Correct, and Recall@128), integrative decoding also shows substantial improvement. This is particularly evident on the LongFact benchmark, which involves generating long documents, where the absolute improvement in Recall@128 reaches as high as 11.4%. This indicates that integrative decoding can elicit more parametric knowledge from the LLM while maintaining factual accuracy, rather than merely improving factuality simply by filtering out incorrect information. In contrast, the baseline methods, especially the other regeneration-based approaches (i.e., SR, FSC, SE-RG), struggle to achieve a robust balance between factuality and informativeness. For instance, while SR also improves the precision of GLM4 on LongFact, it results in a considerable drop of 25.9% in Recall@128. This indicates that they need to sacrifice a large degree of informativeness to ensure factual accuracy.
+
+**Integrative decoding is robust to document-level generation tasks.** Enhancing factuality on long-form generation tasks is challenging and less explored. From Table 2, we can see that baseline approaches struggle with the LongFact benchmark, which requires document-level generation. Though some of them can also enhance precision, they often result in a marked decline in information recall the F1 metric. Encouragingly, integrative decoding remains effective on LongFact, providing absolute improvements of up to 8.5%. This suggests that integrative decoding offers greater generality and robustness in long-form generation tasks.
+
+**Integrative decoding achieve more substantial and consistent improvement in factuality compared to the baseline approaches.** The improvements achieved by DoLa is marginal on our experimental benchmarks, with an increase of no more than 0.7%. This suggest that the effectiveness of DoLa in enhancing factuality is limited in long-form, open-ended generation tasks. While the other approaches can improve factual accuracy in many cases, their enhancements are not robust. They fail to reliably enhance performance across different LLMs; for instance, USC causes significant performance degradation on LLaMA2, and SR does the same on Gemma2. Additionally, their effectiveness on the LongFact benchmark is marginal and sometimes leads to reduced performance.
+
+**Integrative decoding is robust to varying model scales.** To evaluate the robustness of ID to different model scales, we further conduct experiments with Qwen-2.5-3B/7B/14B/32B/72B-Instruct (Team, 2024c), LLaMA-2-13B/70B-chat (Touvron et al., 2023), and Mistral-Nemo/Small/Large-Instruct-2407/2409 (Team, 2024a) on the Biographies dataset. The results are shown in Figure 2 (please refer to Figure 5 in the appendix for full results). We observe that ID consistently leads to substantial improvements over different model scales; in addition, there is a general trend indicating that performance gains become more pronounced at larger model scales.
+
+![Figure 2: A stacked bar chart showing Accuracy (%) for different model scales (3B, 7B, 14B, 32B, 72B). The chart compares Greedy (blue) and ID (green) methods. The ID method consistently shows higher accuracy than the Greedy method across all model scales, with the improvement being more pronounced at larger scales.](01da0d212fb571933f10f96556157745_img.jpg)
+
+| Model Scale | Greedy (%) | ID (%) | Improvement (%) |
+|-|-|-|-|
+| 3B | ~30.0 | ~31.0 | +3.3% |
+| 7B | ~40.0 | ~40.4 | +0.1% |
+| 14B | ~45.0 | ~48.5 | +7.3% |
+| 32B | ~45.0 | ~50.0 | +10.5% |
+| 72B | ~52.0 | ~57.0 | +9.7% |
+
+Figure 2: A stacked bar chart showing Accuracy (%) for different model scales (3B, 7B, 14B, 32B, 72B). The chart compares Greedy (blue) and ID (green) methods. The ID method consistently shows higher accuracy than the Greedy method across all model scales, with the improvement being more pronounced at larger scales.
+
+Figure 2: The performance of ID on different model scales from the Qwen-2.5 series. Additional results for the LLaMA and Mistral series are shown in Figure 5.
+
+### 3.3 EFFECTS OF INCREASING THE NUMBER OF SAMPLED RESPONSES
+
+We analyze the effects of increasing the number of sampled responses on the performance of SR, USC, and ID, as shown in Figure 3 (more results are included in Appendix C.4).
+
+**The performance of integrative decoding can progressively improve with more sampled responses.** Even with only four sampled responses, ID consistently delivers noticeable performance gains. Figure 4 further explores the effects of incorporating more sampled responses when they are obtained via different sampling strategies. From Figure 3 and 4, we can observe a generally log-linear relationship between performance and the number of sampled responses. This trend mirrors findings from previous studies on the performance improvements observed in exact-match-based self-consistency approaches (Wang et al., 2023; Brown et al., 2024).
+
+**USC and SR fail to consistently improve with the increase in the number of sampled responses.** In many cases, particularly with less capable LLMs like LLaMA2, their performance even deteriorates.
+
+{7}------------------------------------------------
+
+![Figure 3: Performance of different approaches on the Biographies dataset over six LLMs. The figure contains four line graphs for Llama2, Mistral2, Qwen2, and Gemma2. Each graph plots Accuracy (%) on the y-axis against the number of sampled responses (1, 4, 8, 12, 16) on the x-axis. Four methods are compared: ID (green line with circles), SR (blue line with circles), USC (light blue line with circles), and Greedy (dashed horizontal line). In all cases, ID starts at the Greedy baseline and increases as more responses are sampled, while SR and USC remain relatively flat and lower than ID.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 3: Performance of different approaches on the Biographies dataset over six LLMs. The figure contains four line graphs for Llama2, Mistral2, Qwen2, and Gemma2. Each graph plots Accuracy (%) on the y-axis against the number of sampled responses (1, 4, 8, 12, 16) on the x-axis. Four methods are compared: ID (green line with circles), SR (blue line with circles), USC (light blue line with circles), and Greedy (dashed horizontal line). In all cases, ID starts at the Greedy baseline and increases as more responses are sampled, while SR and USC remain relatively flat and lower than ID.
+
+Figure 3: The performance of different approaches on the Biographies dataset over six LLMs, when the number of sampled responses is 1, 4, 8, 12, and 16, respectively.
+
+rates. We find that USC tends to directly choose the first sampled response appearing in their prompt as the final answer instead of adequately evaluating the consistency among all responses. SR, likewise, struggles to distill factual information from multiple responses into a cohesive, high-quality final answer. A significant factor contributing to this limitation is that they need to concatenate all sampled responses within a single prompt, which dramatically inflates the context length. This places an immense burden on the model’s long-text processing capabilities, making them hard to scale effectively with repeated sampling. In contrast, ID only extends the input by the length of one sampled response, rendering it far more manageable for the model to process. This alleviates the challenges associated with context length saturation and reduces the cognitive load on the model, thereby enabling more stable and scalable performance.
+
+### 3.4 ANALYSIS OF DECODING OBJECTIVE
+
+**Evaluation of Language Coherence.** We assess whether ID would impair language coherence by comparing it with the generations from greedy decoding. Specifically, given a pair of outputs generated via ID and greedy decoding on the same sample of TruthfulQA, GPT-4-turbo is employed to select one with better language coherence or select “Tie” (see Appendix B.4 for the prompt template). The results are shown in Table 3. We observe that most comparisons result in a “Tie,” and the number of instances where ID wins is even slightly higher than those where it loses. This indicates that the generations from integrative decoding can achieve the same level of language fluency and coherence as greedy decoding.
+
+**Evaluation of Self-consistency.** To assess whether ID can effectively foster self-consistency with the sampled responses, we measure the self-consistency score, following (Manakul et al., 2023; Farquhar et al., 2024) (please refer to Appendix B.5 for the evaluation details). We conduct evaluation on ID and the baseline approaches that aim to enhance self-consistency in the final output (i.e., USC, SR, SE-SL, SE-RG, FSC). We consider the scenarios where they integrates 8 sampled responses and measures the self-consistency score between the final output and the eight sampled responses. We also evaluate the self-consistency level between an output that is directly generated through temperature sampling and the other eight sampled responses, denoted as *Vanilla*. As shown in Table 4, the self-consistency level achieved by integrative decoding is significantly better than the other approaches that aim to utilize self-consistency from improving factuality on six LLMs.
+
+Based on these two sets of experiments, we confirm that integrative decoding can effectively enhance both language coherence and self-consistency in its decoding objective, as outlined in Eq. 4.
+
+| Model | ID vs. Greedy |  |  |
+|-|-|-|-|
+|  | Win (%) | Tie (%) | Lose (%) |
+| Gemma2 | 11.95 | 80.49 | 7.56 |
+| GLM4 | 16.34 | 72.68 | 10.98 |
+| LLaMA2 | 12.68 | 82.44 | 4.88 |
+| LLaMA3 | 8.54 | 82.93 | 8.54 |
+| Mistral2 | 11.22 | 76.83 | 11.95 |
+| Qwen2 | 14.39 | 74.63 | 10.98 |
+
+Table 3: Evaluation results of language coherence. The “Win” column indicates the ratio of cases where ID wins.
+
+| Method | Base Model |  |  |  |  |  |
+|-|-|-|-|-|-|-|
+|  | LLaMA2 | Mistral | Qwen | Gemma | GLM |  |
+| Vanilla | 0.609 | 0.632 | 0.602 | 0.679 | 0.707 | 0.645 |
+| USC | 0.605 | 0.652 | 0.606 | 0.676 | 0.724 | 0.664 |
+| SR | 0.634 | 0.644 | <b>0.651</b> | <b>0.720</b> | <b>0.720</b> | <b>0.695</b> |
+| FSC | 0.598 | 0.634 | 0.610 | 0.683 | 0.710 | 0.679 |
+| SE-SL | 0.622 | <b>0.671</b> | 0.643 | 0.700 | 0.748 | 0.672 |
+| SE-RG | 0.639 | 0.647 | 0.634 | 0.706 | <b>0.752</b> | 0.681 |
+| <b>ID</b> | <b>0.648</b> | <b>0.682</b> | <b>0.663</b> | <b>0.737</b> | <b>0.759</b> | <b>0.734</b> |
+
+Table 4: Evaluation results of self-consistency between the final outputs and the sampled responses it integrates. The best results and the runner-ups are highlighted in blue and green, respectively.
+
+{8}------------------------------------------------
+
+### 3.5 ANALYSIS OF INFERENCE EFFICIENCY
+
+We assess the inference efficiency of ID and previous methods that leverage self-consistency to enhance factuality. We apply them on LLaMA3 to perform inference on the TruthfulQA benchmark, using a single GPU of A100 80GB. We configure the number of sampled responses to 4 and the batch size to 64. As shown in Table 5, the inference cost of ID is comparable to USC and significantly lower than all other methods. It is because those methods necessitate numerous iterations of inference or extensive chain-of-thought reasoning to assess consistency among sampled responses, while ID does not. In Appendix D.1, we further discuss the issue of inference efficiency and the value of exploring techniques to utilize more inference-time computation in exchange of enhanced performance.
+
+### 3.6 ANALYSIS OF ROBUSTNESS TO DIFFERENT SAMPLING STRATEGIES
+
+We evaluate the robustness of ID when the sampled responses are obtained via different sampling strategies on the Biographies dataset, including temperature sampling with  $T \in \{0.3, 0.5, 0.7\}$  and nucleus sampling with  $p \in \{0.9, 0.95\}$ . The results are shown in Figure 4 (more results are included in Figure 8 in the appendix). ID robustly improves the performance across all sampled responses. The performance growth is slightly more significant in nucleus sampling compared to temperature sampling, but the difference is modest and lacks consistency.
+
+### 3.7 CASE STUDY
+
+**Integrative decoding maintains self-consistency at semantic level.** To further illustrate the mechanism of ID, we present a case study in Table 6. The base model used in this case is Qwen-7B-Instruct. In this case, three out of the five sentences produced by greedy decoding exhibit hallucination. In comparison, while the four sampled responses also contain non-factual information (see Appendix G.2 for their complete content), ID is able to capture the content that consistently present across them and eliminate sporadic hallucinations, ultimately yielding a fully factual and coherent output. It is crucial to note that, though many statements in the ID’s output share the same underlying meanings as those in sampled responses, they differ in their surface-level expression. This indicates that ID can maintain self-consistency at semantic level, rather than merely replicating the content in the sampled responses. ID achieves such effects by allowing each input it integrates to act like a “representative” for a sampled response. Leveraging the in-context learning capability, each input assigns high logits to all tokens that are semantically consistent with the sampled response it represents, instead of confining its choices to tokens directly appearing in it. This allows ID to maintain a high level of self-consistency at semantic level.
+
+## 4 RELATED WORKS
+
+Though LLMs have exhibited remarkable proficiency in solving a wide range of tasks, many studies have found that they tend to generate statements that appear plausible but are inconsistent with real-world facts, a phenomenon commonly known as hallucinations (Bai et al., 2022; Yin et al., 2023; Huang et al., 2023b; Zhang et al., 2024c). Previous studies found that the degree of self-consistency between LLM’s different sampled responses can serve as a useful indicator for hallucination detection (Manakul et al., 2023; Farquhar et al., 2024; Mündler et al., 2024) and uncertainty quantification (Desai & Durrett, 2020; Jiang et al., 2021; Glushkova et al., 2021; Kuhn et al., 2023; Duan et al., 2024; Zhang et al., 2024a). Among these efforts, self-consistency-driven approaches have proved
+
+| Method | Latency ↓<br>(ms/token) | Throughput ↑<br>(tokens/s) |
+|-|-|-|
+| Greedy | 0.10 (×1.00) | 975.76 (×1.00) |
+| USC | 0.93 (×9.10) | 107.73 (×0.11) |
+| SR | 1.97 (×19.26) | 50.90 (×0.05) |
+| FSC | 1.97 (×19.26) | 50.88 (×0.05) |
+| SE-SL | 8.37 (×82.09) | 11.96 (×0.01) |
+| SE-RG | 7.28 (×71.35) | 13.74 (×0.01) |
+| <b>ID</b> | <b>1.13 (×11.04)</b> | <b>86.78 (×0.09)</b> |
+
+Table 5: Evaluation of inference efficiency. Tokens generated in intermediate steps and chain-of-thought reasoning excluded in the evaluation.
+
+![Figure 4: A line graph titled 'LLaMA3' showing Accuracy (%) on the y-axis (ranging from 27 to 42) versus # Sampled Responses on the x-axis (values: 1, 4, 8, 12, 16). Six data series are plotted: Greedy (dashed line with circles), T=0.3 (green line with squares), T=0.5 (green line with triangles), T=0.7 (green line with diamonds), p=0.9 (blue line with circles), and p=0.95 (blue line with diamonds). The p=0.95 series shows the highest accuracy, peaking at approximately 42% at 12 sampled responses. The Greedy series shows the lowest accuracy, starting at ~30% and ending at ~39%.](ae21ece48844b14b230832cbb6fcf735_img.jpg)
+
+Figure 4: A line graph titled 'LLaMA3' showing Accuracy (%) on the y-axis (ranging from 27 to 42) versus # Sampled Responses on the x-axis (values: 1, 4, 8, 12, 16). Six data series are plotted: Greedy (dashed line with circles), T=0.3 (green line with squares), T=0.5 (green line with triangles), T=0.7 (green line with diamonds), p=0.9 (blue line with circles), and p=0.95 (blue line with diamonds). The p=0.95 series shows the highest accuracy, peaking at approximately 42% at 12 sampled responses. The Greedy series shows the lowest accuracy, starting at ~30% and ending at ~39%.
+
+Figure 4: The performance of ID, with sampled responses obtained via different sampling strategies (temperature sampling with  $T \in \{0.3, 0.5, 0.7\}$  and nucleus sampling with  $p \in \{0.9, 0.95\}$ ). The best results and the runner-ups are highlighted in blue and green.
+
+{9}------------------------------------------------
+
+Table 6: A case study that compares ID and greedy decoding, using the prompt “list five major achievements or contributions made by David Parnas.” See Appendix G.2 for the complete content.
+
+|  |  |
+|-|-|
+| <b>Sampled Response #1:</b> | David Parnas is credited with the concept of “information hiding”, which emphasizes structuring software into manageable, self-contained modules... His work on software architecture principles, including the “Parnas Principle”, which advocates for the separation of concerns, has had a lasting impact on the design and development of complex software systems. |
+| <b>Sampled Response #2:</b> | David Parnas introduced the principle that “information hiding” is a key concept in software design, advocating that ... He contributed significantly to the concept of modular programming, emphasizing that ... Parnas was instrumental in the development of software architecture theory, focusing on the design of systems that are understandable, scalable, and adaptable ... |
+| <b>Sampled Response #3:</b> | David Parnas introduced the concept of “information hiding” in software engineering. ... Parnas was a pioneer in the field of software architecture, advocating for the importance of understanding and managing the structure and organization of complex software systems. He contributed to the development of the “Parnas Principle”, which suggests that a program should be understandable ... |
+| <b>Sampled Response #4:</b> | Parnas advocated for modular programming, emphasizing that ... Parnas contributed to the field of software architecture, emphasizing the importance of architecture in ... Parnas recognized the importance of human factors in software engineering, advocating for the integration of psychological and sociological aspects into the design and development processes of software systems. |
+| <b>Integrative Decoding:</b> | David Parnas introduced the concept of “information hiding” in software engineering, which is crucial for managing complexity in software systems (✓). He contributed to the development of the “Parnas Principle”, advocating for the separation of concerns in software design to enhance maintainability and understandability (✓). Parnas was instrumental in the advancement of software architecture theory, emphasizing the importance of clear structure and organization in software systems (✓). He advocated “modular programming,” which involves structuring software into independent, interchangeable modules to simplify development and maintenance (✓). His works on “software understanding” and “software comprehension” has been foundational in the field, focusing on the human aspects of software development and maintenance (✓). |
+| <b>Greedy Decoding:</b> | David Parnas introduced the concept of “information hiding” in software engineering, which is fundamental to object-oriented programming (✓). He developed the ‘causality criterion’ for software modularity, influencing how software is designed and structured (✗). Parnas was instrumental in the development of the “slicing” technique for program comprehension and debugging (✗). He contributed to the understanding of “information flow” in security and confidentiality within computer systems (✓). His work on “degradation” and “amortization” has been pivotal in the field of software maintenance and evolution (✗). |
+
+to be very effective in improving factuality (Wang et al., 2023; Shi et al., 2022; Chen et al., 2023; Thirukovalluru et al., 2024; Malon & Zhu, 2024; Mündler et al., 2024). However, most of the existing approaches that utilize self-consistency to improve factuality pose strict constraints on the task format, they only consider tasks, where the answers can be directly verified via exact matches (Li et al., 2022; Shi et al., 2022; Wang et al., 2023; Huang et al., 2023a). To overcome this limitation, research efforts (Chen et al., 2023; Thirukovalluru et al., 2024; Malon & Zhu, 2024; Mündler et al., 2024) have been directed towards adapting self-consistency for open-ended tasks without constraints on the task format. USC (Chen et al., 2023) concatenates multiple candidate outputs and directly prompts the LLM to select the most consistent answer. Similarly, (Wang et al., 2024a) instructs the LLM to regenerate a new response that is consistency with those presented in the prompt. Alternatively, it has been explored to treat each response as a collection of statements and then assess the consistency level between each pair of statements through clustering (Thirukovalluru et al., 2024) or iterative LLM prompting (Mündler et al., 2024; Wang et al., 2024a,b).
+
+Another line of research that is closely related to this study is exploration of decoding-based approaches for improving factuality (Burns et al., 2023; Li et al., 2024; Chuang et al., 2024b;a). Chuang et al. (2024b) propose to decode outputs by comparing the differences in logits between the projections of later and earlier layers to better surface factual knowledge and reduce the generation of incorrect facts. Burns et al. (2023) introduce a consistency-based search algorithm to identify a direction in the activation space of LLMs that remains consistent across negations, thereby reducing generated errors. O’Brien & Lewis (2023) propose contrastive decoding, which maximizes the weighted difference in likelihood between a stronger expert model and a weaker model to mitigate hallucinations. Interestingly, ID, which sums up a set of logit predictions, acts somewhat like an opposite version of contrastive decoding.
+
+## 5 CONCLUSION
+
+In this paper, we introduced Integrative Decoding (ID), a decoding algorithm with self-consistency incorporated in its objective. It achieved substantial improvements in improving factuality over six series of LLMs on three open-ended generation benchmarks. Moreover, ID exhibited the potential for continuous improvement as the number of sampled responses increases, suggesting the possibility of realizing “inference-time scaling laws” on open-ended generation tasks. One promising direction for future work is to combine the idea of speculative decoding (Leviathan et al., 2023; Sun et al., 2023) with ID, applying ID only at the few “difficult” decoding steps. In addition, our current implementation of ID makes locally optimal decisions at each decoding step to approximate the self-consistency objective (Eq. 8). Future work could explore more precise approximations of this objective, such as leveraging beam search.
+
+ Rest of paper (reference and Appendix) is removed.

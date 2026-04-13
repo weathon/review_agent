@@ -1,0 +1,414 @@
+
+
+{0}------------------------------------------------
+
+# ADAPTIVE HL-GAUSSIAN: A VALUE FUNCTION LEARNING METHOD WITH DYNAMIC SUPPORT AD- JUSTMENT
+
+## Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Recent research indicates that using cross-entropy (CE) loss for value function learning surpasses traditional mean squared error (MSE) loss in performance and scalability, with the HL-Gaussian method showing notably strong results. However, this method requires a pre-specified support for representing the categorical distribution of the value function, and an inappropriately chosen interval for the support may not match the time-varying value function, potentially impeding the learning process. To address this issue, we theoretically establish that HL-Gaussian inherently introduces a projection error during the learning of the value function, which is dependent on the support interval. We further prove that an ideal interval should be sufficiently broad to reduce truncation-induced projection errors, yet not so excessive as to counterproductively amplify them. Guided by these findings, we introduce the Adaptive HL-Gaussian (AHL-Gaussian) approach. This approach starts with a confined support interval and dynamically adjusts its range by minimizing the projection error. This ensures that the interval's size stabilizes to adapt to the learning value functions without further expansion. We integrate AHL-Gaussian into several classic value-based algorithms and evaluate it on Atari 2600 games and Gym Mujoco. The results show that AHL-Gaussian significantly outperforms the vanilla baselines and standard HL-Gaussian with a static interval across the majority of tasks.
+
+## 1 Introduction
+
+Deep Reinforcement Learning (DRL) has achieved significant success across various practical applications (Badia et al., 2020; Shah et al., 2022; Fawzi et al., 2022; Degrave et al., 2022; OpenAI, 2022), among which value-based methods (Mnih et al., 2015; Silver et al., 2017) are the most widely adopted frameworks. Within this framework, value functions are typically approximated using neural networks and learned to fit the Bellman targets. A common approach for this is to employ mean squared error (MSE) as the regression objective (Mnih et al., 2015; Haarnoja et al., 2018; Fujimoto et al., 2018a). Alternatively, a class of methods (Bellemare et al., 2017; Dabney et al., 2018) models the value function as a categorical distribution on a finite support, capturing its distributional properties, and employs cross-entropy (CE) loss for learning as a classification objective. Recently, Farebrother et al. (2024) reviewed three typical approaches within this paradigm and revealed that using CE loss rather than MSE loss can significantly improve the training performance and exhibit scaling law as model complexity increases. In particular, Farebrother et al. (2024) found that HL-Gaussian (Imani & White, 2018), a specialized method among the three, which involves projecting Bellman target scalar into a categorical distribution derived from Gaussian distribution, can produce the most remarkable results. These empirical benefits have been attributed to several hypotheses, including improved gradient stability (Ehsan Imani, 2024), better feature representation (Zhang et al., 2023), implicit biases (Stewart et al., 2023), and greater resilience to noisy targets and non-stationary environments (Farebrother et al., 2024).
+
+However, HL-Gaussian and analogous approaches that represent value functions through categorical distributions share a fundamental limitation: they necessitate a predetermined interval for the support,  $[v_{\min}, v_{\max}]$ , within which the value functions must be confined. Intuitively, the choice of
+
+{1}------------------------------------------------
+
+054  
+055  
+056  
+057  
+058  
+059  
+060  
+061  
+062  
+063  
+064  
+065  
+066  
+067  
+068  
+069  
+070  
+071  
+072  
+073  
+074  
+075  
+076  
+077  
+078  
+079  
+080  
+081  
+082  
+083  
+084  
+085  
+086  
+087  
+088  
+089  
+090  
+091  
+092  
+093  
+094  
+095  
+096  
+097  
+098  
+099  
+100  
+101  
+102  
+103  
+104  
+105  
+106  
+107
+
+![Figure 1: Comparison of different interval magnitudes. (a) Histogram of episodic return for three tasks: SpacInvader4(Formaly-v4), Pong-v2, and Humanoid500(v2). The x-axis shows Vmax values (10, 100, 1000, 10000) and the y-axis shows Episodic Return. (b) Learning curves of Q-values for Humanoid500(v2) over 1.0M time steps for Vmax values of 10, 100, 1000, and 10000. The y-axis is on a log scale from 10^0 to 10^4.](e05232e09f8d0a603eef5812f7313d4b_img.jpg)
+
+Figure 1: Comparison of different interval magnitudes. (a) Histogram of episodic return for three tasks: SpacInvader4(Formaly-v4), Pong-v2, and Humanoid500(v2). The x-axis shows Vmax values (10, 100, 1000, 10000) and the y-axis shows Episodic Return. (b) Learning curves of Q-values for Humanoid500(v2) over 1.0M time steps for Vmax values of 10, 100, 1000, and 10000. The y-axis is on a log scale from 10^0 to 10^4.
+
+(a) Histogram of episodic return
+
+(b) Learning curves of Q-values
+
+Figure 1: Comparison of different interval magnitudes
+
+the interval significantly impacts the training performance: on one hand, value function is used to characterize the actual returns generated when a policy is executed in a task. However, an inappropriate interval can restrict the value function to an unreasonable range, making it difficult to capture task-specific return information and thus affecting the final performance. As demonstrated in Figure 1(a), the magnitude of the optimal interval range varies across three distinct tasks, reflecting the task-specific nature of the interval. On the other hand, the value function dynamically changes and often exhibits numerical growth during the learning process. Consequently, a static and overly narrow interval may fail to adapt to the temporal variability of the value function, thereby negatively suppressing its upward trend. As depicted in Figure 1(b), the value functions, each induced by different intervals, all exhibit an upward trajectory. However, their ultimate convergence values are significantly influenced by the range of the interval.
+
+Therefore, for HL-Gaussian to be effective in RL and achieve widespread adoption, the current static method of setting intervals, which relies on task-specific priors, is inadequate. A more promising approach lies in developing a dynamic support adjustment mechanism that is both task-agnostic and value-function-aware. This advancement would enable HL-Gaussian to reach its full potential across a wide range of real-world applications.
+
+In this study, we explore the influence of the support interval  $[v_{\min}, v_{\max}]$  on the learning of the value function within the HL-Gaussian approach. Initially, we establish that HL-Gaussian introduces a projection error during value function fitting, arising from the truncation of the Bellman target within  $[v_{\min}, v_{\max}]$  and its discretization into categorical distributions. Subsequently, we demonstrate the relationship between these two types of errors and  $[v_{\min}, v_{\max}]$ : when the Bellman target is within  $[v_{\min}, v_{\max}]$  and away from the boundaries, the overall projection error is minimal. Otherwise, the truncation error is substantial. Additionally, the projection error rises linearly with the expansion of  $[v_{\min}, v_{\max}]$ . Therefore, we conclude that the ideal interval must be wide enough to minimize truncation error but not so broad as to incur counterproductive projection error. Leveraging these theoretical insights, we propose an approach that begins with a confined interval and dynamically adjusts its range by optimizing the projection error. This method is task-agnostic and can adapt the interval dynamically based on the learning value function. We term this approach Adaptive HL-Gaussian (AHL-Gaussian).
+
+We integrate AHL-Gaussian with several classic value-based algorithms, including DQN (Mnih et al., 2015), SAC (Haarnoja et al., 2018), and TD3 (Fujimoto et al., 2018b), and apply it to tasks with both discrete action spaces (Atari 2600 games) and continuous action spaces (Gym Mujoco). The results consistently show that across the majority of tasks, AHL-Gaussian, without relying on any prior knowledge of the tasks, greatly improves the performance of the original algorithms it is applied to, as well as the HL-Gaussian method that is specially fine-tune for each task. This performance is attributed to three key characteristics of AHL-Gaussian: (i) the universality of its mechanism, which is both task-agnostic and value function-aware; (ii) the modularity that facilitates flexible integration as a plug-in within a variety of algorithms; and (iii) the insensitivity to its remaining parameters associated with HL-Gaussian, thus enhancing robustness.
+
+## 2 Preliminaries
+
+**Reinforcement Learning (RL).** We consider the reinforcement learning (RL) problem where an agent interacts with the environment by selecting an action  $a_t \in \mathcal{A}$  in the current state  $s_t \in \mathcal{S}$ . Afterward, the agent receives a reward  $r_{t+1} \in \mathbb{R}$  and transitions to the next state  $s_{t+1} \in \mathcal{S}$  according
+
+{2}------------------------------------------------
+
+to the environment’s transition model  $\mathcal{P}(\cdot | s_t, a_t)$ . The return is defined as the cumulative discounted sum of rewards:  $G_t = \sum_{k=0}^{\infty} \gamma^k r_{t+k+1}$ , where  $\gamma \in [0, 1)$  is the discount factor. The agent’s objective is to learn a policy  $\pi : \mathcal{S} \rightarrow \mathcal{P}(\mathcal{A})$  that maximizes the expected return. The action-value function,  $Q^\pi(s, a) = \mathbb{E}_\pi[G_t | s_t = s, a_t = a]$ , represents the expected return from taking action  $a$  in state  $s$  and following policy  $\pi$  thereafter. The optimal action-value function is  $Q^*(s, a) = \mathbb{E}_{\pi^*}[G_t | s_t = s, a_t = a]$ .
+
+Q-learning and actor-critic methods are two widely used approaches within the value-based algorithm framework. Q-learning directly learns the optimal action-value function  $Q^*$ , which satisfies the optimal Bellman equation (1). On the other hand, actor-critic algorithms focus on learning the action-value function  $Q^\pi$  corresponding to the current policy  $\pi$ , which satisfies the standard Bellman equation (2).
+
+$$Q^*(s_t, a_t) = r_{t+1} + \gamma \mathbb{E}_{s_{t+1} \sim \mathcal{P}(\cdot | s_t, a_t)} \max_{a'} Q^*(s_{t+1}, a') := (\mathcal{T}^* Q^*)(s_t, a_t). \quad (1)$$
+
+$$Q^\pi(s_t, a_t) = r_{t+1} + \gamma \mathbb{E}_{s_{t+1} \sim \mathcal{P}(\cdot | s_t, a_t), a_{t+1} \sim \pi(\cdot | s_{t+1})} Q^\pi(s_{t+1}, a_{t+1}) := (\mathcal{T}^\pi Q^\pi)(s_t, a_t). \quad (2)$$
+
+Let  $\tilde{\mathcal{T}}$  denote the approximation of either  $\mathcal{T}^*$  or  $\mathcal{T}^\pi$ , depending on the specific algorithm.  $Q$  function is typically learned by minimizing the temporal difference (TD) error between  $Q(s_t, a_t)$  and the Bellman target  $\tilde{\mathcal{T}}Q(s_t, a_t)$  for all  $(s_t, a_t)$  in the replay buffer  $\mathcal{D}$ , with a mean squared error (MSE) as objective:
+
+$$\mathcal{L}_{\text{MSE}} = \mathbb{E}_{\mathcal{D}} \left( \tilde{\mathcal{T}}Q(s_t, a_t) - Q(s_t, a_t) \right)^2.$$
+
+**Cross-entropy Loss in RL.** Distributional RL methods (Bellemare et al., 2017; Dabney et al., 2018) and recent work (Farebrother et al., 2024) propose representing value function as a categorical distribution and replacing MSE with cross-entropy (CE) loss in value function learning. Specifically,  $Q(s, a)$  is represented as the expected value of a random variable  $Z(s, a)$ , and  $Z(s, a)$  obeys a categorical distribution on a set of  $m$  discrete locations  $[z_1, \dots, z_m]$  within  $[v_{\min}, v_{\max}]$ . This distribution is parameterized by the learned probabilities  $\hat{p}_i(s_t, a_t)$  corresponding to each location  $z_i$ , which are computed from logits  $l_i(s_t, a_t)$  via the softmax function. In summary:
+
+$$Q(s_t, a_t) = \mathbb{E}[Z(s_t, a_t)], \quad \hat{p}_i(s_t, a_t) = \frac{\exp(l_i(s_t, a_t))}{\sum_{j=1}^m \exp(l_j(s_t, a_t))}. \quad (3)$$
+
+It is essential that the Bellman target is also represented as a categorical distribution, supported at the same locations. Let  $p_i(s_t, a_t)$  denote the probability associated with  $z_i$ , ensuring that the equation  $\sum_{i=1}^m p_i(s_t, a_t) z_i = (\tilde{\mathcal{T}}Q)(s_t, a_t)$  holds true. Consequently, the CE loss for learning  $\hat{p}_i(s_t, a_t)$  is defined as
+
+$$\mathcal{L}_{\text{CE}} = \mathbb{E}_{\mathcal{D}} \left[ - \sum_{i=1}^m p_i(s_t, a_t) \log \hat{p}_i(s_t, a_t) \right]. \quad (4)$$
+
+**HL-Gaussian in RL.** For constructing the target categorical distributions  $[p_1(\cdot), \dots, p_m(\cdot)]$ , Farebrother et al. (2024) reviews various strategies and identifies that HL-Gaussian (Imani & White, 2018; Ehsan Imani, 2024) delivers the best performance. Specifically, assume the interval  $[v_{\min}, v_{\max}]$  is uniformly divided into  $m$  bins, each with a width  $w$ , where the center of each bin is  $z_i$ . Consider a truncated Gaussian distribution with variance  $\sigma^2$ , centered at the Bellman target value  $\mu = (\tilde{\mathcal{T}}Q)(s_t, a_t)$ . The probability density function  $f(y)$  is given by:
+
+$$f(y) = \frac{1}{Z\sigma\sqrt{2\pi}} e^{-\frac{(y-\mu)^2}{2\sigma^2}}, \quad Z = \frac{1}{2} \left( \operatorname{erf} \left( \frac{v_{\max} - \mu}{\sqrt{2}\sigma} \right) - \operatorname{erf} \left( \frac{v_{\min} - \mu}{\sqrt{2}\sigma} \right) \right). \quad (5)$$
+
+Then, the probability assigned to each center  $z_i$  is defined as:
+
+$$p_i(s_t, a_t) = \frac{1}{2Z} \left( \operatorname{erf} \left( \frac{z_i + \frac{w}{2} - \mu}{\sqrt{2}\sigma} \right) - \operatorname{erf} \left( \frac{z_i - \frac{w}{2} - \mu}{\sqrt{2}\sigma} \right) \right). \quad (6)$$
+
+The CE loss, which employs histogram densities derived from equation (6) as the target categorical distribution, is referred to as HL-Gaussian. Indeed, HL-Gaussian demonstrates superior optimization characteristics over traditional regression techniques. This assertion is corroborated by the research of Ehsan Imani (2024), which reveals that the local Lipschitz constant, or the gradient norm of HL-Gaussian, is significantly smaller than that of MSE at each iteration. Such a trait is highly advantageous for the optimization process, as highlighted by Hardt et al. (2016).
+
+{3}------------------------------------------------
+
+## 3 Method
+
+### 3.1 Projection Error of HL-Gaussian
+
+While HL-Gaussian exhibits desirable optimization traits, when projecting the Bellman target  $\hat{\mathcal{T}}Q(s_t, a_t)$  onto the support interval and representing it with a categorical distribution, a projection error is inevitably introduced. We define this as:
+
+$$\mathcal{E}_{v_{\min}, v_{\max}, m, \sigma}(s_t, a_t) = \sum_{i=1}^m p_i(s_t, a_t) z_i - \left(\hat{\mathcal{T}}Q\right)(s_t, a_t). \quad (7)$$
+
+**Proposition 3.1.**
+
+$$\mathcal{L}_{\text{MSE}} \leq 4 \max(|v_{\min}|, |v_{\max}|)^2 \mathcal{L}_{\text{CE}} + \mathbb{E}_{\mathcal{D}} \mathcal{E}_{v_{\min}, v_{\max}, m, \sigma}^2 + C, \quad (8)$$
+
+where  $C$  is a constant independent of the learning functions  $[\hat{p}_1(\cdot), \dots, \hat{p}_m(\cdot)]$ .
+
+Given that the projection error  $\mathcal{E}_{v_{\min}, v_{\max}, m, \sigma}$  is insignificant for every  $(s_t, a_t)$  pair within  $\mathcal{D}$ , Proposition 3.1 posits that utilizing HL-Gaussian to minimize  $\mathcal{L}_{\text{CE}}$  is an effective strategy for optimizing the traditional TD error  $\mathcal{L}_{\text{MSE}}$ . Furthermore, as highlighted by Ehsan Imani (2024), the CE loss holds a theoretical edge over the MSE loss in the optimization process, facilitating a more efficient path to the optimal solution with a reduced number of gradient steps—a concept supported by a wealth of empirical data (Farebrother et al., 2024; Ehsan Imani, 2024). Consequently, the adoption of  $\mathcal{L}_{\text{CE}}$  as the optimization objective is well-founded in both theoretical understanding and practical results, which justifies our focus on  $\mathcal{L}_{\text{CE}}$  in this study.
+
+Nonetheless, if the projection error  $\mathcal{E}_{v_{\min}, v_{\max}, m, \sigma}$  is significant, the TD error  $\mathcal{L}_{\text{MSE}}$  may remain substantial even with  $\mathcal{L}_{\text{CE}}$  minimized, owing to the lingering impact of  $\mathcal{E}_{v_{\min}, v_{\max}, m, \sigma}$ . According to the error propagation theory in Approximate Policy/Value Iteration (Farahmand et al., 2010), the accumulation of one-step TD-errors can significantly impair the optimality of the final value function, thereby leading to a suboptimal policy. Consequently, effectively reducing the projection error is of paramount importance.
+
+### 3.2 Relationship between Projection Error and Support Interval
+
+In this section, we delve into the origins of the projection error and examine the interplay between  $\mathcal{E}_{v_{\min}, v_{\max}, m, \sigma}$  and the interval  $[v_{\min}, v_{\max}]$ . This intrinsic connection will serve as the cornerstone to create a mechanism that is both task-agnostic and value function-aware, designed to adjust the support interval effectively.
+
+We begin by introducing some notations. Given a Bellman target  $\mu = \hat{\mathcal{T}}Q(s, a)$ , let  $m_0$  represent the center of the bin that contains  $\mu$ , and define  $\delta := \mu - m_0$ <sup>1</sup>. It is straightforwardly that  $0 \leq |\delta| \leq \frac{w}{2}$  and the value will vary depending on the specific position of  $\mu$ . Define  $F_{\mu, \sigma}(x, y)$  as the cumulative probability of the Gaussian distribution  $\mathcal{N}(\mu, \sigma^2)$  on interval  $[x, y]$ . Further define:
+
+$$h = \left\lfloor \frac{|v_{\max} - \mu|, |\mu - v_{\min}|}{w} \right\rfloor, \quad k = \left\lfloor \frac{\max(|v_{\max} - \mu|, |\mu - v_{\min}|)}{w} \right\rfloor.$$
+
+As illustrated in Figure 2,  $h$  represents the number of bins between  $\mu$  and the closer boundary of  $[v_{\min}, v_{\max}]$ , while  $k$  represents the number of bins between  $\mu$  and the farther boundary of  $[v_{\min}, v_{\max}]$ .
+
+**Theorem 3.1.** With the number of bins  $m$  fixed, let  $w = \beta\sigma$ , where  $\beta$  is a hyperparameter, and let  $Z$  be as defined in (5). Then, for a wide range of  $\beta$ ,
+
+$$\mathcal{E}_{a, b, m, \sigma}(s, a) = \mathcal{E}_{\text{discretization}} + \mathcal{E}_{\text{muncation}},$$
+
+with
+
+$$\mathcal{E}_{\text{discretization}} = \delta \cdot \left( \mathbf{1}_{\{v_{\min} \leq \mu \leq v_{\max}\}} \frac{F_{0,1}(-\beta h, \beta h) + o(1)}{2Z} - 1 \right),$$
+
+$$(h+1)w \frac{F_{0,1}(-\beta(k+1), -\beta(h+1))}{2Z} \leq |\mathcal{E}_{\text{muncation}}| \leq kw \frac{F_{0,1}(-\beta k, -\beta h)}{2Z},$$
+
+where  $o(1)$  represents a constant far less than 1.
+
+<sup>1</sup>To keep the expression concise, we assume that bins also exist outside the interval  $[v_{\min}, v_{\max}]$ .
+
+{4}------------------------------------------------
+
+**Remark 1.** *It is important to note that the assumption of fixed  $m$  and the setting of  $w = \beta\sigma$  aligns with the configuration in Farebrother et al. (2024), ensuring that the number of non-zero elements in the vector  $[p_1(s, a), \dots, p_m(s, a)]$  remains consistent. This stability preserves the representational capacity throughout the process.*
+
+Theorem 3.1 posits that the projection error can be dissected into two components: truncation error and discretization error. The truncation error materializes when the target is confined within the interval  $[v_{\min}, v_{\max}]$ , whereas the discretization error arises from employing the categorical distribution to depict the Bellman target. The former has a direct linear relationship with  $w$ , and the latter mirrors a linear association with  $\delta$ , with the proportionality constants being exclusively derived from  $\beta, h, k$ . Note that  $w$  signifies the interval span with a fixed number of bins  $m$ , thus, a pivotal insight is unveiled: the overall projection error ascends in direct proportion to the enlargement of the interval span.
+
+We will offer more refined estimates for each of the two errors.
+
+**Theorem 3.2.** *With the number of bins  $m$  fixed, let  $w = \beta\sigma$ , where  $\beta$  is a hyperparameter that can be selected over a wide range. According to the relationship between  $\mu$  and  $[v_{\min}, v_{\max}]$ , we have :*
+
+(i) If  $\mu \in (v_{\min}, v_{\max})$ ,
+
+$$|\mathcal{E}_{\text{discretization}}| = C_{\beta,1} \cdot \left( (he^{h^2})^{-1} + o(1) \right) \cdot |\delta|, \quad |\mathcal{E}_{\text{truncation}}| = C_{\beta,m,2} \cdot (he^{h^2})^{-1} \cdot w,$$
+
+(ii) If  $\mu \in (v_{\min}, v_{\max})$  and  $h = 0$ , or if  $\mu \notin (v_{\min}, v_{\max})$ ,
+
+$$|\mathcal{E}_{\text{discretization}}| = |\delta|, \quad |\mathcal{E}_{\text{truncation}}| \geq C_{\beta,3}(h+1)w,$$
+
+where  $C_{\beta,1}, C_{\beta,m,2}$  and  $C_{\beta,3}$  are constants dependent only on the hyperparameters and  $o(1)$  is a constant far less than 1.
+
+Note that Theorem 3.2 confirms the idea that the projection error increases linearly with  $w$ , consistent with Theorem 3.1. Moreover, with  $w$  fixed, Theorem 3.2 further shows how the projection error varies as  $\mu$  changes, as illustrated in Figure 2. Specifically, when  $\mu$  is well within the interval  $[v_{\min}, v_{\max}]$  and far from the boundaries (indicating a larger  $h$  in case (i)), both types of errors decrease exponentially with an increase in  $h$ , resulting in a minimal overall projection error. On the other hand, as  $\mu$  approaches the boundaries or falls outside  $[v_{\min}, v_{\max}]$  (indicating case (ii)), the discretization error stays at  $|\delta|$  while the truncation error becomes predominant, growing linearly with  $h$ , and thus significantly increasing the overall projection error compared to the initial case.
+
+Building upon the insights from both Theorem 3.1 and 3.2, we summarize our key finding as follows.
+
+**Key Finding :** (i) Given the fixed interval  $[v_{\min}, v_{\max}]$ , the projection error remains minimal if  $\mu$  is positioned within  $[v_{\min}, v_{\max}]$  and is sufficiently distant from either boundary. In contrast, the projection error increases markedly if  $\mu$  nears either boundary of  $[v_{\min}, v_{\max}]$  or if  $\mu$  lies outside this interval. (ii) As the interval range  $[v_{\min}, v_{\max}]$  widens, the projection error increases linearly.
+
+### 3.3 Adaptive HL-Gaussian Method
+
+Proposition 3.1 emphasizes the importance of reducing projection error. Furthermore, the key finding from the previous section suggests that an ideal support interval should be broad enough to encompass all Bellman targets comfortably within it, thereby reducing truncation error, yet not so excessive as to induce counterproductive projection error. This inspires us to develop a dynamic interval adjustment mechanism by optimizing the projection error.
+
+Specifically, we introduce a learnable variable  $\xi$ , and let  $[-\xi, \xi]$  represent the current support interval. This interval yields a dynamic bin width  $w_\xi = 2\xi/m$ . Besides, let  $\sigma_\xi = \alpha w_\xi$  with
+
+{5}------------------------------------------------
+
+the ratio  $\alpha = 1/\beta$  being a fixed hyperparameter. For any  $(s, a)$ , we project its corresponding target  $\mu = TQ(s, a)$  onto the categorical distribution of discrete locations  $[z_{1,\xi}, \dots, z_{m,\xi}]$ , where  $z_{i,\xi}$  is the center of each bin associated with  $[-\xi, \xi]$ . This yields the projected target value  $\sum_{i=1}^m p_{i,\xi}(s, a) z_{i,\xi}$ , where  $p_{i,\xi}(s, a)$  is computed by
+
+$$p_{i,\xi}(s, a) = \frac{1}{2Z_\xi} \left( \operatorname{erf} \left( \frac{z_{i,\xi} + \frac{w_\xi}{2} - \mu}{\sqrt{2\sigma_\xi}} \right) - \operatorname{erf} \left( \frac{z_{i,\xi} - \frac{w_\xi}{2} - \mu}{\sqrt{2\sigma_\xi}} \right) \right) \quad (9)$$
+
+$$Z_\xi = \frac{1}{2} \left( \operatorname{erf} \left( \frac{\xi - \mu}{\sqrt{2\sigma_\xi}} \right) - \operatorname{erf} \left( \frac{-\xi - \mu}{\sqrt{2\sigma_\xi}} \right) \right).$$
+
+We use the projection error  $\mathcal{L}_{\text{projection}}(\xi)$  to measure whether current interval  $[-\xi, \xi]$  is suitable or not to project all the Bellman targets in  $\mathcal{D}$  and minimize  $\mathcal{L}_{\text{projection}}(\xi)$  to obtain an appropriate  $\xi$ :
+
+$$\min_{\xi} \mathcal{L}_{\text{projection}}(\xi) := \mathbb{E}_{\mathcal{D}} \left( \sum_{i=1}^m p_{i,\xi}(s_t, a_t) z_{i,\xi} - (\tilde{T}Q)(s_t, a_t) \right)^2. \quad (10)$$
+
+HL-Gaussian with dynamic support interval adjustment is defined as *Adaptive HL-Gaussian* (AHL-Gaussian). The procedure for updating the value function once can be outlined in Algorithm 1.
+
+#### --- Algorithm 1 Value Function Update with AHL-Gaussian ---
+
+Fix hyperparameters  $\beta, m$ . The parameterized logits function is  $[l_1^\theta, \dots, l_m^\theta]$  and  $[l_1^{\tilde{\theta}}, \dots, l_m^{\tilde{\theta}}]$ . The bound is  $\xi$ .
+
+- 1: Sample a random minibatch  $\mathcal{B}$  of transitions from replay memory  $\mathcal{D}$ ;
+ - 2: **for**  $i = 1$  to  $|\mathcal{B}|$  **do**
+ - 3:   For transition  $(s_i, a_i, r_i, s_{i+1})$ , calculate  $[\hat{p}_{1,\xi}(s_i, a_i), \dots, \hat{p}_{m,\xi}(s_i, a_i)]$  through (3);
+ - 4:   For transition  $(s_i, a_i, r_i, s_{i+1})$ , calculate Q-values  $Q_{\tilde{\theta}}(s_{i+1}, a')$  through (3), where  $a'$  is sampled from greedy policy or current  $\pi$  according to the underlying algorithm;
+ - 5:   Calculate the Bellman target value  $y_i = r_i + \gamma Q_{\tilde{\theta}}(s_{i+1}, a')$ ;
+ - 6:   Project  $y_i$  into categorical distribution  $[p_{1,\xi}(s_{i+1}, a'), \dots, p_{m,\xi}(s_{i+1}, a')]$  through (9);
+ - 7: **end for**
+ - 8: Calculate  $\mathcal{L}_{\text{CE}}$  on  $\mathcal{B}$  by (4) and perform a gradient descent step to update  $\theta$ ;
+ - 9: Calculate  $\mathcal{L}_{\text{projection}}(\xi)$  on  $\mathcal{B}$  by (10) and perform a gradient descent step to update  $\xi$ .
+- 
+
+In practice, for tasks where the value function undergoes large changes, we suggest adding a bias term to the interval calculations, which results in the shifted interval  $[-\xi + v_{\text{mean}}, \xi + v_{\text{mean}}]$ , where  $v_{\text{mean}}$  is the mean of the current Q-values. This ensures that the center of the interval moves in sync with the value function, thus effectively preventing the interval from becoming overly broad.
+
+This dynamic interval adjustment mechanism does not require any prior knowledge of the task at hand, and can automatically calibrate the interval to suit the learning value function: starting from an initially constrained interval, when the Bellman targets dynamically increases and exceeds the boundaries of the interval, the resulting projection error will drive an increase in  $\xi$ . Conversely, when the Bellman targets stabilizes,  $\xi$  will also converges at a state that is sufficient to encompass all Bellman targets without the impetus to continue expanding. At this point, the interval has achieved a balance that is neither too large nor too small. Additionally, this method involves optimizing just a single variable, making it computationally efficient and resulting in minimal extra computational cost.
+
+## 4 Experimental Evaluation
+
+In this section, we undertake an empirical analysis to explore several critical questions: (i) Is the projection error introduced by AHL-Gaussian consistent with the behavioral patterns our theory anticipates? (ii) Can AHL-Gaussian be seamlessly incorporated into conventional value-based algorithms to enhance performance? (iii) Is it possible to realize the essence of AHL-Gaussian without resorting to learning-based approaches? (iv) How resilient is AHL-Gaussian in the face of variations in other hyperparameters associated with HL-Gaussian?
+
+{6}------------------------------------------------
+
+### 4.1 Observation Study of Projection Error
+
+Consider the interval  $[-500, 500]$ . Figure 3(a) demonstrates how the projection error varies as the Bellman target  $\mu$  shifts. It is evident that the error exhibits two distinct patterns based on  $\mu$ 's relative position to the interval. The error is minimal when  $\mu$  is comfortably within  $[-500, 500]$ . However, the error climbs as  $\mu$  nears the interval's boundaries. Once  $\mu$  exceeds the interval, the error increases linearly with the distance from the boundaries. This aligns perfectly with our primary finding (i), indicating that a sufficiently large support interval should be chosen to cover the majority of targets.
+
+As we progress, we examine the patterns of projection error across a range of  $\xi$  value. Figure 3 (b) illustrates the error curves for instances when  $\mu$  shifts within a tighter interval  $[-2\sigma_\xi, 2\sigma_\xi]$ , a subset of  $[-\xi, \xi]$ . Here, the projection error exhibits periodic fluctuations that align with the characteristics of  $\delta$ . Moreover, as  $\xi$  increases, the peaks of the projection error also increase in a linear fashion. Figure 3 (c) shows the scenario where  $\mu$  shifts within  $[-1.3\xi, 1.3\xi]$ . Similarly, the peak error values for each curve rise linearly with  $\xi$ . These empirical findings consistently support the conclusion that, in both scenarios, the error peaks climb linearly with  $\xi$ , thus confirming our key discovery (ii).
+
+![Figure 3: Observation Study of Projection Error. Panel (a) shows Projection Error vs μ for μ from -600 to 600, with error near zero between -500 and 500 and increasing linearly outside. Panel (b) shows Projection Error vs μ for μ from -150 to 150, with periodic fluctuations. Panel (c) shows Projection Error vs μ for μ from -400 to 400 for ξ values of 500, 1000, 1500, 2000, 2500, and 3000, showing that as ξ increases, the error peaks increase linearly.](c64e9e9f3b0b828a5f6ac70441877764_img.jpg)
+
+Figure 3: Observation Study of Projection Error. Panel (a) shows Projection Error vs μ for μ from -600 to 600, with error near zero between -500 and 500 and increasing linearly outside. Panel (b) shows Projection Error vs μ for μ from -150 to 150, with periodic fluctuations. Panel (c) shows Projection Error vs μ for μ from -400 to 400 for ξ values of 500, 1000, 1500, 2000, 2500, and 3000, showing that as ξ increases, the error peaks increase linearly.
+
+Figure 3: Panel (a) presents the projection error curve, varying with  $\mu$  while keeping  $\xi$  constant. Panels (b) and (c) illustrate the projection error curves across a range of  $\xi$  values, under conditions where  $\mu$  is either within or exceeds the limits of  $[-\xi, \xi]$ , respectively.
+
+![Figure 4: Performance of DQN with AHL-Gaussian. Six line plots show Episodic Return vs Time Steps (x 10^7) for Atari 2600 games: AsteroidNoFrameskip-v4, SeaquestNoFrameskip-v4, EnduroNoFrameskip-v4, FrostbiteNoFrameskip-v4, GopherNoFrameskip-v4, and AmidarNoFrameskip-v4. Four methods are compared: DQN w/ AHL-Gaussian (red), DQN w/ HL-Gaussian (orange), DQN (blue), and C51DQN (green). In five out of six games, DQN w/ AHL-Gaussian achieves the highest return.](01da0d212fb571933f10f96556157745_img.jpg)
+
+Figure 4: Performance of DQN with AHL-Gaussian. Six line plots show Episodic Return vs Time Steps (x 10^7) for Atari 2600 games: AsteroidNoFrameskip-v4, SeaquestNoFrameskip-v4, EnduroNoFrameskip-v4, FrostbiteNoFrameskip-v4, GopherNoFrameskip-v4, and AmidarNoFrameskip-v4. Four methods are compared: DQN w/ AHL-Gaussian (red), DQN w/ HL-Gaussian (orange), DQN (blue), and C51DQN (green). In five out of six games, DQN w/ AHL-Gaussian achieves the highest return.
+
+Figure 4: Performance of DQN with AHL-Gaussian.
+
+### 4.2 Performance of AHL-Gaussian
+
+**Integration with Q-learning Method.** We first assess the efficacy of AHL-Gaussian by integrating it with DQN (Mnih et al., 2015) and evaluate its performance on Atari 2600 games (Mnih et al., 2013). The baselines compared include the standard DQN, DQN with the conventional HL-Gaussian using a default interval of  $[-10, 10]$ , and the representative distributional RL method C51 (Bellemare et al., 2017). As depicted in Figure 4, DQN integrated with AHL-Gaussian excels in five out
+
+{7}------------------------------------------------
+
+![Figure 5: Performance of SAC with AHL-Gaussian. Six line plots showing Episodic Return vs Time Steps (0 to 5e6) for Ant-v2, HalfCheetah-v2, Humanoid-v2, HumanoidStandup-v2, Swimmerv2, and Walker2d-v2. Three algorithms are compared: SAC w/ AHL-Gaussian (red), SAC w/ ft-HL-Gaussian (green), and SAC (blue). In most tasks, SAC w/ AHL-Gaussian achieves the highest return, while SAC w/ ft-HL-Gaussian often underperforms compared to the baseline SAC.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+378  
+379  
+380  
+381  
+382  
+383  
+384  
+385  
+386  
+387  
+388  
+389  
+390  
+391  
+392  
+393  
+394  
+395  
+396
+
+Ant-v2 HalfCheetah-v2 Humanoid-v2
+
+HumanoidStandup-v2 Swimmerv2 Walker2d-v2
+
+Episodic Return Time Steps 1e6
+
+SAC w/ AHL-Gaussian SAC w/ ft-HL-Gaussian SAC
+
+Figure 5: Performance of SAC with AHL-Gaussian. Six line plots showing Episodic Return vs Time Steps (0 to 5e6) for Ant-v2, HalfCheetah-v2, Humanoid-v2, HumanoidStandup-v2, Swimmerv2, and Walker2d-v2. Three algorithms are compared: SAC w/ AHL-Gaussian (red), SAC w/ ft-HL-Gaussian (green), and SAC (blue). In most tasks, SAC w/ AHL-Gaussian achieves the highest return, while SAC w/ ft-HL-Gaussian often underperforms compared to the baseline SAC.
+
+397  
+398  
+399  
+400  
+401  
+402  
+403  
+404  
+405  
+406  
+407  
+408  
+409  
+410  
+411  
+412  
+413  
+414  
+415  
+416  
+417
+
+Figure 5: Performance of SAC with AHL-Gaussian.
+
+![Figure 6: Performance of TD3 with AHL-Gaussian. Six line plots showing Episodic Return vs Time Steps (0 to 5e6) for Ant-v2, HalfCheetah-v2, Humanoid-v2, HumanoidStandup-v2, Swimmerv2, and Walker2d-v2. Three algorithms are compared: TD3 w/ AHL-Gaussian (red), TD3 w/ ft-HL-Gaussian (green), and TD3 (blue). Similar to SAC, TD3 w/ AHL-Gaussian generally achieves higher returns than the baseline TD3 and TD3 w/ ft-HL-Gaussian across most tasks.](d864789b0d8384da1d22fd6a5d76bbdf_img.jpg)
+
+418  
+419  
+420  
+421  
+422  
+423  
+424  
+425  
+426  
+427  
+428  
+429  
+430  
+431
+
+Ant-v2 HalfCheetah-v2 Humanoid-v2
+
+HumanoidStandup-v2 Swimmerv2 Walker2d-v2
+
+Episodic Return Time Steps 1e6
+
+TD3 w/ AHL-Gaussian TD3 w/ ft-HL-Gaussian TD3
+
+Figure 6: Performance of TD3 with AHL-Gaussian. Six line plots showing Episodic Return vs Time Steps (0 to 5e6) for Ant-v2, HalfCheetah-v2, Humanoid-v2, HumanoidStandup-v2, Swimmerv2, and Walker2d-v2. Three algorithms are compared: TD3 w/ AHL-Gaussian (red), TD3 w/ ft-HL-Gaussian (green), and TD3 (blue). Similar to SAC, TD3 w/ AHL-Gaussian generally achieves higher returns than the baseline TD3 and TD3 w/ ft-HL-Gaussian across most tasks.
+
+Figure 6: Performance of TD3 with AHL-Gaussian.
+
+of six tasks, achieving significant improvements in four of them. In contrast, HL-Gaussian has resulted in reduced performance for certain tasks, demonstrating that the default static interval does indeed negatively affect the training process. This observation further validates the superiority of our dynamically adjusted mechanism.
+
+**Integration with Actor-Critic Method.** Moreover, we have also incorporated AHL-Gaussian into the typical actor-critic algorithms SAC (Haarnoja et al., 2018) and TD3 (Fujimoto et al., 2018b), and evaluated their performance in the Gym MuJoCo environments (Todorov et al., 2012). Our baselines include not only the original SAC and TD3 but also a specially fine-tuned version of HL-Gaussian, with a customized support interval for each task, denoted as ft-HL-Gaussian. This fine-tuning was essential due to the substantial differences in return scales across various MuJoCo tasks, which made identifying a universal interval that could perform optimally across all tasks difficult.
+
+Figures 5 and 6 demonstrate that across nearly all tested tasks, the algorithm enhanced with AHL-Gaussian surpasses both the conventional algorithms and those augmented with ft-HL-Gaussian. Moreover, in over half of these tasks, the performance advantage is substantial. In line with the previous integration with DQN, HL-Gaussian results in a performance decline in certain tasks, high-
+
+{8}------------------------------------------------
+
+lighting the difficulty of manually adjusting the optimal interval and the challenge a static interval faces in accommodating the fluctuations of the value function. This reaffirms the distinct advantages of AHL-Gaussian, which is both task-agnostic and value function-aware.
+
+### 4.3 Comparative Study of AHL-Gaussian and Non-learning-based Strategies
+
+In this section, we explore the possibility of implementing AHL-Gaussian without relying on learning mechanisms. A naive strategy would be to set  $\xi$  as the maximum value of all current Bellman targets, multiplied by a coefficient  $\eta$ . This approach, while straightforward, aims to dynamically adapt the interval in response to fluctuations in the value function. However, as shown in Figure 7, for both Ant-v2 and Hopper-v2 tasks, setting  $\eta$  to 1 results in a constrained interval range, which in turn, triggers substantial projection errors and inferior performance. Upon increasing  $\eta$  to 1.1, we observe a significant improvement in Ant-v2’s performance, suggesting that  $\eta$  correlates well with the escalating trend of the value function. Conversely, on Hopper-v2, this adjustment causes an unwarranted surge in the value function, leading to significant projection errors and subpar performance again. This observation implies that the coefficient  $\eta$ , being a hyperparameter, is inherently task-specific and thus lacks the universal applicability that AHL-Gaussian offers across various tasks.
+
+![Figure 7: Comparison of AHL-Gaussian to a Non-learning-based Method. The figure consists of two main parts: (a) Ant and (b) Hopper. Each part contains four subplots. The top-left plot shows 'Episode Return' over 'Time Steps' (0 to 1e6). The top-right plot shows 'Vmax' over 'Time Steps'. The bottom-left plot shows 'Mean of Vmax' over 'Time Steps'. The bottom-right plot shows 'Projection Error' over 'Time Steps'. Three methods are compared: SAC w/ AHL-Gaussian (red line), 1.0 * Max Target as Vmax (blue line), and 1.1 * Max Target as Vmax (green line). In the Ant task, the 1.1 * Max Target method shows better performance than the 1.0 method. In the Hopper task, the 1.1 * Max Target method shows a significant surge in Vmax and projection errors compared to the 1.0 method.](891ff9b651838b7f59e9a1612a739e15_img.jpg)
+
+Figure 7: Comparison of AHL-Gaussian to a Non-learning-based Method. The figure consists of two main parts: (a) Ant and (b) Hopper. Each part contains four subplots. The top-left plot shows 'Episode Return' over 'Time Steps' (0 to 1e6). The top-right plot shows 'Vmax' over 'Time Steps'. The bottom-left plot shows 'Mean of Vmax' over 'Time Steps'. The bottom-right plot shows 'Projection Error' over 'Time Steps'. Three methods are compared: SAC w/ AHL-Gaussian (red line), 1.0 \* Max Target as Vmax (blue line), and 1.1 \* Max Target as Vmax (green line). In the Ant task, the 1.1 \* Max Target method shows better performance than the 1.0 method. In the Hopper task, the 1.1 \* Max Target method shows a significant surge in Vmax and projection errors compared to the 1.0 method.
+
+Figure 7: Comparison of AHL-Gaussian to a Non-learning-based Method.
+
+### 4.4 Robustness of AHL-Gaussian
+
+In this section, we assess the robustness of AHL-Gaussian with respect to other involved hyperparameters. Complete experimental results are deferred in the Appendix.
+
+**Number of Bins ( $m$ ).** We analyzed how AHL-Gaussian performs with different values of  $m$ , ranging from [11, 31, 51, 71, 91]. Figure 8 shows that AHL-Gaussian generally holds up well regardless of  $m$ , but there is a slight dip in performance on a few tasks when  $m$  is set too low. Given these findings, we picked the value of  $m = 51$ , which provides a good balance of performance and computational efficiency. This choice also aligns with the recommendations from Bellemare et al. (2017); Färnbrotter et al. (2024).
+
+**Ratio of bin width to variance ( $\alpha$ ).** We analyzed how AHL-Gaussian performs with different values of  $\alpha$ , ranging from [0.5, 0.75, 1.5, 2.0, 3.0]. Overall, AHL-Gaussian maintains reliable performance regardless of the  $\alpha$  value, with only occasional performance drops on a few tasks for specific  $\alpha$  choices. This aligns well with our theoretical findings, which show that Theorems 3.1 and 3.2 are valid across a wide spectrum of  $\alpha$  values. We have settled on  $\alpha = 1.5$  as the algorithm’s hyperparameter, a choice that works well for the majority of the tasks.
+
+**Interval update frequency.** To determine how the frequency of interval updates affects performance, we conducted a series of experiments with varying ratios of interval update frequency to
+
+{9}------------------------------------------------
+
+value function update frequency, as illustrated in Figure 10. The results indicate that AHL-Gaussian is quite resilient to changes in these ratios. This resilience is a practical advantage, as it allows AHL-Gaussian to maintain its performance while conserving computational resources.
+
+![Figure 8: Ablation for the number of bins m. Four line plots showing Episodic Return vs Time Steps for Breakout-v4, Enduro-v4, Ant-v2, and HalfCheetah-v2. Each plot compares five different numbers of bins: 91 (orange), 71 (blue), 51 (red), 31 (green), and 11 (purple). The performance is relatively stable across different bin counts.](7801d00a216dc4dc8a7d210dcb5fe3c5_img.jpg)
+
+Figure 8: Ablation for the number of bins m. Four line plots showing Episodic Return vs Time Steps for Breakout-v4, Enduro-v4, Ant-v2, and HalfCheetah-v2. Each plot compares five different numbers of bins: 91 (orange), 71 (blue), 51 (red), 31 (green), and 11 (purple). The performance is relatively stable across different bin counts.
+
+Figure 8: Ablation for the number of bins  $m$ .
+
+![Figure 9: Ablation for the ratio of width to variance. Four line plots showing Episodic Return vs Time Steps for Breakout-v4, Enduro-v4, Ant-v2, and HalfCheetah-v2. Each plot compares five different ratios: 3 (orange), 2 (blue), 1.5 (red), 0.75 (green), and 0.5 (purple). The performance is relatively stable across different ratios.](6b32b7b928d34eeccb15c29cdf9d2cb3_img.jpg)
+
+Figure 9: Ablation for the ratio of width to variance. Four line plots showing Episodic Return vs Time Steps for Breakout-v4, Enduro-v4, Ant-v2, and HalfCheetah-v2. Each plot compares five different ratios: 3 (orange), 2 (blue), 1.5 (red), 0.75 (green), and 0.5 (purple). The performance is relatively stable across different ratios.
+
+Figure 9: Ablation for the ratio of width to variance.
+
+![Figure 10: Ablation for the interval update frequency. Four line plots showing Episodic Return vs Time Steps for Breakout-v4, Enduro-v4, Ant-v2, and HalfCheetah-v2. Each plot compares five different update frequencies: 1.5 (orange), 1.4 (blue), 1.3 (red), 1.2 (green), and 1.1 (purple). The performance is relatively stable across different update frequencies.](33228b4227fa57e1477b27b9e07483e6_img.jpg)
+
+Figure 10: Ablation for the interval update frequency. Four line plots showing Episodic Return vs Time Steps for Breakout-v4, Enduro-v4, Ant-v2, and HalfCheetah-v2. Each plot compares five different update frequencies: 1.5 (orange), 1.4 (blue), 1.3 (red), 1.2 (green), and 1.1 (purple). The performance is relatively stable across different update frequencies.
+
+Figure 10: Ablation for the interval update frequency.
+
+## 5 Conclusion and Future Work
+
+In this paper, we concentrate on value function learning methods that leverage HL-Gaussian. We demonstrate that a misalignment between the support interval and the value function can result in substantial projection errors, which in turn can compromise the optimality of the resulting policy. Our analysis further reveals that an ideal interval should be sufficiently broad to reduce truncation-induced projection errors, yet not so extensive as to paradoxically amplify them. Motivated by these findings, we introduce AHL-Gaussian, a novel dynamic interval adjustment mechanism designed to align with the dynamic evolution of the value function. Empirical results indicate that AHL-Gaussian is compatible with a range of algorithms and can consistently boost performance across both discrete and continuous control tasks.
+
+In our future work, we intend to broaden the application of the AHL-Gaussian approach to encompass more complex tasks. Furthermore, we aim to integrate it with a range of other distributional RL methods. We are also committed to investigating the adherence of AHL-Gaussian to a scaling law as the model’s complexity increases.
+
+ Rest of paper (reference and Appendix) is removed.

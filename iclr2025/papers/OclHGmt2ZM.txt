@@ -1,0 +1,401 @@
+
+
+{0}------------------------------------------------
+
+# CMAMBA: CHANNEL CORRELATION ENHANCED STATE SPACE MODELS FOR MULTIVARIATE TIME SERIES FORECASTING
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Recent advancements in multivariate time series forecasting have been propelled by Linear-based, Transformer-based, and Convolution-based models, with Transformer-based architectures gaining prominence for their efficacy in temporal and cross-channel mixing. More recently, Mamba, a state space model, has emerged with robust sequence and feature mixing capabilities. However, the suitability of the vanilla Mamba design for time series forecasting remains an open question, particularly due to its inadequate handling of cross-channel dependencies. Capturing cross-channel dependencies is critical in enhancing the performance of multivariate time series prediction. Recent findings show that self-attention excels in capturing cross-channel dependencies, whereas other simpler mechanisms, such as MLP, may degrade model performance. This is counterintuitive, as MLP, being a learnable architecture, should theoretically capture both correlations and irrelevances, potentially leading to neutral or improved performance. Diving into the self-attention mechanism, we attribute the observed degradation in MLP performance to its lack of data dependence and global receptive field, which result in MLP’s lack of generalization ability. Considering the powerful sequence modeling capabilities of Mamba and the high efficiency of MLP, the combination of the two is an effective strategy for solving multivariate time series prediction. Based on the above insights, we introduce a refined Mamba variant tailored for time series forecasting. Our proposed model, **CMamba**, incorporates a modified Mamba (M-Mamba) module for temporal dependencies modeling, a global data-dependent MLP (GDD-MLP) to effectively capture cross-channel dependencies, and a Channel Mixup mechanism to mitigate overfitting. Comprehensive experiments conducted on seven real-world datasets demonstrate the efficacy of our model in improving forecasting performance.
+
+## 1 INTRODUCTION
+
+Multivariate (or Multichannel) time series forecasting (MTSF) plays a crucial role in diverse applications, such as weather prediction (Chen et al., 2023), traffic management (Liu et al., 2023b;c), economics (Xu & Cohen, 2018), and event prediction (Xue et al., 2023). MTSF aims to predict future values of temporal variations based on historical observations. Given its practical importance, numerous deep learning models have been developed in recent years, notably including, Linear-based (Zeng et al., 2023; Li et al., 2023; Das et al., 2023; Wang et al., 2023), Transformer-based (Zhou et al., 2022; Zhang & Yan, 2022; Wu et al., 2021; Nie et al., 2022; Liu et al., 2023a), and Convolution-based (Liu et al., 2022; Wang et al., 2022; Wu et al., 2022; Luo & Wang, 2024) models, which have demonstrated significant advancements.
+
+Among these, Transformer-based models are particularly distinguished by their capacity to separately mix temporal and channel embeddings using mechanisms such as MLP or self-attention. The recently introduced Mamba model (Gu & Dao, 2023), which operates within a state space framework, exhibits notable sequence and feature mixing capabilities. Mamba has shown progress not only in natural language processing but also in other domains, including computer vision (Liu et al., 2024; Zhu et al., 2024) and graph-based applications (Wang et al., 2024a). Nevertheless, recent studies on Mamba in time series (Patro & Agneeswaran, 2024; Wang et al., 2024d) mostly focus on
+
+{1}------------------------------------------------
+
+054 how to align the input format of time series with other fields so that the original Mamba architec-  
+ 055 ture can be migrated while ignoring the exploration of whether the components of Mamba itself are  
+ 056 suitable for time series. In addition, the vanilla Mamba lacks cross-channel dependency modeling  
+ 057 capabilities. S-Mamba (Wang et al., 2024d) solves this by treating different channels as a sequence  
+ 058 and modeling their dependencies with state space mechanisms. However, the strategy of treating  
+ 059 channels as sequences is not practical and also results in large complexity.
+
+060 Capturing cross-channel dependencies is critical in en-  
+ 061 hancing the performance of multivariate time series pre-  
+ 062 diction. Recent findings (Liu et al., 2023a) show that  
+ 063 self-attention excels in capturing cross-channel depen-  
+ 064 dencies. The resulting model, iTransformer, achieves ex-  
+ 065 cellent performance on multiple datasets. Whereas, as an-  
+ 066 other important component of the Transformer encoder  
+ 067 block, modeling cross-channel dependencies with MLP  
+ 068 (i.e., the FFN layer) degrades model performance (Liu  
+ 069 et al., 2023a; Nie et al., 2022). Being a lightweight and  
+ 070 learnable architecture, MLP should be an ideal structure  
+ 071 to capture cross-channel dependencies as it could theoret-  
+ 072 ically capture both correlations and irrelevances, leading  
+ 073 to neutral or improved performance.
+
+074 In the design of iTransformer, cross-channel depen-  
+ 075 dencies are captured in a data-dependent and global manner.
+
+076 That is, each channel is characterized by its historical sequence, and the self-attention mechanism  
+ 077 adaptively captures the dependencies between channels according to the data. In contrast, the pa-  
+ 078 rameters of channel mixing are the same for different inputs in the original MLP. Moreover, because  
+ 079 the data at each time point is mixed independently during training, the model focuses too much on  
+ 080 the local dependencies between channels while ignoring the global dependencies. The lack of data  
+ 081 dependence and global receptive field, which are crucial for the complex, long-term dependencies  
+ 082 observed in real-world data, results in the discrepancy between MLP and self-attention. To validate  
+ 083 our claims, we depict the curves of two variables (channels) over time in the ETT dataset in Fig. 1.  
+ 084 We find that: (i) Despite the fluctuations, the relationship between these two variables remains stable  
+ 085 over a long time, i.e., *MULL* (Middle UseLess Load) is roughly equivalent to half of *HULL* (High  
+ 086 UseLess Load). (ii) This relationship can vary across different time periods. The above observa-  
+ 087 tions indicate that multivariate time series have relatively stable long-term channel dependencies at  
+ 088 different periods. Hence, a data-dependent and global channel modeling approach is more suitable  
+ 089 for capturing cross-channel dependencies.
+
+090 Based on the above motivations, we propose enhancements to Mamba for multivariate time series  
+ 091 prediction, incorporating a modified Mamba (M-Mamba) module for long-term temporal depen-  
+ 092 dencies modeling and a global data-dependent MLP (GDD-MLP) to model channel dependencies  
+ 093 more efficiently. GDD-MLP endows the original MLP with the advantages of data dependence and  
+ 094 a global receptive field. Additionally, to mitigate the overfitting and generalization issues associated  
+ 095 with Channel-Dependent (CD) models (Han et al., 2023), we introduce a Channel Mixup strategy.  
+ 096 This method combines channels linearly during training to create virtual channels that integrate  
+ 097 characteristics from multiple channels while preserving their shared temporal dependencies, which  
+ 098 is expected to improve the generalizability of models.
+
+099 In summary, we adapt Mamba to multivariate time series forecasting by evaluating the effective-  
+ 100 ness of its components and equipping it with channel mixing capabilities. The resulting model,  
+ 101 **CMamba**, leveraging both cross-time and cross-channel dependencies, achieves consistent state-  
+ 102 of-the-art performance across seven real-world datasets. Technically, our main contributions are  
+ 103 summarized as follows:
+
+- 104 • We tailor the vanilla Mamba module for long-term time series forecasting. A modified  
+ 105 Mamba (M-Mamba) module is proposed for better cross-time dependency modeling.
+- 106 • We enable Mamba to capture multivariate correlations using the proposed global data-  
+ 107 dependent MLP (GDD-MLP) and Channel Mixup. Coupled with the M-Mamba module,  
+ the proposed **CMamba** captures both cross-time and cross-channel dependencies to learn  
+ better representations for multivariate time series forecasting.
+
+![Figure 1: A line graph showing two variables, HULL (High UseLess Load) and MULL (Middle UseLess Load), over time. The HULL curve is orange and the MULL curve is blue. The y-axis ranges from 0.2 to 1.0. A dashed ellipse highlights a period where the MULL curve is approximately half the height of the HULL curve. Text inside the graph indicates 'mean=0.50, std=0.05'.](1ac0e11d90bece49015adc89be472a39_img.jpg)
+
+Figure 1: A line graph showing two variables, HULL (High UseLess Load) and MULL (Middle UseLess Load), over time. The HULL curve is orange and the MULL curve is blue. The y-axis ranges from 0.2 to 1.0. A dashed ellipse highlights a period where the MULL curve is approximately half the height of the HULL curve. Text inside the graph indicates 'mean=0.50, std=0.05'.
+
+Figure 1: An illustration of the relationship of variables in the ETT dataset. *HULL* means High UseLess Load and *MULL* means Middle UseLess Load.
+
+{2}------------------------------------------------
+
+- Experiments on seven real-world benchmarks demonstrate that our proposed framework achieves superior performance. We extensively apply the proposed GDD-MLP and Channel Mixup to other models. The improved forecasting performance indicates the broad versatility of our framework.
+
+## 2 RELATED WORK
+
+### 2.1 STATE SPACE MODELS FOR SEQUENCE MODELING
+
+Traditional state space models (SSMs), such as hidden Markov models and recurrent neural networks (RNNs), process sequences by storing messages in their hidden states and using these states along with the current input to update the output. This recurrent mechanism limits their training efficiency and leads to problems like vanishing and exploding gradients (Hochreiter & Schmidhuber, 1997). Recently, several SSMs with linear-time complexity have been proposed, including S4 (Gu et al., 2021), H3 (Fu et al., 2022), SpaceTime (Zhang et al., 2023), and Mamba (Gu & Dao, 2023). Among these, Mamba further enhances S4 by introducing a data-dependent selection mechanism that balances short-term and long-term dependencies. Mamba has demonstrated powerful long-sequence modeling capabilities and has been successfully extended to the visual (Liu et al., 2024; Zhu et al., 2024) and graph domains (Wang et al., 2024a).
+
+In the time series domain, many recent works (Patro & Agneewaran, 2024; Wang et al., 2024d) have focused on aligning the input format of time series with other fields so that the original Mamba architecture can be migrated. Specifically, S-Mamba (Wang et al., 2024d) modifies iTransformer (Liu et al., 2023a) by replacing its self-attention layer with Mamba, thereby modeling inter-channel relationships by treating different channels as sequential data. Time-SSM (Hu et al., 2024) provides an in-depth examination of various SSM kernel variants within the Mamba framework for time series analysis. Bi-Mamba+ (Liang et al., 2024) explores the impact of sequence modeling direction and proposes a bidirectional Mamba architecture for multivariate time series forecasting. Despite these advancements, existing works overlook the critical evaluation of whether the internal components of Mamba are inherently well-suited for time series data. Moreover, while addressing Mamba’s limited capacity for channel modeling, existing strategies are too direct (e.g., S-Mamba, which models cross-channel dependencies in a sequential manner) and introduce large computational overhead. In this paper, we explore the practicality of Mamba components and propose a more lightweight and efficient strategy to model cross-channel dependencies.
+
+### 2.2 CHANNEL STRATEGIES IN MTSF
+
+Channel strategies are fundamental in determining how to handle relationships between variables in multivariate time series forecasting (MTSF). Broadly, there are two primary approaches: the Channel-Independent (CI) strategy, which disregards cross-channel dependencies, and the Channel-Dependent (CD) strategy, which integrates channels according to specific mechanisms. Each strategy has its respective strengths and weaknesses. CD methods offer greater representational capacity but tend to be less robust when confronted with distributional shifts in time series data, while CI methods sacrifice capacity for more stable, robust predictions (Han et al., 2023).
+
+A significant number of state-of-the-art models adhere to the CI strategy. These models (Zeng et al., 2023; Nie et al., 2022; Wang et al., 2023) treat multivariate time series as a collection of independent univariate time series and simply treat different channels as different training samples. However, recent work has demonstrated the efficacy of explicitly capturing multivariate correlations through mechanisms such as self-attention (Liu et al., 2023a) and convolution (Luo & Wang, 2024). These methods have achieved strong empirical results, underscoring the importance of cross-channel dependency modeling in MTSF. Despite these advances, there remains a need for more effective and efficient mechanisms to capture and model cross-channel dependencies.
+
+### 2.3 MIXUP FOR GENERALIZABILITY
+
+Mixup is an effective data augmentation technique widely used in vision (Zhang et al., 2017; Yun et al., 2019; Verma et al., 2019), natural language processing (Guo et al., 2019; Sun et al., 2020), and more recently, time series analysis (Zhou et al., 2023; Ansari et al., 2024). The vanilla mixup
+
+{3}------------------------------------------------
+
+technique randomly mixes two input data samples via linear interpolation. Its variants extend this by mixing either input samples or hidden embeddings to gain better generalization. In multivariate time series, each sample contains multiple time series. Hence, rather than mixing two samples, our proposed Channel Mixup mixes the time series of the same sample. This strategy not only enhances the generalization of models but also facilitates the CD approach.
+
+## 3 PRELIMINARY
+
+### 3.1 MULTIVARIATE TIME SERIES FORECASTING
+
+In multivariate time series forecasting, we are given a historical time series  $\mathbf{X} = \{\mathbf{x}_1, \dots, \mathbf{x}_L\} \in \mathbb{R}^{L \times V}$  with a look-back window  $L$  and the number of channels  $V$ . The objective is to predict the  $T$  future values  $\mathbf{Y} = \{\mathbf{x}_{L+1}, \dots, \mathbf{x}_{L+T}\} \in \mathbb{R}^{T \times V}$ . In the following sections, we denote  $\mathbf{X}_{t,v}$  as the value of all channels at time step  $t$ , and  $\mathbf{X}_{v,v}$  as the entire sequence of the channel indexed by  $v$ . The same annotation is also applied to  $\mathbf{Y}$ . In this paper, we focus on the long-term time series forecasting task, where the prediction length is greater than or equal to 96.
+
+### 3.2 MAMBA
+
+Given an input  $\bar{\mathbf{x}}(t) \in \mathbb{R}$ , the continuous state space model (SSM) produces a response  $\bar{\mathbf{y}}(t) \in \mathbb{R}$  based on the observation of hidden state  $\mathbf{h}(t) \in \mathbb{R}^S$  and the input  $\bar{\mathbf{x}}(t)$ , which can be formulated as:
+
+$$\begin{aligned} \mathbf{h}'(t) &= \mathbf{A}\mathbf{h}(t) + \mathbf{B}\bar{\mathbf{x}}(t), \\ \bar{\mathbf{y}}(t) &= \mathbf{C}\mathbf{h}(t) + \mathbf{D} \cdot \bar{\mathbf{x}}(t), \end{aligned} \quad (1)$$
+
+where  $\mathbf{A} \in \mathbb{R}^{S \times S}$  is the state transition matrix,  $\mathbf{B} \in \mathbb{R}^{S \times 1}$  and  $\mathbf{C} \in \mathbb{R}^{1 \times S}$  are projection matrices, and  $\mathbf{D} \in \mathbb{R}$  is the skip connection parameter. When both input and response contain  $E$  features, i.e.,  $\bar{\mathbf{x}}(t) \in \mathbb{R}^E$  and  $\bar{\mathbf{y}}(t) \in \mathbb{R}^E$ , the SSM is applied independently to each feature, that is,  $\mathbf{A} \in \mathbb{R}^{E \times S \times S}$ ,  $\mathbf{B} \in \mathbb{R}^{E \times S}$ ,  $\mathbf{C} \in \mathbb{R}^{E \times S}$ , and  $\mathbf{D} \in \mathbb{R}^E$ . For efficient memory utilization,  $\mathbf{A}$  can be compressed to  $\mathbb{R}^{E \times S}$ . Hereafter, unless otherwise stated, we only consider multi-feature systems and the compressed form of  $\mathbf{A}$ . For the discrete system, Eq. 1 could be discretized as:
+
+$$\begin{aligned} \bar{\mathbf{A}} &= \exp(\Delta \mathbf{A}), \\ \bar{\mathbf{B}} &= (\Delta \mathbf{A})^{-1} (\exp(\Delta \mathbf{A}) - \mathbf{I}) \Delta \mathbf{B}, \\ \mathbf{h}_t &= \bar{\mathbf{A}} \mathbf{h}_{t-1} + \bar{\mathbf{B}} \bar{\mathbf{x}}_t, \\ \bar{\mathbf{y}}_t &= \mathbf{C} \mathbf{h}_t + \mathbf{D} \cdot \bar{\mathbf{x}}_t, \end{aligned} \quad (2)$$
+
+where  $\Delta \in \mathbb{R}^E$  is the sampling time interval. These operations can be efficiently computed through global convolution:
+
+$$\begin{aligned} \bar{\mathbf{K}} &= (\mathbf{C} \bar{\mathbf{B}}, \mathbf{C} \bar{\mathbf{A}} \bar{\mathbf{B}}, \dots, \mathbf{C} \bar{\mathbf{A}}^{L-1} \bar{\mathbf{B}}), \\ \bar{\mathbf{Y}} &= \bar{\mathbf{X}} * \bar{\mathbf{K}} + \mathbf{D} \cdot \bar{\mathbf{X}}, \end{aligned} \quad (3)$$
+
+where  $L$  is the sequence length, and  $\bar{\mathbf{X}}, \bar{\mathbf{Y}} \in \mathbb{R}^{L \times E}$ .
+
+**Selective Scan Mechanism** Traditional approaches (Gu et al., 2021) keep transfer parameters (e.g.,  $\mathbf{B}$  and  $\mathbf{C}$ ) unchanged during sequence processing, ignoring their relationships with the input. Mamba (Gu & Dao, 2023) adopts a selective scan strategy where  $\mathbf{B} \in \mathbb{R}^{L \times S}$ ,  $\mathbf{C} \in \mathbb{R}^{L \times S}$ , and  $\Delta \in \mathbb{R}^{L \times E}$  are dynamically derived from the input  $\bar{\mathbf{X}} \in \mathbb{R}^{L \times E}$ . As a result,  $\bar{\mathbf{A}}$  and  $\bar{\mathbf{B}} \in \mathbb{R}^{L \times E \times S}$  are dependent on both time steps and features. This data-dependent mechanism allows Mamba to incorporate contextual information and selectively execute state transitions.
+
+## 4 METHODOLOGY
+
+The overall structure of CMamba is illustrated in Fig. 2. Before training, the Channel Mixup module mixes the input multivariate time series along the channel dimension. This is followed by the core architecture comprising the modified Mamba (M-Mamba) module and the global data-dependent MLP (GDD-MLP) module, designed to capture both cross-time and cross-channel dependencies.
+
+{4}------------------------------------------------
+
+![Figure 2: The overall framework of CMamba. (a) Channel Mixup Module (active while training) takes an Input Multivariate Series (V x L) and uses Random shuffle, Instance Norm, and Channel Mixing to produce a virtual sample. This is then normalized via Instance Norm & Patching to create patches (V x N x E). (b) CMamba Block takes these patches and processes them through a Linear Projection & Position Embedding layer, followed by a CMamba Encoder. The CMamba Encoder consists of two parallel branches: the M-Mamba module and the GDD-MLP module. (c) M-Mamba Module captures cross-time dependencies using a Linear layer, SiLU activation, and a state space model (SSM) with parameters A, B, C, and D. (d) GDD-MLP Module captures cross-channel dependencies using a Linear layer, SiLU activation, and a Multi-Layer Perceptron (MLP) with a skip connection.](690fce4fb5c9cbb8beb560cb2a3fcbeb_img.jpg)
+
+Figure 2: The overall framework of CMamba. (a) Channel Mixup Module (active while training) takes an Input Multivariate Series (V x L) and uses Random shuffle, Instance Norm, and Channel Mixing to produce a virtual sample. This is then normalized via Instance Norm & Patching to create patches (V x N x E). (b) CMamba Block takes these patches and processes them through a Linear Projection & Position Embedding layer, followed by a CMamba Encoder. The CMamba Encoder consists of two parallel branches: the M-Mamba module and the GDD-MLP module. (c) M-Mamba Module captures cross-time dependencies using a Linear layer, SiLU activation, and a state space model (SSM) with parameters A, B, C, and D. (d) GDD-MLP Module captures cross-channel dependencies using a Linear layer, SiLU activation, and a Multi-Layer Perceptron (MLP) with a skip connection.
+
+Figure 2: The overall framework of CMamba. (a) The Channel Mixup module, active during training, fuses different channels of a sample to create a virtual sample. New samples are normalized via instance norm and segmented into patches before being fed into the model. (b) The CMamba block consists of two parts: the M-Mamba module and GDD-MLP before residual connection. (c) The M-Mamba module captures cross-time dependencies. (d) The GDD-MLP module captures cross-channel dependencies.
+
+These two modules form the CMamba block together. CMamba takes patch-wise sequences as input and makes predictions using a single linear layer. The following sections provide detailed explanations of these components.
+
+### 4.1 CMAMBA BLOCK
+
+The CMamba block consists of two key components: the M-Mamba module and the GDD-MLP module, each responsible for modeling cross-time and cross-channel dependencies, respectively.
+
+#### 4.1.1 M-MAMBA
+
+Mamba has demonstrated significant potential in NLP (Gu & Dao, 2023), CV (Zhu et al., 2024; Liu et al., 2024), and stock prediction (Shi, 2024). In these fields, the semantic consistency of features allows elements like words, image patches, or financial indicators to be treated as tokens. In contrast, in multivariate time series, different channels often represent disparate physical quantities (Liu et al., 2023a), making it unsuitable to treat channels at the same time point as a token. While a single time step of each channel lacks semantic meaning, patching (Dosovitskiy et al., 2020; Nie et al., 2022) aggregates time points into subseries-level patches, enriching the semantic information and local receptive fields of tokens. Hence, we divide the input time series into patches to serve as the input of our model.
+
+**Patching** Given multivariate time series  $\mathbf{X}$ , for each univariate series  $\mathbf{X}_{:v} \in \mathbb{R}^L$ , we segment it into patches through moving window with patch length  $P$  and stride  $S$ :
+
+$$\hat{\mathbf{X}}_{:v} = \text{Patching}(\mathbf{X}_{:v}), \quad (4)$$
+
+where  $\hat{\mathbf{X}}_{:v} \in \mathbb{R}^{N \times P}$  is a sequence of patches and  $N = \lfloor \frac{(L-P)}{S} \rfloor + 2$  is the number of patches.
+
+In addition to modifying the input structure, the model architecture of Mamba also needs to be adapted to suit the characteristics of multivariate time series data. Our Mamba variant is called M-Mamba, as shown in Fig. 3 (b). Compared with the vanilla Mamba module, our module has the following differences: (1) We remove the x-branch convolution operation. (2) We no longer learn a transition matrix  $\mathbf{A}$  for each feature, i.e.,  $\mathbf{A} \in \mathbb{R}^3$  in M-Mamba. (3) The skip connection matrix  $\mathbf{D}$  is derived from the input time series, meaning that  $\mathbf{D}$  is also data-dependent. The reasons for our design will be discussed in detail in Section 5.2.
+
+{5}------------------------------------------------
+
+270  
+271  
+272  
+273  
+274  
+275  
+276  
+277  
+278  
+279  
+280  
+281  
+282  
+283  
+284  
+285  
+286  
+287  
+288  
+289  
+290  
+291  
+292  
+293  
+294  
+295  
+296  
+297  
+298  
+299  
+300  
+301  
+302  
+303  
+304  
+305  
+306  
+307  
+308  
+309  
+310  
+311  
+312  
+313  
+314  
+315  
+316  
+317  
+318  
+319  
+320  
+321  
+322  
+323
+
+![Figure 3: Architectures of the vanilla Mamba module and M-Mamba module. (a) Vanilla Mamba Module: Input x enters RMS Norm, which branches into x-branch (Linear, Conv1d, SiLU, SSM) and z-branch (Linear, SiLU). The outputs are multiplied and then passed through a Linear layer. (b) M-Mamba Module: Similar to (a) but the SSM block is replaced by an M-SSM block. (c) SSM Layer: A detailed view of the SSM block showing input x being processed by blocks B, A, h, C, and D to produce output y. (d) M-SSM Layer: Similar to (c) but with a 'Data-dependent' block added to the input x.](a7d78d22e465dea388b31d0739f9d0cd_img.jpg)
+
+Figure 3: Architectures of the vanilla Mamba module and M-Mamba module. (a) Vanilla Mamba Module: Input x enters RMS Norm, which branches into x-branch (Linear, Conv1d, SiLU, SSM) and z-branch (Linear, SiLU). The outputs are multiplied and then passed through a Linear layer. (b) M-Mamba Module: Similar to (a) but the SSM block is replaced by an M-SSM block. (c) SSM Layer: A detailed view of the SSM block showing input x being processed by blocks B, A, h, C, and D to produce output y. (d) M-SSM Layer: Similar to (c) but with a 'Data-dependent' block added to the input x.
+
+Figure 3: Architectures of the vanilla Mamba module and M-Mamba module.
+
+#### 4.1.2 GDD-MLP
+
+To model cross-channel dependencies as simply and effectively as possible, we propose the global data-dependent MLP (GDD-MLP) module. Fig. 2 (b) and (d) illustrate its structure and pipeline. For the patch-wise multivariate time series embeddings generated after the  $t^{th}$  M-Mamba module, denoted as  $\mathbf{H}_t \in \mathbb{R}^{V \times N \times E}$ , the data-dependent weight and bias of GDD-MLP could be formulated as:
+
+$$\begin{aligned} \text{Weight}_t &= \text{sigmoid}(\text{MLP}_1(\text{Pooling}(\mathbf{H}_t))), \\ \text{Bias}_t &= \text{sigmoid}(\text{MLP}_2(\text{Pooling}(\mathbf{H}_t))). \end{aligned} \quad (5)$$
+
+Here,  $\text{Pooling}$  is applied along the embedding dimension, generating descriptors  $\mathbf{F}^l \in \mathbb{R}^{V \times N}$  that encapsulate the overall characteristics of each patch for every channel. To improve the extraction of global information for each channel, we employ both Average Pooling and Max Pooling. The average and max descriptors share the same MLP, whose outputs are added up to produce the final channel representations in the latent space. The weight and bias are then applied to the input features to embed cross-channel dependencies:
+
+$$\mathbf{H}'_t = \text{Weight}_t \odot \mathbf{H}_t + \text{Bias}_t. \quad (6)$$
+
+### 4.2 CHANNEL MIXUP
+
+Previous mixup strategies (Zhang et al., 2017) generate new training samples through linear interpolation between two existing samples. For two feature-target pairs  $(x_i, y_i)$  and  $(x_j, y_j)$  randomly drawn from the training set, the process is described as:
+
+$$\begin{aligned} \tilde{x} &= \lambda x_i + (1 - \lambda) x_j, \\ \tilde{y} &= \lambda y_i + (1 - \lambda) y_j, \end{aligned} \quad (7)$$
+
+where  $(\tilde{x}, \tilde{y})$  is the synthesized virtual sample, and  $\lambda \in [0, 1]$  is a mixing coefficient. In the context of multivariate time series, directly applying this mixup approach can yield suboptimal results and even degrade model performance (Zhou et al., 2023), as mixing samples from distinct time intervals may disrupt temporal features such as periodicity. In contrast, different channels within a multivariate time series often exhibit similar temporal characteristics, which explains the effectiveness of the CI strategy (Han et al., 2023). Mixing different channels could introduce new variables while preserving their shared temporal features. Considering that the CD strategy tends to cause overfitting due to its lack of robustness to distributionally drifted time series (Han et al., 2023), training with unseen channels should mitigate this issue. Generally, the Channel Mixup could be formulated as follows:
+
+$$\begin{aligned} \mathbf{X}' &= \mathbf{X}_{:,i} + \lambda \mathbf{X}_{:,j}, \quad i, j = 0, \dots, V - 1, \\ \mathbf{Y}' &= \mathbf{Y}_{:,i} + \lambda \mathbf{Y}_{:,j}, \quad i, j = 0, \dots, V - 1, \end{aligned} \quad (8)$$
+
+where  $\mathbf{X}' \in \mathbb{R}^{L \times 1}$  and  $\mathbf{Y}' \in \mathbb{R}^{T \times 1}$  are hybrid channels resulting from the linear combination of channel  $i$  and channel  $j$ .  $\lambda \sim N(0, \sigma^2)$  is the linear combination coefficient with  $\sigma$  as the standard deviation. We use a normal distribution with a mean of 0, ensuring that the overall characteristics of each channel remain unchanged. In practice, as shown in Alg. 1, we mix the channels of each sample and replace the original sample with the constructed virtual sample, where  $\text{randperm}(V)$  generates a randomly arranged array of  $0 \sim V - 1$ .
+
+{6}------------------------------------------------
+
+#### **Algorithm 1:** Channel Mixup for multivariate time series forecasting
+
+---
+
+**Input:** training data  $\mathbf{X} \in \mathbb{R}^{L \times V}$ ,  $\mathbf{Y} \in \mathbb{R}^{T \times V}$ ; standard deviation  $\sigma$ ; the number of channels  $V$   
+1:  $\text{perm} = \text{randperm}(V)$  #  $\text{perm} \in \mathbb{R}^V$   
+2:  $\lambda = \text{normal}(\text{mean} = 0, \text{std} = \sigma, \text{size} = (V,))$   
+3:  $\mathbf{X}' = \mathbf{X} + \lambda * \mathbf{X}[;, \text{perm}]$   
+4:  $\mathbf{Y}' = \mathbf{Y} + \lambda * \mathbf{Y}[;, \text{perm}]$   
+**Output:**  $(\mathbf{X}', \mathbf{Y}')$
+
+---
+
+### 4.3 OVERALL PIPELINE
+
+In this section, we summarize the aforementioned procedures and outline the process of training and testing our model.
+
+In the training stage, given a sample  $\{\mathbf{X}, \mathbf{Y}\}$ , it is first transformed into a virtual sample using the Channel Mixup technique, followed by instance normalization that mitigates the distributional shifts:
+
+$$\begin{aligned}\mathbf{X}', \mathbf{Y}' &= \text{ChannelMixup}(\mathbf{X}, \mathbf{Y}), \\ \mathbf{X}'_{\text{norm}} &= \text{InstanceNorm}(\mathbf{X}').\end{aligned}\tag{9}$$
+
+Subsequently, each channel is partitioned into patches of equal patch length  $P$  and patch number  $N$ . These patch-wise tokens are then linearly projected into vectors of size  $E$  followed by the addition of a position encoding  $\mathbf{W}_{\text{pos}}$ . This process could be described as:
+
+$$\begin{aligned}\hat{\mathbf{X}} &= \text{Patching}(\mathbf{X}'_{\text{norm}}), \\ \mathbf{Z}_0 &= \hat{\mathbf{X}}\mathbf{W}_p + \mathbf{W}_{\text{pos}},\end{aligned}\tag{10}$$
+
+where  $\hat{\mathbf{X}} \in \mathbb{R}^{V \times N \times P}$ ,  $\mathbf{W}_p \in \mathbb{R}^{P \times E}$ ,  $\mathbf{W}_{\text{pos}} \in \mathbb{R}^{N \times E}$ , and  $\mathbf{Z}_0 \in \mathbb{R}^{V \times N \times E}$ .  $\mathbf{Z}_0$  is then fed into the CMamba encoder, consisting of  $k$  CMamba blocks:
+
+$$\begin{aligned}\mathbf{H}_l &= \text{M-Mamba}(\mathbf{Z}_{l-1}), \\ \mathbf{Z}_l &= \text{GDD-MLP}(\mathbf{H}_l) + \mathbf{Z}_{l-1},\end{aligned}\tag{11}$$
+
+where  $l = 1, \dots, k$ . The final prediction is generated through a linear projection of the output from the last CMamba block:
+
+$$\hat{\mathbf{Y}} = \text{DeNorm}(\text{Flatten}(\text{Silu}(\mathbf{Z}_k))\mathbf{W}_{\text{proj}}),\tag{12}$$
+
+where  $\mathbf{W}_{\text{proj}} \in \mathbb{R}^{(N \cdot E) \times T}$  and  $\hat{\mathbf{Y}} \in \mathbb{R}^{V \times T}$ . In the testing stage, the Channel Mixup module is excluded, and the model is evaluated directly on the original testing set.
+
+## 5 EXPERIMENTS
+
+**Datasets** We evaluate the performance of CMamba on seven well-established datasets: ETTm1, ETTm2, ETTh1, ETTh2, Electricity, Weather, and Traffic. All of these datasets are publicly available (Wu et al., 2021). We follow the public splits and apply zero-mean normalization to each dataset. More details about datasets are provided in Appendix A.1.
+
+**Baselines** We select ten advanced models as our baselines, including (i) Linear-based models: DLinear (Zeng et al., 2023), RLinear (Li et al., 2023), TIDE (Das et al., 2023), TimeMixer (Wang et al., 2023); (ii) Transformer-based models: Crossformer (Zhang & Yan, 2022), PatchTST (Nie et al., 2022), iTransformer (Liu et al., 2023a); and (iii) Convolution-based models: MICN (Wang et al., 2022), TimesNet (Wu et al., 2022), ModernTCN (Luo & Wang, 2024).
+
+**Implementation** We set the look-back window to  $L = 96$  and report the Mean Squared Error (MSE) as well as the Mean Absolute Error (MAE) for four prediction lengths  $T \in \{96, 192, 336, 720\}$ . We reuse most of the baseline results from iTransformer (Liu et al., 2023a) but we rerun MICN (Wang et al., 2022), TimeMixer (Wang et al., 2023), and ModernTCN (Luo & Wang, 2024) due to their different experimental settings. All experiments are repeated three times, and we report the mean. More details about hyperparameters can be found in Appendix A.2.
+
+{7}------------------------------------------------
+
+Table 1: Average results of the long-term forecasting task with prediction lengths  $T \in \{96, 192, 336, 720\}$ . We fix the look-back window  $L = 96$  and report the average performance of all prediction lengths. The best is highlighted in **red** and the runner-up in **blue**.
+
+| Models | CMamba (Ours) |  | ModelTCN (2024) |  | iTransformer (2023a) |  | TimeMixer (2023) |  | RLinear (2023) |  | PatchTST (2022) |  | Crossformer (2022) |  | TIDE (2023) |  | TimesNet (2022) |  | MUCN (2022) |  | DLinear (2023) |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  | MSE | MAE | MSE | MAE | MSE | MAE | MSE | MAE | MSE | MAE | MSE | MAE | MSE | MAE | MSE | MAE | MSE | MAE | MSE | MAE | MSE | MAE |
+| ETTh1 | <b>0.376</b> | <b>0.379</b> | 0.386 | 0.401 | 0.407 | 0.410 | <b>0.384</b> | <b>0.397</b> | 0.414 | 0.407 | 0.387 | 0.400 | 0.513 | 0.496 | 0.419 | 0.419 | 0.400 | 0.406 | 0.407 | 0.432 | 0.403 | 0.407 |
+| ETTh2 | <b>0.273</b> | <b>0.316</b> | <b>0.228</b> | <b>0.332</b> | 0.288 | 0.332 | 0.279 | 0.325 | 0.286 | 0.327 | 0.281 | 0.326 | 0.757 | 0.610 | 0.358 | 0.404 | 0.291 | 0.333 | 0.339 | 0.386 | 0.350 | 0.401 |
+| ETTm1 | <b>0.433</b> | <b>0.425</b> | <b>0.435</b> | <b>0.432</b> | 0.454 | 0.447 | 0.470 | 0.451 | 0.446 | 0.434 | 0.469 | 0.454 | 0.529 | 0.522 | 0.541 | 0.507 | 0.458 | 0.480 | 0.559 | 0.524 | 0.456 | 0.452 |
+| ETTm2 | <b>0.468</b> | <b>0.491</b> | 0.501 | 0.494 | 0.503 | 0.497 | 0.509 | 0.499 | <b>0.422</b> | <b>0.498</b> | 0.507 | 0.497 | 0.942 | 0.684 | 0.641 | 0.550 | 0.412 | 0.427 | 0.580 | 0.526 | 0.559 | 0.515 |
+| Electricity | <b>0.169</b> | <b>0.258</b> | 0.197 | 0.282 | <b>0.172</b> | <b>0.250</b> | 0.183 | 0.272 | 0.219 | 0.291 | 0.216 | 0.304 | 0.244 | 0.334 | 0.251 | 0.344 | 0.192 | 0.295 | 0.185 | 0.296 | 0.212 | 0.300 |
+| Weather | <b>0.237</b> | <b>0.259</b> | <b>0.240</b> | <b>0.271</b> | 0.258 | 0.279 | 0.245 | 0.274 | 0.272 | 0.291 | 0.259 | 0.281 | 0.259 | 0.315 | 0.271 | 0.320 | 0.259 | 0.287 | 0.267 | 0.318 | 0.265 | 0.317 |
+| Traffic | <b>0.444</b> | <b>0.645</b> | 0.546 | 0.348 | <b>0.428</b> | <b>0.262</b> | 0.496 | 0.298 | 0.626 | 0.378 | 0.555 | 0.362 | 0.550 | 0.304 | 0.790 | 0.473 | 0.620 | 0.336 | 0.544 | 0.319 | 0.625 | 0.383 |
+
+### 5.1 MAIN RESULTS
+
+The comprehensive results for multivariate long-term time series forecasting are presented in Table 1. We report the average performance across four prediction horizons  $T \in \{96, 192, 336, 720\}$  in the main text, with full results available in Appendix D.1. Compared to other state-of-the-art methods, CMamba ranks top 1 in **13** out of the 14 settings of varying metrics and top 2 in **all** settings. Actually, across all prediction lengths and metrics, encompassing 70 settings, CMamba ranks top 1 in **65** settings and top 2 in **all** settings (detailed in Appendix D.1). Notably, for datasets with numerous time series, such as Electricity, Weather, and Traffic, CMamba performs as well as or better than iTransformer. iTransformer captures cross-channel dependencies via the self-attention mechanism, incurring high computational costs. Our GDD-MLP module achieves comparable data dependencies and global receptive field, but the computational cost is significantly reduced. These results demonstrate our method’s effectiveness. For experiments with the optimal look-back length, we provide the results in Appendix C.4.
+
+### 5.2 ABLATION STUDY
+
+**Ablation of M-Mamba Design** In Section 4.1.1, we describe the differences between the M-Mamba and vanilla Mamba modules, including the removal of convolution, feature-independent A, and data-dependent D. Here, we provide quantitative evidence to justify our design choices. As shown in Table 2, we conduct experiments on the Weather dataset with the same settings as before. Case Vanilla, ①, ②, and ③ indicate that the convolution operation and the gated z-branch are redundant for time series forecasting. However, removing both the convolution operation and the z-branch does not provide further improvement, suggesting that retaining the z-branch is beneficial. Moreover, Case Vanilla and Case ④ demonstrate that learning a feature-specific transfer matrix A is unnecessary, given the similar temporal characteristics within each patch. On the other hand, due to the differences between channels and patches, making the skip connection matrix D data-dependent is justified, as indicated by the comparison between Case ④ and Case ⑤.
+
+**Ablation of GDD-MLP and Channel Mixup** To assess the contributions of each module in CMamba, we conduct ablation studies on the GDD-MLP and Channel Mixup modules. The results, summarized in Table 3, present the average performance across four prediction horizons, with full results available in Appendix D.2. Overall, the combination of both modules leads to state-of-the-art performance, demonstrating the efficacy of their integration. In most cases, both modules could function independently, yielding significant improvements over baseline models. However, for the Traffic dataset, using GDD-MLP in isolation results in substantial performance degradation. This supports our hypothesis that the Channel-Dependent (CD) strategy, when applied without Channel Mixup, is vulnerable to distributional shifts and prone to overfitting.
+
+Table 2: Ablation of M-Mamba on Weather. **FS**: feature-specific, **FI**: feature-independent, **F**: free variables, **DD**: data-dependent variables.
+
+| Case | Conv | z-branch | A | D | MSE | MAE |
+|-|-|-|-|-|-|-|
+| Vanilla | ✓ | ✓ | FS | F | 0.240 | 0.261 |
+| ① | - | ✓ | FS | F | 0.238 | 0.260 |
+| ② | ✓ | - | FS | F | 0.239 | 0.261 |
+| ③ | - | - | FS | F | 0.239 | 0.261 |
+| ④ | ✓ | ✓ | FI | F | 0.240 | 0.261 |
+| ⑤ | ✓ | ✓ | FI | DD | 0.239 | 0.260 |
+| CMamba | - | ✓ | FI | DD | <b>0.237</b> | <b>0.259</b> |
+
+{8}------------------------------------------------
+
+Table 3: Ablation of GDD-MLP and Channel Mixup. We list the average MSE and MAE of different prediction lengths.
+
+| GDD<br>MLP | Channel<br>Mixup | ETT1 |  | ETT2 |  | ETH1 |  | ETH2 |  | Electricity |  | Weather |  | Traffic |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  |  | MSE | MAE | MSE | MAE | MSE | MAE | MSE | MAE | MSE | MAE | MSE | MAE | MSE | MAE |
+| - | - | 0.387 | 0.387 | 0.282 | 0.322 | <b>0.431</b> | 0.428 | <b>0.367</b> | <b>0.391</b> | 0.190 | 0.268 | 0.255 | 0.271 | <b>0.479</b> | <b>0.264</b> |
+| - | ✓ | <b>0.383</b> | <b>0.382</b> | 0.280 | 0.321 | <b>0.430</b> | <b>0.426</b> | 0.373 | <b>0.393</b> | 0.189 | 0.267 | 0.254 | 0.270 | 0.483 | 0.267 |
+| ✓ | - | 0.388 | 0.387 | <b>0.275</b> | <b>0.317</b> | 0.437 | 0.428 | 0.372 | 0.394 | <b>0.175</b> | <b>0.266</b> | <b>0.241</b> | <b>0.262</b> | 0.525 | 0.285 |
+| ✓ | ✓ | <b>0.376</b> | <b>0.379</b> | <b>0.273</b> | <b>0.316</b> | 0.433 | <b>0.425</b> | <b>0.368</b> | <b>0.391</b> | <b>0.169</b> | <b>0.258</b> | <b>0.237</b> | <b>0.259</b> | <b>0.444</b> | <b>0.265</b> |
+
+### 5.3 MODEL ANALYSIS
+
+**Effectiveness of GDD-MLP and Channel Mixup** Here, we further demonstrate the advantages of our proposed GDD-MLP and Channel Mixup over traditional mixup and MLP by visualizing the optimization process, with the patch-wise M-Mamba as our base model. (1) As shown in Fig. 4 (a) and (b), compared to the vanilla mixup, Channel Mixup successfully suppresses the oversmoothing caused by the CD strategy and brings significantly excellent generalization capabilities. (2) As depicted in Fig. 4 (c) and (d), the traditional MLP does show a stronger fitting ability, but because it is position-dependent rather than data-dependent, its generalization ability is weaker than that of GDD-MLP. Moreover, due to the data-dependent mechanism, GDD-MLP is more compatible with Channel Mixup than traditional MLP.
+
+![Figure 4: Loss curves for the Traffic dataset. The figure contains four subplots: (a) Training loss, (b) Validation loss, (c) Training loss, and (d) Validation loss. Each plot shows the loss (MSE) over 25 epochs for four models: GDDMLP (blue), MLP (orange), GDDMLP + Vanilla Mixup (green), and GDDMLP + Channel Mixup (red). In all plots, GDDMLP + Channel Mixup (red) achieves the lowest loss, followed by GDDMLP (blue), MLP (orange), and GDDMLP + Vanilla Mixup (green).](925f55ce69802b9d3b00546382663ee2_img.jpg)
+
+Figure 4: Loss curves for the Traffic dataset. The figure contains four subplots: (a) Training loss, (b) Validation loss, (c) Training loss, and (d) Validation loss. Each plot shows the loss (MSE) over 25 epochs for four models: GDDMLP (blue), MLP (orange), GDDMLP + Vanilla Mixup (green), and GDDMLP + Channel Mixup (red). In all plots, GDDMLP + Channel Mixup (red) achieves the lowest loss, followed by GDDMLP (blue), MLP (orange), and GDDMLP + Vanilla Mixup (green).
+
+Figure 4: Loss curves for the Traffic dataset with look-back length and prediction length fixed at 96. All curves are generated by models that combine the specified module with M-Mamba. For example, GDD-MLP + Channel Mixup corresponds to CMamba.
+
+**Generalizability of GDD-MLP and Channel Mixup** We evaluate the effectiveness and versatility of GDD-MLP and Channel Mixup on four recent models: iTransformer (Liu et al., 2023a) and PatchTST (Nie et al., 2022) (Transformer-based), RLinear (Li et al., 2023) (Linear-based), and TimesNet (Wu et al., 2022) (Convolution-based). Among them, iTransformer and TimesNet adopt CD strategies, while PatchTST and RLinear utilize CI approaches. We retain the original architectures of these models but process the input via Channel Mixup during training and insert the GDD-MLP module into the original frameworks. The modified architectures are detailed in Appendix B.2. As shown in Table 4, our pipeline consistently enhances performance over various models, yielding an average improvement of 5% across all metrics. For iTransformer and TimesNet, which have already taken cross-channel dependencies into account, the proposed modules do not result in major
+
+Table 4: Performance promotion obtained by our proposed GDD-MLP and Channel Mixup when applying them to other frameworks. We fix the look-back window  $L = 96$  and report the average performance of four prediction lengths  $T \in \{96, 192, 336, 720\}$ .
+
+|  | Method | iTransformer |  | PatchTST |  | RLinear |  | TimesNet |  |
+|-|-|-|-|-|-|-|-|-|-|
+|  |  | MSE | MAE | MSE | MAE | MSE | MAE | MSE | MAE |
+| Electricity | Original | 0.178 | 0.270 | 0.216 | 0.304 | 0.219 | 0.298 | 0.192 | 0.295 |
+|  | w/ GDD-MLP and Channel Mixup | <b>0.170</b> | <b>0.264</b> | <b>0.178</b> | <b>0.273</b> | <b>0.203</b> | <b>0.290</b> | <b>0.182</b> | <b>0.284</b> |
+|  | Promotion | <b>4.6%</b> | <b>2.1%</b> | <b>17.8%</b> | <b>10.2%</b> | <b>7.5%</b> | <b>2.6%</b> | <b>5.2%</b> | <b>3.7%</b> |
+| Weather | Original | 0.258 | 0.279 | 0.259 | 0.281 | 0.272 | 0.291 | 0.259 | 0.287 |
+|  | w/ GDD-MLP and Channel Mixup | <b>0.250</b> | <b>0.274</b> | <b>0.248</b> | <b>0.272</b> | <b>0.258</b> | <b>0.285</b> | <b>0.257</b> | <b>0.282</b> |
+|  | Promotion | <b>3.1%</b> | <b>1.9%</b> | <b>4.4%</b> | <b>3.3%</b> | <b>5.1%</b> | <b>2.1%</b> | <b>0.9%</b> | <b>1.6%</b> |
+
+{9}------------------------------------------------
+
+improvements. However, for PatchTST and RLinear, which adopt CI strategies, the integration of our modules effectively mitigates oversmoothing, leading to substantial performance gains.
+
+**Computational Cost of GDD-MLP** We report the computational cost introduced by the GDD-MLP module in Table 5, quantified by FLOPs (G). To ensure a fair comparison, we conduct experiments on our CMamba with a fixed hidden size of 128, three layers, and a batch size of 64 for the ETT, Weather, and Electricity datasets. Due to memory limitations, the batch size of the Traffic dataset is set to 32. As shown in Table 5, the GDD-MLP module contributes minimally to the overall computational cost. Notably, even for the Traffic dataset, which includes 862 channels, the increase in FLOPs is only 1.35%, indicating the module’s efficiency.
+
+Table 5: Computational cost of GDD-MLP. We use FLOPs (G) to measure the computational complexity.
+
+| Dataset<br>Channel | ETT<br>7 | Weather<br>21 | Electricity<br>321 | Traffic<br>862 |
+|-|-|-|-|-|
+| w/o GDD-MLP | 1.3322 | 3.9966 | 61.0916 | 82.0264 |
+| w/ GDD-MLP | 1.3368 | 4.0130 | 61.7558 | 83.1327 |
+| FLOPs increment | 0.35% | 0.41% | 1.09% | 1.35% |
+
+**Longer Look-back Length** The look-back length determines the extent of temporal information available within time series data. A model’s ability to deliver improved forecasting performance with an extended historical window indicates its proficiency in capturing long-range temporal dependencies. Fig. 5 illustrates the performance trajectories of CMamba across varying look-back lengths. Consistent with other state-of-the-art models (Nie et al., 2022; Liu et al., 2023a), CMamba’s performance improves as the look-back window lengthens, aligning with the hypothesis that an expanded receptive field contributes to more accurate predictions.
+
+![Figure 5: Performance promotion with longer look-back lengths. Two line plots show MSE vs. Look-back length (96, 192, 336, 512) for Weather and Electricity datasets. Four prediction lengths T are shown: 96 (red stars), 192 (orange squares), 336 (blue circles), and 720 (green diamonds). In both datasets, MSE decreases as look-back length increases for all prediction lengths. The 720 prediction length consistently shows the lowest MSE, while the 96 prediction length shows the highest MSE.](33228b4227fa57e1477b27b9e07483e6_img.jpg)
+
+Figure 5: Performance promotion with longer look-back lengths. Two line plots show MSE vs. Look-back length (96, 192, 336, 512) for Weather and Electricity datasets. Four prediction lengths T are shown: 96 (red stars), 192 (orange squares), 336 (blue circles), and 720 (green diamonds). In both datasets, MSE decreases as look-back length increases for all prediction lengths. The 720 prediction length consistently shows the lowest MSE, while the 96 prediction length shows the highest MSE.
+
+Figure 5: Performance promotion with longer look-back lengths. We vary the look-back length  $L$  in  $\{96, 192, 336, 512\}$  and report the performance curves of four prediction lengths  $T \in \{96, 192, 336, 720\}$  under the Weather and Electricity dataset.
+
+## 6 CONCLUSION
+
+We propose CMamba, a novel state space model for multivariate time series forecasting. To balance cross-time and cross-channel dependencies, CMamba consists of three key components: a M-Mamba module that facilitates Mamba for cross-time dependencies modeling, a GDD-MLP module that captures cross-channel dependencies, and a Channel Mixup training strategy that enhances generalization and facilitates the CD approach. Extensive experiments demonstrate that CMamba achieves state-of-the-art performance on seven real-world datasets. Notably, the GDD-MLP and Channel Mixup modules could be seamlessly inserted into other models with minimal cost, showcasing remarkable framework versatility. In the future, we aim to explore more effective techniques to capture cross-time and cross-channel dependencies.
+
+ Rest of paper (reference and Appendix) is removed.

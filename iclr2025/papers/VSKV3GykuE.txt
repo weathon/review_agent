@@ -1,0 +1,343 @@
+
+
+{0}------------------------------------------------
+
+# RAC-LoRA: A THEORETICAL OPTIMIZATION FRAMEWORK FOR LOW-RANK ADAPTATION
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Fine-tuning has become a popular approach to adapting large foundational models to specific tasks. As the size of models and datasets grows, parameter-efficient fine-tuning techniques are increasingly important. One of the most widely used methods is Low-Rank Adaptation (LoRA), with adaptation update expressed as the product of two low-rank matrices. While LoRA was shown to possess strong performance in fine-tuning, it often underperforms when compared to full-parameter fine-tuning (FPFT). Although many variants of LoRA have been extensively studied empirically, their theoretical optimization analysis is heavily under-explored. The starting point of our work is a demonstration that LoRA and its two extensions, Asymmetric LoRA and Chain of LoRA, indeed encounter convergence issues. To address these issues, we propose a general optimization framework that rigorously analyzes the convergence rates of LoRA-based methods. Our approach inherits the empirical benefits of LoRA-style heuristics, but introduces several small but important algorithmic modifications which turn it into a provably convergent method. Our framework serves as a bridge between FPFT and low-rank adaptation. We provide provable guarantees of convergence to the same solution as FPFT, along with the rate of convergence. Additionally, we present a convergence analysis for smooth, non-convex loss functions, covering gradient descent, stochastic gradient descent, and federated learning settings. Our theoretical findings are supported by experimental results.
+
+## 1 INTRODUCTION
+
+Many real-world Deep Learning (DL) applications require adapting a large pre-trained model to specific tasks in order to improve its performance (Church et al., 2021). This process, known as fine-tuning, involves adjusting the model from its pre-trained state to better handle the nuances of particular tasks or domains. Fine-tuning is a specialized form of transfer learning, where knowledge gained during pre-training is adapted for new, specific applications (Vrbančić & Podgorelec, 2020).
+
+**Parameter-Efficient Fine-Tuning.** While fine-tuning all model parameters has been effective, modern models with billions of parameters pose significant challenges due to their scale. Full-parameter fine-tuning is often computationally impractical with standard resources. To address this challenge, Parameter-Efficient Fine-Tuning (PEFT) (He et al., 2021) has emerged as a solution, focusing on updating a subset of parameters only (Richtárik & Takáč, 2016), or adding task-specific modules (Xu et al., 2023). PEFT reduces computational costs by modifying fewer parameters or adding external modules, enabling more efficient resource use and lowering storage requirements. This approach significantly reduces both training time and computational demands, making it a practical solution for adapting large models to new tasks (Han et al., 2024).
+
+### 1.1 LOW-RANK ADAPTATION (LoRA)
+
+One of the most popular PEFT methods is Low-Rank Adaptation (LoRA) (Hu et al., 2021). The core idea behind LoRA is that fine-tuning large pre-trained models can be effectively achieved by utilizing lower-dimensional parameter spaces (Li et al., 2018; Aghajanyan et al., 2020). Instead of updating all parameters of a large and potentially dense matrix associated with the weights of a linear layer, LoRA works with the product of two trainable low-rank matrices, which significantly reduces the
+
+{1}------------------------------------------------
+
+number of parameters updated during fine-tuning. These matrices are trained such that their product is added to the pre-trained model weights.
+
+In LoRA (Hu et al., 2021), the weight adaptation is represented as the product of two low-rank matrices (and a scalar multiplier), resulting in the final model
+
+$$W = W^0 + \frac{\alpha}{r} BA,$$
+
+where  $W^0 \in \mathbb{R}^{m \times n}$ ,  $B \in \mathbb{R}^{m \times r}$ , and  $A \in \mathbb{R}^{r \times n}$ . Here,  $r$  and  $\alpha$  respectively denote the LoRA rank and its scaling factor. Typically, since the dimensions of (particularly deep learning) models are enormous, we have rank  $r \ll \min\{m, n\}$ . This approach saves computational resources and minimizes the risk of overfitting or catastrophic forgetting (Biderman et al., 2024). Hence, LoRA has become a lightweight and efficient technique for adapting large models to various tasks, particularly in resource-constrained environments (Sun et al., 2022). It is important to note that  $W^0$  remains fixed and does not receive updates, while  $A$  and  $B$  are optimized during the training process. The scaling factor  $\alpha$  serves as a “step size” for the adaptation, and it is normalized by rank  $r$ . The matrix  $A$  is typically initialized with random Gaussian values, while the matrix  $B$  is set to zero, ensuring  $\Delta W = 0$  at the start of training. Alternative initialization strategies were explored by Zhu et al. (2024).
+
+### 1.2 CHAIN OF LORA (COLA)
+
+While LoRA offers significant computational advantages in practice, it remains less effective than full-parameter fine-tuning (FFFT) if efficiency is not a major concern (Biderman et al., 2024). To balance efficiency and performance, Xia et al. (2024) proposed an iterative method called Chain of LoRA (COLA). Essentially, COLA simply means the successive application of several LoRA updates.
+
+Chain of LoRA (COLA) constructs a sequence of LoRA modules through an iterative process of parameter fine-tuning, merging, and extending. The chain length is defined by the number of optimized LoRA modules. COLA’s central concept involves applying LoRA adaptations iteratively  $T$  times. COLA can be summarized as training a LoRA module, merging the updates with the fixed parameters, reinitializing the LoRA matrices, and repeating the process (Xia et al., 2024). The resulting model can be represented by:
+
+$$W = W^0 + \frac{\alpha}{r} \sum_{t=0}^{T-1} B^t A^t,$$
+
+where  $A^t$  and  $B^t$  indicate the low-rank matrices in the  $t$ -th block in the chain, which are typically initialized in the same manner as in standard LoRA. The motivation behind COLA is that standard LoRA may clearly fail to find the optimal adaptation since such an adaptation may not in general be of a low rank. To address this, COLA proposes using a sequence of low-rank matrix decompositions to approximate a middle-to-high-rank update. The hypothesis is that this sequence of updates can provide a better approximation than a single LoRA adaptation and may be easier to optimize compared to learning the optimal adaptation from scratch.
+
+## 2 PROBLEM FORMULATION AND SUMMARY OF CONTRIBUTIONS
+
+### 2.1 PROBLEM FORMULATION
+
+The primary approach for training supervised machine learning models is to formulate the task as an optimization problem where the goal is to minimize a loss function, which measures the discrepancy between the model’s predictions and the actual outcomes. In this work, we explore this optimization problem in the specific context of fine-tuning, where a pre-trained model is adapted to a new task or dataset, requiring efficient adjustments to its parameters to achieve better performance on the target task. In particular, we consider the model-agnostic problem formulation
+
+$$\min_{\Delta W \in \mathbb{R}^{m \times n}} f(W^0 + \Delta W), \quad (1)$$
+
+where  $W^0 \in \mathbb{R}^{m \times n}$  represents the parameters of a pre-trained model (or of a single linear layer, with the others being fixed), and  $\Delta W \in \mathbb{R}^{m \times n}$  denotes the adaptation term. The function  $f$  :
+
+{2}------------------------------------------------
+
+Table 1: Sections where we conduct a theoretical convergence analysis of RAC-LoRA for solving Problem (1) when using a specific optimizer for approximately solving the subproblem in Step 4. The results for the RAC-LoRA + GD combination are described in Section 5, while the proofs can be founded in Appendix C. The results and proofs for all other combinations can be found in the indicated appendices.
+
+| Problem | Fine-tuner | Subproblem Optimizer | Non-convex | PL |
+|-|-|-|-|-|
+| (1) | RAC-LoRA | Gradient Descent (GD) | C.1 | C.2 |
+| (1) | RAC-LoRA | Random Reshuffling (RR) | D.1 | D.2 |
+| (1) | RAC-LoRA | Stochastic Gradient Descent (SGD) | E.1 | E.2 |
+| (15) | Fed-RAC-LoRA | Random Reshuffling (RR) | F.1 | F.2 |
+
+$\mathbb{R}^{m \times n} \rightarrow \mathbb{R}$  corresponds to the empirical loss over the adaptation dataset, or any other loss function of interest. As the total dimensionality  $m \times n$  is typically very large for deep learning models, the adaptation term  $\Delta W$  needs to have a specific structure to be feasible in real-world applications.
+
+### 2.2 NO REASONABLE THEORY FOR LOW-RANK ADAPTATION
+
+We claim that a satisfying theoretical understanding of prevalent fine-tuning methods based on low-rank updates, such as LoRA and COLA, is lacking.
+
+- First, as already noted by Sun et al. (2024), the LoRA re-parameterization of the domain effectively transforms a *smooth* Lipschitz loss into a *non-smooth* Lipschitz loss, which poses *additional* theoretical challenges to those related to proper handling of the low-rank structure of the updates. While this hints at a possible source of issues with providing a good theory for methods based on low-rank adaptation, this observation does not on its own mean that a good theory is impossible to obtain.
+- More importantly, the existing theoretical analysis of COLA (Xia et al., 2024) replaces low-rank optimization over matrices  $A$  and  $B$  with full-rank matrix optimization ( $\Delta W$ ). This makes the theoretical analysis irrelevant at worst and unsatisfactory at best as it completely ignores to model and to explain the key component of LoRA: low-rank updates.
+- Third, it is known that LoRA can be highly sensitive to the choice of the hyper-parameters (Khodak et al., 2021; Kuang et al., 2024). A good theory should be able to explain or remove this issue. No such theory exists, to the best of our knowledge.
+- Finally, and this is the true starting point of our exploration in this work, we observe that COLA may simply *fail to converge* to the optimal solution. We give a simple example (with  $3 \times 3$  matrices) of this divergence behavior in Section 3. Hence, COLA is merely a *heuristic*. Providing a fix is an open problem – the problem we address in this work.
+
+While clearly LoRA and COLA are enormously useful in practice, these methods remain mere *heuristics* since they do not come with solid theoretical backing. This is problematic and raises valid concerns about the robustness and reliability of LoRA-type methods in scenarios *beyond* current datasets, models and practice.
+
+### 2.3 CONTRIBUTIONS
+
+To address the aforementioned fundamental issues of LoRA-type heuristics, and to firmly ground the fine-tuning-via-low-rank adaptation line of work in a theoretically sound algorithmic framework, we propose a new generic low-rank adaptation framework for which we coin the name Randomized Asymmetric Chain of LoRA (RAC-LoRA); see Algorithm 1.
+
+- Similarly to COLA (Xia et al., 2024), our method is iterative: we perform a chain of low-rank updates (see Step 2 in Algorithm 1). In each step of the chain, one matrix (e.g.,  $A$ ) is chosen randomly from a pre-defined distribution, and the other (e.g.,  $B$ ) is trainable (see Step 3 in Algorithm 1). Which of these two update matrices is chosen randomly and which one is trainable is decided a-priori, and hence our method is asymmetric in nature, similarly to AsymmLoRA (Zhu et al., 2024). We propose two options, depending on which matrix is
+
+{3}------------------------------------------------
+
+trainable and which one is chosen randomly: in Option 1,  $A$  is trainable, and in Option 2,  $B$  is trainable.
+
+- In order to make our framework flexible, we offer a variety of strategies for updating the trainable matrix in each step of the chain. This is possible since in each such step we formulate an auxiliary optimization subproblem in the trainable matrix, and once can thus choose essentially *any optimizer* for approximately solving it (see Step 4 in Algorithm 1). We theoretically analyze several such optimizers within our RAC-LoRA framework, including Gradient Descent (GD) in Appendix C (however, we include and describe the theorems in Section 5.2), Random Reshuffling RR in Appendix D, and Stochastic Gradient Descent (SGD) in Appendix E. See Table 1 for a quick overview. Our analysis applies to the smooth nonconvex regime, in which we prove fast sublinear (i.e.,  $O(1/T)$ ) convergence rates to a stationary point, and fast linear (i.e.,  $O(e^{-T})$ ) rates to the globally optimal solution under the Polyak-Łojasiewicz (PL) condition.
+- The update is applied (see Step 5 in Algorithm 1), and the method moves on to the next step of the chain.
+
+**Experiments.** We apply our method to several machine learning tasks. We start from convex problems with traditional models, such as logistic and linear regression, to provide clear illustrations of our theoretical findings. In addition, we present empirical analyses for multilayer perception (MLP) on MNIST and RoBERTa on the GLUE benchmark tasks (Wang, 2018). See Appendix 6.
+
+**Federated Learning.** Furthermore, we extend our findings from the simple problem (1) to the more challenging distributed/federated problem (15), where we consider solving a distributed optimization problem via our new Fed-RAC-LoRA method (Algorithm 2). These additional results can be found in Section F. For illustrative purposes, we provide an analysis for RR as the optimizer for the subproblem; see also Table 1. Previous research (Sun et al., 2024) has shown that using a single learnable matrix in this context provides several key advantages, particularly in terms of preserving privacy, ensuring the correctness of model aggregation, and maintaining stability when adjusting the scaling factor (Sun et al., 2024). These benefits are crucial in Federated Learning (Konečný et al., 2016), where data is distributed across multiple clients, and privacy constraints must be upheld while performing model updates. Building on this asymmetric approach, we integrate the concept of chained updates to develop Fed-RAC-LoRA, a more robust and scalable distributed method. Our approach maintains the computational efficiency of the original RAC-LoRA while ensuring rigorous convergence properties in the distributed setting, offering a theoretically sound method for large-scale Federated Learning scenarios.
+
+## 3 SHINING SOME LIGHT ON LORA’S CONVERGENCE ISSUES
+
+In contemporary machine learning, loss function minimization is primarily accomplished using gradient-based (first-order) optimization techniques (Ruder, 2016). Most advanced methods build on the vanilla Gradient Descent (GD) in various ways, e.g., by adding support for stochastic approximation, momentum, adaptive stepsizes and more (Shapiro & Wardi, 1996; Gower et al., 2019).
+
+It is therefore meaningful to start our exploration of LoRA-style methods in connection with GD steps. In particular, we analyze the update process of LoRA matrices through a GD step, focusing on the application of the chain rule of differentiation. The gradient with respect to the low-rank matrices  $B$  and  $A$  consists of two components,
+
+$$\nabla_{B,A} f(W + \frac{\alpha}{r} BA) = \begin{pmatrix} \nabla_A f(W + \frac{\alpha}{r} BA) \\ \nabla_B f(W + \frac{\alpha}{r} BA) \end{pmatrix} = \frac{\alpha}{r} \begin{pmatrix} \nabla B^\top f(W + \frac{\alpha}{r} BA) \\ \nabla f(W + \frac{\alpha}{r} BA) A^\top \end{pmatrix},$$
+
+and hence the update rules for the matrices  $A$  and  $B$  are given by
+
+$$A^+ = A - \eta \frac{\alpha}{r} B^\top \nabla f(W + \frac{\alpha}{r} BA), \quad B^+ = B - \eta \frac{\alpha}{r} \nabla f(W + \frac{\alpha}{r} BA) A^\top,$$
+
+where  $\eta > 0$  is a step size, and  $A^+$  and  $B^+$  are the updated matrices. Since both  $A$  and  $B$  are trainable, the gradients are multiplied by  $B^\top$  and  $A^\top$ , which adds complexity to the optimization process and complicates the interpretation of its evolution. This interaction between low-rank matrices and gradients creates a non-trivial structure that challenges rigorous analysis and may disrupt Lipschitz
+
+{4}------------------------------------------------
+
+![Figure 1: Convergence of LoRA, Asymmetric LoRA (AsymmLoRA), Chain of LoRA (COLA), and our proposed Randomized Asymmetric Chain of LoRA (RAC-LoRA) on the problem in Equation 2. The figure consists of three plots. The left plot shows the loss L(W) - L* on a log scale (10^-3 to 10^1) vs. # of gradients (0 to 300). The middle plot shows the norm ||∇f(W) - ∇f(V)|| on a log scale (10^-3 to 10^1) vs. # of gradients. The right plot shows the norm ||∇f(W) - ∇f(V)|| on a log scale (10^-1 to 10^1) vs. # of gradients for different step sizes (1, 2, 4, 5, 10). In all plots, RAC-LoRA (black line) converges to the optimal solution, while LoRA (green), AsymmLoRA (blue), and COLA (red) diverge or converge to suboptimal points.](e0d425c8e4eef259e4c52d81426d93fa_img.jpg)
+
+Figure 1: Convergence of LoRA, Asymmetric LoRA (AsymmLoRA), Chain of LoRA (COLA), and our proposed Randomized Asymmetric Chain of LoRA (RAC-LoRA) on the problem in Equation 2. The figure consists of three plots. The left plot shows the loss L(W) - L\* on a log scale (10^-3 to 10^1) vs. # of gradients (0 to 300). The middle plot shows the norm ||∇f(W) - ∇f(V)|| on a log scale (10^-3 to 10^1) vs. # of gradients. The right plot shows the norm ||∇f(W) - ∇f(V)|| on a log scale (10^-1 to 10^1) vs. # of gradients for different step sizes (1, 2, 4, 5, 10). In all plots, RAC-LoRA (black line) converges to the optimal solution, while LoRA (green), AsymmLoRA (blue), and COLA (red) diverge or converge to suboptimal points.
+
+Figure 1: Convergence of LoRA, Asymmetric LoRA (AsymmLoRA), Chain of LoRA (COLA), and our proposed Randomized Asymmetric Chain of LoRA (RAC-LoRA) on the problem in Equation 2.
+
+continuity, raising concerns about convergence guarantees. While LoRA is effective for deep learning adaptation, a deeper understanding of this process is needed to ensure that the optimization scheme is theoretically sound.
+
+**Loss of Lipschitz smoothness.** Lipschitz continuity of the gradient is a commonly invoked assumption in the theoretical analysis of gradient-based optimization methods (Zhou, 2018; Khaled & Richtárik, 2020; Demidovich et al., 2023). This property ensures that the gradient does not change too rapidly, which in turn guarantees a controlled behavior of the optimization process, and plays a key role in establishing convergence rates and in providing stability guarantees for various optimization algorithms (Nesterov, 2004; Sun, 2020). A formal definition follows.
+
+**Assumption 3.1 (Lipschitz Gradient).** *Function  $f$  is differentiable, and there exists  $L > 0$  such that*
+
+$$\|\nabla f(W) - \nabla f(V)\| \leq L\|W - V\|, \quad \forall W, V \in \mathbb{R}^{m \times n},$$
+
+where  $\|\cdot\|$  denotes the Frobenius matrix norm, the gradient is computed w.r.t. the trace inner product.
+
+However, the property of Lipschitz smoothness does not necessarily hold when applying LoRA adaptation. Specifically, even if the original function  $f(W)$  is Lipschitz smooth, meaning that the gradient of  $f(W)$  satisfies the Lipschitz continuity condition (as stated in Assumption 3.1), this smoothness property is generally lost when the function is expressed in the adapted form  $f(W^0 + BA)$ . In particular, the function  $f(W^0 + BA)$  is not Lipschitz smooth with respect to the set of variables  $\{B, A\}$  for any constant. This breakdown of smoothness is a significant limitation, as it complicates the theoretical analysis of optimization algorithms when using LoRA. The formal proof of this result is provided in Theorem 2 of the work by Sun et al. (2024), highlighting the challenges in extending standard gradient-based methods to such adaptations.
+
+**Numerical counterexample.** We present a clear and illustrative example demonstrating that the LoRA and COLA methods may not converge to the solution of the optimization problem. To illustrate this, let us consider a quadratic function of the following form:
+
+$$f(x) = x^\top Mx + b^\top x, \quad (2)$$
+
+where  $x \in \mathbb{R}^d$  is a vector of parameters,  $M \in \mathbb{R}^{d \times d}$  is a positive definite matrix, and  $b \in \mathbb{R}^d$  is a vector corresponding to the linear term. In our numerical example, we consider  $d = 9$ ,  $M = \text{Diag}(10, 1, 1, 1, 1, 1, 1, 1, 1)$ , and  $b = (1, 1, 1, 1, 1, 1, 1, 1, 1)^\top$ . This function has a Lipschitz gradient (Assumption 3.1) with  $L = 10$ . We represent the vector  $x \in \mathbb{R}^9$  as a matrix  $W \in \mathbb{R}^{3 \times 3}$ . In the LoRA adaptation, we use a rank  $r = 1$  and set  $\alpha = r$ .
+
+Figure 1 shows experiments on LoRA, AsymmLoRA, our RAC-LoRA, and COLA. In the case of COLA, we varied the step sizes and the number of gradients per block. Our results indicate that, when using the theoretical step size  $\frac{1}{L}$ , both LoRA and COLA may diverge, while AsymmLoRA converges to a different stationary point. When smaller step sizes are applied to LoRA and COLA, these methods do converge, but to a stationary point that is significantly distant from the optimal solution. In contrast, our RAC-LoRA converges linearly to the optimal solution without such issues. These results provide clear evidence that the choice of LoRA-type updates has a significant impact on both the convergence and the quality of the final solution. The divergence, convergence to suboptimal points,
+
+{5}------------------------------------------------
+
+#### **Algorithm 1** Randomized Asymmetric Chain of LoRA (RAC-LoRA)
+
+1: **Parameters:** pre-trained model  $W^0 \in \mathbb{R}^{m \times n}$ , rank  $r \ll \min\{m, n\}$ , learning rate  $\gamma > 0$ , scaling factor  $\alpha > 0$ , chain length  $T$ , sketch distribution  $\mathcal{D}_S^B$  (Option 1) or  $\mathcal{D}_S^A$  (Option 2).
+
+2: **for**  $t = 0, 1, \dots, T - 1$  **do**
+
+3:   Sample a sketch matrix
+
+$$\text{(Option 1)} \quad B_S^t \sim \mathcal{D}_S^B \quad \text{(Option 2)} \quad A_S^t \sim \mathcal{D}_S^A$$
+
+4:   Using some iterative solver, approximately solve the subproblem
+
+$$\text{(Option 1)} \quad \hat{A}^t \approx \min_A f(W^t + \frac{\alpha}{r} B_S^t A) \quad \text{(Option 2)} \quad \hat{B}^t \approx \min_B f(W^t + \frac{\alpha}{r} B A_S^t)$$
+
+5:   Apply the update
+
+$$\text{(Option 1)} \quad W^{t+1} = W^t + \frac{\alpha}{r} B_S^t \hat{A}^t \quad \text{(Option 2)} \quad W^{t+1} = W^t + \frac{\alpha}{r} \hat{B}^t A_S^t$$
+
+6: **end for**
+
+and sensitivity to step sizes in traditional methods underscore the need for careful selection and design of update mechanisms. Our findings suggest that RAC-LoRA offers a more reliable approach for achieving optimal solutions in the context of LoRA-based adaptations.
+
+## 4 RANDOMIZED ASYMMETRIC CHAIN OF LORA (RAC-LORA)
+
+To address the convergence issues in LoRA updates, we propose Randomized Asymmetric Chain of LoRA (RAC-LoRA). This method introduces an asymmetric LoRA mechanism with a chain-based structure to enhance convergence while preserving model flexibility and efficiency. The method is summarized in Algorithm 1.
+
+**Description of the algorithm.** At the start of each iteration (or block), one matrix is randomly initialized and fixed throughout training, while the other remains fully trainable. This strategy prevents optimization within a restricted subspace, reducing the risk of convergence to suboptimal points. There are two configurations: freeze matrix  $B$  and train  $A$ , or freeze  $A$  and train  $B$ . We now formally define the sampling/sketch schemes.
+
+**Definition 4.1** (Left Sketch). *By a “left sketch” (of rank  $r$ ) we refer to the update rule*
+
+$$\Delta W = \frac{\alpha}{r} B_S \hat{A},$$
+
+where  $B_S \sim \mathcal{D}_B$  is sampled from some fixed distribution over matrices of dimensions  $n \times r$ , and only the matrix  $\hat{A}$  is adjustable.
+
+**Definition 4.2** (Right Sketch). *By a “right sketch” (of rank  $r$ ) we refer to the update rule*
+
+$$\Delta W = \frac{\alpha}{r} \hat{B} A_S,$$
+
+where  $A_S \sim \mathcal{D}_A$  is sampled from some fixed distribution over matrices of dimensions  $r \times m$ , and only the matrix  $\hat{B}$  is adjustable.
+
+In both sampling schemes, we update the trainable matrix over several epochs. This step effectively corresponds to training a LoRA block within the chain, following the standard LoRA approach. While this procedure mirrors the conventional LoRA method, we can formally characterize it as an approximate optimization problem, allowing for a structured analysis of the training process. These procedures for both matrices can be formally expressed via
+
+$$\text{(Option 1)} \quad \hat{A}^t \approx \min_A f(W^t + \frac{\alpha}{r} B_S^t A) \quad \text{(Option 2)} \quad \hat{B}^t \approx \min_B f(W^t + \frac{\alpha}{r} B A_S^t).$$
+
+Similarly to COLA,  $t$  identifies the block in the chain. Next, we incorporate the product of the trained matrix and the sampled matrix into the current model. The merging process involves adding
+
+{6}------------------------------------------------
+
+the product of the two matrices—one sampled and the other trained. This addition is scaled by a factor of  $\frac{\alpha}{r}$ , ensuring the appropriate weighting of the update within the model:
+
+$$(\text{Option 1}) \quad W^{t+1} = W^t + \frac{\alpha}{r} B_S^t \hat{A}^t \quad (\text{Option 2}) \quad W^{t+1} = W^t + \frac{\alpha}{r} \hat{B}^t A_S^t.$$
+
+## 5 THEORY
+
+### 5.1 DERIVATION OF THE UPDATE STEP
+
+Without loss of generality, let us focus on the Left Sketch scheme (Definition 4.1). Specifically, for each model in the chain, the update rule is given as follows:
+
+$$W^{t+1} = W^t + \frac{\alpha}{r} B_S^t \hat{A}^t.$$
+
+Next, we apply the Lipschitz gradient condition (Assumption 3.1) to the loss function  $f$ :
+
+$$f(U) \leq f(V) + \langle \nabla f(V), U - V \rangle + \frac{L}{2} \|U - V\|_F^2, \quad \forall U, V \in \mathbb{R}^{m \times n}$$
+
+Applying this with  $U = W^t$ ,  $V = B_S^t \hat{A}^t$  and  $\eta \leq \frac{1}{L}$  leads to
+
+$$\begin{aligned} f(W^{t+1}) &\leq f(W^t) + \langle \nabla f(W^t), B_S^t \hat{A}^t \rangle + \frac{L}{2} \|B_S^t \hat{A}^t\|_F^2 \\ &\leq f(W^t) + \langle (B_S^t)^\top \nabla f(W^t), \hat{A}^t \rangle + \frac{1}{2\eta} \langle (B_S^t)^\top B_S^t \hat{A}^t, \hat{A}^t \rangle. \end{aligned}$$
+
+Let us minimize the left hand side term in  $\hat{A}^t$ , when the gradient vanishes:  $(B_S^t)^\top \nabla f(W^t) + \frac{1}{\eta} (B_S^t)^\top (B_S^t) \hat{A}^t = 0$ . One such solution is given by<sup>1</sup>
+
+$$\hat{A}^t = -\eta \left( (B_S^t)^\top (B_S^t) \right)^\dagger (B_S^t)^\top \nabla f(W^t),$$
+
+and this leads to the following gradient update:
+
+$$\begin{aligned} W^{t+1} &= W^t + \frac{\alpha}{r} B_S^t \hat{A}^t = W^t - \frac{\alpha}{r} \eta B_S^t \left( (B_S^t)^\top (B_S^t) \right)^\dagger (B_S^t)^\top \nabla f(W^t) \\ &= W^t - \gamma H_B^t \nabla f(W^t), \end{aligned} \quad (3)$$
+
+where  $H_B^t = B_S^t \left( (B_S^t)^\top (B_S^t) \right)^\dagger (B_S^t)^\top$  is projection matrix and  $\frac{\alpha}{r} \eta = \gamma$ . Similarly, we can obtain the update for Right Sketch scheme (Definition 4.2):
+
+$$W^{t+1} = W^t - \gamma \nabla f(W^t) (A_S^t)^\top (A_S^t (A_S^t)^\top)^\dagger A_S^t = W^t - \gamma \nabla f(W^t) H_A^t, \quad (4)$$
+
+where  $H_A^t = (A_S^t)^\top (A_S^t (A_S^t)^\top)^\dagger A_S^t$  is also projection matrix. Notably, the scaling factor  $\frac{\alpha}{r}$  is combined with the parameter  $\eta$ , allowing us to work with the effective step size  $\gamma$ . This simplifies the learning process by unifying the scaling and learning rate. Using this type of update, we provide convergence results for both standard and stochastic gradient descent methods.
+
+### 5.2 CONVERGENCE RESULTS
+
+To derive the convergence results, a key factor in our analysis is the smallest eigenvalue of the expected value of the projection matrix introduced in Section 5.1. This eigenvalue plays a critical role in shaping the optimization process. As we will show, a well-conditioned projection matrix—with a sufficiently large smallest eigenvalue—ensures more efficient and reliable convergence. Therefore, we make an important assumption that this smallest eigenvalue must remain strictly positive.
+
+**Assumption 5.1.** Consider a projection matrix  $H$  generated by Left Sketch 4.1 or Right Sketch 4.2. Assume that the sampling distributions  $\mathcal{D}_S^B$  and  $\mathcal{D}_S^A$  are such that the smallest eigenvalue of the expected projection matrix  $H$  generated by sampled matrix is positive:
+
+$$\lambda_{\min}^H = \lambda_{\min} [\mathbb{E}[H]] > 0.$$
+
+<sup>1</sup>The dagger notation refers to the Moore-Penrose pseudoinverse.
+
+{7}------------------------------------------------
+
+In particular, it is important to observe that the eigenvalues of the projection matrix are either zero or one, with the smallest eigenvalue being zero. However, the smallest eigenvalue of the expected value of the projection matrix can be strictly greater than zero. Additionally, it is essential to establish a lower bound for the loss function.
+
+**Remark.** Assumption 5.1 is easily satisfied. Let  $H$  be the projection matrix as defined below Equation (4) and assume that the  $A$  matrices are drawn from an isotropic distribution (the rows of  $A$  are isotropic). Then  $H$  is the projection onto the rank of  $A$ , which is a subspace of dimension  $r$  distributed isotropically in  $\mathbb{R}^n$ . The matrix  $\mathbb{E}[H]$  is then invariant under rotations, so must be a scalar multiple of the identity. By taking traces, one finds that  $\mathbb{E}[H] = \frac{r}{n}I$  so  $\lambda_{\min}^H = \frac{r}{n}$ .
+
+**Assumption 5.2.** Function  $f$  is bounded from below by an infimum  $f^* \in \mathbb{R}$ .
+
+We now present the convergence result for RAC-LoRA with Gradient Descent (GD) updates.
+
+**Theorem 5.3.** Let Assumptions 3.1 and 5.1 hold, and let the stepsize satisfy  $0 < \gamma \leq \frac{1}{L}$ . Then, the iterates of RAC-LoRA (Algorithm 1) with GD updates (Equation 3 or 4) satisfy
+
+$$\mathbb{E} \left[ \left\| \nabla f(\widetilde{W}^T) \right\|^2 \right] \leq \frac{2(f(W^0) - f^*)}{\lambda_{\min}^H \gamma T},$$
+
+where the output  $\widetilde{W}^T$  is chosen uniformly at random from  $W^0, W^1, \dots, W^{T-1}$ .
+
+We obtain a sub-linear convergence rate, as is expected in general non-convex settings. To achieve a stronger convergence result, we employ an additional assumption: the Polyak-Łojasiewicz (PL) condition. This assumption generalizes strong convexity but applies to certain non-convex functions.
+
+**Assumption 5.4** (PL-condition). Function  $f$  satisfies the Polyak-Łojasiewicz (PL) condition with parameter  $\mu > 0$  if
+
+$$\frac{1}{2} \|\nabla f(W)\|^2 \geq \mu (f(W) - f^*)$$
+
+for all  $W \in \mathbb{R}^{m \times n}$ , where  $f^* = \inf f$ , assumed to be finite.
+
+Next, we establish a convergence rate for RAC-LoRA in the Polyak-Łojasiewicz setting.
+
+**Theorem 5.5.** Let Assumptions 3.1, 5.1 and 5.4 hold, and let the stepsize satisfy  $0 < \gamma \leq \frac{1}{L}$ . Then, for each  $T \geq 0$ , the iterates of RAC-LoRA (Algorithm 1) with GD updates (Equation 3 or 4) satisfy
+
+$$\mathbb{E} [f(W^T)] - f^* \leq (1 - \gamma \mu \lambda_{\min}^H)^T (f(W^0) - f^*).$$
+
+We achieved a linear convergence rate, which is significantly better than previous results; however, this improvement applies to a more limited class of functions. Importantly, we can recover the classical results of GD by setting  $\lambda_{\min}^H = 1$ , which corresponds to the full-rank scenario.
+
+The comprehensive analysis of different optimizers and their performance across various settings is provided in the appendix, as summarized in Table 1.
+
+## 6 EXPERIMENTS
+
+In this section, we explore the performance of RAC-LoRA as an optimization algorithm in machine learning applications. In Section 6.1 we validate the theoretical results in convex problems, while in Section 6.2 we evaluate the method applied to neural networks.
+
+### 6.1 CONVEX OPTIMIZATION PROBLEMS
+
+**Linear Regression.** We conducted our analysis in a controlled setting involving linear regression with quadratic regularization applied to synthetic data. Specifically, we utilized 3,000 samples for pre-training the model and 1,000 samples for fine-tuning. In this setup, we have  $d = 100$  with weight matrices of size  $10 \times 10$ , and the regularization term is set to 0.0001. As illustrated in Figure 2, the method converges for various ranks and the convergence speed is proportional to  $\frac{r}{n}$ , and when the rank is set to the full rank, we observe convergence identical to that of FPFT. We remark that COLA would suffer from the same divergence behavior as in Figure 1 on this quadratic problem.
+
+**Logistic Regression.** Analogous results for logistic regression are shown in Appendix A.
+
+{8}------------------------------------------------
+
+![Figure 2: RAC-LoRA convergence with varying ranks and step sizes on a linear regression problem. The figure contains two line plots. The left plot shows the loss difference f(w^r) - f^* on a log scale (10^1 to 10^-14) versus the number of gradients (0 to 1000). It compares 'Full fine-tuning (GD)' (black line) with RAC-LoRA for ranks 1, 3, 5, and 10 (colored lines with markers). The right plot shows the same loss difference on a log scale (10^1 to 10^-6) versus the number of gradients (0 to 1000) for RAC-LoRA with rank 10 and step sizes eta = 1e-1, 1e-2, 1e-3, 1e-4, and 1e-5 (colored lines with markers).](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 2: RAC-LoRA convergence with varying ranks and step sizes on a linear regression problem. The figure contains two line plots. The left plot shows the loss difference f(w^r) - f^\* on a log scale (10^1 to 10^-14) versus the number of gradients (0 to 1000). It compares 'Full fine-tuning (GD)' (black line) with RAC-LoRA for ranks 1, 3, 5, and 10 (colored lines with markers). The right plot shows the same loss difference on a log scale (10^1 to 10^-6) versus the number of gradients (0 to 1000) for RAC-LoRA with rank 10 and step sizes eta = 1e-1, 1e-2, 1e-3, 1e-4, and 1e-5 (colored lines with markers).
+
+Figure 2: RAC-LoRA convergence with varying ranks and step sizes on a linear regression problem.
+
+### 6.2 NON-CONVEX OPTIMIZATION PROBLEMS
+
+Further experimental results are provided in Appendix B.
+
+#### 6.2.1 RESULTS OF RoBERTa ON NLP TASKS
+
+As in prior work (Zhu et al., 2024; Xia et al., 2024), we evaluate low-rank adaptation methods for LLMs using the GLUE dataset (Wang, 2018).
+
+**Methodology.** We fine-tuned the roberta-base model (Liu, 2019) on four of the smallest GLUE tasks to study the behavior of low-rank methods in practical scenarios. For the chained methods, we use a range of values for the number of chains and epochs per chain hyperparameters. In each experiment we used rank 2 for the adaptations and trained using the AdamW optimiser (Loshchilov, 2017) with  $\beta$  parameters 0.9 and 0.999,  $\epsilon = 1 \times 10^{-8}$ , a learning rate of  $4 \times 10^{-4}$  with linear schedule and a training batch size 8.
+
+**Discussion.** The results are presented in Table 2. We find that RAC-LoRA performs competitively with other low-rank adaptation methods, but does not outperform Asymmetric LoRA despite having greater capacity. We expect RAC-LoRA to outperform Asymmetric LoRA in settings where there is a benefit to the additional capacity, i.e., those where a full parameter fine tune (FPFT) is much better than Asymmetric LoRA. The performance of the FPFT in Table 2 shows that the selected GLUE tasks do not provide such a setting. Here, a single low-rank adaptation is already enough to obtain performance close to that of FPFT. However, this intuition motivates the experiments in Section 6.2.2 where we intentionally restrict capacity of the adaptations to isolate the effect of the chaining procedure.
+
+| Method | # Chains | # Epochs | MRPC | CoLA | RTE | STS-B | Avg |
+|-|-|-|-|-|-|-|-|
+| FPFT * | 1 | 30, 80, 80, 40 | $90.2 \pm 0.0$ | $63.6 \pm 0.0$ | $78.7 \pm 0.0$ | $91.2 \pm 0.0$ | 80.9 |
+| LoRA * | 1 |  | $89.7 \pm 0.7$ | $63.4 \pm 1.2$ | $86.6 \pm 0.7$ | $91.5 \pm 0.2$ | 82.8 |
+| LoRA | 1 | 100 | $87.7 \pm 0.2$ | $60.8 \pm 0.2$ | $75.2 \pm 1.5$ | $90.2 \pm 0.1$ | 78.5 |
+| AsymmLoRA | 1 |  | $86.9 \pm 0.3$ | $58.7 \pm 1.0$ | $71.0 \pm 3.3$ | $90.4 \pm 0.0$ | 76.8 |
+| COLA | 10 | 10 | $88.0 \pm 0.8$ | $59.5 \pm 1.0$ | $72.1 \pm 0.9$ | $90.7 \pm 0.2$ | 77.6 |
+| RAC-LoRA | 10 | 10 | $87.0 \pm 0.7$ | $58.5 \pm 0.1$ | $72.3 \pm 1.5$ | $90.3 \pm 0.0$ | 77.0 |
+
+Table 2: Results with RoBERTa-base for rank 2 on tasks from the GLUE benchmark. \*: results taken from the work of Hu et al. (2021). We report Matthews correlation coefficient for CoLA, Pearson correlation coefficient for STS-B, and accuracy for the remaining tasks. Results are averaged over 3 seeds and standard deviations are given in the subscript.
+
+#### 6.2.2 RESULTS OF MLPs ON MNIST
+
+In this section, we seek to isolate the effect of the chaining procedure on generalisation performance by restricting the capacity of the low-rank adaptations. This ensures that a single adaptation is not sufficient to reach performance comparable with FPFT, allowing us to explore how chaining adaptations can bridge this gap.
+
+{9}------------------------------------------------
+
+**Methodology.** We first pre-train a 3-layer MLP on the first five classes (digits 0-4) and then adapt the network using LoRA-based methods for recognizing the remaining five unseen classes (digits 5-9). The model is evaluated solely on these unseen classes<sup>2</sup>. we used rank 1 for the adaptations and trained using the AdamW optimiser (Loshchilov, 2017) with  $\beta$  parameters 0.9 and 0.999,  $\epsilon = 1 \times 10^{-8}$ , a constant learning rate of  $2 \times 10^{-4}$  and a training batch size 128.
+
+**Discussion.** Table 3 shows results for MNIST with different ranks and initialization. LoRA reaches around 90% of the accuracy of FPFT leaving some margin for improvement when using the chains. COLA constructs a sequence of LoRA modules, delivering significant accuracy improvements over LoRA due to the chaining procedure. The chaining allows COLA to capture richer features (at the cost of training more parameters). However, both LoRA and COLA lack rigorous convergence guarantees. AsymmLoRA has been shown empirically to approximate the performance of LoRA in Sun et al. (2024) — but again no convergence result is provided. Our proposed method (RAC-LoRA) enjoys significant accuracy improvements over AsymmLoRA, again due to the chaining procedure. RAC-LoRA leverages a diverse learning process across different LoRA blocks, which intuitively allows the model to capture a broader range of features. Crucially, RAC-LoRA comes with convergence guarantees (Theorem 5.3 and Theorem 5.5). Finally, we note that each iteration of RAC-LoRA requires training only one matrix per LoRA block, while COLA needs training two matrices. This reduction in trainable parameters may offer advantages in resource-constrained settings, such as Federated Learning, where minimizing communication costs is critical.
+
+## 7 CONCLUSION
+
+In this work, we introduced RAC-LoRA, a framework for parameter-efficient fine-tuning that enables interpolation between low-rank adaptation and full parameter fine-tuning. Motivated by the convergence challenges of LoRA, we propose the iterative algorithm RAC-LoRA and provide convergence guarantees across various settings, including gradient descent, stochastic gradient descent, and random reshuffling. We extended this framework to the federated learning setup, where RAC-LoRA has advantages over competing algorithms in terms of communication efficiency. Finally, we validate our theoretical results empirically in both convex problems, such as linear and logistic regression, and non-convex problems, such as MLPs and LLMs, finding that its chaining procedure is advantageous in settings where standard low-rank adaptation approaches (such as LoRA and AsymmLoRA) fail to capture the richness of a full-parameter fine-tuning.
+
+## REFERENCES
+
+- Armen Aghajanyan, Luke Zettlemoyer, and Sonal Gupta. Intrinsic dimensionality explains the effectiveness of language model fine-tuning. *arXiv preprint arXiv:2012.13255*, 2020.
+- Kwangjun Ahn, Chulhee Yun, and Suvrit Sra. SGD with shuffling: Optimal rates without component convexity and large epoch requirements. *Advances in Neural Information Processing Systems*, 33: 17526–17535, 2020.
+- Dimitri P Bertsekas. Incremental proximal methods for large scale convex optimization. *Mathematical Programming*, 129(2):163–195, 2011.
+
+<sup>2</sup>The setup is inspired by [https://github.com/sunildkumar/lora\\_from\\_scratch/](https://github.com/sunildkumar/lora_from_scratch/).
+
+Table 3: MLP results on MNIST with rank  $r$  and  $\alpha$  set to 1. In the case of AsymmLoRA and RAC-LoRA, only the zero-initialized matrix is trained.
+
+| Method | $\mathcal{D}_A$ | $\mathcal{D}_B$ | Acc | Train Params |
+|-|-|-|-|-|
+| FPFT | - | - | 98.0 | 54,700 |
+| LoRA | Gaussian | Zero | 83.8 | 1K |
+| COLA | Gaussian | Zero | 92.6 | 1K |
+| LoRA | Zero | Gaussian | 87.0 | 1K |
+| COLA | Zero | Gaussian | 96.2 | 1K |
+| AsymmLoRA | Gaussian | Zero | 62.3 | 133 |
+| RAC-LoRA | Gaussian | Zero | 92.0 | 133 |
+| AsymmLoRA | Zero | Gaussian | 81.6 | 912 |
+| RAC-LoRA | Zero | Gaussian | 96.1 | 912 |
+
+ Rest of paper (reference and Appendix) is removed.

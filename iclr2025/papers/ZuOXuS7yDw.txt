@@ -1,0 +1,313 @@
+
+
+{0}------------------------------------------------
+
+# GRAMA: ADAPTIVE GRAPH AUTOREGRESSIVE MOVING AVERAGE MODELS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Graph State Space Models (SSMs) have recently been introduced to enhance Graph Neural Networks (GNNs) in modeling long-range interactions. Despite their success, existing methods either compromise on permutation equivariance or limit their focus to pairwise interactions rather than sequences. Building on the connection between Autoregressive Moving Average (ARMA) and SSM, in this paper, we introduce GRAMA, a Graph Adaptive method based on a learnable Autoregressive Moving Average (ARMA) framework that addresses these limitations. By transforming from static to sequential graph data, GRAMA leverages the strengths of the ARMA framework, while preserving permutation equivariance. Moreover, GRAMA incorporates a selective attention mechanism for dynamic learning of ARMA coefficients, enabling efficient and flexible long-range information propagation. We also establish theoretical connections between GRAMA and Selective SSMs, providing insights into its ability to capture long-range dependencies. Extensive experiments on 14 synthetic and real-world datasets demonstrate that GRAMA consistently outperforms backbone models and performs competitively with state-of-the-art methods.
+
+## 1 INTRODUCTION
+
+Neural graph learning has become crucial in handling graph-structured data across various domains, such as social networks (Kipf & Welling, 2016; Hamilton et al., 2017), molecular interactions (Xu et al., 2019; Bouritsas et al., 2022), and more (Khemani et al., 2024). The most popular framework of neural graph learning is that of Message Passing Neural Networks (MPNNs). Some prominent examples are GCN (Kipf & Welling, 2016), GAT (Veličković et al., 2018), GIN (Xu et al., 2019), and GraphConv (Morris et al., 2019). However, many MPNNs suffer from a critical shortcoming of *oversquashing* (Alon & Yahav, 2021; Di Giovanni et al., 2023), that hinders their ability to model long-range interactions. To address this limitation, several proposals were made, from graph rewiring (Topping et al., 2022; Di Giovanni et al., 2023; Karhadkar et al., 2023), to multi-hop MPNNs (Gutteridge et al., 2023), weight space regularization (Gravina et al., 2023; 2024a), as well as Graph Transformers (GTs) (Yun et al., 2019; Dwivedi & Bresson, 2022; Kreuzer et al., 2021b). Specifically, GTs became popular because of their theoretical and often practical ability to capture long-range node interactions through the attention mechanism. However, the quadratic computational cost of full attention limits their scalability, and in some cases, they were found to underperform on long-range benchmarks when compared to standard MPNNs (Tönshoff et al., 2023).
+
+At the same time, State Space Models (SSMs), such as S4 (Gu et al., 2021c) and Mamba (Gu et al., 2023), have emerged as promising, linear-complexity alternatives to Transformers. SSMs leverage a recurrent and convolutional structure to efficiently capture long-range dependencies while maintaining linear time complexity (Nguyen et al., 2023). Contemporary models like Mamba develop selective filters that prioritize context through input-dependent selection, offering compelling advantages in processing long sequences with reduced computational demands compared to transformers (Gu et al., 2023). Despite these benefits, adapting SSMs to the non-sequential structure of graphs remains a significant challenge. Perhaps the biggest challenge lies in the *fundamental* question of “how to transform a graph into a sequence?”. To this end, several approaches were proposed, from a graph-to-sequence heuristic in Wang et al. (2024a), to studying the relationship between SSMs and spectral GNNs by pairwise interactions (Huang et al., 2024), as well as sample-based random walk sequencing of the graph (Behrouz & Hashemi, 2024). However, as we discuss later, some of them
+
+{1}------------------------------------------------
+
+lose the permutation-equivariance property desired in GNNs, while others do not take advantage of the sequence processing ability of SSMs. [These limitations hinder their ability to fully leverage sequence-processing capabilities, especially for addressing oversquashing in GNNs. To resolve these issues](#), we propose, instead, a complementary approach – transforming a static input graph into a sequence of graphs, combined with an adaptive neural autoregressive moving-average (ARMA) mechanism, called GRAMA. We show that GRAMA is theoretically equivalent to an SSM on graphs. Our GRAMA allows us to enjoy the benefits of sequential processing mechanisms like SSMs, coupled with any GNN backbone, from MPNNs to graph transformers, while maintaining backbone properties, such as permutation-equivariance.
+
+**Main Contributions.** Our Adaptive **Graph** **Autoregressive** **Moving** **Average** (GRAMA) model offers several advancements in the conjoining of dynamical systems theory into GNNs:
+
+- **Principled Integration of SSMs in GNNs.** We enable the use of sequence-based models (like ARMA) coupled with virtually any GNN backbone, by transforming graph inputs into temporal sequences without sacrificing permutation invariance.
+- **Theoretical Understanding of the coupling of SSMs and GNNs.** We demonstrate that augmenting GNNs with ARMA via our GRAMA has an equivalent SSM model.
+- **Mitigation of the oversquashing problem.** We provide the theoretical foundation that our GRAMA effectively addresses the oversquashing phenomenon in GNNs and improves the long-range interaction modeling capabilities.
+- **Strong Practical Performance.** We demonstrate our GRAMA on three popular backbones (GCN (Kipf & Welling, 2016), GatedGCN (Bresson & Laurent, 2018), and GPS (Rampásek et al., 2022)) and show the compelling performance by GRAMA on 14 synthetic and real-world datasets.
+
+## 2 RELATED WORK
+
+We now provide an overview and discussion of related topics and works to our GRAMA. In Appendix A, we discuss additional related works.
+
+**Long-Range Interactions on Graphs.** GNNs rely on message-passing mechanisms to aggregate information from neighboring nodes, which limits their ability to capture long-range dependencies, as highlighted by Alon & Yahav (2021); Di Giovanni et al. (2023). Models like GCN (Kipf & Welling, 2016), GraphSAGE (Hamilton et al., 2017), and GIN (Xu et al., 2019) face challenges such as over-smoothing (Nt & Maehara, 2019; Oono & Suzuki, 2020; Cai & Wang, 2020; Rusch et al., 2023) and over-squashing (Alon & Yahav, 2021; Topping et al., 2022; Di Giovanni et al., 2023), which hinder long-range information propagation—critical in applications like bioinformatics (Baek et al., 2021; Dwivedi et al., 2022b) and heterophilic settings (Luan et al., 2024; Wang et al., 2024b). To address these limitations, various methods have emerged, including graph rewiring (Topping et al., 2022; Karhadkar et al., 2023), weight space regularization (Gravina et al., 2023; 2024a), and Graph Transformers (GTs). GTs, which capture both local and global interactions, have been particularly promising, as demonstrated by models like SAN (Kreuzer et al., 2021c), Graphormer (Ying & Leskovec, 2021), and GPS (Rampásek et al., 2022). These models often incorporate positional encodings, such as Laplacian eigenvectors (Dwivedi et al., 2021) or random-walk structural encodings (RWSE) (Dwivedi et al., 2022a), to encode graph structure. However, the quadratic complexity of full attention in GTs presents scalability challenges. Recent innovations like sparse attention mechanisms (Zaheer et al., 2020; Choromanski et al., 2020), Exphormer (Shirzad et al., 2023), and linear graph transformers (Wu et al., 2023; Deng et al., 2024) address these bottlenecks, improving efficiency and scalability for long-range propagation.
+
+**State Space Models (SSMs).** SSMs, traditionally used for time series analysis (Hamilton, 1994b; Aoki, 2013), process sequences through latent states. However, classic SSMs struggle with long-range dependencies and lack parallelism, limiting their computational efficiency. Recent advances, such as the Structured State Space Sequence model (S4) (Gu et al., 2021c; Fu et al., 2023), mitigate these issues by employing linear recurrence as a structured convolutional kernel, enabling parallelization on GPUs. Despite this, simple SSMs still underperform compared to attention models in natural language tasks. Mamba (Gu et al., 2023) improves the ability of SSMs to capture long-range dependencies by selectively controlling which sequence parts influence model states. Mamba has shown promising results, outperforming Transformers in several benchmarks (Gu et al., 2023;
+
+{2}------------------------------------------------
+
+Liu et al., 2024) while being more computationally efficient. The combination of SSMs with graph models presents challenges, particularly in transforming the articulated connectivity of graphs into sequences. For instance, Graph-Mamba (Wang et al., 2024a) orders nodes by degree, but this heuristic approach sacrifices permutation-equivariance, a desirable property in GNNs. Similarly, Behrouz & Hashemi (2024) propose generating sequences via random walks, which improves performance but also sacrifices permutation-equivariance while adding non-determinism to the model. Also, turning a graph into a sequence based on a policy, such as sorting nodes by degree, limits direct use of the input graph, as multiple graphs can share the same node degrees and thus be indistinguishable. Huang et al. (2024) explored links between spectral GNNs and graph SSMs, focusing on pairwise interactions; however, this design choice may not fully exploit the sequence-handling capacity of SSMs and may reach the state of oversquashing earlier because of the use of powers of the adjacency matrix (Di Giovanni et al., 2023). In this work, we harness the potential of SSMs by adopting a structure inspired by the connection between SSMs and ARMA models. By transforming static graphs into sequences, GRAMA maintains permutation-equivariance, a desired property in GNNs (Bronstein et al., 2021), also useful for long-propagation (Pan & Kondor, 2022; Schatzki et al., 2024), while enabling effective learnable and selective long-range propagation.
+
+**Autoregressive Moving Average Models (ARMA).** ARMA models, introduced by Whittle (1951), combine an autoregressive (AR) component, modeling dependencies on previous time steps, with a moving average (MA) component, considering residuals. Widely applied in stationary time series analysis (Box et al., 1970), ARMA models are equivalent to state space models (SSMs) (Hamilton, 1994a). An ARMA( $p, q$ ) model considers previous  $p$  states and  $q$  residuals  $\delta(\cdot)$ , and is governed by the following equation:
+
+$$f(t) = \sum_{i=1}^p \phi_i f(t-i) + \sum_{j=1}^q \theta_j \delta(t-j) + \delta(t), \quad (1)$$
+
+where  $\{\phi_i\}_{i=1}^p, \{\theta_j\}_{j=1}^q$  are the autoregressive and moving average coefficients, respectively.
+
+Although ARMA models are traditionally used for processing sequences, they have also been studied for classical graph filtering (Isufi et al., 2016) and more recently formulated as an MPNN in Bianchi et al. (2019). The Graph ARMA model (Bianchi et al., 2019) introduced a learnable ARMA version for GCNs, using recursive 1-hop filters to create a structure resembling ARMA methods. In this paper, we introduce GRAMA, a method that leverages neural ARMA models by transforming a static graph input into a graph sequence. Different than Bianchi et al. (2019), which uses the static input graph and formulates a recursive ARMA model through a spectral convolution perspective, our GRAMA incorporates a selective and graph adaptive mechanism that learns ARMA coefficients along the graph sequence. This dynamic adjustment of coefficients directly addresses oversquashing by preserving long-range dependencies and enabling adaptive control over feature propagation. Additionally, Bianchi et al. (2019) uses an ARMA(1, 1) model with non-linearities between steps, hindering its direct conversion into an SSM, while we show that our GRAMA has an equivalent SSM, providing deeper theoretical understandings.
+
+## 3 GRAMA
+
+Although a graph is a static structure, the process of message passing introduces a dynamic element. In message passing, information is propagated through the graph, allowing nodes to update their states based on the states of their neighbors. This dynamic behavior can be viewed through the lens of dynamical systems, where the state of each node evolves according to certain aggregating rules, as discussed in Section 2. This perspective is instrumental in Recurrent Neural Networks (RNNs), which are designed to handle sequential data and capture temporal dependencies. By treating the message-passing process as a dynamical system, we can leverage the strengths of RNNs to model the evolution of node states over time. The model we propose, GRAMA, takes inspiration from the architectural structure of the latest generation of sequential models, like S4 (Gu et al., 2021a), Mamba (Gu et al., 2023), LRU (Orvieto et al., 2023b), and xLSTM (Beck et al., 2024). To import these powerful sequential models to graph learning, we first translate static input graphs into sequences of graphs. Then, the GRAMA block transforms such graph sequence into another graph sequence, while considering the structure of the graph. Each GRAMA block is linear, and non-linear activations are applied between GRAMA blocks to increase the flexibility of the overall model. Below, we discuss in detail the different aspects of our GRAMA – from its initialization
+
+{3}------------------------------------------------
+
+![Figure 1: An illustration of the GRAMA framework. The diagram shows the flow of information from a static input graph to a sequence of graphs, which is then processed by a sequence of GRAMA blocks. The first GRAMA block is composed of an ARMA layer and a GNN backbone. The ARMA layer uses coefficients phi and theta to process the sequence of graphs. The GNN backbone uses a graph-informed residual update. The output of the first GRAMA block is passed to the second GRAMA block, and so on, until the final output is produced.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+The diagram illustrates the GRAMA framework. At the top, a 'GRAMA Block' is shown. It takes a sequence of graphs  $\mathbf{f}^{(0)}, \mathbf{f}^{(1)}, \dots, \mathbf{f}^{(L-2)}, \mathbf{f}^{(L-1)}$  as input. These are processed by an ARMA layer with coefficients  $\phi$  and  $\theta$  to produce a sequence of residuals  $\delta^{(0)}, \delta^{(1)}, \dots, \delta^{(L-2)}, \delta^{(L-1)}$ . This sequence is then processed by a GNN backbone. The output of the GNN is passed through a GRAMA block (labeled 'Block 1') to produce the final output  $\mathbf{f}^{(S)}, \Delta^{(S)}$ . The initial sequence  $\mathbf{f}^{(0)}, \dots, \mathbf{f}^{(L-1)}$  is also shown as the input to the first GRAMA block. The residuals  $\delta^{(0)}, \dots, \delta^{(L-1)}$  are shown as the output of the ARMA layer and the input to the GNN. The GRAMA blocks are shown as a sequence of blocks, with the first block labeled 'Block 1' and the last block labeled 'Block S'.
+
+Figure 1: An illustration of the GRAMA framework. The diagram shows the flow of information from a static input graph to a sequence of graphs, which is then processed by a sequence of GRAMA blocks. The first GRAMA block is composed of an ARMA layer and a GNN backbone. The ARMA layer uses coefficients phi and theta to process the sequence of graphs. The GNN backbone uses a graph-informed residual update. The output of the first GRAMA block is passed to the second GRAMA block, and so on, until the final output is produced.
+
+Figure 1: An illustration of the GRAMA framework with  $R=L$  recurrences. We embed a static input graph into a sequence of graphs. This sequence is the input for the first GRAMA block. A GRAMA block is composed of a neural ARMA( $p, q$ ) layer with adaptive autoregressive  $\phi = \{\phi_i\}_{i=1}^p$  and moving average  $\theta = \{\theta_j\}_{j=1}^q$  coefficients, and a graph-informed residual update via a GNN backbone. A GRAMA block transforms a graph sequence into a sequence. Each GRAMA block is a linear system, and non-linearities are applied between GRAMA blocks, as in Equation (8).
+
+to the graph sequence processing blueprint by ARMA, to the learning of ARMA coefficients in a graph adaptive manner. The overall design of GRAMA is illustrated in Figure 1.
+
+**Notations.** We denote a graph by  $G = (V, E)$ , with  $|V| = n$  nodes and  $|E| = m$  edges. A node  $v$  is associated with input node features  $f_v \in \mathbb{R}^c$ . The node features are then denoted by  $\mathbf{f} \in \mathbb{R}^{n \times c}$ .
+
+**Initialization.** Processing information with ARMA or SSM frameworks, by design, requires a sequence. As discussed in Section 2, previous studies on graph SSMs have chosen to transform the graph into a sequence by means of heuristic node ordering, random walk sampling, or by considering pairwise interactions (edges) as sequences of length 2. While these choices are valid, and show strong performance in practice, they also introduce challenges compared to common graph learning approaches, or may not fully utilize the underlying sequence processing framework. Specifically, the first two approaches (node ordering and walk sampling) do not maintain the permutation equivariance desired in GNNs, and the third (pairwise interactions) considers only very short sequences, while one key benefit of the ARMA and SSM frameworks is their ability to capture long-range dependencies in long sequences (Gu et al., 2021b). To address these challenges, we propose to transform a *static graph* into a *sequence of graphs*, such that each node is equipped with a sequence of input node feature vectors rather than a single input node feature vector. By following this idea, we can employ sequence processing frameworks such as ARMA on data beyond pairwise interactions, while maintaining permutation-equivariance, as we discuss later. Specifically, we first stack the input node features  $\mathbf{f}$  for  $L$  times, where  $L > 0$  is a hyperparameter that determines the length of the sequence to process, followed by the application of a set of MLPs,  $\{g_k\}_{k=0}^{L-1}$ , one for each  $k = 0, \dots, L-1$ , to embed the original  $c$  node features into  $d$  channels:
+
+$$\mathbf{F}^{(0)} = [\mathbf{f}^{(0)}, \dots, \mathbf{f}^{(L-1)}] = [g_0(\mathbf{f}), \dots, g_{L-1}(\mathbf{f})], \quad \mathbf{F}^{(0)} \in \mathbb{R}^{L \times n \times d}. \quad (2)$$
+
+We refer to the sequence encoded by  $\mathbf{F}^{(0)}$  as the initial input sequence, and to work with an ARMA model, we also define the *residuals* sequence as follows:
+
+$$\Delta^{(0)} = [\delta^{(0)}, \dots, \delta^{(L-1)}], \quad \Delta^{(0)} \in \mathbb{R}^{L \times n \times d}, \quad (3)$$
+
+where  $\delta^{(\ell)} = \mathbf{f}^{(\ell+1)} - \mathbf{f}^{(\ell)}$  for  $\ell = 0, \dots, L-2$ . Note that by subtracting subsequent elements in the input sequence  $\mathbf{F}^{(0)}$ , we are left with  $L-1$  elements. Therefore, we choose the last residual term in  $\Delta^{(0)}$  (that is  $\delta^{(L-1)}$ ) to be a matrix of zeros at the initialization step.
+
+We note that via this approach, we can perform sequence modeling using ARMA on the sequence dimension ( $L$ ) while retaining the ability to use any desired backbone GNN to exchange information between nodes, as shown in Section 3.1, thus rendering our GRAMA a drop-in mechanism.
+
+### 3.1 GRAPH NEURAL ARMA
+
+**Autoregressive (AR) Layers.** An  $\text{AR}_p$  captures the relationship between current node features and their  $p > 0$  previous historical values, through the learnable coefficients  $\{\phi_i\}_{i=1}^p$  discussed in
+
+{4}------------------------------------------------
+
+**Section 3.2.** Formally, given a sequence of node features of length  $L$   $[\mathbf{f}^{(\ell)}, \dots, \mathbf{f}^{(\ell+L-1)}]$ , assuming  $p \leq L$ , the node features at step  $\ell+L$  read:
+
+$$\mathbf{f}_{\text{AR}_p}^{(\ell+L)} = \text{AR}_p(\mathbf{f}^{(\ell)}, \dots, \mathbf{f}^{(\ell+L-1)}) = \sum_{i=1}^p \phi_i \mathbf{f}^{(\ell+L-i)}. \quad (4)$$
+
+**Moving Average (MA) Layers.** Given a residuals sequence  $[\delta^{(\ell)}, \dots, \delta^{(\ell+L-1)}]$ , an  $\text{MA}_q$  layer with  $\{\theta_j\}_{j=1}^q$  learnable coefficients, captures the dependency of the latest  $0 < q \leq L$  residuals:
+
+$$\mathbf{f}_{\text{MA}_q}^{(\ell+L)} = \text{MA}_q(\delta^{(\ell)}, \dots, \delta^{(\ell+L-1)}) = \sum_{j=1}^q \theta_j \delta^{(\ell+L-j)}. \quad (5)$$
+
+**GRAMA Recurrence.** Combining  $\text{AR}_p$  and  $\text{MA}_q$  layers, leads to the ARMA( $p, q$ ) recurrence:
+
+$$\mathbf{f}^{(\ell+L)} = \mathbf{f}_{\text{AR}_p}^{(\ell+L)} + \mathbf{f}_{\text{MA}_q}^{(\ell+L)} + \delta^{(\ell+L)}, \quad (6)$$
+
+where  $\delta^{(\ell+L)}$  is the residual of the last step, which is given by a GNN backbone that is optimized jointly with the ARMA coefficients, that is,  $\delta^{(\ell+L)} = \text{GNN}(\mathbf{f}^{(\ell+L-1)}; G)$ . Here, we apply the GNN backbone without non-linearity so that each recurrence step within a GRAMA block is a linear function. In particular, note that the GNN can be any graph neural network, because at each recurrence, GRAMA processes a sequence of graphs by updating each node feature based on its sequence via the terms  $\mathbf{f}_{\text{AR}_p}^{(\ell+L)}, \mathbf{f}_{\text{MA}_q}^{(\ell+L)}$ , coupled with a GNN in the term  $\delta^{(\ell+L)}$ . Moreover, the structure of the terms  $\mathbf{f}_{\text{AR}_p}^{(\ell+L)}, \mathbf{f}_{\text{MA}_q}^{(\ell+L)}$  includes multiple residual connections, which can implement standard skip-connections, retaining the expressiveness of the backbone GNN. Section 5 showcases GRAMA with various GNN backbones, from MPNNs to graph transformers.
+
+**GRAMA Block.** Equation (6) describes a *single* recurrence step within a GRAMA block. Similar to other recurrent mechanisms, we apply  $R$  recurrences, where  $R > 1$  is a hyperparameter. Thus, given the initial states  $\mathbf{F}^{(0)}$  and residuals  $\Delta^{(0)}$ , after  $R$  recurrences according to Equation (6), we obtain updated states  $[\mathbf{f}^{(L)}, \dots, \mathbf{f}^{(L+R-1)}]$  and residuals  $[\delta^{(L)}, \dots, \delta^{(L+R-1)}]$  sequences, followed by an element-wise application of non-linearity  $\sigma$ :
+
+$$\mathbf{F}^{(1)} = [\sigma(\mathbf{f}^{(L)}), \dots, \sigma(\mathbf{f}^{(L+R-1)})], \quad \Delta^{(1)} = [\sigma(\delta^{(L)}), \dots, \sigma(\delta^{(L+R-1)})]. \quad (7)$$
+
+In practice, as discussed in Appendix D.6,  $R$  is chosen such that  $p = q = R = L$ , and the obtained updated sequences are  $\mathbf{F}^{(1)} = [\sigma(\mathbf{f}^{(L)}), \dots, \sigma(\mathbf{f}^{(2L-1)})]$ ,  $\Delta^{(1)} = [\sigma(\delta^{(L)}), \dots, \sigma(\delta^{(2L-1)})]$ .
+
+**Deep GRAMA.** In Equation (7), we describe the action of a *single, first* GRAMA block. Overall, each block performs  $R$  recurrence steps. As such, the first GRAMA block yields  $R$  new states and residuals encoded in  $\mathbf{F}^{(1)}$  and  $\Delta^{(1)}$ , respectively, that can then be processed by subsequent GRAMA blocks. That is, we can stack  $S \geq 1$  GRAMA blocks, each block with its own parameters, forming a deep GRAMA network, where the updated sequences at the  $s$ -th GRAMA block are:
+
+$$\mathbf{F}^{(s)} = [\sigma(\mathbf{f}^{(L+(s-1)R)}), \dots, \sigma(\mathbf{f}^{(L+sR-1)})], \quad \Delta^{(s)} = [\sigma(\delta^{(L+(s-1)R)}), \dots, \sigma(\delta^{(L+sR-1)})], \quad (8)$$
+
+for  $s = 1, \dots, S$ . Note that the depth of a GRAMA network is therefore equivalent to the number of systems  $S$  to be learned, multiplied by the number of recurrent steps  $R$ . The outputs of the GRAMA network are then the final state and residual sequences  $\mathbf{F}^{(S)}, \Delta^{(S)}$ . We illustrate this process in Figure 1. Because in our experiments we are interested in static graph learning problems, we feed the latest state matrix within the sequence  $\mathbf{F}^{(S)}$  to a readout layer to obtain the final prediction, as elaborated in Appendix C.2. The additional processing in GRAMA introduces some computational overhead, as detailed in Appendix E. However, this cost remains reasonable compared to other methods and yields significant performance improvements, as detailed in Section 5.
+
+### 3.2 LEARNING ADAPTIVE GRAPH ARMA COEFFICIENTS
+
+We now introduce our graph adaptive approach for learning the ARMA coefficients, which is a key component in our approach to allow a flexible and selective GRAMA.
+
+**Naive ARMA Learning.** The most straightforward way to learn the AR and MA coefficients,  $\{\phi_i\}_{i=1}^p$  and  $\{\theta_j\}_{j=1}^q$ , is to consider them as parameters of the neural network and learn them via
+
+{5}------------------------------------------------
+
+gradient descent. However, this yields coefficients that are identical for all inputs, thereby not adaptive. This approach is directly linked to non-selective weights in SSM models (Gu et al., 2021c), which were shown to be less effective compared to selective coefficients (Gu et al., 2023).
+
+**Selective ARMA Learning.** To allow selective ARMA coefficient learning similarly to Mamba (Gu et al., 2023), we use an attention mechanism (Vaswani et al., 2017) applied over the state and residual sequences  $\mathbf{F}^{(s)}$ ,  $\Delta^{(s)}$  at each GRAMA block  $s = 1, \dots, S$ . The rationale behind this construction is that an attention layer assigns scores between elements within the sequence. Formally, we obtain two scores matrices  $\mathcal{A}_{\mathbf{F}^{(s)}}, \mathcal{A}_{\Delta^{(s)}} \in [0, 1]^{L \times L}$ . The last row in each matrix represents the predicted coefficients for our GRAMA,  $\{\phi_i\}_{i=1}^p$  and  $\{\theta_j\}_{j=1}^q$ , respectively. However, the SoftMax normalization in standard attention layers yields non-negative pairwise values, which is not consistent with the usual choice of ARMA coefficients. Therefore, we follow the self-attention implementation (Vaswani et al., 2017) up to the SoftMax step, and we normalize the scores to be in  $[-1, 1]$  while complying with a sum-to-one constraint. We note that, this procedure facilitates learning stability, such that ARMA coefficients do not explode or vanish, and its design is guided by the insights from Theorems 4.3 and 4.4. We also note that this overall construction yields two-fold adaptivity in the predicted ARMA coefficients: First, the attention mechanism allows to be selective with respect to its input, which are the sequences  $\mathbf{F}^{(s)}$ ,  $\Delta^{(s)}$ . Second, because these sequences are coupled with a GNN backbone, as shown in Equation (6), it implies that the input node features and the graph structure influence the coefficients. We provide further implementation details in Appendix C, and a comparison between naive and selective ARMA learning in Appendix F.1.
+
+## 4 THEORETICAL PROPERTIES OF GRAMA
+
+We now formally cast common knowledge formulated in the context of RNNs, control theory, and SSMs (Yu et al., 2019; Slotine et al., 1991; Khalil, 2002) to the realm of GNNs. We discuss the main theoretical properties of our GRAMA: (i) its representation as an SSM model, (ii) its stability, and (iii) its ability to model long-range interactions in graphs. All the proofs are provided in Appendix B.
+
+**Connection to SSM.** As discussed in Section 3, each GRAMA block is fundamentally an ARMA model. In Theorem 4.1, we formalize the equivalence between ARMA models and linear SSMs. This allows us to interpret our GRAMA model as a stack of graph-informed SSMs through the backbone GNN encoded in Equation (6).
+
+**Theorem 4.1** (Equivalence between ARMA models and State Space Models). *For every ARMA model, there exists an equivalent State Space Model (SSM) representation, and conversely, for every linear SSM, there exists an equivalent ARMA model representation.*
+
+**Stability.** Representing an ARMA system as an SSM involves the description of a linear recurrence equation as  $\mathbf{f}^{(L)} = \sum_{i=1}^p \phi_i \mathbf{f}^{(L-i)} + \sum_{j=1}^q \theta_j \delta^{(L-j)} + \delta^{(L)}$ , or, alternatively, in matrix form as  $\mathbf{X}^{(L)} = \mathbf{A}\mathbf{X}^{(L-1)} + \mathbf{B}\delta^{(L)}$ , with  $\mathbf{X}^{(L-1)} = [\mathbf{f}^{(L-1)}, \dots, \mathbf{f}^{(0)}, \delta^{(L-1)}, \dots, \delta^{(0)}]$ , see Appendix B for more details.<sup>1</sup> In the SSM literature, the  $\mathbf{A}$  matrix is called the *state matrix*. The state matrix corresponding to a GRAMA block is entirely determined by the set of autoregressive and moving average coefficients. Thus, each GRAMA block is characterized by an adaptive state matrix, which is especially important since it directly governs the evolution of the node features  $\mathbf{f}$ . In particular, the stability of this evolution can be established by analyzing the powers of the state matrix, as widely studied in the context of RNN and SSM theory (Pascanu, 2013; Gu et al., 2021b). Hence, the stability of a GRAMA block can be characterized by the following Lemma 4.2.
+
+**Lemma 4.2** (Stability of GRAMA). *The linear SSM corresponding to a GRAMA block with autoregressive coefficients  $\{\phi_i\}_{i=1}^p$  is stable if and only if the spectral radius of its state matrix is less than (or at most equal to) 1. In particular, this happens if and only if the polynomial  $P(\lambda) = \lambda^p - \sum_{j=1}^p \phi_j \lambda^{p-j}$  has all its roots inside (or at most on) the unit circle.*
+
+We now give a sufficient condition for the stability of the SSM corresponding to a GRAMA block.
+
+**Theorem 4.3** (Sufficient condition for GRAMA stability). *If  $\sum_{j=1}^p |\phi_j| \leq 1$ , then the GRAMA block with autoregressive coefficients  $\{\phi_i\}_{i=1}^p$  corresponds to a stable linear SSM.*
+
+<sup>1</sup>Note that, following the notation of Section 3, we can write the state  $\mathbf{X}^{(L-1)}$  as the concatenation of  $\mathbf{F}^{(0)}$  and  $\Delta^{(0)}$ , i.e.,  $\mathbf{X}^{(L-1)} = [\mathbf{F}^{(0)}, \Delta^{(0)}]$ . For simplicity of notations, we analyze the case where  $R = L$ .
+
+{6}------------------------------------------------
+
+**Long-Range Interactions.** A key distinction between standard MPNNs and our GRAMA lies in its neural selective sequential mechanism, which uses learned ARMA coefficients to operate across two domains: the spatial graph domain via a GNN backbone, and the sequence domain via the ARMA mechanism, enabling selective state updates. Remarkably, the state matrices of each GRAMA block play a significant role in the propagation of the information from the first sequence of node features,  $\mathbf{F}^{(0)} = [\mathbf{f}^{(0)}, \dots, \mathbf{f}^{(L-1)}]$ , to the last sequence of node features after  $S$  GRAMA blocks,  $\mathbf{F}^{(S)} = [\mathbf{f}^{(LS)}, \dots, \mathbf{f}^{(L(S+1)-1)}]$ , especially for large  $L$  and  $S$ . In fact, if the entries of the  $k$ -th power of the state matrix of a GRAMA block vanish, then for a stable GRAMA it is impossible to model long-range dependencies of  $k$  hops, in the sequence, as we show in Lemma B.1. This fact relates to a broadly acknowledged problem in the RNN literature, the vanishing gradient issue (Hochreiter et al., 2001; Bengio et al., 1994; Orvieto et al., 2023a): the entries of the powers of a matrix with a spectral radius less than 1 can quickly vanish, making it challenging for gradient-based algorithms to effectively long-range patterns. Therefore, to bias the long-term propagation of the information of a GRAMA block, we can initialize the state matrix to have its eigenvalues close enough to the unitary circle, following the footsteps of recent RNN methodologies (Orvieto et al., 2023b; Arjovsky et al., 2016; De et al., 2024). In fact, the closer the eigenvalues are to the unitary circle, the slower the powers of the state matrix vanish (Horn & Johnson, 2012). The following Theorem 4.4 provides a criterion to control the long-range interaction of GRAMA.
+
+**Theorem 4.4** (GRAMA allows long-range interactions). *Let us be given a GRAMA block with autoregressive coefficients  $\{\phi_i\}_{i=1}^p$ . Assume the roots of the polynomial  $P(\lambda) = \lambda^p - \sum_{j=1}^p \phi_j \lambda^{p-j}$  are all inside the unit circle. Then, the closer the roots  $P(\lambda)$  are to the unit circle, the longer the range propagation of the linear SSM corresponding to such a GRAMA block.*
+
+The results derived in this section provide the theoretical foundation and motivation for the employment of GRAMA as a method to address the oversquashing phenomenon in GNNs, and to enhance long-range interaction modeling capabilities, as we show in our experiments in Section 5.
+
+## 5 EXPERIMENTS
+
+We present the empirical performance of our GRAMA on a suite of benchmarks similar to previous graph SSM studies. Specifically, we show the efficacy in performing long-range propagation, thereby mitigating oversquashing. To this end, we evaluate GRAMA on a graph transfer task inspired by Di Giovanni et al. (2023) in Section 5.1. In a similar spirit, we assess GRAMA on synthetic benchmarks that require the exchange of messages at large distances over the graph, called graph property prediction from Gravina et al. (2023), in Section 5.2. We also verify GRAMA on real-world datasets, including the long-range graph benchmark (Dwivedi et al., 2022b) in Section 5.3, and additional GNN benchmarks in Section 5.4, where we consider MolNet-Tiny (Freitas et al., 2021) and the heterophilic node classification datasets from Platonov et al. (2023), and in Appendix F.3 where we consider ZINC-12k, OGBG-MOLHIV, Cora, CiteSeer, and Pubmed. In Appendix E, we discuss the complexity and runtimes of GRAMA, and compare with other methods. In Appendix F, we report ablation studies and additional comparisons to provide a comprehensive understanding of our GRAMA, including an evaluation on temporal setting (see Appendix F.4). Notably, the performance of GRAMA is compared with popular and state-of-the-art methods, such as MPNN-based models, DE-GNNs, higher-order DGNs, and graph transformers, and shows consistent improvements over its baseline models, with competitive results to state-of-the-art methods. We note that, in the main text, we report models and variants that are state-of-the-art on the individual benchmarks, which may lead to differences between the tables, while more variants are explored in the appendix. Additional details on baseline methods are presented in Appendix D.1, and the explored grid of hyperparameters in Appendix D.6.
+
+### 5.1 GRAPH FEATURE TRANSFER
+
+**Setup.** We consider three graph feature transfer tasks based on Di Giovanni et al. (2023). The objective is to transfer a label from a source to a target node, placed at a distance  $\ell$  in the graph. By increasing  $\ell$ , we increase the complexity of the task and require longer-range information. Moreover, due to oversquashing, the performance is expected to degrade as  $\ell$  increases. We initialize nodes with a random valued feature, and we assign values “1” and “0” to source and target nodes, respectively.
+
+{7}------------------------------------------------
+
+![Figure 2: Feature transfer performance on (a) Line, (b) Ring, and (c) Crossed-Ring graphs. The figure consists of three line plots showing Mean Squared Error (MSE) on the y-axis (log scale) versus Source-Target distance (#hops) on the x-axis (values: 3, 5, 10, 50). Seven models are compared: GCN (blue), GAT (orange), GPS (yellow), GraphSAGE (purple), GIN (red), A-DGN (green), and GRAMA (teal). In all three plots, GRAMA maintains a consistently low MSE across all distances, while other models like GCN and GAT show a significant increase in error as distance increases.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 2: Feature transfer performance on (a) Line, (b) Ring, and (c) Crossed-Ring graphs. The figure consists of three line plots showing Mean Squared Error (MSE) on the y-axis (log scale) versus Source-Target distance (#hops) on the x-axis (values: 3, 5, 10, 50). Seven models are compared: GCN (blue), GAT (orange), GPS (yellow), GraphSAGE (purple), GIN (red), A-DGN (green), and GRAMA (teal). In all three plots, GRAMA maintains a consistently low MSE across all distances, while other models like GCN and GAT show a significant increase in error as distance increases.
+
+Figure 2: Feature transfer performance on (a) Line, (b) Ring, and (c) Crossed-Ring graphs.
+
+We consider three graph distributions, i.e., line, ring, crossed-ring, and four different distances  $\ell = \{3, 5, 10, 50\}$ . Appendix D.2 provides additional details about the dataset and the task.
+
+**Results.** Figure 2 reports the test mean-squared error (and standard deviation) of GRAMA compared to well-known models from the literature. Results show that traditional MPNNs (GCN, GAT, GraphSAGE, and GIN) struggle to propagate information effectively over long distances, with their performance deteriorating significantly as the source-target distance  $\ell$  increases. This is evident across all graph types. In contrast, GRAMA coupled with GCN achieves a low error even when the source-target distance is 50. Among the models, A-DGN and GPS come closest to GRAMA performance, as they are a non-dissipative approach and a transformer-based model, respectively. However, GRAMA still outperforms all baselines across all graph structures, especially as the propagation distance increases, thereby offering solid empirical evidence of its ability to transfer information across long distances, as supported by our theoretical understanding from Section 4.
+
+### 5.2 GRAPH PROPERTY PREDICTION
+
+**Setup.** We consider the three graph property prediction tasks presented in Gravina et al. (2023), investigating the performance of GRAMA in predicting graph diameters, single source shortest paths (SSSP), and node eccentricity on synthetic graphs. To effectively address these tasks, it is essential to propagate information not only from direct neighbors but also from distant nodes within the graph. As a result, strong performance in these tasks mirrors the ability to facilitate long-range interactions. We provide more details on the setup and task in Appendix D.3. For the GPS results, we use a basic GPS with no additional components (e.g., encodings), to quantify the contribution of GRAMA.
+
+**Results.** Table 1 reports the mean test  $\log_{10}(\text{MSE})$ , comparing our GRAMA with various MPNNs, DE-GNNs, and transformer-based models. The results highlight that  $\text{GRAMA}_{\text{GPS}}$  consistently achieves the best performance across all tasks, demonstrating significant improvements over baseline models. For example, in the Eccentricity task,  $\text{GRAMA}_{\text{GPS}}$  reduces the error score by over 1.2 points compared to SWAN and by over 1.7 points compared to A-DGN, which are models designed to propagate information over long radii effectively. Compared to ARMA (Bianchi et al., 2019), our method demonstrates an average improvement of 2.4 points, highlighting the empirical difference between the methods, besides their major qualitative differences.
+
+Table 1: Mean test set  $\log_{10}(\text{MSE})(\downarrow)$  and std averaged on 4 random weight initializations on Graph Property Prediction tasks. The lower, the better. **First**, **second**, and **third** best results for each task are color-coded; we consider only the best configuration of GRAMA for coloring purposes.
+
+| Model | Diameter | SSSP | Eccentricity |
+|-|-|-|-|
+| <b>MPNNs</b> |  |  |  |
+| GatedGCN | <b>0.1348</b> <sub>±0.0387</sub> | <b>-3.2610</b> <sub>±0.0514</sub> | <b>0.6995</b> <sub>±0.0302</sub> |
+| GCN | 0.7424 <sub>±0.0466</sub> | 0.9499 <sub>±0.1810</sub> <sup>-5</sup> | 0.8468 <sub>±0.0028</sub> |
+| GAT | 0.8221 <sub>±0.0752</sub> | 0.6951 <sub>±0.1499</sub> | 0.7909 <sub>±0.0222</sub> |
+| GraphSAGE | 0.8645 <sub>±0.0401</sub> | 0.2863 <sub>±0.1843</sub> | 0.7863 <sub>±0.0207</sub> |
+| GIN | 0.6131 <sub>±0.0990</sub> | -0.5408 <sub>±0.4193</sub> | 0.9504 <sub>±0.0007</sub> |
+| GCNII | 0.5287 <sub>±0.0570</sub> | -1.1329 <sub>±0.0135</sub> | 0.7640 <sub>±0.0355</sub> |
+| ARMA | 0.7819 <sub>±0.4729</sub> | 0.0432 <sub>±0.0981</sub> | 0.2605 <sub>±0.0610</sub> |
+| <b>DE-GNNs</b> |  |  |  |
+| DGC | 0.6028 <sub>±0.0050</sub> | -0.1483 <sub>±0.0231</sub> | 0.8261 <sub>±0.0032</sub> |
+| GRAND | 0.6715 <sub>±0.0490</sub> | -0.0942 <sub>±0.3897</sub> | 0.6602 <sub>±0.1393</sub> |
+| GraphCON | 0.0964 <sub>±0.0620</sub> | -1.3836 <sub>±0.0092</sub> | 0.6833 <sub>±0.0074</sub> |
+| A-DGN | <b>-0.5188</b> <sub>±0.1812</sub> | -3.2417 <sub>±0.0751</sub> | <b>0.4296</b> <sub>±0.1003</sub> |
+| SWAN | <b>-0.5981</b> <sub>±0.1145</sub> | <b>-3.5425</b> <sub>±0.0890</sub> | <b>-0.0739</b> <sub>±0.2190</sub> |
+| <b>Graph Transformers</b> |  |  |  |
+| GPS | -0.5121 <sub>±0.0426</sub> | <b>-3.5990</b> <sub>±0.1949</sub> | 0.6077 <sub>±0.0282</sub> |
+| <b>Our</b> |  |  |  |
+| $\text{GRAMA}_{\text{GCN}}$ | 0.2577 <sub>±0.0368</sub> | 0.0095 <sub>±0.0877</sub> | 0.6193 <sub>±0.0441</sub> |
+| $\text{GRAMA}_{\text{GatedGCN}}$ | <b>-0.5485</b> <sub>±0.1489</sub> | <b>-4.1289</b> <sub>±0.0988</sub> | <b>0.5523</b> <sub>±0.0511</sub> |
+| $\text{GRAMA}_{\text{GPS}}$ | <b>-0.8663</b> <sub>±0.0514</sub> | <b>-3.9349</b> <sub>±0.0699</sub> | <b>-1.3012</b> <sub>±0.1258</sub> |
+
+{8}------------------------------------------------
+
+Overall, these results further validate the effectiveness of our GRAMA in modeling long-range interactions and mitigating oversquashing. Furthermore, GRAMA not only surpasses strong models like GPS, but also strengthens the performance of simple MPNN backbones like GCN. For example, GCN augmented with our GRAMA consistently delivers better results than the baseline GCN, highlighting its ability to enhance traditional message-passing frameworks. This demonstrates that our method can effectively leverage the strengths of simple models while overcoming their limitations in long-range propagation.
+
+### 5.3 LONG-RANGE BENCHMARK
+
+**Setup.** We assess the performance of our method on the real-world long-range graph benchmark (LRGB) from Dwivedi et al. (2022b), focusing on the *Peptides-func* and *Peptides-struct* datasets. We follow the experimental setting in Dwivedi et al. (2022b), including the 500K parameter budget. All transformer baselines include Laplacian positional encodings, for a fair evaluation. Our GRAMA does not use additional encodings. The datasets consist of large molecular graphs derived from peptides, where the structure and function of a peptide depend on interactions between distant parts of the graph. Therefore, relying on short-range interactions, such as those captured by local message passing in GNNs, may not be insufficient to excel at this task. More details on the setup
+
+**Results.** Table 2 provides a comparison of our GRAMA model with a wide range of baselines. A broader comparison is presented in Table 12. The results indicate that GRAMA outperforms standard MPNNs, transformer-based GNNs, DE-GNNs, SSM-based GNNs, and most Multi-hop GNNs. Such a result highlights the competitiveness of our method and its ability to propagate information effectively. Moreover, its superiority with respect to Graph SSMs, emphasizes the strength of GRAMA in modeling long-range interactions while maintaining permutation equivariance and processing sequences that go beyond pairwise interactions. Similarly to Section 5.2, our results show that GRAMA strengthens the abilities of simple GNN backbones. Specifically, our method boosts MPNNs like GCN and GatedGCN by more than 11 AP points on the Peptide-func task.
+
+### 5.4 GNN BENCHMARKS
+
+**Setup.** To further evaluate the performance of our GRAMA, we consider multiple GNN benchmarks, including *MalNet-Tiny* (Freitas et al., 2021) and the five heterophilic tasks introduced in Platonov et al. (2023). Specifically, *MalNet-Tiny* consists of relatively large graphs (with thousands of nodes) representing function call graphs from malicious and benign software, where nodes represent functions and edges represent calls between them. Considering the scale of the graphs and the fact that malware can of-
+
+Table 2: Results for Peptides-func and Peptides-struct averaged over 3 training seeds. Baselines are taken from Dwivedi et al. (2022b) and Gutteridge et al. (2023). All MPNN-based methods include structural and positional encoding. The **first**, **second**, and **third** best scores are colored, and we color only the best configuration of GRAMA.
+
+| Model | Peptides-func<br>AP ↑ | Peptides-struct<br>MAE ↓ |
+|-|-|-|
+| <b>MPNNs</b> |  |  |
+| GCN | 59.30 $\pm$ 0.23 | 0.3496 $\pm$ 0.0013 |
+| GatedGCN | 58.64 $\pm$ 0.77 | 0.3420 $\pm$ 0.0013 |
+| ARMA | 64.08 $\pm$ 0.62 | 0.2709 $\pm$ 0.0016 |
+| <b>Multi-hop GNNs</b> |  |  |
+| DIGL+MPNN+LapPE | 68.30 $\pm$ 0.26 | 0.2616 $\pm$ 0.0018 |
+| MixHop-GCN+LapPE | 68.43 $\pm$ 0.49 | 0.2614 $\pm$ 0.0023 |
+| DRew-GCN+LapPE | <b>71.50</b> $\pm$ 0.44 | 0.2536 $\pm$ 0.0015 |
+| DRew-GatedGCN+LapPE | 69.77 $\pm$ 0.26 | 0.2539 $\pm$ 0.0007 |
+| <b>Graph Transformers</b> |  |  |
+| Transformer+LapPE | 63.26 $\pm$ 1.26 | 0.2529 $\pm$ 0.0016 |
+| SAN+LapPE | 63.84 $\pm$ 1.21 | 0.2683 $\pm$ 0.0043 |
+| GraphGPS+LapPE | 65.35 $\pm$ 0.41 | 0.2500 $\pm$ 0.0005 |
+| <b>DE-GNNs</b> |  |  |
+| GRAND | 57.89 $\pm$ 0.62 | 0.3418 $\pm$ 0.0015 |
+| GraphCON | 60.22 $\pm$ 0.68 | 0.2778 $\pm$ 0.0018 |
+| A-DGN | 59.75 $\pm$ 0.44 | 0.2874 $\pm$ 0.0021 |
+| SWAN | 67.51 $\pm$ 0.39 | 0.2485 $\pm$ 0.0009 |
+| <b>Graph SSMs</b> |  |  |
+| Graph-Mamba | 67.39 $\pm$ 0.87 | <b>0.2478</b> $\pm$ 0.0016 |
+| GMN | <b>70.71</b> $\pm$ 0.83 | <b>0.2473</b> $\pm$ 0.0025 |
+| <b>Ours</b> |  |  |
+| GRAMA <sub>GCN</sub> | <b>70.93</b> $\pm$ 0.78 | 0.2439 $\pm$ 0.0017 |
+| GRAMA <sub>GatedGCN</sub> | 70.49 $\pm$ 0.51 | 0.2459 $\pm$ 0.0020 |
+| GRAMA <sub>GPS</sub> | 69.83 $\pm$ 0.83 | <b>0.2436</b> $\pm$ 0.0022 |
+
+and tasks can be found in Appendix D.4.
+
+Table 3: Mean test accuracy and std averaged over 4 random weight initializations on MalNet-Tiny. The higher, the better. **First**, **second**, and **third** best results. Baselines from Wang et al. (2024a); Behrouz & Hashemi (2024) include Laplacian positional encodings.
+
+| Model | MalNet-Tiny<br>Acc ↑ |
+|-|-|
+| <b>MPNNs</b> |  |
+| GCN | 81.00 |
+| GIN | 88.98 $\pm$ 0.55 |
+| GatedGCN | 92.23 $\pm$ 0.65 |
+| ARMA | 91.80 $\pm$ 0.72 |
+| <b>Graph Transformers</b> |  |
+| GPS+Transformer | OOM |
+| GPS+Performer | 92.64 $\pm$ 0.78 |
+| GPS+BigBird | 92.34 $\pm$ 0.34 |
+| Exphormer | <b>94.22</b> $\pm$ 0.24 |
+| <b>Graph SSMs</b> |  |
+| Graph-Mamba | 93.40 $\pm$ 0.27 |
+| GMN | <b>94.15</b> |
+| <b>Ours</b> |  |
+| GRAMA <sub>GCN</sub> | 93.43 $\pm$ 0.29 |
+| GRAMA <sub>GatedGCN</sub> | 93.66 $\pm$ 0.40 |
+| GRAMA <sub>GPS</sub> | <b>94.37</b> $\pm$ 0.36 |
+
+{9}------------------------------------------------
+
+ten exhibit non-local behavior, we believe this task can further reinforce the idea that GRAMA can preserve and leverage long-range interactions between nodes.
+
+In the heterophilic node classification setting, we consider *Roman-empire*, *Amazon-ratings*, *Minesweeper*, *Tolokers*, and *Questions* tasks, to show the efficacy of our method in capturing more complex node relationships beyond simple homophily settings. We consider the experimental setting from Freitas et al. (2021) for MalNet-Tiny, and that from Platonov et al. (2023) for heterophilic tasks.
+
+Additional details on the setup and tasks are in Appendix D.5.
+
+**Results.** Table 3 reports the mean test set accuracy on MalNet-Tiny, while Table 4 reports the test score for the heterophilic tasks. For a more in-depth comparison of the heterophilic setting, we refer the reader to Table 13. Among all models and tasks, GRAMA achieves competitive overall performance that often outperforms state-of-the-art methods, demonstrating that our model not only excels at handling larger graphs than those considered in previous experiments but also under complex heterophilic scenarios. The results underscore the ability of GRAMA to capture the dependencies characterizing malware detection tasks where non-local behaviors are often prevalent. Overall, these findings confirm that GRAMA is a competitive and effective solution, even when compared to state-of-the-art models like Graph Transformers and recent Graph SSM models.
+
+## 6 CONCLUSION
+
+We introduced GRAMA, a novel sequence-based framework that enhances the long-range interaction modeling ability and feature update selectivity of Graph Neural Networks (GNNs) through the integration of adaptive neural Autoregressive Moving Average (ARMA) models with potentially any GNN backbone. We draw a theoretical link between SSM models and GRAMA, to build solid groundwork and understanding of the qualitative behavior of GRAMA. Compared with several existing Graph SSMs, our GRAMA allows to benefit from long-range interaction modeling abilities, while maintaining permutation equivariance. Through a series of extensive experiments on 14 synthetic and real-world datasets, we demonstrated that GRAMA consistently offers competitive performance with well-established baseline models, from classical MPNNs to more complex approaches such as Graph Transformers and Graph SSMs. Overall, GRAMA offers a theoretically grounded and powerful, flexible solution that bridges the gap between contemporary sequential models and existing graph learning methods, stepping forward towards a new family of graph machine learning models.
+
+Table 4: Node classification mean test set score and standard-deviation using splits from Platonov et al. (2023) on heterophilic datasets. The higher, the better. **First**, **second**, and **third** best results for each task are color-coded, and we consider only the best configuration of GRAMA for color purposes.
+
+| Model | <i>Roman-empire</i><br>Acc $\uparrow$ | <i>Amazon-ratings</i><br>Acc $\uparrow$ | <i>Minesweeper</i><br>AUC $\uparrow$ | <i>Tolokers</i><br>AUC $\uparrow$ | <i>Questions</i><br>AUC $\uparrow$ |
+|-|-|-|-|-|-|
+| <b>MPNNs</b> |  |  |  |  |  |
+| GCN | $73.69 \pm 0.74$ | $48.70 \pm 0.63$ | $89.75 \pm 0.52$ | $83.64 \pm 0.07$ | $76.09 \pm 1.27$ |
+| SAGE | $85.74 \pm 0.67$ | $53.63 \pm 0.39$ | <b>93.51</b> $\pm 0.57$ | $82.43 \pm 0.44$ | $76.44 \pm 0.62$ |
+| GAT | $80.87 \pm 0.30$ | $49.09 \pm 0.63$ | $92.01 \pm 0.68$ | $83.70 \pm 0.47$ | $77.43 \pm 1.20$ |
+| GatedGCN | $74.46 \pm 0.54$ | $43.00 \pm 0.32$ | $87.54 \pm 1.22$ | $77.31 \pm 1.14$ | <b>76.61</b> $\pm 1.13$ |
+| CO-GNN( $\mu, \mu$ ) | <b>91.37</b> $\pm 0.35$ | <b>54.17</b> $\pm 0.37$ | <b>97.31</b> $\pm 0.41$ | <b>84.45</b> $\pm 1.17$ | $76.54 \pm 0.95$ |
+| ARMA | $87.11 \pm 0.38$ | $49.94 \pm 0.30$ | $91.64 \pm 1.21$ | $82.29 \pm 0.97$ | $77.75 \pm 0.85$ |
+| <b>Graph Transformers</b> |  |  |  |  |  |
+| NAGphormer | $74.34 \pm 0.77$ | $51.26 \pm 0.72$ | $84.19 \pm 0.66$ | $78.32 \pm 0.95$ | $68.17 \pm 1.53$ |
+| Exphormer | <b>89.03</b> $\pm 0.37$ | <b>53.51</b> $\pm 0.46$ | <b>90.74</b> $\pm 0.53$ | <b>83.77</b> $\pm 0.78$ | <b>73.94</b> $\pm 1.06$ |
+| GT-sep | $87.32 \pm 0.39$ | $52.18 \pm 0.80$ | $92.29 \pm 0.47$ | $82.52 \pm 0.92$ | <b>78.05</b> $\pm 0.93$ |
+| GPS | $82.00 \pm 0.61$ | $53.10 \pm 0.42$ | <b>90.63</b> $\pm 0.67$ | <b>83.71</b> $\pm 0.48$ | $71.73 \pm 1.47$ |
+| <b>Heterophilicity-Designated GNNs</b> |  |  |  |  |  |
+| H2GCN | $60.11 \pm 0.52$ | $36.47 \pm 0.23$ | $89.71 \pm 0.31$ | $73.35 \pm 1.01$ | $63.59 \pm 1.46$ |
+| FSGNN | $79.92 \pm 0.56$ | $52.74 \pm 0.83$ | $90.08 \pm 0.70$ | $82.76 \pm 0.61$ | <b>78.86</b> $\pm 0.92$ |
+| GBK-GNN | $74.57 \pm 0.47$ | $45.98 \pm 0.71$ | $90.85 \pm 0.58$ | $81.01 \pm 0.67$ | <b>74.47</b> $\pm 0.86$ |
+| <b>Graph SSMs</b> |  |  |  |  |  |
+| GPS + Mamba | $83.10 \pm 0.28$ | $45.13 \pm 0.97$ | $89.93 \pm 0.54$ | $83.70 \pm 1.05$ | – |
+| GMN | $87.69 \pm 0.50$ | <b>54.07</b> $\pm 0.31$ | $91.01 \pm 0.23$ | <b>84.52</b> $\pm 0.21$ | – |
+| <b>Ours</b> |  |  |  |  |  |
+| GRAMAGCN | $88.61 \pm 0.43$ | $53.48 \pm 0.62$ | $95.27 \pm 0.71$ | <b>86.23</b> $\pm 1.10$ | $79.23 \pm 1.16$ |
+| GRAMAGatedGCN | <b>91.82</b> $\pm 0.39$ | <b>53.71</b> $\pm 0.57$ | <b>98.19</b> $\pm 0.58$ | $85.42 \pm 0.95$ | <b>80.47</b> $\pm 1.09$ |
+| GRAMAGPS | $91.73 \pm 0.59$ | $53.36 \pm 0.38$ | <b>98.33</b> $\pm 0.55$ | $85.71 \pm 0.98$ | $79.11 \pm 1.19$ |
+
+ Rest of paper (reference and Appendix) is removed.

@@ -1,0 +1,278 @@
+
+
+{0}------------------------------------------------
+
+# PERSENSE: PERSONALIZED INSTANCE SEGMENTATION IN DENSE IMAGES
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Leveraging large-scale pre-training, vision foundational models showcase notable performance benefits. Recent segmentation algorithms for natural scenes have advanced significantly. However, existing models still struggle to automatically segment personalized instances in dense and crowded scenarios, where severe occlusions, scale variations, and background clutter pose a challenge to accurately delineate densely packed instances of the target object. To address this, we propose **PerSense**, an end-to-end, training-free, and model-agnostic one-shot framework for **Personalized instance Segmentation in dense images**. PerSense introduces a novel Instance Detection Module (IDM) that leverages density maps to encapsulate the spatial distribution of objects and automatically generate instance-level point prompts. To reduce false positives in these prompts, we design the Point Prompt Selection Module (PPSM), which refines the output of IDM. Both IDM and PPSM transforms density maps into precise point prompts, seamlessly integrate into our model-agnostic framework. Furthermore, we introduce a feedback mechanism which enables PerSense to improve the accuracy of density maps by automating the exemplar selection process for density map generation. Finally, To promote algorithmic advances and effective tools for this relatively underexplored task, we introduce PerSense-D, a diverse dataset exclusive to personalized instance segmentation in dense images. Our extensive experiments establish PerSense superiority in dense scenarios by achieving an mIoU of **71.61%** on PerSense-D, outperforming recent SOTA models by significant margins of **+47.16%**, **+42.27%**, **+8.83%**, and **+5.69%**. Additionally, our qualitative findings demonstrate the adaptability of our framework to images captured in-the-wild.
+
+![Figure 1: (a) Comparison of Grounded-SAM and SAM (Everything Mode) on a dense image of berries. Grounded-SAM uses bounding boxes to segment, while SAM (Everything Mode) indiscriminately segments background and foreground. (b) PerSense (Training Free) pipeline showing support and query images for different objects (potatoes, tomatoes, yellow berries) being processed through a 'PerSense (Training Free)' block to produce segmented results.](0538daaa5583c23e17db3a12f2281a55_img.jpg)
+
+Figure 1: (a) Comparison of Grounded-SAM and SAM (Everything Mode) on a dense image of berries. Grounded-SAM uses bounding boxes to segment, while SAM (Everything Mode) indiscriminately segments background and foreground. (b) PerSense (Training Free) pipeline showing support and query images for different objects (potatoes, tomatoes, yellow berries) being processed through a 'PerSense (Training Free)' block to produce segmented results.
+
+Figure 1: (a) Depicts the deteriorated segmentation performance of Grounded-SAM in dense scenario due to limitations associated with bounding box-based detections. Additionally, it demonstrates how SAM's "everything mode" indiscriminately segments both background and foreground, lacking any personalization for specific objects. (b) Introducing PerSense, a training-free and model-agnostic one-shot framework offering an end-to-end automated pipeline for personalized instance segmentation in dense images.
+
+{1}------------------------------------------------
+
+## 1 INTRODUCTION
+
+Imagine working in a food processing sector where the goal is to automate the quality control process for vegetables, such as potatoes, using vision sensors. The challenge is to segment all potato instances in densely packed environments, where variations in scale, occlusions, and background clutter add complexity to the task. We refer to this task as *personalized instance segmentation in dense images* (Figure 1b), building on the concept of personalized segmentation, first introduced in Zhang et al. (2024). The term *personalized* refers to the segmentation of specific visual category within an image. Our task setting focuses on personalized instance segmentation, particularly in *dense scenarios*. To tackle this problem, a natural approach would be to explore the state-of-the-art (SOTA) segmentation models. One of the notable contributions in this domain is the Segment Anything Model (SAM) trained on the SA-1B dataset that consists of more than 1B masks derived from 11M images (Kirillov et al., 2023). SAM introduces a groundbreaking segmentation framework capable of generating masks for various objects in images using custom prompts, allowing for flexible segmentation across different visual elements. However, SAM lacks the inherent ability to segment distinct visual concepts as highlighted in Zhang et al. (2024). It primarily generates masks for individual objects using its "everything mode", which prompts the model with a point grid to segment all objects in the image, including both background and foreground (Figure 1a). Alternatively, users can manually draw a box or a point prompt to isolate specific instances. This process is labor-intensive, time-consuming, and hence not scalable for large-scale or automated applications.
+
+One approach to achieve automation is to utilize the box prompts generated by a pre-trained object detector to isolate the object of interest. A recent work proposing an automated image segmentation pipeline is Grounded-SAM (Ren et al., 2024), which is a combination of open-vocabulary object detector GroundingDINO (Liu et al., 2023) and SAM (Kirillov et al., 2023). The underlying idea is to forward annotated bounding boxes from GroundingDINO to SAM for generating segmentation masks. However, bounding boxes are limited by box shape (fixed size anchors), occlusions (limited feature resolution), and the orientation of objects (Zand et al., 2021). In simpler terms, a standard bounding box (non-oriented and non-rotated) for a particular object may include portions of other instances. Additionally, when using non-max suppression (NMS), bounding box-based detections may group multiple instances of the same object together (Hosang et al., 2017), making it difficult to achieve proper delineation of object instances (Figure 1a). Although techniques like bipartite matching introduced in DETR (Carion et al., 2020) address the NMS issue but still bounding box-based detections are challenged due to variations in object scale, occlusions, and background clutter. These limitations become more pronounced when dealing with dense images (Wan & Chan, 2019).
+
+Point-based prompting, mostly based on manual user input, is generally better than bounding box-based prompting for tasks that require high accuracy, fine-grained control, and the ability to handle occlusions, clutter, and dense instances (Maninis et al., 2018). However, the automated generation of point prompts using one-shot data, for personalized segmentation in dense scenarios, has largely remained unexplored. This motivates a novel segmentation framework specifically for dense images that can provide an automated pipeline capable of achieving instance-level segmentation through the generation of precise point prompts using one-shot data. Such capability will be pivotal for industrial automation, which uses vision-based sensors for applications such as object counting, quality control, and cargo monitoring. Beyond industrial automation, it could be transformative in the medical realm, particularly in tasks demanding segmentation at cellular levels. In such scenarios, relying solely on bounding box-based detections could prove limiting towards achieving desired segmentation accuracy.
+
+We therefore approach this problem by exploring density estimation methods, which emphasize the spatial distribution of objects through the use of density maps (DM). While DMs are effective for calculating global object counts, they often fall short in providing precise point prompts for localization of individual objects at the instance level (Idrees et al., 2013). Although some studies have attempted to leverage DMs for instance segmentation in natural scenes (Cholakkal et al., 2019; Ma et al., 2015), there remains a potential gap for a streamlined approach that explicitly and effectively utilizes DM to achieve automated personalized instance segmentation in dense images. To this end, *our work introduces an end-to-end, training-free, and model-agnostic one-shot framework titled PerSense* (Figure 2). First, we develop a new baseline capable of automatically generating instance-level point prompts. This new baseline features a proposed Instance Detection Module (IDM) which leverages DMs to provide candidate point prompts. We generate DMs using a density map genera-
+
+{2}------------------------------------------------
+
+tor (DMG) which highlights spatial distribution of object of interest based on input exemplars. To allow automatic selection of effective exemplars for DMG, we automate the mostly manual process via a class-label extractor (CLE) and a grounding detector. Second, we design a Point Prompt Selection Module (PPSM) to mitigate false positives within the candidate point prompts. The proposed IDM and PPSM are essentially plug-and-play components and seamlessly integrate with our model-agnostic PerSense framework. Lastly, we introduce a robust feedback mechanism, which automatically refines the initial exemplar selection by identifying multiple rich exemplars for DMG based on the initial segmentation output of PerSense.
+
+Finally, to our knowledge, there exists no dataset specifically targeting segmentation in dense images. While some images in mainstream segmentation datasets like COCO (Lin et al., 2014), LVIS (Gupta et al., 2019), and FSS-1000 (Li et al., 2020), may contain multiple instances of the same object category, the majority do not qualify as dense images due to the limited number of object instances. For example, images in the LVIS dataset contain an average of 11.2 instances across 3.4 object categories, resulting in about 3.3 instances per category. This low instance count is insufficient to represent dense scenarios in images. Therefore we introduce PerSense-D, a personalized one-shot segmentation dataset exclusive to dense images. PerSense-D comprises 717 dense images distributed across 28 diverse object categories with an *average count of 39 object instances per image*. These images present significant occlusion and background clutter, making our dataset a unique and challenging benchmark for enabling algorithmic advances and practical tools targeting personalized segmentation in dense images.
+
+We report results on this newly introduced PerSense-D dataset, comparing PerSense with several SOTA segmentation models, including PerSAM (Zhang et al., 2024), Matcher (Liu et al., 2024), and Grounded-SAM (Ren et al., 2024). Our extensive experiments demonstrate PerSense’s superior performance and efficiency in dense scenarios.
+
+## 2 RELATED WORK
+
+**One-shot personalized segmentation:** As discussed in sec 1, SAM (Kirillov et al., 2023) segmentations lack semantic meaning, which limits it in segmenting personalized visual concepts. To overcome this challenge, PerSAM is introduced in Zhang et al. (2024), which offers a training-free automated framework for one-shot personalized segmentation using SAM. PerSAM performs well in segmenting few instances of similar category, efficiently distinguishing and segmenting objects through its iterative masking approach. However, when applying PerSAM to dense images with many instances of the same object, several challenges may arise. Firstly, its iterative masking strategy, which segments objects one by one, can become computationally expensive and slow, as the number of iterations is proportional to the number of object instances in the image. Moreover, the confidence map’s accuracy may degrade as more objects are masked out, making it difficult to distinguish between closely packed or overlapping instances. Also, the confidence thresholding strategy introduced in PerSAM, which halts the process when the confidence score drops below a set threshold, may lead to premature termination of segmentation process, even when valid objects are still present (see sec 5). Unlike PerSAM, our PerSense utilizes DM to generate precise instance-level point prompts in a single iteration.
+
+Matcher introduced in Liu et al. (2024) integrates a versatile feature extraction model with a class-agnostic segmentation model and leverages bidirectional matching to align semantic information across images for tasks like semantic segmentation and dense matching. However, its instance-level matching capability inherited from the image encoder is relatively limited, which hampers its performance for instance segmentation tasks. Matcher employs reverse matching to eliminate outliers and uses K-means clustering for instance-level sampling, which can become a bottleneck in dense and cluttered scenes due to challenges posed by varying object scales. Additionally, Matcher forwards the bounding box of the matched region as a box prompt to SAM, which can have adverse affect due to the limitations of box-based detections, especially in crowded environments. To address these challenges, PerSense utilizes DMG to obtain a personalized DM which obviates the need for clustering and sampling. With IDM and PPSM, PerSense accurately generates at least one point prompt for each detected instance.
+
+Another one-shot segmentation method, SLiMe (Khani et al., 2023), enables personalized segmentation based on segmentation granularity in the support set, rather than object category. Despite
+
+{3}------------------------------------------------
+
+![Figure 2: Overall architecture of PerSense. The diagram shows a flow from 'Input masking' and 'Query Image' through a 'Class-label Extractor (CLE)' to produce a 'Class-label as Prompt'. This prompt is fed into a 'Grounding Detector' which outputs 'Bbox cards'. Simultaneously, the 'Query Image' is processed by an 'Encoder' to generate an 'Overall Confidence Map (Cosine Similarity)'. A 'Support Set' image is also encoded. The 'Bbox cards' and the 'Overall Confidence Map' are input to a 'Decoder'. The 'Decoder' produces an 'Initial Segmentation Output'. This output is processed by a 'Density Map Generator (DMG)' to create a 'Density Map'. The 'Density Map' is then processed by a 'PPSM' (Point Prompt Selection Module) to generate 'Point Prompts'. These point prompts are used to refine the 'Initial Segmentation Output' via a 'Feedback Mechanism' involving 'Exemplar Selection' and 'IDM' (Instance Detection Module). The final output is a 'Fixed Segmentation Output'.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 2: Overall architecture of PerSense. The diagram shows a flow from 'Input masking' and 'Query Image' through a 'Class-label Extractor (CLE)' to produce a 'Class-label as Prompt'. This prompt is fed into a 'Grounding Detector' which outputs 'Bbox cards'. Simultaneously, the 'Query Image' is processed by an 'Encoder' to generate an 'Overall Confidence Map (Cosine Similarity)'. A 'Support Set' image is also encoded. The 'Bbox cards' and the 'Overall Confidence Map' are input to a 'Decoder'. The 'Decoder' produces an 'Initial Segmentation Output'. This output is processed by a 'Density Map Generator (DMG)' to create a 'Density Map'. The 'Density Map' is then processed by a 'PPSM' (Point Prompt Selection Module) to generate 'Point Prompts'. These point prompts are used to refine the 'Initial Segmentation Output' via a 'Feedback Mechanism' involving 'Exemplar Selection' and 'IDM' (Instance Detection Module). The final output is a 'Fixed Segmentation Output'.
+
+Figure 2: **Overall architecture:** PerSense is a one-shot framework for personalized instance segmentation in dense images. It begins by extracting class-label using CLE followed by exemplar selection to generate density maps using DMG. IDM identifies candidate point prompts from these density maps, which are subsequently refined using the PPSM. The feedback mechanism identifies high-quality exemplars using the initial segmentation output from the decoder and leverages them to refine initial density maps. The point prompts generated from these refined maps enables PerSense to achieve precise personalized instance segmentation in dense and cluttered scenes.
+
+its strong performance, SLiMe tends to produce noisy segmentations for small objects due to the smaller attention maps extracted from Stable Diffusion (Rombach et al., 2022) compared to the input image. Given our focus on instance segmentation in dense images with varying object scales, SLiMe may not be the most suitable choice.
+
+**Interactive segmentation:** Recently, the task of interactive segmentation has received a fine share of attention. Works like InterFormer (Huang et al., 2023), MIS (Li et al., 2023) and SEEM (Zou et al., 2024) provide a user-friendly interface to segment an image at any desired granularity, however, these models are not scalable as they are driven by manual input from the user.
+
+## 3 METHOD
+
+We introduce PerSense, a training-free and model-agnostic one-shot framework designed for personalized instance segmentation in dense images (Figure 2). Here, we describe the core components of our PerSense framework, including class-label extraction using CLE and exemplar selection for DMG (sec. 3.1), IDM (sec. 3.2), PPSM (sec. 3.3), and the feedback mechanism (sec. 3.4). See Appendix A.1 for the overall pseudo-code of PerSense.
+
+### 3.1 CLASS-LABEL EXTRACTION AND EXEMPLAR SELECTION FOR DMG
+
+PerSense operates as a one-shot framework, wherein a support set is utilized to guide the personalized segmentation of an object in the query image that shares semantic similarity with the support object. Initially, input masking is applied to the support image using the coarse support mask to isolate the object of interest. The resulting input masked image is fed into the CLE with a custom prompt, “*Name the object in the image?*”. The CLE generates a description of the object in the image, from which the noun is extracted, representing the object category. Subsequently, the grounding detector is prompted with this class-label to facilitate personalized object detection in the query image. To enhance the prompt, we prefixed the term “all” with the class-label.
+
+Next, we compute the cosine similarity score  $S_{score}$  between query  $Q$  and support  $S_{supp}$  features coming from the encoder as follows:
+
+$$S_{score}(Q, S_{supp}) = \cos\_sim(f(Q), f(S_{support})), \quad (1)$$
+
+where  $f(\cdot)$  represents the encoder. Utilizing this score along with detections from the grounding object detector, we extract the positive location prior. Specifically, we identify the bounding box
+
+{4}------------------------------------------------
+
+![Figure 3: (a) Comparison of composite contours detection. The left side shows 'Without identifying composite contours' where a red circle highlights a group of objects as a single instance. The right side shows 'Identification of composite contours' where a green circle highlights the same group, and individual child contours are also detected. (b) A scatter plot titled 'Composite Contours vs Overall Contour Area Distribution' showing contour area (pixels) on a log scale (10^0 to 10^2) versus image index (0 to 200). Green dots represent individual contours, and red dots represent composite contours. A vertical line at approximately 10^1.5 indicates the threshold for mu + 2 sigma.](e0d425c8e4eef259e4c52d81426d93fa_img.jpg)
+
+Figure 3: (a) Comparison of composite contours detection. The left side shows 'Without identifying composite contours' where a red circle highlights a group of objects as a single instance. The right side shows 'Identification of composite contours' where a green circle highlights the same group, and individual child contours are also detected. (b) A scatter plot titled 'Composite Contours vs Overall Contour Area Distribution' showing contour area (pixels) on a log scale (10^0 to 10^2) versus image index (0 to 200). Green dots represent individual contours, and red dots represent composite contours. A vertical line at approximately 10^1.5 indicates the threshold for mu + 2 sigma.
+
+Figure 3: (a) Without identifying composite contours, multiple object instances may be incorrectly grouped (red circle). Identification of composite contours (green circle) enables accurate localization of child contours (missed detections). (b) The plot illustrates the presence of composite contours beyond  $\mu + 2\sigma$  in the contour area distribution for 250 images in the PerSense-D dataset.
+
+$B_{max}$  with the highest detection confidence and proceed to locate the pixel-precise point  $P_{max}$  with the maximum similarity score within this bounding box:
+
+$$P_{max} = \arg \max_{P \in B_{max}} S_{score}(P, S_{supp}), \quad (2)$$
+
+where  $P$  represents candidate points within the bounding box  $B_{max}$ . This identified point serves as the positive location prior, which is subsequently fed to the decoder for segmentation. Additionally, we extract the bounding box surrounding the segmentation mask of the object. This process effectively refines the original bounding box provided by the grounding detector. The refined bounding box is then forwarded as an exemplar to the DMG for generation of density map.
+
+### 3.2 INSTANCE DETECTION MODULE (IDM)
+
+The IDM begins by converting the DM from the DMG into a grayscale image  $I_{gray}$ . Next, a binary image  $I_{binary}$  is created from  $I_{gray}$  using a pixel-level threshold  $T$  ( $T \in [0, 255]$ ):
+
+$$I_{binary}(x, y) = \begin{cases} 1 & \text{if } I_{gray}(x, y) \geq T \\ 0 & \text{if } I_{gray}(x, y) < T \end{cases} \quad (3)$$
+
+for all pixels  $(x, y)$  in the image, where  $I_{binary}$  is the resulting binary image. A morphological erosion operation is then applied to  $I_{binary}$  using a  $3 \times 3$  kernel  $K$ :
+
+$$I_{eroded}(x, y) = \min_{(i,j) \in K} I_{binary}(x + i, y + j), \quad (4)$$
+
+where  $I_{eroded}$  is the eroded image, and  $(i, j)$  iterates over the kernel  $K$  to refine the boundaries and eliminate noise from the binary image. We deliberately used a small kernel to avoid damaging the original densities of true positives. Next, contours are identified in the eroded binary image, and for each contour  $C$ , its area  $A_C$  and center pixel coordinates  $(x_C, y_C)$  are computed. We calculate the mean  $\mu$  and standard deviation  $\sigma$  of all contour areas to assess the distribution of contour sizes:
+
+$$\mu = \frac{1}{N} \sum_{i=1}^N A_{C_i}, \quad \sigma = \sqrt{\frac{1}{N} \sum_{i=1}^N (A_{C_i} - \mu)^2}, \quad (5)$$
+
+where  $N$  is the total number of contours. Subsequently, composite contours, which represent multiple objects in one contour, are detected using a threshold based on the distribution of contour sizes. This is necessary to identify the regions that are detected as one contour but encapsulate multiple instances of the object of interest (Figure 3a). Such regions are scarce and can be detected as outliers, essentially falling beyond  $\mu + 2\sigma$ , considering the contour size distribution (Figure 3b). For each detected composite contour, a distance transform is applied to expose child contours for ease of detection. Finally, the algorithm returns the center points obtained from all detected contours (parent and child) as candidate point prompts. In summary, through systematic analysis of the DM, IDM identifies regions of interest and generates candidate point prompts, which are subsequently forwarded to PPSM for final selection. See Appendix A.1 for pseudo-code of IDM.
+
+{5}------------------------------------------------
+
+### 3.3 POINT PROMPT SELECTION MODULE (PPSM)
+
+The PPSM serves as a critical component in the PerSense pipeline, tasked with filtering candidate point prompts for final selection. For each candidate point prompt received from IDM, we compare the corresponding query-support similarity score using an adaptive threshold defined as:
+
+$$\text{sim\_threshold} = \frac{\text{max\_score}}{\text{object\_count/norm\_const}} \quad (6)$$
+
+where *max\_score* is the maximum value of the query-support similarity score, the *object\_count* corresponds to the number of instances of the desired object present in the query image, and the *norm\_const* is a normalization factor, set as  $\sqrt{2}$  to make the threshold adaptive with respect to the object count (see sec 5.1). A fixed similarity threshold would struggle in this case, as the query-support similarity score varies significantly even with small intra-class variations. Moreover, for highly crowded images (*object\_count* > 50), the similarity score for positive location priors can vary widely, necessitating an adaptive threshold that accounts for the density (count) of the query image. In other words, as object instances increase, the query-support similarity score distribution widens due to intra-class variations. To address this challenge, our adaptive threshold is based on the maximum query-support similarity score as well as the object count within the query image. In addition to this, PPSM leverages bounding box data from the grounding detector to ensure filtered point prompts fall within the box boundaries. These filtered points are then passed to the decoder for segmentation. See Appendix A.1 for pseudo-code of PPSM.
+
+### 3.4 FEEDBACK MECHANISM
+
+PerSense proposes a feedback mechanism to enhance the exemplar selection process for the DMG by leveraging the initial segmentation output from the decoder. Let *M<sub>seg</sub>* represent the initial segmentation mask generated by the decoder, and let *S<sub>mask</sub>* denote the mask scores provided by SAM.
+
+$$C_{Top} = \text{Top\_k}(M_{seg}, S_{mask}, k), \quad (7)$$
+
+where *C<sub>Top</sub>* represents the set of the top *k* candidates selected based on their mask scores. In our case *k* = 4 (see sec 5.1). These selected candidates are then forwarded as exemplars to DMG in a feedback manner. This leads to improved accuracy of the DM and consequently enhances the segmentation performance. The quantitative analysis of this aspect is further discussed in sec 5, which explicitly highlights the value added by the proposed feedback mechanism.
+
+## 4 NEW DATASET (PERSENSE-D)
+
+PerSense utilizes DMs generated by DMG for point prompt extraction via IDM and PPSM, specifically for dense images containing several instances of the same object. While existing segmentation datasets like COCO (Lin et al., 2014), LVIS (Gupta et al., 2019), and FSS-1000 (Li et al., 2020) may contain some images with multiple instances of the same object category, the majority of images do not represent dense scenarios due to limited or few object instances. For example, on average each image in LVIS (Gupta et al., 2019) is annotated with 11.2 instances from 3.4 object categories. This results in an average of 3.3 instances per single category, which is insufficient to represent dense scenarios in images. To address this, we introduce PerSense-D, a diverse dataset exclusive to segmentation in dense images. PerSense-D comprises 717 images distributed across 28 object categories, with an average count of 39 objects per image. The dataset is designed to serve as a challenging benchmark for driving algorithmic innovations while facilitating the development of practical tools across diverse domains such as medical, agriculture, environmental monitoring, and autonomous systems. Given our focus on one-shot personalized dense image segmentation, we explicitly supply 28 support images labeled as "00", each containing a single object instance intended for personalized segmentation in the corresponding object category. This can facilitate fair evaluation among various one-shot approaches as no random seeding is required.
+
+**Image Collection and Retrieval:** Out of 717 images, we have 689 dense query images and 28 support images. To acquire the set of 689 dense images, we initiated the process with a collection of candidate images obtained through keyword searches. To mitigate bias, we retrieved the candidate images by querying object keywords across three distinct Internet search engines: Google, Bing,
+
+{6}------------------------------------------------
+
+324  
+325  
+326  
+327  
+328  
+329  
+330  
+331  
+332  
+333  
+334  
+335  
+336  
+337  
+338  
+339  
+340  
+341  
+342  
+343  
+344  
+345  
+346  
+347  
+348  
+349  
+350  
+351  
+352  
+353  
+354  
+355  
+356  
+357  
+358  
+359  
+360  
+361  
+362  
+363  
+364  
+365  
+366  
+367  
+368  
+369  
+370  
+371  
+372  
+373  
+374  
+375  
+376  
+377
+
+![Figure 4: (a) Object categories in PerSense-D. (b) No of images vs range bins of object count.](c0843c6d138705289960d9f53a6e72a1_img.jpg)
+
+Figure 4(a) is a sunburst chart showing the distribution of object categories in the PerSense-D dataset. The inner ring represents the category names, and the outer ring shows the number of images for each category. The categories and their counts are: Toys (243), Animals (86), Vegetables (116), Fruits (103), Flowers (75), Books (54), Shoes (42), Hats (38), Bags (31), and Glasses (21). Figure 4(b) is a histogram showing the number of images across various ranges of object counts. The x-axis represents the count of objects in PerSense-D, with bins: 0-10, 10-20, 20-30, 30-40, 40-50, 50-60, 60-70, 70-80, 80-90, 90-100, and >100. The y-axis represents the number of images, ranging from 0 to 120. The distribution shows a peak in the 30-40 bin, followed by a general decline, with a slight increase in the >100 bin.
+
+Figure 4: (a) Object categories in PerSense-D. (b) No of images vs range bins of object count.
+
+Figure 4: (a) Object categories in PerSense-D. (b) No of images vs range bins of object count.
+
+and Yahoo. To diversify the search query keywords, we prefixed adjectives such as ‘*multiple*’, ‘*lots of*’, and ‘*many*’ before the category names. In every search, we collected the first 100 images that fall under CC BY-NC 4.0 licensing terms. With 28 categories, we gathered a total of 2800 images, which were subsequently filtered in the next step.
+
+**Manual Inspection and Filtering:** The candidate images were manually inspected following a three-point criterion. (1) The image quality and resolution should be sufficiently high to enable easy differentiation between objects. (2) Following the criterion in object counting dataset FSC-147 (Ranjan et al., 2021), we set the minimum object count to 7 per image for our PerSense-D benchmark. (3) The image shall contain a challenging dense environment with sufficient occlusions among object instances along with background clutter. Based on this criterion, we filtered 689 images out of 2800 candidates.
+
+**Semi-automatic Image Annotation Pipeline:** We crowdsourced the annotation task under appropriate institutional approval. We devised a semi-automatic annotation pipeline. Following the *model-in-the-loop* strategy outlined in Kirillov et al. (2023), we utilized our PerSense to provide an initial segmentation mask. This initial mask was then manually refined and corrected by annotators using pixel-precise tools such as the OpenCV image annotation tool and Photoshop’s “quick selection” and “lasso” tool, which allows users to loosely select an object automatically. As the images were dense, the average time to manually refine single image annotation was around 15 minutes.
+
+**Dataset Statistics:** The dataset contains a total of 717 images (689 query and 28 support images). Average count is 39 objects per image, with a total of 28,395 objects across the entire dataset. The minimum and maximum number of objects in a single image are 7 and 218, respectively. The average resolution ( $h \times w$ ) of images is  $839 \times 967$  pixels. Figure 4 presents detail of object categories in PerSense-D and a histogram depicting the number of images across various ranges of object count.
+
+## 5 EXPERIMENTS
+
+**Implementation Details and Evaluation Metrics:** Our PerSense is model-agnostic and leverages a CLE, grounding detector, and DMG for personalized instance segmentation in dense images. For CLE, we leverage VLM as it is best suited for this task. We follow VIP-LLaVA (Cai et al., 2024), which utilizes CLIP-336px (Radford et al., 2021) and Vicuna v1.5 (Chiang et al., 2023) as visual and language encoders, respectively. We use GroundingDINO (Liu et al., 2023) as the grounding detector. To demonstrate model-agnostic capability of PerSense, we separately utilize DSALVNet (He et al., 2024) and CounTR (Liu et al., 2022) pretrained on FSC-147 dataset (Ranjan et al., 2021) as DMG. Finally, we utilize SAM (Kirillov et al., 2023) encoder and decoder for personalized segmentation following the approach in (Zhang et al., 2024). We evaluate segmentation performance on the PerSense-D dataset specifically created for dense scenarios. We use standard evaluation metric of mIoU (mean Intersection over Union) for evaluating segmentation performance. **No training is involved in any of our experiments.**
+
+{7}------------------------------------------------
+
+Table 1: We compare overall mIoU between PerSense and SOTA methods on PerSense-D dataset.  $\dagger$  indicates training-free methods. \* denotes that PerSAM’s inference time is calculated as (number of object instances  $\times 1.02$ ) sec. Given that the PerSense-D dataset contains an average of 39 object instances per image, the average inference time for PerSAM is  $(39 \times 1.02) = 39.78$  sec.  $\dagger$  indicates that PerSAM-F requires an average of 8 seconds of training time per class, which is added to the training-free inference time and incurred once per class.
+
+| Method | Venue | mIoU | Avg inference time (per image) (sec) |
+|-|-|-|-|
+| PerSAM $\dagger$ (Zhang et al., 2024) | ICLR’24 | 24.45 | 39.78* |
+| PerSAM-F (Zhang et al., 2024) | ICLR’24 | 29.34 | $(39.78 + 8)^\dagger$ |
+| Matcher $\dagger$ (Liu et al., 2024) | ICLR’24 | 62.78 | 10.2 |
+| Grounded-SAM $\dagger$ (Ren et al., 2024) | arXiv’24 | 65.92 | 1.8 |
+| <b>PerSense<math>\dagger</math> (DMG: DSALVNet)</b> | this work | <b>70.96</b> | 2.7 |
+| <b>PerSense<math>\dagger</math> (DMG: CounTR)</b> | this work | <b>71.61</b> |  |
+
+**Results:** We compare our PerSense with a variety of generalist models like PerSAM (Zhang et al., 2024), Matcher (Liu et al., 2024) and Grounded-SAM (Ren et al., 2024) utilizing PerSense-D as evaluation benchmark. To be fair in comparison with Grounded-SAM, we ensured that all classes in PerSense-D overlaps with at least one of the datasets on which GroundingDINO is pre-trained. Importantly, all the classes in PerSense-D are common in Objects365 dataset (Shao et al., 2019). The class-label extracted by CLE in PerSense (sec 3.1), using one-shot data, is also fed to Grounded-SAM for personalized segmentation. We report the results in Table 1. Our PerSense achieves **71.61%** mIoU, surpassing PerSAM, PerSAM-F, Matcher and Grounded-SAM by a significant margin of **+47.16%**, **+42.27%**, **+8.83%** and **+5.69%**, respectively. Figure 6 showcases our qualitative results. For qualitative analysis of PerSense at each step, please see Appendix A.2.
+
+**Discussion:** We observed that the decline in PerSAM’s segmentation performance on PerSense-D is mainly due to the premature termination of the segmentation process (see Figure 6), influenced by its naive confidence thresholding strategy. In dense environments with closely packed instances of similar objects, the confidence scores can drop below the fixed set threshold, particularly as the confidence map becomes noisy and less clear after multiple masking iterations. This leads the algorithm to misidentify remaining instances as background, resulting in premature termination of the segmentation process and ultimately compromising the accuracy of the segmentation outcomes.
+
+For Matcher, we observed that in dense scenarios, the patch-level matching and correspondence matrix struggles to identify distinct regions when there is significant overlap or occlusion among objects. Additionally, Matcher uses a bidirectional matching strategy that, while effective in less crowded scenes, can introduce false positives in densely packed environments, where minor differences in appearance between objects are hard to capture.
+
+![Figure 5: Two plots comparing PerSense and Grounded-SAM. The left plot shows class-wise mIoU for PerSense (blue) and Grounded-SAM (green) across 20 categories. The right plot shows Grounded-SAM mIoU vs. Box_threshold in GroundingDINO.](27b22513fc27a0ff5f230b062ad3112f_img.jpg)
+
+Figure 5 consists of two plots. The left plot is a bar chart titled 'mIoU per Class' comparing PerSense (blue bars) and Grounded-SAM (green bars) across 20 object categories: People, Bicycles, Cars, Trucks, Buses, Trains, Motorcycles, Boats, Airplanes, Sheep, Goats, Cows, Horses, Dogs, Cats, Birds, Elephants, Bears, Zebras, and Giraffes. PerSense generally achieves higher mIoU than Grounded-SAM across most categories. The right plot is a line graph titled 'mIoU vs. Box\_threshold' showing the mIoU of Grounded-SAM on PerSense-D as a function of the box threshold in GroundingDINO. The x-axis represents the box threshold from 0.10 to 0.30, and the y-axis represents the mIoU from 59 to 66. The mIoU starts at approximately 65.5 for a threshold of 0.10, peaks at 66.0 for 0.15, and then decreases to 62.8 for 0.20, 61.0 for 0.25, and 58.8 for 0.30.
+
+Figure 5: Two plots comparing PerSense and Grounded-SAM. The left plot shows class-wise mIoU for PerSense (blue) and Grounded-SAM (green) across 20 categories. The right plot shows Grounded-SAM mIoU vs. Box\_threshold in GroundingDINO.
+
+Figure 5: Left: Class-wise mIoU comparison between PerSense and Grounded-SAM on PerSense-D. Right: Grounded-SAM mIoU on PerSense-D vs Box\_threshold in GroundingDINO
+
+{8}------------------------------------------------
+
+We present a class-wise comparison of mIoU on PerSense-D considering PerSense and Grounded-SAM (Figure 5, Left). PerSense excels in accurately segmenting object categories like "Durian," "Mangoes," and "Walnuts," where there is minimal demarcation between instances. In contrast, Grounded-SAM often missegments undesired regions between instances due to its reliance on bounding box-based detections. However, for categories with zero separation between instances or tightly merged flat boundaries, such as "Books," Grounded-SAM performs better, as distinguishing distinct instances without clear boundaries is challenging for PerSense. Additionally, for categories with significant intra-class variation, like "Eggplants," "Cookies," "Cucumbers," and "Dumbbells," PerSense shows a relative decline in performance compared to Grounded-SAM, as its one-shot context provides access to limited object features.
+
+We evaluated the runtime efficiency of all methods using the PerSense-D dataset on a single NVIDIA GeForce RTX 4090 GPU with a batch size of 1. As reported in Table 1, PerSAM is computationally inefficient due to its iterative masking strategy, which requires as many iterations as there are object instances in the image. Matcher averages 10.2 seconds per image, which limits its suitability for applications demanding fast inference. PerSense, by contrast, takes an average of 2.7 seconds per image, while Grounded-SAM takes about 1.8 seconds under similar conditions. This relative temporal overhead of 0.9 seconds for PerSense is mainly attributed to the generation of DMs for extracting instance-level point prompts in dense scenarios. In summary, PerSense introduces minimal latency compared to Grounded-SAM at the cost of improved segmentation performance, while being significantly more efficient and accurate than the recent SOTA methods, PerSAM and Matcher.
+
+![Figure 6: Qualitative comparison of PerSense with SOTA. The figure is a grid of images showing various object categories. The columns are labeled: Support, Query, GT, PerSAM-F, Matcher, Grounded SAM, and PerSense. The rows show different object types: fruits (apple, tomato, orange), eggs, and vegetables (peppers, beans). A dashed pink line separates the first five rows from the last two rows, which are labeled 'PerSense by PerSense in the wild'. The PerSense column shows more accurate segmentation results compared to the other methods, especially in dense or overlapping object scenarios.](c37fe03d7cad74ad675a0eb16aa43821_img.jpg)
+
+Figure 6: Qualitative comparison of PerSense with SOTA. The figure is a grid of images showing various object categories. The columns are labeled: Support, Query, GT, PerSAM-F, Matcher, Grounded SAM, and PerSense. The rows show different object types: fruits (apple, tomato, orange), eggs, and vegetables (peppers, beans). A dashed pink line separates the first five rows from the last two rows, which are labeled 'PerSense by PerSense in the wild'. The PerSense column shows more accurate segmentation results compared to the other methods, especially in dense or overlapping object scenarios.
+
+Figure 6: Qualitative comparison of PerSense with SOTA
+
+### 5.1 ABLATION STUDY
+
+**Component-wise Ablation Study of PerSense:** The proposed PerSense framework includes three key components: IDM, PPSM, and a feedback mechanism. An ablation study was conducted to highlight PerSense's model-agnostic capability and assess each component's contribution to performance using two different DMGs, DSALVANet and CounTR (Table 2a). Even with the baseline network, PerSense (CounTR) outperformed Grounded-SAM by +2.2%, while PerSense (DSALVANet)
+
+{9}------------------------------------------------
+
+Table 2: (a) Component-wise ablation study of PerSense. (b) Choice of normalization factor for adaptive threshold in PPSM. (c) Varying shots of exemplar data in DMG using feedback mechanism.
+
+| Modules | (a) |  |  | (b) |  | (c) |  |
+|-|-|-|-|-|-|-|-|
+|  | baseline | baseline + PPSM | PerSense | Norm Factor | mIoU | No. of Shots | mIoU |
+| IDM | yes | yes | yes | 1 | 70.41 | 1-shot | 65.78 |
+| PPSM | no | yes | yes | $\sqrt{2}$ | <b>70.96</b> | 2-shot | 69.24 |
+| Feedback | no | no | yes | $\sqrt{3}$ | 69.59 | 3-shot | 70.53 |
+| DMG: DSALVAnet | 65.58 | 66.95 | <b>70.96</b> | $\sqrt{5}$ | 68.95 | <b>4-shot</b> | <b>70.96</b> |
+| mIoU(Gain) | (-) | (+1.37) | (+4.01) |  |  | 5-shot | 70.90 |
+| DMG: CounTR | 68.12 | 70.58 | <b>71.61</b> |  |  | 6-shot | 70.81 |
+| mIoU(Gain) | (-) | (+2.46) | (+1.03) |  |  |  |  |
+
+showed comparable performance. Adding PPSM improved mIoU by **+1.37%** for DSALVAnet and **+2.46%** for CounTR, with CounTR’s higher increase indicating the presence of relatively more false positives in its DMs, despite better localization. This aligns with the findings in He et al. (2024), which report lower performance of CounTR relative to DSALVAnet for few-shot object counting task. Finally, the feedback mechanism improved mIoU by **+4.01%** for DSALVAnet and **+1.03%** for CounTR, indicating DSALVAnet’s sensitivity to exemplar selection for accurate DM generation.
+
+**Varying the Detection Threshold in Grounding Detector:** We conducted an ablation study to assess the impact of varying the detection threshold in GroundingDINO on segmentation performance for Grounded-SAM (Figure 5, Right). The bounding box threshold was varied from 0.10 to 0.30 in increments of 0.05. For comparison with PerSense, we selected 0.15 as the optimal threshold, as it achieved the highest mIoU for Grounded-SAM on the PerSense-D benchmark. To ensure fairness, we applied the same threshold for GroundingDINO within the PerSense framework.
+
+**Choice of Normalization Factor for Adaptive Threshold in PPSM:** For the adaptive threshold in PPSM, we tested different values of the normalization constant. Empirical results (Table 2b), demonstrate that  $\sqrt{2}$  is the optimal choice, as it led to the most significant performance improvements in the overall mIoU evaluation.
+
+**Varying No of Shots for Exemplar Data in Feedback Mechanism:** We automated the selection of the best exemplars for DMG based on SAM scores using the proposed feedback mechanism. As shown in Table 2c, segmentation performance on PerSense-D saturates after 4-shot, as additional exemplars do not provide any new significant information about the object of interest.
+
+## 6 CONCLUSION
+
+We presented PerSense, a training-free and model-agnostic one-shot framework for personalized instance segmentation in dense images. We proposed IDM and PPSM, which transforms density maps from DMG into personalized instance-level point prompts for segmentation. We also proposed a robust feedback mechanism in PerSense which automates and improves the exemplar selection process in DMG. Finally to promote algorithmic advancements considering the persense task, we presented PerSense-D, a dataset exclusive to personalized segmentation in dense images and established superiority of our method on this benchmark by comparing it with the SOTA.
+
+**Limitations and Broader Impact:** PerSense is specifically designed for dense images, deriving point prompts from density maps generated by DMG. Therefore, it would not be fair to gauge PerSense performance on standard segmentation datasets with few object instances. In such cases, traditional object detection methods are more effective due to fewer occlusions and easier object boundary delineation, rendering density map generation inefficient. While PerSense employs IDM and PPSM to refine density maps and reject false positives, respectively, it cannot recover any true positives missed initially by DMG, during generation of DMs (see Appendix A.3). Being training-free and built upon open-source models, PerSense significantly reduces carbon emissions. Presently, no notable ethical or social implications are anticipated from our work.
+
+ Rest of paper (reference and Appendix) is removed.

@@ -1,0 +1,318 @@
+
+
+{0}------------------------------------------------
+
+# ON CONFORMAL ISOMETRY OF GRID CELLS: LEARNING DISTANCE-PRESERVING POSITION EMBEDDING
+
+Dehong Xu<sup>1</sup>, Ruiqi Gao<sup>1</sup>, Wen-Hao Zhang<sup>2</sup>, Xue-Xin Wei<sup>3</sup>, Ying Nian Wu<sup>1</sup>
+
+<sup>1</sup>UCLA <sup>2</sup>UT Southwestern Medical Center <sup>3</sup>UT Austin  
+ xudehong1996@ucla.edu, ywu@stat.ucla.edu
+
+## ABSTRACT
+
+This paper investigates the conformal isometry hypothesis as a potential explanation for the hexagonal periodic patterns in grid cell response maps. We posit that grid cell activities form a high-dimensional vector in neural space, encoding the agent’s position in 2D physical space. As the agent moves, this vector rotates within a 2D manifold in the neural space, driven by a recurrent neural network. The conformal hypothesis proposes that this neural manifold is a conformal isometric embedding of 2D physical space, where local physical distance is preserved by the embedding up to a scaling factor (or unit of metric). Such distance-preserving position embedding is indispensable for path planning in navigation, especially planning local straight path segments. We conduct numerical experiments to show that this hypothesis leads to the hexagonal grid firing patterns by learning maximally distance-preserving position embedding, agnostic to the choice of the recurrent neural network. Furthermore, we present a theoretical explanation of why hexagon periodic patterns emerge by minimizing our loss function by showing that hexagon flat torus is maximally distance preserving.
+
+## 1 INTRODUCTION
+
+The mammalian hippocampus formation encodes a “cognitive map” (Tolman, 1948; O’keefe & Nadel, 1979) of the animal’s surrounding environment. In the 1970s, it was discovered that place cells in the rodent hippocampus fire at specific locations within the environment (O’Keefe & Dostrovsky, 1971). Later, another type of neurons, called grid cells, was identified in the medial entorhinal cortex (Hafting et al., 2005; Fyhn et al., 2008; Yartsev et al., 2011; Killian et al., 2012; Jacobs et al., 2013; Doeller et al., 2010). Unlike place cells, each grid cell fires at multiple locations that form a hexagonal grid pattern across the environment (Fyhn et al., 2004; Hafting et al., 2005; Fuhs & Touretzky, 2006; Burak & Fiete, 2009; Sreenivasan & Fiete, 2011; Blair et al., 2007; Couey et al., 2013; de Almeida et al., 2009; Pastoll et al., 2013; Agmon & Burak, 2020). Grid cells are thought to interact with place cells and play a crucial role in path integration (Hafting et al., 2005; Fiete et al., 2008; McNaughton et al., 2006; Gil et al., 2018; Ridler et al., 2019; Horner et al., 2016; Ginosa et al., 2023; Boccara et al., 2019), which calculates the agent’s self-position by accumulating its self-motion. Thus, this has led to the view that grid cells form an internal Global Positioning System (GPS) in the brain (Moser & Moser, 2016). Although grid cells have primarily been studied in spatial contexts, recent research suggests that grid-like responses may also exist in more abstract, non-spatial cognitive spaces (Constantinescu et al., 2016; Bellmund et al., 2018).
+
+Numerous computational models have been proposed to explain the characteristic firing patterns of grid cells. Early approaches focused on continuous attractor neural networks (CANN) (Amit, 1992; Burak & Fiete, 2009; Couey et al., 2013; Pastoll et al., 2013; Agmon & Burak, 2020). More recently, two papers (Cueva & Wei, 2018; Banino et al., 2018) learned recurrent neural networks (RNNs) on path integration tasks and demonstrated that grid patterns emerge in the learned networks. These results were further extended in subsequent studies (Gao et al., 2019; Sorscher et al., 2019; Cueva et al., 2020; Gao et al., 2021; Whittington et al., 2021; Dorrell et al., 2022; Xu et al., 2022; Sorscher et al., 2023). Besides RNN-based models, basis expansion models based on principal component
+
+{1}------------------------------------------------
+
+analysis (PCA) with non-negativity constraints (Dordek et al., 2016; Sorscher et al., 2023; Stachenfeld et al., 2017) have been proposed to capture interactions between grid and place cells.
+
+While prior models have advanced our understanding of grid cells, the underlying mathematical principles behind the emergence of hexagonal grid patterns remain elusive (Cueva & Wei, 2018; Sorscher et al., 2023; Gao et al., 2021; Nayebi et al., 2021; Schaeffer et al., 2022). Recently, the conformal isometry hypothesis has gained attention and has been studied in various papers on grid cells. This hypothesis was formalized by Xu et al. (2022) with earlier explorations by Gao et al. (2021; 2019), and has been adapted and investigated in recent works (Schaeffer et al., 2023; Schoyen et al., 2024). The conformal isometry hypothesis posits that grid cell activities form a high-dimensional vector in neural space, encoding the agent’s position in 2D physical space. As the agent moves, this vector rotates within a 2D neural manifold, guided by a recurrent neural network (RNN). The hypothesis proposes that this manifold is a conformal isometric embedding of the 2D physical space, where local physical distance is preserved by the position embedding up to a scaling factor (or unit of metric). Such distance-preserving position embedding is indispensable for path planning in navigation, including planning local straight-path segments.
+
+This paper investigates the conformal isometry hypothesis as a potential mathematical explanation for the formation of hexagonal periodic patterns in grid cell response maps. Unlike previous studies (Xu et al., 2022; Gao et al., 2021) that examined conformal isometry within models combining both place cells and grid cells, we focus on a minimal setting: a single module of grid cells equipped with an explicit metric. By reducing the system to its essentials, we bring the conformal isometry hypothesis to the forefront and study the grid cell system in isolation with fewer assumptions. This approach allows us to gain a sharper and deeper understanding of the hypothesis.
+
+In this paper, we design numerical experiments in the minimalistic setting demonstrating that the conformal isometry hypothesis underlies the hexagonal periodic patterns in grid cell response maps. Specifically, we show that the hexagonal periodic patterns emerge by learning the maximally distance-preserving position embedding. To further validate this hypothesis, we conduct in-depth mathematical analysis to show that hexagon periodic patterns emerge by minimizing our loss function, due to the fact that the hexagon flat torus exhibits minimal deviation from local conformal isometry, i.e., the hexagon flat torus forms the maximally distance-preserving position embedding.
+
+**Contributions.** To summarize, our paper investigates the conformal isometry hypothesis as a possible mathematical principle that underlies the grid cell system. Our contributions are as follows. (1) We conduct a systematic numerical investigation of the conformal isometry hypothesis in a minimalistic setting with a single module of grid cells. (2) We provide a general framework that is agnostic to specific forms of transformation models, grid scales, and the number of neurons. (3) We present a theoretical analysis demonstrating that the hexagonal grid patterns emerge by minimizing our conformal and transformation loss function.
+
+## 2 BACKGROUND
+
+### 2.1 REPRESENTING SELF-POSITION
+
+![Figure 1: (a) A 2D Euclidean space with a vector v(x) representing the self-position. A curved arrow labeled F(·, Δx) shows the transformation to v(x + Δx). (b) A diagram showing the transformation of the self-position vector v(x) to v(x + Δx) via F(·, Δx), and the corresponding physical space transformation x to x + Δx via Δx. (c) A 2D manifold M in the neural space, represented as a curved surface, which is an embedding of the 2D Euclidean domain D.](0a12cc47f3c5ca76c39d5943ba8661bd_img.jpg)
+
+Figure 1: (a) A 2D Euclidean space with a vector v(x) representing the self-position. A curved arrow labeled F(·, Δx) shows the transformation to v(x + Δx). (b) A diagram showing the transformation of the self-position vector v(x) to v(x + Δx) via F(·, Δx), and the corresponding physical space transformation x to x + Δx via Δx. (c) A 2D manifold M in the neural space, represented as a curved surface, which is an embedding of the 2D Euclidean domain D.
+
+Figure 1: (a) The self-position  $\mathbf{x} = (x_1, x_2)$  in 2D Euclidean space is represented by a vector  $\mathbf{v}(\mathbf{x})$  in the  $d$ -dimensional neural space. When the agent moves by  $\Delta\mathbf{x}$ , the vector is transformed to  $\mathbf{v}(\mathbf{x} + \Delta\mathbf{x}) = F(\mathbf{v}(\mathbf{x}), \Delta\mathbf{x})$ . (b)  $F(\cdot, \Delta\mathbf{x})$  is a representation of the self-motion  $\Delta\mathbf{x}$ . (c)  $\mathbb{M} = (\mathbf{v}(\mathbf{x}), \mathbf{x} \in D)$  is a 2D manifold in the neural space, and is an embedding of the 2D Euclidean domain  $D$ .
+
+Suppose the agent is at the self-position  $\mathbf{x} = (x_1, x_2) \in \mathbb{R}^2$  within a 2D Euclidean domain  $D$ . The activities of the population of  $d$  grid cells form a  $d$ -dimensional vector  $\mathbf{v}(\mathbf{x}) = (v_i(\mathbf{x}), i = 1, \dots, d)$ , where  $v_i(\mathbf{x})$  is the activity of the  $i$ -th grid cell at position  $\mathbf{x}$ . We call the  $d$ -dimensional vector space of  $\mathbf{v}$  the neural space, and we embed  $\mathbf{x}$  of the 2D physical space as a vector  $\mathbf{v}(\mathbf{x})$  of the  $d$ -dimensional
+
+{2}------------------------------------------------
+
+neural space. We may also call the vector  $v(x)$  the position embedding, following the deep learning terminology (Vaswani et al., 2017). For each grid cell  $i$ ,  $v_i(x)$ , as a function of  $x$ , represents the response map of grid cell  $i$ .
+
+### 2.2 REPRESENTING SELF-MOTION
+
+At self-position  $x = (x_1, x_2)$ , assume the agent makes a movement  $\Delta x = (\Delta x_1, \Delta x_2)$  and moves to  $x + \Delta x$ . Correspondingly, the vector  $v(x)$  is transformed to  $v(x + \Delta x)$ . The general form of the transformation can be formulated as:
+
+$$v(x + \Delta x) = F(v(x), \Delta x), \quad (1)$$
+
+where  $F$  can be parametrized by an RNN. See Figure 1(a). The input velocity  $\Delta x$  can also be represented as  $(\Delta r, \theta)$  in polar coordinates, where  $\Delta r = \|\Delta x\|$  is the displacement along the heading direction  $\theta \in [0, 2\pi]$ , so that  $\Delta x = (\Delta x_1 = \Delta r \cos \theta, \Delta x_2 = \Delta r \sin \theta)$ .  $F(\cdot, \Delta x)$  is a representation of the self-motion  $\Delta x$ . See Figure 1(a-b). We can also write  $F(v(x), \Delta x) = F(v(x), \Delta r, \theta)$  with slight overloading of notation  $F$ . The transformation model is necessary for path integration and path planning.
+
+### 2.3 CONFORMAL ISOMETRY
+
+For each  $x \in \mathbb{D}$ , such as a  $1\text{m} \times 1\text{m}$  square environment, we embed  $x$  as a vector  $v(x)$  in the  $d$ -dimensional neural space. Collectively,  $\mathbb{M} = \{v(x), \forall x \in \mathbb{D}\}$  is a 2D manifold in the neural space, and  $\mathbb{M}$  is an embedding of  $\mathbb{D}$ . See Figure 1(c) (the shape of  $\mathbb{M}$  in the figure is merely illustrative). As the agent moves in  $\mathbb{D}$ ,  $v(x)$  moves in  $\mathbb{M}$ .
+
+The conformal isometry hypothesis (Xu et al., 2022; Gao et al., 2021) proposes that  $\mathbb{M}$  is a conformal embedding of  $\mathbb{D}$ . Specifically, at any  $x \in \mathbb{D}$ , for a local  $\Delta x$ , we have
+
+$$\|v(x + \Delta x) - v(x)\| = s\|\Delta x\| + o(\|\Delta x\|), \quad (2)$$
+
+where  $s$  is a constant scaling factor independent of  $x$  and  $\Delta x$ . As the agent moves in  $\mathbb{D}$  by  $\|\Delta x\|$ , the vector  $v(x)$  moves in  $\mathbb{M}$  by  $s\|\Delta x\|$ .
+
+**Unit of metric.** The scaling factor  $s$  defines the metric unit for distance preserving. For example, if  $\|\Delta x\|$  is measured in meters, and we want to work in centimeters, then  $s = 100$ .
+
+**Intrinsic and extrinsic curvatures.** For a constant  $s$ , the intrinsic geometry of the manifold  $\mathbb{M}$  remains Euclidean or flat, i.e.,  $\mathbb{M}$  is a folding or bending of the flat  $\mathbb{D}$  without distorting stretching or squeezing. The intrinsic curvature of  $\mathbb{M}$  is zero. But the extrinsic curvature of  $\mathbb{M}$  is non-zero, i.e., the  $o(\|\Delta x\|)$  term in (equation 2) grows as  $\|\Delta x\|$  increases. We want to minimize this term for non-infinitesimal  $\|\Delta x\|$  so that distance is maximally preserved within a non-infinitesimal local range.
+
+## 3 A MINIMALISTIC SETTING
+
+### 3.1 ASSUMPTIONS
+
+In this section, we seek to study the grid cell system with a minimal number of assumptions. Specifically, we make the following four assumptions:
+
+**Assumption 1.** Conformal isometry:  $\|v(x + \Delta x) - v(x)\| = s\|\Delta x\| + o(\|\Delta x\|)$ . In the minimalistic setting, we specify  $s$  explicitly, in order to understand how  $s$  affects the learned hexagon patterns, and conversely what the hexagon patterns reveal about the underlying  $s$ . This will enable us to gain a deeper geometric understanding of the grid cell patterns. We shall discuss learning  $s$  in Appendix I.
+
+**Assumption 2.** Transformation:  $v(x + \Delta x) = F(v(x), \Delta x)$ , where  $F$  is a recurrent neural network. We want to be agnostic about  $F$ , and our numerical experiments show that hexagon grid patterns emerge regardless of the form of  $F$ . In our experiments, we consider the following simple forms.
+
+(1) Linear model:  $v(x + \Delta x) = v(x) + B(\theta)v(x)\Delta r$ , where  $\Delta r = \|\Delta x\|$  is the displacement, and  $\theta$  is the heading direction of  $\Delta x$ .  $B(\theta)$  is a  $d \times d$  square matrix.
+
+{3}------------------------------------------------
+
+(2) Nonlinear model 1:  $\mathbf{v}(\mathbf{x} + \Delta\mathbf{x}) = R(\mathbf{A}\mathbf{v}(\mathbf{x}) + \mathbf{B}(\theta)\mathbf{v}(\mathbf{x})\Delta r + \mathbf{b})$ , where  $R$  is elementwise nonlinearity such as ReLU,  $\mathbf{A}$  and  $\mathbf{B}(\theta)$  are  $d \times d$  square matrices, and  $\mathbf{b}$  is  $d \times 1$  bias vector.
+
+(3) Nonlinear model 2:  $\mathbf{v}(\mathbf{x} + \Delta\mathbf{x}) = R(\mathbf{A}\mathbf{v}(\mathbf{x}) + \mathbf{B}(\theta)\Delta r + \mathbf{b})$ , where  $\mathbf{B}(\theta)$  is a  $d \times 1$  vector,  $\mathbf{b}$  is bias vector, and  $R$  is nonlinearity.
+
+**Assumption 3.** Normalization:  $\|\mathbf{v}(\mathbf{x})\| = 1$  for each  $\mathbf{x} \in \mathbb{D}$ .  $\|\mathbf{v}(\mathbf{x})\|^2 = \sum_i v_i(\mathbf{x})^2$  can be interpreted as the total energy of the population of neurons in  $\mathbf{v}$  at position  $\mathbf{x}$ . This normalization assumption makes the conformal isometry assumption well-defined. Otherwise, we can multiply the vector  $\mathbf{v}(\mathbf{x})$  by an arbitrary constant  $c$ , so that the scaling factor  $s$  is changed to  $cs$ . Such undesirable arbitrariness is eliminated by the normalization assumption.
+
+**Assumption 4.** Non-negativity:  $v_i(\mathbf{x}) \geq 0$  for each  $i$  and  $\mathbf{x}$ . This is the assumption studied by Dordek et al. (2016); Sorscher et al. (2023); Stachenfeld et al. (2017). This is obviously true for biological neurons. However, our ablation studies show that it is not necessary for the emergence of hexagon grid patterns. On the other hand, this assumption does enable more stable learning of clean patterns, because it greatly constrains the solution space.
+
+The above assumptions form a minimalistic setting for studying grid cells, where place cells are not involved. This enables us to study the grid cells in isolation with an explicit metric  $s$ .
+
+**Scaling property.** Under the above assumptions, for a fixed constant  $c$ , let  $\tilde{\mathbf{v}}(\mathbf{x}) = \mathbf{v}(c\mathbf{x})$ , then for Assumption 1,  $\|\tilde{\mathbf{v}}(\mathbf{x} + \Delta\mathbf{x}) - \tilde{\mathbf{v}}(\mathbf{x})\| = \|\mathbf{v}(c(\mathbf{x} + \Delta\mathbf{x})) - \mathbf{v}(c\mathbf{x})\| = cs\|\Delta\mathbf{x}\| + o(\|\Delta\mathbf{x}\|)$ . For Assumption 2,  $\tilde{\mathbf{v}}(\mathbf{x} + \Delta\mathbf{x}) = \mathbf{v}(c\mathbf{x} + c\Delta\mathbf{x}) = F(\mathbf{v}(c\mathbf{x}), c\Delta\mathbf{x}) = F(\tilde{\mathbf{v}}(\mathbf{x}), c\Delta\mathbf{x}) = \tilde{F}(\tilde{\mathbf{v}}(\mathbf{x}), \Delta\mathbf{x})$ . Assumptions 3 and 4 continue to hold. Therefore, a system with scaling factor  $s$  can be translated to a system with scaling factor  $cs$ .
+
+### 3.2 LEARNING METHOD
+
+Let  $\mathbb{D}$  be a  $1\text{m} \times 1\text{m}$  Euclidean continuous square environment. We overlay a  $40 \times 40$  regular lattice on  $\mathbb{D}$ . We learn  $\mathbf{v}(\mathbf{x})$  on the  $40 \times 40$  lattice points, but we treat  $\mathbf{x}$  as continuous, so that for  $\mathbf{x}$  off the lattice points, we let  $\mathbf{v}(\mathbf{x})$  be the bi-linear interpolation of the  $\mathbf{v}(\mathbf{x})$  on the 4 nearest grid points.
+
+The loss function consists of the following two terms:
+
+$$L_1 = \mathbb{E}_{\mathbf{x}, \Delta\mathbf{x}}[(\|\mathbf{v}(\mathbf{x} + \Delta\mathbf{x}) - \mathbf{v}(\mathbf{x})\| - s\|\Delta\mathbf{x}\|)^2], \quad (3)$$
+
+$$L_2 = \mathbb{E}_{\mathbf{x}, \Delta\mathbf{x}}[\|\mathbf{v}(\mathbf{x} + \Delta\mathbf{x}) - F(\mathbf{v}(\mathbf{x}), \Delta\mathbf{x})\|^2], \quad (4)$$
+
+where  $L_1$  ensures Assumption 1 on conformal isometry, while  $L_2$  satisfies Assumption 2 on transformation. Since  $L_2$  is a one-step transformation loss, back-propagation through time is not required.
+
+In  $L_2$ , we assume  $\Delta\mathbf{x}$  to be infinitesimal for local motion (e.g.,  $\|\Delta\mathbf{x}\| \leq 0.075$ ). In  $L_1$ , however, we assume  $s\Delta\mathbf{x}$  to be within a non-infinitesimal range,  $s\|\Delta\mathbf{x}\| \leq D$  (e.g.,  $D = 1.25$ ). In defining  $\mathbb{E}_{\Delta\mathbf{x}}$ , we assume  $\Delta\mathbf{x}$  follows uniform distribution within the ranges specified above. In  $L_1$ , we can also assume a more general distribution  $p(\Delta\mathbf{x})$ , so that  $L_1 = \mathbb{E}_{\mathbf{x}}[\int (\|\mathbf{v}(\mathbf{x} + \Delta\mathbf{x}) - \mathbf{v}(\mathbf{x})\| - s\|\Delta\mathbf{x}\|)^2 p(\Delta\mathbf{x}) d\Delta\mathbf{x}]$ .
+
+We minimize  $L = L_1 + \lambda L_2$  over the set of  $\mathbf{v}(\mathbf{x})$  on the  $40 \times 40$  lattice points as well as the parameters in  $F$ , such as  $\mathbf{B}(\theta)$  for the discrete set of directions  $\theta$  in the linear model.  $\lambda > 0$  is a hyper-parameter that balances  $L_1$  and  $L_2$ . We use stochastic gradient descent to minimize  $L$ , where in each iteration, the expectations in  $L$  are replaced by the averages over Monte Carlo samples of  $(\mathbf{x}, \Delta\mathbf{x})$ .
+
+After each iteration, we set any negative elements in  $\mathbf{v}(\mathbf{x})$  to zero to enforce Assumption 4 on non-negativity. Then we normalize  $\|\mathbf{v}(\mathbf{x})\| = 1$  for each  $\mathbf{x}$ , ensuring Assumption 3 on normalization.
+
+### 3.3 MAXIMALLY DISTANCE-PRESERVING POSITION EMBEDDING
+
+While  $L_2$  can be minimized to close to 0,  $L_1$  has a non-zero minimum due to the non-infinitesimal range  $D$ . For small  $s\|\Delta\mathbf{x}\|$ , the deviation is small due to  $o(\|\Delta\mathbf{x}\|)$  term. In fact, our experiment in Section 3.5 shows that conformal isometry is nearly exact for  $s\|\Delta\mathbf{x}\| \leq .8$ . Beyond that point, the deviation begins to increase due to the extrinsic curvature of the manifold. Minimizing  $L_1$  amounts to finding the maximally distance-preserving position embedding at a given scaling factor  $s$  within
+
+{4}------------------------------------------------
+
+the range  $D$ . The reason we constrain the range of  $s\|\Delta\mathbf{x}\|$  is that under the scaling  $\tilde{\mathbf{v}}(\mathbf{x}) = \mathbf{v}(c\mathbf{x})$ , the deviation from conformal isometry in  $L_1$  satisfies:  $\|\tilde{\mathbf{v}}(\mathbf{x} + \Delta\mathbf{x}) - \tilde{\mathbf{v}}(\mathbf{x})\| - cs\|\Delta\mathbf{x}\| = \|\mathbf{v}(c\mathbf{x} + c\Delta\mathbf{x}) - \mathbf{v}(c\mathbf{x})\| - s\|c\Delta\mathbf{x}\|$ .
+
+### 3.4 NUMERICAL EXPERIMENTS
+
+We perform numerical experiments in the minimalistic setting, testing the generality of our method across various RNN parameterizations. Additionally, we varied the scaling factor  $s$  and the number of neurons. For  $\Delta\mathbf{x}$  in  $L_1$ , we constrained it locally, ensuring  $s\|\Delta\mathbf{x}\| \leq 1.25$ . For  $L_2$ ,  $\|\Delta\mathbf{x}\|$  was restricted to be smaller than 0.075.
+
+The dimensions of  $\mathbf{v}(\mathbf{x})$ , representing the total number of grid cells, were nominally set to 24 for both the linear model and nonlinear model 1, and 1000 for nonlinear model 2. Notably, similar results can be obtained with different numbers of cells, e.g., 500, for both the linear model and nonlinear model 1. All the parameters are updated by Adam optimizer (Kingma & Ba, 2014).
+
+![Figure 2: Hexagonal periodic patterns learned in linear models. (a) Learned grid cells showing response maps for different scales s (3, 5, 8, 10, 15). (b) Toroidal structure spectral analysis showing a 3D torus (i), a vector diagram (ii), and individual spectral components (iii) for k1, k2, and k3.](6bbc398f520a7bcc5491cab18d3e4cac_img.jpg)
+
+Figure 2: Hexagonal periodic patterns learned in linear models. (a) Learned grid cells showing response maps for different scales s (3, 5, 8, 10, 15). (b) Toroidal structure spectral analysis showing a 3D torus (i), a vector diagram (ii), and individual spectral components (iii) for k1, k2, and k3.
+
+Figure 2: Hexagonal periodic patterns learned in linear models. (a) Learned patterns of linear models with different scales. (b) Toroidal structure spectral analysis of the activities of grid cells.
+
+**Hexagonal patterns.** We first trained the linear model with manually assigned scaling factor  $s$  by minimizing  $L = L_1 + \lambda L_2$ . Figure 2(a) shows the learned firing patterns of  $\mathbf{v}(\mathbf{x})$  for linear models with the change of scaling factors  $s$ , which controlled the scale or metric. In Figure 2(a), each image represents the response map for a grid cell, with each row displaying 6 randomly selected response maps. The emergence of hexagonal periodic patterns in these response maps is evident. Consistency in scale and orientation is observed within each scale, though variations in phases or spatial shifts are apparent.
+
+We also trained nonlinear models with various activation functions. In Figures 3(a-d), hexagonal periodic patterns still emerge with nonlinear transformations, demonstrating that the grid-like patterns are stable and easily learned regardless of the transformation type, grid scales, or number of neurons.
+
+To evaluate how closely the learned patterns align with regular hexagonal grids, we recruited the most commonly used metric for quantifying grid cells, the gridness score, adopted by the neuroscience literature (Langston et al., 2010; Sargolini et al., 2006). The gridness scores and the valid rate were reported in Table 1. Compared to other existing learning-based approaches, our models exhibit notably high gridness scores ( $\uparrow$ ) and a high percentage of valid grid cells ( $\uparrow$ ).
+
+Table 1: Gridness scores and validity rates of grid cells. The last two rows represent the results of our models.
+
+| MODEL | GRIDNESS( $\uparrow$ ) | VALID RATE( $\uparrow$ ) |
+|-|-|-|
+| BANINO ET AL. (2018) | 0.18 | 25.2% |
+| SORSCHER ET AL. (2023) | 0.48 | 56.1% |
+| GAO ET AL. (2021) | 0.90 | 73.1% |
+| OUR LINEAR | 1.70 | 100.0% |
+| OUR NONLINEAR | 1.17 | 100.0% |
+
+Table 2: Scaling factor  $s$  and estimated scale for learned patterns in single-module linear models.
+
+| SCALING FACTOR | ESTIMATED SCALE |
+|-|-|
+| $s = 5$ | 0.82 |
+| $s = 10$ | 0.41 |
+| $s = 15$ | 0.27 |
+
+{5}------------------------------------------------
+
+We also investigated the relationship between the manually assigned scaling factor  $s$  and the estimated scale of the learned patterns following (Langston et al., 2010; Sargolini et al., 2006). As shown in Table 2, the estimated scale of the learned patterns is proportional to  $1/s$ .
+
+**Topological analysis.** As discussed in Section 4.1, the joint activities of grid cells should reside on a torus-like manifold, and the positions on the torus correspond to the physical locations of a moving agent. To evaluate whether our empirically learned representations align with the topological properties of theoretical models, we employed a nonlinear dimension reduction method (spectral embedding (Saul et al. (2006))) to show that grid cell states fell on a toroidal manifold as depicted in Figure 2b(i). To further investigate periodicity and orientation within the same module, we conducted numerical simulations of pattern forming dynamics. In Figure 2b(ii), we applied 2D Fourier transforms of the learned maps, revealing that the Fourier power is hexagonally distributed along 3 principal directions  $k_1$ ,  $k_2$ , and  $k_3$ . Following (Schøyen et al. (2022); Schaeffer et al. (2023), projecting the toroidal manifold onto the 3 vectors, we can observe 3 rings in Figure 2b(iii). This indicates the manifold has a 2D twisted torus topology.
+
+![Figure 3: Learned patterns for nonlinear models and ablation for the linear model. The figure consists of eight subplots arranged in a 4x2 grid. The left column (a-d) shows learned patterns for nonlinear models with different rectified functions: (a) Nonlinear Model 1 (Tanh) w/o v > 0, (b) Nonlinear Model 1 (Tanh) w/ v > 0, (c) Nonlinear Model 1 (ReLU) w/ v > 0, and (d) Nonlinear Model 2 (ReLU) w/ v > 0. The right column (e-h) shows ablation results for the linear model: (e) Linear model w/o v > 0, (f) Linear model w/o |v| = 1, (g) Linear model w/o L2, and (h) Linear model w/o L1. Each subplot displays a 2D grid of colored squares representing the learned patterns.](46f43cb4ffd47565e7c0ca306d461435_img.jpg)
+
+Figure 3: Learned patterns for nonlinear models and ablation for the linear model. The figure consists of eight subplots arranged in a 4x2 grid. The left column (a-d) shows learned patterns for nonlinear models with different rectified functions: (a) Nonlinear Model 1 (Tanh) w/o v > 0, (b) Nonlinear Model 1 (Tanh) w/ v > 0, (c) Nonlinear Model 1 (ReLU) w/ v > 0, and (d) Nonlinear Model 2 (ReLU) w/ v > 0. The right column (e-h) shows ablation results for the linear model: (e) Linear model w/o v > 0, (f) Linear model w/o |v| = 1, (g) Linear model w/o L2, and (h) Linear model w/o L1. Each subplot displays a 2D grid of colored squares representing the learned patterns.
+
+Figure 3: *Left(a-d)*: Learned patterns for nonlinear models with different rectified functions. *Right(e-h)*: Ablation for the linear model.
+
+**Ablation study.** We show ablation results to investigate the empirical significance of each assumption for the emergence of hexagon grid patterns. First, we highlight the essential role of conformal isometry; in its absence, as shown in Figure 3(h), the response maps display non-hexagon patterns. Next, as shown in Figure 3(a) and (e), we also ablate the non-negative assumption. Without  $v(x) \geq 0$ , the hexagonal pattern still emerges. For the transformation and normalization assumptions, Figure 3(f) and (g) indicate that they are necessary. See more results for normalization assumption in G.2.
+
+### 3.5 NUMERICAL EVIDENCE FOR LOCAL CONFORMAL ISOMETRY
+
+![Figure 4: A scatter plot showing the relationship between ||v(x + Δx) - v(x)|| and ||Δx|| in the learned representations. The x-axis is labeled ||Δx|| and ranges from 0.0 to 0.12. The y-axis is labeled ||v(x + Δx) - v(x)|| and ranges from 0.0 to 1.2. A dashed green line represents the linear reference line with slope s=10. A dashed orange line represents the quadratic fit to the data. Blue dots represent the learned representation data points. The data points follow the linear trend closely but show a slight upward deviation at higher ||Δx|| values, following the quadratic fit curve.](ed2fa033a401564314cdc32fe9732935_img.jpg)
+
+Figure 4: A scatter plot showing the relationship between ||v(x + Δx) - v(x)|| and ||Δx|| in the learned representations. The x-axis is labeled ||Δx|| and ranges from 0.0 to 0.12. The y-axis is labeled ||v(x + Δx) - v(x)|| and ranges from 0.0 to 1.2. A dashed green line represents the linear reference line with slope s=10. A dashed orange line represents the quadratic fit to the data. Blue dots represent the learned representation data points. The data points follow the linear trend closely but show a slight upward deviation at higher ||Δx|| values, following the quadratic fit curve.
+
+Figure 4: The relationship between  $\|v(x + \Delta x) - v(x)\|$  and  $\|\Delta x\|$  in the learned representations.
+
+To further assess whether our learned model achieves local conformal isometry, we examine the relationship between  $\|v(x + \Delta x) - v(x)\|$  and  $\|\Delta x\|$  in our learned model. Specifically, we aim to verify if the learned representation exhibits the expected local isometry for local displacements  $\Delta x$  and how deviations arise as the displacement increases. Here we use the linear model with the metric  $s = 10$  for analysis.
+
+As shown in Figure 4, we randomly sample  $\Delta x$  within the range  $(0, 0.125)$ , and plot  $\|v(x + \Delta x) - v(x)\|$  using the learned model. Then, we draw the linear reference line with slope  $s = 10$ , and also fit a quadratic curve to the data. The results show that the learned representation closely follows a linear relationship for local  $\Delta x$ , as expected from a conformally isometric embedding.
+
+As  $\Delta x$  increases, we observe a quadratic deviation from the linear trend, due to the extrinsic curvature of the manifold  $\mathbb{M}$ . In our theoretical analysis, we shall analyze this deviation and show that the
+
+{6}------------------------------------------------
+
+hexagon flat torus achieves minimum deviation from local isometry, thus explaining the emergence of hexagonal grid patterns by minimizing our loss term on conformal isometry  $L_1$  in equation 3.
+
+### 3.6 NEUROSCIENCE EVIDENCE FROM NEURAL RECORDING DATA
+
+To further investigate conformal isometry, we perform analysis on real neural recordings using data from Gardner et al. (2021), which contains simultaneous recording of hundreds of grid cells in rodents using Neuropixels probes. To test the conformal isometry hypothesis, we evaluate whether equation 2 holds in the recorded cell activations. Specifically, we calculate  $\|v(x) - v(x + \Delta x)\|$  for different locations  $x$  and for varying local shifts  $\Delta x$ . We expect to observe a linear relationship.
+
+![Figure 5: Analysis of real neural data. (a) Scatter plot of ||v(x + Δx) - v(x)|| vs ||Δx|| showing a linear relationship with a linear fit (green line) and a quadratic fit (yellow line). (b) Histogram of ||v|| in neural data showing a distribution centered around 128.6.](c64e9e9f3b0b828a5f6ac70441877764_img.jpg)
+
+Figure 5 consists of two plots. Plot (a) is a scatter plot titled 'Neural data' showing the relationship between  $\|v(x + \Delta x) - v(x)\|$  on the y-axis and  $\|\Delta x\|$  on the x-axis. The data points are blue dots, and there are two fitted lines: a green line for 'Linear Fit' and a yellow line for 'Quadratic Fit'. The data points follow a clear linear trend. Plot (b) is a histogram titled 'Distribution of  $\|v\|$ ' showing the frequency of  $\|v\|$  values. The x-axis is labeled  $\|v\|$  and ranges from 80 to 200. The y-axis is labeled 'Frequency' and ranges from 0 to 1600. The histogram shows a distribution centered around 128.6.
+
+Figure 5: Analysis of real neural data. (a) Scatter plot of ||v(x + Δx) - v(x)|| vs ||Δx|| showing a linear relationship with a linear fit (green line) and a quadratic fit (yellow line). (b) Histogram of ||v|| in neural data showing a distribution centered around 128.6.
+
+Figure 5: Analysis of real neural data. (a) A clear linear relationship between  $\|v(x + \Delta x) - v(x)\|$  and  $\|\Delta x\|$  is shown in the real neural data. The unit of  $\Delta x$  is meter. (b) Distribution of  $\|v(x)\|$  in neural data.
+
+In the analysis, we used data from one module, which includes 93 pure grid cells. As shown in Figure 5(a), despite the noise in the data, a clear linear relationship emerges between  $\|v(x) - v(x + \Delta x)\|$  and  $\|\Delta x\|$ . A quadratic polynomial fit closely matches the linear curve, indicating minimal deviation from linearity for local  $\|\Delta x\|$ . Furthermore, we analyzed the distribution of  $\|v(x)\|$  in real neural data, finding a mean of 128.6 with a standard deviation of 15.1. When normalized to a mean of 1, the standard deviation becomes 0.12, indicating that the assumption of constant  $\|v(x)\|$  holds approximately.
+
+Considering the noisy nature of neural responses and the fact that the data may only contain a subset of grid cells in the module, the results above are consistent with Assumption 1 of local conformal isometry and Assumption 3 of constant  $\|v(x)\|$  over  $x$ . See Appendix J for more results.
+
+## 4 THEORETICAL UNDERSTANDING
+
+This section presents a theoretical understanding of the emergence of hexagon grid patterns when minimizing our loss function. We show that the hexagonal flat torus, which underlies grid cell patterns, achieves minimal deviation from local conformal isometry.
+
+### 4.1 HEXAGON FLAT TORUS IS MAXIMALLY DISTANCE PRESERVING
+
+We start by showing that the manifold of the grid cell representation  $\mathbb{M} = (v(x), \forall x)$  forms a 2D torus.
+
+**Proposition 1.** *The transformations  $(F(\cdot, \Delta x), \forall \Delta x)$  form a group acting on the manifold  $\mathbb{M} = (v(x), \forall x)$ , and the 2D manifold  $\mathbb{M}$  has a torus topology.*
+
+*Proof.* The group  $(F(\cdot, \Delta x), \forall \Delta x)$  is a representation of the 2D additive Euclidean group  $(\mathbb{R}^2, +)$ , i.e.,  $F(v(x), \Delta x_1 + \Delta x_2) = F(F(v(x), \Delta x_1), \Delta x_2) = F(F(v(x), \Delta x_2), \Delta x_1), \forall x, \Delta x_1, \Delta x_2$ , and  $F(v(x), 0) = v(x), \forall x$  (Gao et al., 2021). See Figure 1 for an illustration. Since  $(\mathbb{R}^2, +)$  is an abelian Lie group,  $(F(\cdot, \Delta x), \forall \Delta x)$  is also an abelian Lie group. With Assumption 3 on normalization,  $\|v(x)\| = 1$ , the manifold  $(v(x), \forall x)$  is compact, and  $(F(\cdot, \Delta x), \forall \Delta x)$  is a compact group. It is also connected because the 2D domain is connected. According to a classical theorem
+
+{7}------------------------------------------------
+
+in Lie group theory (Dwyer & Wilkerson, 1998), a compact and connected abelian Lie group has a topology of a torus. Therefore, the 2D manifold  $\mathbb{M}$  is a 2D torus. ■
+
+The torus topology is supported by neuroscience data (Gardner et al., 2021) as well as our numerical experiments. The torus manifold makes  $\mathbf{v}(\mathbf{x})$  a 2D periodic function of  $\mathbf{x}$ . See Appendix B for a detailed explanation of the 2D periodic lattice.
+
+Section 3.5 shows that our learned model achieves local isometry. Without loss of generality, assuming the conformal scaling factor  $s = 1$ . The 2D manifold  $\mathbb{M} = (\mathbf{v}(\mathbf{x}), \forall \mathbf{x})$  is thus a flat torus with local isometry, and it has zero intrinsic curvature, meaning it has a flat Euclidean geometry intrinsically.
+
+So far we have shown that the geometry of the grid cell representation is a torus and is flat locally. However, viewed from outside the manifold with bigger  $\|\Delta\mathbf{x}\|$ , the extrinsic curvature of the torus within the ambient embedding space is non-zero, and our loss function  $\mathbb{E}_{\mathbf{x}, \Delta\mathbf{x}}[\|\mathbf{v}(\mathbf{x} + \Delta\mathbf{x}) - \mathbf{v}(\mathbf{x})\| - \|\Delta\mathbf{x}\|^2]$  minimizes the deviation from the local flatness for bigger  $\|\Delta\mathbf{x}\|$ .
+
+Let us assume  $\|\mathbf{v}(\mathbf{x} + \Delta\mathbf{x}) - \mathbf{v}(\mathbf{x})\|^2 = \|\Delta\mathbf{x}\|^2 + o(\|\Delta\mathbf{x}\|^2)$  for infinitesimal  $\|\Delta\mathbf{x}\|$ , enforced by the loss function and verified numerically in Section 3.5. For larger  $\|\Delta\mathbf{x}\|$ , we further analyze  $\|\mathbf{v}(\mathbf{x} + \Delta\mathbf{x}) - \mathbf{v}(\mathbf{x})\|^2 - \|\Delta\mathbf{x}\|^2$  using a higher-order Taylor expansion, up to  $o(\|\Delta\mathbf{x}\|^4)$ .
+
+**Definition 2.** We define notation for the derivatives of  $\mathbf{v}(\mathbf{x})$ :  $\mathbf{v}^{(1)} = \partial\mathbf{v}(\mathbf{x})/\partial x_1$ ,  $\mathbf{v}^{(2)} = \partial\mathbf{v}(\mathbf{x})/\partial x_2$ ,  $\mathbf{v}^{(11)} = \partial^2\mathbf{v}(\mathbf{x})/\partial x_1^2$ ,  $\mathbf{v}^{(12)} = \partial^2\mathbf{v}(\mathbf{x})/\partial x_1\partial x_2$ ,  $\mathbf{v}^{(22)} = \partial^2\mathbf{v}(\mathbf{x})/\partial x_2^2$ , and their higher-order counterparts. The indices in the superscript indicate the variables with respect to which we take partial derivatives.
+
+**Definition 3.** Assume  $\|\mathbf{v}(\mathbf{x} + \Delta\mathbf{x}) - \mathbf{v}(\mathbf{x})\|^2 = \|\Delta\mathbf{x}\|^2 + o(\|\Delta\mathbf{x}\|^2)$ . Define high order deviation from local flatness as  $\|\mathbf{v}(\mathbf{x} + \Delta\mathbf{x}) - \mathbf{v}(\mathbf{x})\|^2 - \|\Delta\mathbf{x}\|^2$ .
+
+**Proposition 4.** Assuming  $\|\mathbf{v}(\mathbf{x})\| = 1$  for every  $\mathbf{x}$ , then the high order deviation
+
+$$\|\mathbf{v}(\mathbf{x} + \Delta\mathbf{x}) - \mathbf{v}(\mathbf{x})\|^2 - \|\Delta\mathbf{x}\|^2 = -\frac{1}{12}D(\Delta\mathbf{x}) + o(\|\Delta\mathbf{x}\|^4). \quad (5)$$
+
+where
+
+$$\begin{aligned} D(\Delta\mathbf{x}) = & \langle \mathbf{v}^{(1111)}, \mathbf{v} \rangle \Delta x_1^4 + \langle \mathbf{v}^{(2222)}, \mathbf{v} \rangle \Delta x_2^4 + 6\langle \mathbf{v}^{(1122)}, \mathbf{v} \rangle \Delta x_1^2 \Delta x_2^2 \\ & + 4\langle \mathbf{v}^{(1112)}, \mathbf{v} \rangle \Delta x_1^3 \Delta x_2 + 4\langle \mathbf{v}^{(1222)}, \mathbf{v} \rangle \Delta x_1 \Delta x_2^3. \end{aligned} \quad (6)$$
+
+*Proof.* With  $\|\mathbf{v}(\mathbf{x})\|^2 = 1$ , we have
+
+$$\|\mathbf{v}(\mathbf{x} + \Delta\mathbf{x}) - \mathbf{v}(\mathbf{x})\|^2 - \|\Delta\mathbf{x}\|^2 = 2 - 2\langle \mathbf{v}(\mathbf{x} + \Delta\mathbf{x}), \mathbf{v}(\mathbf{x}) \rangle - (\Delta x_1^2 + \Delta x_2^2). \quad (7)$$
+
+We can expand  $\mathbf{v}(\mathbf{x} + \Delta\mathbf{x})$  by 4th-order Taylor expansion, and calculate the inner products between the derivatives and  $\mathbf{v}(\mathbf{x})$ . When the manifold is locally flat and isometric for infinitesimal  $\Delta\mathbf{x}$ , the first derivatives  $\mathbf{v}^{(1)}$  and  $\mathbf{v}^{(2)}$  form an orthonormal basis, i.e.,  $\langle \mathbf{v}^{(1)}, \mathbf{v}^{(2)} \rangle = 0$  and  $\|\mathbf{v}^{(i)}\|^2 = 1$  for  $i = 1, 2$ . By repeatedly differentiating these equations, we can derive a series of properties such as  $\langle \mathbf{v}^{(1)}, \mathbf{v}(\mathbf{x}) \rangle = \langle \mathbf{v}^{(2)}, \mathbf{v}(\mathbf{x}) \rangle = 0$ ,  $\langle \mathbf{v}^{(11)}, \mathbf{v}(\mathbf{x}) \rangle = \langle \mathbf{v}^{(22)}, \mathbf{v}(\mathbf{x}) \rangle = -1$ ,  $\langle \mathbf{v}^{(12)}, \mathbf{v}(\mathbf{x}) \rangle = 0$ . Moreover, the inner products between the third-order derivatives and  $\mathbf{v}(\mathbf{x})$  all vanish. See Appendix C for detailed proof. Therefore, only the 4-th order terms  $D(\Delta\mathbf{x})$  remain. ■
+
+This fourth-order term  $D(\Delta\mathbf{x})$  captures deviation from local flatness or extrinsic curvature for larger  $\|\Delta\mathbf{x}\|$  (i.e., going beyond second-order  $o(\|\Delta\mathbf{x}\|^2)$  to up to  $o(\|\Delta\mathbf{x}\|^4)$ ).
+
+We shall prove that among all flat tori (such as parallelogram, rectangle, square, and hexagon tori), the hexagonal torus minimizes the deviation derived above, due to its six-fold symmetry that evenly distributes the extrinsic curvature. We first establish the isotropy of hexagon flat torus.
+
+**Theorem 5.** If the torus  $\mathbb{M} = (\mathbf{v}(\mathbf{x}), \forall \mathbf{x})$  is a hexagon flat torus, then  $D(\Delta\mathbf{x}) = c\|\Delta\mathbf{x}\|^4$  for a constant coefficient  $c$ , i.e.,  $D(\Delta\mathbf{x})$  is isotropic.
+
+*Proof.* A hexagon torus possesses 6-fold rotational symmetry, meaning it is invariant under 60-degree rotations. Under such a rotation, the coordinates transform as:
+
+$$\Delta x'_1 = \frac{\sqrt{3}}{2} \Delta x_1 - \frac{1}{2} \Delta x_2; \quad \Delta x'_2 = \frac{1}{2} \Delta x_1 + \frac{\sqrt{3}}{2} \Delta x_2. \quad (8)$$
+
+{8}------------------------------------------------
+
+To maintain symmetry, we require that  $D(\Delta\mathbf{x}') = D(\Delta\mathbf{x})$ , which leads to the conditions:
+
+$$\langle \mathbf{v}^{(1111)}, \mathbf{v} \rangle = \langle \mathbf{v}^{(2222)}, \mathbf{v} \rangle = 3\langle \mathbf{v}^{(1122)}, \mathbf{v} \rangle = c; \quad \langle \mathbf{v}^{(1112)}, \mathbf{v} \rangle = \langle \mathbf{v}^{(1222)}, \mathbf{v} \rangle = 0. \quad (9)$$
+
+Thus, the deviation  $D(\Delta\mathbf{x})$  becomes:
+
+$$D(\Delta\mathbf{x}) = c(\Delta x_1^4 + \Delta x_2^4 + 2\Delta x_1^2 \Delta x_2^2) = c(\Delta x_1^2 + \Delta x_2^2)^2 = c\|\Delta\mathbf{x}\|^4, \quad (10)$$
+
+which is constant in all directions. This shows that the hexagonal torus is locally isotropic up to the fourth-order term. See Appendix D for a detailed treatment. ■
+
+Define  $\Delta r = \|\Delta\mathbf{x}\|$ ,  $\Delta x_1 = \Delta r \cos \theta$ , and  $\Delta x_2 = \Delta r \sin \theta$ .  $D(\Delta\mathbf{x})$  is constant over direction  $\theta$  for fixed  $\Delta r$ . As shown in Figure 6 of Appendix, only the hexagon lattice has six-fold symmetry. Other flat tori do not have six-fold symmetry and thus do not have isotropic  $D(\Delta\mathbf{x})$ . For instance, a square torus has 4-fold symmetry, and its  $D(\Delta\mathbf{x})$  is not isotropic. An example is Clifford torus in 4D,  $\mathbf{v}(\mathbf{x}) = (\cos x_1, \sin x_1, \cos x_2, \sin x_2)$ , with  $D(\Delta\mathbf{x}) \propto (\cos^4 \theta + \sin^4 \theta)\Delta r^4$ , which is not isotropic.
+
+Flat tori come with different sizes or surface areas, which are related to their average extrinsic curvatures. When comparing different tori, we should fix the size or average extrinsic curvature for fair comparison. Specifically, for any fixed  $\Delta r$ , we integrate over  $\theta \in [0, 2\pi]$  to get expectation with respect to  $\theta$ .
+
+**Theorem 6.** *For any fixed average extrinsic curvature  $\int D(\Delta\mathbf{x})d\theta$ , the overall deviation from local flatness*
+
+$$L(\Delta r) = \int (\|\mathbf{v}(\mathbf{x} + \Delta\mathbf{x}) - \mathbf{v}(\mathbf{x})\|^2 - \|\Delta\mathbf{x}\|^2)^2 d\theta = \frac{1}{12^2} \int (D(\Delta\mathbf{x}))^2 d\theta \quad (11)$$
+
+is minimized if  $D(\Delta\mathbf{x})$  is constant over  $\theta$ .
+
+*Proof.* This optimality is a result of Cauchy-Schwarz inequality. It can also be proved via the identity  $\mathbb{E}_\theta(D(\Delta\mathbf{x})^2) = (\mathbb{E}_\theta(D(\Delta\mathbf{x})))^2 + \text{Var}_\theta(D(\Delta\mathbf{x}))$ , which is minimized when  $\text{Var}_\theta(D(\Delta\mathbf{x})) = 0$ . This is achieved by the hexagon torus which is isotropic. Moreover, for the same hexagon torus, we can apply the above analysis and proves its optimality for all  $\Delta r$ . That is, the optimality of a hexagon torus is independent of  $\Delta r$ . ■
+
+This proves that the hexagon torus minimizes our loss function, i.e., the hexagon torus has local isometry up to  $o(\|\Delta\mathbf{x}\|^2)$  and it has the minimum deviation from local isometry up to  $o(\|\Delta\mathbf{x}\|^4)$ . To conclude, the hexagon flat torus forms the maximally distance-preserving position embedding.
+
+### 4.2 MULTIPLE MODULES OF CONFORMAL ISOMETRY
+
+The minimalistic setting studied in the previous sections is about a single module of grid cells with a fixed scaling factor  $s$ . Grid cells form multiple modules or blocks (Barry et al., 2007; Stensola et al., 2012), and the response maps of grid cells within each module share the same scale and orientation. Thus, we can learn multiple modules, so that each module satisfies conformal isometry with its own scaling factor  $s$ .
+
+For a small  $s$ , the flat torus is big, and conformal isometry holds within a big range, but the resolution is low, i.e.,  $\mathbf{v}(\mathbf{x} + \Delta\mathbf{x})$  is close to  $\mathbf{v}(\mathbf{x})$  in the presence of noises in neuron activities. On the contrary, for a big  $s$ , the flat torus is small, and conformal isometry holds within a small range, but the resolution is high, i.e.,  $\mathbf{v}(\mathbf{x} + \Delta\mathbf{x})$  is far from  $\mathbf{v}(\mathbf{x})$  to resist noises in neuron activities.
+
+The agent needs spatial awareness at different scales or resolutions. For instance, in playing golf, the first stroke and the final putt require very different  $s$ . Thus it needs multiple modules that satisfy conformal isometry at different scaling factors.
+
+See Appendix H for a conformal modulation scheme to ensure the transformation RNN satisfies conformal isometry automatically. See Appendix I for learning multiple modules with such built-in conformal isometry by incorporating place cells.
+
+{9}------------------------------------------------
+
+## 5 RELATION TO PAST WORKS
+
+The study of grid cells using machine learning models (Cueva & Wei, 2018; Banino et al., 2018; Sorscher et al., 2019; Whittington et al., 2020; Nayebi et al., 2021) is a topic of interest to both machine learning and computational neuroscience communities. Earlier papers (Cueva & Wei, 2018; Banino et al., 2018) adopted recurrent neural networks and used the objective of path integration to learn grid cells. Their models also involved interactions with place cells at the output layer, and the place cells are often modeled by predefined functions such as Gaussian tuning functions (Cueva & Wei, 2018; Gao et al., 2021; Xu et al., 2022). However, hexagon grid patterns do not consistently emerge from the learned models (Schaeffer et al., 2022). Thus extra assumptions or hypotheses are needed to explain the emergence of hexagon grid patterns.
+
+One hypothesis is to assume the non-negativity of the grid cell responses coupled with Difference-of-Gaussian tuning functions for place cells, as in (Sorscher et al., 2019; Nayebi et al., 2021). However, the biological plausibility of center-surround Difference-of-Gaussian assumption is questioned (Schaeffer et al., 2022).
+
+Another hypothesis is the conformal isometry hypothesis proposed in (Gao et al., 2021; Xu et al., 2022). However, these papers focused on learning multiple modules of grid cells using specific transformation models. Additionally, they introduced extra assumptions regarding place cells and the interactions between grid cells and place cells.
+
+Our paper is built on (Gao et al., 2021; Xu et al., 2022), and we have achieved scientific reductionism by isolating the grid cell system of a single module, without making any assumptions about the place cells as well as the interactions between grid cells and place cells. We have also achieved generality by being agnostic of the form of the transformation model. This enables us to focus solely on the conformal isometry hypothesis and demonstrates its crucial role in the emergence of hexagon grid patterns. Moreover, we also provide neuroscience and theoretical evidences for this hypothesis. In our work, we study the conformal isometry hypothesis with explicit scaling factor  $s$ . In contrast, (Gao et al. (2021); Xu et al. (2022)) incorporate  $s$  implicitly within their learned models.
+
+Schaeffer et al. (2023) proposed a self-supervised learning framework to learn grid cells of multiple modules, where conformal isometry is incorporated.
+
+## 6 DISCUSSION: CONFORMAL ISOMETRY FOR PATH PLANNING
+
+Conformal isometry ensures that the spatial representation in the brain preserves the geometry of the local environment, where distances are preserved locally. In terms of functional benefit, conformal isometry can be crucial for path planning. For instance, planning a straight path in an open field can be easily accomplished by following the steepest descent on the distance between neural representations of the target position and the current position on the path. This geometry-preserving property also facilitates the planning of more complex paths involving obstacles and landmarks. The scaling factor  $s$  allows path planning at different spatial scales or resolutions. This rationale suggests planning-centered representation learning in general, i.e., the learning of representations should serve the purpose of planning.
+
+## 7 CONCLUSION
+
+This paper investigates the conformal isometry hypothesis as a fundamental mathematical principle for the emergence of hexagonal periodic patterns in grid cells, both numerically and theoretically. The simplicity and naturalness of the conformal isometry hypothesis, along with its compelling geometric implications, make it a powerful framework for understanding grid cell patterns. Moreover, the conformal isometry hypothesis is also general enough that it leads to hexagon grid patterns regardless of the specific forms of transformation models or other settings. We believe that this hypothesis will serve as a foundation for further development of normative models of grid cells and enhance our understanding of their interactions with other systems.
+
+ Rest of paper (reference and Appendix) is removed.

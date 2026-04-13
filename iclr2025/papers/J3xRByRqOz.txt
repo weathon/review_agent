@@ -1,0 +1,262 @@
+
+
+{0}------------------------------------------------
+
+# RETRIEVAL-AUGMENTED GENERATION WITH ESTIMATION OF SOURCE RELIABILITY
+
+**Anonymous authors**
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Retrieval-augmented generation (RAG) addresses key limitations of large language models (LLMs), such as hallucinations and outdated knowledge, by incorporating external databases. These databases typically consult multiple sources to encompass up-to-date and various information. However, standard RAG methods often overlook the heterogeneous source reliability in the multi-source database and retrieve documents solely based on relevance, making them prone to propagating misinformation. To address this, we propose Reliability-Aware RAG (RA-RAG) which estimates the reliability of multiple sources and incorporates this information into both retrieval and aggregation processes. Specifically, it iteratively estimates source reliability and true answers for a set of queries **without ground truth answers**. Then, it selectively retrieves relevant documents from a few of reliable sources and aggregates them using weighted majority voting, where the selective retrieval ensures scalability while not compromising the performance. We also introduce a benchmark designed to reflect real-world scenarios with heterogeneous source reliability and demonstrate the effectiveness of RA-RAG compared to a set of baselines.
+
+## 1 INTRODUCTION
+
+Large language models (LLMs) have demonstrated remarkable capabilities across various tasks but are often limited by hallucinations and a lack of access to real-time information. Retrieval-augmented generation (RAG) offers a promising solution by integrating external databases, allowing LLMs to access more accurate and up-to-date information (Guu et al., 2020; Lewis et al., 2020). However, these databases often consist of content from multiple sources with varying levels of reliability, which can make RAG systems vulnerable to misinformation from unreliable sources. Standard RAG methods retrieve documents based on only relevance to the query, without considering the accuracy or trustworthiness of the information retrieved. As a result, RAG systems are prone to propagating misinformation. This issue is exacerbated by the advances of LLMs, which enable a massive production of plausible yet false documents and disables identifying the credibility of documents by linguistic features (Menczer et al., 2023; Augenstein et al., 2024; Hong et al., 2024; Zou et al., 2024; Shafran et al., 2024; Chaudhari et al., 2024; Chen & Shu, 2023).
+
+Several recent efforts have sought to improve the robustness of RAG systems against misinformation (Pan et al., 2023; Weller et al., 2024; Xiang et al., 2024; Deng et al., 2024; Pan et al., 2024). However, these approaches have notable limitations. Deng et al. (2024) use LLMs to evaluate document reliability based on their internal knowledge, which is ineffective when LLMs indeed need to consult with external knowledge. Pan et al. (2023); Weller et al. (2024); Xiang et al. (2024) use counting-based methods such as majority voting (MV) or selecting responses that exceed a certain threshold. However, these methods are effective only when the portion of misinformation in the retrieved documents is minor, overlooking the heterogeneity in source reliability. Pan et al. (2024) propose a heuristic estimation, which categorizes the source reliability into two groups (low, high) based on a common reputation of the source. To learn how to aggregate responses according to source reliability, they generate labeled dataset to fine-tune LLMs. However, the reputation of sources, particularly social media and blogs, is often unclear and susceptible to manipulation. Additionally, a simple two-level credibility score cannot capture subtle differences in reliability and requires additional training to utilize this information.
+
+{1}------------------------------------------------
+
+![Figure 1: Overview of the RA-RAG framework. The diagram is divided into two main stages. Stage 1: Iterative Reliability Estimation. It shows a graph of Questions and Sources. Sources are represented by colored squares (green for correct, red for incorrect). Reliability values are estimated iteratively. For example, in (3), s1=0.3, s2=0.5, s3=0.4, s4=0.2, s5=0.1. In (4), s1=0.4, s2=0.5, s3=0.4, s4=0.2, s5=0.1. The output is Estimated Reliability v = [0.7, 0.4, 0.2, ..., 0.1]. Stage 2: Reliable and Efficient Inference. This stage involves κ-Reliable and Relevant Source Selection (κ-RRSS). A Retriever selects sources based on their reliability. A Ground Truth (Sigmund Freud) is shown. A list of sources is sorted by reliability: Sigmund Freud (0.7), I don't know (0.4), B.F. Skinner (0.2), B.F. Skinner (0.1). A Weighted Majority Voting process is shown, resulting in Sigmund Freud (0.7) and B.F. Skinner (0.35). A final answer is determined: Sigmund Freud (correct) and B.F. Skinner (incorrect).](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 1: Overview of the RA-RAG framework. The diagram is divided into two main stages. Stage 1: Iterative Reliability Estimation. It shows a graph of Questions and Sources. Sources are represented by colored squares (green for correct, red for incorrect). Reliability values are estimated iteratively. For example, in (3), s1=0.3, s2=0.5, s3=0.4, s4=0.2, s5=0.1. In (4), s1=0.4, s2=0.5, s3=0.4, s4=0.2, s5=0.1. The output is Estimated Reliability v = [0.7, 0.4, 0.2, ..., 0.1]. Stage 2: Reliable and Efficient Inference. This stage involves κ-Reliable and Relevant Source Selection (κ-RRSS). A Retriever selects sources based on their reliability. A Ground Truth (Sigmund Freud) is shown. A list of sources is sorted by reliability: Sigmund Freud (0.7), I don't know (0.4), B.F. Skinner (0.2), B.F. Skinner (0.1). A Weighted Majority Voting process is shown, resulting in Sigmund Freud (0.7) and B.F. Skinner (0.35). A final answer is determined: Sigmund Freud (correct) and B.F. Skinner (incorrect).
+
+Figure 1: **Overview of the RA-RAG framework.** In the first stage, RA-RAG iteratively estimates the reliability of each source  $v_i$  for  $i \in [N]$  based on estimated true answers  $\hat{y}_j$  for each question  $j$ , as outlined in equation (3) and (4). Based on the estimated reliability, in the second stage, the retriever selects  $\kappa$  sources through the Reliable and Relevant Source Selection ( $\kappa$ -RRSS) process, detailed in Section 3.4. The final answer is determined using a weighted majority voting process, with the weights derived from the estimated reliability.
+
+To overcome these limitations, we formalize a multi-source RAG framework based on weighted majority voting (WMV) that distinguishes between different sources in the database and integrates information from multiple sources given their reliability. However, as it is hard to know the source reliability in advance, we introduce Reliability-Aware RAG (RA-RAG), an effective method that estimates the reliability of each source and uses this information to guide the retrieval and aggregation process. RA-RAG operates in two stages illustrated in Figure 1. The first stage focuses on estimating source reliabilities for a set of queries with no labelings. Specifically, we devise an iterative reliability estimation that alternates estimating the true answers and the reliability of each source. In the second stage, RA-RAG aims at reliable and efficient inference, which aggregates documents from sources given the estimated source reliability while ensuring computational scalability even with numerous sources without compromising performance. To do so, we propose WMV with  $\kappa$ -reliable and relevant source selection ( $\kappa$ -RRSS), in which RA-RAG consults with only a small number of selective sources that are reliable with relevant documents.
+
+RA-RAG also addresses two specific issues inherent in RAG systems: misalignment of responses, where the model generates answers based on internal knowledge rather than retrieved documents, and response variation, where semantically identical answers are phrased differently. These issues can hinder both the aggregation of responses and the estimation of source reliability. To overcome these challenges, RA-RAG incorporates a misalignment filtering mechanism to detect and exclude hallucinated responses, and a keyword-based system prompt to regularize response variation.
+
+To evaluate the effectiveness of RA-RAG, we develop a realistic benchmark of multi-source RAG with heterogeneous source reliability, reflecting the complexity of real-world scenarios. Our benchmark contrasts with previous works (Weller et al., 2024; Xiang et al., 2024; Deng et al., 2024; Pan et al., 2024) that relied on setups with artificially injected misinformation into retrieved documents, as we construct an environment where the database consists of multiple sources with heterogeneous reliability. Our experimental results show that RA-RAG consistently outperforms various baselines, highlighting its robustness and effectiveness in accurately aggregating information from multiple sources.
+
+We defer an extensive discussion of related works to Appendix A, while we summarise our main contributions as follows:
+
+- We formalize the multi-source RAG (Section 2) and propose an effective approach, called RA-RAG (Section 3). It estimates the source reliability without additional labelings via the iterative reliability estimation (Section 3.3). Then, based on the estimated reliability, it efficiently retrieves reliable and relevant documents by  $\kappa$ -RRSS and robustly aggregates them with WMV (Section 3.4).
+- We also address the inherent issues of RAG systems: variation and misalignment in the generated responses. To mitigate the issues, we devise the keyword-based system prompt (Section 3.1) and the misalignment filtration (Section 3.2).
+
+{2}------------------------------------------------
+
+- We construct the realistic benchmark of the multi-source RAG frameworks with diverse source reliability, which allows us to evaluate and analyze multi-source RAG systems (Section 4). Our code and datasets will be released.
+- Our experimental results demonstrate that RA-RAG consistently outperforms a number of baselines, showcasing its robustness and effectiveness in accurately aggregating information from multiple sources, even in conflicting and unreliable information (Section 5).
+
+## 2 PROBLEM FORMULATION
+
+In this section, we formally describe the problem of retrieval-augmented generation (RAG) with a multi-source database. We introduce the standard RAG system in Section 2.1 and outline the multi-source RAG framework in Section 2.2, followed by a discussion of key challenges in Section 2.3.
+
+### 2.1 RETRIEVAL-AUGMENTED GENERATION (RAG)
+
+A typical RAG system generates a response  $\tilde{y}$  by retrieving relevant information from a database  $\mathcal{D}$  using a retrieval mechanism  $\mathcal{R}$ , followed by a language model  $\mathcal{G}$  to generate the final response. To be specific, consider a closed-ended query  $q$  associated with a true answer  $y$ . Retriever  $\mathcal{R}$  selects the top- $K$  most relevant documents from database  $\mathcal{D}$  based on a similarity measure between query  $q$  and each document  $t \in \mathcal{D}$ . The set of retrieved documents is denoted by  $\mathcal{R}(q, \mathcal{D})$ . Using the retrieval result  $\mathcal{R}(q, \mathcal{D})$  and a system prompt  $\mathcal{P}$ , language model  $\mathcal{G}$  generates a response  $\tilde{y}$ , which can be represented as follows:  $\tilde{y} = \mathcal{G}(q, \mathcal{R}(q, \mathcal{D}), \mathcal{P})$ . In this framework, system prompt  $\mathcal{P}$  guides language model  $\mathcal{G}$  to generate response  $\tilde{y}$  based on the retrieval result  $\mathcal{R}(q, \mathcal{D})$ . A critical limitation arises when the retrieved documents come from unreliable sources, as the similarity measure used in retrieval does not account for the truthfulness or reliability of the information. This becomes particularly problematic when database  $\mathcal{D}$  includes documents from multiple sources with different levels of reliability, such as news articles, Wikipedia, or social media. Such a multi-source database is often necessary to cover up-to-date and diverse content. Although prompts can attempt to filter out unreliable information based on linguistic features, this is not always reliable. With the growing sophistication of language models, generating plausible yet false information—such as fake news—has become easier (Menczer et al., 2023; Augenstein et al., 2024). This underscores the need for additional mechanisms to assess the reliability of retrieved documents, beyond their mere relevance to the query.
+
+### 2.2 MULTI-SOURCE RAG
+
+To address the vulnerability to misinformation in retrieval, we propose a multi-source RAG framework that explicitly distinguishes between the sources of documents. Let  $N$  be the number of distinct sources contributing to database  $\mathcal{D}$ . We partition the database as  $\mathcal{D} = \bigcup_{i=1}^N \mathcal{S}_i$ , where  $\mathcal{S}_i$  is the set of documents originating from source  $i \in [N]$ . Such a partition of dataset  $\mathcal{D}$  enables the system to account for the reliability of each document's source, based on weighted majority voting (WMV). For a given query  $q$ , let  $\tilde{y}_i = \mathcal{G}(q, \mathcal{R}(q, \mathcal{S}_i), \mathcal{P})$  represent the response generated using documents exclusively from source  $i$ . Once the probability that a retrieved document from source  $i$  is correct is estimated as  $v_i$ , and a set of candidate responses  $\mathcal{M}$  is obtained from  $\tilde{y}_i$ 's, we can apply WMV to aggregate the responses:
+
+$$\tilde{y} = \arg \max_{u \in \mathcal{M}} \sum_{i \in [N]} v_i \mathbb{1}(\tilde{y}_i = u). \quad (1)$$
+
+If all sources are assumed to have equal reliability, this reduces to majority voting (MV) that selects the most consensus among  $\tilde{y}_i$ 's. However, WMV is superior to MV when the reliability of each source  $v_i$  can be properly estimated. Hence, the key components in a multi-source RAG framework are (i) the reliability estimation for  $v_i$ 's and (ii) the response aggregation of  $\tilde{y}_i$ 's based on WMV.
+
+### 2.3 CHALLENGES IN MULTI-SOURCE RAG
+
+To develop an effective mechanism for reliability estimation and response aggregation in the multi-source RAG framework, we need to address four key challenges: (i) response variations, (ii) misaligned response, (iii) limited access to ground truth, and (iv) scalability in the number of sources.
+
+{3}------------------------------------------------
+
+**Response variations.** Even when focusing on closed-ended queries, language models often generate semantically identical answers with paraphrasing, complicating the application of weighted majority voting (WMV). For example, in response to the question, “What is the largest planet in our solar system?”, the model might generate “The largest planet in our solar system is Jupiter” or “Jupiter is the largest planet in our solar system.” These responses convey the same meaning, but if treated as different outputs, they can reduce the effectiveness of WMV. Therefore, techniques for normalizing or aligning semantically equivalent responses are essential to ensure that the aggregation process accurately reflects consensus.
+
+**Misaligned responses.** Since the reliability of sources is inferred based on the outputs generated by the language model, the model must generate responses strictly from the documents retrieved from each source. However, language models often produce hallucinations or responses influenced by their internal knowledge, particularly when dealing with complex queries or ambiguous contextual information (Kaddour et al., 2023; Ji et al., 2023; Xie et al., 2024; Kortukov et al., 2024; Xu et al., 2024). These misaligned responses complicate the reliability estimation process by distorting the relationship between the response and the quality of the retrieved documents. Thus, it is necessary to develop a filtering mechanism to exclude responses that do not rely on the retrieved documents, ensuring that the answers are grounded in the provided information.
+
+**Limited access to ground truth.** A straightforward reliability estimation can be conducted with the true labels for a number of queries. However, acquiring the labels is costly and time-intensive, particularly when dealing with unverified, up-to-date information. Hence, we consider a set of queries with no labels and devise an iterative algorithm that alternates between estimating both the reliability of sources and the true answers (Section 3.3).
+
+**Scalability in the number of sources.** In a multi-source RAG framework, retrieving documents from a large number of sources can lead to significant computational overhead. Generating responses  $\hat{y}_i$  for every source may become impractical as the number of sources increases. To ensure scalability in real-world applications, it is critical to use strategies that reduce computational costs, such as optimizing retrieval processes or limiting the number of sources considered during inference. Effective solutions will enable multi-source RAG systems to scale efficiently without compromising performance (Section 3.4).
+
+## 3 RELIABILITY-AWARE RETRIEVAL-AUGMENTED GENERATION (RA-RAG)
+
+To mitigate the impact of misinformation on RAG systems, we propose the Reliability-Aware Retrieval-Augmented Generation (RA-RAG), which addresses the challenges of the multi-source RAG framework outlined in Section 2.3. RA-RAG operates in two stages: (i) iterative reliability estimation (Section 3.3) and (ii) reliable and efficient inference (Section 3.4). In the first stage, the iterative algorithm given a set of queries with no labels estimates the reliability of sources before deploying the RAG system. In the second stage, a WMV mechanism combined with  $\kappa$ -reliable and relevant source selection ( $\kappa$ -RRSS) uses the estimated reliability to retrieve documents and effectively aggregate the information. In advance of describing the two stages of RA-RAG, we first present two common components used for both stages: keyword-based system prompt (Section 3.1) and misalignment filtration (Section 3.2). They are mainly to address the problems of variation and misalignment in the language model’s responses. The detailed algorithm of RA-RAG can be found in Appendix B, and the code will be distributed.
+
+### 3.1 KEYWORD-BASED SYSTEM PROMPT
+
+Even for closed-ended queries that elicit simple answers, such as “What is the largest planet in our solar system?”, the language model often generates responses of the same semantic meaning but in various forms. This decreases the effectiveness of response aggregation with WMV and thus disturbs the reliability estimation as well. To address this, we employ a system prompt to ensure that the language model generates keyword-based answers without unnecessary details. For example, the keyword-based response to the aforementioned query would be “Jupiter”, rather than a more detailed response, “Jupiter is the largest planet in our solar system.”. In addition, the prompt also guides the language model to say IDK (which stands for “I don’t know” and indicates the abstention) when irrelevant documents are retrieved. The detailed prompt is provided in Appendix G. This
+
+{4}------------------------------------------------
+
+keyword-based answer allows us to effectively aggregate the LLMs response for WMV while reducing hallucinations to generate responses irrelevant to retrieval results. We note that Xiang et al. (2024) use a post-processing method with the spaCy library (Honnibal et al., 2020) to extract keywords like adjectives, adverbs, and other elements from LLM outputs. However, we observe that prompt engineering alone can effectively generate the desired keyword-based outputs without the need for additional processing. The detailed experimental results are provided in Appendix E.
+
+### 3.2 MISALIGNMENT FILTRATION
+
+Although the system prompt directs the language model to generate  $\tilde{y}_i$  based on the retrieval result  $\mathcal{R}(q, \mathcal{S}_i)$ , responses irrelevant to the retrieval result are often generated. This can distract the reliability estimation and WMV, as discussed in Section 2.3. To mitigate this issue, we further employ a filtration function  $f_{\text{align}}$  to detect misaligned responses and replace them with IDK, indicating the abstention. In this paper, we use the ROUGE-1 precision score (Lin, 2004) which computes the ratio of the number of unigrams in response  $\tilde{y}_i$  that appear also in retrieval result  $\mathcal{R}(q, \mathcal{S}_i)$ . A low score implies that the response is irrelevant to the retrieved documents. Specifically,  $f_{\text{align}}$  replaces  $\tilde{y}_i$  with IDK if the score for a response is below 0.9 and keep  $\tilde{y}_i$  otherwise. Given that the responses are in a keyword-based form, the ROUGE-1 precision score effectively captures how well the words in the response match the provided context. As a result, we can obtain a refined set of answer candidates:
+
+$$\mathcal{M}_{\text{filtered}} = \{f_{\text{align}}(\tilde{y}_i, \mathcal{R}(q, \mathcal{S}_i)) \mid i \in [N]\}. \quad (2)$$
+
+We demonstrate the effectiveness of  $f_{\text{align}}$  based on ROUGE-1 precision in Section 5.3. However, our choice of  $f_{\text{align}}$  based on the ROUGE-1 score can be replaced with asking the relevance of the response to the retrieved result to the language model, while it requires substantial cost as well as the risk of hallucination.
+
+### 3.3 STAGE 1: ITERATIVE RELIABILITY ESTIMATION
+
+To estimate the reliability of sources and effectively aggregate the outputs, we utilize the WMV method proposed by Li & Yu (2014), which is a simple and effective approach for aggregating crowdsourced labels in classification tasks, applied to the filtered outputs. Given the set  $\{q^j \mid j \in [M]\}$  of  $M$  queries, the iterative reliability estimation is described as follows:
+
+- Step 0. We initialize the source weights  $v_i = 1$  for all sources  $i \in [N]$  and repeat Step 1 to Step 2 until  $v_i$ 's converge.
+- Step 1. We estimate each answer  $\hat{y}^j$  for each  $j \in [M]$  using WMV:
+
+$$\hat{y}^j = \arg \max_{u \in \mathcal{M}_{\text{filtered}}^j} \sum_{i \in [N]} v_i \mathbb{1}(\tilde{y}_i^j = u), \quad (3)$$
+
+where  $\tilde{y}_i^j = \mathcal{G}(q^j, \mathcal{R}(q^j, \mathcal{S}_i), \mathcal{P}_{\text{keyword}})$  is a response to  $q^j$  based on documents from source  $i$  and  $\mathcal{M}_{\text{filtered}}^j = \{f_{\text{align}}(\tilde{y}_i^j, \mathcal{R}(q^j, \mathcal{S}_i)) \mid i \in [N]\}$  is the filtered candidates of responses to  $q^j$ .
+
+- Step 2. Given the estimated  $\hat{y}^j$ 's, we estimate source reliability  $\hat{w}_i$  for each  $i \in [N]$  as follows:
+
+$$\hat{w}_i = \frac{\sum_{j=1}^M \mathbb{1}(f_{\text{align}}(\tilde{y}_i^j, \mathcal{R}(q^j, \mathcal{S}_i)) = \hat{y}^j)}{\sum_{j=1}^M \mathbb{1}(f_{\text{align}}(\tilde{y}_i^j, \mathcal{R}(q^j, \mathcal{S}_i)) \neq \text{IDK})}. \quad (4)$$
+
+Then, we normalize  $\hat{w}_i$  as  $v_i = N\hat{w}_i - 1$  giving larger weights to reliable sources and smaller weights to unreliable sources. This leads to more accurate estimates of  $w_i$ . Following the approach of Li & Yu (2014), which uses the number of labels  $L$  as a scaling factor, we use  $N$ , the number of sources, because the maximum possible number of responses occurs when each source provides a distinct answer. However, in real-world applications, it is unlikely that all sources will offer completely distinct responses, especially when  $N$  is large. Thus,  $N$  can be reasonably limited to a manageable size.
+
+- Step 3. With the converged weights  $v_i$ , we compute the refined estimated answers using the WMV, i.e.,  $\hat{y}^j = \arg \max_{u \in \mathcal{M}_{\text{filtered}}^j} \sum_{i \in [N]} v_i \mathbb{1}(\tilde{y}_i^j = u)$  for all  $j \in [M]$ .
+
+{5}------------------------------------------------
+
+### 3.4 STAGE 2: RELIABLE AND EFFICIENT INFERENCE
+
+In real-world applications, integrating information from all sources can cause a significant computational burden, especially when the number of sources is large. The WMV process,  $\hat{y}^j = \arg \max_{u \in \mathcal{M}_{\text{filtered}}^j} \sum_{i \in [N]} v_i \mathbb{1}(\tilde{y}_i^j = u)$ , becomes increasingly expensive as  $N$  grows. For better scalability, we select a subset of sources, denoted as  $\mathcal{W}$ , where  $|\mathcal{W}| < N$ . Then, the WMV process is applied using  $\mathcal{W}$ :  $\hat{y}^j = \arg \max_{u \in \mathcal{M}_{\text{filtered}}^j} \sum_{i' \in \mathcal{W}} v_{i'} \mathbb{1}(\tilde{y}_{i'}^j = u)$ , where  $\mathcal{M}_{\text{filtered}}^j = \{f_{\text{align}}(\tilde{y}_{i'}^j, \mathcal{R}(q, S_{i'})) \mid i' \in \mathcal{W}\}$ . A simple way to select  $\mathcal{W}$  is to choose the  $\kappa$  most reliable sources. However, high reliability alone doesn't always mean these sources will contain relevant documents for the given query, which can lead to performance degradation. Therefore, it's important to consider both reliability and relevance.
+
+To achieve this, we identify the  $\kappa$  most reliable and relevant sources. We start by ordering the sources by reliability and then check if they contain documents relevant to the query. This process continues until we find  $\kappa$  sources, which we call the  $\kappa$ -Reliable and Relevant Source Selection ( $\kappa$ -RRSS). Although similarity scores from the retrieval process can suggest relevance, they are often noisy, as high scores may just reflect shared words without capturing the actual context. Instead, we use the LLM's responses and apply a filtering method,  $f_{\text{align}}$ , to assess relevance. If the filtered LLM response is "I don't know", we consider the source as lacking relevant information. Once the  $\kappa$  sources are selected, we use their outputs in the WMV process to generate the final answers.
+
+## 4 BENCHMARK OF MULTI-SOURCE RAG
+
+We construct a benchmark designed to assess performance in environments where the database contains sources with heterogeneous reliability, which reflect the complexities of real-world scenarios. Each source  $S_i$  is characterized by two parameters: (1) the probability  $r_i$  of containing the relevant documents to a given question (related to the corpus size), and (2) its reliability  $p_i$ , representing the probability that  $S_i$  contains factual documents. We use two types of priors to model the reliability  $p_i$ : the *beta* prior and the *spammer-hammer* prior. For the *beta* priors,  $p_i$  is sampled from  $\text{Beta}(2\bar{w}/1-\bar{w}, 2)$ , which has an expected mean of  $\bar{w}$ . This enables the simulation of scenarios with sources that have heterogeneous reliability. For the *spammer-hammer* prior,  $p_i$  is set to either 0.1 or 0.9, where  $p_i = 0.1$  represents a *spammer*, an unreliable source that provides mostly incorrect information for the given query and  $p_i = 0.9$  represents a *hammer*, a reliable source that provides mostly accurate information.
+
+To construct the corpus for each source  $S_i$  based on this framework, we use three datasets: Natural Questions (NQ) (Kwiatkowski et al., 2019), HotpotQA (Yang et al., 2018), and TriviaQA (TQA) (Joshi et al., 2017). For the HotpotQA dataset, we use only single-hop queries. We focus on closed-ended queries because open-ended queries (e.g., "Describe the various uses of forests to human beings" from the NQ dataset) often lack definitive answers, making aggregation from multiple sources difficult. To identify closed-ended queries, we first use GPT-4o-mini (OpenAI, 2024) to filter out open-ended queries and then manually review any remaining ones. The filtering prompt is provided in Appendix F.1. Due to computational constraints, we select 1,600 queries per dataset: 200 for reliability estimation and 1,400 as test data. The corpus for each source  $S_i$  is generated through the following steps:
+
+- 1. Collecting factual documents:** We first collect documents containing the correct answers from the Wikipedia corpus using Contriever (Izacard et al., 2022) for the NQ and TQA datasets. For the HotpotQA dataset, we use the contexts provided within the dataset itself.
+- 2. Generating diverse factual information:** To generate diverse factual information that conveys the same meaning but in different expressions, we use GPT-4o-mini to paraphrase the collected documents, creating 9 documents for each query. This diversity makes it more challenging to aggregate the LLM's outputs.
+- 3. Generating diverse misinformation:** Unlike classification tasks with predefined label sets, incorrect answers can vary infinitely in query-answering tasks. To simplify our experiment, we use GPT-4o-mini to generate 9 distinct incorrect answers for each query and then create three corresponding documents for each incorrect answer using GPT-4o-mini.
+
+{6}------------------------------------------------
+
+4. **Constructing the corpus for  $S_i$ :** The corpus for each source  $S_i$  is generated independently, based on its  $r_i$  and  $p_i$ . If  $S_i$  contains relevant documents for a given query (as determined by  $r_i$ ), the truthfulness of these documents is decided by  $p_i$ . If  $S_i$  is assigned to provide factual information, it randomly selects three documents from pool of the previously generated factual documents. Conversely, if  $S_i$  is designated to provide misinformation, it randomly choose one of the nine incorrect answers and includes the corresponding three misinformation documents generated earlier. Since the corpus for each source is constructed independently, each source contains a different set of knowledge. For instance, for a given query,  $S_i$  may have relevant documents, while  $S_j$  may not, where  $i \neq j$  and  $i, j \in [N]$ .
+
+The specific prompts used to generate the data are detailed in Appendix F.
+
+## 5 EXPERIMENTS
+
+In this section, we conduct comprehensive experiments on the benchmarks to evaluate the effectiveness of RA-RAG. Detailed descriptions of the experimental setup can be found in Section 5.1, and the results are presented in Section 5.2. Additionally, we perform ablation studies on the individual modules within RA-RAG to evaluate its overall effectiveness, as discussed in Section 5.3.
+
+### 5.1 EXPERIMENTAL SETTINGS
+
+**Models.** For the LLMs, we use Llama3-8B Instruct (Dubey et al., 2024), Phi3-mini Instruct (Abdin et al., 2024), and GPT-4o mini (OpenAI, 2024). As the retriever, we utilize Contriever (Izacard et al., 2022), which calculates similarity scores by taking the dot product between the embedding vectors of a query and documents in the database.
+
+**Baselines.** We evaluate our framework against the following baselines:
+
+- **Oracle WMV:** Oracle Weighted Majority Voting aggregates outputs using the true reliability values of each source, representing an ideal scenario where the source reliability is available.
+- **WMV:** Weighted Majority Voting aggregates outputs from all sources using the estimated reliability values, i.e., Weighted Majority Voting excludes the RRSS process from RA-RAG.
+- **MV:** Majority Voting aggregates outputs by assigning equal weight to each response.
+- **Naive RAG:** Naive RAG follows the traditional RAG approach, retrieving documents and generating outputs without considering the reliability of the sources in the database.
+- **Naive LLM:** Naive LLMs generate outputs for the given query without using a retriever.
+
+**Settings for multi-source RAG.** In our multi-source RAG setup, we retrieve the top 3 documents from each source and select 4 sources for the  $\kappa$ -RRSS process. For Naive RAG, we retrieve the top-10 documents, as multi-source RAG typically handles a larger volume of information. When constructing sources for the multi-source RAG benchmark, we set the beta prior with  $\bar{w} = 0.6$ . To simplify the setup, we assign  $r_i = 0.6$  for all sources. Due to computational constraints, the number of sources is limited to between 3 and 9. We use Exact Match (EM) (Rajpurkar et al., 2016) as the evaluation metric, with all experimental results averaged over 10 random trials.
+
+### 5.2 MAIN RESULTS
+
+**Beta prior.** We conduct experiments using a *beta* prior across different numbers of sources to demonstrate the effectiveness of our method with heterogeneous reliability. Figure 2 shows that our RA-RAG framework demonstrates significant performance improvements, outperforming both MV and Naive RAG. Notably, our RA-RAG, which uses  $\kappa = 4$  for  $\kappa$ -RRSS (the subset of sources), achieves performance comparable to WMV, which aggregates information from all available sources. The performance of WMV closely matches the oracle WMV, demonstrating that our approach effectively estimates source reliability. In contrast, the Naive RAG exhibits poor performance when source reliability varies, leading to a high likelihood of retrieving a mixture of factual information and misinformation, for both the NQ and TQA datasets. This inconsistency results in conflicting knowledge, complicating LLMs' ability to generate accurate outputs.
+
+{7}------------------------------------------------
+
+![Figure 2: Six line graphs showing Exact Match (EM) scores for NQ and TQA datasets across Llama3-8B, Phi3-mini, and GPT-4o-mini models. Each graph plots EM score against the number of sources (3 to 9). Six methods are compared: Oracle WMV (blue solid), WMV (orange dashed), RA-RAG (Ours) (red solid), MV (green dashed), Naive RAG (purple dashed), and Naive LLM (black dashed). RA-RAG (Ours) consistently achieves the highest EM scores, while Naive LLM remains flat at a low score.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 2: Six line graphs showing Exact Match (EM) scores for NQ and TQA datasets across Llama3-8B, Phi3-mini, and GPT-4o-mini models. Each graph plots EM score against the number of sources (3 to 9). Six methods are compared: Oracle WMV (blue solid), WMV (orange dashed), RA-RAG (Ours) (red solid), MV (green dashed), Naive RAG (purple dashed), and Naive LLM (black dashed). RA-RAG (Ours) consistently achieves the highest EM scores, while Naive LLM remains flat at a low score.
+
+Figure 2: Exact Match against the number of sources, comparing the heterogeneous reliability via *beta* priors on the NQ and TQA datasets across the Llama3-8B, Phi3-mini, and GPT-4o-mini language models. See Figure 8 in Appendix C.1 for the HotpotQA dataset.
+
+| Question: The gulf stream the world's fastest ocean current flows along the western side of this water body<br>Ground Truth (GT): atlantic ocean |  |  |  |  |  |  |
+|-|-|-|-|-|-|-|
+| Multi-Source Outputs | southern ocean | atlantic ocean | I don't know | indian ocean | southern ocean | gulf of mexico |
+| True Reliability | 0.39 | <b>0.97</b> | 0.55 | 0.78 | 0.53 | 0.79 |
+| Estimated Reliability | 0.36 | <b>0.92</b> | 0.56 | 0.82 | 0.54 | 0.76 |
+
+MV Answer: southern ocean
+RA-RAG Answer: atlantic ocean
+
+Figure 3: A qualitative comparison between MV and RA-RAG on the NQ dataset. Additional examples are available in Appendix D.
+
+We provide a qualitative example in Figure 3 to illustrate how RA-RAG effectively estimates source reliabilities and improves answer accuracy. While MV selects “southern ocean” based on response frequency, RA-RAG correctly identifies “atlantic ocean” by leveraging well-estimated reliabilities that align closely with true values. This example highlights RA-RAG’s robustness in overcoming conflicting or inaccurate information by focusing on more reliable sources, ensuring more accurate predictions.
+
+**Spammer-hammer prior.** To evaluate the robustness of our method in the presence of spammers in the database, we conduct experiments using the *spammer-hammer prior* with a total of 9 sources, using Llama3-8B on the NQ dataset. The experimental results for TQA and HotpotQA datasets are provided in Appendix C.2. As shown in Figure 4, our RA-RAG framework demonstrates robustness against spammers, while the performance of Naive RAG degrades significantly as the number of spammers increases. When the number of spammers exceeds five, MV performs worse than Naive RAG. This decline results from the dominance of misinformation from spammers, which leads MV to select incorrect answers.
+
+### 5.3 ABLATION STUDIES AND ANALYSIS
+
+**Effectiveness of filtering with  $f_{\text{align}}$ .** We conduct an ablation study to evaluate the necessity of  $f_{\text{align}}$  for accurate reliability estimation, across different types of retrieved documents: factual, misinformation, and irrelevant. Table 1 shows the proportions of answers both without (w/o) and with (w/) filtering, categorized by answer types: correct, incorrect, IDK (I don’t know), and hallucination, based on 1,600 queries in the TQA dataset, using a single source with  $p_i = 0.5$  and  $r_i = 0.5$ . Further results for other datasets and models are in Appendix C.5. Table 1 shows that LLM misalignment occurs when the documents contain misinformation or are irrelevant, resulting in correct or hallucinated answers that are not based on the retrieved documents. In particular, in cases of irrelevant documents, LLMs often generate either correct answers or hallucinations. However, after applying the  $f_{\text{align}}$ , these misaligned responses (marked in blue) are significantly reduced. Additionally, the
+
+{8}------------------------------------------------
+
+![Figure 4: Line graph showing Exact Match (EM) score vs. Number of Spammers (1 to 7). Oracle WMV (blue circles) starts at ~0.75 and stays relatively flat. WMV (orange squares) starts at ~0.75 and decreases to ~0.6. RA-RAG (Ours) (red triangles) starts at ~0.75 and decreases to ~0.6. MV (green diamonds) starts at ~0.75 and decreases sharply to ~0.4. Naive RAG (purple crosses) starts at ~0.75 and decreases to ~0.5.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 4: Line graph showing Exact Match (EM) score vs. Number of Spammers (1 to 7). Oracle WMV (blue circles) starts at ~0.75 and stays relatively flat. WMV (orange squares) starts at ~0.75 and decreases to ~0.6. RA-RAG (Ours) (red triangles) starts at ~0.75 and decreases to ~0.6. MV (green diamonds) starts at ~0.75 and decreases sharply to ~0.4. Naive RAG (purple crosses) starts at ~0.75 and decreases to ~0.5.
+
+Figure 4: EM against the number of spammers, comparing robustness using *spammer-hammer* priors on the NQ dataset.
+
+![Figure 5: Line graph showing Exact Match (EM) score vs. kappa (1 to 9). k-RRSS (red line with circles) starts at ~0.65 and increases to ~0.72. MV (green dashed line) is constant at ~0.70.](bedcca5cdf168e3508ef511d94ec514c_img.jpg)
+
+Figure 5: Line graph showing Exact Match (EM) score vs. kappa (1 to 9). k-RRSS (red line with circles) starts at ~0.65 and increases to ~0.72. MV (green dashed line) is constant at ~0.70.
+
+Figure 5: EM for different numbers of  $\kappa$  on the NQ dataset.
+
+![Figure 6: Bar chart showing Inference Cost ($) for Number of Sources (5 to 9). RA-RAG (red bars) is consistently lower than WMV (orange bars).](925f55ce69802b9d3b00546382663ee2_img.jpg)
+
+Figure 6: Bar chart showing Inference Cost (\$) for Number of Sources (5 to 9). RA-RAG (red bars) is consistently lower than WMV (orange bars).
+
+Figure 6: Comparison of inference costs between RA-RAG and WMV using the GPT-4o-mini.
+
+![Figure 7: Line graph showing Exact Match (EM) score vs. Number of Sources (5 to 9). RA-RAG with k-RRSS (k=4) (red line with circles) increases from ~0.62 to ~0.72. RA-RAG with k-RRSS (k=4) (purple line with circles) increases from ~0.60 to ~0.68.](e8ff6e66c77a8e96203c9f8db8f0986f_img.jpg)
+
+Figure 7: Line graph showing Exact Match (EM) score vs. Number of Sources (5 to 9). RA-RAG with k-RRSS (k=4) (red line with circles) increases from ~0.62 to ~0.72. RA-RAG with k-RRSS (k=4) (purple line with circles) increases from ~0.60 to ~0.68.
+
+Figure 7: Comparison of  $\kappa$ -RRSS and  $\kappa$ -RSS ( $\kappa = 4$ ) across different number of sources.
+
+Table 1: Percentage of type of answers by retrieved document type in the filtering with  $f_{\text{align}}$  ablation study on Llama3-8B and TQA dataset.
+
+| Types of Answers | Filtering ( $f_{\text{align}}$ ) | Types of Retrieved Documents |  |  |
+|-|-|-|-|-|
+|  |  | Factual | Misinformation | Irrelevant |
+| Correct | w/o | 92.82% | 5.43% | 25.55% |
+|  | w/ | 92.82% | 0.82%(-4.61) | 4.30%(-21.25) |
+| Incorrect | w/o | - | 81.52% | - |
+|  | w/ | - | 81.52% | - |
+| IDK | w/o | 0.00% | 4.89% | 55.52% |
+|  | w/ | 0.00% | 11.68%(+6.79) | 86.36%(+30.84) |
+| Hallucination | w/o | 7.18% | 8.15% | 18.92% |
+|  | w/ | 7.18% | 5.98%(-2.17) | 9.34%(-9.58) |
+
+Table 2: Ablation study on the risk of distorted reliability estimation without  $f_{\text{align}}$ .
+
+| Method | EM |
+|-|-|
+| Oracle WMV | 0.549 |
+| Ours (w/) | 0.543 |
+| Ours (w/o) | 0.465 |
+| MV | 0.449 |
+
+increase in IDK responses (marked in red) indicates that filtering effectively mitigates the influence of irrelevant documents and misinformation.
+
+**Risk of distortion of reliability estimation without filtering.** As highlighted in our analysis, LLMs frequently generate either correct answers or hallucinations when processing irrelevant documents. This issue becomes particularly problematic when dealing with low-reliability sources that have a small corpus. As the corpus size shrinks, i.e., contains fewer relevant documents, more queries are needed to accurately estimate the reliability of these sources. However, this can lead to LLMs producing a large number of correct answers or hallucinations, potentially resulting in an overestimation of the sources’ reliability. To illustrate this risk, we conduct experiments using the *spammer-hammer prior*. Specifically, we experiment with five sources from the TQA dataset using Llama3-8B: four spammers with  $r_i = 0.1$  and one hammer with  $r_i = 0.6$ , using 800 queries for reliability estimation. As illustrated in Table 2, without filtering, the estimated weights are distorted, giving more weight to the spammers and leading to poor performance. However, applying filtering effectively mitigates this distortion in reliability estimation, yielding performance close to the Oracle WMV.
+
+**Effectiveness of  $\kappa$ -RRSS.** To determine the optimal value of  $\kappa$  for  $\kappa$ -RRSS, we conduct ablation studies using different values of  $\kappa$  with 9 sources on the NQ dataset, employing Llama3-8B. As
+
+{9}------------------------------------------------
+
+shown in Figure 5, when  $\kappa = 4$ , RA-RAG outperforms MV and shows a slight performance drop compared to WMV, which uses all available sources. This result, with  $\kappa$  being less than half the total number of sources, shows that selecting a small subset of sources can achieve performance close to using all sources. The results for additional datasets are provided in Appendix C.3. In addition, to quantitatively evaluate the efficiency of  $\kappa$ -RRSS, we assess the inference cost using GPT-4o mini by the number of sources. As shown in Figure 6, RA-RAG incurs lower inference costs than WMV, which aggregates all sources, and the efficiency of our RA-RAG framework becomes increasingly evident as the number of sources grows.
+
+To analyze the importance of considering relevance in  $\kappa$ -RRSS, we evaluate a variant:  $\kappa$ -RSS (Reliable Source Selection), which selects  $\kappa$  sources based solely on reliability scores in descending order, without checking whether the sources contain relevant documents on NQ dataset. As shown in Figure 7, using  $\kappa$ -RSS leads to significant performance degradation, since high reliability alone does not guarantee that the selected sources will contain documents relevant to the given query.
+
+## 6 CONCLUSION
+
+In this paper, we introduce RA-RAG, an effective multi-source RAG mechanism that estimates source reliability without using true labels and efficiently aggregates information through WMV, addressing the inherent problems of RAG systems. We also present a comprehensive benchmark that reflects real-world scenarios with diverse source reliability. Our experimental results show that RA-RAG consistently outperforms a set of baselines, demonstrating its robustness and effectiveness even when handling conflicting and unreliable information.
+
+**Limitations and future directions.** Despite RA-RAG’s robustness, several challenges remain: (1) While aggregating keyword-based LLM responses using a system prompt is effective and does not require additional post-processing or modules, this approach has limitations, such as difficulty in handling homonyms and varied expressions, which make consistent aggregation challenging. Therefore, more advanced approaches, such as using LLMs capable of capturing semantic meaning, are needed for more general and reliable aggregation. We discuss advanced aggregation methods we have explored in Appendix I. (2) In this work, we primarily focus on short-form generation tasks. However, RA-RAG can be extended to long-form generation tasks by using text decomposition, where long-form responses are broken down into a series of short-form responses to evaluate long-form factuality (Min et al., 2023; Wei et al., 2024; Farquhar et al., 2024). This decomposition reduces the long-form generation task into multiple short-form tasks, allowing our approach to be applied. Further exploration and details of this extension is provided in Appendix J. (3) While  $f_{\text{align}}$  effectively filters misaligned responses, it struggles to detect incorrect answers based on retrieved documents. More reliable evaluation methods, such as applying modules from advanced RAG, are necessary. Since our approach does not require training, it can be applied in a plug-and-play manner alongside advanced RAG systems. (4) While we assume the availability of queries to estimate source reliability, real-world applications often require generating these queries, which adds complexity to accurately estimating source reliability.
+
+## 7 REPRODUCIBILITY STATEMENT
+
+As mentioned, we will release the source code and datasets for the multi-source RAG benchmark and the set of method including RA-RAG and the other baselines. Our experiments have been produced using LLama3-8B Instruct, Phi3-mini Instruct and ChatGPT-4o-mini from July to September 2024. We will also distribute the intermediate outputs of the LLMs so that every evaluation in this work can be reproducible.
+
+## REFERENCES
+
+Marah Abdin, Sam Ade Jacobs, Ammar Ahmad Awan, Jyoti Aneja, Ahmed Awadallah, Hany Awadalla, Nguyen Bach, Amit Bahree, Arash Bakhtiari, Harkirat Behl, et al. Phi-3 technical report: A highly capable language model locally on your phone. *arXiv preprint arXiv:2404.14219*, 2024.
+
+ Rest of paper (reference and Appendix) is removed.

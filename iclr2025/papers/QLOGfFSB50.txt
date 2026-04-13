@@ -1,0 +1,277 @@
+
+
+{0}------------------------------------------------
+
+# SPARC: CONTINUAL LEARNING BEYOND EXPERIENCE REHEARSAL AND MODEL SURROGATES
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Continual learning (CL) has become increasingly important as deep neural networks (DNNs) are required to adapt to the continuous influx of data without retraining from scratch. However, a significant challenge in CL is catastrophic forgetting (CF), where learning new tasks erases previously acquired knowledge, either partially or completely. Existing solutions often rely on experience rehearsal or full model surrogates to mitigate CF. While effective, these approaches introduce substantial memory and computational overhead, limiting their scalability and applicability in real-world scenarios. To address this, we propose SPARC, a scalable CL approach that eliminates the need for experience rehearsal and full-model surrogates. By effectively combining task-specific working memories and task-agnostic semantic memory for cross-task knowledge consolidation, SPARC results in a remarkable parameter efficiency, using only 6% of the parameters required by full-model surrogates. Despite its lightweight design, SPARC achieves superior performance on Seq-TinyImageNet and matches rehearsal-based methods on various CL benchmarks. Additionally, weight re-normalization in the classification layer mitigates task-specific biases, establishing SPARC as a practical and scalable solution for CL under stringent efficiency constraints.<sup>1</sup>
+
+## 1 INTRODUCTION
+
+Deep neural networks (DNNs), driven by large datasets and sophisticated algorithms, have shown exceptional performance across numerous tasks, including speech translation (Barrault et al., 2023), sentiment analysis (Devlin et al., 2018), and object recognition (Kirillov et al., 2023). However, as the scale of data increases, it becomes crucial for these models to learn continuously rather than retraining from scratch. Traditional training approaches are tailored to static data distributions, limiting their ability to handle dynamic data. Continual learning (CL) (Parisi et al., 2019; Hadsell et al., 2020; Wang et al., 2023) addresses this by enabling models to incrementally acquire new knowledge over time. However, a significant challenge in CL is catastrophic forgetting (McClelland et al., 1995; McCloskey & Cohen, 1989), where learning new information leads to the deterioration of previously acquired knowledge. This issue is not unique to CL but also arises in multitask learning (Kudugunta et al., 2019) and supervised learning under domain shifts (Ovadia et al., 2019). As a result, catastrophic forgetting has emerged as a critical barrier to the effective deployment of DNNs in dynamic environments.
+
+To mitigate catastrophic forgetting, several strategies such as experience rehearsal, weight regularization, and parameter isolation have been proposed. These methods aim to preserve previously learned knowledge while enabling the acquisition of new information. Experience rehearsal methods (Arani et al., 2022; Pham et al., 2021a; Bhat et al., 2023) utilize memory buffers and model surrogates to replay past experiences during training, mitigating forgetting. However, these approaches are impractical for memory-constrained environments, such as edge devices, where buffer size is limited. Similarly, weight regularization approaches (Zenke et al., 2017; Chaudhry et al., 2018; Li & Hoiem, 2017) rely on model surrogates in the form of frozen networks to consolidate past knowledge but often struggle in class-incremental learning (Class-IL) settings, where distinguishing between classes learned across tasks is challenging. Parameter isolation methods (Aljundi et al., 2017; Rusu et al., 2016) allocate distinct parameters for each task to prevent interference but require task identity during
+
+<sup>1</sup>The code will be publicly open upon acceptance.
+
+{1}------------------------------------------------
+
+inference and can suffer from capacity saturation in long task sequences. The reliance on memory buffers and model surrogates in these approaches complicates scaling for real-world applications, where memory constraints are critical.
+
+Biological systems, particularly the human brain, provide a compelling blueprint for continual learning without catastrophic forgetting. The brain demonstrates the ability to learn, adapt, and accumulate knowledge over time, even in the face of dynamic external changes (Hadsell et al., 2020; Kudithipudi et al., 2022). According to the complementary learning systems (CLS) theory (McClelland et al., 1995), the slow-learning neocortex and fast-learning hippocampus work together to facilitate complex behavior, allowing continual learning without explicit experience rehearsal. Inspired by this, several artificial systems have attempted to mimic the interaction between the neocortex and hippocampus by employing model surrogates (Arani et al., 2022; Cha et al., 2021). While effective, these approaches introduce significant memory and computational overhead, making them unsuitable for deployment on memory-constrained devices. Therefore, a key challenge in designing CL systems is to replicate the success of biological systems without the need for memory-intensive experience rehearsal and model surrogates.
+
+To this end, we propose *Simple Parameter Isolation in a Restricted Capacity (SPARC)*, a continual learning approach that eliminates the need for both experience rehearsal and full model surrogates. SPARC leverages parameter-efficient depth-wise separable convolutions to serve as task-specific working memories, capturing task-relevant information, while point-wise convolutions act as task-agnostic semantic memory, consolidating knowledge across tasks. Additionally, SPARC incorporates weight re-normalization in the classification layer to counteract **task-specific biases**, a common issue in parameter isolation methods where the model disproportionately favors more recent tasks. The overall architecture of SPARC, as shown in Figure 1, is simple in design and grows linearly with the number of tasks, maintaining scalability even in memory-constrained environments. By using only 6% of the parameters required by full-model surrogates (Arani et al., 2022), SPARC achieves superior performance on Seq-TinyImageNet. In summary, our contributions are:
+
+- We introduce SPARC, a rehearsal-free parameter isolation approach designed for vision-based continual learning, without the need for full model surrogates. Through extensive experiments, we demonstrate that SPARC achieves competitive performance with rehearsal-based methods across several CL benchmarks.
+- As part of parameter isolation, we augment SPARC with task-specific working memories (Section 3.1) and task-agnostic semantic memory (Section 3.2) to effectively consolidate information across tasks.
+- We identify **task-specific biases** as a **key** challenge in parameter isolation methods and propose a simple weight re-normalization technique (Section 3.3) to mitigate this issue, improving performance in continual learning settings.
+
+## 2 MODEL SURROGATE BOTTLENECK
+
+In a general continual learning (CL) setup, a model  $\Phi_\theta$  with parameters  $\theta \in \mathbb{R}^{|\theta|}$  is required to sequentially learn  $k$  tasks. A core challenge in CL arises from the inaccessibility of previous tasks' data during the learning of new tasks. This results in the well-known stability-plasticity trade-off: balancing the retention of consolidated knowledge (stability) with the flexibility to acquire new information (plasticity). Greater stability risks static knowledge, while increased plasticity can lead to unlearning, also known as catastrophic forgetting. One straightforward method to alleviate this trade-off is experience rehearsal (ER) (Ratcliff, 1990), where a memory buffer stores and replays samples from prior tasks alongside new ones. Empirical evidence (e.g., DER++ (Buzzega et al., 2020)) demonstrates that larger buffers reduce forgetting. However, maintaining a buffer can, in some cases, raise privacy concerns and **increase** resource overhead. In memory-constrained environments, smaller buffers can result in overfitting to the stored samples (Bhat et al., 2022). Similarly, generative replay methods (e.g., DRI (Wang et al., 2022b)) face challenges related to the accuracy of the generative models, including their own susceptibility to forgetting and limitations in expressiveness (Wang et al., 2023). To bypass the limitations of experience rehearsal, many approaches employ model surrogates. These methods seek to stabilize learning by maintaining auxiliary models, allowing the main model to focus on learning new tasks. Inspired by the Complementary Learning Systems (CLS) theory, works like CLS-ER (Arani et al., 2022), OCDNet (Li et al., 2022), and TAMiL (Bhat et al., 2023) use
+
+{2}------------------------------------------------
+
+![Figure 1: The SPARC architecture diagram. The top part shows a high-level view of a ResNet-18 block with 34 layers. It includes an input image of a car, a DSC 3x3 layer, a BN layer, a block containing DSC 3x3, BN, ReLU, and DSC 3x3 layers, and a concatenation operation leading to a loss function L_tot. The bottom part shows a detailed view of a layer with 34 blocks. Each block consists of Depthwise Separable Convolutions (DSC), BN, and ReLU. The DSC layers are further divided into Depthwise conv filters and Pointwise conv filters. The diagram highlights task-specific working memories (white) and task-agnostic semantic memory (red) across different tasks (Task 1, Task 2, Task 3).](1b7d539e02a202c2cf2d97698b911447_img.jpg)
+
+Figure 1: The SPARC architecture diagram. The top part shows a high-level view of a ResNet-18 block with 34 layers. It includes an input image of a car, a DSC 3x3 layer, a BN layer, a block containing DSC 3x3, BN, ReLU, and DSC 3x3 layers, and a concatenation operation leading to a loss function L\_tot. The bottom part shows a detailed view of a layer with 34 blocks. Each block consists of Depthwise Separable Convolutions (DSC), BN, and ReLU. The DSC layers are further divided into Depthwise conv filters and Pointwise conv filters. The diagram highlights task-specific working memories (white) and task-agnostic semantic memory (red) across different tasks (Task 1, Task 2, Task 3).
+
+Figure 1: The SPARC architecture, using ResNet-18 of 4 layers with 2 blocks each. Task-specific working memories (shown in white) efficiently capture task-relevant information, while the task-agnostic semantic memory (highlighted in red) consolidates knowledge across tasks. This design enables SPARC to effectively balance plasticity and stability, achieving scalable continual learning without the need for full model surrogates or experience rehearsal.
+
+an exponential moving average (EMA) of model weights as a slow-learning surrogate to consolidate task knowledge. While these approaches improve retention of past tasks, they introduce significant computational overhead due to the use of multiple model surrogates, making them less efficient for large-scale applications.
+
+An alternative to surrogate-based methods is to frame CL within a Bayesian context. Given the current task data  $\mathcal{D}_t$  and the prior  $p(\theta | \mathcal{D}_{1:t-1})$ , the posterior distribution  $p(\theta | \mathcal{D}_{1:t})$  can be updated using Bayes' rule. Since computing the posterior directly is intractable, approximations like the online Laplace approximation or Fisher information matrix are employed (Ritter et al., 2018; Kirkpatrick et al., 2017). These methods effectively regularize weight updates by penalizing deviations from previous tasks' learned parameters. However, regularization-based methods still struggle with Class-IL because they fail to discriminate between classes across different tasks.
+
+The use of repeated learning in a fixed-capacity model often leads to inter-task interference, where parameters allocated for one task interfere with those of others, reducing overall performance (Wang et al., 2023). Parameter isolation approaches aim to mitigate this interference by dedicating task-specific parameters  $e^{(t)}$  while sharing task-agnostic parameters ( $\psi$ ) across tasks. Methods like PNN (Rusu et al., 2016), DEN (Yoon et al., 2018), and CPG (Hung et al., 2019a) reduce inter-task interference by splitting model parameters, but they require task identity during inference and encounter scalability issues as the number of tasks grows. To address the limitations of task-specific parameter isolation, sparse dynamic parameter isolation methods have been proposed, such as PackNet (Mallya & Lazebnik, 2018) and NISPA (Gurbuz & Dovrolis, 2022). These methods draw inspiration from the brain's sparse connectivity, creating stable, task-specific paths within a fixed model capacity. By using sparse subsets of parameters, these models aim to preserve prior knowledge while acquiring new information. However, these methods also depend on task identity during inference and suffer from capacity saturation in long task sequences, which limits their scalability. Furthermore, they often require multiple model surrogates to manage task-specific parameter subsets, further complicating deployment in real-world applications. A comprehensive review of the related works can be found in the Appendix B.
+
+**In summary, model surrogates in CL come in various forms: be it (a) additional EMA models in rehearsal-based approaches, (b) a copy of the previous task model in weight-regularization approaches, or (c) large sub-network for each task in PNNs or even as many task masks as the number of tasks**
+
+{3}------------------------------------------------
+
+in sparse dynamic parameter isolation approaches. The reductions in catastrophic forgetting in these approaches can often be correlated with either an increase in overall model size due to model surrogates and/or memory buffer size. Most approaches discussed in this paper utilize full model surrogates and/or experience rehearsal to some extent. To this end, we attempt to highlight the problem of correlation between model size and/or increase in buffer size with the reduction in catastrophic forgetting in CL. In light of these challenges, we propose SPARC, a parameter-efficient, scalable, and rehearsal-free parameter isolation method that addresses Class-IL without relying on full model surrogates or explicit experience rehearsal. SPARC consolidates knowledge across tasks while avoiding the computational and memory bottlenecks inherent to existing surrogate-based approaches, making it well-suited for scalable CL in memory-constrained environments.
+
+## 3 METHOD
+
+A typical CL setup consists of  $k$  sequential tasks where the model is expected to learn a new task  $t$  while retaining information from previous tasks. CL is particularly challenging for SPARC, as access to the previous data distributions  $\{\mathcal{D}_1, \dots, \mathcal{D}_{t-1}\}$  is completely restricted when learning a new task. In other words, SPARC does not rely on experience rehearsal. As a result, optimizing the CL model  $\Phi_\theta$  using only the cross-entropy objective for the current task can excessively favor plasticity over stability, leading to overfitting on the current task and catastrophic forgetting of prior tasks. To address this, our CL model  $\Phi_\theta$ , parameterized as  $\theta = \bigcup_{t=1}^k \theta^{(t)} = \bigcup_{t=1}^k \{f_{\theta^t}, g_{\theta^t}, \psi_\theta\}$ , consists of a disjoint set of task-specific parameters (working memories). For each task  $t$ , the feature extractor  $f_{\theta^t}$  and classifier  $g_{\theta^t}$  are learned through task-specific parameters  $\theta^{(t)}$ , while task-agnostic parameters  $\psi_\theta$  (semantic memory) facilitate knowledge consolidation across tasks. In the following subsections, we describe how parameter isolation is enforced within different layers and explain the mechanisms that enable effective information consolidation and weight re-normalization.
+
+### 3.1 TASK-SPECIFIC LEARNING THROUGH WORKING MEMORIES
+
+We assume prior knowledge of the task boundary information to allocate a new sub-network for each task. Most CL approaches utilize ResNet-18 (He et al., 2016) as their backbone for empirical studies. At its core, ResNet-18 features convolutional layers organized into 4 residual blocks, using skip connections to facilitate the training of deep networks. These blocks also include batch normalization (BN) and rectified linear unit (ReLU) activation functions. Additionally, ResNet-18 incorporates pooling layers for downsampling feature maps, and a fully connected layer for final classification. However, repeated learning within a fixed-capacity network leads to significant inter-task interference (Wang et al., 2023). Moreover, parameter isolation using traditional convolutional layers becomes unscalable in long task sequences, as seen in models such as PNNs. The non-stationary nature of CL data further exacerbates the mismatch between training and testing in BN layers (Pham et al., 2021b).
+
+In SPARC, we address these challenges by utilizing task-specific working memories for each task. Apart from the task-agnostic parameters, each working memory is self-contained with its own convolutional, BN, and classification layers. Within each working memory, we replace traditional convolutional layers with parameter-efficient and computationally cheaper depth-wise separable convolutions (DSCs) (Chollet, 2017; Howard et al., 2018; Guo et al., 2019). DSCs consist of two operations: depth-wise convolution, which applies spatial convolution independently to each input channel, and point-wise convolution, which projects the depth-wise output onto a new channel space. These operations are described as:
+
+$$\hat{O}_{h,l,m} = \sum_{i,j} \hat{K}_{i,j,m}^t \cdot F_{h+i-1,l+j-1,m} \quad (1)$$
+
+$$O_{h,l,n} = \sum_m \tilde{K}_{m,n}^t \cdot \hat{O}_{h-1,l-1,m} \quad (2)$$
+
+where  $F$  and  $O$  represent the input and output feature maps, respectively, and  $\hat{K}$  and  $\tilde{K}$  denote the depth-wise and point-wise filters. The indices  $h, l$ , and  $m$  correspond to the spatial height, spatial width, and channel of the feature map, respectively. Similarly,  $i, j$ , and  $n$  represent the offsets in the height and width dimensions and the output channel index, respectively. For each task, a set of depth-wise and point-wise filters is isolated and updated independently from other tasks' parameters.
+
+{4}------------------------------------------------
+
+The choice of DSC over traditional convolutions serves several purposes: (i) Efficiency: DSCs capture the most significant components of traditional convolutions while discarding redundant information, making them computationally efficient (Guo et al., 2018). (ii) Parameter Efficiency: By reducing over-parameterization, DSCs introduce implicit regularization, which helps prevent overfitting and improves generalization. (iii) Scalability: Parameter isolation using DSCs remains scalable even as the number of tasks increases. More details on DSCs are provided in Appendix C.
+
+To mitigate the training and testing discrepancy in BN layers, SPARC maintains task-specific  $\gamma$  and  $\beta$  parameters (the learnable vectors in BN) along with running estimates of the mean and variance for each working memory. This segregated normalization facilitates parameter isolation during training while ensuring proper normalization during inference (Pham et al., 2021b) by applying task-specific moments to task-specific input features.
+
+Finally, in the fully connected (FC) classification layer, SPARC allocates a subset of neurons for each task based on the number of classes, along with their corresponding incoming connections. Connections between neurons belonging to different tasks, referred to as cross-task connections, are discarded to avoid interference, preserving the stability of the CL model. Essentially, each task operates with an isolated fully connected layer serving as its classification layer.
+
+### 3.2 TASK-AGNOSTIC SEMANTIC INFORMATION CONSOLIDATION
+
+Hard parameter isolation within each working memory has a downside: the number of parameters increases significantly as the number of tasks grows. Conversely, maintaining model compactness through parameter sharing is not ideal either, as repeated learning on shared parameters results in higher forgetting. To strike a better balance between model compactness and performance, we introduce a task-agnostic shared semantic memory that consolidates knowledge across tasks while minimizing forgetting.
+
+We achieve parameter-efficient task-agnostic information consolidation by sharing a portion of the point-wise filters across tasks. Specifically, half of the point-wise filters remain task-specific, while the other half are shared among tasks. This modifies the point-wise operation in Eqn. 2 as follows:
+
+$$O_{h,l,n} = \begin{cases} \sum_m \tilde{K}_{m,n}^t \cdot \hat{O}_{h-1,l-1,m}, & \text{if } n \leq N/2, \\ \sum_m \tilde{K}_{m,n}^c \cdot \hat{O}_{h-1,l-1,m}, & \text{if } n > N/2. \end{cases} \quad (3)$$
+
+where  $\tilde{K}^t$  and  $\tilde{K}^c$  denote the task-specific and task-agnostic point-wise filters, respectively, and  $N$  represents the total number of point-wise filters. Note that the outputs of the task-specific and task-agnostic filters are concatenated. The task-agnostic filters  $\tilde{K}^c \in \psi_\theta$  are randomly initialized and learned during the first task, then updated as an exponential moving average of the previous task's filters  $\tilde{K}^{t-1}$  at the end of each task, defined as:
+
+$$\tilde{K}^c = \alpha \tilde{K}^c + (1 - \alpha) \tilde{K}^{t-1} \quad \forall t > 2 \quad (4)$$
+
+As  $\tilde{K}^c$  consolidates information across tasks, it enhances the current task's performance without compromising the stability of previous tasks. This task-agnostic information consolidation enables SPARC to remain parameter-efficient while closely approximating the performance of hard parameter isolation (see Table 5). Similar to the CLS theory, where working and semantic memories complement each other, SPARC's working memories capture task-specific information, while its semantic memory captures task-agnostic information, achieving an effective balance between plasticity and stability.
+
+### 3.3 WEIGHT RE-NORMALIZATION
+
+In CL, the sequential nature of task learning often results in higher weight magnitudes for the classification layer of later tasks, leading to stronger activations and task recency bias in Class-IL (Zhao et al., 2020). In parameter isolation methods like SPARC, the isolated training approach can amplify task-specific biases, causing decisions to favor certain tasks while reducing clarity for others. To address the weight magnitude disparity in the classification layer, we propose a weight re-normalization technique based on activation-derived normalization constants.
+
+Let  $A^t = \{max(g_{gt}(\cdot))\}$  denote the set of maximum activations from the fully connected (FC) layer of the current task over all samples during the final training epoch. Define  $A_{0.25}^t = \text{Quartile}(A^t, 0.25)$
+
+{5}------------------------------------------------
+
+and  $A_{0.75}^t$  = Quartile( $A^t$ , 0.75) as the first and third quartiles of this set, and let  $A_{IQR}^t = A_{0.75}^t - A_{0.25}^t$  be the inter-quartile range (IQR). At the end of training for each task, the task-specific weights and biases of the FC layer are re-normalized as follows:
+
+$$W_i = \frac{\kappa \cdot W_i}{\eta}, \quad B_i = \frac{\kappa \cdot B_i}{\eta}, \quad \eta = \max\{a \in A^t \mid a \leq (A_{0.75}^t + A_{IQR}^t)\} \quad (5)$$
+
+Here,  $\kappa$  is a constant, set to 5 in our experiments. This weight re-normalization method is straightforward and does not require any additional validation sets or model parameters, effectively reducing weight magnitude disparity in the classification layer and mitigating task-specific biases in SPARC.
+
+### 3.4 PUTTING IT ALL TOGETHER
+
+SPARC is a simple, rehearsal-free parameter isolation approach designed to address catastrophic forgetting in continual learning (CL). To effectively evaluate SPARC against comparable methods, we build its backbone similar to ResNet-18. As illustrated in Figure 1, SPARC consists of four layers, each containing two blocks, with standard convolutions replaced by depth-wise separable convolutions (DSCs). For the point-wise filters, half are task-specific, while the remaining are shared across tasks. Both task-specific and task-agnostic point-wise filters process the output from the depth-wise filters independently, and their outputs are concatenated (as shown in Eqn. 1 and 3). As CL exacerbates the mismatch between training and testing in BN layers, SPARC maintains task-specific BN layers along with their own running estimates of the mean and variance for each working memory. During training, task-specific data is accessed, and the corresponding sub-network including their respective BN layers are updated through gradient updates. The learning objective for each task is defined as:
+
+$$\mathcal{L}_t = \mathbb{E}_{(x_i, y_i) \sim \mathcal{D}_t} \mathcal{L}_{ce}(\sigma(\Phi_{\theta^t}(x_i)), y_i), \quad (6)$$
+
+where  $\mathcal{L}_{ce}$  represents the cross-entropy loss, and  $\Phi^t$  is the model for task  $t$ . From the second task onward, task-agnostic shared parameters are updated using an exponential moving average (EMA) as described in Eqn. 4. We also monitor the highest activations in the classification layer during the final training epoch. After training each task, the task-specific weights and biases are re-normalized using Eqn. 5 to address weight magnitude disparity across tasks. For inference in the Class-IL setting, each image is independently processed through all sub-networks, including their respective batch normalization layers. The outputs of all sub-networks are then concatenated, and the class with the highest activation is selected (refer to Appendix A.1). This approach enables task-agnostic inference across multiple tasks. In the Task-IL setting, inference is restricted to the specific sub-network associated with the task, ensuring that only the task-relevant parameters are utilized.
+
+## 4 RESULTS
+
+**Experimental setup.** We evaluate SPARC in the contexts of Class-IL and Task-IL on Split-CIFAR10, Split-CIFAR100, Split-TinyImageNet, Split-MiniImageNet, and Seq-ImageNet100, averaging results over three runs. Several baselines are considered, representing different CL approaches: experience rehearsal, weight regularization, parameter isolation with fixed capacity, and growing architectures. More details on these baselines can be found in Appendix B. For comparison, we also include a lower-bound baseline, *SGD*, which lacks mechanisms to counteract catastrophic forgetting, and an upper-bound baseline, *Joint*, which is trained on the entire dataset simultaneously. While most baselines use ResNet-18 (He et al., 2016) as the backbone, SPARC utilizes a ResNet-18-like architecture with DSC layers. For each task, we reserve 32, 64, 128, and 256 depth-wise filters in layers 1 to 4, respectively. Further details on datasets, settings, evaluation metrics, and backbones can be found in Appendix F.1.
+
+### 4.1 EMPIRICAL EVALUATION
+
+Table 1 compares SPARC with various CL approaches. Weight regularization methods (e.g., Lwf, SI, oEWC) perform moderately in Task-IL and poorly in Class-IL, even with a full model surrogate, as they prioritize stability over plasticity by copying previous task models. In contrast, SPARC ensures maximal stability through parameter-efficient, task-specific working memories without relying on full model surrogates or weight regularization.
+
+{6}------------------------------------------------
+
+Table 1: A benchmark comparison with prior works on Class-IL and Task-IL. The best results are in bold, and the second-best are underlined. The methods are divided into JOINT (upper bound) and SGD (lower bound), weight regularization, parameter isolation, and rehearsal-based with 200 buffer size.  $\mathcal{F}$  and  $\mathcal{B}$  indicate the number of forward and backward passes through the CL model, and #Params (M) indicates the number of parameters (in millions) used for Seq-CIFAR100 with 5 tasks. Refer to Appendix Section B for more details on competing methods (see Table 9 for references to methods.), Section F.2 for exceptions, Section D.1 for results with a buffer size of 500, and Section D.3 for evaluation on ImageNet subsets.
+
+| Method | #Params (M) | # of $\mathcal{F}$ and $\mathcal{B}$ | Seq-CIFAR10 (5T) |  | Seq-CIFAR100 (5T) |  | Seq-TinyImageNet (10T) |  |
+|-|-|-|-|-|-|-|-|-|
+|  |  |  | Class-IL | Task-IL | Class-IL | Task-IL | Class-IL | Task-IL |
+| JOINT | 11.23 | 1 $\mathcal{F}$ , 1 $\mathcal{B}$ | 92.20 $\pm$ 0.15 | 98.31 $\pm$ 0.12 | 70.56 $\pm$ 0.28 | 86.19 $\pm$ 0.43 | 59.99 $\pm$ 0.19 | 82.04 $\pm$ 0.10 |
+| SGD | 11.23 | 1 $\mathcal{F}$ , 1 $\mathcal{B}$ | 19.62 $\pm$ 0.05 | 61.02 $\pm$ 3.33 | 17.49 $\pm$ 0.28 | 40.46 $\pm$ 0.99 | 7.92 $\pm$ 0.26 | 18.31 $\pm$ 0.68 |
+| oEWC | 22.46 | 2 $\mathcal{F}$ , 1 $\mathcal{B}$ | 19.49 $\pm$ 0.12 | 68.29 $\pm$ 3.92 | - | - | 7.58 $\pm$ 0.10 | 19.20 $\pm$ 0.31 |
+| SI | 22.46 | 2 $\mathcal{F}$ , 1 $\mathcal{B}$ | 19.48 $\pm$ 0.17 | 68.05 $\pm$ 5.91 | - | - | 6.58 $\pm$ 0.31 | 36.32 $\pm$ 0.13 |
+| ALASSO | 11.23 | 1 $\mathcal{F}$ , 1 $\mathcal{B}$ | 25.19 | 73.79 | - | - | 17.02 | 48.07 |
+| UCB | 11.23 | 1 $\mathcal{F}$ , 1 $\mathcal{B}$ | 56.23 | 78.56 | - | - | 23.43 | 49.01 |
+| BMKP | 11.23 | 3 $\mathcal{F}$ , 2 $\mathcal{B}$ | - | 94.49 $\pm$ 0.26 | - | - | - | 70.36 $\pm$ 0.32 |
+| PNNs | 216.7 | 1 $\mathcal{F}$ , 1 $\mathcal{B}$ | - | 95.13 $\pm$ 0.72 | - | <u>74.01</u> $\pm$ 1.11 | - | <b>67.84</b> $\pm$ 0.29 |
+| PackNet | 33.6 | 1 $\mathcal{F}$ , 1 $\mathcal{B}$ | - | 93.73 $\pm$ 0.55 | - | 72.39 $\pm$ 0.37 | - | 60.46 $\pm$ 1.22 |
+| NISPA | 8.75 | 1 $\mathcal{F}$ , 1 $\mathcal{B}$ | - | 57.36 $\pm$ 1.92 | - | 65.36 $\pm$ 2.19 | - | 59.56 $\pm$ 0.32 |
+| SparCL-EWC | - | 1 $\mathcal{F}$ , 1 $\mathcal{B}$ | - | 68.33 $\pm$ 0.54 | - | 59.53 $\pm$ 0.25 | - | 59.56 $\pm$ 0.32 |
+| ER | 11.23 | 1 $\mathcal{F}$ , 1 $\mathcal{B}$ | 44.79 $\pm$ 1.86 | 91.19 $\pm$ 0.94 | 21.40 $\pm$ 0.22 | 61.36 $\pm$ 0.35 | 8.57 $\pm$ 0.04 | 38.17 $\pm$ 0.00 |
+| DER++ | 11.23 | 2 $\mathcal{F}$ , 1 $\mathcal{B}$ | 64.88 $\pm$ 1.17 | 91.92 $\pm$ 0.60 | 29.60 $\pm$ 1.14 | 62.49 $\pm$ 1.02 | 10.96 $\pm$ 1.17 | 40.87 $\pm$ 1.16 |
+| ER-ACE | 11.23 | 1 $\mathcal{F}$ , 1 $\mathcal{B}$ | 62.08 $\pm$ 1.44 | 92.20 $\pm$ 0.57 | 35.17 $\pm$ 1.17 | 63.09 $\pm$ 1.23 | 11.25 $\pm$ 0.54 | 44.17 $\pm$ 1.02 |
+| Co <sup>2</sup> L | 22.67 | 4 $\mathcal{F}$ , 1 $\mathcal{B}$ | 65.57 $\pm$ 1.37 | 93.43 $\pm$ 0.78 | 31.90 $\pm$ 0.38 | 55.02 $\pm$ 0.36 | 13.88 $\pm$ 0.40 | 42.37 $\pm$ 0.74 |
+| GCR | 11.23 | 1 $\mathcal{F}$ , 1 $\mathcal{B}$ | 64.84 $\pm$ 1.63 | 90.80 $\pm$ 1.05 | 33.69 $\pm$ 1.40 | 64.24 $\pm$ 0.83 | 13.05 $\pm$ 0.91 | 42.11 $\pm$ 1.01 |
+| CLS-ER | 33.69 | 3 $\mathcal{F}$ , 1 $\mathcal{B}$ | 66.19 $\pm$ 0.75 | 93.90 $\pm$ 0.60 | 43.80 $\pm$ 1.89 | 73.49 $\pm$ 1.04 | 23.47 $\pm$ 0.80 | 49.60 $\pm$ 0.72 |
+| OCDNet | 22.46 | 2 $\mathcal{F}$ , 1 $\mathcal{B}$ | <b>73.38</b> $\pm$ 0.32 | <u>95.43</u> $\pm$ 0.30 | <u>44.29</u> $\pm$ 0.49 | 73.55 $\pm$ 0.24 | 17.60 $\pm$ 0.97 | 56.19 $\pm$ 1.31 |
+| TAMIL | 23.10 | 2 $\mathcal{F}$ , 1 $\mathcal{B}$ | 68.84 $\pm$ 1.18 | 94.28 $\pm$ 0.31 | 41.43 $\pm$ 0.75 | 71.39 $\pm$ 0.17 | 20.46 $\pm$ 0.40 | 55.44 $\pm$ 0.52 |
+| TrIRE | 100.98 | 2 $\mathcal{F}$ , 1 $\mathcal{B}$ | 68.17 $\pm$ 0.33 | 92.45 $\pm$ 0.18 | 43.91 $\pm$ 0.18 | 71.66 $\pm$ 0.44 | 20.14 $\pm$ 0.19 | 55.95 $\pm$ 0.78 |
+| <b>SPARC</b> | <b>1.04</b> | <b>1<math>\mathcal{F}</math>, 1<math>\mathcal{B}</math></b> | <b>61.22 <math>\pm</math> 4.81</b> | <b>95.76 <math>\pm</math> 0.21</b> | <b>49.03 <math>\pm</math> 0.05</b> | <b>75.52 <math>\pm</math> 0.11</b> | <b>32.29 <math>\pm</math> 0.01</b> | <b>65.66 <math>\pm</math> 0.01</b> |
+
+![Figure 2: Comparison with parameter isolation approaches on Seq-CIFAR100 with 20 tasks. The graph shows Top-1 (%) Accuracy vs. Tasks (1 to 20). SPARC (blue line with circles) maintains the highest accuracy, ending at 88.18%. Other methods include NISPA (orange), CLNP (green), PNN (red), PackNet (purple), PAE (pink), and CPG (light green). Final accuracies are: SPARC - 88.18%, NISPA - 75.87%, CLNP - 66.68%, PNN - 77.33%, PackNet - 67.48%, PAE - 77.6%, CPG - 80.89%, and CPG - 50.4%.](a6a8016b231533e7f34b550f4676afc6_img.jpg)
+
+Figure 2: Comparison with parameter isolation approaches on Seq-CIFAR100 with 20 tasks. The graph shows Top-1 (%) Accuracy vs. Tasks (1 to 20). SPARC (blue line with circles) maintains the highest accuracy, ending at 88.18%. Other methods include NISPA (orange), CLNP (green), PNN (red), PackNet (purple), PAE (pink), and CPG (light green). Final accuracies are: SPARC - 88.18%, NISPA - 75.87%, CLNP - 66.68%, PNN - 77.33%, PackNet - 67.48%, PAE - 77.6%, CPG - 80.89%, and CPG - 50.4%.
+
+Figure 2: Comparison with parameter isolation approaches on Seq-CIFAR100 with 20 tasks. We report the final accuracy of each task after training on all tasks.
+
+The performance of parameter isolation methods (e.g., PNNs, PackNet) in Task-IL is comparable to SPARC due to their over-parameterization. We also compare SPARC with rehearsal-based approaches using buffer sizes of 200 and 500 (Tables 1 and 10), including those relying solely on experience rehearsal (e.g., ER, DER++), approaches utilizing multiple model surrogates (e.g., CLS-ER, Co<sup>2</sup>L, OCDNet, TAMIL), and methods incorporating generative replay (e.g., DRI). SPARC, unlike these methods, does not use experience rehearsal or full model surrogates to counter catastrophic forgetting. In simpler scenarios like Seq-CIFAR10, SPARC’s performance is competitive but lags behind most rehearsal-based approaches. However, as the buffer-to-class ratio decreases and dataset complexity increases, the performance of rehearsal-based methods declines due to class under-representation in the buffer. With few exceptions, SPARC outperforms most competing methods in Seq-CIFAR100 and Seq-TinyImageNet scenarios with a buffer size of 200 and remains highly competitive with a buffer size of 500 (refer to Table 10).
+
+{7}------------------------------------------------
+
+![Figure 3: Comparison of relative performance and model size of different CL approaches in Seq-TinyImageNet 10 tasks. The figure contains two bar charts. The left chart shows 'Relative Class-IL Performance' (blue bars) and 'Relative Model Size' (red bars) for ER, DER++, Co2L, OCDNet, TAMIL, CLS-ER, and SPARC. The right chart shows 'Relative Task-IL Performance' (teal bars) and 'Relative Model Size' (red bars) for ALASSO, UCB, eEWC, SI, BMKP, PackNet, and SPARC. In both charts, SPARC consistently shows high relative performance while maintaining a low relative model size compared to other methods.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 3: Comparison of relative performance and model size of different CL approaches in Seq-TinyImageNet 10 tasks. The figure contains two bar charts. The left chart shows 'Relative Class-IL Performance' (blue bars) and 'Relative Model Size' (red bars) for ER, DER++, Co2L, OCDNet, TAMIL, CLS-ER, and SPARC. The right chart shows 'Relative Task-IL Performance' (teal bars) and 'Relative Model Size' (red bars) for ALASSO, UCB, eEWC, SI, BMKP, PackNet, and SPARC. In both charts, SPARC consistently shows high relative performance while maintaining a low relative model size compared to other methods.
+
+Figure 3: Comparison of relative performance and model size of different CL approaches in Seq-TinyImageNet 10 tasks with respect to a JOINT model in Class-IL (left) and Task-IL (right) settings.
+
+Table 2: Effect of width and depth on SPARC in Seq-CIFAR100 with 5 Tasks.
+
+| Width factor | Depth | #Filters per task | #Params (M) | Accuracy |
+|-|-|-|-|-|
+| 1/4 | 1 | [16] | 0.009 | 17.53 $\pm$ 0.24 |
+| 1/4 | 2 | [16, 32] | 0.028 | 29.31 $\pm$ 0.07 |
+| 1/4 | 3 | [16, 32, 64] | 0.087 | 41.19 $\pm$ 0.02 |
+| 1/4 | 4 | [16, 32, 64, 128] | 0.291 | 45.24 $\pm$ 0.19 |
+| 1/2 | 2 | [32, 64] | 0.083 | 37.81 $\pm$ 0.47 |
+| 1/2 | 3 | [32, 64, 128] | 0.287 | 47.00 $\pm$ 1.78 |
+| 1/2 | 4 | [32, 64, 128, 256] | 1.040 | 49.03 $\pm$ 0.05 |
+| 1/4 | 4 | [16, 32, 64, 128] | 0.291 | 45.24 $\pm$ 0.19 |
+| 1/2 | 4 | [32, 64, 128, 256] | 1.040 | 49.03 $\pm$ 0.05 |
+| 1 | 4 | [64, 128, 256, 512] | 3.910 | 52.48 $\pm$ 0.86 |
+
+Table 3: Performance evaluation on Seq-ImageNet100 with 10 tasks.
+
+| Method | Incremental Accuracy (%) |
+|-|-|
+| LwF | 31.2 |
+| EWC | 20.4 |
+| MUC | 35.1 |
+| LUCIR | 41.4 |
+| <b>SPARC</b> | <b>50.90</b> |
+
+Figure 2 compares SPARC with parameter isolation approaches (PNNs, CPG, PAE) and dynamic sparse methods (CLIP, NISPA, PackNet) on Seq-CIFAR100 across 20 tasks. The figure shows the final Task-IL accuracies after training on all tasks. While parameter isolation approaches grow beyond model capacity, dynamic sparse architectures learn task-specific masks within a fixed model capacity. SPARC strikes a balance between these methods, growing beyond model capacity, but more moderately than other parameter isolation approaches. As shown, SPARC achieves superior performance across tasks with a modest model size.
+
+We also report the performance of various approaches on Seq-ImageNet100, divided into 10 tasks, in Table 3. Seq-ImageNet100 is a subset of ImageNet-1k with 100 classes evenly distributed across 10 tasks. With only 1.9 million parameters and without any dataset-specific hyperparameter tuning, SPARC demonstrates superior performance on Seq-ImageNet100. As seen later in Table 2, performance of SPARC can be further enhanced by increasing the model’s width, depth, or both.
+
+**Model size vs performance:** Ideally, a CL model should achieve performance comparable to the JOINT model while maintaining a model size that is equal to or smaller. However, many CL approaches rely on experience rehearsal and model surrogates to counter catastrophic forgetting, which leads to an increase in both the number of parameters and computational complexity. As shown in Figure 3, the reduction in catastrophic forgetting on Seq-TinyImageNet is largely due to the use of model surrogates. In stark contrast, SPARC achieves superior performance across most CL benchmarks while using only a fraction of the parameters. This makes SPARC a compelling choice for real-world applications where memory and compute resources are limited.
+
+**Effect of width and depth:** We present an ablation study on the impact of width and depth on SPARC’s performance. By default, SPARC’s backbone has the same number of filters for 2 tasks per block as a standard ResNet-18. As the number of tasks increases beyond 2, SPARC becomes wider than ResNet-18. Thanks to the use of DSC layers, SPARC remains parameter-efficient even with a larger number of filters per block. Table 2 shows the results of varying the width and depth for SPARC. Consistent with the findings in Mirzadeh et al. (2022), increasing SPARC’s width improves performance. Depth also significantly influences performance, though after a certain point, the improvements do not correspond to the increased number of parameters.
+
+{8}------------------------------------------------
+
+Table 4: Growth in number of parameters (millions) for different number of task sequences in Seq-CIFAR100.
+
+| Methods | 5 tasks | 10 tasks | 20 tasks |
+|-|-|-|-|
+| ER | 11.23 | 11.23 | 11.23 |
+| DER++ | 11.23 | 11.23 | 11.23 |
+| CLS-ER | 33.69 | 33.69 | 33.69 |
+| TAMIL | 23.10 | 23.76 | 25.08 |
+| PNNs | 216.7 | 735.28 | 2645.05 |
+| <b>SPARC</b> | <b>1.04</b> | <b>1.90</b> | <b>3.62</b> |
+
+Table 5: Evaluation of semantic information consolidation in SPARC on Seq-CIFAR100 5 tasks.
+
+| Method | #Param (M) | Class-IL |
+|-|-|-|
+| Shared point-wise & depth-wise filters | 0.33 | 22.37 $\pm$ 0.07 |
+| Shared point-wise & separate depth-wise filters | 0.43 | 42.77 $\pm$ 0.28 |
+| Semantic information consolidation (Sec. 3.2) | 1.04 | 49.13 $\pm$ 0.25 |
+| Separate point-wise & depth-wise filters | 1.65 | 51.57 $\pm$ 0.27 |
+
+![Figure 4: (Left) Bar chart showing Stability, Plasticity, and Tradeoff for ER, DER++, LIDER, and SPARC on Seq-CIFAR100 5 tasks. (Right) Line graph showing Stability vs alpha for SPARC on Seq-CIFAR100 5 tasks.](925f55ce69802b9d3b00546382663ee2_img.jpg)
+
+Figure 4 (Left) is a bar chart titled "Seq-CIFAR100 in 5 tasks" showing Accuracy (%) for four methods (ER, DER++, LIDER, SPARC) across three metrics: Stability, Plasticity, and Tradeoff. SPARC shows the highest stability and tradeoff, while ER shows the highest plasticity.
+
+| Method | Stability | Plasticity | Tradeoff |
+|-|-|-|-|
+| ER | ~15 | ~80 | ~20 |
+| DER++ | ~35 | ~78 | ~45 |
+| LIDER | ~35 | ~75 | ~45 |
+| SPARC | ~50 | ~65 | ~48 |
+
+Figure 4 (Right) is a line graph titled "Seq-CIFAR100 in 5 tasks" showing Stability vs  $\alpha$  for SPARC. The stability increases as  $\alpha$  increases from 0.90 to 1.00.
+
+| $\alpha$ | Stability |
+|-|-|
+| 0.90 | ~42.5 |
+| 0.92 | ~44.5 |
+| 0.94 | ~47.5 |
+| 0.96 | ~50.5 |
+| 0.98 | ~52.5 |
+| 1.00 | ~53.5 |
+
+Figure 4: (Left) Bar chart showing Stability, Plasticity, and Tradeoff for ER, DER++, LIDER, and SPARC on Seq-CIFAR100 5 tasks. (Right) Line graph showing Stability vs alpha for SPARC on Seq-CIFAR100 5 tasks.
+
+Figure 4: (Left) Stability-plasticity trade-off of different CL models on Seq-CIFAR100 5 tasks with buffer size 500. (Right) Effect of semantic information consolidation on SPARC’s stability.  $S$  represents model stability at task  $t$ , quantified as the average performance across all preceding tasks.
+
+**Parameter growth:** Table 4 compares parameter growth across various CL approaches with different task sequences. As shown, SPARC uses far fewer parameters compared to both rehearsal-based and parameter isolation methods. Moreover, SPARC remains scalable even with longer task sequences. In Seq-TinyImageNet with 10 tasks, SPARC outperforms CLS-ER using just 6% of the parameters without the need for experience rehearsal. Both CLS-ER and SPARC leverage complementary learning systems to consolidate knowledge across tasks, but CLS-ER relies on two full model surrogates, resulting in a large memory footprint. In contrast, SPARC creates an efficient combination of parameter-efficient working and semantic memories, all within a restricted model capacity.
+
+**Stability-plasticity trade-off:** Paramount to CL is the stability-plasticity trade-off, a model’s capacity to improve and acquire new knowledge and tasks while preserving performance on earlier learned abilities (Mermillod et al., 2013). This balance is critical for developing adaptable learning algorithms. Following (Sarrafzadeh et al., 2022a), we evaluate stability-plasticity trade-off to better understand the ability of various methods to maintain this balance. Let  $\mathcal{T}$  denote the task-wise performance matrix, where  $\mathcal{T}_{i,j}$  signifies the accuracy on task  $j$  after learning task  $i$ . The stability  $S$  of a model at task  $t$  is quantified as the average performance across all preceding tasks,  $\text{mean}(\mathcal{T}_{t,1:t-1})$ . Conversely, the plasticity  $\mathcal{P}$  at task  $t$  is given by the average performance across tasks 1 to  $t$  when they are first learned,  $\text{mean}(\text{Diag}(\mathcal{T}))$ . The trade-off between stability and plasticity is subsequently defined as  $\text{Trade-off} = 2 \frac{S \cdot \mathcal{P}}{S + \mathcal{P}}$ .
+
+Figure 4 (left) presents an overview of stability-plasticity trade-off in Seq-CIFAR100 5 tasks with buffer size 500. As can be seen, SPARC is way more stable and moderately plastic due to parameter isolation and task-agnostic information consolidation. Such a setting allows SPARC to capture task-specific information with quite less number of parameters and retain them without catastrophic forgetting thereby managing this trade-off better.
+
+**Effect of semantic information consolidation:** The task-agnostic semantic information consolidation presented in Section 3.2 positions SPARC to be as parameter-efficient as possible. Table 5 presents results on Seq-CIFAR100 5 tasks with three extremes: (i) All filters are shared across
+
+{9}------------------------------------------------
+
+tasks; (ii) Only point-wise filters are shared across tasks; and (iii) Each task entails separate filters. As can be seen, SPARC outperforms both shared versions by a large margin. Essentially, semantic memory helps consolidate information across tasks. On the other hand, SPARC almost matches the performance of separate point-wise filters while being parameter-efficient. Specifically, the separate point-wise filters version has **59%** more parameters with only **5%** relative improvement in performance. The difference in terms of the number of parameters will be even more pronounced in longer task sequences.
+
+While semantic information consolidation has a positive impact on learning new tasks, it is imperative to maintain model stability to avoid performance degradation of previous tasks. Figure 4 (right) presents the effect of semantic information consolidation on the stability of SPARC. As can be seen, a faster information aggregation leads to lower stability and consequently higher forgetting. On the other hand, no information aggregation can be detrimental when tasks in a sequence are completely different than the first task. Therefore, slow information aggregation coupled with higher value of  $\alpha$  leads to a better trade-off between performance and stability of SPARC.
+
+Due to space limitations, we provide additional analysis such as performance of competing approaches with SPARC-like backbone in Section D.2, performance evaluation on ImageNet subset in Section D.3, task-wise performance in Section E.1, task-recency bias in Section E.2, and performance under longer task sequences in Section E.3 in Appendix.
+
+## 5 LIMITATIONS AND FUTURE WORK
+
+We proposed SPARC, a simple rehearsal-free, parameter isolation approach for mitigating catastrophic forgetting in CL devoid of full model surrogates. However, SPARC suffers from number of shortcomings. Firstly, we assume the knowledge of task boundary information to switch between task-specific sub-networks [during training](#). However, this information is not always available in real-world settings. Secondly, SPARC does not take into account the difficulty of each task when allocating learnable task-specific parameters. In cases where current task is extremely difficult or overly easy, static allocation of resources is either insufficient or results in over-parameterization. Furthermore, SPARC grows in size, although more modestly than its peers, with the number of tasks. In longer task sequences consisting of unlimited number of tasks, SPARC grows way beyond other rehearsal-based and weight regularization counterparts. As a future work, task-similarity based weight re-use with more nuanced forward transfer coupled with dynamic resource allocation will further augment SPARC in its endeavour to be a real-world continual learner. Finally, SPARC’s current design is specifically optimized for CNN architectures, and its applicability to other model types, such as vision transformers, remains to be explored. Future research will focus on extending SPARC’s compact working and semantic memory framework to these architectures, enabling a broader evaluation of its effectiveness and enhancing its adaptability to diverse real-world scenarios.
+
+## 6 CONCLUSION
+
+We introduced SPARC, a rehearsal-free parameter isolation approach for continual learning that operates without the need for full model surrogates. SPARC’s design is both simple and efficient, leveraging parameter-efficient task-specific working memories and task-agnostic semantic memory to effectively capture and consolidate information across tasks. Inspired by the Complementary Learning Systems (CLS) theory, this combination of specialized memories allows SPARC to function as an efficient continual learner. Additionally, SPARC incorporates a straightforward weight re-normalization technique in the classification layer to address [task-specific biases](#), ensuring a balanced performance across tasks. While SPARC grows incrementally with each new task, it does so at a slower rate compared to existing methods, maintaining scalability even over long task sequences. Our extensive experimental analysis demonstrates that SPARC achieves comparable or superior performance to rehearsal-based methods across various continual learning benchmarks, all while significantly reducing memory and computational overhead. As a future work, we endeavour to further enhance SPARC with dynamic resource allocation and explore its potential for out-of-distribution generalization, further improving its adaptability and robustness in real-world scenarios.
+
+ Rest of paper (reference and Appendix) is removed.

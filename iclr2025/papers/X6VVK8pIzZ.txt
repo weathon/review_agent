@@ -1,0 +1,294 @@
+
+
+{0}------------------------------------------------
+
+# ZERO-SHOT NATURAL LANGUAGE EXPLANATIONS
+
+Fawaz Sammani & Nikos Deligiannis
+
+ETRO Department, Vrije Universiteit Brussel, Pleinlaan 2, B-1050 Brussels, Belgium
+
+imec, Kapeldreef 75, B-3001 Leuven, Belgium
+
+fawaz.sammani@vub.be, ndeligia@etrovub.be
+
+## ABSTRACT
+
+Natural Language Explanations (NLEs) interpret the decision-making process of a given model through textual sentences. Current NLEs suffer from a severe limitation: they are unfaithful to the model’s actual reasoning process, as a separate textual decoder is explicitly trained to generate those explanations using annotated datasets for a specific task, leading them to reflect what annotators desire. In this work, we take the first step towards generating faithful NLEs for any visual classification model without any training data. Our approach models the relationship between class embeddings from the classifier of the vision model and their corresponding class names via a simple MLP which trains in seconds. After training, we can map any new text to the classifier space and measure its association with the visual features. We conduct experiments on 38 vision models, including both CNNs and Transformers. Our method outperforms supervised baselines on many metrics, while remaining comparable on others. In addition to NLEs, our method offers other advantages such as zero-shot image classification and fine-grained concept discovery, each outperforming baseline methods. Finally, we also show that our method achieves state-of-the-art results on zero-shot image captioning.
+
+## 1 INTRODUCTION
+
+Consider the example in Figure 1, where an image classifier incorrectly identifies the input image as a *volcano* rather than a *leatherback turtle*. Why was this decision made and which features of the image led to this prediction? When we apply popular attribution techniques such as the CAM family (Zhou et al., 2015; Selvaraju et al., 2019; Jiang et al., 2021), the explanations are uninformative; perhaps they indicate that the model focused on the main object, but they fail to provide deeper insight. What specific elements within the attributed region influenced the prediction? What features of this image category were significant? Existing attribution techniques offer high-level interpretations and do not break down the reasoning behind the decision. On the other hand, Natural Language Explanations (NLEs) (Park et al., 2018; Sammani et al., 2022) offer detailed interpretations in a textual format. NLEs not only resolve the limitations of attribution methods but also present explanations in a more human-friendly manner, accessible even to a layman user. As illustrated in Figure 1, the NLE reveals that the classifier mistook the image for a volcano due to the bright red glow, resembling erupting lava. This insight allows us to deduce that the classifier is not robust to color shifts.
+
+However, current NLE models are explicitly trained to generate textual explanations using annotated datasets. This renders NLEs as unfaithful, as they reflect what dataset annotators desire rather than the model’s true reasoning process. Other than that, NLE models are characterized with the *shortcut bias* problem, as shown in Sammani & Deligiannis (2023), rendering the explanation meaningless despite achieving state-of-the-art results on natural language generation metrics.
+
+In this work, we aim to generate faithful NLEs in a zero-shot setting for a visual classifier model. This boils down to the question: *how can we access the visual features via any natural text?* To achieve this, we require an intermediary between visual features of the model, and natural language text. Notably, the discrete labels of the classifier correspond to class names in text format, and the classifier weights of each class serve as an embedding vector representation for that class. These embeddings effectively encode semantics; similar objects are close together in the embedding space. Figure 2 illustrates a visualization of those embeddings from a ResNet-50 model for certain classes, using t-sne (van der Maaten & Hinton, 2008). As shown, ocean fish such as different types of sharks
+
+{1}------------------------------------------------
+
+![Figure 1: Comparison between some attribution methods and a Natural Language Explanation (NLE) for explaining the prediction of an image as a volcano. The figure shows four panels: Ground-truth: leatherback turtle, Prediction: volcano; Grad-CAM; Layer-CAM; and Smooth-CAM. Below the panels is a red box containing the NLE: 'this is a volcano because it shows fire burning on the volcano lava flows, a bright red glow erupts'.](c803f6f6e2c49429d2951832bd0f208d_img.jpg)
+
+Ground-truth: leatherback turtle  
+Prediction: volcano
+
+Grad-CAM      Layer-CAM      Smooth-CAM
+
+**NLE (Ours):** this is a volcano because it shows fire burning on the volcano lava flows, a bright red glow erupts
+
+Figure 1: Comparison between some attribution methods and a Natural Language Explanation (NLE) for explaining the prediction of an image as a volcano. The figure shows four panels: Ground-truth: leatherback turtle, Prediction: volcano; Grad-CAM; Layer-CAM; and Smooth-CAM. Below the panels is a red box containing the NLE: 'this is a volcano because it shows fire burning on the volcano lava flows, a bright red glow erupts'.
+
+Figure 1: Comparison between some attribution methods and a Natural Language Explanation (NLE) for explaining the prediction of an image as a *volcano*
+
+and rays form one cluster, while freshwater fish proximally form another cluster. Similarly, small birds such as *robin* and *jay* form a distinct cluster, and so on. Given that discrete labels represent class names, the classification layer of the vision model performs a closed-set visual-textual search over all possible classes, with the predicted class being the one with the highest cosine similarity between the visual features and class embeddings. The classification layer therefore retrieves the class closest to the image. This implies that those class embeddings and the visual features share a common space. Therefore, if we can learn a mapping from the available text data (class names) to the vector embeddings of the classes (classifier weights), we have essentially learned the visual-semantic space of the vision classifier, which then allows us to translate any new text (e.g., a sentence, or a concept) into that embedding space and measure its association with the visual features. Once the mapping is learned, we employ an off-the-shelf frozen language model and utilize inference-time prefix-tuning (Li & Liang, 2021) to generate an NLE that maximize the similarity with the visual features. Additionally, the learned mapping offers us with several other applications, such as concept discovery and zero-shot classification.
+
+To summarize, our contributions are as follows: 1) We are the first to generate NLEs in a zero-shot manner for visual classifiers that are also faithful to the model, achieving performance that is comparable to, and in many cases surpasses supervised baselines. 2) We demonstrate the effectiveness of our approach in three additional applications: zero-shot concept discovery, image classification and image captioning, showing significant improvements over baselines. 3) We evaluate a wide set of 38 vision classifiers, including both CNNs and Transformers.
+
+## 2 RELATED WORK
+
+**Natural Language Explanations:** Early works on NLEs for vision and vision-language tasks include Hendricks et al. (2016); Park et al. (2018); Marasović et al. (2020); Kayser et al. (2021). The standard pipeline typically consists of a task model (e.g., a classifier) for prediction, coupled with an explainer model (e.g., GPT-2 (Radford et al., 2019)) to generate an explanation for the prediction. NLX-GPT (Sammani et al., 2022) proposed a unified approach, combining both models into a single, compact system that simultaneously generates and explains answers in a single text stream using a single causal language modeling objective, ensuring that the reasoning process for the explanation aligns with that of the prediction. Building on this, Uni-NLX (Sammani & Deligiannis, 2023) further consolidates multiple tasks into one model, achieving the ability to perform seven tasks simultaneously. Multimodal-CoT (Zhang et al., 2023) builds upon the Chain of Thought Prompting technique and instead generates a rationale (explanation) prior to generating an answer, which serves as a reasoning step for inferring the answer. In DeViL (Dani et al., 2023), an autoregressive generator is trained on the conceptual captions image captioning dataset (CC3M) (Sharma et al., 2018) using
+
+![Figure 2: t-sne visualization of a ResNet-50 class weight embeddings. The plot shows various bird and animal names clustered in a 2D space. Clusters include birds (kite, bald eagle, grey owl, housefinch, goldfinch, brambling, robin, junco, wren, outel, indigo bunting, chickadee, magpie, bulbul, jay), fish (goldfish, stingray, hammerhead, great white shark, tiger shark, electric ray), and other animals (ostrich, cock, hen, torch).](6d06e66b7a838f8c809884aeee597a5e_img.jpg)
+
+Figure 2: t-sne visualization of a ResNet-50 class weight embeddings. The plot shows various bird and animal names clustered in a 2D space. Clusters include birds (kite, bald eagle, grey owl, housefinch, goldfinch, brambling, robin, junco, wren, outel, indigo bunting, chickadee, magpie, bulbul, jay), fish (goldfish, stingray, hammerhead, great white shark, tiger shark, electric ray), and other animals (ostrich, cock, hen, torch).
+
+Figure 2: t-sne visualization of a ResNet-50 class weight embeddings
+
+{2}------------------------------------------------
+
+![Figure 3: An overview of our method to learn class embeddings. (a) shows the transformation of a visual classifier into a visual feature encoder and an MLP module. (b) shows the classifier weights as class embeddings. (c) shows the learning of class embeddings by minimizing distance between MLP output and ground-truth data. (d) shows the inference process for any new text.](1b7d539e02a202c2cf2d97698b911447_img.jpg)
+
+Figure 3 illustrates the methodology for learning class embeddings.   
+ (a) **Visual Classifier Transformation:** A standard visual classifier (ViT / CNN + classifier) is transformed into a visual feature encoder and an MLP module. The visual encoder outputs a feature vector  $f$ , which is then processed by an MLP to produce a classification output.   
+ (b) **Classifier Weights as Class Embeddings:** The classifier weights,  $w_{tench}$ ,  $w_{goldfish}$ , and  $w_{toilet\ tissue}$ , are used as ground-truth data for training the MLP module.   
+ (c) **Learning Class Embeddings:** The MLP module is trained by minimizing the distance between its output and the ground-truth data. The ground-truth data is generated by encoding class names (e.g., "an image of a tench", "an image of a goldfish", "an image of a toilet tissue") using a frozen Textual Encoder.   
+ (d) **Inference:** Once the MLP module is trained, any new text (e.g., "a freshwater fish") can be mapped into the classifier embedding space. The cosine similarity between the visual feature vector and the text embedding is calculated to determine the association.
+
+Figure 3: An overview of our method to learn class embeddings. (a) shows the transformation of a visual classifier into a visual feature encoder and an MLP module. (b) shows the classifier weights as class embeddings. (c) shows the learning of class embeddings by minimizing distance between MLP output and ground-truth data. (d) shows the inference process for any new text.
+
+Figure 3: An overview of our method to learn class embeddings. (a) We transform the visual classifier into a visual feature encoder and a text encoder paired with an MLP module that outputs classifier weights. (b) The classifier weights, which are the class embeddings, serve as ground-truth data to train the MLP module. (c) We learn the class embeddings by converting the class name into a text prompt, encoding it with the text encoder and MLP module, aiming to minimize the distance between the MLP output and the ground-truth data. (d) Once the MLP module is trained, we can map any new text to the classifier embedding space, which now shares the same space as the visual features, allowing us to measure the association between them. \* indicates that the module is frozen, while 🔥 indicates trainable.
+
+a subset of features from different layers implemented by applying Dropout. However, all these methods rely on annotated datasets consisting of (prediction-explanation) pairs. As a result, the explanations generated reflect the reasoning of the annotators rather than that of the model. This is particularly evident in DeViL, which treats image captions as explanations. On the other hand, our NLEs are generated in a zero-shot manner in a way that maximizes the classifier’s visual feature space, ensuring that they are faithful to the classifier’s reasoning process.
+
+**Zero-Shot Textual Explanations:** ZS-A2T (Salewski et al., 2023) is the work most closely related to ours, as it translates attention maps into textual explanations in a zero-shot manner. There are also several studies (Menon & Vondrick, 2023; Shtedritski et al., 2023) which offer concept-based explanations (short textual descriptors) rather than full sentence-based explanations for model predictions. However, all of these approaches are constrained to vision-language models that are trained to learn a shared vision-language space through a contrastive objective, meaning they cannot be applied to visual classifiers. In contrast, our NLEs are classifier-agnostic, do not depend on a contrastive training objective, and provide full sentence-based explanations.
+
+## 3 METHOD
+
+**Notations:** Consider a visual classifier model  $M$  that we want to interpret, which can be of any architecture (e.g., CNN, Transformer or Hybrid).  $M$  consists of a visual feature encoder  $M_V$ , and a classification layer  $W$ .  $M_V$  maps an input image  $x$  into a feature vector  $f$ . That is:  $M_V(x) = f \in \mathbb{R}^d$ . Usually,  $f$  is the result of average or max pooling, or is the result of the [CLS] token in some Transformer models. The visual feature vector  $f$  is then fed to the classifier layer  $W \in \mathbb{R}^{d \times C}$  with  $C$  classes. Therefore, the matrix  $W$  consists of all class embedding vectors which encode the semantics of a class:  $W = [w_{c_1}, w_{c_2}, \dots, w_{c_C}]$ , and  $|W| = C$ . The prediction  $c_p$  is given by  $\arg \max(f \cdot W)$ . Unlike the visual features  $f$ , note that  $W$  is fixed within the network and independent of the input image  $x$ . We consider an off-the-shelf textual encoder  $M_T$  capable of encoding sentences, with the only exception that this textual encoder does not also encode image information (as in the case of the CLIP textual encoder (Radford et al., 2021)). The textual encoder  $M_T$  takes as an input a natural text  $t_i$  and produces a sentence embedding  $s_i$  of  $k$  dimensions. That is,  $M_T(t_i) = s_i \in \mathbb{R}^k$ .
+
+### 3.1 LEARNING CLASS EMBEDDINGS
+
+The visual classifier  $M$  is a closed-set classifier. Our goal is to expand it into an open-set visual classifier capable of understanding any natural text. Specifically, we want to access or query the
+
+{3}------------------------------------------------
+
+classifier via text. The simplest approach is to align a text encoder with the visual features of the classifier, and then access those features through text. This is the contrastive language-image pretraining paradigm that CLIP (Radford et al., 2021) employs. However, this method is 1) not faithful to the classifier and 2) poses significant technical challenges. More details are provided in Section M of the appendix. To address these issues, we aim to learn a regression function that maps text to the classifier’s embedding space. Note that this is an ill-posed problem, meaning there is either no unique solution or the correct solution is difficult to determine. While we may not be able to learn the exact ground-truth values of the  $d$ -dimensional class embedding vectors  $\mathbf{W}$ , we can still capture their underlying semantics.
+
+The classification layer  $\mathbf{W}$  contains class embeddings which share the same space as the visual features  $f$ . Drawing an analogy with CLIP (Radford et al., 2021),  $\mathbf{W}$  can be thought of as the output of a text encoder that is trained to be aligned with the visual features  $f$  through an alignment loss such as contrastive learning. However, in practice,  $M_T$  is a pretrained off-the-shelf text encoder that is not trained to align with  $f$ . Drawing inspiration from Christensen et al. (2023), we introduce a small learnable module comprising a simple Multi-Layer-Perceptron (MLP), which is trained to map text to the classifier embedding space (Figure 3a). We first map every textual class name  $c_i$ , where  $i = 1, 2, \dots, C$ , to a corresponding natural text prompt  $t_i$ , specified as: *an image of a*  $\{c_i\}$ . For example, if  $c_i$  is the class *tench*, then  $t_i$  is: *an image of a tench*. Given that we want to learn a mapping from  $t_i$  to the class embedding  $\mathbf{w}_{c_i} \in \mathbf{W}$ , the only ground-truth data available to us is  $\mathbf{W}$ , which are the fixed  $C$  class embeddings of the classifier (Figure 3b). For ImageNet-1k (Deng et al., 2009),  $C = 1,000$ , presenting a highly scarce data scenario. Nevertheless, as we will elaborate later, this challenge can still be addressed using specific techniques. Each prompt  $t_i$  is then encoded with the text encoder  $M_T$  to produce a text embedding representation  $s_i$ , which we feed to a shared MLP layer. The regressed class embedding for the class  $c_i$  is defined as  $\tilde{\mathbf{w}}_{c_i} = \text{MLP}(s_i)$ . The prediction  $e_p$  can then given by  $\arg \max(f \cdot \tilde{\mathbf{W}})$ , where  $\tilde{\mathbf{W}} = [\tilde{\mathbf{w}}_{c_1}, \tilde{\mathbf{w}}_{c_2}, \dots, \tilde{\mathbf{w}}_{c_C}]$ .
+
+The MLP is trained to minimize the distance between the regressed class embedding  $\tilde{\mathbf{w}}_{c_i}$  and the ground-truth embedding  $\mathbf{w}_{c_i}$  (Figure 3c). Note that the only trainable module is the MLP, and the visual classifier  $M_V$  and text encoder  $M_T$  are kept frozen. We employ the cosine distance instead of other functions like L1 or Mean Squared Error (MSE) loss, as cosine loss incorporates angular information. This approach yields improved performance, as demonstrated in the ablation experiments in Section D of the appendix. The loss objective  $L$  is then given by:
+
+$$L = \sum_{i=1}^C \left( 1 - \frac{\tilde{\mathbf{w}}_{c_i} \cdot \mathbf{w}_{c_i}}{\|\tilde{\mathbf{w}}_{c_i}\| \|\mathbf{w}_{c_i}\|} \right) \quad (1)$$
+
+Training the MLP takes roughly 10 seconds on a single moderate GPU, and is therefore considered negligible and can be applied instantly to any visual classifier model. Once the MLP is trained, we can map any new text (e.g., a descriptor, new class, or sentence) to the class embedding space. This mapped text now shares the same embedding space as the visual features  $f$ , and we can measure the association of that new text to  $f$  (Figure 3d). It is worth noting, that in coarse or fine-grained classification, some class names (e.g., “tench”) may be unfamiliar to a text encoder trained on general language. However, because their corresponding class embedding is close to that of another class that the text encoder understands (e.g., “goldfish”) (see Figure 2), the MLP can infer that “tench” is a fish, even though the word “fish” is not part of the class name of “tench”. Furthermore, it is important to note that we only use the class name, and no other supplementary information. More details regarding this can be found in Section L of the appendix.
+
+As mentioned, we are faced with an extremely scarce data scenario. We therefore utilize two simple but highly effective data augmentation techniques, both which allow us to create training points which are in proximity to the original training sample.
+
+**Input Dropout:** This follows the conventional Dropout technique (Srivastava et al., 2014). We randomly drop 50% of  $s_i$  (the input features to the MLP) with a probability of 0.3. The regressed class embedding is then defined as  $\tilde{\mathbf{w}}_{c_i} = \text{MLP}(\text{drop}(s_i))$ . As shown in Section D of the appendix, this simple technique already boosts performance by a large margin.
+
+**Learned Soft Dropout:** We propose to implement a learned dropout mechanism, where instead of completely zeroing out features randomly, we learn how to selectively scale them with values between 0 and 1. We term this approach as *Soft Dropout*. We implement this via a Gated Linear
+
+{4}------------------------------------------------
+
+![Figure 4: An overview of how we update the prefix. The diagram shows the process of generating explanations for an image of a cat. A 'Pretrained Language Model' (PLM) with a learnable 'Prefix' (this is a) generates a distribution over top-K words (cat, jacket, water, arm, animal). These are passed through a 'Textual Encoder' and an 'MLP' to produce features f. Simultaneously, an image is processed by a 'ViT/CNN' to produce visual features f_v. Cosine similarity is calculated between f and f_v. A 'Construct Target Distribution' step uses these similarities to form a target distribution. The 'XE Loss' is calculated between the current distribution o_l and the target distribution. Finally, an 'update prefix' step uses the loss to refine the learnable prefix.](690fce4fb5c9cbb8beb560cb2a3fcbeb_img.jpg)
+
+Figure 4: An overview of how we update the prefix. The diagram shows the process of generating explanations for an image of a cat. A 'Pretrained Language Model' (PLM) with a learnable 'Prefix' (this is a) generates a distribution over top-K words (cat, jacket, water, arm, animal). These are passed through a 'Textual Encoder' and an 'MLP' to produce features f. Simultaneously, an image is processed by a 'ViT/CNN' to produce visual features f\_v. Cosine similarity is calculated between f and f\_v. A 'Construct Target Distribution' step uses these similarities to form a target distribution. The 'XE Loss' is calculated between the current distribution o\_l and the target distribution. Finally, an 'update prefix' step uses the loss to refine the learnable prefix.
+
+Figure 4: An overview of how we update the prefix. The example is shown for the first timestep  $l = 1$  at iteration  $i = 1$ , with  $K = 5$  and a hard prompt set as  $\{this\ is\ a\}$ . **cosine** indicates cosine similarity.
+
+Unit (GLU) activation function (Dauphin et al., 2016) on the MLP output. The regressed class embedding is then defined as  $\tilde{w}_{c_i} = \text{GLU}(\text{MLP}(\text{drop}(s_i)))$ . Since GLU is applied independently to *each* dimension of the MLP output, it scales different dimensions of the learned class embedding, effectively associating the space around the training point to the corresponding class. As shown in Section D of the appendix, this technique further provides significant improvements in performance in such a scarce data scenario.
+
+### 3.2 GENERATING ZERO-SHOT NLEs
+
+Once we establish the mapping function **MLP** which projects the textual features into the same space as the visual features  $f$ , we can optimize an off-the-shelf pre-trained language model (PLM)—capable of generating coherent text—to generate a NLE that maximizes the similarity with the visual features  $f$ . We freeze the PLM to keep its powerful generation capability, and instead use prefix-tuning (Li & Liang, 2021), an efficient-finetuning method which attaches learnable vectors in the embedding space of the PLM. We follow an inference-time approach where we optimize learnable prefixes for each sample individually. Unlike supervised models which require a single forward pass at inference, this approach is more time-consuming. However, it allows for much greater flexibility in the generated text, operates in an open-set environment (generating words outside the dataset corpus), and can be adapted to any example or classifier on-the-fly. We build upon the approach introduced by Tewel et al. (2021). An overview of this process is shown in Figure 4. Given a PLM (e.g., GPT-2), we attach randomly initialized learnable prefixes to it to steer the frozen language model to generate explanations of the classifier. Here, the learnable prefixes are set as initial key-value pairs in each attention block of the Transformer, such that each generated word in the explanation can attend to these prefixes. At each timestep  $l$ , we sample the top- $K$  tokens from the PLM output vocabulary distribution  $o_l$ , which act as  $K$  continuation tokens of the currently generated explanation. These  $K$  potential sentences are then passed to the text encoder  $M_T$ , followed by the learned **MLP** to produce  $K$  vectors that share the same embedding space as the visual features  $f$ . The cosine similarity between each of those vectors and the visual features  $f$  is then computed, yielding  $K$  similarity scores with the visual feature vector  $f$ . These scores, normalized with softmax, form a target distribution to train against  $o_l$  with the standard Cross-Entropy loss, and the prefixes of the PLM are updated with backpropagation. We then run the PLM again with the updated prefixes and we sample from the output distribution the most likely token. Namely, per timestep,  $K$  token are initially produced to update the prefixes but one token is finally sampled (after the prefixes are updated) as the continuation of the explanation. We run the above process for  $L$  timesteps. We set  $L$  as the maximum sequence length we want for the explanation, or until the  $\langle . \rangle$  token is reached. After these  $L$  timesteps, one iteration will be concluded, and one explanation will be generated. Therefore, each iteration generates one complete explanation. The sampled  $K$  tokens which have their continuation relevant to the features  $f$  will have their scores increased during the generation process, while non-relevant tokens will have their scores decreased. We train the prefixes for  $I$  iterations, producing  $I$  explanations. Because the similarity between the **MLP** output and the visual features  $f$  is used to construct the target distribution for training the prefixes, we choose a different similarity measure—not biased toward the process and metric used to create these explanations—to select the best explanation from
+
+{5}------------------------------------------------
+
+the  $I$  generated ones. Specifically, we select the explanation that maximizes the CLIP-Score as the final explanation. More details are provided in Section I of the appendix.
+
+## 4 EXPERIMENTS
+
+In this section, we present both quantitative and qualitative experiments. Implementation details are provided in Section I of the appendix. We evaluate a diverse set of 38 vision models. A selection of these models is included here, with the remainder provided in the appendix. For CNNs, we consider the following family of models (each with several variants): Residual Networks (ResNets) (He et al., 2015), Wide ResNets (Zagoruyko & Komodakis, 2016), ResNeXts (Xie et al., 2016), Densely Connected Networks (DenseNets) (Huang et al., 2016), EfficientNetV2 (Tan & Le, 2021), ShuffleNetv2 (Ma et al., 2018), MobileNetV3 (Howard et al., 2019), ConvNeXts (Liu et al., 2022) and ConvNeXtv2 (Woo et al., 2023). For Transformers, we consider the following family of models (each with several variants): Vision Transformers (ViTs) (Dosovitskiy et al., 2021), Swin Transformer (Liu et al., 2021), BeiT (Bao et al., 2022), DiNOv2 (Oquab et al., 2024) and the hybrid Convolution-Vision Transformer CoViT (Wu et al., 2021). All models are pretrained on ImageNet-1K (Deng et al., 2009). Models with the subscript *pr* indicate that the model was pretrained on ImageNet-21k before being finetuned on ImageNet-1K. Models with a subscript *v2* are trained with the new recipe from PyTorch Vryonitis, 2021). Finally, BeiT, DiNOv2 and ConvNeXtv2 are pretrained in a self-supervised manner before being finetuned on ImageNet-1k.
+
+### 4.1 LEARNED CLASS EMBEDDINGS
+
+To evaluate the learned class embeddings, we employ zero-shot image classification as a benchmark. Since our approach can map any new text to class embeddings (i.e., class weights), we can treat new unseen classes as input text. This implies that by mapping  $n$  new classes to class embeddings, we effectively extend our classifier by  $n$  additional classes. It is important to note that we are referring to the classical zero-shot classification paradigm (Lampert et al., 2014; Xian et al., 2017b), unlike CLIP (Radford et al., 2021) which addresses zero-shot *transfer*. As a baseline, we compare against ICIS (Christensen et al., 2023), the current state-of-the-art in zero-shot image classification using text-only training. For a fair comparison, we re-implemented their method, utilizing the same text encoder, dataset splits and class names as in our approach. We use the challenging ImageNet-1K dataset as our benchmark, splitting its 1,000 classes into 900 for training and 100 for testing. For validation and hyperparameter tuning, we use 100 non-overlapping classes from the ImageNet-21K dataset.
+
+We follow the standard evaluation protocol for zero-shot image classification which includes two settings: the *Generalized Zero-Shot Setting* and the *Zero-Shot Setting*. The Generalized Zero-Shot Setting is the most important as it reflects real-world scenarios. In this setting, we generate class weights for both the seen (training) classes, and the unseen (testing) classes. For ImageNet, these are all the 1,000 classes. The image is then classified into one of these classes by comparing its features  $f$  against all these classes, and the class with the highest similarity is predicted. “Train” refers to the results on the training set, while “Test” refers to the results on the testing set. We report the standard Top-1 (@1) and Top-5 (@5) accuracy metrics. In the Zero-Shot Setting, we generate weights for the unseen (testing) classes only, and the image is classified solely among the testing classes.
+
+In the case of ImageNet, the image features  $f$  are compared only against the 100 testing classes, and the class with the highest similarity is predicted. However, this setting is less realistic, as in practice we do not know which classes are unknown. Results are presented in Table 1. Our method significantly outperforms ICIS on the testing set in the generalized zero-shot setting and, in most
+
+![](80530169c7b6298ce012a85b906caeb3_img.jpg)
+
+Figure 5: t-sne embeddings on new unseen classes from ImageNet-21K, for a ResNet-50
+
+{6}------------------------------------------------
+
+Table 1: Quantitative Results on evaluating class embeddings via zero-shot image classification on ImageNet-1K, compared to the baseline ICIS, for several visual classifiers.
+
+| Model | Method | Generalized Zero-Shot Setting |  |  |  | Zero-Shot Setting |  |
+|-|-|-|-|-|-|-|-|
+|  |  | Train@1 | Train@5 | Test@1 | Test@5 | Test@1 | Test@5 |
+| ResNet50 | ICIS | <b>74.18</b> | <b>91.76</b> | 13.04 | 51.68 | 49.80 | 77.04 |
+|  | Ours | 66.77 | 89.34 | <b>33.28</b> | <b>66.20</b> | <b>50.88</b> | <b>77.62</b> |
+| ResNet101 | ICIS | <b>76.05</b> | <b>92.86</b> | 11.18 | 43.26 | <b>46.06</b> | <b>73.48</b> |
+|  | Ours | 69.42 | 90.19 | <b>25.92</b> | <b>57.80</b> | 44.36 | 72.96 |
+| WideResNet50 | ICIS | <b>78.29</b> | <b>93.57</b> | 11.82 | 49.08 | <b>51.00</b> | <b>79.26</b> |
+|  | Ours | 74.27 | 92.05 | <b>30.20</b> | <b>64.92</b> | 49.98 | 78.46 |
+| WideResNet101 | ICIS | <b>78.89</b> | <b>93.67</b> | 9.26 | 46.02 | 46.38 | 75.22 |
+|  | Ours | 75.65 | 92.59 | <b>26.66</b> | <b>60.60</b> | <b>48.58</b> | <b>75.82</b> |
+| ResNeXt50 <sub>32x4d</sub> | ICIS | <b>77.54</b> | <b>93.32</b> | 8.78 | 44.00 | 44.24 | 74.52 |
+|  | Ours | 72.44 | 90.97 | <b>29.96</b> | <b>63.00</b> | <b>46.90</b> | <b>74.96</b> |
+| MobileNetv3-L | ICIS | <b>74.22</b> | <b>91.53</b> | 3.30 | 21.44 | <b>39.56</b> | 65.56 |
+|  | Ours | 68.26 | 89.84 | <b>18.90</b> | <b>43.42</b> | 39.32 | <b>66.00</b> |
+| ViT-B/16 <sub>swag</sub> | ICIS | 85.43 | 97.11 | 4.98 | 50.62 | 57.72 | <b>84.18</b> |
+|  | Ours | <b>85.47</b> | <b>97.35</b> | <b>9.18</b> | <b>53.84</b> | <b>58.20</b> | 83.72 |
+| BEiT-L/16 | ICIS | <b>87.79</b> | <b>98.32</b> | 5.72 | 49.62 | <b>56.96</b> | 78.84 |
+|  | Ours | 87.57 | 98.26 | <b>10.84</b> | <b>51.52</b> | 54.10 | <b>80.22</b> |
+| DINOv2-B | ICIS | <b>81.30</b> | <b>96.08</b> | 13.96 | 44.70 | <b>46.60</b> | 72.14 |
+|  | Ours | 79.26 | 95.95 | <b>21.52</b> | <b>49.36</b> | 43.50 | <b>73.72</b> |
+| ConvNeXtV2-B <sub>pl-384</sub> | ICIS | 87.89 | 98.20 | 6.06 | 48.64 | 56.36 | 76.74 |
+|  | Ours | <b>87.90</b> | <b>98.31</b> | <b>9.36</b> | <b>50.60</b> | <b>56.72</b> | <b>77.58</b> |
+
+cases, in the zero-shot setting as well. As this is an ill-posed problem, the testing accuracies may not be particularly high. This phenomenon is standard in zero-shot learning (Xian et al., 2017a), especially on the challenging ImageNet dataset. Evaluation on other models are presented in Section F of the appendix. We also present an analysis on test prompt sensitivity in Section E of the appendix. In Figure 5, we present a t-sne visualization of the generated embeddings for new unseen classes taken from ImageNet-21K. As seen, semantically similar classes are clustered together (e.g., water sports cluster, people cluster). After tuning the hyperparameters of the MLP mapper, we train it on the full set of classes (1, 000 for ImageNet) for further applications. In Section D of the appendix, we present ablation studies on Input Dropout and Soft Dropout. Our findings show that Input Dropout boosts top-1 zero-shot accuracy by 11.38% points, while Soft Dropout further boosts it by an additional 16.04% points. Therefore, these augmentations together provide a significant increase of 27.42% points in top-1 zero-shot accuracy. We also present ablation studies on different text encoders.
+
+### 4.2 ZERO-SHOT NLEs
+
+**Baselines and Dataset:** We use the ImageNet-X (Sammani & Deligiannis, 2023) dataset which provides explanations for ImageNet categories, describing them with distinctive and physical features. It consists of 141K training samples, 2K for validation and 1K for testing. As our method is zero-shot, we only use the testing split for evaluation purposes. We compare against 4 supervised baseline NLE models which are trained explicitly to generate those explanations: NLX-GPT (Sammani et al., 2022) and Uni-NLX (Sammani & Deligiannis, 2023). The subscript *ft* means that the NLE model is preceded by pretraining on 1M image- caption pairs before being finetuned on ImageNet-X. All baselines are trained on the ImageNet-X training set.
+
+**Metrics:** Supervised NLE models use natural language generation (NLG) metrics such as BLEU (Papineni et al., 2002) to measure the n-gram overlap between the generated NLE and the ground-truth one. We avoid evaluation using NLG metrics because it is challenging to expect an n-gram overlap between the ground-truth annotation and a zero-shot explanation. As a result, we resort to using
+
+{7}------------------------------------------------
+
+semantic-based evaluation metrics that, to the best of our ability, reflect faithfulness. Given a NLE for an image  $x$ , we use the following metrics: **CLIP-S**: We use the CLIP-Score (Hessel et al., 2021), a metric that leverages the powerful CLIP model as an external “judge” to assess the matching score between an image-text pair. Here, we use the CLIP-S to judge how associated the image  $x$  is to its NLE. That is,  $\text{CLIP-S} = \text{CLIP}(x, \text{NLE})$ . An NLE which truly reflects the image and its content, is given a high matching score. **LPIPS**: Perceptual Similarity (Zhang et al., 2018) is a learned metric trained with human input that has shown to correlate very well with human judgment. It measures the similarity between two images semantically using deep network features rather than focusing on pixel-level differences. To utilize this metric, we need two images. Taking advantage of the remarkable ability of current text-to-image models in generating realistic images, we first generate an image by re-formulating the NLE as a text prompt to the Stable Diffusion Text-to-Image model (Rombach et al., 2021) to obtain  $x^g$  (see Section I of the appendix for more details on this). We then compare  $x^g$  against the image  $x$  using the LPIPS metric:  $\text{LPIPS}(x, x^g)$ . The LPIPS score is low when the two images share similar semantic features. The lower the LPIPS, the more the NLE truly reflects the visual features. We use the trained LPIPS models<sup>1</sup> based on AlexNet (A) and SqueezeNet (S). Finally, **Cosine** is the cosine similarity between the visual features of the model we interpret for the image  $x$  and that for  $x^g$ :  $\cos(M_V(x), M_V(x^g))$ . When the NLE is correct and faithful, the synthesized image  $x^g$  will activate the same visual features in the classifier as the original image  $x$  that generated the NLE, resulting in a high cosine similarity score. Our method, including the 4 baselines follow exactly the same evaluation protocol, using the ImageNet-X test set.
+
+We follow NLX-GPT and Uni-NLX where we generate both the prediction and explanation. As highlighted in NLX-GPT, this is important to ensure that the prediction and explanation come from the same reasoning process. Results are presented in Table 2. On all CNN models, our zero-shot NLEs outperform supervised NLEs on all metrics while remaining comparable on the cosine metric. On Transformer models, our zero-shot NLEs surpass the supervised NLEs on CLIP-S and perform comparably (and sometimes better) across other metrics. Note that the cosine metric only captures the geometric alignment (or direction) of these vectors in the Euclidean space. As a simple example, the cosine similarity between:  $v_1 = [1, 1, 0]$  and  $v_2 = [2, 2, 0]$ , where  $v_2 = 2v_1$  is, 1, indicating perfect alignment. Therefore, the cosine metric is suboptimal for capturing *semantically* relevant alignment. Evaluation on other models are presented in Section H of the appendix.
+
+In Figure 6, we provide qualitative examples of images from different ImageNet categories. The first row presents NLEs that are expressive and free from contextual errors. For example, we can see that the rings presented on the snake’s skin are distinctive of the category *king snake*. In the second row, we present examples where the NLEs are expressive but contain contextual errors. Despite these mistakes, they still help users understand the reasoning process. For example, the model identifies a *vine snake* based on its green, arrow-shaped head, and identifies a *tree frog* by its green, lizard-like head. We can also reveal that a ResNet-50 has associated *jellyfish* with “glowing”. Upon inspecting the ImageNet training images for the class *jellyfish*, we observe that most of them feature glowing jellyfish. This suggests that the ResNet-50 model has taken a shortcut bias in learning this class. Additional qualitative examples are provided in Section J of the appendix.
+
+### 4.3 ZERO-SHOT FINE-GRAINED CONCEPT DISCOVERY
+
+We present one more human-friendly interpretable approach to deep learning models, which is fine-grained concept discovery where we aim to dissect the visual features into textual concepts in a zero-shot manner. In this context, we refer to concepts as textual descriptors; short descriptions in natural language that describe physical features of many objects in the world. This approach stems from how humans reason. For example, to justify an image as an *american robin*, we would describe the bird’s beak, orange belly, and black back. In this approach, we are given a set of predefined concepts. We then query a visual classifier to determine whether these concepts are present in the classifier’s visual features. Previously, this method was restricted to CLIP models (Menon & Vondrick, 2023). Now, with our approach, it can be applied to any visual classifier. Manually writing these textual concepts can be costly and does not scale to large class sets like ImageNet. To address this, we leverage large language models (LLMs), which demonstrate remarkable world knowledge across various domains, to generate these concepts. See Section K of the appendix for more details.
+
+<sup>1</sup><https://github.com/richzhang/PerceptualSimilarity>
+
+{8}------------------------------------------------
+
+Table 2: Quantitative Results on our zero-shot NLEs compared to supervised baselines, on several visual classifiers. Results are reported on the test set of ImageNet-X.
+
+| Model | Metric | NLX-GPT | NLX-GPT <sub>ft</sub> | Uni-NLX | Uni-NLX <sub>ft</sub> | Ours |
+|-|-|-|-|-|-|-|
+| ResNet50 | CLIP-S ↑ | 28.53 | 28.52 | 28.38 | 28.52 | <b>30.56</b> |
+|  | LPIPS(A) ↓ | 0.721 | 0.719 | 0.720 | 0.716 | <b>0.706</b> |
+|  | LPIPS(S) ↓ | 0.624 | 0.623 | 0.620 | 0.620 | <b>0.614</b> |
+|  | Cosine ↑ | 0.703 | 0.704 | 0.703 | <b>0.710</b> | 0.708 |
+| ResNeXt50 <sub>32x4d</sub> | CLIP-S ↑ | 28.53 | 28.52 | 28.38 | 28.52 | <b>30.73</b> |
+|  | LPIPS(A) ↓ | 0.717 | 0.717 | 0.720 | 0.719 | <b>0.707</b> |
+|  | LPIPS(S) ↓ | 0.621 | 0.620 | 0.622 | 0.623 | <b>0.616</b> |
+|  | Cosine ↑ | <b>0.680</b> | 0.677 | 0.677 | 0.677 | 0.676 |
+| DenseNet161 | CLIP-S ↑ | 28.53 | 28.52 | 28.38 | 28.52 | <b>30.56</b> |
+|  | LPIPS(A) ↓ | 0.717 | 0.718 | 0.718 | 0.723 | <b>0.706</b> |
+|  | LPIPS(S) ↓ | 0.620 | 0.620 | 0.620 | 0.624 | <b>0.616</b> |
+|  | Cosine ↑ | 0.589 | <b>0.591</b> | 0.589 | 0.588 | 0.588 |
+| DINOv2-B | CLIP-S ↑ | 28.53 | 28.52 | 28.38 | 28.52 | <b>30.15</b> |
+|  | LPIPS(A) ↓ | 0.719 | 0.716 | 0.717 | 0.716 | <b>0.712</b> |
+|  | LPIPS(S) ↓ | 0.622 | 0.621 | <b>0.619</b> | <b>0.619</b> | <b>0.619</b> |
+|  | Cosine ↑ | <b>0.362</b> | 0.360 | 0.354 | 0.356 | 0.314 |
+| ViT-B/16 <sub>pt</sub> | CLIP-S ↑ | 28.53 | 28.52 | 28.38 | 28.52 | <b>30.92</b> |
+|  | LPIPS(A) ↓ | 0.723 | 0.723 | 0.717 | 0.722 | <b>0.710</b> |
+|  | LPIPS(S) ↓ | 0.624 | 0.626 | <b>0.619</b> | 0.624 | 0.621 |
+|  | Cosine ↑ | <b>0.450</b> | 0.440 | 0.447 | 0.445 | 0.425 |
+
+![Figure 6: Qualitative examples of our zero-shot NLEs on ImageNet for a ResNet-50 classifier. The figure shows two rows of images with predictions and explanations. The first row shows: 1) A farm scene with tractors and buckets, predicted as 'barrow because it shows tractor cart buckets and other tools in the field at a farm'. 2) A beekeeper with a beehive, predicted as 'apiary because it shows honey bees in the food bee factory at a farm for Honeybee Foods'. 3) An airplane taking off, predicted as 'airliner because it shows the aircraft flying overhead at a high speed over an airport'. 4) A snake with a ring, predicted as 'king snake because it shows serpentine ring on the snake skin'. The second row shows: 1) A hermit crab on a hand, predicted as 'hermit crab because it shows crab and turtle in the shell'. 2) A vine snake with an arrow, predicted as 'vine snake because it shows a green arrow on top'. 3) A tree frog on a leaf, predicted as 'tree frog because it shows the frog with its head covered by a green lizard on top'. 4) A jellyfish in a tube, predicted as 'jellyfish because it shows jellyfish glow in a tube on the screen'. Labels 'Expressive & No Contextual Errors' and 'Expressive Contextual Errors' are on the left.](c37fe03d7cad74ad675a0eb16aa43821_img.jpg)
+
+Figure 6: Qualitative examples of our zero-shot NLEs on ImageNet for a ResNet-50 classifier. The figure shows two rows of images with predictions and explanations. The first row shows: 1) A farm scene with tractors and buckets, predicted as 'barrow because it shows tractor cart buckets and other tools in the field at a farm'. 2) A beekeeper with a beehive, predicted as 'apiary because it shows honey bees in the food bee factory at a farm for Honeybee Foods'. 3) An airplane taking off, predicted as 'airliner because it shows the aircraft flying overhead at a high speed over an airport'. 4) A snake with a ring, predicted as 'king snake because it shows serpentine ring on the snake skin'. The second row shows: 1) A hermit crab on a hand, predicted as 'hermit crab because it shows crab and turtle in the shell'. 2) A vine snake with an arrow, predicted as 'vine snake because it shows a green arrow on top'. 3) A tree frog on a leaf, predicted as 'tree frog because it shows the frog with its head covered by a green lizard on top'. 4) A jellyfish in a tube, predicted as 'jellyfish because it shows jellyfish glow in a tube on the screen'. Labels 'Expressive & No Contextual Errors' and 'Expressive Contextual Errors' are on the left.
+
+Figure 6: Qualitative examples of our zero-shot NLEs on ImageNet for a ResNet-50 classifier.
+
+Performing this application with our method is simple, and is illustrated in Figure 3d. Given a large set of concepts  $U$  with  $|U| = Z$ , every concept  $u_j$  is encoded using the text encoder  $M_T$  followed by the MLP to yield a concept embedding  $\tilde{w}_{u_j}$ . That is,  $\tilde{w}_{u_j} = \text{MLP}(\text{M}_T(u_j))$ . We then compute the cosine similarity between the visual features  $f$  and  $\tilde{w}_{u_j}$ ,  $\forall j = 1, \dots, Z$ . We then take the top- $B$  scoring concepts. Qualitative results are shown in Figure 7 for different models. This allows us to reveal what concepts different model features encode. Interestingly, we see that the BeiT-L models assigns the top-concept for the “tench” prediction as “10 legs”. This classification arises from the patchification process of the transformer, where multiple patches comprise of the fins of the fish, which are identified as “10 legs” due to their physical appearance.
+
+{9}------------------------------------------------
+
+![Figure 7: Qualitative examples of concept discovery on ImageNet for different classifiers. The figure shows two rows of images and their corresponding detected concepts and scores for ResNet-50, WideResNet-101, and BeiT/16-Large models. The first row shows a fish in a net, and the second row shows a shark swimming. The cosine similarity is scaled by 2.5 for all models.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+| Image | Model | Concept | Score |
+|-|-|-|-|
+| fish in a net | ResNet-50: | tench, tinca tinca because... | 42.25 |
+|  |  | a variety of fish | 49.25 |
+|  |  | a freshwater fish | 46.76 |
+|  |  | brass or bronze metal or plastic wire mesh stretched | 40.05 |
+|  | WideResNet-101 | tench, tinca tinca because... | 87.75 |
+|  |  | fish | 68.0 |
+|  |  | a freshwater fish | 57.75 |
+|  |  | large, elongated fish a fish with a bright orange or yellow color | 57.25 |
+|  | BeiT/16-Large | tench, tinca tinca because... | 98.0 |
+|  |  | 10 legs | 42.0 |
+|  |  | fish | 34.0 |
+|  |  | a freshwater fish leaves brass or bronze | 30.25 |
+| shark swimming | ResNet-50: | great white shark because... | 73.50 |
+|  |  | large, triangular fins | 71.25 |
+|  |  | an underwater scene | 71.25 |
+|  |  | large, predatory fish one or two dorsal fins large grey marine mammal | 70.0 |
+|  | WideResNet-101 | great white shark because... | 91.0 |
+|  |  | large, predatory fish | 79.25 |
+|  |  | one or two dorsal fins large marine mammal wings or fins | 79.00 |
+|  |  | an underwater scene | 77.50 |
+|  | BeiT/16-Large | great white shark because... | 44.0 |
+|  |  | large, predatory fish | 42.5 |
+|  |  | powerful jaws sharp teeth large head large fins | 29.75 |
+
+Figure 7: Qualitative examples of concept discovery on ImageNet for different classifiers. The figure shows two rows of images and their corresponding detected concepts and scores for ResNet-50, WideResNet-101, and BeiT/16-Large models. The first row shows a fish in a net, and the second row shows a shark swimming. The cosine similarity is scaled by 2.5 for all models.
+
+Figure 7: Qualitative examples of concept discovery on ImageNet for different classifiers. The cosine similarity is scaled by 2.5 for all models, in order to stretch the range of the score distribution to  $[0, 1]$
+
+Finally, we conduct a quantitative evaluation of the detected concepts to assess their effectiveness and faithfulness to the visual features. We use the top-detected concepts as supplementary information to regress the class embeddings. If the detected concepts are faithful, they should lead to a better regression of the class embeddings, and as a result a higher accuracy. Our baseline uses only the class name to regress the class embeddings. That is,  $\tilde{w}_{c_i} = \text{MLP}(\mathbf{M}_T(t_i))$  where  $t_i$  is: *an image of a {class name}*. For the evaluation, we change  $t_i$  to  $t_{ic}$  which now include both the class name and the detected concepts:  $t_{ic} = \text{an image of a {class name, } u_b}$  where  $u_b$  is a concept from the top- $B$  detected concepts. Results on ImageNet are presented in Table 3 on several models. As shown, the detected concepts lead to significant improvements in accuracy, which shows the effectiveness and faithfulness of the concepts to the visual features. In this experiment, we use  $B = 15$  and average the text encoder outputs to a single feature vector, before we feed it as input to the MLP. We also found that setting  $B = 10$  yields to approximately the same results (e.g., 73.61 Top-1 accuracy for a ResNet-50). Evaluation on other models are provided in Section G of the appendix.
+
+### 4.4 ADDITIONAL APPLICATIONS
+
+In Section B of the appendix, we also present zero-shot image captioning experiments on the COCO dataset (Lin et al., 2014) as an additional application of our method, achieving new state-of-the-art results while also showing the generalizability of our method to datasets beyond ImageNet. Furthermore, we present experiments on zero-shot transfer to other datasets in Section C of the appendix.
+
+## 5 CONCLUSION
+
+We proposed a zero-shot faithful NLE method for visual classifiers. We also presented other applications on zero-shot image classification and fine-grained concept discovery. Note that our work offers a solution to a wide range of zero-shot applications that were previously restricted to CLIP models. Our work removes this limitation, and can now be applied to any visual classifier. Additionally, our work offers a method for annotating sparse autoencoder latents trained on any visual classifier. Finally, as with any research work, our method is accompanied by its own set of limitations, which we discuss in Section A of the appendix.
+
+Table 3: Quantitative results of concept discovery
+
+| Model | Baseline |  | + Concepts |  |
+|-|-|-|-|-|
+|  | Top-1 | Top-5 | Top-1 | Top-5 |
+| ResNet50 | 63.42 | 87.02 | 73.66 | 92.18 |
+| ResNet101 | 65.07 | 86.95 | 75.32 | 92.91 |
+| WideResNet50 <sub>2</sub> | 73.51 | 90.10 | 81.06 | 95.64 |
+| WideResNet101 <sub>2</sub> | 75.25 | 90.60 | 82.05 | 95.95 |
+| ResNeXt101 <sup>64x4d</sup> | 75.52 | 90.79 | 82.85 | 96.41 |
+| DenseNet161 | 67.84 | 88.58 | 75.37 | 93.11 |
+| EfficientNetV2-S | 76.64 | 91.99 | 84.00 | 96.79 |
+| EfficientNetV2-M | 77.82 | 92.37 | 85.03 | 97.17 |
+| ShuffleNetv2 <sub>2.0</sub> | 68.02 | 86.87 | 75.04 | 92.64 |
+| MobileNetv3-L | 63.32 | 85.20 | 71.76 | 90.62 |
+| ViT-B/32 | 68.66 | 85.76 | 75.31 | 92.34 |
+| ViT-B/16 <sub>wag</sub> | 77.84 | 93.00 | 84.42 | 97.48 |
+| ViT-L/32 | 69.83 | 86.66 | 76.47 | 92.97 |
+| ViT-L/16 | 72.35 | 88.58 | 79.44 | 94.51 |
+| Swin-S | 75.40 | 90.66 | 82.45 | 96.34 |
+| ViT-B/16 <sub>pt</sub> | 76.90 | 92.77 | 82.40 | 96.79 |
+| BeiT-B/16 | 77.27 | 92.47 | 84.56 | 97.37 |
+| BEiT-L/16 | 79.90 | 93.58 | 87.06 | 98.22 |
+| DINOv2-B | 73.49 | 91.29 | 81.99 | 96.37 |
+| Cvt-21 | 74.16 | 90.10 | 81.04 | 95.15 |
+| ConvNeXt-B | 76.54 | 91.66 | 83.72 | 96.79 |
+| ConvNeXt-B <sub>pt</sub> | 77.89 | 92.88 | 84.98 | 97.66 |
+| ConvNextV2-B | 77.31 | 91.83 | 84.58 | 97.11 |
+| ConvNextV2-B <sub>pt</sub> | 78.93 | 93.32 | 85.96 | 97.87 |
+| ConvNeXtV2-B <sub>pt.384</sub> | 80.05 | 93.54 | 87.28 | 98.32 |
+
+ Rest of paper (reference and Appendix) is removed.

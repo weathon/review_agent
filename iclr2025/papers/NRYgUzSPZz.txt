@@ -1,0 +1,295 @@
+
+
+{0}------------------------------------------------
+
+# BEYOND AUTOREGRESSION: DISCRETE DIFFUSION FOR COMPLEX REASONING AND PLANNING
+
+Jiacheng Ye<sup>1</sup>, Jiahui Gao<sup>2</sup> Shanshan Gong<sup>1</sup>, Lin Zheng<sup>1</sup>  
+Xin Jiang<sup>2</sup>, Zhenguo Li<sup>2</sup>, Lingpeng Kong<sup>1</sup>
+
+<sup>1</sup> The University of Hong Kong <sup>2</sup> Huawei Noah’s Ark Lab  
+carsonye@connect.hku.hk
+
+## ABSTRACT
+
+Autoregressive language models, despite their impressive capabilities, struggle with complex reasoning and long-term planning tasks. We introduce discrete diffusion models as a novel solution to these challenges. Through the lens of subgoal imbalance, we demonstrate how diffusion models effectively learn difficult subgoals that elude autoregressive approaches. We propose Multi-Granularity Diffusion Modeling (MGDM), which prioritizes subgoals based on difficulty during learning. On complex tasks like Countdown, Sudoku, and Boolean Satisfiability Problems, MGDM significantly outperforms autoregressive models without using search techniques. For instance, MGDM achieves 91.5% and 100% accuracy on Countdown and Sudoku, respectively, compared to 45.8% and 20.7% for autoregressive models. Our work highlights the potential of diffusion-based approaches in advancing AI capabilities for sophisticated language understanding and problem-solving tasks. All associated codes are available at <https://github.com/HKUNLP/diffusion-vs-ar>.
+
+## 1 INTRODUCTION
+
+In recent years, autoregressive language models (LMs; [Bengio et al. 2000](#)) have dominated the landscape of natural language processing and artificial intelligence. Empowered by scaling laws ([Kaplan et al., 2020](#)), these models have demonstrated impressive performance across various applications ([OpenAI, 2022](#); [Achiam et al., 2023](#); [Anthropic, 2023](#); [Team et al., 2023](#), *inter alia*). However, this apparent success masks significant limitations that are becoming increasingly evident. Autoregressive models inherently struggle with tasks requiring complex reasoning, long-term planning, and maintaining global coherence ([Bubeck et al., 2023](#); [Valmeekam et al., 2023](#); [2024](#); [Dziri et al., 2024](#); [Kambhampati et al., 2024](#)). These shortcomings represent substantial challenges in developing AI systems capable of robust problem-solving and adaptable cognition ([Wu et al., 2022](#); [Zhao et al., 2023](#); [Trinh et al., 2024](#); [Yao et al., 2023](#); [Shinn et al., 2024](#), *inter alia*). While autoregressive approaches have driven considerable progress, their limitations suggest that they may not be the optimal solution for all aspects of machine intelligence. As the field evolves, it becomes increasingly important to explore alternative paradigms that can address these inherent drawbacks and potentially offer new avenues for advancement in AI capabilities.
+
+In response to these limitations, recent research has focused on addressing the inherent constraints of autoregressive models. Various strategies have been explored, including the integration of search algorithms at inference ([Yao et al., 2024](#); [Besta et al., 2024](#)) and the incorporation of backtracking supervision during training ([Lehnert et al., 2024](#); [Gandhi et al., 2024](#)). However, these approaches are not without their own drawbacks: the former often incurs significant computational costs, while the latter frequently results in verbose inputs and suboptimal performance.
+
+To address this challenge, we argue for a fundamentally different modeling approach: discrete diffusion models. While most contemporary language models are autoregressive, diffusion-based models have become predominant in image ([Dhariwal & Nichol, 2021](#); [Rombach et al., 2022](#); [Peebles & Xie, 2023](#)) and video domains ([Ho et al., 2022](#); [Wu et al., 2023a](#); [Brooks et al., 2024](#)). Diffusion models are also gaining traction in various other applications, such as protein designing ([Xu et al., 2022](#); [Hoogeboom et al., 2022b](#); [Corso et al., 2023](#)) and planning in reinforcement learning ([Jan-](#)
+
+{1}------------------------------------------------
+
+ner et al., 2022; Ajay et al., 2022; Chi et al., 2023). In this work, we reveal that discrete diffusion models demonstrate significantly superior performance compared to the autoregressive counterparts, particularly in tasks requiring complex planning and reasoning.
+
+To substantiate this argument, we first examine the problem through the lens of *subgoal imbalance* (§3.1). We present both theoretical and empirical evidence via a synthetic planning task (Figure 1) to illustrate why autoregressive models struggle with these types of problems, often achieving near-random performance. In contrast, we demonstrate how diffusion models effectively learn the subgoals that challenge autoregressive models (§3.2). The key insight lies in the training objective of diffusion models, where difficult subgoals are decomposed into a diverse range of interrelated views within a multi-view learning framework (Xu et al., 2013). Each of these views is more manageable, resulting in an overall easier and more effective learning process.
+
+Building upon these insights, we propose a natural extension to current discrete diffusion models, which we term *multi-granularity diffusion modeling* (MGDM; §3.3). This approach prioritizes different subgoals based on their difficulty during the learning process, leading to more effective learning outcomes and faster convergence.
+
+In our experimental evaluation (§4), we focus on substantially more complex problem-solving tasks, such as Countdown (Gandhi et al., 2024) and Sudoku (Garns, 1979). These tasks demand extensive planning over a large number of combinations and pose challenges even for commercial Large Language Models (e.g., GPT-4 Achiam et al. 2023). Notably, without employing any search techniques, MGDM achieves 91.5% and 100% accuracy on Countdown and Sudoku respectively, while its autoregressive counterpart only solves 45.8% and 20.7% of the problems. Additionally, we conduct experiments on the Boolean Satisfiability Problem (SAT), an NP-complete problem (Cook, 1971) that represents a wide range of constraint satisfaction problems. Our model exhibits superior performance in solving SAT problems with higher accuracy compared to the autoregressive alternative, particularly when dealing with an increased number of variables and constraints. Through this systematic exploration, we aim to demonstrate the potential advantages of diffusion-based approaches in addressing sophisticated language understanding and generation challenges.
+
+## 2 BACKGROUND
+
+### 2.1 AUTO-REGRESSIVE MODELING
+
+Let  $\mathbf{x} := (x_1, \dots, x_N)$  denote a sequence drawn from a data distribution  $q(\mathbf{x})$ . For decades, it has been common to factorize the joint probabilities of a sequence of tokens as the product of conditional probabilities (Jelinek, 1980; Bengio et al., 2000):
+
+$$p_\theta(\mathbf{x}) = p_\theta(x_1) \prod_{n=2}^N p_\theta(x_n \mid x_{1:n-1}), \quad (1)$$
+
+where  $\theta$  parameterizes the model distribution and  $x_{1:n-1} := x_1, \dots, x_{n-1}$ . In order to optimize the generative model  $p_\theta(\mathbf{x})$  to fit the data distribution  $q(\mathbf{x})$ , we optimize the negative log-likelihood:
+
+$$L_{\text{AR}} = -\mathbb{E}_{q(\mathbf{x})} \log p_\theta(\mathbf{x}) = -\mathbb{E}_{q(\mathbf{x})} \sum_{n=1}^N \log p_\theta(x_n \mid x_{1:n-1}). \quad (2)$$
+
+### 2.2 DISCRETE DIFFUSION MODELING
+
+Discrete diffusion models (Sohl-Dickstein et al., 2015; Hoogeboom et al., 2021; Austin et al., 2021) are a class of latent variable models characterized by a forward noising process and a learned reverse denoising process. The forward process  $q(x_{1:T} \mid x_0) = \prod_{t=1}^T q(x_t \mid x_{t-1})$  corrupts the original data  $x_0 := \mathbf{x}$  into a sequence of increasingly noisy latent variables  $x_{1:T} := x_1, \dots, x_T$ . The backward process learns to gradually denoise the latent variables to the data distribution given by:
+
+$$p_\theta(\mathbf{x}) = \sum_{x_{1:T} \sim q} p(x_T) \prod_{t=1}^T p_\theta(x_{t-1} \mid x_t). \quad (3)$$
+
+{2}------------------------------------------------
+
+![Figure 1: The planning task. A directed graph with 10 nodes (0-9). Node 0 is the start node (orange), and node 9 is the goal node (orange). Nodes 1, 2, 3, 4, 5, 6, 7, 8, 10 are intermediate nodes (blue). Edges are shown as arrows. Some edges are highlighted in orange, indicating 'Hard Subgoal' (e.g., 0 to 7, 7 to 5). A bracket indicates 'Planning Distance = 3' for the path 0 -> 7 -> 5 -> 8 -> 9.](1b7d539e02a202c2cf2d97698b911447_img.jpg)
+
+Input: 4,7 | 5,8 | 7,0 | 3,1 | ... | 0,2 | 3,9  
+ shuffled edges      start,goal
+
+Output: 3,1 | 1,7 | 7,5 | 5,8 | 8,9
+
+Figure 1: The planning task. A directed graph with 10 nodes (0-9). Node 0 is the start node (orange), and node 9 is the goal node (orange). Nodes 1, 2, 3, 4, 5, 6, 7, 8, 10 are intermediate nodes (blue). Edges are shown as arrows. Some edges are highlighted in orange, indicating 'Hard Subgoal' (e.g., 0 to 7, 7 to 5). A bracket indicates 'Planning Distance = 3' for the path 0 -> 7 -> 5 -> 8 -> 9.
+
+Figure 1: The planning task.
+
+![Figure 2: (Left) Accuracy of different method given 50k training data. (Right) Minimum data size required to solve (i.e., accuracy above 90%) subgoal at each planning distance. The left plot shows Accuracy (0-100) vs Planning Distance (0-5) for AR (blue), Reverse AR (orange), Teacherless (green), and Diffusion (red). AR and Reverse AR reach 100% accuracy quickly, while Teacherless and Diffusion remain low. The right plot shows Data Size (log scale, 10^4-10^6) vs Planning Distance (0-5) for the same methods. AR and Reverse AR require less data as distance increases, while Teacherless and Diffusion require more data.](e863446d7d263c68be9402afd63668ac_img.jpg)
+
+Figure 2: (Left) Accuracy of different method given 50k training data. (Right) Minimum data size required to solve (i.e., accuracy above 90%) subgoal at each planning distance. The left plot shows Accuracy (0-100) vs Planning Distance (0-5) for AR (blue), Reverse AR (orange), Teacherless (green), and Diffusion (red). AR and Reverse AR reach 100% accuracy quickly, while Teacherless and Diffusion remain low. The right plot shows Data Size (log scale, 10^4-10^6) vs Planning Distance (0-5) for the same methods. AR and Reverse AR require less data as distance increases, while Teacherless and Diffusion require more data.
+
+Figure 2: (Left) Accuracy of different method given 50k training data. (Right) Minimum data size required to solve (i.e., accuracy above 90%) subgoal at each planning distance.
+
+Due to the intractable marginalization, we typically optimize a variational upper bound on the negative log-likelihood:
+
+$$L_{\text{DM}} = \mathbb{E}_{q(\mathbf{x}_0)} \left[ \underbrace{D_{\text{KL}}[q(\mathbf{x}_T|\mathbf{x}_0)||p(\mathbf{x}_T)]}_{L_T} + \sum_{t=2}^T \underbrace{\mathbb{E}_{q(\mathbf{x}_t|\mathbf{x}_0)} [D_{\text{KL}}[q(\mathbf{x}_{t-1}|\mathbf{x}_t, \mathbf{x}_0)||p_\theta(\mathbf{x}_{t-1}|\mathbf{x}_t)]]}_{L_{t-1}} - \underbrace{\mathbb{E}_{q(\mathbf{x}_1|\mathbf{x}_0)} [\log p_\theta(\mathbf{x}_0|\mathbf{x}_1)]}_{L_0} \right], \quad (4)$$
+
+where  $L_T$  is a constant when one uses a fixed prior  $p(\mathbf{x}_T)$ . By defining both the forward and backward distribution as categorical distribution, e.g.,  $q(\mathbf{x}_t|\mathbf{x}_{t-1}) = \text{Cat}(\mathbf{x}_t; \mathbf{p} = \mathbf{Q}_t^\top \mathbf{x}_{t-1})$  where  $\mathbf{Q}_t$  is a pre-defined  $K \times K$  transition matrix and  $K$  is the size of categories, and  $p_\theta(\mathbf{x}_{t-1}|\mathbf{x}_t) = q(\mathbf{x}_{t-1}|\mathbf{x}_t, f(\mathbf{x}_t; \theta))$ , the forward process posterior  $q(\mathbf{x}_{t-1}|\mathbf{x}_t, \mathbf{x}_0)$  and each KL term can be calculated analytically (Hoogeboom et al., 2021; Austin et al., 2021).
+
+## 3 SUBGOAL IMBALANCE AND MULTI-GRANULARITY DIFFUSION MODELS
+
+In this section, we employ a motivation example (§3.1) to elucidate the challenges faced by autoregressive models in specific scenarios. Through this analysis, we introduce the concept of *subgoal imbalance*—wherein some subgoals are inherently more difficult than others—which offers insights into these difficulties. We then extend our discussion in §3.2 to examine how diffusion models can more effectively address and learn these *hard subgoals*, effectively overcoming the limitations observed in autoregressive approaches. We finally propose Multi-Granularity Diffusion Modeling (MGDM; §3.3) as a natural extension of discrete diffusion models to better address these challenges and improve performance on complex tasks requiring planning and reasoning.
+
+### 3.1 SUBGOAL IMBALANCE IN AUTOREGRESSIVE AND DIFFUSION MODELING
+
+We designed a simple planning task to serve as our running example. Consider the example in Figure 1, where the input for the task consists of a set of shuffled edges from the graph shown below. At the end of the input sequence, the start and goal nodes are specified to indicate the path the model needs to find. The objective of this task is to identify the correct path in the graph and output its constituent edges. The complexity of this problem arises from distracting factors (highlighted in orange) that potentially mislead the path selection. For instance, at node 7, with the goal being node 9, the model must plan over a distance of 3 nodes to determine that the correct next choice should be node 5 rather than 0. We define this span as the Planning Distance (PD), a parameter adjustable in our synthetic task data. Intuitively, as the PD increases, the model faces greater difficulty in learning to determine the correct subsequent node. We formalize this intuition as *subgoal imbalance*.
+
+**Proposition 1** (*Subgoal imbalance due to the unknown data distribution  $q(\mathbf{x})$* ) Given the data  $\mathbf{x}$  sampled from an unknown data distribution  $q(\mathbf{x})$ , the difficulty of learning each subgoal  $\mathbf{x}_n$  can differ significantly based on how we parametrize the model distribution, and some subgoals may require substantially more data to learn or may even be infeasible to learn.
+
+{3}------------------------------------------------
+
+**Subgoal imbalance in autoregressive modeling.** Given the data  $\mathbf{x}$  sampled from an unknown data distribution  $q(\mathbf{x})$ , the naive autoregressive modeling parametrizes the model distribution  $p_\theta(\mathbf{x})$  as  $p_\theta(\mathbf{x}_1) \prod_{n=2}^N p_\theta(\mathbf{x}_n | \mathbf{x}_{1:n-1})$ , the difficulty of learning each subgoal  $\mathbf{x}_n$  can differ significantly as given only the left context, and some subgoals may require substantially more data to learn or may even be infeasible to learn.
+
+**Setup.** We synthesize the data with only one distracting path. We randomize node numbers in  $[0, 10]$  and the intersection positions in  $[0, 5]$ . We further designed this task to be symmetric, ensuring that simply training with reversed output, as suggested by Bachmann & Nagarajan (2024), cannot solve subgoals with all PDs. For comparison, we include Auto-regressive (AR), reverse AR (Bachmann & Nagarajan, 2024), and teacherless training (Moncea et al., 2023; Bachmann & Nagarajan, 2024), which can be seen as a lookahead method that produce all target tokens from the source input, and our proposed diffusion model (detailed in §3.2). For all the models, we keep the model architecture fixed as the same 3-layer Transformer with approximately 6M parameters. More details can be found in Appendix §C.
+
+**Discussion.** We examine the performance of all the models in two scenarios. In the first scenario, we generate a fixed number of 50k instances with mixed planning distance. We plot the accuracy on the held-out evaluation set for each model in the left figure of Figure 2. Our findings indicate that autoregressive models (AR and Reverse AR) are only effective in solving cases where the PD equals 0 or 1 (or equivalently, 5 and 4 in the reverse setting). Due to the aforementioned subgoal imbalance phenomenon, when PD is less than 2, the task barely involves any planning, allowing models to simply copy from the input with ease. However, for larger PDs, AR models barely outperform random guessing. Teacherless training fails to adequately fit the training data, resulting in the production of illegal paths. In contrast, our diffusion model achieves perfect accuracy across all PD values.
+
+In the second scenario, we investigate whether the challenging subgoals can be naturally resolved through data or model scaling, akin to the success observed in large language models (Kaplan et al., 2020; Wei et al., 2022a). To investigate this question, we gradually increase the size of the dataset for each model with different PDs and plot the minimum data size required to solve the subgoal in the right figure of Figure 2. We find that the autoregressive models (AR and Reverse AR) can learn the easy cases of PD equal to 0 and 1 (or equivalently, 5 and 4 in the reverse setting) with only 10k data points. However, exponentially larger amounts of data are required to address increasingly challenging subgoals. Both teacherless training and diffusion models exhibit a similar U-shaped curve in their performance. This similarity can be attributed to the fact that teacherless training can be conceptualized as a special case of diffusion without an iterative denoising process. In these models, solving edge PDs necessitates slightly more data. We hypothesize that this phenomenon occurs because the distance to other positions is shorter from the middle position (i.e., higher closeness centrality), thus providing the middle position with more nearby tokens to aid in prediction. Overall, autoregressive models require significantly more data to address all PDs compared to diffusion models, highlighting their relative data inefficiency.
+
+In addition to our previous experiments, we conducted a series of tests to examine the effect of increasing the parameter count in autoregressive models while maintaining a fixed dataset size of 50,000 instances. Our findings reveal that scaling the original 6 million parameter model to 85 million, 303 million, and 1.5 billion parameters fails to resolve all PDs. Only upon fine-tuning a substantially larger model, specifically the LLaMA 7B model (Touvron et al., 2023), did we observe successful resolution of all PD subgoals.
+
+### 3.2 EFFECTIVE HARD SUBGOAL LEARNING IN DIFFUSION MODELING
+
+These experiments collectively indicate that diffusion models are significantly more effective in learning challenging subgoals arising from subgoal imbalance. To elucidate why diffusion models exhibit this superior capability, we first establish a connection between autoregressive (AR) models and diffusion models by reformulating Equation (4). Instead of evaluating the KL divergence between two complicated categorical (Hoogeboom et al., 2021), we consider discrete diffusion with absorbing state and simplify it as the weighted cross-entropy losses (Austin et al., 2021; Zheng et al.,
+
+{4}------------------------------------------------
+
+2023; Shi et al., 2024; Sahoo et al., 2024):
+
+$$D_{\text{KL}}[q(\mathbf{x}_{t-1}|\mathbf{x}_t, \mathbf{x}_0)]|p_\theta(\mathbf{x}_{t-1}|\mathbf{x}_t) = -w(t) \sum_{n=1}^N \mathbf{1}_{\mathbf{x}_{t,n} \neq \mathbf{x}_{0,n}} \mathbf{x}_{0,n}^\top \log f(\mathbf{x}_t; \boldsymbol{\theta})_n, \quad (5)$$
+
+where  $w(t) = \frac{\alpha_{t-1} - \alpha_t}{1 - \alpha_t} \in (0, 1]$  is a time-dependent reweighting term which places higher weight when  $t$  approaching 0. We then rewrite Equation (4) as:
+
+$$L_{\text{DM}} = \mathbb{E}_{q(\mathbf{x}_0)} \underbrace{\sum_{n=1}^N \sum_{t=1}^T w(t) \mathbb{E}_{q(\mathbf{x}_t|\mathbf{x}_0)} u(\mathbf{x}_0, \mathbf{x}_t, n; \boldsymbol{\theta})}_{-\log p_{\text{DM}}(\mathbf{x}_n|\mathbf{x}_{\neq n})}, \quad (6)$$
+
+where  $u(\mathbf{x}_0, \mathbf{x}_t, n; \boldsymbol{\theta}) := -\mathbf{1}_{\mathbf{x}_{t,n} \neq \mathbf{x}_{0,n}} \mathbf{x}_{0,n}^\top \log f(\mathbf{x}_t; \boldsymbol{\theta})_n$  is the cross entropy loss on token  $n$ .
+
+We can now systematically compare the losses of autoregressive (AR) and diffusion models (DM), specifically  $-\log p_{\text{AR}}(\mathbf{x}_n | \mathbf{x}_{1:n-1})$  and  $-\log p_{\text{DM}}(\mathbf{x}_n | \mathbf{x}_{\neq n})$ , as expressed in Equations (2) and (6), respectively. In Figure 3, we examine a specific hard subgoal with Planning Distance (PD) equals 3 in both model types. The loss levels of AR and diffusion models are depicted using blue and red lines, respectively. The overall loss  $-\log p_{\text{DM}}(\mathbf{x}_n | \mathbf{x}_{\neq n})$  in the diffusion model remains relatively low compared to its autoregressive counterpart  $-\log p_{\text{AR}}(\mathbf{x}_n | \mathbf{x}_{1:n-1})$ , corroborating the superior performance of the diffusion model on these challenging subgoals in our experiments.
+
+Further analysis of the unweighted loss  $u(\mathbf{x}_0, \mathbf{x}_t, n; \boldsymbol{\theta})$  in the diffusion model, based on 1,000 samples of  $\mathbf{x}_t \sim q(\mathbf{x}_t|\mathbf{x}_0)$ , reveals a clear trend: as the number of timesteps increases, resulting in more noise in  $\mathbf{x}_t$ , objectives in smaller timesteps (i.e., recovery from less noisy data) become significantly easier to learn. From a multi-view learning perspective (Xu et al., 2013), each  $\mathbf{x}_t$  can be interpreted as a distinct view of  $\mathbf{x}_0$ , where each view provides different information about  $\mathbf{x}_0$ . In the diffusion process, by exploring the consistency and complementary properties of different views offered by a diverse range of interrelated objectives  $u(\mathbf{x}_0, \mathbf{x}_t, n; \boldsymbol{\theta})$ , our findings suggest that objectives challenging to learn in AR models become more effective, promising, and exhibit better generalization in diffusion models. This phenomenon is particularly evident when examining scenarios where mask noise is applied to positions after the hard token, i.e.,  $\mathbf{x}_t = \mathbf{x}_{1:n-1}$ , where the diffusion model learns the hard subgoal similarly to AR models. We plot this loss as  $-\log p_{\text{DM}}(\mathbf{x}_n | \mathbf{x}_{1:n-1})$  in the figure. Unlike in the AR model, where this learning is consistently difficult, in diffusion models, this challenging subgoal is addressed at a much more manageable level during the learning process.
+
+![Figure 3: A line graph showing the loss (log scale) versus Timestep (1 to 10) for a specific hard subgoal (PD=3). The y-axis is logarithmic, ranging from 10^-4 to 10^0. The x-axis is Timestep, ranging from 1 to 10. Three lines are plotted: a blue line for -log p_AR(x_n | x_{1:n-1}), a red line for -log p_DM(x_n | x_{\neq n}), and a red line with dots for -log p_DM(x_n | x_{1:n-1}). The blue line is consistently high (around 10^-1). The red line for -log p_DM(x_n | x_{\neq n}) is consistently low (around 10^-3). The red line with dots for -log p_DM(x_n | x_{1:n-1}) starts high (around 10^-1) at timestep 1 and decreases significantly as timestep increases, reaching around 10^-2 by timestep 10.](bc04d002fc79e8a3637b1552ac3361e6_img.jpg)
+
+Figure 3: A line graph showing the loss (log scale) versus Timestep (1 to 10) for a specific hard subgoal (PD=3). The y-axis is logarithmic, ranging from 10^-4 to 10^0. The x-axis is Timestep, ranging from 1 to 10. Three lines are plotted: a blue line for -log p\_AR(x\_n | x\_{1:n-1}), a red line for -log p\_DM(x\_n | x\_{\neq n}), and a red line with dots for -log p\_DM(x\_n | x\_{1:n-1}). The blue line is consistently high (around 10^-1). The red line for -log p\_DM(x\_n | x\_{\neq n}) is consistently low (around 10^-3). The red line with dots for -log p\_DM(x\_n | x\_{1:n-1}) starts high (around 10^-1) at timestep 1 and decreases significantly as timestep increases, reaching around 10^-2 by timestep 10.
+
+Figure 3: Loss for a specific hard subgoal, i.e., PD=3, in Diffusion and AR modeling. We also show the unweighted loss  $u(\mathbf{x}_0, \mathbf{x}_t, n; \boldsymbol{\theta})$  at different timestep  $t$  and context  $\mathbf{x}_t$  in diffusion modeling.
+
+### 3.3 MULTI-GRANULARITY DIFFUSION MODELING
+
+These observations provide valuable insights, i.e., diffusion modeling builds on a diverse range of interrelated views from the data  $\mathbf{x}_0$  to handle a challenging subgoal. To handle multiple challenging subgoals in real data, we should prioritize different subgoals based on their difficulty during the learning process to achieve more effective learning outcomes and faster convergence, and this naturally translates to prioritizing difficult views as the learning of a subgoal depends on learning interrelated views related to it. Building on this, we propose the multi-granularity diffusion model as a natural extension of the discrete diffusion model.
+
+In practice, to optimize Equation (6), we typically employ Monte Carlo sampling, which results in:
+
+$$L_{\text{DM}} = \sum_{n=1}^N \sum_{t=1}^T w(t) u(\mathbf{x}_0, \mathbf{x}_t, n; \boldsymbol{\theta}). \quad (7)$$
+
+{5}------------------------------------------------
+
+For a sequence of length  $N$ , the probability of sampling the same  $\mathbf{x}_t$  in AR is 1. However, in diffusion, this probability reduces to  $1/C_{N-1}^{t(N-1)/T}$  due to the randomness in sampling  $\mathbf{x}_t$ , potentially reducing the training efficiency of diffusion models. We note that Equation (7) employs a sequence-level reweighting term  $w(t)$  to indicate the importance of  $\mathbf{x}_t$ . However, individual tokens within the sequence, given their imbalanced difficulties, are not properly reweighted. To address this, we propose multi-granularity diffusion modeling (MGDM), which introduces an additional token-level reweighting mechanism to enhance training efficiency:
+
+$$L_{\text{MGDM}} = \sum_{n=1}^N \sum_{t=1}^T w(t) v(\mathbf{x}_{t,n}) u(\mathbf{x}_0, \mathbf{x}_t, n; \theta); \quad (8)$$
+
+where  $v(\mathbf{x}_{t,n}) = \alpha(1 - \exp(-u(\cdot)))^\beta$  is the adaptive token-level reweighting term. Setting  $\beta > 0$  reduces the relative loss for easy tokens while emphasizing harder tokens, and  $\alpha$  is used to control the relative reweighting magnitude. For inference, we employ an easy-first TopK decoding strategy, which has demonstrated superior performance compared to the random decoding method used by Austin et al. (2021). This finding aligns with similar observations documented in prior studies (Savinov et al., 2021; Zheng et al., 2023). We provide a detailed derivation and algorithm of the training and inference process in Appendix §A and §B, respectively.
+
+## 4 EXPERIMENTS
+
+In Section §3.1 we show our model works well on a straightforward planning task with only one hard subgoal. However, it is important to note that real-world scenarios often involve instances with multiple challenging subgoals. In this section, we aim to assess the performance of our model in tackling three considerably more complex problem-solving tasks that necessitate deliberate planning. Detailed experimental setup can be found in Appendix §C.
+
+### 4.1 COUNTDOWN
+
+Countdown (Countdown, 2024) is a mathematical reasoning challenge and is a generalized version of the game of 24, which even advanced models such as GPT-4 struggle with (Yao et al., 2024). The goal of Countdown is to use the given numbers and arithmetic operations ( $+ - * /$ ) to obtain a target number. For example, given 4 numbers “97,38,3,17” and a target number “14”, a step-by-step solution is “ $97-38=59, 59-17=42, 42/3=14$ ”.
+
+**Setup.** We follow Gandhi et al. (2024) to generate 500k problems with target numbers ranging from 10 to 100 and randomly hold out 10% of the targets for ‘out-of-distribution’ evaluation. We consider three subtasks with increasing complexity by varying the number of input digits in {3,4,5}. Given that search-augmented prompting approaches (Yao et al., 2024) have recently been employed to address the limitations of AR, we also compare with such approaches by training on Countdown 4 and evaluating on the same game of 24 test set as Yao et al. (2024).
+
+**Baselines.** Our primary comparison involves autoregressive models trained from scratch, employing the GPT-2 architecture (Radford et al., 2019) with parameter sizes ranging from 6M, 85M, and 303M (denoted as GPT-2 Scratch). We also include larger pre-trained AR models LLaMA (Touvron et al., 2023) with sizes 7B and 13B. These models are fine-tuned using the same dataset. In addition, we compare with Stream-of-Search (Gandhi et al., 2024), which augments the dataset with search trajectory such that the AR model can be taught to search. Furthermore, we compare with several existing diffusion models,
+
+Table 1: Results on the Countdown (CD) task with increasing complexity.
+
+|  | Params | CD 3 | CD 4 | CD 5 |
+|-|-|-|-|-|
+| <i>Autoregressive</i> |  |  |  |  |
+|  | 6M | 94.1 | 31.9 | 4.3 |
+| GPT-2 Scratch | 85M | 95.9 | 45.8 | 5.1 |
+|  | 303M | 96.4 | 41.3 | 4.5 |
+| Stream-of-Search | 250M | - | 54.2 | - |
+| LLaMA | 7B | 95.7 | 41.1 | 6.7 |
+|  | 13B | 96.5 | 51.1 | 7.4 |
+| <i>Diffusion</i> |  |  |  |  |
+| VDM | 85M | 99.1 | 73.4 | 16.3 |
+| D3PM | 85M | 99.4 | 83.1 | 27.6 |
+| RDM | 85M | 99.5 | 87.0 | 45.8 |
+|  | 6M | 98.1 | 52.0 | 27.0 |
+| <b>MGDM (Ours)</b> | 85M | 99.5 | <b>91.5</b> | <b>46.6</b> |
+|  | 303M | <b>99.9</b> | 88.3 | 39.0 |
+
+{6}------------------------------------------------
+
+both continuous models VDM (Kingma et al., 2021) and discrete models D3PM Austin et al. (2021) and RDM (Zheng et al., 2023). By default, we use the absorbing noise for discrete diffusion as it significantly outperforms the multinomial one (Austin et al., 2021; Zheng et al., 2023). Finally, we consider in-context learning (Brown et al., 2020; Wu et al., 2023; Ye et al., 2023a) based on GPT-4, including vanilla input-output (IO), chain-of-thought (CoT; Wei et al. 2022b), CoT with Self-consistency (CoT-SC; Wang et al. 2023) and Tree-of-thought (ToT; Yao et al. 2024). We use 5 in-context examples following Yao et al. 2024.
+
+**Results on Countdown.** As shown in Table 1, diffusion-based approaches demonstrate superior performance across all three Countdown tasks compared to autoregressive models, especially as the complexity of the tasks increases. We have several key findings based on the result. Firstly, the 6M diffusion model outperforms both the 303M GPT-2 model trained from scratch and the pretrained 13B LLaMA model, indicating that the modeling approach sometimes outweighs the sheer number of parameters. Secondly, while training with search trajectory supervision (Stream-of-search) does provide some benefits, its effectiveness is limited. Importantly, training the entire search trajectory as a sequence poses additional challenges due to its long length, such as in the case of Countdown 5 where the search trajectories can span 60,000 tokens. Lastly, our model surpasses all previous diffusion models, demonstrating the efficacy of the multigranularity loss.
+
+**Results on Game of 24.** As shown in Table 2, the performance of the GPT-4 with IO, CoT, and CoT-SC prompting methods from Yao et al. (2024) is unsatisfactory for the given task, with only accuracy below 10%. The introduction of ToT, which incorporates a search algorithm designed by human experts into the decoding process, significantly enhances the performance of GPT-4. This integration allows the AR model to backtrack as needed, resulting in notable improvements. However, this paradigm requires the assessment of intermediate steps using LLM, resulting in considerable computational costs due to the need for multiple LLM calls. We list the token cost in Table 2 with more details in Appendix D.1. ToT consumes 186 times more tokens than MGDM, showcasing the ‘internal’ search capability by promoting global consistency in diffusion modeling. In summary, our model, despite having a parameter size of only 85M, significantly outperforms both the AR task-specific model of the same size (GPT-2 Scratch) in terms of performance and the larger general pre-trained model (GPT-4) in computation cost, indicating it is challenging for model scaling and decoding strategies to substitute the advantages of modeling paradigm.
+
+Table 2: Accuracy and token cost on game of 24.
+
+|  | Acc. | # Token |
+|-|-|-|
+| <i>Prompting</i> |  |  |
+| GPT-4 IO | 7.3 | x28 |
+| GPT-4 CoT | 4.0 | x61 |
+| GPT-4 CoT-SC | 9.0 | x241 |
+| GPT-4 ToT | 74.0 | x186 |
+| <i>Supervised training</i> |  |  |
+| GPT-2 Scratch | 18.8 | x1 |
+| <b>MGDM</b> | <b>76.0</b> | <b>x1</b> |
+
+### 4.2 SUDOKU
+
+Sudoku is a classical logic-based number placement puzzle that has gained popularity due to its rigorous intellectual demands. The goal of Sudoku is to meticulously fill a  $9 \times 9$  grid with numerical digits, ensuring that every column, row, and  $3 \times 3$  subgrid contains all the numbers from 1 to 9.
+
+![Figure 4: (Left) Accuracy on Sudoku vs Parameter Size (M). (Right) Accuracy on boolean satisfiability problem with increasing difficulty.](023b142f90e1253702ac88b18380d3ec_img.jpg)
+
+Figure 4 consists of two plots. The left plot shows Accuracy (y-axis, 20 to 100) versus Parameter Size (M) (x-axis, log scale from 10<sup>2</sup> to 10<sup>4</sup>). The right plot shows Accuracy (left y-axis, 70 to 100) and Δ Accuracy (right y-axis, 2.5 to 12.5) versus Number of Variables (x-axis, 5 to 9).
+
+**Left Plot Data (Approximate):**
+
+| Model | Parameter Size (M) | Accuracy (%) |
+|-|-|-|
+| GPT-2 Scratch (6M) | ~6 | ~20 |
+| GPT-2 Scratch (85M) | ~85 | ~22 |
+| GPT-2 Scratch (303M) | ~303 | ~25 |
+| LLaMA (7B) | ~7000 | ~30 |
+| LLaMA (13B) | ~13000 | ~35 |
+| MGDM (6M) | ~6 | ~40 |
+
+**Right Plot Data (Approximate):**
+
+| Number of Variables | GPT-2 Scratch Accuracy (%) | MGDM Accuracy (%) | Δ Accuracy |
+|-|-|-|-|
+| 5 | ~98 | ~100 | ~2.0 |
+| 7 | ~60 | ~95 | ~8.0 |
+| 9 | ~70 | ~85 | ~12.0 |
+
+Figure 4: (Left) Accuracy on Sudoku vs Parameter Size (M). (Right) Accuracy on boolean satisfiability problem with increasing difficulty.
+
+Figure 4: (Left) Accuracy on Sudoku. (Right) Accuracy on boolean satisfiability problem with increasing difficulty.
+
+**Setup.** We collect one million solved games from Park (2016) and use the first 100k as our training set and the subsequent 1k as the testing set. We employ the digit 0 to represent the vacant position that needs to be filled. We then transform the  $9 \times 9$  grid into a sequence of 81 digits, which serves as the model input. To illustrate, an example input appears as “080050060...603100007” (omitted for brevity), while the corresponding output is represented as “789251364...653184297”. During tokenization, we treat each digit as a separate token.
+
+{7}------------------------------------------------
+
+|  | Random | TopK |
+|-|-|-|
+| No reweighting | 82.1 | 87.3 |
+| Original sequence-reweighting | 83.1 | 88.5 |
+| + token-reweighting ( $\alpha=0.25, \beta=1$ ) | 84.9 | <b>90.4</b> |
+| + token-reweighting ( $\alpha=1, \beta=1$ ) | 82.4 | 89.3 |
+| + token-reweighting ( $\alpha=0.25, \beta=2$ ) | 82.4 | 87.9 |
+| Linear sequence-reweighting | 79.6 | 87.0 |
+| + token-reweighting ( $\alpha=0.25, \beta=1$ ) | 83.2 | 88.0 |
+| + token-reweighting ( $\alpha=1, \beta=1$ ) | 86.7 | 90.4 |
+| + token-reweighting ( $\alpha=0.25, \beta=2$ ) | 85.6 | <b>91.5</b> |
+
+Table 3: Ablation on training reweighting strategies and inference decoding methods.
+
+**Result.** We show the results in the left figure of Figure 4. As the size of the AR model increases, the performance remains unsatisfactory. For instance, the LLaMA model achieves a performance of only 32.9 with 13B parameters. In contrast, our model, which has only 6M parameters, is able to perfectly solve all the problems, demonstrating the significant advantage brought by the modeling architecture.
+
+### 4.3 BOOLEAN SATISFIABILITY PROBLEM
+
+The Boolean satisfiability problem, commonly known as SAT, is a foundational problem in computer science that has been rigorously proven to be NP-complete (Cook, 1971). This challenging combinatorial problem is attractive as a broad range of search problems from domains such as software verification, test pattern generation, planning, scheduling, and combinatorics can all routinely be solved by reducing to an appropriate SAT problem (Gomes et al., 2008). The goal of SAT is to determine whether a given Boolean formula represented in conjunctive normal form (CNF) can be assigned a set of values (0 or 1) to its variables, such that the formula evaluates to true (1). An example formula with three variables can be  $(x_1 \vee \neg x_2) \wedge (\neg x_1 \vee x_2 \vee x_3) \wedge \neg x_1$  and an corresponding assignment is  $x_1 = 0, x_2 = 0, x_3 = 1$ .
+
+**Setup.** Given the number of variables  $n$  and clauses  $m$ , we iteratively sample  $k = 3$  variables (and their polarities) uniformly at random until  $m$  clauses are obtained. To ensure that we get relatively hard instances of SAT, we take advantage of the well-studied family of random  $k$ -SAT problem (Ding et al., 2015) and set the  $m$  to be close to  $m = 4.258n + 58.26n^{-2/3}$  given  $n$ , as it has been observed that SAT solvers are slow to determine the satisfiability of a formula when  $m$  is near the threshold (Crawford & Auton, 1996). We consider increasing numbers of variables from {5,7,9} and generate 50k training data for  $n = 5, 7$  and 100k for  $n = 9$ , as well as additional 1k testing data for each  $n$ .
+
+**Result.** As shown in the right figure of Figure 4, MGDM performs well in solving scenarios with five variables, while the AR model falls slightly short. As the number of variables increases, both our model and the AR model experience a certain degree of decrease in accuracy. However, the performance gap between the two models widens as the difficulty of the task increases. This indicates that our diffusion model exhibits a more pronounced advantage in handling more challenging tasks than the AR counterpart.
+
+### 4.4 ANALYSIS
+
+**On the Effect of Training and Decoding Strategies.** As listed in Table 3, we find that changing the sequence-reweighting strategies has only led to a slight improvement in performance. However, when a suitable parameter is selected for token-reweighting, a more significant improvement can be observed. Additionally, the easy first decoding (TopK) outperforms the random one, which aligns with previous findings (Ghazvininejad et al., 2019; Zheng et al., 2023). We compare the evaluation accuracy along the training process in Figure 5. By aligning the AR training steps with the diffu-
+
+![Figure 5: Evaluation accuracy throughout the training process for AR and MGDM with different reweighting strategies. The graph shows Accuracy (Y-axis, 0.00 to 0.75) versus Training Steps (X-axis, 0 to 200,000). The AR model (blue line) starts at approximately 0.45 accuracy and remains relatively flat. The MGDM models (orange, green, and red lines) start at 0.00 and rapidly increase, reaching a plateau around 0.75 accuracy after approximately 50,000 steps. The MGDM models are labeled: 'No Rew' (orange), 'Seq Rew' (green), and 'Seq + Token Rew' (red).](2396add2849eccefcbcfbe1c7142a253_img.jpg)
+
+Figure 5: Evaluation accuracy throughout the training process for AR and MGDM with different reweighting strategies. The graph shows Accuracy (Y-axis, 0.00 to 0.75) versus Training Steps (X-axis, 0 to 200,000). The AR model (blue line) starts at approximately 0.45 accuracy and remains relatively flat. The MGDM models (orange, green, and red lines) start at 0.00 and rapidly increase, reaching a plateau around 0.75 accuracy after approximately 50,000 steps. The MGDM models are labeled: 'No Rew' (orange), 'Seq Rew' (green), and 'Seq + Token Rew' (red).
+
+Figure 5: Evaluation accuracy throughout the training process for AR and MGDM with different reweighting strategies.
+
+{8}------------------------------------------------
+
+sion process, we can see AR converges rapidly, with the performance tends to plateau afterward. The utilization of our multi-granularity loss, which incorporates sequence and token reweighting, demonstrates superior performance, particularly during the middle stages of training. This implies that the inclusion of such a loss function contributes to enhanced convergence during the training process.
+
+**On Decoding Speed.** We assess the trade-off between accuracy and decoding speed by comparing the performance of the AR model (GPT-2 Scratch 85M) and MGDM (85M). The speed metric is determined by the number of samples processed using a batch size of 1 on the NVIDIA GeForce V100 GPU. As shown in Figure 6(a), MGDM can flexibly control the trade-off between accuracy and decoding speed by varying the diffusion timesteps. Notably, by employing just one diffusion step, MGDM demonstrates a remarkable 10x improvement in speed compared to AR, while maintaining superior accuracy with 75% and 12.7% compared to 45.8% and 5.1% of AR on Countdown 4 and 5, respectively. We observed that the slope of countdown 4 is smaller compared to countdown 5 in the trade-off. This suggests that for tasks with lower complexity, diffusion demonstrates a more noticeable speed advantage by setting a smaller diffusion step. In addition, it also indicates that sacrificing some efficiency for performance improvements becomes particularly evident when dealing with more intricate tasks.
+
+![Figure 6: (a) Accuracy vs Speed on Countdown 4 and 5. (b) Planning and Calculation Error at each step.](bedcca5cdf168e3508ef511d94ec514c_img.jpg)
+
+Figure 6 consists of two subplots. Subplot (a) is a line graph showing Accuracy (left y-axis, 50-90) and Speed (right y-axis, 0-40) for AR (blue circles) and MGDM (orange line) on Countdown 4 and 5. MGDM shows a sharp increase in speed as accuracy increases, while AR remains relatively flat. Subplot (b) is a bar chart showing Planning (left y-axis, 0.0-0.4) and Calculation (right y-axis, 0.0-0.4) errors at steps Eq1, Eq2, Eq3, and Ans.Overall for AR (blue bars) and MGDM (orange bars). AR has significantly higher calculation errors than MGDM across all steps, while planning errors are relatively low for both.
+
+Figure 6: (a) Accuracy vs Speed on Countdown 4 and 5. (b) Planning and Calculation Error at each step.
+
+Figure 6: (a) Accuracy vs Speed (samples per second) trade-off by varying the diffusion timesteps on Countdown 4 (left y-axis) and 5 (right y-axis). (b) Ratio of planning (left y-axis) and calculation (right y-axis) error at each reasoning step on Countdown 4.
+
+**Error Analysis: The Regretful Compromise.** To gain a deeper understanding of error patterns in AR and MGDM, we conducted an error analysis on Countdown 4. For instance, given the input “7,38,3,1” and the target number 14, a correct solution would be “ $97-38=59, 59-17=42, 42/3=14$ ”. We divide the solution into four parts: equation 1, equation 2, equation 3, and answer checking. First, from a calculation perspective, we assess the error ratio in each equation by comparing the left-hand side and the right-hand side, regardless of whether the correct number was chosen. As shown in Figure 6(b), the bar plot demonstrates that the majority of calculation errors for AR are concentrated in Equation 3. For example, given input “16,4,40,51” and target 87, the prediction of AR is “ $51-40=11, 16*4=64, 11+64=87$ ” while the correct solution is “ $16/4=4, 40+51=91, 91-4=87$ ”. Moreover, in many cases, the error rate for the last equation in AR (48.9%) is significantly higher than that of the previous equations (0.2% for the first and 7.2% for the second). This indicates that the model’s lack of planning capability results in its realization of being unable to achieve the goal only at the end. By that point, it cannot correct the previous errors, leading it to “regretfully” to rely on incorrect equations to reach the goal (e.g., the number 87 in the above case). This significantly increases the number of calculation errors in the third equation. We call this phenomenon ‘The Regretful Compromise’. The reason for this is that the AR model made incorrect choices of numbers or operations in previous equations. This is demonstrated by examining the step at which the models fail the task, as depicted in Figure 6(b). It is evident that there is a notable frequency of planning errors in the first equation for the AR model, where the number of errors is significantly higher compared to our model. This highlights the limitations of the left-to-right decoding approach in AR, which adversely affects its planning ability.
+
+{9}------------------------------------------------
+
+## 5 RELATED WORK
+
+### 5.1 AUTOREGRESSIVE MODELING
+
+Starting from [Bengio et al. \(2000\)](#) and later [Sutskever et al. \(2011\)](#), the autoregressive modeling paradigm, where the prediction of a token only depends on the preceding context, is widely adopted in modeling language, until recently ([OpenAI, 2022](#); [Achiam et al., 2023](#); [Anthropic, 2023](#); [Team et al., 2023](#); [Touvron et al., 2023](#); [Jiang et al., 2023](#); [Bai et al., 2023](#), *inter alia*). Theoretically, the autoregressive Transformers have limited expressive power, but their capabilities can be expanded given sufficient chain-of-thought intermediate steps ([Wei et al., 2022b](#); [Merrill & Sabharwal, 2023](#); [Malach, 2023](#)). However, [Lin et al. \(2021\)](#) demonstrates that the expressing of some next-tokens requires super-polynomial computational resources and is NP-hard to approximate. Numerous advancements have been made upon the AR paradigm to compensate for modeling deficiencies, such as reverse training ([Lee et al., 2023](#); [Golovneva et al., 2024](#)), fill-in-the-middle training ([Bavarian et al., 2022](#)), future-token prediction ([Qi et al., 2020](#); [Gloeckle et al., 2024](#)), lookahead attention ([Du et al., 2023](#)) during the training stage, as well as search-augmented decoding ([Lu et al., 2022](#); [Xie et al., 2023](#); [Yao et al., 2024](#), *inter alia*) during inference. In practice, autoregressive next-token predictors are shown to be ill-suited for planning tasks ([Bubeck et al., 2023](#); [Valmeekam et al., 2023](#); [2024](#); [Dziri et al., 2024](#); [Kambampati et al., 2024](#)). Besides, [Bachmann & Nagarajan \(2024\)](#); [Lin et al. \(2024\)](#) find not all tokens are equal and some tokens are hard to learn in the AR pretraining stage, implying the introduced subgoal imbalance phenomenon also exists in the general text corpus.
+
+### 5.2 NON-AUTOREGRESSIVE MODELING
+
+The non-autoregressive (NAR) generation method, which produces all target tokens simultaneously given the source context, is first proposed by ([Gu et al., 2017](#)) in the text field for machine translation, primarily due to the efficiency consideration. While a series of advancements have been made afterward ([Lee et al., 2018](#); [Gu et al., 2019](#); [Ghazvininejad et al., 2019](#); [Qian et al., 2021](#); [Huang et al., 2022](#), *inter alia*), traditional NAR models still tend to underperform AR models in terms of generation quality ([Xiao et al., 2023](#)). Diffusion models ([Sohl-Dickstein et al., 2015](#); [Ho et al., 2020](#)), a powerful class of generative models known for their impressive image-generation capabilities ([Dhariwal & Nichol, 2021](#)), have recently been applied to the field of text generation ([Hoogeboom et al., 2021](#); [Austin et al., 2021](#); [Li et al., 2022](#); [Campbell et al., 2022](#); [Dieleman et al., 2022](#); [Chen et al., 2023](#); [Ye et al., 2023b](#); [Lovelace et al., 2024](#)), reinforcement learning ([Ianner et al., 2022](#); [Chi et al., 2023](#)) and protein design ([Xu et al., 2022](#); [Hoogeboom et al., 2022b](#); [Corso et al., 2023](#)). In essence, diffusion models perform a multi-step denoising process to progressively convert a random noise into a data sample, and the denoising procedure can be seen as parameterizing the gradients of the data distribution ([Song & Ermon, 2019](#)), connecting them to score matching ([Hyvärinen & Dayan, 2005](#)) and energy-based models ([LeCun et al., 2006](#)). For text, the diffusion model can be seen as an extension of the traditional iterative NAR models ([Gong et al., 2022](#)) and has been shown to approach or outperform AR models on text perplexity ([Han et al., 2023](#); [Lou et al., 2023](#); [Gulrajani & Hashimoto, 2024](#)), diversity ([Gong et al., 2022](#); [2023](#); [Zhang et al., 2023](#)) as well as various seq-to-seq tasks ([Wu et al., 2023b](#); [Zheng et al., 2023](#); [Ye et al., 2024](#)). In this work, we compare diffusion with AR from a perspective of subgoal imbalance and demonstrates the effectiveness of diffusion in tasks requiring complex reasoning and planning.
+
+## 6 CONCLUSION
+
+This paper presents an extensive analysis of the limitations of auto-regressive (AR) language models when applied to planning tasks that involve deliberate planning, both in controlled settings and real-world contexts. Based on an advanced understanding, we propose an improved diffusion model, named MGDM, that performs significantly better than AR and previous diffusion models on various sophisticated planning tasks. Our findings underscore the necessity to reevaluate the sequence modeling paradigm for modern large language models, especially in tackling challenging problem-solving tasks.
+
+ Rest of paper (reference and Appendix) is removed.

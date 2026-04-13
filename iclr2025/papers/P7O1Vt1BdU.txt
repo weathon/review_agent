@@ -1,0 +1,325 @@
+
+
+{0}------------------------------------------------
+
+# EXPECTED SLICED TRANSPORT PLANS
+
+Xinran Liu<sup>\*1</sup>, Rocío Martín Díaz<sup>\*2</sup>, Yikun Bai<sup>1</sup>, Ashkan Shabazi<sup>1</sup>,  
+Matthew Thorpe<sup>3</sup>, Akram Aldroubi<sup>4</sup>, Soheil Kolouri<sup>1</sup>
+
+<sup>1</sup>Department of Computer Science, Vanderbilt University, Nashville, TN, 37235
+
+<sup>2</sup>Department of Mathematics, Tufts University, Medford, MA 02155
+
+<sup>3</sup>Department of Statistics, University of Warwick, Coventry, CV4 7AL, UK
+
+<sup>4</sup>Department of Mathematics, Vanderbilt University, Nashville, TN, 37235
+
+## ABSTRACT
+
+The optimal transport (OT) problem has gained significant traction in modern machine learning for its ability to: (1) provide versatile metrics, such as Wasserstein distances and their variants, and (2) determine optimal couplings between probability measures. To reduce the computational complexity of OT solvers, methods like entropic regularization and sliced optimal transport have been proposed. The sliced OT framework improves efficiency by comparing one-dimensional projections (slices) of high-dimensional distributions. However, despite their computational efficiency, sliced-Wasserstein approaches lack a transport plan between the input measures, limiting their use in scenarios requiring explicit coupling. In this paper, we address two key questions: Can a transport plan be constructed between two probability measures using the sliced transport framework? If so, can this plan be used to define a metric between the measures? We propose a ‘lifting’ operation to extend one-dimensional optimal transport plans back to the original space of the measures. By computing the expectation of these lifted plans, we derive a new transport plan, termed expected sliced transport (EST) plans. We further prove that using the EST plan to weight the sum of the individual Euclidean costs  $\|x - y\|^p$  for moving from  $x$  to  $y$  results in a valid metric between the input discrete probability measures. Finally, we demonstrate the connection between our approach and the recently proposed min-SWGG, along with illustrative numerical examples that support our theoretical findings.
+
+## 1 INTRODUCTION
+
+The optimal transport (OT) problem (Villani, 2009) seeks the most efficient way to transport a distribution of mass from one configuration to another, minimizing the cost associated with the transportation process. It has found diverse applications in machine learning due to its ability to provide meaningful distances, i.e., the Wasserstein distances (Peyré & Cuturi, 2019), between probability distributions, with applications ranging from supervised learning (Frogner et al., 2015) to generative modeling (Arjovsky et al., 2017). Beyond merely measuring distances between probability measures, the optimal transport plan obtained from the OT problem provides correspondences between the empirical samples of the source and target distributions, which are used in various applications, including domain adaptation (Courty et al., 2014), positive-unlabeled learning (Chapel et al., 2020), texture mixing (Rabin et al., 2011), color transfer (Rabin et al., 2014), image analysis (Basu et al., 2014), and even single-cell and spatial omics (Bunne et al., 2024), to name a few.
+
+One of the primary challenges in applying the OT framework to large-scale problems is its computational complexity. Traditional OT solvers for discrete measures typically scale cubically with the number of samples  $N$  (i.e., the support size) (Kolouri et al., 2014). Precisely, when using linear programming for solving the OT problem, the computational complexity is of order  $\mathcal{O}(N^3 \log(N))$ . This computational burden has spurred significant research efforts to accelerate OT computations. Various approaches have been developed to address this challenge, including the seminal work (Cuturi, 2013), which introduces entropic regularization, leveraging the Sinkhorn algorithm to compute OT efficiently with quadratic time complexity; multiscale methods (Schmitzer, 2016); and projection-
+
+<sup>\*</sup>Equal contribution.
+
+{1}------------------------------------------------
+
+based techniques such as sliced-Wasserstein distances (Rabin et al., 2011) and robust subspace OT (Paty & Cuturi, 2019). Each of these methods has its own advantages and limitations.
+
+For instance, the entropic regularized OT is solved via an iterative algorithm (i.e., the Sinkhorn algorithm) with quadratic computational complexity per iteration. However, the number of iterations required for convergence typically increases as the regularization parameter decreases, which can offset the computational benefits of these methods. Precisely, the complexity of Sinkhorn method is of order  $\mathcal{O}(N^2 \log(N)/\lambda^2)$ , where  $\lambda$  is the regularization parameter (Dvurechensky et al. (2018); Altschuler et al. (2017)). Additionally, while entropic regularization interpolates between Maximum-Mean Discrepancy (MMD) (Gretton et al., 2012) and the Wasserstein distance (Feydy et al., 2019), it does not produce a true metric between probability measures. Despite not providing a metric, the entropic OT provides a transport plan, i.e., soft correspondences, albeit not the optimal one. On the other hand, sliced-Wasserstein distances offer linearithmic computational complexity, enabling the comparison of discrete measures with millions of samples. These distances are also topologically equivalent to the Wasserstein distance and offer statistical advantages, such as better sample complexity (Nadjahi et al., 2020). However, despite their computational efficiency, the sliced-Wasserstein approaches do not provide a transport plan between the input probability measures, limiting their applicability to problems that require explicit coupling between measures.
+
+In this paper, we address two central questions: **First, can a transportation plan be constructed between two probability measures using the sliced transport framework? If so, can the resulting transportation plan be used to define a metric between the two probability measures?** Within the sliced transport framework, the "slices" refer to the one-dimensional marginals of the source and target probability measures, for which an optimal transportation plan is computed. Crucially, this optimal transportation plan applies to the marginals (i.e., one-dimensional probability measures) rather than the original measures. To derive a transportation plan between the source and target measures, this optimal plan for the marginals must be "lifted" back to the original space.
+
+For discrete measures with equal support size,  $N$ , and uniform mass,  $1/N$ , the optimal transportation plan between marginals is represented by a correspondence matrix, specifically an  $N \times N$  permutation matrix. Previous works have used directly the correspondence matrix obtained for a slice as a transportation plan in the original space of measures (Rowland et al., 2019; Mahey et al., 2023). This paper provides a holistic and rigorous analysis of this problem for general discrete probability measures.
+
+Our specific contributions in this paper are:
+
+1. Introducing a computationally efficient transport plan between discrete probability measures, the **Expected Sliced Transport (EST) plan**. Motivated by the first question highlighted above, we construct this transport plan as the average of transport plans computed via a lifting scheme involving one-dimensional sliced transport plans. (See Definition 2.4 below.)
+2. Providing a distance for discrete probability measures, the **Expected Sliced Transport (EST) distance**. (See Definition 2.6 and Theorem 2.10 below.)
+3. Offering both a theoretical proof and an experimental visualization showing that the EST distance is equivalent to the Wasserstein distance (and to weak\* convergence) when applied to discrete measures.
+4. Illustrating the potential applicability of the proposed distance and transport plan, with a focus on interpolation and classification tasks.
+
+## 2 EXPECTED SLICED TRANSPORT
+
+### 2.1 PRELIMINARIES
+
+Given a probability measure  $\mu \in \mathcal{P}(\mathbb{R}^d)$  and a unit vector  $\theta \in \mathbb{S}^{d-1} \subset \mathbb{R}^d$ , we define  $\theta_{\#}\mu := \langle \theta, \cdot \rangle_{\#}\mu$  to be the  $\theta$ -slice of the measure  $\mu$ , where  $\langle \theta, x \rangle = \theta \cdot x = \theta^T x$  denotes the standard inner product in  $\mathbb{R}^d$ . For any pair of probability measures with finite  $p$ -moment ( $p > 1$ )  $\mu^1, \mu^2 \in \mathcal{P}_p(\mathbb{R}^d)$ , one can pose the following two Optimal Transport (OT) problems: On the one hand, consider the classical OT problem, which gives rise to the  $p$ -Wasserstein metric:
+
+$$W_p(\mu^1, \mu^2) := \min_{\gamma \in \Gamma(\mu^1, \mu^2)} \left( \int_{\mathbb{R}^d \times \mathbb{R}^d} \|x - y\|^p d\gamma(x, y) \right)^{1/p} \quad (1)$$
+
+{2}------------------------------------------------
+
+![Figure 1: Two diagrams (a) and (b) illustrating the transportation process. (a) shows two uniform measures, mu^1 (green circles) and mu^2 (blue circles), being sliced along a direction theta (indicated by triangles). The slices are then lifted back to the original d-dimensional space to form a transport plan. (b) shows two non-uniform measures, mu^1 and mu^2, with overlapping masses when projected along theta. The process of slicing and lifting is also shown for this case.](d9d706121d1c4ba9ad2c793746382361_img.jpg)
+
+Figure 1: Two diagrams (a) and (b) illustrating the transportation process. (a) shows two uniform measures, mu^1 (green circles) and mu^2 (blue circles), being sliced along a direction theta (indicated by triangles). The slices are then lifted back to the original d-dimensional space to form a transport plan. (b) shows two non-uniform measures, mu^1 and mu^2, with overlapping masses when projected along theta. The process of slicing and lifting is also shown for this case.
+
+Figure 1: Our goal in this paper is to construct transportation plans between  $d$ -dimensional measures ( $d > 1$ ) using their one-dimensional marginals, or slices. For two measures  $\mu^1$  (represented by green circles) and  $\mu^2$  (represented by blue circles), we first derive a one-dimensional transport plan  $\Lambda_\theta^{\mu^1, \mu^2}$  from their slices along a unit vector  $\theta$  (indicated by triangles). This one-dimensional transport plan is then lifted back to the original  $d$ -dimensional space to produce a transport plan between the measures,  $\gamma_\theta^{\mu^1, \mu^2}$ . Finally, these transport plans are aggregated over all directions  $\theta \in \mathbb{S}^{d-1}$ . In (a), the measures  $\mu^1$  and  $\mu^2$  are uniform, with their masses non-overlapping when projected in the direction of  $\theta$ . In (b),  $\mu^1$  and  $\mu^2$  are non-uniform, resulting in overlapping masses when projected along  $\theta$ . For further details, see Remark A.1 in Appendix A.1.
+
+where  $\|\cdot\|$  denotes the Euclidean norm in  $\mathbb{R}^d$  and  $\Gamma(\mu^1, \mu^2) \subset \mathcal{P}(\mathbb{R}^d \times \mathbb{R}^d)$  is the subset of all probability measures with marginals  $\mu^1$  and  $\mu^2$ . On the other hand, for a given  $\theta \in \mathbb{S}^{d-1}$ , consider the one-dimensional OT problem:
+
+$$W_p(\theta_\# \mu^1, \theta_\# \mu^2) = \min_{\Lambda_\theta \in \Gamma(\theta_\# \mu^1, \theta_\# \mu^2)} \left( \int_{\mathbb{R} \times \mathbb{R}} |u - v|^p d\Lambda_\theta(u, v) \right)^{1/p} \quad (2)$$
+
+In this case, since the measures  $\theta_\# \mu^1, \theta_\# \mu^2$  can be regarded as one-dimensional probabilities in  $\mathcal{P}(\mathbb{R})$ , there exists a unique optimal transport plan, which we denote by  $\Lambda_\theta^{\mu^1, \mu^2}$  (see, for e.g., [Villani, 2021, Thm. 2.18, Remark 2.19]), ([Maggi, 2023, Thm. 16.1]).
+
+## 2.2 ON SLICING AND LIFTING TRANSPORT PLANS
+
+In this section, given discrete probability measures  $\mu^1, \mu^2 \in \mathcal{P}_p(\mathbb{R}^d)$ , we describe the process of slicing them according to a direction  $\theta \in \mathbb{S}^{d-1}$  and lifting the optimal transport plan  $\Lambda_\theta^{\mu^1, \mu^2}$ , which solves the 1-d OT problem (2), to get a plan in  $\Gamma(\mu^1, \mu^2)$ . Thus, we obtain a new measure, denoted as  $\gamma_\theta^{\mu^1, \mu^2}$ , in  $\mathcal{P}(\mathbb{R}^d \times \mathbb{R}^d)$  with first and second marginal  $\mu^1$  and  $\mu^2$ , respectively. For clarity, we first describe the process for discrete uniform measures and then extend it to any pair of discrete measures.
+
+### 2.2.1 ON SLICING AND LIFTING TRANSPORT PLANS FOR UNIFORM DISCRETE MEASURES
+
+Given  $N \in \mathbb{N}$ , consider the space  $\mathcal{P}_{(N)}(\mathbb{R}^d)$  of uniform discrete probability measures concentrated at  $N$  particles in  $\mathbb{R}^d$ , that is,
+
+$$\mathcal{P}_{(N)}(\mathbb{R}^d) = \left\{ \frac{1}{N} \sum_{i=1}^N \delta_{x_i} \mid x_i \in \mathbb{R}^d, \forall i \in \{1, \dots, N\} \right\}.$$
+
+Let  $\mu^1 = \frac{1}{N} \sum_{i=1}^N \delta_{x_i}, \mu^2 = \frac{1}{N} \sum_{j=1}^N \delta_{y_j} \in \mathcal{P}_{(N)}(\mathbb{R}^d)$ , where  $x_i, y_j \in \mathbb{R}^d$  and  $\delta_{x_i}$  denotes a Dirac measure located at  $x_i$  (respectively for  $\delta_{y_j}$ ). Let us denote by  $\mathcal{U}(\mathbb{S}^{d-1})$  the uniform measure on the hypersphere  $\mathbb{S}^{d-1} \subset \mathbb{R}^d$ . In this case, the  $\theta$ -slice of  $\mu^1$  is represented by  $\theta_\# \mu^1 = \frac{1}{N} \sum_{i=1}^N \delta_{\theta \cdot x_i}$ , and similarly for  $\theta_\# \mu^2$ . Let  $\mathbf{S}_N$  denote the symmetric group of all permutations of the elements in the set  $[N] := \{1, \dots, N\}$ . Let  $\zeta_\theta, \tau_\theta \in \mathbf{S}_N$  denote the sorted indices of the projected points  $\{\theta \cdot x_i\}_{i=1}^N$  and  $\{\theta \cdot y_j\}_{j=1}^N$ , respectively, that is,
+
+$$\theta \cdot x_{\zeta_\theta^{-1}(1)} \leq \theta \cdot x_{\zeta_\theta^{-1}(2)} \leq \dots \leq \theta \cdot x_{\zeta_\theta^{-1}(N)} \text{ and } \theta \cdot y_{\tau_\theta^{-1}(1)} \leq \theta \cdot y_{\tau_\theta^{-1}(2)} \leq \dots \leq \theta \cdot y_{\tau_\theta^{-1}(N)} \quad (3)$$
+
+The optimal matching from  $\theta_\# \mu^1$  to  $\theta_\# \mu^2$  for the problem (2) is induced by the assignment
+
+$$\theta \cdot x_{\zeta_\theta^{-1}(i)} \mapsto \theta \cdot y_{\tau_\theta^{-1}(i)}, \quad \forall 1 \leq i \leq N. \quad (4)$$
+
+We define  $T_\theta^{\mu^1, \mu^2} : \{x_1, \dots, x_N\} \rightarrow \{y_1, \dots, y_N\}$  the lifted transport map between  $\mu^1$  and  $\mu^2$  by:
+
+$$T_\theta^{\mu^1, \mu^2}(x_i) = y_{\tau_\theta^{-1}(\zeta_\theta(i))}, \quad \forall 1 \leq i \leq N. \quad (5)$$
+
+{3}------------------------------------------------
+
+Rigorously,  $T_\theta^{\mu^1, \mu^2}$  is not necessarily a function defined on  $\{x_1, \dots, x_N\}$  but on the labels  $\{1, \dots, N\}$ , as two projected points  $\theta \cdot x_i$  and  $\theta \cdot x_j$  could coincide for  $i \neq j$ . As a result, it is more appropriate to work with *lifted transport plans*. Indeed, the matrix  $u_\theta^{\mu^1, \mu^2} \in \mathbb{R}^{n \times n}$  given by
+
+$$u_\theta^{\mu^1, \mu^2}(i, j) = \begin{cases} 1/N & \text{if } j = \tau_\theta^{-1}(\zeta_\theta(i)) \\ 0 & \text{otherwise} \end{cases} \quad (6)$$
+
+encodes the weights of the optimal transport plan between  $\theta_\# \mu^1$  and  $\theta_\# \mu^2$  given by
+
+$$\Lambda_\theta^{\mu^1, \mu^2} := \sum_{i, j} u_\theta^{\mu^1, \mu^2}(i, j) \delta_{(\theta \cdot x_i, \theta \cdot y_j)}, \quad (7)$$
+
+as well as the weights of the *lifted transport plan* between the original measures  $\mu^1$  and  $\mu^2$  according to the  $\theta$ -slice defined by
+
+$$\gamma_\theta^{\mu^1, \mu^2} := \sum_{i, j} u_\theta^{\mu^1, \mu^2}(i, j) \delta_{(x_i, y_j)}. \quad (8)$$
+
+This new measure  $\gamma_\theta^{\mu^1, \mu^2} \in \mathcal{P}(\mathbb{R}^d \times \mathbb{R}^d)$  has marginals  $\mu^1$  and  $\mu^2$ . While  $\gamma_\theta^{\mu^1, \mu^2}$  is not necessarily optimal for problem (1), it can be interpreted as a transport plan in  $\Gamma(\mu^1, \mu^2)$  which is optimal when projecting  $\mu^1$  and  $\mu^2$  in the direction of  $\theta$ . See Figure 1 (a) for a visualization.
+
+### 2.2.2 ON SLICING AND LIFTING TRANSPORT PLANS FOR GENERAL DISCRETE MEASURES
+
+Consider discrete measures  $\mu^1, \mu^2 \in \mathcal{P}_\rho(\mathbb{R}^d)$ . In this section, we will use the notation  $\mu^1 = \sum_{x \in \mathbb{R}^d} p(x) \delta_x$ , where  $p(x) \geq 0$  for all  $x \in \mathbb{R}^d$ ,  $p(x) \neq 0$  for at most countable many points  $x \in \mathbb{R}^d$ , and  $\sum_{x \in \mathbb{R}^d} p(x) = 1$ . Similarly,  $\mu^2 = \sum_{y \in \mathbb{R}^d} q(y) \delta_y$  for a non-negative density function  $q$  in  $\mathbb{R}^d$  with finite or countable support and such that  $\sum_{y \in \mathbb{R}^d} q(y) = 1$ . Given  $\theta \in \mathbb{S}^{d-1}$ , consider the equivalence relation defined by:
+
+$$x \sim_\theta x' \quad \text{if and only if} \quad \theta \cdot x = \theta \cdot x'$$
+
+We denote by  $\bar{x}^\theta$  the equivalence class of  $x \in \mathbb{R}^d$ . By abuse of notation, we will use interchangeably that  $\bar{x}^\theta$  is a point in the quotient space  $\mathbb{R}^d / \sim_\theta$ , and also the set  $\{x' \in \mathbb{R}^d : \theta \cdot x = \theta \cdot x'\}$ , which is the orthogonal hyperplane to  $\theta$  that intersects  $x$ . The intended meaning of  $\bar{x}^\theta$  will be clear from the context. Notice that, geometrically, the quotient space  $\mathbb{R}^d / \sim_\theta$  is the line  $\mathbb{R}$  in the direction of  $\theta$ .
+
+Now, we interpret the projected measures  $\theta_\# \mu^1, \theta_\# \mu^2$  as 1-dimensional probability measures in  $\mathcal{P}(\mathbb{R}^d / \sim_\theta)$  given by  $\theta_\# \mu^1 = \sum_{\bar{x}^\theta \in \mathbb{R}^d / \sim_\theta} P(\bar{x}^\theta) \delta_{\bar{x}^\theta}$ , where  $P(\bar{x}^\theta) = \sum_{x' \in \bar{x}^\theta} p(x')$ , and similarly,  $\theta_\# \mu^2 = \sum_{\bar{y}^\theta \in \mathbb{R}^d / \sim_\theta} Q(\bar{y}^\theta) \delta_{\bar{y}^\theta}$ , where  $Q(\bar{y}^\theta) = \sum_{y' \in \bar{y}^\theta} q(y')$ .
+
+**Remark 2.1.** Notice that if  $P(\bar{x}^\theta) = 0$ , then  $p(x') = 0$  for all  $x' \in \bar{x}^\theta$ , or, equivalently, if  $p(x) \neq 0$ , then  $P(\bar{x}^\theta) \neq 0$  (where  $x$  is any ‘representative’ of the class  $\bar{x}^\theta$ ). Similarly for  $Q$ .
+
+Consider the optimal transport plan  $\Lambda_\theta^{\mu^1, \mu^2} \in \Gamma(\theta_\# \mu^1, \theta_\# \mu^2) \subset \mathcal{P}(\mathbb{R}^d / \sim_\theta \times \mathbb{R}^d / \sim_\theta)$  between  $\theta_\# \mu^1$  and  $\theta_\# \mu^2$ , which is *unique* for the OT problem (2) as we are considering 1-dimensional probability measures. Let us define
+
+$$u_\theta^{\mu^1, \mu^2}(x, y) := \begin{cases} \frac{p(x)q(y)}{P(\bar{x}^\theta)Q(\bar{y}^\theta)} \Lambda_\theta^{\mu^1, \mu^2}(\{(\bar{x}^\theta, \bar{y}^\theta)\}) & \text{if } p(x) \neq 0 \text{ and } q(y) \neq 0 \\ 0 & \text{if } p(x) = 0 \text{ or } q(y) = 0 \end{cases}$$
+
+which allows us to generalize the *lifted transport plan* given in (6) in the general discrete case:
+
+$$\gamma_\theta^{\mu^1, \mu^2} := \sum_{x \in \mathbb{R}^d} \sum_{y \in \mathbb{R}^d} u_\theta^{\mu^1, \mu^2}(x, y) \delta_{(x, y)} \quad (9)$$
+
+See Figure 1 (b) for a visualization.
+
+**Remark 2.2.** Notice that this lifting process can be performed by starting with any transport plan  $\Lambda_\theta \in \Gamma(\theta_\# \mu^1, \theta_\# \mu^2)$ , but in this article we will always consider the optimal transport plan, i.e.,  $\Lambda_\theta = \Lambda_\theta^{\mu^1, \mu^2}$ . The reason why we make this choice is because this will give rise to a metric between discrete probability measures: The EST distance which will be defined in Section 2.3.
+
+**Lemma 2.3.** Given general discrete probability measures  $\mu^1$  and  $\mu^2$  in  $\mathbb{R}^d$ , the discrete measure  $\gamma_\theta^{\mu^1, \mu^2}$  defined by (9) has marginals  $\mu^1$  and  $\mu^2$ , that is,  $\gamma_\theta^{\mu^1, \mu^2} \in \Gamma(\mu^1, \mu^2) \subset \mathcal{P}(\mathbb{R}^d \times \mathbb{R}^d)$ .
+
+We refer the reader to the appendix for its proof.
+
+{4}------------------------------------------------
+
+## 2.3 EXPECTED SLICED TRANSPORT (EST) FOR DISCRETE MEASURES
+
+Leveraging on the transport plans  $\gamma_\theta^{\mu^1, \mu^2}$  described before, in this section we propose a new transport plan  $\bar{\gamma}^{\mu^1, \mu^2} \in \Gamma(\mu^1, \mu^2)$ , which will give rise to a new metric in the space of discrete probability measures.
+
+**Definition 2.4** (Expected Sliced Transport plan). *Let  $\sigma \in \mathcal{P}(\mathbb{S}^{d-1})$ . For discrete probability measures  $\mu^1, \mu^2$  in  $\mathbb{R}^d$ , we define the **Expected Sliced Transport (EST) plan**  $\bar{\gamma}^{\mu^1, \mu^2} \in \mathcal{P}(\mathbb{R}^d \times \mathbb{R}^d)$  by*
+
+$$\bar{\gamma}^{\mu^1, \mu^2} := \mathbb{E}_{\theta \sim \sigma} [\gamma_\theta^{\mu^1, \mu^2}], \quad \text{where each } \gamma_\theta^{\mu^1, \mu^2} \text{ is given by (9), that is,} \quad (10)$$
+
+$$\bar{\gamma}^{\mu^1, \mu^2}(\{(x, y)\}) = \int_{\mathbb{S}^{d-1}} \gamma_\theta^{\mu^1, \mu^2}(\{(x, y)\}) d\sigma(\theta), \quad \forall x, y \in \mathbb{R}^d \times \mathbb{R}^d.$$
+
+In other words,  $\bar{\gamma}^{\mu^1, \mu^2} = \sum_{x \in \mathbb{R}^d} \sum_{y \in \mathbb{R}^d} U^{\mu^1, \mu^2}(x, y) \delta_{(x, y)}$ , where the new weights are given by
+
+$$U^{\mu^1, \mu^2}(x, y) = \begin{cases} p(x)q(y) \int_{\mathbb{S}^{d-1}} \frac{\Lambda_\theta^{\mu^1, \mu^2}(\{(x^\theta, \bar{y}^\theta)\})}{P(x^\theta)Q(\bar{y}^\theta)} d\sigma(\theta) & \text{if } p(x) \neq 0 \text{ and } q(y) \neq 0 \\ 0 & \text{otherwise} \end{cases}$$
+
+**Remark 2.5.** *The measure  $\bar{\gamma}^{\mu^1, \mu^2}$  is well-defined and, moreover, (as an easy consequence of Lemma 2.3)  $\bar{\gamma}^{\mu^1, \mu^2} \in \Gamma(\mu^1, \mu^2)$ , i.e., it has marginals  $\mu^1$  and  $\mu^2$ . (See Lemma A.5 in the appendix.)*
+
+**Definition 2.6** (Expected Sliced Transport distance). *Let  $\sigma \in \mathcal{P}(\mathbb{S}^{d-1})$  with  $\text{supp}(\sigma) = \mathbb{S}^{d-1}$ . We define the **Expected Sliced Transport discrepancy** for discrete probability measures  $\mu^1, \mu^2$  in  $\mathbb{R}^d$  by*
+
+$$\mathcal{D}_p(\mu^1, \mu^2) := \left( \sum_{x \in \mathbb{R}^d} \sum_{y \in \mathbb{R}^d} \|x - y\|^p \bar{\gamma}^{\mu^1, \mu^2}(\{(x, y)\}) \right)^{\frac{1}{p}}, \quad \text{where } \bar{\gamma}^{\mu^1, \mu^2} \text{ is defined by (10).} \quad (11)$$
+
+**Remark 2.7.** *By defining the following generalization of the Sliced Wasserstein Generalized Geodesics (SWGG) dissimilarity presented in Mahey et al. (2023),*
+
+$$\mathcal{D}_p(\mu^1, \mu^2; \theta) := \left( \sum_{x \in \mathbb{R}^d} \sum_{y \in \mathbb{R}^d} \|x - y\|^p \gamma_\theta^{\mu^1, \mu^2}(\{(x, y)\}) \right)^{1/p}, \quad (12)$$
+
+we can rewrite (11) as
+
+$$\mathcal{D}_p(\mu^1, \mu^2) = \mathbb{E}_{\theta \sim \sigma}^{\mathbb{R}^d} [\mathcal{D}_p^p(\mu^1, \mu^2; \theta)]$$
+
+**Remark 2.8.** *Since the EST plan  $\bar{\gamma}^{\mu^1, \mu^2}$  is a transport plan, we have that*
+
+$$W_p(\mu^1, \mu^2) \leq \mathcal{D}_p(\mu^1, \mu^2).$$
+
+In Appendix B we show that they define the same topology for the space of discrete probabilities.
+
+**Remark 2.9** (EST for discrete uniform measures and the Projected Wasserstein distance). *Consider uniform measures  $\mu^1 = \frac{1}{N} \sum_{i=1}^N \delta_{x_i}$ ,  $\mu^2 = \frac{1}{N} \sum_{j=1}^N \delta_{y_j} \in \mathcal{P}_{(N)}(\mathbb{R}^d)$ , and for  $\theta \in \mathbb{S}^{d-1}$ , let  $\zeta_\theta, \tau_\theta \in \mathbb{S}_N$  be permutations that allow us to order the projected points as in (3). Notice that if  $\sigma = \mathcal{U}(\mathbb{S}^{d-1})$ , by using the formula (5) for each assignment given  $\theta$  and noticing that  $\tau_\theta^{-1} \circ \zeta_\theta \in \mathbb{S}_N$ , we can re-write (11) as*
+
+$$\mathcal{D}_p(\mu^1, \mu^2)^p = \mathbb{E}_{\theta \sim \mathcal{U}(\mathbb{S}^{d-1})} \left[ \frac{1}{N} \sum_{i=1}^N \|x_i - y_{\tau_\theta^{-1}(\zeta_\theta(i))}\|^p \right]. \quad (13)$$
+
+Therefore, we have that the expression for  $\mathcal{D}_p(\cdot, \cdot)$  given by (13) coincides with the **Projected Wasserstein distance** proposed in (Rowland et al., 2019, Definition 3.1). Then, by applying (Rowland et al., 2019, Proposition 3.3), we have that the Expected Sliced Transport discrepancy defined in Equation (13) is a metric on the space  $\mathcal{P}_{(N)}(\mathbb{R}^d)$ . We generalise this in the next theorem.
+
+**Theorem 2.10.** *The Expected Sliced Transport  $\mathcal{D}_p(\cdot, \cdot)$  defined in (11) is a metric in the space of finite discrete probability measures in  $\mathbb{R}^d$ .*
+
+{5}------------------------------------------------
+
+*Sketch of the proof of Theorem 2.10.* For the detailed proof, we refer the reader to Appendix A. Here, we present a brief overview of the main ideas and steps involved in the proof.
+
+The symmetry of  $\mathcal{D}_p(\cdot, \cdot)$  follows from our construction of the transport plan  $\bar{\gamma}^{\mu^1, \mu^2}$ , which is based on considering a family of *optimal* 1-d transport plans  $\{\Lambda_\theta^{\mu^1, \mu^2}\}_{\theta \in \mathbb{S}^{d-1}}$ . The identity of indiscernibles follows essentially from Remark 2.8. To prove the triangle inequality we use the following strategy:
+
+1. We leverage the fact that  $\mathcal{D}_p(\cdot, \cdot)$  is a metric for the space  $\mathcal{P}_{(N)}(\mathbb{R}^d)$  of uniform discrete probability measures concentrated at  $N$  particles in  $\mathbb{R}^d$  (Rowland et al. (2019)) to prove that  $\mathcal{D}_p(\cdot, \cdot)$  is also a metric on the set of measures in which the masses are rationals. To do so, we establish a correspondence between finite discrete measures with rational weights and finite discrete measures with uniform mass (see the last paragraph of Proposition A.7).
+2. Given finite discrete measures  $\mu^1, \mu^2$ , we approximate them, in terms of the Total Variation norm, by sequences of probability measures with rational weights  $\{\mu_n^1\}, \{\mu_n^2\}$ , supported on the same points as  $\mu^1$  and  $\mu^2$ , respectively. We then turn our attention on how the various plans constructed behave as the  $n$  increases and show the following convergence results in Total Variation norm:
+ - (a) The sequence  $\left(\Lambda_\theta^{\mu_n^1, \mu_n^2}\right)_{n \in \mathbb{N}}$  converges to  $\Lambda_\theta^{\mu^1, \mu^2}$ .
+ - (b) The sequence  $\left(\gamma_\theta^{\mu_n^1, \mu_n^2}\right)_{n \in \mathbb{N}}$  converges to  $\gamma_\theta^{\mu^1, \mu^2}$ .
+ - (c) The sequence  $\left(\bar{\gamma}^{\mu_n^1, \mu_n^2}\right)_{n \in \mathbb{N}}$  converges to  $\bar{\gamma}^{\mu^1, \mu^2}$ .
+
+As a consequence, we obtain  $\lim_{n \rightarrow \infty} \mathcal{D}_p(\mu_n^1, \mu_n^2) = \mathcal{D}_p(\mu^1, \mu^2)$ .
+
+Finally, given three finite discrete measures  $\mu^1, \mu^2, \mu^3$ , we proceed as in point 2 by considering sequences of probability measures with rational weights  $\{\mu_n^1\}, \{\mu_n^2\}, \{\mu_n^3\}$  supported on the same points as  $\mu^1, \mu^2, \mu^3$ , respectively, that approximate the original measures in Total Variation, obtaining
+
+$$\mathcal{D}_p(\mu^1, \mu_n^2) = \lim_{n \rightarrow \infty} \mathcal{D}_p(\mu_n^1, \mu_n^2) \leq \lim_{n \rightarrow \infty} \mathcal{D}_p(\mu_n^1, \mu_n^3) + \mathcal{D}_p(\mu_n^3, \mu_n^2) = \mathcal{D}_p(\mu^1, \mu^3) + \mathcal{D}_p(\mu^3, \mu^2)$$
+
+where the equalities follows from point 2 and the middle triangle inequality follows from point 1.  $\square$
+
+## 3 EXPERIMENTS
+
+## 3.1 COMPUTATIONAL EFFICIENCY
+
+In practice, to compute the EST plan (10) and distance (11), we sample  $L$  unit vectors  $\{\theta_\ell\}_{\ell=1}^L$  (or *slices*) uniformly from  $\mathbb{S}^{d-1}$  to approximate  $\bar{\gamma}^{\mu^1, \mu^2} \approx \frac{1}{L} \sum_{\ell=1}^L \gamma_{\theta_\ell}^{\mu^1, \mu^2}$ .
+
+For empirical measures  $\mu^1, \mu^2$  in  $\mathbb{R}^d$  of size  $N$ , the computational complexity of our proposed EST method is of order  $\mathcal{O}((L+d)N^2)$ . A detailed analysis is provided in Appendix C. Additionally, Figure 2 presents the wall-clock time of the Sinkhorn algorithm, used to compute entropic OT for various values of the regularization parameter  $\lambda$ , and the proposed EST method, evaluated with different numbers of slices,  $L$ , as the size  $N$  of the support of the discrete measures increases. The wall clock times are averaged over 10 runs.
+
+## 3.2 COMPARISON OF TRANSPORT PLANS
+
+Figure 3 illustrates the behavior of different transport schemes: the optimal transport plan for  $W_2(\cdot, \cdot)$ , the transport plan obtained by solving an entropically regularized transportation problem between the source and target probability measures, and the new expected sliced transport plan  $\bar{\gamma}$ . We include comparisons with entropic regularization because it is one of the most popular approaches, as it allows for the use of Sinkhorn’s algorithm. From the figure, we observe that while  $\bar{\gamma}$  promotes mass splitting, this phenomenon is less pronounced than in the entropically regularized OT scheme. This observation will be revisited in Subsection 3.3.
+
+![Figure 2: Wall-clock time plot of Sinkhorn algorithm for entropic OT with varying lambda and the EST method for different numbers of slices, L, as the size N of the empirical measures increases. The x-axis is 'Number of Particles, N' from 0 to 30000. The y-axis is 'Wall-Clock Time, Logarithmic Scale' from 10^-1 to 10^1. The legend shows: EST Plan, L=128 (solid blue line with circles); EST Plan, L=256 (dashed blue line with circles); EST Plan, L=512 (dotted blue line with circles); EST Plan, L=1024 (dash-dot blue line with circles); Sinkhorn, eps=0.1 (solid red line with circles); Sinkhorn, eps=1 (solid green line with circles); Sinkhorn, eps=10 (solid purple line with circles); Sinkhorn, eps=100 (solid black line with circles). The EST methods show a rapid increase in time as N increases, while the Sinkhorn methods show a much slower increase, indicating that the EST method is more computationally efficient for large N.](6a412ce0ee3ac6bd290d214edd54c1da_img.jpg)
+
+Figure 2: Wall-clock time plot of Sinkhorn algorithm for entropic OT with varying lambda and the EST method for different numbers of slices, L, as the size N of the empirical measures increases. The x-axis is 'Number of Particles, N' from 0 to 30000. The y-axis is 'Wall-Clock Time, Logarithmic Scale' from 10^-1 to 10^1. The legend shows: EST Plan, L=128 (solid blue line with circles); EST Plan, L=256 (dashed blue line with circles); EST Plan, L=512 (dotted blue line with circles); EST Plan, L=1024 (dash-dot blue line with circles); Sinkhorn, eps=0.1 (solid red line with circles); Sinkhorn, eps=1 (solid green line with circles); Sinkhorn, eps=10 (solid purple line with circles); Sinkhorn, eps=100 (solid black line with circles). The EST methods show a rapid increase in time as N increases, while the Sinkhorn methods show a much slower increase, indicating that the EST method is more computationally efficient for large N.
+
+Figure 2: Wall-clock time plot of Sinkhorn algorithm for entropic OT with varying  $\lambda$  and the EST method for different numbers of slices,  $L$ , as the size  $N$  of the empirical measures increases.
+
+{6}------------------------------------------------
+
+![Figure 3: Depiction of transport plans. The figure is a 4x3 grid of plots. Each row represents a different configuration of source (orange) and target (blue) samples. The columns represent three different transport plans: 'OT plan', 'Entropic OT plan', and 'Expected Sliced Transport Plan'. The top row shows uniform mass on the same particles. The bottom row shows uniform mass on the same particles. The third row shows random, non-uniform mass. The fourth row shows uniform mass on different particles. Each plot includes a scatter plot of source and target samples with gray lines representing transport assignments, and a corresponding heat matrix below it. The heat matrix uses a color scale from dark purple (no transportation) to bright yellow (more transportation).](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+Figure 3: Depiction of transport plans. The figure is a 4x3 grid of plots. Each row represents a different configuration of source (orange) and target (blue) samples. The columns represent three different transport plans: 'OT plan', 'Entropic OT plan', and 'Expected Sliced Transport Plan'. The top row shows uniform mass on the same particles. The bottom row shows uniform mass on the same particles. The third row shows random, non-uniform mass. The fourth row shows uniform mass on different particles. Each plot includes a scatter plot of source and target samples with gray lines representing transport assignments, and a corresponding heat matrix below it. The heat matrix uses a color scale from dark purple (no transportation) to bright yellow (more transportation).
+
+Figure 3: Depiction of transport plans (an optimal transport plan, a plan obtained from solving an entropically regularized transport problem, and the proposed expected sliced transport plan) between source (orange) and target (blue) for four different configurations of masses. The measures in the left and right panels are concentrated on the same particles, respectively; however, the top row depicts measures with uniform mass, while the bottom row depicts measures with random, non-uniform mass. transport plans are shown as gray assignments and as  $n \times m$  heat matrices encoding the amount of mass transported (dark color = no transportation, bright color = more transportation), where  $n$  is the number of particles on which the source measure is concentrated, and  $m = 2n$  is the number of particles on which the target measure is concentrated.
+
+## 3.3 TEMPERATURE APPROACH
+
+Given  $\mu^1, \mu^2$  discrete probability measures, we perform the new expected sliced transportation scheme by using the following averaging measure  $\sigma_\tau \ll \mathcal{U}(\mathbb{S}^{d-1})$  on the sphere:
+
+$$\sigma_\tau(\theta) = \frac{e^{-\tau \mathcal{D}_p^\#(\mu^1, \mu^2; \theta)}}{\int_{\mathbb{S}^{d-1}} e^{-\tau \mathcal{D}_p^\#(\mu^1, \mu^2; \theta')} d\theta'}, \quad (14)$$
+
+where  $\mathcal{D}_p(\mu^1, \mu^2; \theta)$  is given by (12), and  $\tau \geq 0$  is a hyperparameter we will refer to as the *temperature* (note that increasing  $\tau$  corresponds to reducing the temperature). If  $\tau = 0$ , then  $\sigma_0 = \mathcal{U}(\mathbb{S}^{d-1})$ . However, when  $\tau \neq 0$ ,  $\sigma_\tau$  is a probability measure on  $\mathbb{S}^{d-1}$  with density given by (14), which depends on the source and target measures  $\mu^1$  and  $\mu^2$ . We have chosen this measure  $\sigma_\tau$  because it provides a general parametric framework that interpolates between our proposed scheme with the uniform measure ( $\tau = 0$ ) and min-SWGG (Mahery et al., 2023), as the EST distance approaches min-SWGG when  $\tau \rightarrow \infty$ . For the implementations, we use
+
+$$\sigma_\tau(\theta^l) = \frac{e^{-\tau \mathcal{D}_p^\#(\mu^1, \mu^2; \theta^l)}}{\sum_{\ell'=1}^L e^{-\tau \mathcal{D}_p^\#(\mu^1, \mu^2; \theta^{\ell'})}}, \quad (15)$$
+
+where  $L$  represents the number of slices or unit vectors  $\theta^1, \dots, \theta^L \in \mathbb{S}^{d-1}$ . Figure 4 illustrates that as  $\tau \rightarrow \infty$ , the weights used for averaging the lifted transport plans converge to a one-hot vector, i.e., the slice minimizing  $\mathcal{D}_p(\mu^1, \mu^2; \theta)$  dominates, leading to a transport plan with fewer mass splits. For the visualization we have used source  $\mu^1$  and target  $\mu^2$  uniform probability measures concentrated on different number of particles. For consistency, the configurations are the same as in Figure 3.
+
+## 3.4 INTERPOLATION
+
+We use the Point Cloud MNIST 2D dataset Garcia (2023), a reimagined version of the classic MNIST dataset (LeCun, 1998), where each image is represented as a set of weighted 2D point clouds instead
+
+{7}------------------------------------------------
+
+![Figure 4: A 2x5 grid of plots showing the effect of increasing tau on the expected sliced plan. The top row contains line plots of source (blue) and target (orange) samples with transport lines. The bottom row contains corresponding heatmaps. Columns are labeled: OT plan, Expected Sliced Plan, tau = 0.00, Expected Sliced Plan, tau = 1.00, Expected Sliced Plan, tau = 10.00, Expected Sliced Plan, tau = 100.00, Expected Sliced Plan, tau = 1000.00. As tau increases, the transport lines become more structured and the heatmaps show more concentrated mass.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 4: A 2x5 grid of plots showing the effect of increasing tau on the expected sliced plan. The top row contains line plots of source (blue) and target (orange) samples with transport lines. The bottom row contains corresponding heatmaps. Columns are labeled: OT plan, Expected Sliced Plan, tau = 0.00, Expected Sliced Plan, tau = 1.00, Expected Sliced Plan, tau = 10.00, Expected Sliced Plan, tau = 100.00, Expected Sliced Plan, tau = 1000.00. As tau increases, the transport lines become more structured and the heatmaps show more concentrated mass.
+
+Figure 4: The effect of increasing  $\tau$  (i.e., decreasing temperature) on the expected sliced plan. The left most column shows the OT plan, and the rest of the columns show the expected sliced plan as a function of increasing  $\tau$ . The right most column depicts that expected sliced plan recovers the min-SWGG Mahey et al. (2023) transportation map.
+
+![Figure 5: A 2x2 grid of point cloud interpolations between digits 7 and 6. The top-left panel shows the OT interpolation. The bottom-left panel shows Entropic OT interpolation for lambda = 0.10, 1.00, and 10.00. The right panels show Interpolation via Expected Sliced Plan for tau = 100.00, 10.00, 1.00, and 0.00. The interpolations show a smooth transition between the two digit shapes.](d864789b0d8384da1d22fd6a5d76bbdf_img.jpg)
+
+Figure 5: A 2x2 grid of point cloud interpolations between digits 7 and 6. The top-left panel shows the OT interpolation. The bottom-left panel shows Entropic OT interpolation for lambda = 0.10, 1.00, and 10.00. The right panels show Interpolation via Expected Sliced Plan for tau = 100.00, 10.00, 1.00, and 0.00. The interpolations show a smooth transition between the two digit shapes.
+
+Figure 5: Interpolation between two point clouds via  $((1-t)x + ty)_{\#}\gamma$ , where  $\gamma$  is the optimal transport plan for  $W_2(\cdot, \cdot)$  (top left), the transport plan obtained from entropic OT with various regularization parameters (bottom left), and the EST for different temperatures  $\tau$  (right).
+
+of pixel values. In Figure 5, we illustrate the interpolation between two point clouds that represent digits 7 and 6. Since the point clouds are discrete probability measures with non-uniform mass, we perform three different interpolation schemes via  $((1-t)x + ty)_{\#}\gamma$  where  $0 \leq t \leq 1$  for different transport plans  $\gamma$ , namely:
+
+1.  $\gamma = \gamma^*$ , an optimal transport plan for  $W_2(\cdot, \cdot)$ ;
+2. a transport plan  $\gamma$  obtained from solving an entropically regularized transportation problem (performed for three different regularization parameters  $\lambda$ );
+
+{8}------------------------------------------------
+
+3.  $\gamma = \bar{\gamma}$ : the expected sliced transport plan computed using  $\sigma_\tau$  given by formula (14) (or (15) for implementations) for four different values of the temperature parameter  $\tau$ .
+
+As the temperature increases, the transport plan exhibits less mass splitting, similar to the effect of decreasing the regularization parameter  $\lambda$  in entropic OT. However, unlike entropic OT, where smaller regularization parameters require more iterations for convergence, the computation time for expected sliced transport remains unaffected by changes in temperature.
+
+## 3.5 WEAK CONVERGENCE
+
+Given finite discrete probability measures  $\mu$  and  $\nu$ , we consider  $\mu_t$ , for  $0 \leq t \leq 1$ , the Wasserstein geodesic between  $\mu$  and  $\nu$ . In particular,  $\mu_t$  is a curve of probability measures that interpolates  $\mu$  and  $\nu$ , that is  $\mu_0 = \mu$  and  $\mu_1 = \nu$ . Moreover, we have that  $W_2(\mu_t, \nu) = (1 - t)W_2(\mu, \nu) \rightarrow 0$  as  $t \rightarrow 1$ , or equivalently, we can say  $\mu_t$  converges in the weak\*-topology to  $\nu$ . Figure 6 illustrates that the expected sliced distance also satisfies  $\mathcal{D}_2(\mu_t, \nu) \rightarrow 0$  as  $t \rightarrow 1$ . Indeed, this experimental conclusion is justified by the following theoretical result:
+
+*Let  $\mu, \mu_n \in \mathcal{P}(\Omega)$  be discrete measures with finite or countable support, where  $\Omega \subset \mathbb{R}^d$  is compact. Assume  $\sigma \ll \mathcal{U}(\mathbb{S}^{d-1})$ . Then,  $\mathcal{D}_p(\mu_n, \mu) \rightarrow 0$  if and only if  $\mu_n \xrightarrow{w} \mu$ .*
+
+We present its proof in Appendix B.
+
+For the experiment,  $\mu$  and  $\nu$  are chosen to be discrete measures with  $N$  particles of uniform mass, sampled from two Gaussian distributions (see Figure 6, top). For different values of time,  $0 \leq t \leq 1$ , we compute different discrepancies,  $\sum_{i=1}^N \sum_{j=1}^N \|x_i - y_j\|^2 \gamma_{ij}^{\mu_t, \nu}$ , calculated for various transport plans: (1) the optimal transport plan, (2) the outer product plan  $\mu_t \otimes \nu$ , (3) the plan obtained from entropic OT with two different regularization parameters  $\lambda$ , and (4) our proposed expected sliced plan computed with  $\sigma_\tau$  given in (14) for four different temperature parameters  $\tau$ . As  $\mu_t$  converges to  $\nu$ , it is evident that both the OT and our proposed EST distance approach zero, while the entropic OT and outer product plans, as expected, do not converge to zero.
+
+## 3.6 TRANSPORT-BASED EMBEDDING
+
+Following the linear optimal transportation (LOT) framework, also referred to as the Wasserstein or transport-based embedding framework (Wang et al., 2013; Kolouri et al., 2021; Nenna & Pass, 2023; Bai et al., 2023; Martin et al., 2024), we investigate the application of our proposed transport plan in point cloud classification. Let  $\mu_0 = \sum_{i=1}^N \alpha_i \delta_{x_i}$  denote a reference probability measure and let  $\mu_k = \sum_{j=1}^{N_k} \beta_j^k \delta_{y_j^k}$  denote a target probability measure. Let  $\gamma^{\mu_0, \mu_k}$  be a transport plan between  $\mu_0$  and  $\mu_k$ , and define the barycentric projection (Ambrosio et al., 2011, Definition 5.4.2) of this plan as:
+
+$$b_i(\gamma^{\mu_0, \mu_k}) := \frac{1}{\alpha_i} \sum_{j=1}^{N_k} \gamma_{ij}^{\mu_0, \mu_k} y_j^k, \quad i \in 1, \dots, N. \quad (16)$$
+
+Note that  $b_i(\gamma^{\mu_0, \mu_k})$  represents the center of mass to which  $x_i$  from the reference measure is transported according to the transport plan  $\gamma^{\mu_0, \mu_k}$ . When  $\gamma^{\mu_0, \mu_k}$  is the OT plan, the LOT framework of Wang et al. (2013) uses
+
+$$[\phi(\mu_k)]_i := b_i(\gamma^{\mu_0, \mu_k}) - x_i, \quad i \in 1, \dots, N \quad (17)$$
+
+as an embedding  $\phi$  for the measure  $\mu_k$ . This framework, as demonstrated in Kolouri et al. (2021), can be used to define a permutation-invariant embedding for sets of features and, more broadly, point clouds. More precisely, given a point cloud  $\mathcal{Y}_k = \{(\beta_j^k, y_j^k)\}_{j=1}^{N_k}$ , where  $\sum_{j=1}^{N_k} \beta_j^k = 1$  and  $\beta_j$  represent the mass at location  $y_j$ , we represent this point cloud as a discrete measure  $\mu_k$ .
+
+![Figure 6: Discrepancies calculated from transport plans between mu_t and nu, as a function of t in [0, 1]. The top part shows five clusters of points representing mu_0, mu_0.25, mu_0.5, mu_0.75, and mu_1 = nu. The bottom part is a log-linear plot of D(mu_t, nu) vs t. The y-axis ranges from 10^-3 to 10^1, and the x-axis ranges from 10^-1 to 10^0. The plot shows that the OT and EST distance approach zero as t increases, while the Outer product and Sinkhorn (lambda = 1.00, 10.00) and EST (tau = 0.00, 1.00, 10.00, 100.00) distance remain relatively constant.](d96d4e75c9300bbeffb0fccf0b2b8038_img.jpg)
+
+Figure 6: Discrepancies calculated from transport plans between mu\_t and nu, as a function of t in [0, 1]. The top part shows five clusters of points representing mu\_0, mu\_0.25, mu\_0.5, mu\_0.75, and mu\_1 = nu. The bottom part is a log-linear plot of D(mu\_t, nu) vs t. The y-axis ranges from 10^-3 to 10^1, and the x-axis ranges from 10^-1 to 10^0. The plot shows that the OT and EST distance approach zero as t increases, while the Outer product and Sinkhorn (lambda = 1.00, 10.00) and EST (tau = 0.00, 1.00, 10.00, 100.00) distance remain relatively constant.
+
+Figure 6: Discrepancies calculated from transport plans between  $\mu_t$  and  $\nu$ , when  $\mu_t \xrightarrow{w} \nu$ , as a function of  $t \in [0, 1]$ .
+
+{9}------------------------------------------------
+
+![Figure 7: t-SNE visualization of embeddings and a table of logistic regression accuracy. The figure includes five t-SNE plots and a line graph showing accuracy vs. temperature parameter tau.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+The figure displays five t-SNE visualizations of embeddings for the MNIST 2D dataset. The top row shows three plots: 'OT' with accuracy %96.2, 'Entropic OT,  $\lambda = 10.0$ ' with accuracy %96.8, and 'Entropic OT,  $\lambda = 100.0$ ' with accuracy %92.2. The bottom row shows two plots for the 'EST' method with  $\tau = 0.0$  (accuracy %94.3) and  $\tau = 0.1$  (accuracy %92.3). A table titled 'Effect of Reference Size' provides accuracy data for different reference sizes  $N$ . A line graph at the bottom left shows 'Embedding Accuracy for EST' decreasing as the temperature parameter  $\tau$  increases from  $10^{-1}$  to  $10^1$ .
+
+| Effect of Reference Size |  |  |  |
+|-|-|-|-|
+| N | OT | Entropic OT | EST |
+| 4 | 66.72 | 67.06 | 65.53 |
+| 9 | 88.45 | 89.24 | 88.72 |
+| 16 | 93.51 | 94.39 | 92.88 |
+| 36 | 96.14 | 96.4 | 94.47 |
+| 64 | 96.22 | 96.79 | 94.4 |
+| 100 | 96.21 | 96.82 | 94.3 |
+| 400 | 94.43 | 96.86 | 92.77 |
+
+Figure 7: t-SNE visualization of embeddings and a table of logistic regression accuracy. The figure includes five t-SNE plots and a line graph showing accuracy vs. temperature parameter tau.
+
+Figure 7: t-SNE visualization of the embeddings computed using different transport plans, along with the corresponding logistic regression accuracy for each embedding. The t-SNE plots are generated for embeddings with a reference size of  $N = 100$ , and for EST, we used  $L = 128$  slices. The table shows the accuracy of the embeddings as a function of reference size  $N$ . For the table, the regularization parameter for entropic OT is set to  $\lambda = 10$ , and for EST, the temperature is set to  $\tau = 0$  with  $L = 128$  slices. Lastly, the plot on the bottom left shows the performance of EST, when  $N = 100$  and  $L = 128$ , as a function of the temperature parameter,  $\tau$ .
+
+In this section, we use a reference measure with  $N$  particles of uniform mass to embed the digits from the Point Cloud MNIST 2D dataset using various transport plans. We then perform a logistic regression on the embedded digits and present the results in Figure 7. The figure shows a 2D t-SNE visualization of the embedded point clouds using: (1) the OT plan, (2) the entropic OT plan with two different regularization parameters, and (3) our expected sliced plan with two temperature parameters (using  $N = 100$  for all methods). In addition, we report the test accuracy of these embeddings for different reference sizes.
+
+Lastly, we make an interesting observation about the embedding computed using EST. As we reduce the temperature, i.e., increase  $\tau$ , the embedding becomes progressively less informative. We attribute this to the dependence of  $\sigma_\tau$  on  $\mu_k$ . In other words, the embedding is computed with respect to different  $\sigma_\tau$ , for different measures, leading to inaccuracies when comparing the embedded measures. This finding also suggests that the min-SWGG framework, while meritorious, may not be well-suited for defining a transport-based embedding.
+
+Additionally, we refer the reader to Appendix D for a similar classification experiment using a more complex dataset: ModelNet40.
+
+## 4 CONCLUSIONS
+
+In this paper, we explored the feasibility of constructing transport plans between two probability measures using the computationally efficient sliced optimal transport (OT) framework. We introduced the Expected Sliced Transport (EST) framework and proved that it provides a valid metric for comparing discrete probability measures while preserving the computational efficiency of sliced transport and enabling explicit mass coupling. Through a diverse set of numerical experiments, we illustrated the behavior of this newly introduced transport plan. Additionally, we demonstrated how the temperature parameter in our approach offers a flexible framework that connects our method to the recently proposed min-Sliced Wasserstein Generalized Geodesics (min-SWGG) framework. Finally, the theoretical insights and experimental results presented here open up new avenues for developing efficient transport-based algorithms in machine learning and beyond.
+
+ Rest of paper (reference and Appendix) is removed.

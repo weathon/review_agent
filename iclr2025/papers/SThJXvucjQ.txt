@@ -1,0 +1,323 @@
+
+
+{0}------------------------------------------------
+
+# CONSERVATIVE CONTEXTUAL BANDITS: BEYOND LINEAR REPRESENTATIONS
+
+**Rohan Deb**
+
+University of Illinois  
+Urbana-Champaign  
+rd22@illinois.edu
+
+**Mohammad Ghavamzadeh**
+
+Amazon AGI  
+ghavamza@amazon.com
+
+**Arindam Banerjee**
+
+University of Illinois  
+Urbana-Champaign  
+arindamb@illinois.edu
+
+## ABSTRACT
+
+Conservative Contextual Bandits (CCBs) address safety in sequential decision making by requiring that an agent’s policy, along with minimizing regret, also satisfies a safety constraint: the performance is not worse than a baseline policy (e.g., the policy that the company has in production) by more than  $(1 + \alpha)$  factor. Prior work developed UCB-style algorithms for this problem in the multi-armed (Wu et al., 2016) and contextual linear (Kazerouni et al., 2017) settings. However, in practice the cost of the arms is often a non-linear function, and therefore existing UCB algorithms are ineffective in such settings. In this paper, we consider CCBs beyond the linear case and develop two algorithms **C-SquareCB** and **C-FastCB**, using Inverse Gap Weighting (IGW) based exploration and an online regression oracle. We show that the safety constraint is satisfied with high probability and that the regret for **C-SquareCB** is sub-linear in horizon  $T$ , while the regret for **C-FastCB** is first-order and is sub-linear in  $L^*$ , the cumulative loss of the optimal policy. Subsequently, we use a neural network for function approximation and online gradient descent as the regression oracle to provide  $\tilde{O}(\sqrt{KT} + K/\alpha)$  and  $\tilde{O}(\sqrt{KL^*} + K(1 + 1/\alpha))$  regret bounds respectively. Finally, we demonstrate the efficacy of our algorithms on real world data, and show that they significantly outperform the existing baseline while maintaining the performance guarantee.
+
+## 1 INTRODUCTION
+
+Contextual bandits provide a framework to make sequential decisions over time by actively interacting with the environment. In each time step, the learner observes  $K$  context vectors associated with corresponding arms, selects an arm based on the history of interaction and observes the corresponding noise corrupted cost<sup>1</sup> of playing that arm. The objective of the learner is to minimize the cumulative sum of costs over the entire horizon of length  $T$ , or equivalently to minimize the *regret*. Although a lot of progress had been made in the multi-armed (Auer et al., 2002; Agrawal & Goyal, 2012; Bubeck et al., 2012; Bubeck & Slivkins, 2012) and linear formulation (Chu et al., 2011; Abbasi-Yadkori et al., 2011; Agrawal & Goyal, 2013), until recently solutions for the general non-linear cost function did not exist. A series of work on neural contextual bandits (Zahavy & Mannor, 2020; Zhou et al., 2020; Zhang et al., 2021) have provided algorithms and guarantees for general non-linear cost functions, paving the way for practical use of bandit algorithms in real-world problems. Distinct from the previous set of works, Foster & Rakhlin (2020) and Foster & Krishnamurthy (2021) developed general reductions from the bandit problem to online regression using the Inverse Gap Weighting (IGW) idea (Abe & Long, 1999; Abe et al., 2003). This reduction works for general cost functions and uses only a mild realizability assumption (see Assumption 1).
+
+In addition to non-linear cost functions, safety is another crucial consideration that significantly enhances the practical use of these algorithms in real-world. In this work, we consider a specific notion of safety called *safety with respect to a baseline* (Kazerouni et al., 2017). Algorithms that are safe, meaning it is assured to perform at least as well as an established (possibly already deployed) baseline, are more likely to be used in practice. While existing online algorithms for bandits are expected to eventually identify an optimal or high-performing policy, their performance during the
+
+<sup>1</sup>We use the cost formulation instead of the more common reward formulation in this paper.
+
+{1}------------------------------------------------
+
+initial learning phase can be unpredictable and often unsafe. To ensure safety in such algorithms, it is important to regulate their exploration, by making them more *conservative*. This is done by making sure that the cumulative cost of the algorithm at any stage is not worse than that of the baseline by more than a  $(1 + \alpha)$  factor (cf. Definition 2.2). Such a conservative bandit formulation has been studied in the multi-armed setting (Wu et al., 2016) and the contextual linear setting (Kazerouni et al., 2017; Garcelon et al., 2020), but algorithms and regret guarantees for the general case do not exist.
+
+Existing conservative bandit algorithms in Wu et al. (2016); Kazerouni et al. (2017); Garcelon et al. (2020) have considered standard multi-armed bandits and linear contextual bandits, using a suitable variant of the popular Upper Confidence Bound (UCB) approach. In this work, we are interested in Conservative Contextual Bandits (CCBs) beyond the linear case. One simple and lazy way to extend the analysis to general non-linear functions would be to modify the Neural UCB algorithm (Zhou et al., 2020), and extend the regret analysis to the conservative setup. However, a recent work (Deb et al., 2024a) has shown that the regret bound for Neural UCB in Zhou et al. (2020) (and Neural Thompson Sampling Zhang et al. (2021)) that depends on the effective dimension  $\tilde{d}$ , is  $\Omega(T)$  in the worst case even with an oblivious adversary. This also extends to any modification for the conservative case, and therefore we avoid this approach.
+
+In this paper, we consider CCBs with general functions and make the following contributions. First, as our main contribution, under the assumption of an online regression oracle for such general functions, we propose CCB algorithms utilizing such regression oracle and doing exploration using inverse gap weighting (IGW) (Abe & Long, 1999; Foster & Rakhlin, 2020; Foster & Krishnamurthy, 2021). The regret of our proposed algorithms, respectively based on squared loss and KL-loss regression (Sections 3 and 4), can be expressed in terms of the regret of the corresponding regression oracle, while ensuring that the conservative performance guarantee is not violated with high probability. Our analysis differs substantially from the standard UCB based analysis, since our algorithms do not maintain high confidence sets around the true cost functions, which is challenging for general functions. Our analysis also differs from the standard IGW analysis as the proposed CCB algorithms have to guarantee the safety constraint by a careful balance between actions chosen based on IGW exploration and using the baseline algorithm. Second, we instantiate the proposed CCB algorithms by using online neural regression, leverage  $O(\log T)$  regret for neural regression with both square-loss and KL-loss, and provide regret bounds for CCBs with neural networks (Section 5). A more detailed description of existing works leading up to the current work can be found in Appendix A.
+
+Next we summarize our specific technical contributions below:
+
+1. **Reduction using Squared loss:** We provide an algorithm for conservative bandits for general cost functions using an oracle for online regression with squared loss (see Algorithm 1). We subsequently prove a  $O(\sqrt{KT} \text{Reg}_{\text{sq}}(T) + K \text{Reg}_{\text{sq}}(T)/\alpha)$  regret bound, where  $\text{Reg}_{\text{sq}}(T)$  is the regret of online regression with squared loss, and also ensure that the performance constraint is satisfied in high probability (see Theorem 3.1).
+2. **Reduction using KL loss:** Next, we provide an algorithm using an oracle for online regression with KL loss (see Algorithm 2) and prove a  $O(\sqrt{KL^* \log(L^*)} \text{Reg}_{\text{KL}}(T) + K \text{Reg}_{\text{KL}}(T)(1+1/\alpha))$  regret bound. Here,  $\text{Reg}_{\text{KL}}(T)$  is the regret of online regression with KL loss and  $L^*$  is the cumulative cost of the optimal policy, while ensuring that the performance constraint is satisfied in high probability (see Theorem 4.1). This is a *first order* regret bound and is data-dependent in the sense that it scales with the cumulative cost of the best policy  $L^*$ , instead of the horizon length  $T$ .
+3. **Regret Bounds using Neural Networks:** We instantiate the online regression oracle with Online Gradient Descent (OGD) and the function approximator with a feed-forward neural network to give an end-to-end regret bound of  $O(\sqrt{KT} \log(T) + K \log(T)/\alpha)$  for Algorithm 1 (Theorem 5.1) and  $O(\sqrt{KL^* \log(L^*)} \log(T) + K \log T + K \log(T)/\alpha)$  for Algorithm 2 (Theorem 5.2).
+4. **Experiments:** Finally, we compare our proposed algorithms with existing baselines for conservative bandits and show that our algorithms consistently perform better (see Section 6).
+
+## 2 PROBLEM FORMULATION
+
+**Contextual Bandits:** We consider a contextual bandit problem where a learner needs to make sequential decisions over  $T$  time steps. At any round  $t \in [T]$ , the learner observes the context for  $K$  arms  $\mathcal{X}_t = \{\mathbf{x}_{t,1}, \dots, \mathbf{x}_{t,K}\} \subseteq \mathbb{R}^d$ , where the contexts can be chosen adversarially unlike in Agarwal et al. (2014); Simchi-Levi & Xu (2020); Ban et al. (2022) where the contexts are chosen i.i.d. from
+
+{2}------------------------------------------------
+
+a fixed distribution. The learner chooses an arm  $a_t \in [K]$  and then the associated cost of the arm  $y_{t,a_t} \in [0, 1]$  is observed. We make the following assumption on the cost.
+
+**Assumption 1 (Realizability).** *The conditional expectation of  $y_{t,a}$  given  $\mathbf{x}_{t,a}$  is given by some  $h \in \mathcal{H}$ , where  $\mathcal{H}$  is the function class such that  $h : \mathbb{R}^d \mapsto [0, 1]$ , i.e.,  $\mathbb{E}[y_{t,a} | \mathbf{x}_{t,a}] = h(\mathbf{x}_{t,a})$ . Further, the context vectors satisfy  $\|\mathbf{x}_{t,a}\| \leq 1$ ,  $t \in [T]$ ,  $a \in [K]$ .*
+
+**Definition 2.1 (Regret).** *The learner's goal is to minimize the regret, defined as the expected difference between the cumulative cost of the algorithm and that of the optimal policy:*
+
+$$\text{Reg}_{\text{CB}}(T) = \mathbb{E} \left[ \sum_{t=1}^T (y_{t,a_t} - y_{t,a_t^*}) \right] = \sum_{t=1}^T (h(\mathbf{x}_{t,a_t}) - h(\mathbf{x}_{t,a_t^*})) , \quad (1)$$
+
+where  $a_t^* = \operatorname{argmin}_{a \in [K]} h(\mathbf{x}_{t,a})$ , minimizes the expected cost in round  $t$ . The subscript CB stands for Contextual Bandits and subsequently differentiates it from the regret of online regression.
+
+**Conservative Contextual Bandits:** There exists a baseline policy  $\pi_b$  that at each round  $t$ , selects action  $b_t \in [K]$  and receives the expected cost  $h(\mathbf{x}_{t,b_t})$ . This baseline policy is to be interpreted as the default or status quo policy that the company follows and knows to provide a reasonable performance. However, the company wants to improve the policy but at the same time not incur a high cost while trying to do so. Thus, it insists on the following performance constraint on any algorithm:
+
+**Definition 2.2 (Performance Constraint).** *At each round  $t$ , the cumulative loss of the agent's policy should remain below  $(1 + \alpha)$  times the cumulative loss of the baseline policy for some  $\alpha > 0$ , i.e.,*
+
+$$\sum_{i=1}^t h(\mathbf{x}_{i,a_i}) \leq (1 + \alpha) \sum_{i=1}^t h(\mathbf{x}_{i,b_i}) , \quad \forall t \in \{1, \dots, T\}. \quad (2)$$
+
+The parameter  $\alpha > 0$  controls how conservative the agent has to be with respect to the baseline policy. When  $\alpha$  is very small, the cumulative loss by the agent's policy cannot be very large in comparison to baseline cumulative loss and as  $\alpha$  is increased the agent can take larger risks to explore more. We assume that the expected costs of the actions taken by the baseline policy,  $h(\mathbf{x}_{t,b_t})$ , are known. This is a reasonable assumption as argued in [Kazerouni et al. \(2017\)](#); [Garcelon et al. \(2020\)](#), since we usually have access to a large amount of data generated by the baseline policy as this is the default strategy of the company. We can also relax this to the assumption that we have an un-biased estimate of the baseline cost and modify our algorithms slightly (see [Appendix E](#)).
+
+Next, we make the following assumption on the baseline gap and the costs of the baseline actions.
+
+**Assumption 2 (Baseline Gap and Cost Bounds).** *Let  $\Delta_{t,b_t} := h(\mathbf{x}_{t,b_t}) - h(\mathbf{x}_{t,a_t^*})$  be the baseline gap. There exist  $0 \leq \Delta_l \leq \Delta_h$  and  $0 < y_l < y_h$ , such that for all  $t \in [T]$ , we have*
+
+$$\Delta_l \leq \Delta_{t,b_t} \leq \Delta_h \quad \text{and} \quad y_l \leq y_{t,b_t} \leq y_h.$$
+
+The assumption ensures a minimum level of performance by the baseline action and is standard in conservative bandits. Assumption 3 in both [Kazerouni et al. 2017](#) and [Garcelon et al. \(2020\)](#) are exactly as Assumption 2 in this work, while the regret bound provided in Theorem 2 of [Wu et al. \(2016\)](#) implicitly depends on similar quantities.
+
+## 3 REDUCTION TO ONLINE REGRESSION WITH SQUARED LOSS
+
+In this section, we develop an algorithm for Conservative Bandits with general output functions by reducing it to a black-box online regression oracle with squared loss. In Section 5, we instantiate the oracle by online gradient descent and give end-to-end regret guarantees. Before proceeding to the algorithm, we briefly describe the online regression formulation below. For a more detailed treatment, see [Hazan \(2021\)](#); [Shalev-Shwartz \(2012\)](#); [Bubeck \(2011\)](#).
+
+**Online Regression with Squared Loss:** We assume access to an oracle  $\text{Sq-Alg}$  that takes as input all data points until time  $t - 1$ ,  $\mathcal{D}_{t-1} = \{(\mathbf{x}_{i,a_i}, y_{i,a_i}) : 1 \leq i \leq t - 1\}$  and makes the prediction  $\hat{y}_{t,a} = \text{Sq-Alg}(\mathcal{D}_{t-1}, \mathbf{x}_{t,a})$  in  $[0, 1]$  for input  $\mathbf{x}_{t,a}$  at time  $t$ . We further make the following assumption on the regret incurred by the oracle  $\text{Sq-Alg}$ :
+
+**Assumption 3 (Online Regression Regret for Squared Loss).** *The regret of the online regression oracle  $\text{Sq-Alg}$  is bounded by  $\text{Reg}_{\text{Sq}}(T) \geq 1$ , i.e.,*
+
+$$\sum_{t=1}^T \ell_{\text{sq}}(\hat{y}_{t,a_t}, y_{t,a_t}) - \inf_{g \in \mathcal{H}} \sum_{t=1}^T \ell_{\text{sq}}(g(\mathbf{x}_{t,a_t}), y_{t,a_t}) \leq \text{Reg}_{\text{Sq}}(T), \quad (3)$$
+
+where the squared loss is given by  $\ell_{\text{sq}}(\hat{y}_{t,a_t}, y_{t,a_t}) = (\hat{y}_{t,a_t} - y_{t,a_t})^2$ .
+
+{3}------------------------------------------------
+
+### **Algorithm 1** Conservative SquareCB (C-SquareCB)
+
+- 
+- 1: **Input:**  $\alpha$
+ - 2: **Hyper-parameter:** Exploration parameter  $\gamma_t$
+ - 3: **Initialize:**  $\mathcal{S}_0 = \emptyset$ , and let  $m_0 = 0, n_t := |\mathcal{S}_t|, t \in [T]$
+ - 4: **for**  $t = 1, \dots, T$  **do**
+ - 5:   Receive contexts  $\mathbf{x}_{t,1}, \dots, \mathbf{x}_{t,K}$  and compute  $\hat{y}_{t,k}, \forall k \in [K]$  using Sq-Alg
+ - 6:   Let  $z_t = \operatorname{argmin}_{a \in [K]} \hat{y}_{t,a}$ , and compute
+ 
+$$p_{t,a} = \frac{1}{K + \gamma_t(\hat{y}_{t,a} - \hat{y}_{t,z_t})}, \forall k \in [K] \setminus \{z_t\}; \quad p_{t,z_t} = 1 - \sum_{a \neq z_t} p_{t,a}.$$
+ - 7:   Sample  $\tilde{a}_t \sim p_t$
+ - 8:   **if** the safety condition in (4) is satisfied **then**
+ - 9:     Play the IGW action  $a_t = \tilde{a}_t$  and observe output  $y_{t,a_t}$
+ - 10:     Set  $\mathcal{S}_t = \mathcal{S}_{t-1} \cup t, \quad \mathcal{S}_t^c = \mathcal{S}_{t-1}^c - 1$
+ - 11:     Set  $\mathcal{D}_t = \mathcal{D}_{t-1} \cup \{(\mathbf{x}_{t,a_t}, y_{t,a_t})\}$  and update the oracle Sq-Alg
+ - 12:   **else**
+ - 13:     Play  $a_t = b_t$  and observe output  $h(\mathbf{x}_{t,b_t})$
+ - 14:     Set  $\mathcal{S}_t = \mathcal{S}_{t-1}, \quad \mathcal{S}_t^c = \mathcal{S}_{t-1}^c \cup t, \quad \mathcal{D}_{t+1} = \mathcal{D}_t$
+- 
+
+We refer to our algorithm as **C-SquareCB**, whose pseudo-code is reported in Algorithm 1. At a high level, **C-SquareCB** does the following: **1)** It samples an action from the IGW distribution using the outputs of the oracle Sq-Alg, **2)** It then verifies if a certain safety condition is met, **3)** If yes, it then plays the sampled action, otherwise turns conservative and plays the baseline action. We use  $\mathcal{S}_t \subseteq [T]$  and its complement  $\mathcal{S}_t^c \subseteq [T]$  to denote the subsets containing the time-steps until round  $t$  when the IGW and baseline actions were played, respectively. We denote the cardinality of these sets by  $m_t = |\mathcal{S}_t|$  and  $n_t = |\mathcal{S}_t^c|$ .
+
+At every round  $t$ , the agent receives  $K$  contexts  $\mathbf{x}_{t,1}, \dots, \mathbf{x}_{t,K}$  and estimates the cost for every arm  $\hat{y}_{t,a}$  using the online regression oracle (line 5). It then finds the arm with the lowest estimate  $z_t$  (see line 6) and computes the Inverse Gap Weighted (IGW) distribution using the estimate gaps  $\hat{y}_{t,a} - \hat{y}_{t,z_t}$  and the exploration parameter  $\gamma_t$ . Next it samples a candidate action  $\tilde{a}_t$  in line 7 and verifies a safety condition in line 7 (corresponding to (2)) by checking if the following inequality holds:
+
+$$\underbrace{\hat{y}_{t,\tilde{a}_t} + \sum_{i \in \mathcal{S}_{t-1}} \sum_{a \in [K]} p_{i,a} \hat{y}_{i,a}}_{(A)} + \underbrace{\sum_{i \in \mathcal{S}_{t-1}^c} h(\mathbf{x}_{i,b_i})}_{(B)} + \underbrace{16 \sqrt{m_{t-1} \left( \operatorname{Reg}_{\text{sq}}(m_{t-1}) + \log(4/\delta) \right)}}_{(C)} \leq (1 + \alpha) \sum_{i=1}^t h(\mathbf{x}_{i,b_i}). \quad (4)$$
+
+Here, term (A) sums up the expected costs of the regression oracle for all rounds when the IGW action was played and the cost of the current IGW action  $\tilde{a}_t$  under consideration. Term (B) simply sums up the baseline costs for all the rounds when the baseline action was played. To ensure that the performance constraint (2) is not violated, in our proof we show that (see proof of Lemma 4)
+
+$$(A) - \sum_{i \in \mathcal{S}_{t-1} \cup \{t\}} h(\mathbf{x}_{i,a_i}) \geq -16 \sqrt{m_{t-1} \left( \operatorname{Reg}_{\text{sq}}(m_{t-1}) + \log(4/\delta) \right)}.$$
+
+Observe that now term (C) compensates for the above gap and immediately implies that the constraint in (2) is satisfied. Note that an easy way to ensure that (2) holds would be to replace (A) with the observed costs  $y_{t,a_t}$  and use Azuma-Hoeffding to bound  $\sum_{i \in \mathcal{S}_{t-1}} (y_{i,a_i} - h(\mathbf{x}_{i,a_i}))$ . However this approach does not let us control the number of times the baseline action is played by the algorithm, which is crucial to bound the final regret (see Step 2 in the proof of Theorem 3.1). If the safety condition in (4) is satisfied, then the IGW action  $a_t = \tilde{a}_t$  is played and the output  $y_{t,a_t}$  is observed in line 9. The current time step is added to  $\mathcal{S}_t$  and the current input-output pair  $(\mathbf{x}_{t,a_t}, y_{t,a_t})$  is added to the online regression dataset  $\mathcal{D}_t$  (lines 10 and 11). Otherwise we play the baseline action  $b_t$  in
+
+{4}------------------------------------------------
+
+line 13, observe the true output  $h(\mathbf{x}_{t,b_t})$  and add the current time step to  $\mathcal{S}_t^c$  in line 14. We now state the main theoretical result of this section that bounds the regret of **C-SquareCB** (Algorithm 1) along with satisfying the performance constraint in (2) in high probability.
+
+**Theorem 3.1 (Regret Bound for C-SquareCB).** Suppose Assumptions 1, 2 and 3 hold. With probability at least  $1 - \delta$ , **C-SquareCB** (Algorithm 1) with  $\gamma_t = \sqrt{K|\mathcal{S}_t|/(\text{Reg}_{\text{sq}}(m_T) + \log(8\delta^{-1}))}$  satisfies the performance constraint in (2) and has the following regret bound:
+
+$$\text{Reg}_{\text{CB}}(T) = \mathcal{O} \left( \underbrace{\sqrt{KT} \left( \sqrt{\text{Reg}_{\text{sq}}(T)} + \sqrt{\log(8\delta^{-1})} \right)}_I + \underbrace{\frac{K(\text{Reg}_{\text{sq}}(T) + \log(8\delta^{-1}))}{\alpha y_l(\Delta_l + \alpha y_l)}}_{II} \right). \quad (5)$$
+
+**Remark 3.1 (Term interpretations).** Term *I* and *II* in (5) correspond to the regret of playing the IGW and baseline actions, respectively. Note that term *II* grows with  $\text{Reg}_{\text{sq}}(T)$ , unlike the linear case where the second term is independent of the horizon  $T$  (see Theorem 5 in [Kazerouni et al. 2017](#)). However, in Section 5, when we instantiate the oracle with OGD and the function approximator with a neural network,  $\text{Reg}_{\text{sq}}(T)$  only contributes a  $\log T$  factor to the regret to the second term.
+
+**Remark 3.2 (Infinite actions).** The regret in (5) scales with the number of actions  $K$ , and thus, holds for finite number of actions. In case of infinite actions, a straightforward extension of our results following the analysis of Theorem 1 in [Foster et al. \(2020\)](#) will lead to a regret that scales with the dimension of the action space instead of  $K$ .
+
+*Proof of Theorem 3.1* The proof of the theorem follows along the following steps. We report the proof of the intermediate lemmas in Appendix B.
+
+- Regret Decomposition:** We begin by decomposing the regret in (1) into two parts following [Kazerouni et al. \(2017\)](#): the regret accumulated by playing the IGW and baseline actions, terms *I* and *II* in the regret bound (5), respectively.
+
+**Lemma 3.1.** Let Assumptions 1 and 2 hold. Then, the regret defined in (1) can be bounded as
+
+$$\text{Reg}_{\text{CB}}(T) \leq \sum_{t \in \mathcal{S}_T} \left( h(\mathbf{x}_{t,a_t}) - h(\mathbf{x}_{t,a_t^*}) \right) + n_T \Delta_h, \quad (6)$$
+
+where the set  $\mathcal{S}_T$  consists of the rounds until the horizon  $T$  when **C-SquareCB** played an IGW action and  $n_T = |\mathcal{S}_T^c|$  is the number of times until  $T$  where a baseline action was played.
+
+- Upper Bound on  $n_T$ :** The safety condition in (4) determines how many times the baseline action is played. In what follows, we use  $m_t := |\mathcal{S}_t|$  and  $\tau := \max\{1 \leq t \leq T : a_t = b_t\}$ , i.e., the last time step at which **C-SquareCB** played an action according to the baseline strategy.
+
+- The following lemma upper-bounds  $n_T$  in terms of  $m_\tau$  and  $\text{Reg}_{\text{sq}}(m_{\tau-1})$ .
+
+**Lemma 3.2.** Suppose Assumption 1, 2 and 3 holds. Then, with probability  $1 - \delta/4$  the number of times the baseline action is played by **C-SquareCB** is bounded as
+
+$$n_T \leq \frac{1}{\alpha y_l} \left\{ - (m_{\tau-1} + 1)(\Delta_l + \alpha y_l) + 64\sqrt{K} \sqrt{(m_{\tau-1} + 1)} \left( \sqrt{\text{Reg}_{\text{sq}}(T)} + \sqrt{\log(8\delta^{-1})} \right) \right\}. \quad (7)$$
+
+- Note that the second term in (7) grows as  $\sqrt{m_{\tau-1}}$  and the first term decreases linearly in  $m_\tau$ , and therefore, one can find the maximum and further bound  $n_T$  as in the following lemma.
+
+**Lemma 3.3.** Suppose Assumption 1, 2 and 3 holds. Then, with probability  $1 - \delta/4$  the number of times the baseline action is played by **C-SquareCB** is bounded as follows:
+
+$$n_T \leq \mathcal{O} \left( \frac{K(\text{Reg}_{\text{sq}}(T) + \log(8\delta^{-1}))}{\alpha y_l(\Delta_l + \alpha y_l)} \right). \quad (8)$$
+
+- Bounding the Final Regret:** The first term in (6) can be bounded along the lines of the analysis in ([Foster & Rakhlin, 2020](#)). Note that  $\mathcal{D}_T$  only contains the input-output pairs at time steps when the IGW action was picked, i.e., all  $t \in \mathcal{S}_T$ , and therefore, using  $m_T = |\mathcal{S}_T|$ , (3) reduces to
+
+$$\sum_{t \in \mathcal{S}_T} (\hat{y}_{t,a_t} - y_{t,a_t})^2 - \inf_{g \in \mathcal{H}} \sum_{t \in \mathcal{S}_T} (g(\mathbf{x}_{t,a_t}) - y_{t,a_t})^2 \leq \text{Reg}_{\text{sq}}(m_T). \quad (9)$$
+
+{5}------------------------------------------------
+
+However, unlike Foster & Rakhlin (2020), we need an a time varying exploration parameter  $\gamma_t$  that depends on the size of  $\mathcal{S}_t$  for all  $t \in [T]$  in order to bound  $n_T$  in Step 2. The next lemma bounds the regret of the first term in (6) with an such adaptive  $\gamma_t$ .
+
+**Lemma 3.4.** *Suppose Assumptions 1 and 3 hold. Then, for  $\delta > 0$  and  $\gamma_t = \sqrt{K|\mathcal{S}_t|/(\text{Reg}_{\text{sq}}(T) + \log(4\delta^{-1}))}$ , with probability  $1 - \delta/4$ , C-SquareCB guarantees*
+
+$$\sum_{t \in \mathcal{S}_T} \left( h(\mathbf{x}_{t,a_t}) - h(\mathbf{x}_{t,a_t^*}) \right) \leq \mathcal{O} \left( \sqrt{K m_T \text{Reg}_{\text{sq}}(T)} + \sqrt{K m_T \log(8\delta^{-1})} \right). \quad (10)$$
+
+Note that  $m_T \leq T$ . Combining (6), (8), and (10), and taking a union bound over the high probability events shows that the regret bound in (5) holds with probability  $1 - \delta/2$ .
+
+4. **Performance Constraint:** Finally the following lemma shows that the condition in Line 7 of C-SquareCB ensures that the performance constraint in (2) is satisfied.
+
+**Lemma 3.5.** *Let Assumptions 1, 2 and 3 hold. Then, for  $\delta > 0$  and  $\gamma_t = \sqrt{K|\mathcal{S}_t|/(\text{Reg}_{\text{sq}}(m_T) + \log(8\delta^{-1}))}$ , with probability  $1 - \delta/2$ , C-SquareCB satisfies the performance constraint in (2).*
+
+Taking a union bound with the high probability regret bound in Step 3, we have that with probability  $1 - \delta$ , C-SquareCB simultaneously satisfies the performance constraint in (2) and the regret upper-bound in (5), which concludes the proof.  $\square$
+
+**Remark 3.3 (Bounding baseline regret).** The analysis in Foster & Rakhlin (2020) does not have a safety condition and therefore our analysis bounding  $n_T$  (the number of times the baseline action is played) in Step 2 and the performance constraint satisfaction in Step 4 of proof of Theorem 3.1 are original contributions. One of the important parts of the analysis involves bounding  $n_T$ , the number of times the baseline actions are played. In the linear case (Kazeroni et al., 2017), the analysis crucially uses the upper and lower confidence bounds for the parameter estimates. For general function classes it is difficult to maintain such confidence bounds around estimates, and further the estimates from the regression oracle  $\hat{y}_{t,a_t}$  do not provide any such guarantees. Therefore our analysis crucially relates  $n_T$  to squared loss and through that gives a reduction to online regression.
+
+**Remark 3.4 (Time dependent Exploration).** The analysis from Foster & Rakhlin (2020) cannot be directly used to bound the regret for the time steps when the IGW actions were picked (term  $I$  in (5)). This is because we need to carefully choose a time dependent exploration parameter  $\gamma_t$ , to simultaneously ensure that term  $I$  is  $\sqrt{T}$  while ensuring that  $n_T$  is small. In the process, we extend the analysis in Foster & Rakhlin (2020) to time-dependent  $\gamma_t$  and bound the regret in  $I$ .  $\square$
+
+## 4 FIRST ORDER REGRET BOUND WITH LOG LOSS
+
+In this section, we use an oracle with KL loss, KL-Alg, and provide a reduction from the conservative contextual bandit (CCB) problem to online regression. The objective of this reduction is to provide a *first order* data dependent<sup>2</sup> regret bound, i.e., a bound that scales with  $L^* = \sum_{t=1}^T L^*(t)$ , where  $L^*(t) = h(\mathbf{x}_{t,a_t^*})$  is the cost of the optimal action at time  $t$ . Note that  $L^* \leq T$ , since  $h(\mathbf{x}) \in [0, 1]$  for all  $\mathbf{x}$ , but in practice we may have  $L^* \ll T$ .
+
+**Online Regression with KL Loss:** We assume access to an oracle KL-Alg that takes as input all data points until time  $t - 1$ ,  $\mathcal{D}_{t-1} = \{(\mathbf{x}_{i,a_i}, y_{i,a_i}) : 1 \leq i \leq t - 1\}$  and makes the prediction  $\hat{y}_{t,a} = \text{KL-Alg}(\mathcal{D}_{t-1}, \mathbf{x}_{t,a}) \in [0, 1]$  for input  $\mathbf{x}_{t,a}$  at time  $t$ . We further make the following assumption on the regret incurred by the oracle KL-Alg:
+
+**Assumption 4 (Online Regression Regret for KL Loss).** *The regret of the online regression oracle KL-Alg is bounded by  $\text{Reg}_{\text{KL}}(T) \geq 1$ , i.e.,*
+
+$$\sum_{t=1}^T \ell_{\text{KL}}(\hat{y}_{t,a_t}, y_{t,a_t}) - \inf_{g \in \mathcal{H}} \sum_{t=1}^T \ell_{\text{KL}}(g(\mathbf{x}_{t,a_t}), y_{t,a_t}) \leq \text{Reg}_{\text{KL}}(T), \quad (11)$$
+
+where the KL loss is given by  $\ell_{\text{KL}}(\hat{y}, y) = y \log(1/\hat{y}) + (1 - y) \log(1/(1 - \hat{y}))$ .
+
+<sup>2</sup>See Appendix A for more details on Data Dependent Bounds
+
+{6}------------------------------------------------
+
+### **Algorithm 2** Conservative FastCB (C-FastCB)
+
+- 
+- 1: **Input:**  $\alpha$
+ - 2: **Hyper-parameter:** Exploration parameter  $\gamma_t$
+ - 3: **Initialize:**  $\mathcal{S}_0 = \emptyset$
+ - 4: **for**  $t = 1, \dots, T$  **do**
+ - 5:   Receive contexts  $\mathbf{x}_{t,1}, \dots, \mathbf{x}_{t,K}$  and compute  $\hat{y}_{t,k}$ ,  $\forall k \in [K]$  using KL-Alg
+ - 6:   Let  $z_t = \operatorname{argmin}_{k \in [K]} \hat{y}_{t,k}$  and compute
+$$p_{t,k} = \frac{\hat{y}_{t,z_t}}{K\hat{y}_{t,z_t} + \gamma_t(\hat{y}_{t,k} - \hat{y}_{t,z_t})} \forall k \in [K] \setminus \{z_t\}; \quad p_{t,z_t} = 1 - \sum_{a \neq z_t} p_{t,a}$$
+ - 7:   Sample  $\tilde{a}_t \sim p_t$
+ - 8:   **if**
+ - 9:     
+$$\hat{y}_{t,\tilde{a}_t} + \sum_{i \in \mathcal{S}_{t-1}} \sum_{a \in [K]} p_{t,a} \hat{y}_{t,a} + \sum_{i \in \mathcal{S}_{t-1}^c} h(\mathbf{x}_{i,b_i}) + 16\sqrt{m_{t-1}\operatorname{Reg}_{\text{KL}}(T)} \leq (1 + \alpha) \sum_{i=1}^t h(\mathbf{x}_{i,b_i})$$
+ - 10:     **then**
+ - 11:       Play  $a_t = \tilde{a}_t$  and observe output  $y_{t,a_t}$
+ - 12:       Set  $\mathcal{S}_t = \mathcal{S}_{t-1} \cup t$ ,  $\mathcal{S}_t^c = \mathcal{S}_{t-1}^c - 1$
+ - 13:       Set  $\mathcal{D}_t = \mathcal{D}_{t-1} \cup \{\mathbf{x}_{t,a_t}, r_{t,a_t}\}$  and update the oracle KL-Alg
+ - 14:     **else**
+ - 15:       Play  $a_t = b_t$  and observe output  $h(\mathbf{x}_{t,b_t})$
+ - 16:       Set  $\mathcal{S}_t = \mathcal{S}_{t-1}$ ,  $\mathcal{S}_t^c = \mathcal{S}_{t-1}^c \cup t$ ,  $\mathcal{D}_{t+1} = \mathcal{D}_t$
+- 
+
+We refer to the resulting algorithm as **C-FastCB**. It follows the same structure as **C-SquareCB** (Algorithm 1) and is summarized in Algorithm 2. We now state the main theory of this section that bounds the regret of **C-FastCB** along with satisfying the performance constraint in high probability.
+
+**Theorem 4.1 (Regret Bound for C-FastCB).** *Let Assumptions 1, 2 and 4 hold. With probability  $1 - \delta$ , **C-FastCB** (Algorithm 2) with  $\gamma_t$  chosen in ( **$\gamma_t$ -Schedule**), satisfies the performance constraint in (2) and has the following bound on the expected regret (expectation is for the action distributions):*
+
+$$\mathbb{E} [\operatorname{Reg}_{\text{CB}}(T)] = \mathcal{O} \left( \sqrt{KL^* \log(L^*) \operatorname{Reg}_{\text{KL}}(T)} + \frac{K \operatorname{Reg}_{\text{KL}}(T)}{\alpha y_l (\Delta_l + \alpha y_l)} \log \left( \frac{e \sqrt{K \operatorname{Reg}_{\text{KL}}(T)}}{\Delta_l + \alpha y_l} \right) \right). \quad (12)$$
+
+**Remark 4.1 (First Order Regret).** Note that the regret in (12) depends on  $\sqrt{L^*}$  instead of  $\sqrt{T}$ , where  $L^* = \sum_{t=1}^T L^*(i)$  is the cumulative loss of the optimal policy and depends on the complexity of the bandit instance,  $L^* \ll T$ , thus improving the performance of the learner. Such a data dependent regret is referred to as a *first-order regret* (Agarwal et al., 2017a; Foster & Krishnamurthy, 2021).
+
+**Remark 4.2 (Challenges).** We face similar set of challenges as in Theorem 5.1 in trying to bound  $n_T$ , and our analysis relates  $n_T$  to the KL loss using the sampling strategy and reduces it to online regression with KL loss. We face an additional challenge. In Foster & Krishnamurthy (2021), the exploration parameter  $\gamma_t$  is set to a fixed value  $\gamma = \max(\sqrt{KL^*/3\operatorname{Reg}_{\text{KL}}(T)}, 10K)$ . In our analysis we need a time dependent  $\gamma_t$  to ensure that we can bound the regret contributed by both the IGW and baseline actions (cf. decomposition in (6)). However, unlike in Algorithm 1, we crucially need to set  $\gamma_t$  in an episodic manner to ensure that the final regret does not have a  $\sqrt{T}$  dependence. By having  $\log(L^*)$  episodes and keeping  $\gamma_t$  constant within an episode, we derive our final regret in (12), in which term  $I$  has only an additional  $\sqrt{\log(L^*)}$  factor. A more detailed description of the exact choice of  $\gamma_t$  along with the episodic analysis has been pushed to Appendix C, for clarity.
+
+*Proof of Theorem 4.1.* The proof broadly follows the same sequence of steps as in the proof of Theorem 3.1, and owing to limited space, has been reported in Appendix C.  $\square$
+
+{7}------------------------------------------------
+
+## 5 NEURAL CONSERVATIVE BANDITS
+
+In this section, we instantiate the online regression oracles Sq-Alg (Algorithm 1) and KL-Alg (Algorithm 2) by (projected) Online Gradient Descent (OGD), and use feed-forward neural networks for function approximation. The setup closely follows the one in [Deb et al. \(2024a\)](#), which we restate it here for completeness. We consider a feed-forward neural network whose output is given by
+
+$$f(\theta_t; \mathbf{x}) := m^{-1/2} \mathbf{v}_t^\top \phi(m^{-1/2} W_t^{(L)} \phi(\dots \phi(m^{-1/2} W_t^{(1)} \mathbf{x}) \dots)), \quad (13)$$
+
+where  $L$  is the number of hidden layers and  $m$  is the width of the network. Further,  $W_t^{(1)} \in \mathbb{R}^{m \times d}$  and  $W_t^{(l)} = [w_{t,l,j}^{(l)}] \in \mathbb{R}^{m \times m}$  for all  $l \in \{2, \dots, L\}$  are layer-wise weight matrices, and  $\mathbf{v}_t \in \mathbb{R}^m$  is the last layer vector. Similar to [Du et al. \(2019\)](#); [Banerjee et al. \(2023\)](#), we consider a (point-wise) smooth and Lipschitz activation function  $\phi(\cdot)$ . We define  $\theta_t \in \mathbb{R}^p$ , where  $\theta_t := (\text{vec}(W_t^{(1)})^\top, \dots, \text{vec}(W_t^{(L)})^\top, \mathbf{v}_t^\top)^\top$ , as the vector of all parameters in the network, and make the following assumption on the initialization of the network ([Liu et al., 2020](#); [Banerjee et al., 2023](#)).
+
+**Assumption 5.** *We initialize  $\theta_0$  with  $w_{0,ij}^{(l)} \sim \mathcal{N}(0, \sigma_0^2)$  for  $l \in [L]$ , where  $\sigma_0 = \frac{\sigma}{2(1 + \frac{\sqrt{\log m}}{\sqrt{2m}})}$ ,  $\sigma_1 > 0$ , and  $\mathbf{v}_0$  is a random unit vector with  $\|\mathbf{v}_0\|_2 = 1$ .*
+
+Next, we define the Neural Tangent Kernel (NTK) matrix ([Jacot et al., 2018](#)) at  $\theta$  as  $K_{\text{ntk}}(\theta) := [\langle \nabla f(\theta; \mathbf{x}_t), \nabla f(\theta; \mathbf{x}_{t'}) \rangle] \in \mathbb{R}^{T \times T}$ , and make the following assumption on this matrix which is common in the deep learning literature ([Du et al., 2019](#); [Arora et al., 2019](#); [Cao & Gu, 2019](#)). Note that our NTK is defined for a specific sequence of  $\mathbf{x}_t$ 's where  $\mathbf{x}_t$  depends on the choice of arms played, and our assumption on the NTK matrix is for all sequences, which is equivalent to the assumption for the  $(TK \times TK)$  NTK matrix as in [Zhou et al. \(2020\)](#); [Zhang et al. \(2021\)](#).
+
+**Assumption 6.** *The matrix  $K_{\text{ntk}}(\theta_0)$  is positive definite, i.e.,  $K_{\text{ntk}}(\theta_0) \succeq \lambda_0 \mathbb{I}$  for some  $\lambda_0 > 0$ .*
+
+The assumption can be ensured if no two context vectors  $\mathbf{x}_t$  overlap. Note that this assumption is used by all existing regret bounds for neural bandits (see Assumption 4.2 in [Zhou et al. 2020](#), Assumption 3.4 in [Zhang et al. 2021](#), Assumption 5.1 in [Ban et al. 2022](#) and Assumption 5 in [Deb et al. 2024a](#)). The choice of the width of the network  $m$  depends on  $\lambda_0$  and is similar to the width requirements in [Zhou et al. \(2020\)](#) and [Zhang et al. \(2021\)](#).
+
+We define a perturbed network as in [Deb et al. \(2024a\)](#) as follows:
+
+$$\tilde{f}(\theta_t, \mathbf{x}_t, \varepsilon) = f(\theta_t; \mathbf{x}_t) + c_p \sum_{j=1}^p \frac{(\theta_t - \theta_0)^\top e_j \varepsilon_j}{m^{1/4}}, \quad (14)$$
+
+where  $\{e_j\}_{j=1}^p$  are standard basis vectors,  $\varepsilon = (\varepsilon_1, \dots, \varepsilon_p)^\top$  is an i.i.d. random Rademacher vector, i.e.,  $P(\varepsilon_j = +1) = P(\varepsilon_j = -1) = 1/2$ , and  $c_p$  is the perturbation constant. As in [Deb et al. \(2024a\)](#), we use an ensemble of  $S = \mathcal{O}(\log T)$  random networks as follows:
+
+$$\tilde{f}^{(S)}(\theta; \mathbf{x}_t, \varepsilon^{(1:S)}) = \frac{1}{S} \sum_{s=1}^S \tilde{f}(\theta; \mathbf{x}_t, \varepsilon_s), \quad (15)$$
+
+where each  $\varepsilon_s$  is a Rademacher vector. We run projected OGD on the loss function
+
+$$\mathcal{L}_{\text{Sq}}^{(S)}(y_t, \{\tilde{f}(\theta; \mathbf{x}_t, \varepsilon_s)\}_{s=1}^S) := \frac{1}{S} \sum_{s=1}^S \ell_{\text{Sq}}(y_t, \tilde{f}(\theta; \mathbf{x}_t, \varepsilon_s)), \quad (16)$$
+
+which with the projection operator  $\prod_B(\theta) = \arg\inf_{\theta' \in B} \|\theta' - \theta\|_2$  gives us the following update:
+
+$$\theta_{t+1} = \prod_B \left( \theta_t - \eta_t \nabla \mathcal{L}_{\text{Sq}}^{(S)}(y_t, \mathbf{a}_t, \{\tilde{f}(\theta; \mathbf{x}_t, \varepsilon_s)\}_{s=1}^S) \right). \quad (17)$$
+
+We now prove a regret bound for **C-SquareCB** with feed-forward neural networks (neural **C-SquareCB**) and OGD as a regression oracle.
+
+{8}------------------------------------------------
+
+![Figure 1: Comparison of cumulative regret of C-SquareCB and C-FastCB with the baseline C-LinUCB on openml datasets (averaged over 10 runs). The figure consists of six subplots for datasets: covtype, fashion, MagicTelescope, mushroom, Plants, and shuttle. Each plot shows Regret (y-axis) vs. Rounds (x-axis, 0 to 5000). C-LinUCB (blue line) shows linear regret growth. C-SquareCB (red line) and C-FastCB (green line) show significantly lower, sublinear regret. Shaded regions represent confidence intervals.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 1: Comparison of cumulative regret of C-SquareCB and C-FastCB with the baseline C-LinUCB on openml datasets (averaged over 10 runs). The figure consists of six subplots for datasets: covtype, fashion, MagicTelescope, mushroom, Plants, and shuttle. Each plot shows Regret (y-axis) vs. Rounds (x-axis, 0 to 5000). C-LinUCB (blue line) shows linear regret growth. C-SquareCB (red line) and C-FastCB (green line) show significantly lower, sublinear regret. Shaded regions represent confidence intervals.
+
+Figure 1: Comparison of cumulative regret of C-SquareCB and C-FastCB with the baseline C-LinUCB on openml datasets (averaged over 10 runs).
+
+**Theorem 5.1 (Regret bound for Neural C-SquareCB).** *We instantiate Sq-Alg with the predictor  $\hat{y}_{t,a_t} = \tilde{f}^{(S)}(\theta; \mathbf{x}_t, \varepsilon^{(1:S)})$  from (15) and update the parameters using OGD in (17). Under Assumptions 1, 2, 5 and 6 with  $\gamma_t$  as in Theorem 5.1, step-size sequence  $\{\eta_t\}$ , width  $m$ , perturbation constant  $c_p$ , and projection ball  $B$ , with high probability  $(1 - \mathcal{O}(\delta))$ , the performance constraint in (2) is satisfied by C-SquareCB and the regret is given by*
+
+$$\text{Reg}_{\text{CB}}(T) \leq \mathcal{O}\left(\sqrt{KT \log T} + \sqrt{KT \log(16\delta^{-1})} + \frac{K(\log T + \log(16\delta^{-1}))}{\alpha y_l(\Delta_t + \alpha y_l)}\right).$$
+
+Next, for the *first-order* bound, we use the following ensemble network as the predictor:
+
+$$\sigma\left(\tilde{f}^{(S)}(\theta; \mathbf{x}_t, \varepsilon^{(1:S)})\right) = \frac{1}{S} \sum_{s=1}^S \sigma\left(\tilde{f}(\theta; \mathbf{x}_t, \varepsilon_s)\right) \quad (18)$$
+
+where  $\tilde{f}(\theta; \mathbf{x}_t, \varepsilon_s)$  is as defined in (14) and  $\sigma(\cdot)$  is the sigmoid function. Our next theorem provides a first-order regret bound for C-FastCB when coupled with feed-forward networks and OGD.
+
+**Theorem 5.2 (Regret bound for Neural C-FastCB).** *We instantiate Sq-Alg with the predictor  $\hat{y}_{t,a_t} = \tilde{f}^{(S)}(\theta; \mathbf{x}_t, \varepsilon^{(1:S)})$  from (15) and update the parameters using OGD in (17). Under Assumptions 1, 2, 4, 5 and 6 with  $\gamma_t$  chosen as in  $\gamma_t$ -Schedule, step-size sequence  $\{\eta_t\}$ , width  $m$ , perturbation constant  $c_p$ , and projection ball  $B$ , with probability  $(1 - \mathcal{O}(\delta))$ , the performance constraint in (2) is satisfied by C-FastCB and the expected regret is given by*
+
+$$\mathbb{E} \text{Reg}_{\text{CB}}(T) \leq \mathcal{O}\left(\sqrt{KL^* \log L^* \log T} + K \log T + \frac{K \log T}{\alpha y_l(\Delta_t + \alpha y_l)}\right).$$
+
+## 6 EXPERIMENTS
+
+We evaluate our algorithms C-SquareCB and C-FastCB and compare the regret bounds with the existing baseline - Conservative Linear UCB (C-LinUCB) (Kazerouni et al., 2017). The algorithm estimates the parameter associated with the cost function using least squares regression and uses existing results on high probability confidence bounds around the estimate (Abbasi-Yadkori et al., 2011) to set up a safety condition. When the safety condition is satisfied, it plays actions according to Linear UCB (Chu et al., 2011; Abbasi-Yadkori et al., 2011), otherwise switches to the baseline action. We tune the ridge parameter  $\lambda$  in  $\{0.001, 0.005, 0.01, 0.05, 0.1\}$ .
+
+{9}------------------------------------------------
+
+![Figure 2: Comparison of Percentage of Constraints violated by C-SquareCB and C-FastCB with their vanilla non conservative versions on openml datasets (averaged over 100 runs). The figure contains four line plots for datasets: covtype, Plants, fashion, and MagicTelecope. Each plot shows the percentage of violated constraints (y-axis) against the perturbation parameter epsilon (x-axis, ranging from 0.02 to 0.10). In all datasets, C-SquareCB (red dashed line) and C-FastCB (green dashed line) maintain a significantly lower percentage of violated constraints (mostly below 2%) compared to their vanilla counterparts, SquareCB (red solid line) and FastCB (green solid line), which show higher violation rates (up to 25% for covtype and 12% for MagicTelecope).](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 2: Comparison of Percentage of Constraints violated by C-SquareCB and C-FastCB with their vanilla non conservative versions on openml datasets (averaged over 100 runs). The figure contains four line plots for datasets: covtype, Plants, fashion, and MagicTelecope. Each plot shows the percentage of violated constraints (y-axis) against the perturbation parameter epsilon (x-axis, ranging from 0.02 to 0.10). In all datasets, C-SquareCB (red dashed line) and C-FastCB (green dashed line) maintain a significantly lower percentage of violated constraints (mostly below 2%) compared to their vanilla counterparts, SquareCB (red solid line) and FastCB (green solid line), which show higher violation rates (up to 25% for covtype and 12% for MagicTelecope).
+
+Figure 2: Comparison of Percentage of Constraints violated by C-SquareCB and C-FastCB with their vanilla non conservative versions on openml datasets (averaged over 100 runs).
+
+We use the evaluation setting for bandit algorithms developed in Bietti et al. (2021) and subsequently used in Zhou et al. (2020); Zhang et al. (2021); Ban et al. (2022); Deb et al. (2024a). We consider a series of multiclass classification problems from the openml.org platform. We transform each  $d$ -dimensional input into  $K$  different context vectors of dimension  $dK$ , where  $K$  is the number of classes as follows:  $\mathbf{x}_{t,1} = (\mathbf{x}_t, 0, 0, \dots, 0)^T$ ,  $\mathbf{x}_{t,2} = (0, \mathbf{x}_t, 0, \dots, 0)^T$ ,  $\dots$ ,  $\mathbf{x}_{t,K} = (0, 0, \dots, 0, \mathbf{x}_t)^T$ . The  $K$  vectors correspond to the  $K$  different action choices in the bandit problem. We assign a cost of 1 to all the context vectors associated with the incorrect classes, and a cost of 0.01 to the correct class. Note that when an action corresponding to an incorrect class is selected, the learner does not learn the identity of the action with the lowest cost. For each of the datasets, we fix one action as the baseline action, and the baseline policy corresponds to always choosing this pre-defined action.
+
+C-SquareCB and C-FastCB use a two layer neural network with ReLU activation and width 100. We update the network parameter every 10-th round and do a grid search over step sizes  $\{0.01, 0.005, 0.001\}$ . In C-SquareCB we set  $\gamma_i = c\sqrt{t/\log(\delta^{-1})}$  and tune  $c$  in  $\{10, 20, 50, 100, 200, 500, 1000\}$ . For C-FastCB, since the optimal loss  $L_t^*$  is not known in advance, the exploration parameter  $\gamma_i$  is treated as a hyper-parameter in our experiments. We set  $\gamma_i = \gamma$  and tune it in  $\{10, 20, 50, 100, 200, 500, 1000\}$ . Deb et al. (2024a) tune for different choices of the perturbation constant (see Appendix F in Deb et al. (2024a)) and show that the unperturbed version perform almost as good as the perturbed ones, and are computationally more efficient. We saw a similar behavior in our experiments and report the final plots for only the unperturbed networks.
+
+We compare the cumulative regret of the algorithms in Figure 1. Note that C-SquareCB and C-FastCB consistently show a sub-linear trend in regret and beat the existing benchmark, with C-FastCB performing better in some of the datasets, owing to its *first order* order regret guarantee. We also compare it with another heuristic choice, where we substitute  $\sum_{i=1}^t L_i^*$  by the sum of the observed losses until time  $t - 1$ , i.e.,  $\sum_{i=1}^{t-1} L_i$  to choose  $\gamma_t$ , and note that it produces good results in the majority of environments (See Figure 3 in Appendix F). We also compare the performance of the algorithms for various choices of width of the network (see Appendix F).
+
+Finally, we compare the percentage of constraints violated by our algorithms C-SquareCB and C-FastCB compared to their vanilla counterparts that does not use any *safety condition* in Figure 2. Our algorithms maintain the performance constraint while minimizing the regret.
+
+## 7 CONCLUSION
+
+In this paper, we developed two new algorithms, C-SquareCB and C-FastCB, for the problem of Conservative Contextual Bandits with general non-linear cost functions. Our algorithms use Inverse Gap Weighting (IGW) for exploration and rely on an online regression oracle for prediction. We provided regret guarantees for both algorithms, showing that C-SquareCB achieves a sub-linear regret in  $T$ , while C-FastCB achieves a first-order regret in terms of the cumulative loss of the optimal policy  $L^*$ . We also extended our approach by using neural networks for function approximation and provide end-to-end regret bounds. Finally, through experiments on real-world data, we showed that our methods outperform existing baseline while maintaining safety guarantee. Adapting our methods to other safe bandit frameworks such as the stage-wise setting (Moradipari et al., 2019; Amani et al., 2019) and to the more general reinforcement learning framework following Foster et al. (2023b) and Foster et al. (2023a) is left for future work.
+
+ Rest of paper (reference and Appendix) is removed.

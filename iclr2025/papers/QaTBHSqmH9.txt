@@ -1,0 +1,289 @@
+
+
+{0}------------------------------------------------
+
+# SIZE-GENERALIZABLE RNA STRUCTURE EVALUATION BY EXPLORING HIERARCHICAL GEOMETRIES
+
+Zongzhao Li<sup>1,2</sup> Jiacheng Cen<sup>1,2</sup> Wenbing Huang<sup>1,2,\*</sup> Taifeng Wang<sup>3</sup> Le Song<sup>3</sup>
+
+<sup>1</sup>Gaoling School of Artificial Intelligence, Renmin University of China
+
+<sup>2</sup>Beijing Key Laboratory of Big Data Management and Analysis Methods
+
+<sup>3</sup>BioMap Research
+
+lizongzhao2023@ruc.edu.cn, jiacc.cn@outlook.com, hwenbing@126.com  
+{taifeng, songle}@biomap.com
+
+## ABSTRACT
+
+Understanding the 3D structure of RNA is essential for deciphering its function and developing RNA-based therapeutics. Geometric Graph Neural Networks (GeoGNNs) that conform to the  $E(3)$ -symmetry have advanced RNA structure evaluation, a crucial step toward RNA structure prediction. However, existing GeoGNNs are still defective in two aspects: 1. inefficient or incapable of capturing the full geometries of RNA; 2. limited generalization ability when the size of RNA significantly differs between training and test datasets. In this paper, we propose EquiRNA, a novel equivariant GNN model by exploring the three-level hierarchical geometries of RNA. At its core, EquiRNA effectively addresses the size generalization challenge by reusing the representation of nucleotide, the common building block shared across RNAs of varying sizes. Moreover, by adopting a scalarization-based equivariant GNN as the backbone, our model maintains directional information while offering higher computational efficiency compared to existing GeoGNNs. Additionally, we propose a size-insensitive  $K$ -nearest neighbor sampling strategy to enhance the model’s robustness to RNA size shifts. We test our approach on our created benchmark as well as an existing dataset. The results show that our method significantly outperforms other state-of-the-art methods, providing a robust baseline for RNA 3D structure modeling and evaluation.
+
+## 1 INTRODUCTION
+
+RNA, or ribonucleic acid, is a pivotal type of molecules essential to myriad processes within biological organisms. Central to its versatility is RNA’s 3D structure, which dictates its function and interaction with other molecules (Serganov et al., 2004; Mortimer et al., 2014). Thus, predicting RNA’s 3D structure is imperative for advancing our understanding of its biological roles and potential therapeutic applications. Inspired by the breakthroughs achieved by AlphaFold (Jumper et al., 2021) in the field of protein structure prediction, more and more researchers have started to adopt deep learning (such as Graph Neural Networks (GNNs)) for RNA 3D structure prediction (Wang et al., 2023a; Shen et al., 2022). Moreover, designing an effective scoring function for evaluation and ranking of RNA structures is a key step in prediction (Townshend et al., 2021; Zhang et al., 2022b), which is the main focus of our paper. The process of RNA structure evaluation can be shown in Fig. 1.
+
+![Figure 1: RNA structure evaluation. The diagram shows two panels: 'Train (50 < nodes < 100)' and 'Valid / Test (100 < nodes < 200)'. Each panel displays three candidate RNA structures being evaluated by EquiRNA to produce RMSD scores. In the Train panel, the scores are 12.645, 10.305, and 10.846. In the Valid / Test panel, the scores are 23.758, 25.453, and 21.207. A dashed box at the bottom of each panel indicates the selection of the structure with the lowest predicted RMSD.](68dad113f9a15ab01945110cb50cdcfb_img.jpg)
+
+| Dataset | Candidate RNA Structure | EquiRNA | RMSD |
+|-|-|-|-|
+| Train (50 < nodes < 100) | [Structure 1] | EquiRNA | 12.645 |
+|  | [Structure 2] | EquiRNA | 10.305 |
+|  | [Structure 3] | EquiRNA | 10.846 |
+| Valid / Test (100 < nodes < 200) | [Structure 1] | EquiRNA | 23.758 |
+|  | [Structure 2] | EquiRNA | 25.453 |
+|  | [Structure 3] | EquiRNA | 21.207 |
+
+Figure 1: RNA structure evaluation. The diagram shows two panels: 'Train (50 < nodes < 100)' and 'Valid / Test (100 < nodes < 200)'. Each panel displays three candidate RNA structures being evaluated by EquiRNA to produce RMSD scores. In the Train panel, the scores are 12.645, 10.305, and 10.846. In the Valid / Test panel, the scores are 23.758, 25.453, and 21.207. A dashed box at the bottom of each panel indicates the selection of the structure with the lowest predicted RMSD.
+
+Figure 1: RNA structure evaluation.
+
+\*Corresponding author: Wenbing Huang.
+
+{1}------------------------------------------------
+
+RNA structure evaluation presents several challenges: **1.** The predictor we leverage should conform to the  $E(3)$  symmetry (3D translation and rotation), as RNA structures are independent to the choice of the coordinate system. **2.** Since large RNA structures are difficult to determine experimentally, currently-known RNA structures are of limited number and mostly of small size (Wang et al., 2023b). As shown in Fig. 2, in the well-known RNAsolo dataset (Adamczyk et al., 2022), among RNA structures with high resolution ( $\leq 2.0$  Å), RNAs longer than 100 nucleotides account for only 3.60%; while at low resolutions ( $> 2.0$  Å), RNAs longer than 100 nucleotides account for 24.62%. This observation underscores the current limitations of experimental methods in determining the 3D structures of large RNAs, highlighting a significant challenge in the field of structural biology. Therefore, effectively using smaller RNAs for training a predictor that is generalizable to larger RNAs poses an intriguing research topic, which is identified as the problem of *size generalization* in this paper. As an initial exploration, in this paper, we use smaller RNAs of 50-100 nt for training and larger RNAs of 100-200 nt for testing. The detailed definition of *size generalization* as well as the detailed explanation of the significance for studying this problem are provided in Appendix B.
+
+Several Geometric GNNs (GeoGNNs) have been proposed for RNA structure evaluation (Zhang et al., 2022b; Townshend et al., 2021), but they are still defective in addressing these two challenges. To be specific, PaxNet (Zhang et al., 2022b) utilizes a typical GNN on invariant input (such as bond lengths and angles), making it lose directional information during message passing and thus ineffective in characterising the spatial geometry. ARES (Townshend et al., 2021), on the other hand, employs an equivariant GNN that is able to retain the directional information, but is expanded through high-degree irreducible representations, leading to more computational cost. More importantly, both models are not explicitly and specifically designed to tackle RNAs of varying size, leaving the issue of size generalization less explored.
+
+In this paper, we propose a hierarchical equivariant GNN, dubbed as EquiRNA, which consists of three components: the atom-level, subunit-level, and nucleotide-level equivariant message passing processes. Built upon the biological insight that nucleotides are common building blocks shared across RNAs of varying sizes, our model effectively generalizes to different RNA sizes by reusing nucleotides. In particular, we obtain a uniform representation of each nucleotide by undertaking the atom-level and subunit-level message passing over the atoms inside each nucleotide, and then capture the interactions between nucleotides by utilizing the nucleotide-level component. Notably, our model preserves full-atom information throughout all components, in contrast to those pooling-based hierarchical models in other domains (e.g. ProNet (Wang et al., 2022)). Moreover, by adopting a scalarization-based equivariant GNN (i.e. the EGNN model (Satorras et al., 2021)) as the backbone, our model maintains directional information while offering higher computational efficiency compared to existing GeoGNNs. Additionally, we equip our model with a size-insensitive  $K$ -nearest neighbor sampling strategy at the nucleotide level. This complements the aforementioned hierarchical structural design, jointly mitigating the challenge of size generalization.
+
+In summary, this paper contributes to the following aspects:
+
+- We introduce a new dataset named **rRNAsolo** for assessing size generalization in RNA structure evaluation. It covers a broader range of RNA sizes, includes more RNA types, and features more recent RNA structures when compared to existing datasets.
+- We propose EquiRNA, a hierarchical equivariant graph neural network, tailored to address the size generalization challenge by reusing the representations of nucleotides.
+- Extensive experiments on our new dataset rRNAsolo and the existing dataset ARES (Townshend et al., 2021) show that our model achieves better performance across all metrics than SOTA methods, establishing its superiority.
+
+![Figure 2: RNA distribution of RNAsolo. A density plot showing the probability density function of RNA lengths. The x-axis is 'Length of the RNA' from 0 to 1000. The y-axis is 'Probability density function' scaled by 10^-2, ranging from 0.0 to 1.5. Two distributions are shown: a blue curve for 'RNA with the resolution smaller than 2 Å' and an orange curve for 'RNA with the resolution larger than 2 Å'. The blue curve has a sharp peak at approximately 50 nucleotides, while the orange curve is broader and peaks around 100 nucleotides.](131b27192f21ffa3869d8686b7a67448_img.jpg)
+
+Figure 2: RNA distribution of RNAsolo. A density plot showing the probability density function of RNA lengths. The x-axis is 'Length of the RNA' from 0 to 1000. The y-axis is 'Probability density function' scaled by 10^-2, ranging from 0.0 to 1.5. Two distributions are shown: a blue curve for 'RNA with the resolution smaller than 2 Å' and an orange curve for 'RNA with the resolution larger than 2 Å'. The blue curve has a sharp peak at approximately 50 nucleotides, while the orange curve is broader and peaks around 100 nucleotides.
+
+Figure 2: RNA distribution of RNAsolo.
+
+{2}------------------------------------------------
+
+## 2 OUR METHOD
+
+In this section, we first introduce necessary preliminaries related to RNA modeling, and then present the details of our created benchmark rRNAsolo for structure evaluation. After this, we describe the architecture of EquiRNA with multi-level equivariant message passing, followed by a size-insensitive  $K$ -nearest neighbor sampling strategy for handling the imbalance of the size between the training and test RNAs. Fig. 3 shows the whole architecture of our model.
+
+### 2.1 PRELIMINARIES
+
+RNA is a polymeric molecule composed of four types of nucleotides: adenine (A), uracil (U), cytosine (C), and guanine (G). Each nucleotide includes three distinctive chemical sub-units: a five-carbon sugar ribose, a phosphate group, and a nucleobase. The atoms that constitute all components are carbon (C), nitrogen (N), oxygen (O), phosphorus (P), and hydrogen (H). In most cases, different nucleotide shares the same ribose and phosphate group (called ribose-phosphate backbone below), and could contain different type of nucleobase. In this paper, we preserve full-atom representations to enhance the characterization of RNA’s 3D structure. In particular, the ribose-phosphate backbone of each nucleotides is denoted as a fully-connected graph  $\mathcal{G}_r = (\mathcal{V}_r, \mathcal{E}_r)$ . Each node in  $\mathcal{V}_r$  encapsulates the information of the  $i$ -th atom, namely  $\vec{v}_{r_i} = (\vec{x}_{r_i}, h_{r_i})$  with  $\vec{x}_{r_i} \in \mathbb{R}^3$  being the equivariant 3D coordinate and  $h_{r_i} \in \mathbb{R}^c$  being the invariant embedding feature based on atom type. The edges  $\mathcal{E}_r$  are constructed by connecting all pairs of atoms in the ribose-phosphate backbone. Similarly, we can define a fully-connected graph for a nucleobase as  $\mathcal{G}_b = (\mathcal{V}_b, \mathcal{E}_b)$ . To reduce computational complexity, we adopt the strategy outlined in ARES (Townshend et al., 2021) in the above graph construction process, which only considers heavy atoms without hydrogen (H). Finally, a nucleotide is referred to as a joint graph  $\mathcal{G} = (\mathcal{V}_r \cup \mathcal{V}_b, \mathcal{E}_r \cup \mathcal{E}_b)$ , which is illustrated more clearly in Appendix O.
+
+**Task formulation.** Given a candidate RNA structure with  $N$  nucleotides  $\{\mathcal{G}_i\}_{i=1}^N$ , our goal is to design a neural network  $f$  to predict the Root Mean Square Deviation (RMSD) between the candidate and native structures, which will be used to score and rank all candidates to identify the one most closely matching the native structure.
+
+### 2.2 NEW DATASET: rRNASOLO
+
+Although several datasets already exist for RNA structure evaluation (Townshend et al., 2021), they contain RNAs of either limited types or narrow size ranges. Therefore, to extensively explore the problem of size generalization, we devise a novel dataset from the RNAsolo database (Adamczyk et al., 2022), a publicly available online repository that comprises a diverse array of biomolecular information concerning RNA. We call this new dataset as **rRNAsolo**. We provide the details of the dataset construction process as follows.
+
+**Data Collection and Purification.** To better investigate the intrinsic properties of RNA molecules, we exclusively select data from the solo RNA category with a resolution higher than 4 Å. We engage in a detailed cleaning process of the collected data, which is unfolded through two levels. **At the atomic level:** First, we scrutinize all atoms within every RNA molecule to ensure the legitimacy of their valency, eliminating any RNA that contained illicit atoms. Second, we conduct a comprehensive count of atoms within each nucleotide of all RNAs, excluding those with the number of atoms deviated from the normal range. **At the nucleotide level:** First, we analyze the sequencing of nucleotide numbers across all RNAs, discarding those with discontinuous numbering. This discontinuity might be due to insufficient data from solution nuclear magnetic resonance experiments needed to determine their structures. Second, we assess the number of chains contained within the RNA, and exclude any instance with more than two chains, which possibly are redundant chains as a result of experimental techniques. Third, we verify that all RNAs consisted solely of nucleotides and rule out any containing additional residues, such as amino acids. Fourth, aligning with the methodology presented in paper (Townshend et al., 2021), we eliminate RNAs with non-canonical base pairs. Finally, we examine every RNA molecule to reduce conformational ambiguity, specifically for atoms that could occupy possible positions  $A$  or  $B$ . We choose the configuration with higher occurrence frequency, removing all other configurations.
+
+**Data Partitioning and Clustering.** We employ USAlign (Zhang et al., 2022a) to calculate the TM-score between any two RNA samples. USAlign is a metric used to evaluate the structural similarity
+
+{3}------------------------------------------------
+
+![Figure 3: Architecture of EquiRNA. The diagram shows a flow from Input to Output through multiple layers (x L Layers). The Input is an RNA structure. The processing stages are Atom-Level (Nucleobase and Ribose-Phosphate), Subunit-Level (Nucleobase and Ribose-Phosphate), and Nucleotide-Level (KNN). The Output includes RMSD, Candidate Structure, and a 3D plot of the RNA structure space showing the Ground Truth and Predicted Structure space.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 3: Architecture of EquiRNA. The diagram shows a flow from Input to Output through multiple layers (x L Layers). The Input is an RNA structure. The processing stages are Atom-Level (Nucleobase and Ribose-Phosphate), Subunit-Level (Nucleobase and Ribose-Phosphate), and Nucleotide-Level (KNN). The Output includes RMSD, Candidate Structure, and a 3D plot of the RNA structure space showing the Ground Truth and Predicted Structure space.
+
+Figure 3: The architecture of EquiRNA. Each layer comprises three levels: atom-level, subunit-level, and nucleotide-level.  $(h_r, \bar{x}_r)$  and  $(h_b, \bar{x}_b)$  denote the features and coordinates of the atom in ribose-phosphate and nucleobase, respectively.  $(h, \bar{X})$  denotes the features and coordinates of each nucleotide. KNN represents our size-insensitive  $K$ -nearest neighbor sampling strategy. EquiRNA predicts RMSD from native structure and selects structure with the lowest predicted RMSD.
+
+of two RNAs. A TM-score greater than 0.45 indicates that the two RNAs belong to the same RNA family. We then apply the clustering method proposed in USAlign based on the TM-scores to cluster all RNA structures. Specifically, we first sort RNAs by the number of nucleotides in descending order. Then, starting with the largest RNA as the cluster representative, the TM-score is computed with the rest using the USAlign algorithm. If the score is higher than 0.45, it’s categorized into the same cluster as the largest RNA; otherwise, the largest RNA forms its own cluster. Repeat the process with the second largest RNA until all RNAs are clustered. Given that RNAs with over 200 nucleotides require considerable time for candidate conformation generation, our validation and test sets primarily focus on RNAs with 100-200 nucleotides, using a training set composed of RNAs with 50-100 nucleotides. Since the number of RNAs within the 100-200 range is smaller than those within 50-100, we first create the validation and test sets by enumerating all clusters and randomly sampling RNAs within the 100-200 range, ensuring maximum coverage of all potential clusters. After the completion of the validation and test sets, we remove the clusters that contain any sample in the validation or test set, and construct the training set using the remaining clusters to prevent data leakage. To be specific, we enumerate the remaining clusters and randomly sample a certain number of RNAs from each cluster to form the training set.
+
+Table 1: The detailed comparisons between our rRNAsolo and ARES.
+
+| Method | Range of sizes |  |  | Numbers |  |  | Release date |
+|-|-|-|-|-|-|-|-|
+|  | Train | Valid | Test | Train | Valid | Test |  |
+| ARES | (10, 50) | (10, 50) | (20, 150) | 18 | 4 | 16 | ~2020 |
+| rRNAsolo | (50, 100) | (100, 200) | (100, 200) | 200 | 15 | 15 | ~2023 |
+
+Table 1 compares the statistic of rRNAsolo against the existing benchmark ARES (Townshend et al., 2021). Our rRNAsolo exhibits the following advantages: **1.** Wider range of RNA sizes: the training set includes RNAs of 50-100 nucleotides, whereas ARES covers only RNAs less than 50 nucleotides. Our validation and test set consists of RNAs of 100-200 nucleotides, while ARES has only three entities over 100 nucleotides. **2.** A greater number of RNAs: our dataset comprises RNAs approximately 7 times more than ARES. **3.** More recently released data: our dataset contains all the eligible RNA structures up to the latest release, as opposed to ARES which includes RNAs published between 1994-2006 for the training set. Overall, our dataset possesses higher quality and thus enables a more comprehensive evaluation of the current methods. More detailed information about our rRNAsolo can be found in Appendix D.
+
+### 2.3 THE PROPOSED EQUIRNA MODEL
+
+EquiRNA consists of the three-level  $E(3)$ -equivariant processes: atom-level, subunit-level and nucleotide-level. In this way, EquiRNA largely reuses the common building block (i.e. the nucleotide) for RNAs of different sizes, better addressing size generalization. Specifically, the atom-
+
+{4}------------------------------------------------
+
+level and subunit-level modules are able to obtain a uniform representation of each nucleotide, while the nucleotide-level message passing can capture the interaction between different nucleotides.
+
+#### (1) Atom-Level Equivariant Message Passing.
+
+Previous works like (Zhang et al., 2022b) initially calculate E(3)-invariant scalars from atomic coordinates, such as planar angles, dihedral angles, and bond lengths, and then encode and propagate these invariant information through a typical GNN. However, the explicit calculations of scalars suffer from suboptimal computational efficiency and insufficient representational capability. Here, we employ an equivariant GNN to process the atomic coordinates straightforwardly, which is able to retain the orientation information in each layer by propagating geometric information beyond local neighborhoods (Joshi et al., 2023), thus enhancing the modeling of RNAs.
+
+Our model is built upon a prevailing equivariant GNN model, *i.e.*, EGNN (Satorras et al., 2021), by further drawing inspiration from the biological properties of RNA. In particular, for each nucleotide, we conduct atom-level equivariant message passing over the atoms within the ribose-phosphate backbone  $\mathcal{G}_r$  and the nucleobase  $\mathcal{G}_b$ , separately. We denote these two processes as Equivariant Ribose-phosphate Network (ERN) and Equivariant nucleoBase Network (EBN).
+
+**ERN.** For a ribose-phosphate graph  $\mathcal{G}_r^l$  comprising  $N_r$  nodes (atoms) denoted as  $\{\vec{x}_{r_i}^l, \mathbf{h}_{r_i}^l\}_{i=1}^{N_r}$  at the  $l$ -th layer, the formula for updating each node within the graph is given by:
+
+$$\begin{aligned} m_{r_i r_j}^l &= \varphi_m \left( \text{rbf}(\|\vec{x}_{r_i}^l - \vec{x}_{r_j}^l\|), \mathbf{h}_{r_i}^l, \mathbf{h}_{r_j}^l \right), \\ \vec{x}_{r_i}^{l+1} &= \vec{x}_{r_i}^l + \frac{1}{N_r - 1} \sum_{j \neq i} (\vec{x}_{r_i}^l - \vec{x}_{r_j}^l) \varphi_x(m_{r_i r_j}^l), \\ \mathbf{h}_{r_i}^{l+1} &= \mathbf{h}_{r_i}^l + \varphi_h(\mathbf{h}_{r_i}^l, \sum_{j \neq i} m_{r_i r_j}^l), \end{aligned} \quad (1)$$
+
+where  $\varphi_m$ ,  $\varphi_x$  and  $\varphi_h$  represent different Multi-Layer Perceptrons (MLPs),  $\text{rbf}(\cdot)$  is the Radial basis function on the relative distance  $\|\vec{x}_{r_i}^l - \vec{x}_{r_j}^l\|$ , and  $m_{r_i r_j}^l$  is the invariant message from node  $j$  to  $i$ . To derive  $\vec{x}_{r_i}^{l+1}$ , we first multiply the 1D invariant scalar  $\varphi_x(m_{r_i r_j}^l) \in \mathbb{R}$  with the relative coordinate  $(\vec{x}_{r_i}^l - \vec{x}_{r_j}^l)$  to recover the orientation information and maintain orthogonality equivariance, and then aggregate all such terms from all neighbors, followed by an addition of the original coordinate  $\vec{x}_{r_i}^l$  to ensure translation equivariance. The update of the hidden embedding  $\mathbf{h}_{r_i}^{l+1}$  follows the conventional message passing strategy. For simplicity, we abstract Eq. (1) as  $\mathcal{G}_r^{l+1} = \text{ERN}(\mathcal{G}_r^l)$ .
+
+**EBN.** Given a nucleobase graph  $\mathcal{G}_b^l = \{\vec{x}_{b_i}^l, \mathbf{h}_{b_i}^l\}_{i=1}^{N_b}$  at the  $l$ -th layer, the updates of all atoms are similar to ERN as detailed in Eq. (1). We denote this message passing process as  $\mathcal{G}_b^{l+1} = \text{ERN}(\mathcal{G}_b^l)$ .
+
+#### (2) Subunit-Level Equivariant Message Passing.
+
+The atom-level message passing above only models the geometry of each subunit, without characterizing their interactions. Biologically, interactions between the ribose-phosphate backbone and the nucleobase involve a complex interplay of forces, e.g., covalent bonds, hydrogen bonds, and so on. To involve interactions, we develop subunit-level equivariant message passing across the atoms in the ribose-phosphate backbone and the nucleobase. We first compute the center of  $\mathcal{V}_r$  and  $\mathcal{V}_b$ , as  $\vec{x}_{r_c}^{l+1} = \frac{1}{N_r} \sum_{i=1}^{N_r} \vec{x}_{r_i}^{l+1}$  and  $\vec{x}_{b_c}^{l+1} = \frac{1}{N_b} \sum_{i=1}^{N_b} \vec{x}_{b_i}^{l+1}$ . Subsequently, we achieve translation invariance by center normalization as  $\tilde{\vec{x}}_{r_i}^{l+1} = \vec{x}_{r_i}^{l+1} - \vec{x}_{r_c}^{l+1}$  and  $\tilde{\vec{x}}_{b_i}^{l+1} = \vec{x}_{b_i}^{l+1} - \vec{x}_{b_c}^{l+1}$ , respectively. Then, the update process for each atom in  $\mathcal{G}_r$  is given by:
+
+$$\left. \begin{aligned} \mathbf{q}_i &= \varphi_q \left( \mathbf{h}_{r_i}^{l+1}, \text{rbf}(\|\tilde{\vec{x}}_{r_i}^{l+1}\|) \right) \\ \mathbf{k}_j &= \varphi_k \left( \mathbf{h}_{b_j}^{l+1}, \text{rbf}(\|\tilde{\vec{x}}_{b_j}^{l+1}\|) \right) \\ \mathbf{v}_j &= \varphi_v \left( \mathbf{h}_{b_j}^{l+1}, \text{rbf}(\|\tilde{\vec{x}}_{b_j}^{l+1}\|) \right) \end{aligned} \right\} \implies \begin{cases} \alpha_{ij} = \text{Softmax}(\mathbf{q}_i^\top \mathbf{k}_j) \\ \tilde{\vec{x}}_{r_i}^{l+2} = \tilde{\vec{x}}_{r_i}^{l+1} + \frac{1}{N_b} \sum_{j \in \mathcal{V}_b} \alpha_{ij} \tilde{\vec{x}}_{b_j}^{l+1} \varphi_{xr}(\mathbf{v}_j) \\ \mathbf{h}_{r_i}^{l+2} = \mathbf{h}_{r_i}^{l+1} + \varphi_{hr} \left( \mathbf{h}_{r_i}^{l+1}, \sum_{j \in \mathcal{V}_b} \alpha_{ij} \mathbf{v}_j \right) \end{cases} \quad (2)$$
+
+where  $\varphi_q$ ,  $\varphi_k$ ,  $\varphi_v$ ,  $\varphi_{xr}$  and  $\varphi_{hr}$  are all MLPs,  $\text{rbf}(\cdot)$  is the Radial basis function. We apply the attention mechanism to depict the interaction between each atom in  $\mathcal{G}_r$  and  $\mathcal{G}_b$ . The invariant quantities  $\mathbf{q}_i$ ,  $\mathbf{k}_j$  and  $\mathbf{v}_j$  refer to the query, key and value features, respectively, and  $\alpha_{ij}$  signifies the
+
+{5}------------------------------------------------
+
+attention weights, with higher values indicating more pronounced interactions between atom  $i$  and  $j$ . The aforementioned procedure can be succinctly expressed as  $\mathcal{G}_r^{l+2} = \text{EB2R}(\mathcal{G}_r^{l+1}, \mathcal{G}_b^{l+1})$ .
+
+Following this, we employ an analogous approach to model the interactions exerted by the ribose-phosphate backbone on the nucleobase, leading to  $\mathcal{G}_b^{l+2} = \text{ER2B}(\mathcal{G}_b^{l+1}, \mathcal{G}_r^{l+1})$ .
+
+#### (3) Nucleotide-Level Equivariant Message Passing.
+
+Upon completing the atom-level and subunit-level modeling, we advance to message passing at the nucleotide level. We aggregate the features of all atoms within the same nucleotide, which have been updated as described previously, deriving the nucleotide feature by summation:  $\mathbf{h}^{l+2} = \sum_{i=1}^{N_r} \mathbf{h}_{r_i}^{l+2} + \sum_{j=1}^{N_b} \mathbf{h}_{b_j}^{l+2}$ , and the coordinate matrix by concatenating all atomic coordinates:  $\bar{\mathbf{X}}^{l+2} \in \mathbb{R}^{3 \times (N_r + N_b)}$ . To distinguish between nucleotides, we denote different nucleotide via subscript  $i$ :  $(\bar{\mathbf{X}}_i^{l+2}, \mathbf{h}_i^{l+2})$  with  $N_i$  being the number of atoms in this nucleotide.
+
+It is challenging to design a function on  $\bar{\mathbf{X}}_i^{l+2}$ , since different nucleobase could have a distinct number of atoms, implying that the dimension of  $\bar{\mathbf{X}}_i^{l+2}$  varies. Here, we address this challenge by using templates. First, we define 4 atom templates  $\{\mathbf{W}_k^n \in \mathbb{R}^{d_a}\}_{k=1}^4$ , as there are 4 types of atoms used in our model. Each atom template is learnable with the number of channels as  $d_a$ . The atom-level templates are engineered to capture the intrinsic characteristics of all atoms. We further define nucleotide templates  $\{\mathbf{W}_k^n \in \mathbb{R}^{N_i \times d_n}\}_{k=1}^4$ , where 4 reflects the 4 types of nucleotides, and  $d_n$  reflects the dimension of the nucleotide template. The nucleotide-level templates aim to capture the unique attributes of the same atom when situated in different categories of nucleotides. In summary,  $\mathbf{W}_i^a$  and  $\mathbf{W}_i^n$  are two learnable templates that store information about each type of atom and nucleotide, respectively. In  $\mathbf{W}_k^n$ , different row represents the characteristics of different atom, and therefore does not share the same representation. We apply these templates to  $\bar{\mathbf{X}}_i^{l+2}$  to derive fixed-size message from nucleotide  $j$  and  $i$ .
+
+In detail, we begin by calculating the distances between any pair of atoms in nucleotide  $i$  and  $j$ , yielding the distance matrix  $D_{ij} \in \mathbb{R}^{N_i \times N_j}$ . We then compute the center of each nucleotide, denoted as  $\bar{\mathbf{x}}_i^{l+2} = \frac{1}{N_r + N_b} (\sum_{i=1}^{N_r} \bar{\mathbf{x}}_{r_i}^{l+2} + \sum_{j=1}^{N_b} \bar{\mathbf{x}}_{b_j}^{l+2})$ . The coordinates and features of each nucleotide are updated as follows:
+
+$$\begin{aligned} m_{ij}^n &= (W_{t_i}^a \oplus W_{\tau_j}^n)^\top \left( (p_{r_i} p_{r_j}^\top) \odot D_{ij} \right) (W_{t_j}^a \oplus W_{\tau_j}^n), \\ m_{ij}^{l+3} &= \varphi_{hn} \left( h_i, h_j, \frac{m_{ij}^n}{\|m_{ij}^n\|_F} \right), \\ \bar{\mathbf{X}}_i^{l+3} &= \bar{\mathbf{X}}_i^{l+2} + \frac{1}{|\mathcal{N}(i)|} \sum_{j \in \mathcal{N}(i)} \text{Pool}(\varphi_{zn}(m_{ij}^{l+3})) \cdot (\bar{\mathbf{X}}_i^{l+2} - \bar{\mathbf{x}}_{c_j}^{l+2}), \\ h_i^{l+3} &= h_i^{l+2} + \varphi_{hn} \left( h_i^{l+2}, \sum_{j \in \mathcal{N}(i)} m_{ij}^{l+3} \right), \end{aligned} \quad (3)$$
+
+where  $\bar{\mathbf{x}}_{c_j}^{l+2}$  represents the center of nucleotide  $j$ ,  $\oplus$  represents concatenations along the channel dimension;  $t_i \in \{1, \dots, 4\}^{N_i}$  are vectors concatenated by all atom types in nucleotide  $i$  and  $\tau_i \in \{1, \dots, 4\}$  represents its nucleotide type; the dimension of  $W_{t_i}^a$  and  $W_{\tau_j}^n$  are  $\mathbb{R}^{N_i \times d_a}$  and  $\mathbb{R}^{N_i \times d_n}$ , respectively;  $p_{r_i}$  and  $p_{r_j}$  are two learnable vectors used to model the atom-wise correlation in the distance matrix  $D_{ij}$ ;  $\mathcal{N}(i)$  denotes all neighboring nucleotides of nucleotide  $i$ . The dimension of the derived message  $m_{ij}^n$  in the first equation keeps unchanged regardless of the value of  $N_i$ . The message  $m_{ij}^n$  is a matrix with dimension  $\mathbb{R}^{(d_a + d_n) \times (d_a + d_n)}$ . By default, we will flatten  $m_{ij}^n$  into a vector of size  $\mathbb{R}^{(d_a + d_n)^2}$  before feeding it to the update function  $\varphi_{hn}$ . The pooling operation  $\text{Pool}(\cdot)$  with adaptive stride ensures the output of  $\varphi_{zn}(m_{ij}^{l+3})$  to have the same dimension as  $\bar{\mathbf{X}}_i^{l+2}$ .
+
+**Size-insensitive  $K$ -nearest neighbor sampling strategy.** To further alleviate the size-generalization issue, we propose a size-insensitive  $K$ -nearest neighbor sampling strategy, designed to leverage the abundant smaller RNAs for training and enable the model to generalize effectively to larger RNAs. In detail, we first perform  $M$ -nearest neighbor sampling for all RNAs, then randomly select  $K$  out of these  $M$  neighbors ( $K < M$ ) with equal probability. Consequently, the model has been exposed to  $M$ -neighbors' information during training, allowing it to transfer the spatial information of  $M$ -neighbors learned from the training set to larger RNAs in the test set. This process is
+
+{6}------------------------------------------------
+
+analogous to randomly masking nodes and dropping edges in the graph during each training period, which renders the model less sensitive to variations in the size of RNAs and enhances its robustness.
+
+**Learning objective.** After implementing  $L$  layers of computations using the modules described in § 2.3, we perform the final calculation on the output  $h_i^{l+3}$  from Eq. (3) to predict the RMSD between the candidate structure and the native structure. Specifically, we first sum up the features of all nucleotides, and then feed them through a MLP to predict a scalar. This scalar represents the predicted RMSD by the model. Ultimately, we employ Smooth  $\ell_1$  loss as our loss function. This process is delineated as follows:
+
+$$\mathcal{L} = \mathcal{L}_{\text{smoothl1}} \left( y, \text{MLP} \left( \sum_{i=1}^{N_{\text{nu}}} h_i^{l+3} \right) \right), \quad (4)$$
+
+where  $y$  is a scalar, calculated by FARFAR2 when generating the candidate structure, representing the ground truth label.  $N_{\text{nu}}$  represents the number of nucleotide in RNA. A pivotal characteristic of our model is its E(3)-equivariance, with proofs provided in Appendix C.
+
+## 3 EXPERIMENT
+
+**Datasets.** We conducted exhaustive experiments on two datasets comprising a wide range of RNA structures. **1. rRNAsolo:** In our meticulously designed dataset, we employ candidate structures of RNAs with 50-100 nt as training set and candidate structures with 100-200 nt as validation and test sets. The dataset rRNAsolo consists of 80k/6k/6k candidate structures generated from 200/15/15 RNAs for training, validation, and test sets, respectively. **2. ARES:** Within ARES dataset (Townshend et al., 2021), 14 RNAs with 19-47 nt form training set and 4 RNAs with 17-41 nt form validation set, each generating 1k candidate structures. Additionally, 16 RNAs (only three of which are larger than 100 nt) with 27-147 nt form test set, with each RNA generating 5k candidate structures. The training, validation, and test sets include 14k/4k/80k candidate structures, respectively.
+
+**Baselines and Implementation.** We compare our method with the following baselines: the invariant GNNs including PaxNet (Zhang et al., 2022b) and RDesign (Tan et al., 2024), and the equivariant GNNs including ARES (Townshend et al., 2021), EGNN (Satorras et al., 2021), dyMEAN (Kong et al., 2023b), and GET (Kong et al., 2024). We use the default configurations in the corresponding source codes for all baselines. Details of the configuration settings are provided in Appendix E and Appendix P.
+
+**Metrics.** For each RNA in the validation and test sets, the models are required to score all related candidate structures and selects the best-scoring one. Subsequently, the RMSD between the selected best structure and the native structure is utilized as the criterion for assessing the model’s evaluation ability. The metrics include: **1.Median RMSD:** Following the evaluation metrics in Zhang et al. (2022b); Townshend et al. (2021), we calculate the median RMSD across RNAs; **2.Mean RMSD:** We also calculate the mean RMSD across RNAs to further evaluate the model’s scoring capability comprehensively. **3.Relative Error of Median/Mean RMSD:** For each RNA, there is a theoretical minimum RMSD value among all the candidate structures. Thus, we calculate the relative error of the median/mean RMSD with respect to the median/mean of the minimum RMSD.
+
+### 3.1 MAIN RESULTS
+
+**Results on rRNAsolo.** Table 2 provides a detailed comparison of various methods’ performance on rRNAsolo. Within this dataset, our model shows significant improvements on all evaluation metrics compared to the current SOTA methods for both validation and test sets. We can observe that: **1.** Our model achieves the greatest performance gains by 2.00 and 1.55 across the Mean RMSD and Medium RMSD metrics on both validation and test sets. Furthermore, as indicated by Relative Error of Mean RMSD and Relative Error of Medium RMSD, our model yields improvements of up to 17% and 13% on the validation and test sets, respectively. Given the small performance differences among SOTA models, this demonstrates the efficiency and superiority of our method in RNA 3D structure modeling. **2.** Analyzing from the perspective of equivariance, the PaxNet, which retains only invariant feature, underperforms equivariant models like dyMEAN and EquiRNA. This underscores the importance of considering physical symmetry in RNA 3D structure modeling. **3.** As a method in protein domain, dyMEAN still exhibits a certain gap in performance compared to EquiRNA. This suggests that despite structural similarities, the intricacy and flexibility of RNA
+
+{7}------------------------------------------------
+
+Table 2: All four metrics on the validation and test sets of rRNAsolo. The four metrics in the table, ER, DR, R-ER, and R-DR, correspond to the abbreviations of the previously mentioned metrics Mean RMSD, Median RMSD, Relative Error of Mean RMSD, and Relative Error of Median RMSD, respectively.
+
+|  | Validation Set |  |  |  | Test Set |  |  |  |
+|-|-|-|-|-|-|-|-|-|
+|  | ER ↓ | DR ↓ | R-ER ↓ | R-DR ↓ | ER ↓ | DR ↓ | R-ER ↓ | R-DR ↓ |
+| ARES (Townshend et al., 2021) | 22.13 | 22.45 | 1.12 | 1.22 | 20.98 | 20.89 | 0.84 | 0.84 |
+| EGNN (Satorras et al., 2021) | 22.12 | 23.12 | 1.01 | 1.34 | 20.99 | 20.42 | 0.71 | 0.69 |
+| PaxNet (Zhang et al., 2022b) | 22.71 | 24.00 | 1.12 | 1.43 | 21.64 | 21.53 | 0.76 | 0.78 |
+| dyMEAN (Kong et al., 2023b) | 21.34 | 20.94 | 0.99 | 1.11 | 20.91 | 20.52 | 0.71 | 0.70 |
+| RDesign (Tan et al., 2024) | 21.99 | 20.79 | 1.05 | 1.11 | 20.22 | 19.34 | 0.65 | 0.60 |
+| GET (Kong et al., 2024) | 21.61 | 21.68 | 1.01 | 1.20 | 20.03 | 19.19 | 0.63 | 0.59 |
+| <b>EquiRNA</b> | <b>19.77</b> | <b>19.62</b> | <b>0.84</b> | <b>0.99</b> | <b>18.22</b> | <b>17.79</b> | <b>0.48</b> | <b>0.47</b> |
+
+![Figure 4: Native structures (gray) versus predicted structures (beige) by EquiRNA and other models. The figure shows a 3x4 grid of RNA structures. Rows are labeled dyMEAN, RDesign, and EquiRNA. Columns are labeled (100, 110), (110, 120), (120, 150), and (150, 200). Each cell contains a 3D model of an RNA structure with its corresponding RMSD value.](86bc87f7876d150f4ca9684c6848082f_img.jpg)
+
+| Model | (100, 110) | (110, 120) | (120, 150) | (150, 200) |
+|-|-|-|-|-|
+| dyMEAN | RMSD: 23.66 | RMSD: 27.38 | RMSD: 22.99 | RMSD: 26.67 |
+| RDesign | RMSD: 20.46 | RMSD: 23.35 | RMSD: 19.34 | RMSD: 19.89 |
+| EquiRNA | RMSD: 12.07 | RMSD: 13.89 | RMSD: 15.93 | RMSD: 17.20 |
+
+Figure 4: Native structures (gray) versus predicted structures (beige) by EquiRNA and other models. The figure shows a 3x4 grid of RNA structures. Rows are labeled dyMEAN, RDesign, and EquiRNA. Columns are labeled (100, 110), (110, 120), (120, 150), and (150, 200). Each cell contains a 3D model of an RNA structure with its corresponding RMSD value.
+
+Figure 4: Native structures (gray) versus predicted structures (beige) by EquiRNA and other models.
+
+structures places higher demands on a model’s ability to capture RNA characteristics. **4.** Inferior performance is observed of GET, attributable to its lack of specialized mechanisms for addressing the unique structural features of RNAs. This limitation likely stems from GET’s general-purpose design, rather than RNA-specific optimization.
+
+To comprehensively compare our model’s ability to assess RNAs of various sizes with current SOTA models, Fig. 5 further analyzes each model’s evaluation capability across all RNAs in the validation and test sets. We first divide the RNAs into size intervals of 100-110, 110-120, 120-150, and 150-200, based on the distribution of RNA sizes. Then we calculate the average prediction values for RNAs in each interval. Fig. 5 clearly shows our method’s superior predictive results across various RNA sizes, indicating our approach effectively addresses the size generalization problem, transferring the knowledge of nucleotide interactions learned from small RNAs to larger RNAs. Moreover, we select four RNAs from the size intervals discussed previously. Fig. 4 displays the native structures, compared with the predicted structures of the current SOTA models and our model.
+
+![Figure 5: Comparison of different methods in the validation and test sets. The figure is a line graph showing Average RMSD on the y-axis (ranging from 16 to 26) versus RNA Nucleotide Size Intervals on the x-axis (100, 110, 120, 150, 200). Four methods are plotted: RDesign (blue line with circles), PaxNet (orange line with squares), dyMEAN (green line with triangles), and EquiRNA (red line with diamonds). EquiRNA shows the lowest Average RMSD across all intervals, while PaxNet shows the highest.](aa14b9ec884bf40ce06c161be468cd84_img.jpg)
+
+| RNA Nucleotide Size Intervals | RDesign | PaxNet | dyMEAN | EquiRNA |
+|-|-|-|-|-|
+| 100 | 20.0 | 22.5 | 20.0 | 15.5 |
+| 110 | 21.5 | 22.0 | 20.5 | 17.8 |
+| 120 | 19.0 | 19.0 | 19.0 | 18.5 |
+| 150 | 24.5 | 25.5 | 24.0 | 22.5 |
+| 200 | 25.5 | 26.5 | 25.0 | 24.5 |
+
+Figure 5: Comparison of different methods in the validation and test sets. The figure is a line graph showing Average RMSD on the y-axis (ranging from 16 to 26) versus RNA Nucleotide Size Intervals on the x-axis (100, 110, 120, 150, 200). Four methods are plotted: RDesign (blue line with circles), PaxNet (orange line with squares), dyMEAN (green line with triangles), and EquiRNA (red line with diamonds). EquiRNA shows the lowest Average RMSD across all intervals, while PaxNet shows the highest.
+
+Figure 5: Comparison of different methods in the validation and test sets.
+
+{8}------------------------------------------------
+
+Table 3: Results across four metrics on the test set of ARES dataset.
+
+| Method | ER | DR | R-ER | R-DR |
+|-|-|-|-|-|
+| ARES | 12.33 | 11.22 | 1.02 | 0.90 |
+| EGNN | 13.47 | 12.12 | 1.21 | 1.05 |
+| PaxNet | 13.15 | 10.28 | 1.16 | 0.74 |
+| dyMEAN | 13.56 | 11.30 | 1.23 | 0.91 |
+| RDesign | 13.37 | 12.96 | 1.20 | 1.20 |
+| GET | 13.29 | 11.62 | 1.18 | 0.97 |
+| <b>EquiRNA</b> | <b>11.74</b> | <b>9.57</b> | <b>0.93</b> | <b>0.62</b> |
+
+**Results on ARES.** To further assess the versatility and generalization capabilities of our model, we conducted experiments on the public dataset ARES. As shown in Table 3, our method achieves optimal results on all four metrics. Despite the smaller size and fewer training samples in this dataset, our model still outperforms the current SOTA method ARES, demonstrating its capability to encode essential structural information within and between nucleotides. Additionally, following the ARES paper, we present the results of all methods on the rRNAsolo and ARES datasets using the 1 best-scoring model and 10 best-scoring models in Table 9 of Appendix F.1. Moreover, we also provide detailed analyses of the experimental results in Appendix F.2.
+
+**High-level RMSD values presented in rRNAsolo.** The RMSD values observed in our rRNAsolo dataset are higher than those in ARES dataset. We briefly elucidate the underlying factors contributing to this discrepancy and introduce a more appropriate metric for evaluating model performance. Comprehensive analyses of this phenomenon are provided in Appendix G. There are primarily two reasons: (1) Our rRNAsolo is more challenging with wider range of RNA sizes and a greater number of large RNAs. (2) The reported RMSD values are predominantly contingent upon the quality of candidate structures; however, for large RNAs, existing predictive methods often struggle to generate high-quality candidates with low RMSD values. To provide a more direct understanding of model’s evaluation capability, we have reported the **Relative Ranking** metric of all models on rRNAsolo and ARES datasets in Table 4. The calculation of **Relative Ranking** is as follows: the evaluation model first ranks all candidate structures’ ground-truth RMSD values in an ascending order out of  $N$  candidate structures in total. Then we identify the order of evaluation model’s selected structure as  $E$ , and Relative Ranking is calculated as  $(E/N)$ . Clearly, our method significantly outperforms other evaluation models on these two datasets. Moreover, our method shows consistent performance across both rRNAsolo and ARES datasets, while the performance of other methods declines noticeably on rRNAsolo. Compared to metrics we originally used, Relative Ranking provides a more scientific and intuitive assessment of the model’s ability to rank candidate structures. One can directly use ranking metric to evaluate whether evaluation model offers reliable guidance for RNA selection.
+
+**Further exploratory experiments.** We also conduct a series of exploratory experiments, the details of which are presented in the appendices, including: the incorporation of molecular chirality in the model architecture (Appendix H); the influence of the noise (Appendix N); the model performance under a more general scenario where size generalization is not a constraint (Appendix J); performance comparisons with other leading models (Appendix L); the performance of the model after fine-tuning on a dataset constructed using the recently published RhoFold (Shen et al., 2024) as a novel candidate structure generator (Appendix Q); and the analysis of some error cases (Appendix M).
+
+**Complexity analyses.** We now proceed to conduct a complexity analysis of the different models. The efficiency analysis and comparison are provided in Table 5. In this table,  $N_a$ ,  $n_a$ ,  $K_a$ ,  $K_m$ ,  $C$ , and  $L$  denote number of atoms in each RNA, number of atoms in each nucleotide, number of nearest atom neighbors, number of nearest nucleotide neighbors, channel size of high-degree tensors, and angular order, respectively. The  $K_{a1}$  and  $K_{a2}$  in PaxNet denotes the the number of nearest atom neighbors in two different settings, the  $d_a$  and  $d_m$  in EquiRNA denotes the embedding size of the atom template and the nucleotide template. Our EquiRNA costs much less inference time than the methods that using high-degree irreducible representations (ARES, SE(3)-Transformer (Fuchs et al., 2020), Equifomer (Liao & Smidt, 2022) and SE(3)-Hyena (Moskalkev et al., 2024)), and is even faster than EGNN since EquiRNA employs the hierarchical modeling and can fulfil desirable performance with a smaller neighbor size  $K$  than EGNN in the atom-level message passing.
+
+Table 4: The Relative Ranking of all the models on rRNAsolo and ARES datasets.
+
+| Method | rRNAsolo | ARES |
+|-|-|-|
+| ARES | 0.591 | 0.294 |
+| EGNN | 0.435 | 0.325 |
+| PaxNet | 0.628 | 0.343 |
+| dyMEAN | 0.603 | 0.347 |
+| RDesign | 0.476 | 0.351 |
+| GET | 0.423 | 0.343 |
+| <b>EquiRNA</b> | <b>0.280</b> | <b>0.238</b> |
+
+{9}------------------------------------------------
+
+Table 5: Complexity and inference time.
+
+| Method | Complexity | Inference Time |
+|-|-|-|
+| ARES | $\mathcal{O}(N_a K_a C^3 L^6)$ | 0.095s |
+| SE(3)-Transformer | $\mathcal{O}(N_a K_a C^3 L^6)$ | - |
+| Equiformer | $\mathcal{O}(N_a K_a C^3 L^6)$ | - |
+| SE(3)-Hyena | $\mathcal{O}(N_a (K_a + \log N_a) C^3 L^6)$ | - |
+| EGNN | $\mathcal{O}(N_a K_a)$ | 0.042s |
+| PaxNet | $\mathcal{O}(N_a (K_{a1} + K_{a2}))$ | 0.035s |
+| EquiRNA | $\mathcal{O}(n_a N_a + (n_a^2 + n_a(d_a + d_{nu})) K_{nu} N_{nu})$ | 0.038s |
+
+### 3.2 ABLATION STUDIES
+
+Comprehensive ablation studies are carried out to evaluate the impact of each component of the EquiRNA model on performance, with specific results presented in Table 6. The At, Su, Nu, Sa, and Eq correspond to the abbreviations of the atom-level, subunit-level, nucleotide-level, size-insensitive  $K$ -nearest neighbor sampling strategy, and equivariance, respectively. We have the following observations: **1.** The experiments indicate that eliminating any one of atom-level, subunit-level, or nucleotide-level submodule will lead to a decrease in performance. This phenomenon confirming that EquiRNA effectively encodes critical information of RNA 3D structures, such as dihedral angles, and facilitates message passing within and between these three levels. **2.** The removal of the nucleotide-level results in a significant decline in performance, revealing the significance of nucleotide interactions. **3.** The ablation of the size-insensitive  $K$ -nearest neighbor sampling strategy also leads to diminished performance, demonstrating that this strategy allows the model to engage with a more extensive range of local neighbors during training, which is beneficial when coping with the large RNAs. **4.** From the results presented in Row 5, the introduction of equivariance enhances the model’s ability to encode physical symmetry, resulting in a stronger capacity for 3D structure representation. **5.** Removing atom template  $W_k^a$  or nucleotide template  $W_k^n$  hinders the performance, indicating their ability to capture the biology information. More ablation studies on subunit-level and nucleotide-level can be found in Appendix I.
+
+Table 6: Ablation studies on rRNAsolo.
+
+|  | ER | DR | R-ED | R-DE |
+|-|-|-|-|-|
+| w/o At | 19.38 | 19.40 | 0.58 | 0.61 |
+| w/o Su | 19.53 | 19.57 | 0.59 | 0.62 |
+| w/o Nu | 20.25 | 19.41 | 0.65 | 0.61 |
+| w/o Sa | 19.40 | 17.94 | 0.58 | 0.49 |
+| w/o Eq | 20.53 | 19.42 | 0.67 | 0.61 |
+| w/o $W_k^a$ | 20.03 | 19.64 | 0.63 | 0.63 |
+| w/o $W_k^n$ | 18.69 | 17.97 | 0.52 | 0.49 |
+| <b>EquiRNA</b> | <b>18.22</b> | <b>17.79</b> | <b>0.48</b> | <b>0.47</b> |
+
+## 4 CONCLUSION
+
+We introduce EquiRNA, a hierarchical equivariant model designed for RNA structure evaluation. The innovation of this model lies in deconstructing RNA structures into multiple levels. It performs message passing and aggregation from the bottom-up, starting at the atom-level and progressing through subunit-level and nucleotide-level, while preserving full-atom details. Additionally, we incorporate a size-insensitive  $K$ -nearest neighbor sampling strategy to mitigate challenges associated with generalizing to large RNAs. The entire architecture of EquiRNA guarantees the critical E(3)-equivariance to properly encode physical symmetries and enhance its expressive capabilities. Comprehensive experiments on two datasets with a broad range of RNA sizes demonstrate that the selected structures of our model have significantly lower RMSD values, showcasing its superior performance. We hope that EquiRNA will serve as a robust baseline for the field and foster further advancement.
+
+ Rest of paper (reference and Appendix) is removed.

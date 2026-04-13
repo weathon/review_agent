@@ -1,0 +1,438 @@
+
+
+{0}------------------------------------------------
+
+# EXPLORING DIFFUSION MODELS’ CORRUPTION STAGE IN FEW-SHOT FINE-TUNING AND MITIGATING WITH BAYESIAN NEURAL NETWORKS
+
+**Anonymous authors**
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Few-shot fine-tuning of Diffusion Models (DMs) is a key advancement, significantly reducing training costs and enabling personalized AI applications. However, we explore the few-shot fine-tuning dynamics of DMs and observe an unanticipated phenomenon: during the fine-tuning process, image fidelity initially improves, then unexpectedly deteriorates with the emergence of noisy patterns, only to recover later with severe overfitting. We term the stage with generated noisy patterns as *corruption stage*. To understand this corruption stage, we begin by heuristically modeling the one-shot fine-tuning scenario, and then extend this modeling to more general cases. Through this modeling, we identify the primary cause of this corruption stage: a narrowed learning distribution inherent in the nature of few-shot fine-tuning. To tackle this, we apply Bayesian Neural Networks (BNNs) on DMs with variational inference to implicitly broaden the learned distribution, and present that the learning target of the BNNs can be naturally regarded as an expectation of the diffusion loss and a further regularization with the pretrained DMs. This approach is highly compatible with current few-shot fine-tuning methods in DMs and does not introduce any extra inference costs. Experimental results demonstrate that our method significantly mitigates corruption, and improves the fidelity, quality and diversity of the generated images in both object-driven and subject-driven generation tasks. The code is available at an anonymous link<sup>1</sup>.
+
+## 1 INTRODUCTION
+
+Recent years have witnessed a surge in the development of Diffusion Models (DMs). These models have showcased extraordinary capabilities in various applications, such as image editing (Kawar et al., 2022) and video editing (Yang et al., 2022), among others. Particularly noteworthy is the advent of few-shot fine-tuning methods (Hu et al., 2021; Ruiz et al., 2023; Qiu et al., 2023), in which a pretrained model is fine-tuned to personalize generation based on a small set of training images. These approaches have significantly reduced both memory and time costs in training. Moreover, these techniques offer powerful tools for adaptively generating images based on specific subjects or objects, embodying personalized AI and making AI accessible to everyone. In recent years, this innovation has even fostered the emergence of several communities, such as [civitai.com](https://civitai.com), which boasts tens of thousands of checkpoints and millions of downloads.
+
+Despite the importance and widespread usage of few-shot fine-tuning methods in DMs, these methods often struggle or even fail when transferring from a large distribution (i.e., pretrained DMs’ learned distribution) to a much smaller one (i.e., fine-tuned DMs’ learned distribution) using limited data (Qiu et al., 2023; Ruiz et al., 2023). We are the first to identify when and how these failures occur, and find that they are related to an unusual phenomenon: As shown in Fig. 1, the similarity between the generated images and the training images initially increases during fine-tuning, but then unexpectedly decreases, before increasing once more. Ultimately, the DMs are only capable of generating images identical to the training images. Notably, on the stage with decreasing similarity, we observe there appear some unexpected noisy patterns on the generated images, therefore we name it as *corruption stage*.
+
+<sup>1</sup><https://anonymous.4open.science/r/BNN-Finetuning-DMs-0C35>
+
+{1}------------------------------------------------
+
+![Figure 1: Image fidelity variation during few-shot fine-tuning. (a) Without BNNs: DINO Similarity starts at ~0.4, peaks at ~0.9 at iteration 500, then drops to ~0.4 at iteration 1500 (Corruption Stage), before rising to ~0.95 at iteration 5000. (b) With BNNs: DINO Similarity starts at ~0.4, rises to ~0.95 at iteration 500, and remains stable around 0.95. Both plots show Average DINO Similarity (line) and Variation Range (shaded area). Training images are shown at various iterations.](49ad3a646d84bcfeac02bdf2b3792a3e_img.jpg)
+
+Figure 1: Image fidelity variation during few-shot fine-tuning. (a) Without BNNs: DINO Similarity starts at ~0.4, peaks at ~0.9 at iteration 500, then drops to ~0.4 at iteration 1500 (Corruption Stage), before rising to ~0.95 at iteration 5000. (b) With BNNs: DINO Similarity starts at ~0.4, rises to ~0.95 at iteration 500, and remains stable around 0.95. Both plots show Average DINO Similarity (line) and Variation Range (shaded area). Training images are shown at various iterations.
+
+(a) Few-shot fine-tuning process without BNNs.
+
+(b) Few-shot fine-tuning process with BNNs.
+
+Figure 1: Image fidelity variation during few-shot fine-tuning with and without BNNs. Zero training iteration indicates pretrained DMs. We fine-tune Stable Diffusion v1.5 with DreamBooth for 5 runs.
+
+To understand this corruption stage, we carry out further analysis on the few-shot fine-tuning process. Specifically, we start from heuristic modeling a one-shot case, i.e., using only one image during fine-tuning, and then extend it to more general cases. The modeling provides an estimation of the error scale remaining in the generated images. We further show how corruption stages emerge due to the limited learned distribution inherent in few-shot tasks with this modeling.
+
+Based on the analysis above, the solution to corruption should concentrate on expanding the learned distribution. However, this expansion remains challenging in few-shot fine-tuning. Traditional data augmentation methods, when applied to generative models, often face significant problems such as leakage (Karras et al., 2020) and a reduction in generation quality (Daras et al., 2023). Inspired by recent advancements in Bayesian Neural Networks (BNNs) (Blundell et al., 2015), we propose to incorporate BNNs as a straightforward yet potent strategy to implicitly broaden the learned distribution. We further present that its learning target can be regarded as an expectation of the diffusion loss and an extra regularization loss related to the pretrained model. These two losses can be adjusted to reach a trade-off between image fidelity and diversity. Our method does not introduce any extra inference costs, and has good compatibility with existing few-shot fine-tuning methods in DMs, including DreamBooth (Ruiz et al., 2023), LoRA (Hu et al., 2021), and OFT (Qiu et al., 2023). Experimental results demonstrate that our method significantly alleviates the corruption issues and substantially enhances the performance across various few-shot fine-tuning methods on diverse datasets under different metrics.
+
+In summary, our main contributions are as follows:
+
+1. We observe an abnormal phenomenon during few-shot fine-tuning process on DMs: The image fidelity first enhances, then unexpectedly worsens with the appearance of noisy patterns, before improving again but with severe overfitting. We refer to the phase where noisy patterns appear as the corruption stage. We hope this observation could inform future research on DMs.
+2. We provide a heuristic modeling for few-shot fine-tuning process on DMs, explaining the emergence and disappearance of the corruption stage. With this modeling, we pinpoint that the main issue stems from the constrained learned distribution of DMs inherent in few-shot fine-tuning process.
+3. We innovatively incorporate BNNs to broaden the learned distribution, hence relieving such corruption. Experimental results confirm the effectiveness of this approach in improving on different metrics, including text prompt fidelity, image fidelity, generation diversity, and image quality.
+
+## 2 RELATED WORKS
+
+### 2.1 DIFFUSION MODELS AND FEW-SHOT FINE-TUNING
+
+Diffusion Models (DMs) (Ho et al., 2020; Sohl-Dickstein et al., 2015; Song & Ermon, 2019; Song et al., 2020) are generative models that approximate a data distribution through the gradual denoising of a variable initially sampled from a Gaussian distribution. These models involve a forward diffusion process and a backward denoising process. In the forward process, the extent of the addition of a noise  $\varepsilon$  increases over time  $t$ , as described by the equation  $x_t = \sqrt{\alpha_t}x_0 + \sqrt{1 - \alpha_t}\varepsilon$ , where  $x_0$  is a given original image and the range of time  $t$  is  $\{1, \dots, 1000\}$  in general cases. Conversely, in
+
+{2}------------------------------------------------
+
+the backward process, the DMs aim to estimate the noise with a noise-prediction module  $\epsilon_\theta$  and subsequently remove it from the noisy image  $x_t$ . The discrepancy between the actual and predicted noise serves as the training loss, denoted as diffusion loss  $\mathcal{L}_{DM} := \mathbb{E}_{\epsilon \sim \mathcal{N}(0,1), t} \|\epsilon_\theta(x_t, t) - \epsilon\|_2^2$ .
+
+Few-shot fine-tuning in DMs (Gal et al., 2022; Hu et al., 2021; Qiu et al., 2023; Ruiz et al., 2023) aims at personalizing DMs with a limited set of images, facilitating the creation of tailored content. Gal et al. (2022) introduced a technique that leverages new tokens within the embedding space of a frozen text-to-image model to capture the concepts presented in provided images. Ruiz et al. (2023) further proposed DreamBooth, which fine-tunes most parameters in DMs leveraging a reconstruction loss that captures more precise details of the input images, with a class-specific preservation loss ensuring the alignment with the textual prompts. Additionally, Hu et al. (2021) proposed LoRA, a lightweight fine-tuning approach that inserts low-rank layers to be learned while keeping other parameters frozen. Qiu et al. (2023) presented OFT, a method that employs orthogonal transformations to enhance the quality of generation. Although these methods generally succeed in capturing the details of training images, they suffer from the corruption stage observed in this paper.
+
+### 2.2 BAYESIAN NEURAL NETWORKS
+
+Bayesian Neural Networks (BNNs) are a type of stochastic neural networks characterized by treating the parameters as random variables rather than fixed values (Blundell et al., 2015; Buntine, 1991; Neal, 2012). The objective is to infer the posterior distribution  $P(\theta|\mathcal{D})$  for the parameters  $\theta$  given a dataset  $\mathcal{D}$ . It endows BNNs with several distinct advantages, such as the capability to model the distributions for output, to mitigate overfitting, and to enhance model interpretability (Arbel et al., 2023; Jospin et al., 2022). One prevalent variant of BNNs is the mean-field variational BNN, also known as *Bayes by Backprop*, where the mean-field variational inference is applied to obtain the variational distribution  $Q_W(\theta)$  to approximate the posterior distribution  $P(\theta|\mathcal{D})$  (Blundell et al., 2015). Recent studies demonstrated that even a BNN module, which treats only a subset of parameters as random variables while maintaining the rest as fixed, can retain the benefits associated with full BNNs (Harrison et al., 2023; Kristiadi et al., 2020; Sharma et al., 2023). Our proposed method can be regarded as a natural progression of BNN principles applied to few-shot fine-tuning in DMs.
+
+## 3 CORRUPTION STAGE IN FEW-SHOT FINE-TUNING
+
+In Sec. 3.1, we first present the observation on the corruption stage during few-shot fine-tuning of DMs. In Sec. 3.2, to better observe and understand the issues and fine-tuning dynamics with the corruption stage, we propose a heuristic modeling that uses Gaussian distribution as an approximation. To address the challenges of modeling the dynamics of DMs during fine-tuning, we adopt reasonable simplifications, supported by evidence from a specific case. In Sec. 3.3, we explain the emergence and vanishing of the corruption stage by our modeling, and reveal the limited learned distribution is the root cause of the corruption stage.
+
+### 3.1 OBSERVATION
+
+In this section, we explore the performance variation during the few-shot fine-tuning process of DMs. Concretely, we fine-tune Stable Diffusion (SD) v1.5<sup>2</sup> (Rombach et al., 2022) with DreamBooth (Ruiz et al., 2023) on different number of training images, and record the average Dino similarity between the generated images and training images as a measure of the image fidelity (Qiu et al., 2023; Ruiz et al., 2023).
+
+As shown in Fig. 2, the variation of the image fidelity is not monotonous during fine-tuning. Specifically, the few-shot fine-tuning process can be approximately divided into the following phases:
+
+1. In the first a few iterations, the image fidelity improves quickly.
+2. Later, there is an **abnormal decrease** in the image fidelity. We observe the generated images in this phase present with increasing noisy patterns, i.e., the gradual emergence of the corruption stage.
+
+<sup>2</sup><https://huggingface.co/runwayml/stable-diffusion-v1-5>
+
+{3}------------------------------------------------
+
+![Figure 2: Illustration of image fidelity variation in few-shot fine-tuning under different numbers of training images measured by Dino similarity. The figure consists of three subplots: (a) Fine-tuning on 1 image, (b) Fine-tuning on 2 images, and (c) Fine-tuning on 6 images. Each plot shows Average Dino Similarity (y-axis) vs. Training Iterations (x-axis, 0 to 5000). A red dashed line indicates the 'Corruption Stage'. A blue shaded area represents the 'Variation Range'. In (a), the corruption stage starts around 1000 iterations. In (b), it starts around 1500 iterations. In (c), it starts around 2500 iterations. The severity of the corruption (dip in similarity) is highest in (a) and lowest in (c).](e94f3bbb6f7501b9a1344dd0210e5dd8_img.jpg)
+
+Figure 2: Illustration of image fidelity variation in few-shot fine-tuning under different numbers of training images measured by Dino similarity. The figure consists of three subplots: (a) Fine-tuning on 1 image, (b) Fine-tuning on 2 images, and (c) Fine-tuning on 6 images. Each plot shows Average Dino Similarity (y-axis) vs. Training Iterations (x-axis, 0 to 5000). A red dashed line indicates the 'Corruption Stage'. A blue shaded area represents the 'Variation Range'. In (a), the corruption stage starts around 1000 iterations. In (b), it starts around 1500 iterations. In (c), it starts around 2500 iterations. The severity of the corruption (dip in similarity) is highest in (a) and lowest in (c).
+
+Figure 2: Illustration of image fidelity variation in few-shot fine-tuning under different numbers of training images measured by Dino similarity. Higher Dino similarity indicates better image fidelity. As the number of training images increases, the corruption occurs later, and its severity is reduced.
+
+3. Subsequently, the generation fidelity recovers, and we observe the corruption patterns on generated images progressively diminish, i.e. the gradual disappearance of the corruption stage. Once corruption completely diminishes in this phase, the model enters a state close to *overfitting*, where it can only generate images identical to the training images. As a result, it loses the ability to produce diverse images.
+
+Through the comparisons between Fig. 2a, Fig. 2b and Fig. 2c, it is worth noting that when the number of training images increases, the onset of corruption is delayed and its severity is lessened.
+
+### 3.2 HEURISTIC MODELING ON FEW-SHOT FINE-TUNING IN DMs
+
+In this section, we begin by heuristically modeling one-shot fine-tuning scenarios and then extend it to more general cases. This modeling is supported by an evidence on a specific case.
+
+**Heuristic Modeling for One-shot Fine-tuning on DMs.** We start with a representative condition where the dataset  $\mathcal{D}$  contains only one training image  $x'$ . Under this condition, we suppose the fine-tuned DMs with parameter  $\theta$  model the joint distribution of any original image  $x_0$  and any noisy image at time  $t$ , i.e.,  $x_t$ , as a multivariate Gaussian distribution  $P_\theta(x_0, x_t)$ . Concretely, its marginal distribution of  $x_0$  is approximated as  $P_\theta(x_0) \approx \mathcal{N}(x', \sigma_1^2)$  when the model is fine-tuned with only one image  $x'$ . Additionally, as the noisy image  $x_t$  is obtained by a linear combination  $x_t = \sqrt{\alpha_t}x_0 + \sqrt{1 - \alpha_t}\epsilon$  between  $x_0$  and a unit Gaussian noise  $\epsilon$ , the marginal distribution of  $x_t$  should approximate  $P_\theta(x_t) \approx \mathcal{N}(\sqrt{\alpha_t}x', \alpha_t\sigma_1^2 + (1 - \alpha_t))$ . Notably, the fine-tuning process in fact narrows the KL divergence between  $P_\theta(x_t | x_0 = x')$  and  $\mathcal{N}(\sqrt{\alpha_t}x', (1 - \alpha_t))$ , thus these distributions should be increasingly close during fine-tuning (Qiu et al., 2023; Ruiz et al., 2023).
+
+With this modeling, the main focus of the DMs, predicting the original image  $x_0$  based on a noisy image  $x_t$ , is represented as  $P_\theta(x_0|x_t)$ . We find that it in fact approximates a Gaussian distribution related to both  $x_t$  and the training image  $x'$ :
+
+$$P_\theta(x_0|x_t) \approx \mathcal{N}(x' + \delta_t(x_t, x'), \frac{(1 - \alpha_t)}{\alpha_t\sigma_1^2 + (1 - \alpha_t)}), \quad (1)$$
+
+$$\text{where } \delta_t(x_t, x') = \frac{\sqrt{\alpha_t}\sigma_1^2}{\alpha_t\sigma_1^2 + (1 - \alpha_t)}(x_t - \sqrt{\alpha_t}x').$$
+
+The most possible  $x_0$  denoted as  $\hat{x}_0$  in the view of the DMs is:
+
+$$\hat{x}_0 = \arg \max_{x_0} P_\theta(x_0|x_t) \approx x' + \delta_t(x_t, x'). \quad (2)$$
+
+The derivation details are provided at the Appendix Sec. A. Notably, the error term  $\delta_t(x_t, x')$  represents the difference between the predicted original image  $\hat{x}_0$  and the training image  $x'$ . Intuitively,  $\sigma_1$  can be treated as the “confidence” of the fine-tuned DM regenerating the training sample  $x'$ .
+
+The accuracy of the above modeling is influenced by the number of training iterations. As fine-tuning progresses, the approximation  $P_\theta(x_0) \approx \mathcal{N}(x', \sigma_1^2)$  becomes more precise, and the formulation more closely reflects real-world scenarios. To illustrate an extreme case in this modeling, we consider a scenario where  $\sigma_1 = 0$ , i.e.,  $\delta_t = 0$ . Under this condition, for any input  $x_t$ , the DMs consistently
+
+{4}------------------------------------------------
+
+reproduce the training image  $x'$  as described by Eq. (2). This indicates that the DMs fully lose the intrinsic denoising ability in this extreme scenario, only regenerating the training image instead.
+
+In the opposite extreme, where  $\sigma_1 = +\infty$ , i.e.,  $\delta_t = \frac{1}{\sqrt{\alpha_t}}x_t - x'$ , the model's prediction for  $x_0$  is exactly  $\frac{1}{\sqrt{\alpha_t}}x_t$ . This indicates that the DMs entirely lose the ability to generate images. Instead, DMs only rescale  $x_t$  based on the factor  $\alpha_t$  at the time step  $t$ , leading to any noise in  $x_t$  is also remaining in the generated image.
+
+**Extension to More General Cases.** We further extend our modeling to the case where  $\mathcal{D}$  contains multiple training samples. In specific, we assume the learned distribution of the original image  $x_0$  of the DMs, i.e.,  $p_\theta(x_0)$ , is centered with an image set  $\mathcal{I}_\theta$ . Under few-shot fine-tuning, as the training continues,  $\mathcal{I}_\theta$  gradually approximates the training dataset  $\mathcal{D}$ . On the other hand, for the pretrained DMs, they typically learn a much larger manifold, which can be interpreted as learning with a sufficiently large  $\mathcal{I}_\theta$ . For all these DMs facing with noisy image  $x_t$ , we simplify their behavior as firstly finding a sample  $x^* \in \mathcal{I}_\theta$  to minimize the error term  $\delta_t(x_t, x^*)$ , and then estimating the corresponding  $\hat{x}_0$  according to Eq. (2). With this simplification, the sufficiently large  $\mathcal{I}_\theta$  of pretrained DMs enables them to find an  $x$  such that the error term  $\delta_t(x_t, x)$  approaches zero, thereby preventing corruption in most instances.
+
+**Support for the Modeling.** To support the above modeling closely approximates the practical scenarios, we present a specific example where we set the "noisy" image  $x_t = 0$ , and then make both the pretrained and fine-tuned DMs denoise this image  $x_t$  which is entirely free of noise. This is a special case as  $x_t$  is free of noise and the typical DM should leave it unchanged to function effectively as a denoiser. According to our modeling, both DMs should first find one sample  $x^*$  within their own  $\mathcal{I}_\theta$ . Naturally,  $x_t = 0$  is within  $\mathcal{I}_\theta$  of the pretrained DMs (See Appendix Sec. E for more evidence). Therefore, the pretrained DMs should leave this  $x_t = 0$  almost unchanged during denoising.
+
+In comparison, the  $\mathcal{I}_\theta$  of the fine-tuned DMs should gradually approximate the training dataset  $\mathcal{D}$ . Therefore, the fine-tuned DMs should first find one sample  $x^* \in \mathcal{D}$ , and then predict the original image  $x_0$  as proportional to  $x^*$  according to Eq. (2).
+
+Experimental results provided in Fig. 3 support our analysis, where we can observe the pretrained DMs do not largely change this  $x_t = 0$ , but the fine-tuned DMs transform this  $x_t$  to one of the samples in its training dataset  $\mathcal{D}$ . This supports that our modeling aligns with real-world scenarios during few-shot fine-tuning.
+
+### 3.3 EXPLANATION OF THE CORRUPTION STAGE.
+
+In this section, we explain the corruption stage according to our heuristic modeling about few-shot fine-tuning process on DMs. We first present the reason for the emergence of the corruption stage, with an example showing the severity of such problem. We further demonstrate why the corruption stage gradually disappears, resulting in "overfitting" as the fine-tuning process continues.
+
+**Emergence of the Corruption Stage.** As stated in Eq. (2), given any noisy image  $x_t$ , the fine-tuned DMs would predict the original image  $\hat{x}_0 = x^* + \delta_t$ , where  $x^* \in \mathcal{I}_\theta \approx \mathcal{D}$  after certain training iterations. The scale of the error term  $\delta_t$  is related to  $\|x_t - \sqrt{\alpha_t}x^*\|_2$  and  $\sigma_1$ . We estimate  $\sigma_1$  based on  $x_t$  sampled from  $\mathcal{N}(0, 1 - \alpha_t)$  and present the average  $\sigma_{1,t}$  among different  $t$ s in Fig. 4. It shows that the  $\sigma_1$  remains relatively high under moderate iterations, resulting in a significant  $\delta_t$  once  $x_t$  is not identical to  $\sqrt{\alpha_t}x^*$ .
+
+![Figure 3: Denoised images from pretrained and fine-tuned DMs. The figure shows three panels: 'Predicted original image x_0 for pretrained model' (a solid green square), 'Predicted original image x_0 for model fine-tuned on 1 image' (a woman in a red dress), and 'Predicted original image x_0 for model fine-tuned on 5 images' (the same woman in a red dress).](f3ba0fe172c179cca0e5ab2661b0a2d0_img.jpg)
+
+Figure 3: Denoised images from pretrained and fine-tuned DMs. The figure shows three panels: 'Predicted original image x\_0 for pretrained model' (a solid green square), 'Predicted original image x\_0 for model fine-tuned on 1 image' (a woman in a red dress), and 'Predicted original image x\_0 for model fine-tuned on 5 images' (the same woman in a red dress).
+
+Figure 3: Denoised images from pretrained and fine-tuned DMs using  $x_t = 0$  and  $t = 1000$ . The pretrained DMs do not largely change  $x_t$  as it is free of noise. In contrast, both DMs fine-tuned on 1 and 5 images transform  $x_t$  to make it closely resembles one sample within the training dataset  $\mathcal{D}$ .
+
+![Figure 4: A line graph showing the estimated sigma_1 over training iterations. The x-axis represents iterations from 1000 to 6000, and the y-axis represents sigma_1 from 2 to 4. The data points are: (1000, 4.5), (2000, 3.0), (3000, 3.0), (4000, 2.3), (5000, 2.5), (6000, 2.0).](867fce43c58fda6178b06e454b4ed73a_img.jpg)
+
+| Iterations | Estimated $\sigma_1$ |
+|-|-|
+| 1000 | 4.5 |
+| 2000 | 3.0 |
+| 3000 | 3.0 |
+| 4000 | 2.3 |
+| 5000 | 2.5 |
+| 6000 | 2.0 |
+
+Figure 4: A line graph showing the estimated sigma\_1 over training iterations. The x-axis represents iterations from 1000 to 6000, and the y-axis represents sigma\_1 from 2 to 4. The data points are: (1000, 4.5), (2000, 3.0), (3000, 3.0), (4000, 2.3), (5000, 2.5), (6000, 2.0).
+
+Figure 4: Estimated  $\sigma_1$  under different training iterations for DreamBooth.
+
+{5}------------------------------------------------
+
+270  
+271  
+272  
+273  
+274  
+275  
+276  
+277  
+278  
+279  
+280  
+281  
+282  
+283  
+284  
+285  
+286  
+287  
+288  
+289  
+290  
+291  
+292  
+293  
+294  
+295  
+296  
+297  
+298  
+299  
+300  
+301  
+302  
+303  
+304  
+305  
+306  
+307  
+308  
+309  
+310  
+311  
+312  
+313  
+314  
+315  
+316  
+317  
+318  
+319  
+320  
+321  
+322  
+323
+
+Concretely, for the case with only one training image, i.e.,  $\mathcal{D} = \{x'\}$ , we set the noisy image  $x_t = \sqrt{\alpha_t}x' + \sqrt{1 - \alpha_t}\varepsilon + \delta'$ , where  $\varepsilon \in \mathcal{N}(0, 1)$  and  $\delta'$  is an additional noise introduced to a small region of the image. This  $\delta'$  simulates the case where the generating process of DMs is inaccurate in some  $t$ s. We further set the time variable  $t = 100$ , and fine-tune DMs with 1000 iterations, with the estimated  $\sigma_1 \approx 4.8$  as shown in Fig. 4. According to Eq. (2) and the analysis above, we can compute  $\|\delta'_{100}\|_2^2 \approx 2.65 \|\delta'\|_2^2$ . It means the additional noise  $\delta'$  introduced is even expanded in this case, leading to a significant error term  $\delta_t$ . Fig. 5 shows the experimental results under this setting, where we observe a significant error term  $\delta_t$ , resembling a corruption pattern, and consisting with the above analysis.
+
+**Vanishing of the Corruption Stage.** However, with the fine-tuning continues,  $\sigma_1$  drops as shown in Fig. 4, leading to a decreasing prediction error  $\delta_t$ . This indicates that the corruption stage vanishes, and the fine-tuned DMs gradually move to the state where they only strictly regenerate the training image  $x' \in \mathcal{D}$ . This is a classic case of “overfitting”, where the fine-tuned DMs lose their ability to generate diverse outputs and thus become unusable.
+
+In conclusion, the analysis in this Sec. 3.3 shows how the corruption stage happens when the learned distribution of DMs is highly limited with small  $\mathcal{I}_\theta$  and a high standard deviation  $\sigma_1$ .
+
+## 4 APPLYING BNNs TO FEW-SHOT FINE-TUNING ON DMs
+
+### 4.1 MOTIVATION
+
+Based on our analysis, the corruption stage primarily arises from a limited learned distribution with a small  $\mathcal{I}_\theta$ . Motivated by recent work on BNNs (Blundell et al., 2015; Harrison et al., 2023; Kristiadi et al., 2020; Sharma et al., 2023), which model the parameters  $\theta$  as random variables, we propose to apply BNNs in the few-shot fine-tuning process on DMs as a simple yet effective method to expand  $\mathcal{I}_\theta$ . Intuitively, the modeling of BNNs hinders the DMs to learn the exact distribution of the training dataset  $\mathcal{D}$ . Therefore, the DMs are encouraged to learn a larger and more robust distribution to counter the randomness. Moreover, the sampling randomness during the fine-tuning process can be regarded as an inherent data augmentation, indicating the corresponding  $\mathcal{I}_\theta$  is implicitly expanded.
+
+### 4.2 FORMULATION
+
+**Modeling.** BNNs model the parameters  $\theta$  as random variables. Therefore, the learned distribution of DMs with BNN is  $P(x|\mathcal{D}) = \int P(x|\theta)P(\theta|\mathcal{D})d\theta$ . Concretely,  $P(x|\theta)$  is the image distribution modeled by the DMs, and  $P(\theta|\mathcal{D})$  is the posterior parameter distribution with a given dataset  $\mathcal{D}$ .
+
+As the posterior distribution  $P(\theta|\mathcal{D})$  is intractable, a variational distribution  $Q_W(\theta)$  is applied to approximate it. We model the variational distribution of each parameter  $\theta$  as a Gaussian distribution:  $\theta \sim \mathcal{N}(\mu_\theta, \sigma_\theta^2)$ , where  $W = \{\mu_\theta, \sigma_\theta\}$  are trainable parameters. Considering the fine-tuning process, we initialize the expectation term  $\mu_\theta$  from the corresponding parameter of the pretrained DMs, denoted as  $\theta_0$ . Following previous work (Blundell et al., 2015), we apply the re-parameterization trick to obtain the gradients of the parameters, as detailed in Appendix Sec. C.
+
+![Figure 5: Experimental results for pretrained and fine-tuned DMs. The figure shows four images: 'Input image x_t', 'Predicted original image x_0 for pretrained model', 'Predicted original image x_0 for fine-tuned model', and 'Training image x'.' The first image shows a person in a red jacket with a small region of additional noise (indicated by a red arrow and label 'Additional noise delta''). The second image shows the predicted original image for the pretrained model, which still contains the noise. The third image shows the predicted original image for the fine-tuned model, which has removed the noise (indicated by a red arrow and label 'Removed noise delta'). The fourth image shows the training image x'.](abf2f799abc5d215de1ce8a2d5e2712f_img.jpg)
+
+Figure 5: Experimental results for pretrained and fine-tuned DMs. The figure shows four images: 'Input image x\_t', 'Predicted original image x\_0 for pretrained model', 'Predicted original image x\_0 for fine-tuned model', and 'Training image x'.' The first image shows a person in a red jacket with a small region of additional noise (indicated by a red arrow and label 'Additional noise delta''). The second image shows the predicted original image for the pretrained model, which still contains the noise. The third image shows the predicted original image for the fine-tuned model, which has removed the noise (indicated by a red arrow and label 'Removed noise delta'). The fourth image shows the training image x'.
+
+Figure 5: Experimental results for pretrained and fine-tuned DMs with an additional noise  $\delta'$  introduced in a small region of the noisy image  $x_t$  at  $t = 100$ . The pretrained DMs effectively remove  $\delta'$ , producing high-quality images. Conversely, the fine-tuned DMs fail to eliminate  $\delta'$ , with output images showing corruption patterns.
+
+{6}------------------------------------------------
+
+**Training.** During the fine-tuning process, the DMs are trained by minimizing the Kullback–Leibler (KL) divergence  $\text{KL}(Q_W(\theta) \| P(\theta | \mathcal{D}))$ , which is equivalent to minimizing
+
+$$\mathcal{L} = - \int Q_W(\theta) \log \frac{P(\theta, \mathcal{D})}{Q_W(\theta)} d\theta = \underbrace{\mathbb{E}_{\theta \sim Q_W(\theta)} [-\log P(\theta | \mathcal{D})]}_{\mathcal{L}_{DM}} + \underbrace{\text{KL}(Q_W(\theta) \| P(\theta))}_{\mathcal{L}_r}. \quad (3)$$
+
+Following previous work (Zhang et al., 2022), the above loss  $\mathcal{L}$  can be divided into two terms. In DMs, the first term can be seen as the modeled probability for the training dataset  $\mathcal{D}$ , and is equivalent to the expectation of the diffusion loss  $\mathcal{L}_{DM}$  shown in Sec. 2.1 on the parameters  $\theta$ . The second term can be seen as a regularization restricting the discrepancy between the variational distribution  $Q_W(\theta)$  and the prior distribution  $P(\theta)$ . We name it as the regularization loss  $\mathcal{L}_r$ . In few-shot fine-tuning, we regard the pretrained DMs naturally represent the prior information, so we set the prior distribution  $P(\theta)$  from the pretrained DMs, i.e.,  $P(\theta) = \mathcal{N}(\theta_0, \sigma^2)$ , where  $\sigma$  is a hyperparameter which represents the parameter randomness.
+
+In practice, we formulate our learning target as a linear combination of  $\mathcal{L}_{DM}$  and  $\mathcal{L}_r$  with a hyperparameter  $\lambda$ , i.e.,
+
+$$W^* = \arg \min_W \mathbb{E}_{\theta \sim Q_W(\theta)} \mathcal{L}_{DM} + \lambda \mathcal{L}_r. \quad (4)$$
+
+The training process is summarized in Appendix Alg. 1. Empirically, we find that using only  $\mathbb{E}_{\theta \sim Q_W(\theta)} \mathcal{L}_{DM}$ , i.e., setting  $\lambda$  as 0, is enough to improve few-shot fine-tuning. Nevertheless, we can reach a further trade-off between the generation diversity and image fidelity by adjusting  $\lambda$ .
+
+**Inference.** During the inference, we explicitly replace each parameter  $\theta$  with its mean value  $\mu_\theta$  and perform inference just as DMs without BNNs. It guarantees that we do not introduce any additional costs compared to fine-tuned DMs without BNNs when deployed in production.
+
+Motivated by previous approaches on BNN modules (Harrison et al., 2023; Kristiadi et al., 2020; Sharma et al., 2023), we only model a subset of parameters as random variables in practice, which reduces the computational costs. Fine-tuning DMs with BNNs is compatible with existing few-shot fine-tuning methods, including DreamBooth (Ruiz et al., 2023), LoRA (Hu et al., 2021), and OFT (Qiu et al., 2023). More details are presented in Appendix Sec. D.
+
+## 5 EXPERIMENTS
+
+We apply BNNs to different few-shot fine-tuning methods across different tasks. For object-driven generation, where the fine-tuned DMs synthesize images with the details of given objects, we use all the 30 classes from DreamBooth (Ruiz et al., 2023) dataset, each containing 4-6 images. For subject-driven generation, where the fine-tuned DMs synthesize images with the identities of given people, we follow previous research (Van Le et al., 2023), randomly selecting 30 classes of images from CelebA-HQ (Liu et al., 2018), each containing 5 images. Most training settings follow previous approaches (Hu et al., 2021; Qiu et al., 2023; Ruiz et al., 2023; Van Le et al., 2023). All experiments are conducted with 5 different seeds by default and we report the average performance here. We use Stable Diffusion v1.5<sup>3</sup> (SD v1.5) as the default model for fine-tuning. As for the BNNs, we set the default initialized standard derivation  $\sigma_\theta$  and prior standard derivation  $\sigma$  as 0.01. The  $\lambda$  is set as 0 by default. We show more details in Appendix Sec. H.1.
+
+Following previous approaches (Hu et al., 2021; Qiu et al., 2023; Ruiz et al., 2023), for each class, we fine-tune one DM and generate 100 images with various prompts. These generated images are used to measure the performance of different few-shot fine-tuning methods. In specific, we use Clip-T (Radford et al., 2021) to measure the text prompt fidelity, Clip-I (Hessel et al., 2021) and Dino (Caron et al., 2021) to assess image fidelity, and Lpips (Zhang et al., 2018) to evaluate generation diversity. Additionally, we apply Clip-IQA (Wang et al., 2023) to measure no-reference image quality. We show more details about these metrics in Appendix Sec. G.
+
+### 5.1 QUANTITATIVE AND VISUALIZED COMPARISONS
+
+We apply BNNs on different few-shot fine-tuning methods under both object-driven and subject-driven generation tasks. As shown in Tab. 1 and Fig. 6, BNNs bring considerable improvements
+
+<sup>3</sup><https://huggingface.co/runwayml/stable-diffusion-v1-5>
+
+{7}------------------------------------------------
+
+Table 1: Performance of fine-tuning with BNNs under object-driven and subject-driven generation.
+
+| Object-Driven Generation: DreamBooth Dataset |  |  |  |  | Subject-Driven Generation: CelebA Dataset |  |  |  |  |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|
+| Method | Clip-T† | Dino† | Clip-I† | Lpips† | Clip-IQA† | Method | Clip-T† | Dino† | Clip-I† | Lpips† | Clip-IQA† |
+| DreamBooth | 0.246 | 0.614 | 0.771 | 0.611 | 0.875 | DreamBooth | 0.186 | 0.642 | 0.723 | 0.511 | 0.789 |
+| DreamBooth w/ BNNs | <b>0.256</b> | <b>0.633</b> | <b>0.785</b> | <b>0.640</b> | <b>0.893</b> | DreamBooth w/ BNNs | <b>0.205</b> | <b>0.696</b> | <b>0.757</b> | <b>0.515</b> | <b>0.811</b> |
+| LoRA | 0.252 | 0.542 | 0.722 | 0.650 | 0.864 | LoRA | 0.216 | 0.602 | 0.656 | 0.644 | 0.804 |
+| LoRA w/ BNNs | <b>0.261</b> | <b>0.618</b> | <b>0.769</b> | <b>0.890</b> |  | LoRA w/ BNNs | <b>0.227</b> | <b>0.604</b> | <b>0.663</b> | <b>0.688</b> | <b>0.824</b> |
+| OFT | 0.233 | 0.649 | 0.786 | 0.629 | 0.861 | OFT | 0.164 | 0.675 | 0.728 | 0.549 | 0.784 |
+| OFT w/ BNNs | <b>0.242</b> | <b>0.661</b> | <b>0.791</b> | <b>0.646</b> | <b>0.884</b> | OFT w/ BNNs | <b>0.185</b> | <b>0.696</b> | <b>0.743</b> | <b>0.570</b> | <b>0.798</b> |
+
+![Figure 6: Comparison of few-shot fine-tuning methods with and without BNNs across subject-driven and object-driven scenarios. The figure is divided into two main sections. The top section shows 'Object-Driven Generation' with the prompt 'A [V] vase with a tree and autumn leaves in the background'. It displays input images of a red vase, and then compares 'Best-case generation' and 'Average-case generation' for 'w/o BNNs' and 'w/ BNNs' methods using DreamBooth, LoRA, and OFT. The bottom section shows 'Subject-Driven Generation' with the prompt 'A photo of a [V] person smiling'. It displays input images of a woman's face, and then compares 'Best-case generation' and 'Average-case generation' for 'w/o BNNs' and 'w/ BNNs' methods using DreamBooth, LoRA, and OFT. In both cases, the 'w/ BNNs' methods generally produce better quality images compared to their 'w/o BNNs' counterparts.](efca2dce0095c9dc2a68e9af6b2bfd40_img.jpg)
+
+Figure 6: Comparison of few-shot fine-tuning methods with and without BNNs across subject-driven and object-driven scenarios. The figure is divided into two main sections. The top section shows 'Object-Driven Generation' with the prompt 'A [V] vase with a tree and autumn leaves in the background'. It displays input images of a red vase, and then compares 'Best-case generation' and 'Average-case generation' for 'w/o BNNs' and 'w/ BNNs' methods using DreamBooth, LoRA, and OFT. The bottom section shows 'Subject-Driven Generation' with the prompt 'A photo of a [V] person smiling'. It displays input images of a woman's face, and then compares 'Best-case generation' and 'Average-case generation' for 'w/o BNNs' and 'w/ BNNs' methods using DreamBooth, LoRA, and OFT. In both cases, the 'w/ BNNs' methods generally produce better quality images compared to their 'w/o BNNs' counterparts.
+
+Figure 6: Comparison of few-shot fine-tuning methods with and without BNNs across subject-driven and object-driven scenarios. We show both best-case and average-case generated images measured by Clip-I, Dino and Clip-IQA. See Appendix Sec. I and L for more details.
+
+on all few-shot fine-tuning methods across text prompt fidelity (Clip-T) and image fidelity (Dino and Clip-I). These improvements arise from the expanded learned distribution contributed by BNNs, which makes the DMs more capable to generate reasonable images about the learned objects/subjects based on different prompts. BNNs also largely enhance the no-reference image quality (Clip-IQA). It is mainly because BNNs largely reduce the corruption phenomenon, which also partially improve the image fidelity (Dino and Clip-I) as the corrupted images are semantically distant to training images. Additionally, we observe BNNs boost the generation diversity (Lpips). We believe it naturally comes from the randomness introduced by BNNs.
+
+### 5.2 GENERALIZATION
+
+In this section, we further demonstrate BNNs can be applied to broader scenarios with notable performance improvement, including different DMs, varying training steps and a different number of training images. By default, we experiment on DreamBooth with BNNs for fine-tuning.
+
+Table 2: Performance under different DMs. All DMs are fine-tuned with DreamBooth on DreamBooth dataset.
+
+|  |  | Clip-T† | Dino† | Clip-I† | Lpips† | Clip-IQA† |
+|-|-|-|-|-|-|-|
+| SD v1.5 | w/o BNNs | 0.246 | 0.614 | 0.771 | 0.611 | 0.875 |
+|  | w/ BNNs | <b>0.256</b> | <b>0.633</b> | <b>0.785</b> | <b>0.640</b> | <b>0.893</b> |
+| SD v1.4 | w/o BNNs | 0.248 | 0.594 | 0.762 | 0.618 | 0.872 |
+|  | w/ BNNs | <b>0.249</b> | <b>0.620</b> | <b>0.777</b> | <b>0.656</b> | <b>0.895</b> |
+| SD v2.0 | w/o BNNs | 0.240 | 0.563 | 0.739 | 0.604 | 0.875 |
+|  | w/ BNNs | <b>0.248</b> | <b>0.610</b> | <b>0.764</b> | <b>0.649</b> | <b>0.925</b> |
+
+**Different DMs.** Following previous work (Ye et al., 2024), we experiment on different DMs. Concretely, besides default SD v1.5, we also experiment on SD v1.4 and SD v2.0 (Rombach et al.,
+
+{8}------------------------------------------------
+
+2022). We provide training details in Appendix Sec. H.2. Tab. 2 indicates that applying BNNs on different DMs of SD consistently improves few-shot fine-tuning across multiple metrics.
+
+**Training Iterations.** Fig. 7 shows that our method consistently improves the image quality (Clip-IQA). It also improves the image fidelity (Dino) when the training steps are larger than  $100 \times \text{Num}$ , where Num represents the number of images utilized during fine-tuning. With fewer iterations, the model suffers from underfitting. In this case, BNNs may make the underfitting problem further severe as BNNs encourage the model to learn a larger distribution. This results in the slightly decreased image fidelity (Dino) observed in  $100 \times \text{Num}$ .
+
+![Figure 7: Comparison of performance with and without BNNs on the DreamBooth dataset with different training iterations per image. (a) Dino: Line graph showing Dino score vs training iterations (50, 100, 200, 400). (b) Clip-IQA: Line graph showing Clip-IQA score vs training iterations (50, 100, 200, 400). Both graphs compare 'w/ BNNs' (green line with circles) and 'w/o BNNs' (blue line with triangles).](bedcca5cdf168e3508ef511d94ec514c_img.jpg)
+
+Data for Figure 7(a) Dino:
+
+| Iterations | w/ BNNs | w/o BNNs |
+|-|-|-|
+| 50 | 0.48 | 0.48 |
+| 100 | 0.58 | 0.52 |
+| 200 | 0.65 | 0.55 |
+| 400 | 0.68 | 0.50 |
+
+Data for Figure 7(b) Clip-IQA:
+
+| Iterations | w/ BNNs | w/o BNNs |
+|-|-|-|
+| 50 | 0.88 | 0.88 |
+| 100 | 0.88 | 0.88 |
+| 200 | 0.88 | 0.88 |
+| 400 | 0.88 | 0.75 |
+
+Figure 7: Comparison of performance with and without BNNs on the DreamBooth dataset with different training iterations per image. (a) Dino: Line graph showing Dino score vs training iterations (50, 100, 200, 400). (b) Clip-IQA: Line graph showing Clip-IQA score vs training iterations (50, 100, 200, 400). Both graphs compare 'w/ BNNs' (green line with circles) and 'w/o BNNs' (blue line with triangles).
+
+Figure 7: Comparison of performance with and without BNNs on the DreamBooth dataset with different training iterations per image.
+
+**Numbers of Training Images.** We also experiment under different numbers of training images. Concretely, we use the CelebA-HQ (Liu et al., 2018) dataset as it contains enough images per class. We randomly select five classes from the CelebA-HQ dataset and conduct experiments with different numbers of training images. We fix the training iterations to  $250 \times \text{Num}$ .
+
+![Figure 8: Comparison of the performance with different number of training images. (a) Dino: Bar chart showing Dino score for 4, 8, 12, 16 training images. (b) Clip-IQA: Bar chart showing Clip-IQA score for 4, 8, 12, 16 training images. Both charts compare 'w/ BNNs' (green bars) and 'w/o BNNs' (blue bars).](0f3e3ea50bcceb86f6c524ab2b6f3e7a_img.jpg)
+
+Data for Figure 8(a) Dino:
+
+| Num | w/ BNNs | w/o BNNs |
+|-|-|-|
+| 4 | 0.65 | 0.55 |
+| 8 | 0.68 | 0.58 |
+| 12 | 0.72 | 0.60 |
+| 16 | 0.75 | 0.62 |
+
+Data for Figure 8(b) Clip-IQA:
+
+| Num | w/ BNNs | w/o BNNs |
+|-|-|-|
+| 4 | 0.72 | 0.65 |
+| 8 | 0.75 | 0.68 |
+| 12 | 0.78 | 0.70 |
+| 16 | 0.80 | 0.72 |
+
+Figure 8: Comparison of the performance with different number of training images. (a) Dino: Bar chart showing Dino score for 4, 8, 12, 16 training images. (b) Clip-IQA: Bar chart showing Clip-IQA score for 4, 8, 12, 16 training images. Both charts compare 'w/ BNNs' (green bars) and 'w/o BNNs' (blue bars).
+
+Figure 8: Comparison of the performance with different number of training images.
+
+Fig. 8 illustrates that our method consistently improves image fidelity and quality under different numbers of training images. Such improvement is more obvious with more training images. This is primarily because the  $250 \times \text{Num}$  generally results in more severe corruption problems when the training image number Num is larger, hence BNNs bring in much improvement by expanding the learning distribution and relieving corruptions.
+
+### 5.3 ABLATION STUDY
+
+**Scale of Initialized  $\sigma_\theta$ .** The initialized standard deviation  $\sigma_\theta$  determines the extent of randomness during fine-tuning. We experiment with applying BNNs under varying initialized  $\sigma_\theta$ . Experimental results in Fig. 9a indicate that both the image fidelity (Dino) and quality (Clip-IQA) have been improved with a moderate initialized  $\sigma_\theta$ . However, when the initialized  $\sigma_\theta$  is too large, the DMs collapse and the performance rapidly decreases. This indicates the DMs are almost randomly updated because of the too large randomness introduced in this scenario.
+
+![Figure 9: Ablation study on different initialized sigma_theta and different lambda. (a) Different Initialized sigma_theta: Line graph showing Dino and Clip-IQA scores vs sigma_theta (0, 0.0025, 0.005, 0.01, 0.02, 0.04). (b) Different lambda: Line graph showing Lpips and Dino scores vs lambda (0, 0.5, 1, 2, 4, 8, 16).](ae21ece48844b14b230832cbb6fcf735_img.jpg)
+
+Data for Figure 9(a) Different Initialized  $\sigma_\theta$ :
+
+| $\sigma_\theta$ | Clip-IQA | Dino |
+|-|-|-|
+| 0 | 0.78 | 0.62 |
+| 0.0025 | 0.78 | 0.63 |
+| 0.005 | 0.78 | 0.64 |
+| 0.01 | 0.78 | 0.64 |
+| 0.02 | 0.78 | 0.64 |
+| 0.04 | 0.72 | 0.45 |
+
+Data for Figure 9(b) Different  $\lambda$ :
+
+| $\lambda$ | Lpips | Dino |
+|-|-|-|
+| 0 | 0.65 | 0.65 |
+| 0.5 | 0.68 | 0.60 |
+| 1 | 0.70 | 0.58 |
+| 2 | 0.72 | 0.55 |
+| 4 | 0.74 | 0.52 |
+| 8 | 0.76 | 0.50 |
+| 16 | 0.78 | 0.48 |
+
+Figure 9: Ablation study on different initialized sigma\_theta and different lambda. (a) Different Initialized sigma\_theta: Line graph showing Dino and Clip-IQA scores vs sigma\_theta (0, 0.0025, 0.005, 0.01, 0.02, 0.04). (b) Different lambda: Line graph showing Lpips and Dino scores vs lambda (0, 0.5, 1, 2, 4, 8, 16).
+
+Figure 9: Ablation study on different initialized  $\sigma_\theta$  and different  $\lambda$ .
+
+**Trade-off Between Diversity and Fidelity with Adjusted  $\lambda$ .** Eq. (4) indicates  $\lambda$  controls the trade-off between the generation diversity and image fidelity. As illustrated in Fig. 9b, an increasing  $\lambda$  leads to improving generation diversity (Lpips), albeit at the expense of image fidelity (Dino).
+
+**Where to Apply BNNs.** As mentioned in Sec. 4.2, we could model only a subset of parameters as random variables, i.e., applying BNNs on a part of layers in DMs. By default, we apply BNNs to all linear layers in the U-Net (Ronneberger et al., 2015) except the ones in the cross-attention modules and explore how different choices influence the performance and the training costs.
+
+As shown in Tab. 3, the DM can achieve relatively good performance with only the upblock of the U-Net applied with BNNs, which reduces the ratio of the parameters modified to about 13.8%. We can further decrease the training costs by only applying BNNs on the normalization layer, i.e., Layer Normalization (LN) (Ba et al., 2016) and Group Normalization (GN) (Wu & He, 2018) layers. This decreases the ratio of the parameters modified to about 0.02% with relatively strong performance.
+
+{9}------------------------------------------------
+
+Table 3: Comparison of performance when BNNs are applied to different layers in DMs. All experiments are conducted on DreamBooth dataset fine-tuning with DreamBooth. ‘N.A.’ refers to no BNN applied. ‘CrossAttn’ refers to BNN applied to cross-attention modules. We report the GPU memory costs and average time costs during fine-tuning for each class on one A100 GPU.
+
+| Layer Type | CrossAttn | Up Block Only | Clip-T† | Dino† | Clip-I† | Lips† | Clip-IQA† | Memory Costs(MB) | Time Costs(s) |
+|-|-|-|-|-|-|-|-|-|-|
+| N.A. |  |  | 0.246 | 0.614 | 0.771 | 0.611 | 0.875 | 27236 | 933 |
+| Linear |  |  | 0.256 | 0.633 | 0.785 | 0.640 | 0.893 | 31912 | 1107 |
+| Linear |  | ✓ | 0.259 | 0.614 | 0.776 | 0.646 | 0.890 | 29674 | 1040 |
+| Linear | ✓ |  | <b>0.272</b> | 0.611 | 0.760 | <b>0.672</b> | <b>0.897</b> | 33258 | 1157 |
+| LN+GN |  |  | 0.254 | <b>0.650</b> | <b>0.792</b> | 0.643 | 0.889 | 27268 | 1088 |
+
+Table 4: User study results of fine-tuned DMs with and without BNNs across various measurements under both best-case and average-case scenarios. The table depicts the percentage of users favoring generated images from fine-tuned DMs with and without BNNs.
+
+| Best-case Generation |  |  |  |  | Average-case Generation |  |  |  |  |
+|-|-|-|-|-|-|-|-|-|-|
+| Method | Subject Fidelity | Text Alignment | Image Quality |  | Method | Subject Fidelity | Text alignment | Image Quality |  |
+| DreamBooth | 34.4% | 32.3% | 30.2% |  | DreamBooth | <b>50.5%</b> | 35.6% | 28.7% |  |
+| DreamBooth w/ BNNs | <b>65.6%</b> | <b>67.7%</b> | <b>69.8%</b> |  | DreamBooth w/ BNNs | 49.5% | <b>64.4%</b> | <b>71.3%</b> |  |
+| LoRA | 48.0% | 34.7% | 31.6% |  | LoRA | 27.5% | 26.5% | 24.5% |  |
+| LoRA w/ BNNs | <b>52.0%</b> | <b>65.3%</b> | <b>68.4%</b> |  | LoRA w/ BNNs | <b>72.5%</b> | <b>73.5%</b> | <b>75.5%</b> |  |
+| OFT | 30.6% | 34.7% | 40.8% |  | OFT | 41.1% | 26.8% | 39.3% |  |
+| OFT w/ BNNs | <b>69.4%</b> | <b>65.3%</b> | <b>59.2%</b> |  | OFT w/ BNNs | <b>58.9%</b> | <b>73.2%</b> | <b>60.7%</b> |  |
+
+Additionally, when BNNs are applied to cross-attention modules, there is a significant increase in text prompt fidelity (Clip-T) at the expenses of image fidelity (Dino and Clip-I). Intuitively, this is because the input image aligns with only a limited set of prompts, and the applying of BNNs in cross-attention modules produces a further broader distribution matching more prompts.
+
+### 5.4 USER STUDY
+
+**User Study Setting.** We conduct user study to comprehensively present the superiority of applying BNNs on few-shot fine-tuning DMs. Concretely, we follow previous approaches (Qiu et al., 2023; Ruiz et al., 2023) and conduct a structured human evaluation for generated images, involving 101 participants. For this purpose, we utilize the DreamBooth dataset and the CelebA-HQ dataset. Subsequently, we generate four images per subject or object using a random prompt selected from 25 prompts across five models trained with different seeds. For comprehensive comparisons, we select both the best and average cases from the generated images (see Appendix Sec. I for details).
+
+Each participant is requested to compare image pairs generated by models that have been fine-tuned with and without BNNs, using three baseline models: DreamBooth, LoRA, and OFT. For each task, there are three binary-selection questions:
+
+- **Subject fidelity:** Which of the given two images contains a subject or object that is most similar to the following reference image (one from the training dataset)?
+- **Text alignment:** Which of the given two images best matches the text description provided below (the prompt used to generate the images)?
+- **Image quality:** Which of the given two images exhibits the higher image quality?
+
+**Results.** The results are presented in Tab. 4, which shows the percentage of participants favoring each method (with and without BNNs) based on the criteria described above. It is evident that the methods with BNNs are preferred in almost all scenarios for both best-case and average-case generations. This preference is particularly significant in terms of text alignment and overall image quality.
+
+## 6 CONCLUSION
+
+In this paper, we focus on few-shot fine-tuning in DMs, and reveal an unusual “corruption stage” where image fidelity first improves, then deteriorates due to noisy patterns, before recovering. With theoretical modeling, we attribute this phenomenon to the constrained learned distribution inherent in few-shot fine-tuning. By applying BNNs to broaden the learned distribution, we mitigate the corruption. Experiment results across various fine-tuning methods and datasets underscore the versatility of our approach.
+
+ Rest of paper (reference and Appendix) is removed.

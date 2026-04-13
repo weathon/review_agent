@@ -1,0 +1,274 @@
+
+
+{0}------------------------------------------------
+
+# PHIDIAS: A GENERATIVE MODEL FOR CREATING 3D CONTENT FROM TEXT, IMAGE, AND 3D CONDITIONS WITH REFERENCE-AUGMENTED DIFFUSION
+
+Zhenwei Wang<sup>1†</sup> Tengfei Wang<sup>2\*†</sup> Zexin He<sup>3†</sup> Gerhard Hancke<sup>1</sup> Ziwei Liu<sup>4</sup> Rynson W.H. Lau<sup>1‡</sup>  
+<sup>1</sup>City University of Hong Kong <sup>2</sup>Shanghai AI Lab <sup>3</sup>CUHK <sup>4</sup>S-Lab, NTU
+
+## ABSTRACT
+
+Generative 3D modeling has made significant advances recently, but it remains constrained by its inherently ill-posed nature, leading to challenges in quality and controllability. Inspired by the real-world workflow that designers typically refer to existing 3D models when creating new ones, we propose *Phidias*, a novel generative model that uses diffusion for reference-augmented 3D generation. Given an image, our method leverages a retrieved or user-provided 3D reference model to guide the generation process, thereby enhancing the generation quality, generalization ability, and controllability. *Phidias* integrates three key components: 1) *meta-ControlNet* to dynamically modulate the conditioning strength, 2) *dynamic reference routing* to mitigate misalignment between the input image and 3D reference, and 3) *self-reference augmentations* to enable self-supervised training with a progressive curriculum. Collectively, these designs result in significant generative improvements over existing methods. *Phidias* forms a unified framework for 3D generation using text, image, and 3D conditions, offering versatile applications. Project page: <https://RAG-3D.github.io/>.
+
+![Figure 1: Diagram illustrating the Phidias generative model's workflow for 3D asset creation. The diagram is divided into three horizontal sections: 'Image to 3D', 'Text to 3D', and '3D to 3D'. In the 'Image to 3D' section, an 'Image Input' is processed through a 'Retrieve' step to get a '3D Reference', which is then used to generate a 'Generated 3D Model'. In the 'Text to 3D' section, a 'Text Input' (e.g., 'a young anime-style girl with blue hair') is processed to generate an image, which is then retrieved to get a '3D Reference' for generating a 'Generated 3D Model'. In the '3D to 3D' section, a '3D Input' is processed through 'Image variations' and 'Self-Reference' to generate a '3D Reference', which is then used to generate 'Generated 3D Variation 1' and 'Generated 3D Variation 2'. Each section shows multiple examples of the input, the retrieved reference, and the generated output.](54a53f959bb7758332532c1cd5f0ad75_img.jpg)
+
+Figure 1: Diagram illustrating the Phidias generative model's workflow for 3D asset creation. The diagram is divided into three horizontal sections: 'Image to 3D', 'Text to 3D', and '3D to 3D'. In the 'Image to 3D' section, an 'Image Input' is processed through a 'Retrieve' step to get a '3D Reference', which is then used to generate a 'Generated 3D Model'. In the 'Text to 3D' section, a 'Text Input' (e.g., 'a young anime-style girl with blue hair') is processed to generate an image, which is then retrieved to get a '3D Reference' for generating a 'Generated 3D Model'. In the '3D to 3D' section, a '3D Input' is processed through 'Image variations' and 'Self-Reference' to generate a '3D Reference', which is then used to generate 'Generated 3D Variation 1' and 'Generated 3D Variation 2'. Each section shows multiple examples of the input, the retrieved reference, and the generated output.
+
+Figure 1: The proposed method, *Phidias*, can produce high-quality 3D assets given 3D references, which can be obtained via retrieval (top two rows) or specified by users (bottom row). It supports 3D generation from a single image, a text prompt, or an existing 3D model.
+
+## 1 INTRODUCTION
+
+The goal of 3D generative models is to empower artists and even beginners to effortlessly convert their design concepts into 3D models. Consider the input image in Fig. 1. A skilled craftsman can, through a blend of skills and creativity, convert a 2D concept image into an exquisite 3D model. This creative process may originate from artists’ pure imagination or, more commonly, through examining one or more existing 3D models as a source of inspiration (Bob, 2022; Carvajal, 2023). Artists
+
+<sup>†</sup>Intern at Shanghai AI Lab. <sup>\*</sup>Equal Contribution. <sup>‡</sup>Corresponding Authors.
+
+{1}------------------------------------------------
+
+often reference pre-existing 3D models to help improve the modeling quality. The question then arises: could we develop a reference-based 3D generative model that can replicate this capability?
+
+Over the years, a plethora of works (Wang et al., 2023; Liu et al., 2023b; Hong et al., 2023; Bensadoun et al., 2024) steadily expanded the frontiers of 3D generative models. These methods, while yielding stunning performance, still face several challenges. 1) **Generation quality.** A single image cannot furnish sufficient information for reconstructing a full 3D model, due to the ambiguity of this ill-posed task. It necessitates the generative model to “hallucinate” the unseen parts in a data-driven manner. However, this hallucination step can lead to view inconsistency and imprecise geometries that appear abrupt and unrealistic. 2) **Generalization ability.** These models often struggle with out-of-domain cases, such as atypical input views or objects, constrained by the data coverage of existing 3D datasets (Deitke et al., 2023). Meanwhile, the growing variety and quantity of object categories exacerbate the difficulty for generative models to learn implicit shape priors, with a limited model capacity v.s. an infinitely diverse array of objects. 3) **Controllability.** Due to the ambiguity, one input image can produce several plausible 3D models, each differing in shape, geometric style, and local patterns. Existing methods are constrained by limited diversity and controllability, which hinders the ability to predictably generate the desired 3D models.
+
+To address these challenges, we propose to take 3D models as additional inputs to guide the generation, inspired by the success of retrieval augmented generation (RAG) in language (Lewis et al., 2020) and image (Sheynin et al., 2022). Given an input image and a reference 3D model, we present *Phidias*, a novel reference-augmented diffusion model that unifies 3D generation from text, image, and 3D conditions. As shown in Fig. 1, the reference 3D model would help 1) **improve generation quality** by alleviating ambiguity with richer information for unseen views, 2) **enhance generalization capacity** by serving as a shape template or an external memory for generative models, and 3) **provide controllability** by allowing users to indicate desired shape patterns and geometric styles.
+
+Our method introduces a reference-augmented multi-view diffusion model, followed by sparse-view 3D reconstruction. The goal is to produce 3D models faithful to the input concept image, with improved quality by incorporating relevant information from the 3D reference. However, it is non-trivial to learn such a generative model due to the *Misalignment Dilemma*, where the discrepancy between the concept image and the 3D reference can lead to conflicts in the generation process. This requires our model to utilize the misaligned 3D reference adaptively. To tackle this challenge, *Phidias* leverages three key designs outlined below.
+
+The first is **meta-ControlNet**. Consider the 3D reference as conditions for the diffusion model. Unlike image-to-image translation works (Zhang et al., 2023; Wang et al., 2022) that demand the generated images to closely follow the conditions, we treat the reference model as auxiliary guidance to provide additional information. The generated multi-view images are expected to be consistent with the concept image, without requiring precise alignment with the reference model. To this end, we build our method on ControlNet and propose a meta-control network to dynamically modulate the conditioning strength when it conflicts with the concept image, based on their similarity.
+
+The second design is **dynamic reference routing** for further alleviating the misalignment. Rather than using the same 3D reference for the full diffusion process, we adjust its resolution across denoise timesteps. This follows the dynamics of the reverse diffusion process (Balaji et al., 2022), which generates the coarse structure in high-noised timesteps and details in low-noised timesteps. Thus, we can alleviate the generation conflicts by starting with a coarse 3D reference and progressively increasing its resolution as the reverse diffusion process continues.
+
+The final key design is **self-reference augmentations**. As it is not feasible to gather a large set of 3D models together with their matching references, a practical solution is to use the 3D model itself as its own reference (i.e., self-reference) for self-supervised learning. The trained model, however, may not work well when the 3D reference does not align with the concept image. To alleviate this problem, we apply a variety of augmentations to the 3D models to simulate this misalignment. In addition, we also introduce a progressive augmentation approach that leverages curriculum learning for the diffusion model to effectively utilize 3D references with varying degrees of similarity.
+
+Taken together, the above ingredients work in concert to enable *Phidias* to achieve stunning performances in 3D generation. Several application scenarios are thus supported: 1) Retrieval-augmented image-to-3D generation, 2) Retrieval-augmented text-to-3D generation, 3) Theme-aware 3D-to-3D generation, 4) Interactive 3D generation with coarse guidance, and 5) High-fidelity 3D completion.
+
+{2}------------------------------------------------
+
+![Figure 2: Overview of the Phidias model. The diagram illustrates a two-stage process for 3D model generation. Stage 1, 'Reference-Augmented Multi-View Generation', takes an 'Input' (Text, Image, 3D) and a '3D Reference' (from a Database or User) to produce 'Generated Multi-View Images'. This stage involves 'Dynamic Reference Routing', 'Meta-ControlNet', and 'Adaptive Control Signal' leading to 'Pretrained Multi-View Diffusion'. Stage 2, 'Sparse-View 3D Reconstruction', takes the 'Generated Multi-View Images' to produce the final 'Generated 3D Model'.](1b7d539e02a202c2cf2d97698b911447_img.jpg)
+
+Figure 2: Overview of the Phidias model. The diagram illustrates a two-stage process for 3D model generation. Stage 1, 'Reference-Augmented Multi-View Generation', takes an 'Input' (Text, Image, 3D) and a '3D Reference' (from a Database or User) to produce 'Generated Multi-View Images'. This stage involves 'Dynamic Reference Routing', 'Meta-ControlNet', and 'Adaptive Control Signal' leading to 'Pretrained Multi-View Diffusion'. Stage 2, 'Sparse-View 3D Reconstruction', takes the 'Generated Multi-View Images' to produce the final 'Generated 3D Model'.
+
+Figure 2: Overview of our *Phidias* model. It generates a 3D model in two stages: (1) reference-augmented multi-view generation and (2) sparse-view 3D reconstruction.
+
+We summarize our contributions as follows: 1) We propose the first reference-based 3D-aware diffusion model. 2) We design our model with three key component designs to enhance the performance. 3) Our model serves as a unified framework for 3D generation, which enables a variety of applications with text, image, and 3D inputs. 4) Extensive experiments show that our method outperforms existing approaches qualitatively and quantitatively.
+
+## 2 RELATED WORKS
+
+**Image to 3D.** Pioneering works (Melas-Kyriazi et al., 2023; Tang et al., 2023; Chen et al., 2024b) perform 3D synthesis by distilling image diffusion priors (Poole et al., 2023), but are time-consuming. Recent advancements have leveraged feed-forward models with 3D datasets. Some works use diffusion models to generate points (Nichol et al., 2022), neural radiance fields (Wang et al., 2023; Jun & Nichol, 2023; Gupta et al., 2023; Hong et al., 2024), SDF (Cheng et al., 2023; Zhang et al., 2024b), and gaussian splatting (Zhang et al., 2024a). Another line of works uses transformers for auto-regressive generation (Siddiqui et al., 2023; Chen et al., 2024a) or sparse-view reconstruction (Hong et al., 2023; Tang et al., 2024; Zou et al., 2023; Wang et al., 2024a; Xu et al., 2024), which often rely on multi-view diffusion for better performance.
+
+**Multi-View Diffusion Models.** Multi-view models reduce the complexities of 3D synthesis to consistent 2D synthesis. Seminal works (Liu et al., 2023b) have shown novel view synthesis capabilities with pre-trained image diffusion models (Rombach et al., 2022). Later, a plethora of works explored multi-view diffusion models with better consistency (Shi et al., 2023a; Wang & Shi, 2023; Shi et al., 2023b; Long et al., 2023; Liu et al., 2023a) by introducing cross-view communication. More recent works (Voleti et al., 2024; Chen et al., 2024c; You et al., 2024; Han et al., 2024) leverage video priors for multi-view generation by injecting cameras into video diffusion models. However, they still struggle with generalized and controllable generation due to the ill-posed nature of this problem.
+
+**Reference-Augmented Generation.** Retrieval-augmented generation (RAG) emerges to enhance the generation of both language (Lewis et al., 2020) and image (Sheynin et al., 2022; Blattmann et al., 2022) by incorporating relevant external information during the generation process. Under the context of 3D generation, the concept of reference-based generation is also widely applied. Some works (Chaudhuri et al., 2011; Kim et al., 2013; Schor et al., 2019) probe into the database for compatible parts and assemble them into 3D shapes. Some works (Xie et al., 2024; Richardson et al., 2023; Yeh et al., 2024; Zeng et al., 2023; 2024) utilize reference texts or images as guidance to generate textures for existing 3D meshes. Some works refer to a 3D exemplar model (Wu & Zheng, 2022; Wang et al., 2024b) to produce customized 3D assets. Despite success in specific contexts, they are time-consuming with per-case optimization. In contrast, our method focuses on learning a generalized feed-forward model that applies to reference-augmented 3D generation.
+
+## 3 APPROACH
+
+Given one *concept image*, we aim at leveraging an additional *3D reference model* to alleviate 3D inconsistency issues and geometric ambiguity that exist in 3D generation. The 3D reference model can be either provided by the user or retrieved from a large 3D database for different applications.
+
+{3}------------------------------------------------
+
+![Figure 3: Architectural designs for (a) meta-ControlNet and (b) dynamic reference routing.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 3 consists of two diagrams. Diagram (a) titled '(a) Meta-ControlNet' shows an input 'Concept Image' and '3D Reference' being processed through a 'CCM' (Canonical Coordinate Map) block to produce 'Front-View CCM' and 'Multi-View CCM' images. These are then encoded by an 'Encoder' to generate 'Multi-Scale Alignment Features'. A 'Meta-Controller' block takes these features and a 'Zero Conv' block to produce an 'Adaptive Control Signal'. Diagram (b) titled '(b) Dynamic Reference Routing' shows a '3D Reference' being processed through a series of 'CCM' blocks (High Res., Middle Res., Low Res.) to generate 'Low Noise Levels', 'Middle Noise Levels', and 'High Noise Levels' images. These are then processed by 'CCM' blocks to generate 't<sub>z</sub>' and 't<sub>a</sub>' signals, which are used to dynamically adjust the reference routing.
+
+Figure 3: Architectural designs for (a) meta-ControlNet and (b) dynamic reference routing.
+
+Figure 3: Architectural designs for (a) meta-ControlNet and (b) dynamic reference routing.
+
+The overall pipeline of *Phidias* is shown in Fig. 2, which involves two stages: reference-augmented multi-view generation and sparse-view 3D reconstruction.
+
+### 3.1 REFERENCE-AUGMENTED MULTI-VIEW DIFFUSION
+
+Multi-view diffusion models incorporate camera conditions into well-trained image diffusion models for novel-view synthesis with supervised fine-tuning. We aim to weave additional 3D references into these multi-view models for better generation quality, generalization ability, and controllability. Our approach can be built on arbitrary multi-view diffusion models, enabling reference-augmented 3D content creation from text, image, and 3D conditions. Specifically, we initialize our model with Zero123++ (Shi et al., 2023a), which simply tiles multi-view images for efficient generation conditioned on one input image  $c_{\text{image}}$ .
+
+To integrate 3D reference models  $c_{\text{ref}}$  into the diffusion process, we transform them into multi-view canonical coordinate maps (CCM) (Wang et al., 2024a), also known as NOCS maps (Wang et al., 2019), to condition the diffusion model. The choice of CCMs as the 3D representation is based on two reasons: 1) Multi-view images serve as more efficient and compatible inputs for diffusion models than meshes or voxels, as they have embedded camera viewing angles that correspond with the output images. 2) Reference models often share similar shapes with the concept image but vary significantly in texture details. By focusing on the geometry while omitting the texture, CCMs conditions can reduce generation conflicts arising from texture discrepancies. We add a conditioner branch to incorporate reference CCMs into the base multi-view diffusion model. The objective for training our diffusion model  $\epsilon_\theta$  can be then formulated as:
+
+$$\mathcal{L} = \mathbb{E}_{t, \epsilon \sim \mathcal{N}(0, 1)} \left[ \left\| \epsilon - \epsilon_\theta \left( \mathbf{x}_t, t, c_{\text{image}}, c_{\text{ref}} \right) \right\|^2 \right]. \quad (1)$$
+
+To leverage the powerful pertaining capability, only the additional conditioner for reference CCMs is trainable while the base multi-view diffusion is frozen. However, a challenge in our task is that the 3D reference may not strictly align with the concept image or, more commonly, vary in most local parts. We found naive conditioner designs such as ControlNet (Zhang et al., 2023) tend to produce undesirable artifacts, as they were originally designed for image-to-image translation where the generated images strictly align with the condition images. To mitigate this problem, we introduce three key designs for our reference-augmented diffusion model: (1) *Meta-ControlNet* for adaptive control of the conditioning strength (Sec. 3.2); (2) *Dynamic Reference Routing* for dynamic adjustment of the 3D reference (Sec. 3.3); (3) *Self-Reference Augmentation* for self-supervised training (Sec. 3.4).
+
+### 3.2 META-CONTROLNET.
+
+ControlNet is designed to add additional controls to pre-trained diffusion models for image-to-image translation. The conditions are derived from the ground-truth images for self-supervised learning, and thus the generated images are expected to follow the conditions. However, in our settings, the conditions are from the reference model, which often misaligns with the target 3D models we want to generate. The vanilla ControlNet fails to handle such cases. This necessitates further architecture advancement to accordingly adjust conditioning strength when the reference conflicts with the concept image. To this end, we propose meta-ControlNet, as shown in Fig. 3 (a). Meta-ControlNet is comprised of two collaborative subnets, a base ControlNet and an additional meta-controller.
+
+Base ControlNet is comprised of an image encoder, a trainable copy of down-sampling blocks and middle blocks of the base multi-view diffusion, denoted as  $\mathcal{F}_\theta^{\text{base}}(\cdot)$ , and a series of  $1 \times 1$  zero
+
+{4}------------------------------------------------
+
+convolution layers (Zero Convs)  $\mathcal{Z}_{\Theta}^{\text{base}}(\cdot)$ . It takes reference CCM maps  $c_{\text{ref}}$  as input to produce the control signal. To deal with misaligned 3D reference, we introduce an additional meta-controller to modulate the conditioning strength according to different similarity levels.
+
+Meta-controller shares a similar architecture but has different parameters  $\Theta'$ . It works as a knob that dynamically modulates base ControlNet to generate adaptive control signals. Meta-controller takes a pair  $c_{\text{pair}}$  of the concept image and the front-view reference CCM as input to produce meta-control signals based on their similarities. The meta-control signals are injected into diffusion models in two ways. On the one hand, meta-controller produces multi-scale alignment features  $y_{\text{meta1}} = \mathcal{Z}_{\Theta'}^{\text{meta1}}(\mathcal{F}_{\Theta'}^{\text{meta}}(z_{\text{pair}}))$  to be injected into base ControlNet. These features are applied to the down-sampling blocks of base ControlNet (Eq. 2) at each scale to guide the encoding of reference and help produce base-signals as:
+
+$$y_{\text{base}} = \mathcal{Z}_{\Theta}^{\text{base}}(\mathcal{F}_{\Theta}^{\text{base}}(y_{\text{meta1}}, z_{\text{ref}})), \quad (2)$$
+
+where  $z_{\text{ref}}$  and  $z_{\text{pair}}$  are the feature maps of  $c_{\text{ref}}$  and  $c_{\text{pair}}$  via the trainable encoders in Fig. 3 (a).
+
+On the other hand, meta-controller produces meta-signals  $y_{\text{meta2}} = \mathcal{Z}_{\Theta'}^{\text{meta2}}(\mathcal{F}_{\Theta'}^{\text{meta}}(z_{\text{pair}}))$  to be injected to the pretrained multi-view diffusion models. These features are added up to base-signal  $y_{\text{base}}$  to directly apply for the pretrained diffusion models. Totally, the final outputs of meta-ControlNet are adaptive control signals  $y_{\text{adaptive}}$  based on the similarity between the concept image and the 3D reference, as:
+
+$$y_{\text{adaptive}} = \lambda(y_{\text{base}} + y_{\text{meta2}}), \quad (3)$$
+
+where  $\lambda$  is the coefficient to adjust the strength of control signal for different applications.
+
+### 3.3 DYNAMIC REFERENCE ROUTING
+
+Reference models typically align roughly with the concept image in terms of coarse shape, but diverge significantly in local details. This misalignment can cause confusion and conflicts, as the generation process relies on both the image and reference model. To address this issue, we propose a dynamic reference routing strategy that adjusts the reference resolution across denoise timesteps, as shown in Fig. 3 (b). As widely observed during the reverse diffusion process, the coarse structure of a target image is determined in high-noised timesteps and fine details emerge later as the timestep goes on. This motivates us to start with low-resolution reference CCMs at high noise levels  $t_h$ . By lowering the resolution, reference models provide fewer details but exhibit smaller misalignment with the concept image. This enables reference models to assist in generating the global structure of 3D objects without significant conflicts. We then gradually increase the resolution of reference CCMs as the reverse diffusion process goes into middle noise levels  $t_m$  and low noise levels  $t_l$  to help refine local structures, e.g., progressively generating a curly tail from a straight one (Fig. 3 (b)). This design choice would ensure effective usage of both concept image and 3D reference during the multi-view image generation process while avoiding degraded generation caused by misalignment.
+
+### 3.4 SELF-REFERENCE AUGMENTATION
+
+A good reference model should resemble the target 3D model (with varied details) to provide additional geometric cues, but it is impractical to collect sufficient target-reference pairs for training. An intuitive solution is to retrieve a similar model from a large 3D database as the training reference. However, due to the limited variety in current databases, finding a perfect match is challenging. The retrieved reference can vary greatly in orientation, size and semantics. While this is a common situation in inference scenarios, where a very similar reference is often unavailable, we found training with these challenging pairs fails to effectively use the 3D reference. We conjecture that the learning process struggles due to the significant differences between the reference and target 3D, leading the diffusion model to disregard the references. To avoid the ‘idleness’ of reference, we developed a self-reference scheme that uses the target model as its own reference by applying various augmentations to mimic misalignment (refer to [Appendix A.5](#)). This approach ensures that the reference models are somewhat aligned with the target and more compatible, alleviating the learning difficulty. We further design a curriculum training strategy, which begins with minimal augmentations (very similar references) to force the diffusion model to rely on the reference for enhancement. Over time, we gradually increase augmentation strength and incorporate retrieved references, challenging the diffusion model to learn from references that do not closely match the target. Once trained, our model performs well with a variety of references, even those retrieved ones that are not very similar.
+
+{5}------------------------------------------------
+
+![Figure 4: Diverse retrieval-augmented image-to-3D results. The figure shows a grid of 6 rows and 2 columns of image-to-3D generation results. Each row starts with an 'Input image' on the left. The first column of results uses a 'Retrieved 3D Reference 1' to generate 'Generated Model 1'. The second column uses a 'Retrieved 3D Reference 2' to generate 'Generated Model 2'. The rows show various objects: a pagoda, a horse head, an axe, a robot, a bus, and a person. The generated models are diverse 3D assets that are faithful to the concept image and conform to the specific retrieved 3D reference in geometry.](afe5eb459b7c9cfe880b067777d876d8_img.jpg)
+
+Figure 4: Diverse retrieval-augmented image-to-3D results. The figure shows a grid of 6 rows and 2 columns of image-to-3D generation results. Each row starts with an 'Input image' on the left. The first column of results uses a 'Retrieved 3D Reference 1' to generate 'Generated Model 1'. The second column uses a 'Retrieved 3D Reference 2' to generate 'Generated Model 2'. The rows show various objects: a pagoda, a horse head, an axe, a robot, a bus, and a person. The generated models are diverse 3D assets that are faithful to the concept image and conform to the specific retrieved 3D reference in geometry.
+
+Figure 4: Diverse retrieval-augmented image-to-3D results. With a single input image, *Phidias* can generate diverse 3D models with different 3D references.
+
+### 3.5 SPARSE-VIEW 3D RECONSTRUCTION
+
+With multi-view images generated in the first stage, we can obtain final 3D models via sparse-view 3D reconstruction. This step can be built upon arbitrary sparse-view reconstruction models. Specifically, we finetune LGM (Tang et al., 2024) by expanding the number of input views from 4 to 6 and the resolution of each view from  $256 \times 256$  to  $320 \times 320$  so that the trained reconstruction model aligns with the multi-view images generated in our first stage.
+
+## 4 EXPERIMENTS
+
+In this section, we evaluate our method on image-to-3D generation, a significant area in 3D generation research. For each image, we retrieve a 3D reference model from a 3D database based on similarity (Zhou et al., 2024). The database used is a subset of Objaverse, containing 40K models. We anticipate that performance could be further enhanced with a larger database in the future. For the rest of this section, we compare *Phidias* with state-of-the-art methods and conduct ablation analysis. More results and implementation details can be found in [Appendix](#). Results on text-to-3D and 3D-to-3D generation can be found in [Sec. 5](#).
+
+### 4.1 COMPARISONS WITH STATE-OF-THE-ART METHODS
+
+We compare *Phidias* with five image-to-3D baselines: CRM (Wang et al., 2024a), LGM (Tang et al., 2024), InstantMesh (Xu et al., 2024), SV3D (Voleti et al., 2024), and OpenLRM (He & Wang, 2023).
+
+**Qualitative Results.** For visual diversity (Fig. 4), given the same concept image, *Phidias* can generate diverse 3D assets that are both faithful to the concept image and conforming to a specific retrieved 3D reference in geometry. For visual comparisons (Fig. 5), while the baseline methods can generate plausible results, they suffer from geometry distortion (e.g., horse legs). Besides, none of the existing methods can benefit from the 3D reference for improved generalization ability (e.g., excavator’s dipper) and controllability (e.g., cat’s tail) as ours.
+
+**Quantitative Results.** Following previous works, we conduct quantitative evaluation on google scanned objects (GSO) (Downs et al., 2022). We remove duplicated objects with the same shape
+
+{6}------------------------------------------------
+
+![Figure 5: Qualitative comparison on image-to-3D generation. The figure shows a grid of 3D models generated from input images. The rows represent different methods: Input (image + 3D), Ours, OpenLRM, CRM, LGM, InstantMesh, and SV3D. The columns show various objects: a building, a cat, a robot, a horse, and a car. Each method's output is shown for comparison.](9ebd85380ef496499e5f23ec0d9cd744_img.jpg)
+
+Figure 5: Qualitative comparison on image-to-3D generation. The figure shows a grid of 3D models generated from input images. The rows represent different methods: Input (image + 3D), Ours, OpenLRM, CRM, LGM, InstantMesh, and SV3D. The columns show various objects: a building, a cat, a robot, a horse, and a car. Each method's output is shown for comparison.
+
+Figure 5: Qualitative comparison on image-to-3D generation.
+
+Table 1: Quantitative comparison with baselines on image-to-3D synthesis.
+
+| Method | PSNR ↑ | SSIM ↑ | LPIPS ↓ | CLIP-P ↑ | CLIP-I ↑ | CD ↓ | F-Score ↑ |
+|-|-|-|-|-|-|-|-|
+| OpenLRM | 16.15 | 0.843 | 0.194 | 0.866 | 0.847 | 0.0446 | 0.805 |
+| LGM | 14.80 | 0.807 | 0.219 | 0.869 | 0.871 | 0.0398 | 0.831 |
+| CRM | 16.35 | 0.841 | 0.182 | 0.855 | 0.843 | 0.0443 | 0.796 |
+| SV3D | 16.24 | 0.838 | 0.203 | 0.879 | 0.866 | - | - |
+| InstantMesh | 14.63 | 0.796 | 0.235 | 0.882 | 0.880 | 0.0450 | 0.788 |
+| <b>Ours (GT Ref.)</b> | <b>20.37</b> | <b>0.870</b> | <b>0.117</b> | <b>0.911</b> | <b>0.885</b> | <b>0.0391</b> | <b>0.840</b> |
+| <b>Ours (Retrieved Ref.)</b> | <b>17.02</b> | <b>0.845</b> | <b>0.174</b> | <b>0.887</b> | <b>0.885</b> | <b>0.0402</b> | <b>0.833</b> |
+
+and randomly select 200 objects for evaluation. *For visual quality*, we report reconstruction metrics (PSNR, SSIM and LPIPS) on 20 novel views. We also report novel views’ CLIP similarity with paired GT (CLIP-P) and input image (CLIP-I). *For geometry quality*, we sample 50K points from mesh surface and compute Chamfer Distance (CD) and F-Score (with a threshold of 0.05). To align the generated mesh and GT, we unify their coordinate systems and re-scale them into a unit box. We report our results with the retrieved reference, *i.e.*, *Ours (Retrieved Ref.)*, and GT mesh as reference, *i.e.*, *Ours (GT Ref.)*, respectively. As shown in Tab. 1, ours, with either retrieved or GT reference, outperforms all baselines, benefiting from the proposed retrieval-augmented method. The results of *Ours (Retrieved Ref.)* seems marginal although *Phidias* produces plausible 3D models given various references that differ from GT (Fig. 7 (a)). We argue that this is caused by the differences between the retrieved references and GT when computing the reconstruction metrics. The actual performance of *Phidias* should be between *Ours (GT Ref.)* and *Ours (Retrieved Ref.)*.
+
+**User Study.** We further conduct a user study to evaluate human preferences among different methods. We publicly invite 30 users to complete a questionnaire for pairwise comparisons. We show the preference rate (*i.e.*, the percentage of users prefer ours compared to a baseline method) in Tab. 2, which suggests that our approach significantly outperforms existing methods in the image-to-3D task based on human preferences.
+
+### 4.2 ABLATION STUDY AND ANALYSIS
+
+**Ablation Studies.** We conduct ablation studies across four settings: a base model employing a standard ControlNet trained with self-reference, and three variants (each integrating one proposed component into the base model). The quantitative results in Tab. 3 demonstrate clear improvements in both visual and geometric metrics with our proposed components.
+
+{7}------------------------------------------------
+
+Table 2: User study.
+
+| Baseline | Pref. Rate |
+|-|-|
+| OpenLRM | 94.7% |
+| LGM | 95.8% |
+| CRM | 93.7% |
+| SV3D | 88.4% |
+| InstantMesh | 91.6% |
+
+Table 3: Quantitative ablation study of the proposed components.
+
+| Method | PSNR $\uparrow$ | SSIM $\uparrow$ | LPIPS $\downarrow$ | CLIP-P $\uparrow$ | CLIP-I $\uparrow$ | CD $\downarrow$ | F-Score $\uparrow$ |
+|-|-|-|-|-|-|-|-|
+| Base Model | 14.70 | 0.804 | 0.227 | 0.855 | 0.859 | 0.0424 | 0.826 |
+| + Meta-ControlNet | 16.35 | 0.833 | 0.190 | 0.881 | 0.878 | 0.0407 | 0.829 |
+| + Dynamic Ref. Routing | 14.76 | 0.816 | 0.221 | 0.868 | 0.861 | 0.0420 | 0.826 |
+| + Self-Ref. Augmentation | 16.57 | 0.840 | 0.182 | 0.880 | 0.883 | 0.0414 | 0.830 |
+| Full Model | <b>17.02</b> | <b>0.845</b> | <b>0.174</b> | <b>0.887</b> | <b>0.885</b> | <b>0.0402</b> | <b>0.833</b> |
+
+![Figure 6: Qualitative ablation study of the proposed components. The figure is divided into three rows: (a) Meta-ControlNet, (b) Dynamic Reference Routing, and (c) Self-Reference Augmentation. Each row shows 'Inputs' (a 2D image and a 3D model), 'Base Model' (three generated images), and the proposed method's result (three generated images). In (a), the Base Model generates a disconnected boat, while Meta-ControlNet generates a complete boat. In (b), the Base Model misses the rope, while Dynamic Reference Routing includes it. In (c), the Base Model generates a misaligned dog, while Self-Reference Augmentation generates a correctly aligned dog.](af54a0b30d50f3f8620b331cdc59ae3a_img.jpg)
+
+Figure 6: Qualitative ablation study of the proposed components. The figure is divided into three rows: (a) Meta-ControlNet, (b) Dynamic Reference Routing, and (c) Self-Reference Augmentation. Each row shows 'Inputs' (a 2D image and a 3D model), 'Base Model' (three generated images), and the proposed method's result (three generated images). In (a), the Base Model generates a disconnected boat, while Meta-ControlNet generates a complete boat. In (b), the Base Model misses the rope, while Dynamic Reference Routing includes it. In (c), the Base Model generates a misaligned dog, while Self-Reference Augmentation generates a correctly aligned dog.
+
+Figure 6: Qualitative ablation study of the proposed components.
+
+**Effectiveness of Meta-ControlNet.** To evaluate meta-ControlNet, we use both self-reference and retrieved reference for training, as the learning of Meta-Controller (Fig. 3 (a) top) requires reference models with varying levels of similarity. As shown in Fig. 6 (a), the base model trained with retrieved reference often ignores the reference, failing to follow the shape pattern (disconnected boat). This phenomenon stems from the considerable similarity variation among retrieved references, which confuses the diffusion model. The base model thereby struggles to determine when and how to use the reference as it lacks the ability to adjust to different levels of similarity. Consequently, they often end up with ignoring the reference models entirely. In contrast, meta-ControlNet equips the model with the capability to dynamically modulate the conditioning strength of the reference model, thereby effectively utilizing available references for improving or controlling the generation process.
+
+**Effectiveness of Dynamic Reference Routing.** Dynamic reference routing aims to alleviate local conflicts between the reference and concept images. As illustrated in Fig. 6 (b), when given a highly similar reference, the base model tends to rely heavily on it, leading to missing specific local details within the concept image, e.g., the rope on the left. By addressing these conflicts with dynamic routing, the model maintains the essential details of the concept image, while still benefiting from the guidance of the 3D reference.
+
+**Effectiveness of Self-Reference Augmentation.** As shown in Fig. 6 (c), without self-reference augmentation, the base model predominantly depends on the provided reference for generation. When given a significantly misaligned reference, the model tends to follow the reference’s structure, resulting in an undesired outcome. Conversely, self-reference augmentation ensures that the generated models remain faithful to the concept image, while using the reference as geometry guidance.
+
+**Analysis on Similarity Levels of the 3D Reference.** We analyze how similarity levels of 3D references would affect the performance. For each input, we retrieve three models ranked first (top-1), third (top-3), and fifth (top-5) in similarity scores, and randomly choose one model, to serve as 3D references. Quantitative results in Tab. 4 indicate that *Phidias* performs better with more similar references. Fig. 7 (a) shows *Phidias* generates diverse plausible results with different references. All results remain faithful to the input image in the front view, but show variations in shapes influenced by the specific reference used. Also, we found *Phidias* can still generate plausible results even with a random 3D reference (Fig. 7 (a) middle), indicating robustness to reference with different similarity levels. Moreover, as shown in Fig. 7 (b), *Phidias* will ignore inappropriate 3D reference with explicit conflicts and generate satisfying results following the input image, demonstrating the robustness to some extreme cases when the retrieved 3D reference significantly differs from the image.
+
+{8}------------------------------------------------
+
+Table 4: Quantitative analysis on similarity levels of the 3D reference.
+
+| Reference | PSNR $\uparrow$ | SSIM $\uparrow$ | LPIPS $\downarrow$ | CLIP-P $\uparrow$ | CLIP-I $\uparrow$ | CD $\downarrow$ | F-Score $\uparrow$ |
+|-|-|-|-|-|-|-|-|
+| Top-1 Retrieval | <b>17.02</b> | <b>0.845</b> | 0.174 | <b>0.887</b> | 0.885 | 0.0402 | <b>0.833</b> |
+| Top-3 Retrieval | 16.75 | 0.841 | <b>0.172</b> | <b>0.887</b> | <b>0.886</b> | <b>0.0395</b> | 0.830 |
+| Top-5 Retrieval | 15.96 | 0.835 | 0.185 | 0.886 | 0.884 | 0.0408 | 0.819 |
+| Random Reference | 14.74 | 0.820 | 0.226 | 0.884 | 0.882 | 0.0424 | 0.810 |
+| Without Reference | 15.90 | 0.836 | 0.188 | 0.886 | 0.880 | 0.0416 | 0.814 |
+
+![Figure 7: Qualitative analysis on similarity levels of the 3D Reference. (a) 3D Reference with Various Similarity Levels: Shows an input image of a shark and its 3D reference. Below are two rows of generated 3D models. The first row shows 'No 3D Reference', 'Random 3D Reference', and 'GT 3D Reference'. The second row shows 'Top-1 Retrieval', 'Top-3 Retrieval', and 'Top-5 Retrieval'. (b) 3D Reference with Explicit Conflicts: Shows an input image of a teapot and its 3D reference. Below are two rows of generated 3D models. The first row shows '3D Reference' and 'Generated 3D Model'. The second row shows 'Input Image', '3D Reference', and 'Generated 3D Model'.](c37fe03d7cad74ad675a0eb16aa43821_img.jpg)
+
+Figure 7: Qualitative analysis on similarity levels of the 3D Reference. (a) 3D Reference with Various Similarity Levels: Shows an input image of a shark and its 3D reference. Below are two rows of generated 3D models. The first row shows 'No 3D Reference', 'Random 3D Reference', and 'GT 3D Reference'. The second row shows 'Top-1 Retrieval', 'Top-3 Retrieval', and 'Top-5 Retrieval'. (b) 3D Reference with Explicit Conflicts: Shows an input image of a teapot and its 3D reference. Below are two rows of generated 3D models. The first row shows '3D Reference' and 'Generated 3D Model'. The second row shows 'Input Image', '3D Reference', and 'Generated 3D Model'.
+
+Figure 7: Qualitative analysis on similarity levels of the 3D Reference.
+
+![Figure 8: Phidias enables retrieval-augmented text-to-3D generation. The figure shows two examples. The first example is 'Gray humanoid character with a golden hooded robe', showing the input text, a concept image, a 3D reference, and a generated 3D model. The second example is 'Large, ornate, intricate Chinese building', showing the input text, a concept image, a 3D reference, and a generated 3D model.](aaec7c7044d764c324cdb35c0201da6f_img.jpg)
+
+Figure 8: Phidias enables retrieval-augmented text-to-3D generation. The figure shows two examples. The first example is 'Gray humanoid character with a golden hooded robe', showing the input text, a concept image, a 3D reference, and a generated 3D model. The second example is 'Large, ornate, intricate Chinese building', showing the input text, a concept image, a 3D reference, and a generated 3D model.
+
+Figure 8: *Phidias* enables retrieval-augmented text-to-3D generation by first converting the input text into a concept image, and then retrieving a 3D reference based on both the text and image.
+
+## 5 APPLICATIONS
+
+*Phidias* supports versatile applications beyond image-to-3D, such as text-to-3D, theme-aware 3D-to-3D, interactive 3D generation with coarse guidance, and high-fidelity 3D completion.
+
+**Text to 3D.** Text-to-3D generation can be converted to image-conditioned generation by transforming a text prompt into a concept image. However, the generated concept image can sometimes be atypical and may lose some information compared with original text input. To enhance generative quality, *Phidias* employs retrieval-augmented text-to-3D generation, as illustrated in Fig. 8. This involves first retrieving a set of 3D references based on the concept image, and then selecting the one that most closely matches the text description as the final reference.
+
+**Theme-Aware 3D-to-3D Generation.** This task aims to create a gallery of theme-consistent 3D variations from existing 3D models. Previous work (Wang et al., 2024b) proposed an optimization-based approach, which is time-consuming. *Phidias* supports fast generation by first generating image variations based on the input 3D model, and then transforming these variant images into 3D variations with the original 3D model itself as reference. The results are shown in Fig. 9, using 3D models from Sketchfab and previous works as inputs.
+
+**Interactive 3D Generation with Coarse Guidance.** Interactive generation gives users more control over the outputs, empowering them to make quick edits and receive rapid feedback. *Phidias* also provides this functionality, allowing users to continually adjust the geometry of generated 3D models using manually created coarse 3D shapes as reference models, as shown in Fig. 10.
+
+**High-Fidelity 3D Completion.** Given incomplete 3D models, as shown in Fig. 11, *Phidias* can be used to restore the missing components. Specially, by generating a complete front view through image inpainting and referencing to the original 3D model, *Phidias* can precisely predict and fill in the missing parts in novel views while maintaining the integrity and details of the origin, resulting in a seamlessly and coherently structured 3D model.
+
+{9}------------------------------------------------
+
+![Figure 9: Phidias facilitates rapid, theme-aware 3D-to-3D generation. The figure shows a 3D input of a character and a self-reference image of the same character. Below, there are image variations of the character in different poses and outfits. To the right, two generated 3D variations are shown, which are 3D versions of the image variations.](625e10f48104ba2b06b2220a9b224712_img.jpg)
+
+Figure 9: Phidias facilitates rapid, theme-aware 3D-to-3D generation. The figure shows a 3D input of a character and a self-reference image of the same character. Below, there are image variations of the character in different poses and outfits. To the right, two generated 3D variations are shown, which are 3D versions of the image variations.
+
+Figure 9: *Phidias* facilitates rapid, theme-aware 3D-to-3D generation by using an existing 3D model as a reference to transform its image variations into corresponding 3D variations.
+
+![Figure 10: Phidias enables interactive 3D generation with coarse 3D shapes as guidance. The figure shows an input image of a building. Below it, there are two rows of images. The first row shows a coarse shape (a simple blue block) and the generated 3D result (a detailed building). The second row shows a different coarse shape (a more complex blue block) and the generated 3D result (a different detailed building).](07f537f57749b75157f742525e6a8dbc_img.jpg)
+
+Figure 10: Phidias enables interactive 3D generation with coarse 3D shapes as guidance. The figure shows an input image of a building. Below it, there are two rows of images. The first row shows a coarse shape (a simple blue block) and the generated 3D result (a detailed building). The second row shows a different coarse shape (a more complex blue block) and the generated 3D result (a different detailed building).
+
+Figure 10: *Phidias* enables interactive 3D generation with coarse 3D shapes as guidance.
+
+![Figure 11: Phidias supports high-fidelity 3D completion. The figure shows an incomplete 3D model of a person. To the right, there are two rows of images. The first row shows the incomplete 3D model and the completed front views (a person flexing their muscles). The second row shows the completed 3D model from different angles.](61ce9760bffbecba8f5e63310be1ebec_img.jpg)
+
+Figure 11: Phidias supports high-fidelity 3D completion. The figure shows an incomplete 3D model of a person. To the right, there are two rows of images. The first row shows the incomplete 3D model and the completed front views (a person flexing their muscles). The second row shows the completed 3D model from different angles.
+
+Figure 11: *Phidias* supports high-fidelity 3D completion by using the completed front views to guide the restoration of the missing parts and the original 3D model to help preserve the original details.
+
+![Figure 12: Phidias allows users to explicitly decide the reference strength during inference. The figure shows an input image of a red armchair and a 3D reference of a blue armchair. Below, there are five rows of images. The first row shows the input image and the 3D reference. The second row shows the generated 3D results for different reference strengths: λ = 0, λ = 1, λ = 2, and λ = 3. As λ increases, the generated 3D result becomes more like the 3D reference.](f0d1b18586b17005ffd3fce23280b5a5_img.jpg)
+
+Figure 12: Phidias allows users to explicitly decide the reference strength during inference. The figure shows an input image of a red armchair and a 3D reference of a blue armchair. Below, there are five rows of images. The first row shows the input image and the 3D reference. The second row shows the generated 3D results for different reference strengths: λ = 0, λ = 1, λ = 2, and λ = 3. As λ increases, the generated 3D result becomes more like the 3D reference.
+
+Figure 12: *Phidias* allows users to explicitly decide the reference strength during inference.
+
+**3D RAG with Adjustable Reference Strength.** *Phidias* offers users enhanced control over the reference strength by adjusting  $\lambda$  in Eq. 3. This feature works as a “control knob” to vary the emphasis on the reference, which is particularly useful for scenarios like image-based 3D re-texturing and interpolation between the concept and reference, as illustrated in Fig. 12.
+
+## 6 CONCLUSION
+
+In this work, we introduce *Phidias*, a 3D-aware diffusion model enhanced by 3D references. By incorporating meta-ControlNet, dynamic reference routing, and self-reference augmentations, *Phidias* effectively leverages reference models with varying degrees of similarity for 3D generation. The proposed approach boosts the quality of 3D generation, expands its generalization capabilities, and improves user control. *Phidias* offers a unified framework for creating high-quality 3D content from diverse modalities, which enables versatile applications beyond image-to-3D, such as, but not limited to, text to 3D, theme-aware 3D-to-3D generation, interactive 3D generation, and high-fidelity 3D completion. More discussions of limitations and failure cases can be found in **Appendix B**.
+
+ Rest of paper (reference and Appendix) is removed.

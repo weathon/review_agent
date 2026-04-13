@@ -1,0 +1,312 @@
+
+
+{0}------------------------------------------------
+
+# G-TRANSFORMER FOR CONDITIONAL AVERAGE POTENTIAL OUTCOME ESTIMATION OVER TIME
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Estimating potential outcomes for treatments over time based on observational data is important for personalized decision-making in medicine. Yet, existing neural methods for this task either (1) do not perform proper adjustments for time-varying confounders, or (2) have a [problematic adjustment strategy](#). In order to address both limitations, we introduce the *G-transformer* (GT). Our GT is a novel, neural end-to-end model which adjusts for time-varying confounders in order to estimate conditional average potential outcomes (CAPOs) over time. Specifically, our GT is the first neural model to perform fully regression-based iterative G-computation for CAPOs in the time-varying setting. We evaluate the effectiveness of our GT across various experiments. In sum, this work represents a significant step towards personalized decision-making from electronic health records.
+
+## 1 INTRODUCTION
+
+Causal machine learning has recently garnered significant attention with the aim to personalize treatment decisions in medicine (Feuerriegel et al., 2024). Here, an important task is to estimate conditional average potential outcomes (CAPOs) from observational data over time (see Fig. 1). Recently, such data has become prominent in medicine due to the growing prevalence of electronic health records (EHRs) (Allam et al., 2021; Bica et al., 2021) and wearable devices (Battalio et al., 2021; Murray et al., 2016).
+
+Several neural methods have been developed for estimating CAPOs over time. However, existing methods suffer from one of two possible **limitations** (see Table 1): ① Methods **without proper adjustments for time-varying confounding** (Bica et al., 2020; Melnychuk et al., 2022; Seedat et al., 2022) exhibit significant bias, as they do not target the correct estimand. Hence, these methods have irreducible estimation errors irrespective of the amount of available data, which renders them unsuitable for medical applications. ② Existing methods that perform proper time-varying adjustments (Li et al., 2021; Lim et al., 2018) have a [problematic adjustment strategy](#). Here, the causal adjustments are based on the estimation of either the distributions of all time-varying covariates, or on inverse propensity weighting at several time steps in the future. While the former is impracticable when granular patient information is available, the latter suffers from strong overlap violations in the time-varying setting. To the best of our knowledge, there is no method that can address both ① and ②.
+
+To fill the above research gap, we propose the *G-transformer* (GT), a novel, neural end-to-end transformer that overcomes both limitations of existing methods. Our GT builds upon G-computation (Bang & Robins, 2005; Robins & Hernán, 2009). However, unlike existing neural models that perform G-computation (Li et al., 2021), our GT is based on an iterative *regression* scheme and does *not* require estimating any probability distribution. As a result, our GT has two clear strengths: it performs ① **proper adjustments for time-varying confounding**, and it is ② **fully regression-based with low-variance pseudo-outcomes**.
+
+Our contributions are three-fold:<sup>1</sup> (1) We introduce the first neural end-to-end method for estimating CAPOs over time with ① **proper adjustments for time-varying confounding**, while ② **avoiding**
+
+<sup>1</sup>Code and data are anonymized in [https://anonymous.4open.science/r/G\\_transformer-130D](https://anonymous.4open.science/r/G_transformer-130D). Upon acceptance, it will be moved to a public Github repository.
+
+{1}------------------------------------------------
+
+|  | CRN<br>(Bica et al., 2020) | TE-CDE<br>(Seedat et al., 2022) | CT<br>(Melnychuk et al., 2022) | RMSNs<br>(Lim et al., 2018) | G-Net<br>(Li et al., 2021) | GT<br>(ours) |
+|-|-|-|-|-|-|-|
+| ① Proper adjustments for time-varying confounding | ✗ | ✗ | ✗ | ✓ | ✓ | ✓ |
+| ② Fully regression-based | ✓ | ✓ | ✓ | ✓ | ✗ | ✓ |
+| Low-variance pseudo-outcomes | — | — | — | ✗ | — | ✓ |
+
+Table 1: Overview of key neural methods for estimating CAPOs over time. Methods that perform **proper adjustments** for time-varying confounding target the correct causal estimand and, therefore, have no infinite-data bias. **Fully regression-based methods avoid estimating high-dimensional probability distributions**. Further, we show that IPW generates pseudo-outcomes with larger variance than G-computation (Prop. 3).
+
+**a problematic adjustment strategy.** (2) To the best of our knowledge, we are the first to leverage regression-based iterative G-computation for estimating CAPOs over time **in a neural end-to-end training algorithm**. (3) We demonstrate the effectiveness of our GT across various experiments. In the future, we expect our GT to help personalize decision-making from patient trajectories in medicine.
+
+## 2 RELATED WORK
+
+We discuss methods for estimating CAPOs in the static setting, survival analysis with pseudo-outcomes, Q-learning, and other literature streams in an extended related work in Supplement A.
+
+**Estimating APOs over time:** Estimating average potential outcomes (APOs) over time has a long-ranging history in classical statistics and epidemiology (Lok, 2008; Robins, 1986; Rytgaard et al., 2022; van der Laan & Gruber, 2012). Popular approaches are the G-methods (Robins & Hernán, 2009), which include marginal structural models (MSMs) (Robins & Hernán, 2009; Robins et al., 2000), structural nested models (Robins, 1994; Robins & Hernán, 2009) and the G-computation (Bang & Robins, 2005; Robins, 1999; Robins & Hernán, 2009), and TMLE (?), which involves a targeting step for the APO. G-computation has also been incorporated into neural models such as LSTMs (Frauen et al., 2023a), and **TMLE to transformers** (Shirakawa et al., 2024). However, all of these works **do not** focus estimating CAPOs. In particular, (Shirakawa et al., 2024) is explicitly **biased** by sequentially targeting the APO and, thereby, ignores individual patient characteristics. Further, it require estimation of additional nuisance such as the propensity score. Finally, it is only evaluated for estimating APOs. As this entire literature stream does not account for individual-level patient characteristics, it serves a different purpose and is thus **not** suitable for personalized decision-making in medicine.
+
+**Estimating CAPOs over time:** In this work, we focus on the task of estimating the heterogeneous response to a sequence of treatments through *conditional average potential outcomes* (CAPOs).<sup>2</sup> Hence, we now summarize key neural methods that have been developed for estimating CAPOs over time (see Table 1). However, these methods fall into two groups with **important limitations**, as discussed in the following:
+
+**Limitation ① proper adjustments:** A number of neural methods for estimating CAPOs have been proposed that **do not properly adjust** for time-varying confounders (Bica et al., 2020; Melnychuk et al., 2022; Seedat et al., 2022). Therefore, they are *biased* as they do not target the correct estimand. Here, key examples are the counterfactual recurrent network (CRN) (Bica et al., 2020), the treatment effect neural controlled differential equation (TE-CDE) (Seedat et al., 2022) and the causal transformer (CT) (Melnychuk et al., 2022). These methods try to account for time-varying confounders through balanced representations. However, balancing was originally designed for reducing finite-sample
+
+<sup>2</sup>This is frequently known as *counterfactual prediction*. However, our work follows the potential outcomes framework (Neyman, 1923; Rubin, 1978), and we thus use the terminology of CAPO estimation.
+
+{2}------------------------------------------------
+
+estimation variance and *not* for mitigating confounding bias (Shalit et al., 2017). Hence, this is a heuristic and may even introduce another source of representation-induced confounding bias (Melnychuk et al., 2024). Unlike these methods, our GT performs **proper adjustments for time-varying confounders**.
+
+**Limitation ② adjustment strategy:** Existing neural methods with proper causal adjustments require estimating full probability distributions at several time steps in the future, or inverse propensity weighting, both of which are **problematic adjustment strategies**. Prominent examples are the recurrent marginal structural networks (RMSNs) (Lim et al., 2018) and the G-Net (Li et al., 2021). Here, the RMSNs leverage MSMs (Robins & Hernán, 2009; Robins et al., 2000) and construct pseudo-outcomes through inverse propensity weighting (IPW). However, IPW constructs pseudo-outcomes with large variance compared to G-computation as we show in Prop. 3. Further, the G-Net (Li et al., 2021) uses G-computation (Robins, 1999; Robins & Hernán, 2009) to adjust for confounding (see Supplement C). For this, G-Net proceeds by estimating the *entire distribution of all confounders at several time-steps in the future*. Therefore, may suffer from large estimation variance. Different to G-Net, our GT makes use of regression-based G-computation. We discuss key differences in Section 4.4 and Supplement F.
+
+**Research gap:** None of the above neural methods leverages G-computation (Bang & Robins, 2005; Robins, 1999) for estimating CAPOs through iterative regressions. Therefore, to the best of our knowledge, we propose the first neural end-to-end model that ① **properly adjusts for time-varying confounders** through regression-based iterative G-computation. Hence, our GT yields estimates of CAPOs over time that have ② **are fully regression-based with low-variance pseudo-outcomes**.
+
+## 3 PROBLEM FORMULATION
+
+**Setup:** We follow previous literature (Bica et al., 2020; Li et al., 2021; Lim et al., 2018; Melnychuk et al., 2022) and consider data that consist of realizations of the following random variables: (i) outcomes  $Y_t \in \mathbb{R}^{d_y}$ , (ii) covariates  $X_t \in \mathbb{R}^{d_x}$ , and (iii) treatments  $A_t \in \{0, 1\}^{d_a}$  at time steps  $t \in \{0, \dots, T\} \subset \mathbb{N}_0$ , where  $T$  is the time window that follows some unknown counting process. We are interested in estimating CAPOs for  $\tau$  steps in the future. For any random variable  $U_t \in \{Y_t, X_t, A_t\}$ , we write  $U_{t:t+\tau} = (U_t, \dots, U_{t+\tau})$  to refer to a specific subsequence of a random variable. We further write  $\bar{U}_t = U_{0:t}$  to denote the full trajectory of  $U$  including time  $t$ . Finally, we write  $\bar{H}_{t+\delta}^\delta = (\bar{Y}_{t+\delta}, \bar{X}_{t+\delta}, A_{t-1})$  for  $\delta \geq 0$ , and we let  $\bar{H}_t = \bar{H}_t^t$  denote the collective history of (i)–(iii).
+
+**Estimation task:** We are interested in estimating the *conditional* average potential outcome (CAPO) for a future, interventional sequence of treatments, given the observed history. For this, we build upon the potential outcomes framework (Neyman, 1923; Rubin, 1978) for the time-varying setting (Robins & Hernán, 2009; Robins et al., 2000). Hence, we aim to estimate the potential outcome  $\bar{Y}_{t+\tau}[a_{t:t+\tau-1}]$  at future time  $t+\tau$ ,  $\tau \in \mathbb{N}$ , for an interventional sequence of treatments  $a = a_{t:t+\tau-1}$ , conditionally on the observed history  $\bar{H}_t = \bar{h}_t$ . That is, our objective is to estimate
+
+$$\mathbb{E} [\bar{Y}_{t+\tau}[a_{t:t+\tau-1}] \mid \bar{H}_t = \bar{h}_t] . \quad (1)$$
+
+**Identifiability:** In order to estimate the causal quantity in Eq. (1) from observational data, we make the following identifiability assumptions (Robins & Hernán, 2009; Robins et al., 2000) that are standard in the literature (Bica et al., 2020; Li et al., 2021; Lim et al., 2018; Melnychuk et al., 2022; Seedat et al., 2022): (1) *Consistency:* For an observed sequence of treatments  $\bar{A}_t = \bar{a}_t$ , the observed outcome  $\bar{Y}_{t+1}$  equals the corresponding potential outcome  $\bar{Y}_{t+1}[\bar{a}_t]$ . (2) *Positivity:* For any history  $\bar{H}_t = \bar{h}_t$  that has non-zero probability  $\mathbb{P}(\bar{H}_t = \bar{h}_t) > 0$ , there is a positive probability  $\mathbb{P}(A_t = a_t \mid \bar{H}_t = \bar{h}_t) > 0$  of receiving any treatment  $A_t = a_t$ , where  $a_t \in \{0, 1\}^{d_a}$ . (3) *Sequential ignorability:* Given a history  $\bar{H}_t = \bar{h}_t$ , the treatment  $A_t$  is independent of the potential outcome  $\bar{Y}_{t+\delta}[a_{t:t+\delta-1}]$ , that is,  $A_t \perp \bar{Y}_{t+\delta}[a_{t:t+\delta-1}] \mid \bar{H}_t = \bar{h}_t$  for all  $a_{t:t+\delta-1} \in \{0, 1\}^{\delta \times d_a}$ .
+
+The above assumptions are standard in the literature (Bica et al., 2020; Li et al., 2021; Lim et al., 2018; Melnychuk et al., 2022; Seedat et al., 2022). In clinical scenarios, (i) consistency is typically guaranteed as long as data is properly recorded. Positivity can be guaranteed by filtering the data or by using propensity score clipping. Further, with growing amounts of observational data, this becomes less of a restriction. Finally, relaxations of (iii) ignorability are typically studied in sensitivity
+
+{3}------------------------------------------------
+
+analysis (Frauen et al., 2023b; Oprescu et al., 2023) and partial identification (Duarte et al., 2023), which is orthogonal to our work. We provide a discussion on the applicability in medical scenarios in Supplement B.
+
+**G-computation:** Estimating CAPOs without confounding bias poses a non-trivial challenge in the time-varying setting. The issue lies in the complexity of handling future time-varying confounders. In particular, for  $\tau \geq 2$  and  $1 \leq \delta \leq \delta' \leq \tau - 1$ , future covariates  $X_{t+\delta}$  and outcomes  $Y_{t+\delta}$  may affect the probability of receiving certain treatments  $A_{t+\delta'}$ . Importantly, the time-varying confounders are *unobserved* during inference time, which is generally known as *runtime confounding* (Coston et al., 2020). Therefore, in order to estimate the direct effect of an interventional treatment sequence, one needs to adjust for the time-varying confounders. That is, it is in general **insufficient** to only adjust for the history (Frauen et al., 2024) via
+
+$$\mathbb{E}[Y_{t+\tau} | a_{t:t+\tau-1}] | \bar{H}_t = \bar{h}_t \neq \mathbb{E}[Y_{t+\tau} | \bar{H}_t = \bar{h}_t, A_{t:t+\tau-1} = a_{t:t+\tau-1}]. \quad (2)$$
+
+As a side note, the problem of *time-varying confounding does not arise for one-step ahead predictions* (i.e.,  $\tau = 1$ ). Here, under assumptions (i)–(iii), conditioning on the observed history is equivalent to backdoor-adjustments in the static setting.
+
+One way to adjust for time-varying confounders is IPW (Robins & Hernán, 2009; Robins et al., 2000), which is leveraged by RMSNs (Lim et al., 2018). However, as we show in Supplement E, IPW is subject to large variance. Instead, we leverage G-computation (Bang & Robins, 2005; Robins, 1999; Robins & Hernán, 2009), which provides a rigorous way to account for the time-varying confounders through **proper adjustments**. Formally, G-computation identifies the causal quantity in Eq. (1) via
+
+$$\begin{aligned} & \mathbb{E}[Y_{t+\tau} | a_{t:t+\tau-1}] | \bar{H}_t = \bar{h}_t \\ &= \mathbb{E} \left\{ \mathbb{E} \left[ \dots \mathbb{E} \left\{ \mathbb{E} [Y_{t+\tau} | \bar{H}_{t+\tau-1}^t, A_{t:t+\tau-1} = a_{t:t+\tau-1}] | \bar{H}_{t+\tau-2}^t, A_{t:t+\tau-2} = a_{t:t+\tau-2} \right\} \right. \right. \\ & \quad \left. \left. \dots | \bar{H}_{t+1}^t, A_{t:t+1} = a_{t:t+1} \right] \right| \bar{H}_t = \bar{h}_t, A_t = a_t \right\}. \end{aligned} \quad (3)$$
+
+A derivation of the G-computation formula for CAPOs is given in Supplement C. However, due to the nested structure of G-computation, estimating Eq. (3) from data is challenging.
+
+So far, only G-Net (Li et al., 2021) has used G-computation for estimating CAPOs in a neural model. For this, G-Net makes a Monte Carlo approximation of Eq. (3) through
+
+$$\begin{aligned} & \int_{\mathbb{R}^{d_x \times \tau-1} \times \mathbb{R}^{d_y \times \tau-1}} \mathbb{E}[Y_{t+\tau} | \bar{H}_{t+\tau-1}^t = \bar{h}_{t+\tau-1}^t, A_{t:t+\tau-1} = a_{t:t+\tau-1}] \\ & \times \prod_{\delta=1}^{\tau-1} p(x_{t+\delta}, y_{t+\delta} | \bar{h}_t, x_{t+1:t+\delta-1}, y_{t+1:t+\delta-1}, a_{t:t+\delta-1}) d(x_{t+1:t+\tau-1}, y_{t+1:t+\tau-1}). \end{aligned} \quad (4)$$
+
+However, Eq. (76) requires estimating the *entire distribution* of all time-varying confounders at several time steps in the future, which may lead to **large estimation variance**. In particular, *all moments* of a  $(\tau - 1) \times (d_x + d_y)$ -dimensional random variable need to be estimated, which leads to estimation of nuisance. We provide more details in Supplement F.
+
+In contrast, our GT does **not** rely on high-dimensional integral approximation through Monte Carlo sampling. Further, our GT does **not** require estimating any probability distribution. Instead, it performs *regression-based iterative G-computation* in an end-to-end transformer architecture. Thereby, we perform **proper adjustments for time-varying confounding** through Eq. (3), **while relying only on regressions of via low-variance pseudo-outcomes**.
+
+## 4 G-TRANSFORMER
+
+In the following, we present our G-transformer. Inspired by (Bang & Robins, 2005; Robins, 1999; Robins & Hernán, 2009) for APOs, we reframe G-computation for CAPOs over time through recursive conditional expectations. Thereby, we precisely formulate the training objective of our GT through iterative regressions. Importantly, existing approaches for estimating APOs do not estimate potential outcomes on an individual level for a given history  $\bar{H}_t = \bar{h}_t$ , because of which they are **not**
+
+{4}------------------------------------------------
+
+sufficient for estimating CAPOs. Therefore, we proceed below by first extending regression-based iterative G-computation to account for the heterogeneous response to a treatment intervention. We then detail the architecture of our GT and provide details on the end-to-end training and inference.
+
+### 4.1 REGRESSION-BASED ITERATIVE G-COMPUTATION FOR CAPOs
+
+Our GT leverages G-computation as in Eq. (3) and, therefore, properly adjusts for time-varying confounders in Eq. (1). However, we do not attempt to integrate over the estimated distribution of all time-varying confounders. Instead, one of our main novelties is that our GT performs iterative regressions in a *neural end-to-end architecture*. This allows us to estimate Eq. (1) **without estimating high-dimensional probability distributions**.
+
+We reframe Eq. (3) equivalently as a recursion of conditional expectations. Thereby, we can formulate the iterative regression objective of our GT. In particular, our approach resembles an *iterative pseudo-outcome regression*. For this, let
+
+$$g_{t+\delta}^a(\bar{h}_{t+\delta}^t) = \mathbb{E}[G_{t+\delta+1}^a \mid \bar{H}_{t+\delta}^t = \bar{h}_{t+\delta}^t, A_{t:t+\delta} = a_{t:t+\delta}], \quad (5)$$
+
+where the *pseudo-outcomes* are defined as
+
+$$G_{t+\tau}^a = Y_{t+\tau} \quad (6)$$
+
+and
+
+$$G_{t+\delta}^a = g_{t+\delta}^a(\bar{H}_{t+\delta}^t) \quad (7)$$
+
+for  $\delta = 0, \dots, \tau - 1$ . By reformulating the G-computation formula through recursions, the nested expectations in Eq. (3) are now given by
+
+$$G_{t+\tau-1}^a = \mathbb{E}[Y_\tau \mid \bar{H}_{t-1}^t, A_{t:t+\tau-1} = a_{t:t+\tau-1}], \quad (8)$$
+
+$$G_{t+\tau-2}^a = \mathbb{E}[\mathbb{E}[Y_\tau \mid \bar{H}_{t-1}^t, A_{t:t+\tau-1} = a_{t:t+\tau-1}] \mid \bar{H}_{t-2}^t, A_{t:t+\tau-2} = a_{t:t+\tau-2}], \quad (9)$$
+
+$$\dots \quad (10)$$
+
+Hence, the G-computation formula in Eq. (3) can be rewritten as
+
+$$g_t^a(\bar{h}_t) = \mathbb{E}[Y_{t+\tau} \mid a_{t:t+\tau-1}] \mid \bar{H}_t = \bar{h}_t]. \quad (11)$$
+
+We show in the following proposition that iterative pseudo-outcome regression recovers the CAPOs and thus performs proper adjustments for time-varying confounding. We summarize the iterative pseudo-outcome regression for CAPOs in the following proposition.
+
+**Proposition 1.** *The regression-based iterative G-computation yields the CAPO in Eq. (1).*
+
+*Proof.* See Supplement D.1. □
+
+To further illustrate our regression-based iterative G-computation, we provide **two examples** in Supplement D.3, where we show step-by-step how our approach adjusts for time-varying confounding.
+
+In order to correctly estimate Eq. (2) for a given history  $\bar{H}_t = \bar{h}_t$  and an interventional treatment sequence  $a = a_{t:t+\tau-1}$ , all subsequent pseudo-outcomes in Eq. (7) are required. However, the ground-truth realizations of the pseudo-outcomes  $G_{t+\delta}^a$  are *not available in the data*. Instead, only realizations of  $G_{t+\tau}^a = Y_{t+\tau}$  in Eq. (6) are observed during the training. Hence, when training our GT, it alternately generates predictions  $\hat{G}_{t+\delta}^a$  of the pseudo-outcomes for  $\delta = 0, \dots, \tau - 1$ , which it then uses for learning the estimator of Eq. (5).
+
+Therefore, the training of our GT completes two steps in an iterative scheme: First, it runs a **(A) generation step**, where it generates predictions of the pseudo-outcomes Eq. (7). Then, it runs a **(B) learning step**, where it regresses the predictions  $\hat{G}_{t+\delta}^a$  for Eq. (7) and the observed  $G_{t+\tau}^a = Y_{t+\tau}$  in Eq. (6) on the history to update the estimator for Eq. (5). Finally, the updated estimators are used again in the next **(A) generation step**. This procedure resembles an iterative pseudo-outcome regression. Thereby, our GT is designed to simultaneously **(A) generate** predictions and **(B) learn** during the training. Both steps are performed in an end-to-end architecture, ensuring that information is shared across time and data is used efficiently. We detail the architecture as well as training and inference of our GT in the following sections.
+
+{5}------------------------------------------------
+
+![Figure 2: Neural end-to-end architecture and training of our G-transformer. The diagram illustrates the flow from input data (X_t, Y_t, A_t) through a multi-input transformer z_theta to hidden states Z_t^A, which are then processed by G-computation heads g_phi^delta to produce estimators G_t^delta. The training process involves learning estimators for different time steps delta.](191a4a245a7d36d03be9a990d0f758f5_img.jpg)
+
+The diagram shows the architecture of the G-transformer. At the top, input data  $\bar{X}_t, \bar{Y}_t, \bar{A}_{t-1}$  are processed by a multi-input transformer  $z_\theta$  to produce hidden states  $Z_t^A$ . These states are then passed to G-computation heads  $g_\phi^\delta$  for different time steps  $\delta$ . The heads are trained iteratively, with each head  $g_\phi^\delta$  learning to estimate the causal effect at time  $t+\delta$  given the history up to  $t$ . The legend indicates various components: GT variable in generation step (green diamond), GT component in generation step (green rectangle), interventional treatment sequence (green circle), computational graph (black arrow), GT variable in learning step (blue diamond), GT component in learning gradient (blue rectangle), observational treatment sequence (blue circle), blocked (red cross), shared variable (white diamond), shared component (white rectangle), other observable (grey circle), and inference / training (purple rectangle). The CAPO estimate is shown as a yellow diamond.
+
+Figure 2: Neural end-to-end architecture and training of our G-transformer. The diagram illustrates the flow from input data (X\_t, Y\_t, A\_t) through a multi-input transformer z\_theta to hidden states Z\_t^A, which are then processed by G-computation heads g\_phi^delta to produce estimators G\_t^delta. The training process involves learning estimators for different time steps delta.
+
+Figure 2: Neural end-to-end architecture and training of our G-transformer.
+
+### 4.2 MODEL ARCHITECTURE
+
+We first introduce the architecture of our GT. Then, we explain the iterative prediction and learning scheme inside our GT, which presents one of the main novelties. Finally, we introduce the inference procedure.
+
+Our GT consists of two key components (see Fig. 2): (i) a *multi-input transformer*  $z_\theta(\cdot)$ , and (ii) several *G-computation heads*  $\{g_\phi^\delta(\cdot)\}_{\delta=0}^{\tau-1}$ , where  $\theta, \phi$  denote the trainable weights. First, the multi-input transformer encodes the entire observed history. Then, the G-computation heads take the encoded history and perform the iterative regressions according to Eq. (5). We provide further details on the transformer architecture and an illustration in Supplement J. For all  $t = 1, \dots, T - \tau$  and  $\delta = 0, \dots, \tau - 1$ , the components are designed as follows:
+
+(i) *Multi-input transformer*: The backbone of our GT is a multi-input transformer  $z_\theta(\cdot)$ , which consists of three connected encoder-only sub-transformers  $z_k^\delta(\cdot)$ ,  $k \in \{1, 2, 3\}$  and is directly inspired by (Melnychuk et al., 2022). We provide details on the architecture in Supplement J. At time  $t$ , the transformer  $z_\theta(\cdot)$  receives data  $\bar{H}_t = (\bar{Y}_t, \bar{X}_t, \bar{A}_{t-1})$  as input and passes them to one corresponding sub-transformer. In particular, each sub-transformer  $z_k^\delta(\cdot)$  is responsible to focus on one particular  $\bar{U}_t^k \in \{\bar{Y}_t, \bar{X}_t, \bar{A}_{t-1}\}$  in order to effectively process the different types of inputs. Further, we ensure that information is shared between the sub-transformers, as we detail below. The output of the multi-input transformer are hidden states  $Z_t^A$ , which are then passed to the (ii) G-computation heads.
+
+(ii) *G-computation heads*: The G-computation heads  $\{g_\phi^\delta(\cdot)\}_{\delta=0}^{\tau-1}$  are the read-out component of our GT. As input at time  $t + \delta$ , the G-computation heads receive the hidden state  $Z_{t+\delta}^A$  from the above multi-input-transformer. Recall that we seek to perform the iterative regressions in Eq. (5) and Eq. (2), respectively. For this, we require estimators of  $\mathbb{E}[G_{t+\delta+1}^a \mid \bar{H}_{t+\delta}, A_{t+\delta}]$ . Hence, the G-computation heads compute
+
+$$\hat{\mathbb{E}}[G_{t+\delta+1}^a \mid \bar{H}_{t+\delta}, A_{t+\delta}] = g_\phi^\delta(Z_{t+\delta}^A, A_{t+\delta}), \quad (12)$$
+
+where
+
+$$Z_{t+\delta}^A = z_\theta(\bar{H}_{t+\delta}) \quad (13)$$
+
+for  $\delta = 0, \dots, \tau - 1$ . As a result, the G-computation heads and the multi-input transformer together give the estimators that are required for the regression-based iterative G-computation. In particular, we thereby ensure that, for  $\delta = 0$ , the last G-computation head  $g_\phi^0(\cdot)$  is trained as the estimator for the CAPO as given in Eq. (2). That is, for a fully trained multi-input transformer and G-computation heads, our GT estimates the CAPO via
+
+$$\hat{\mathbb{E}}[Y_{t+\tau} \mid a_{t:t+\tau-1}] \mid \bar{H}_t = \bar{h}_t] = g_\phi^0(z_\theta(\bar{h}_t), a_t). \quad (14)$$
+
+{6}------------------------------------------------
+
+### 4.3 ITERATIVE TRAINING AND INFERENCE TIME
+
+We now introduce the iterative training of our GT, which consists of a **(A) generation step** and a **(B) learning step**. Then, we show how inference for a given history  $\bar{H}_t = \bar{h}_t$  can be achieved. We provide pseudocode in Supplement K.
+
+**Iterative training:** Our GT is designed to estimate the CAPO  $g_\phi^a(\bar{h}_t)$  in Eq. (2) for a given history  $\bar{H}_t = \bar{h}_t$  and an interventional treatment sequence  $a = a_{t:t+\tau-1}$  via Eq. (14). Therefore, the G-computation heads in Eq. (12) require the pseudo-outcomes  $\{G_{t+\delta}^a\}_{\delta=1}^\tau$  from Eq. (7) during training. However, they are only available in the training data for  $\delta = \tau$ . That is, we only observe the factual outcomes  $G_{t+\tau}^a = Y_\tau$ .
+
+As a remedy, our GT first predicts the remaining pseudo-outcomes  $\{G_{t+\delta}^a\}_{\delta=1}^{\tau-1}$  in the **(A) generation step**. Then, it can use these generated pseudo-outcomes and the observed  $G_{t+\tau}^a$  for learning the network weights  $\phi$  in the **(B) learning step**. In the following, we write  $\tilde{G}_{t+\delta}^a = G_{t+\delta}^a$  for the generated pseudo-outcomes and, for notational convenience, we also write  $\tilde{G}_{t+\tau}^a = G_{t+\tau}^a$ .
+
+**(A) Generation step:** In this step, our GT generates  $\tilde{G}_{t+\delta}^a \approx g_\phi^a(\bar{H}_{t+\delta}^t)$  as substitutes for Eq. (7), which are the pseudo-outcomes in the iterative regression-based G-computation. Formally, our GT predicts these via
+
+$$\tilde{G}_{t+\delta}^a = g_\phi^\delta(Z_{t+\delta}^a, a_{t+\delta}), \quad (15)$$
+
+where
+
+$$Z_{t+\delta}^a = z_\theta(\bar{H}_{t+\delta}^t, a_{t:t+\delta-1}), \quad (16)$$
+
+for  $\delta = 0, \dots, \tau-1$ . For this, all operations are *detached* from the computational graph. Hence, our GT now has pseudo-outcomes  $\{\tilde{G}_{t+\delta}^a\}_{\delta=0}^\tau$ , which it can use in the following **(B) learning step**. Of note, these generated pseudo-outcomes will be noisy for early training epochs. However, as training progresses, the G-computation heads perform increasingly more accurate predictions, as we explain below.
+
+**(B) Learning step:** This step is responsible for updating the weights  $\phi$  of the multi-input transformer  $z_\theta(\cdot)$  and the G-computation heads  $\{g_\phi^\delta(\cdot)\}_{\delta=0}^{\tau-1}$ . For this, our GT learns the estimator for Eq. (5) via
+
+$$\tilde{\mathbb{E}}[G_{t+\delta+1}^a | \bar{H}_{t+\delta}^t, A_{t:t+\delta}] = g_\phi^\delta(Z_{t+\delta}^A, A_{t+\delta}), \quad (17)$$
+
+where
+
+$$Z_{t+\delta}^A = z_\theta(\bar{H}_{t+\delta}) \quad (18)$$
+
+for  $\delta = 0, \dots, \tau-1$ . In particular, the estimator is optimized by backpropagating the squared error loss  $\mathcal{L}$  for all  $\delta = 0, \dots, \tau-1$  and  $t = 1, \dots, T-\tau$  via
+
+$$\mathcal{L} = \frac{1}{T-\tau} \sum_{t=1}^{T-\tau} \left( \frac{1}{\tau} \sum_{\delta=0}^{\tau-1} \left( g_\phi^\delta(Z_{t+\delta}^A, A_{t+\delta}) - \tilde{G}_{t+\delta+1}^a \right)^2 \right). \quad (19)$$
+
+Then, after  $\phi$  is updated, we can use the updated estimator in the next **(A) generation step**.
+
+Here, it is important that for  $\delta = \tau$ , the pseudo-outcome  $\tilde{G}_{t+\tau}^a = Y_{t+\tau}$  is *available in the data*. By estimating  $Y_{t+\tau}$  with  $g_\phi^{\tau-1}(Z_{t+\tau-1}^A, A_{t+\tau-1})$ , it is ensured the last G-computation head  $g_\phi^{\tau-1}(\cdot)$  is learned on a ground-truth quantity. Thereby, the weights of  $g_\phi^{\tau-1}(\cdot)$  are gradually optimized during training. Hence, the predicted pseudo-outcome
+
+$$\tilde{G}_{t+\tau-1}^a = g_\phi^{\tau-1}(Z_{t+\tau-1}^A, a_{t+\tau-1}) \quad (20)$$
+
+in the next **(A) generation step** become more accurate. Therefore, the G-computation head  $g_\phi^{\tau-2}(\cdot)$  is learned on a more accurate prediction in the following **(B) learning step**, which thus leads to a better generated pseudo-outcome  $\tilde{G}_{t+\tau-2}^a$ , and so on. As a result, the optimization of the G-computation heads gradually improves from  $g_\phi^{\tau-1}(\cdot)$  up to  $g_\phi^0(\cdot)$ .
+
+{7}------------------------------------------------
+
+**Inference at runtime:** Finally, we introduce how inference is achieved with our GT. Given a history  $\bar{H}_t = \bar{h}_t$  and an interventional treatment sequence  $a = a_{t:t+\tau-1}$ , our GT is trained to estimate of Eq. (1) through Eq. (2). For this, our GT computes the CAPO via
+
+$$\hat{g}_t^n(\bar{h}_t) = \hat{\mathbb{E}}[G_{t+1}^a \mid \bar{H}_t = \bar{h}_t, A_t = a_t] = g_\phi^0(z_\theta(\bar{h}_t), a_t). \quad (21)$$
+
+We summarize this in the following proposition.
+
+**Proposition 2.** *Our GT estimates the G-computation formula as in Eq. (2) and, therefore, performs proper adjustments for time-varying confounders.*
+
+*Proof.* See Supplement D.2. □
+
+### 4.4 ADVANTAGES OVER EXISTING APPROACHES
+
+In the following, we explain the differences of our GT compared to (i) CT (Melnychuk et al., 2022) and (ii) G-Net (Li et al., 2021), and (iii) RMSNs (Lim et al., 2018). Importantly, our method has an entirely different learning algorithm that allows for *proper adjustments* in an *end-to-end* approach through iterative regressions.
+
+Our GT vastly differs from CT (Melnychuk et al., 2022). Recall that CT does **not** perform proper adjustments for time-varying confounding. In particular, CT targets  $\mathbb{E}[Y_{t+\tau} \mid H_t = h_t, A_{t:t+\tau} = a_{t:t+\tau}]$ , which is **not** the CAPO (Frauen et al., 2024). Hence, it targets an *incorrect estimand*, leading to irreducible *bias*. Therefore, deploying it to medical scenarios would be irresponsible. In contrast, our GT leverages iterative regression based on the G-computation to *correctly* target the CAPO (Prop. 2). To achieve this, we propose a new generation-learning approach inside our GT.
+
+Our GT is also vastly different from G-Net (Li et al., 2021). In order to estimate a  $\tau$ -step-ahead CAPO, G-Net requires (i) a  $d_y$ -dimensional regression as well as estimating the *entire distribution* of a  $(\tau - 1) \times (d_y + d_x)$ -dimensional confounding variable. That is, it needs to estimate *all moments* of a *high-dimensional* random variable. In contrast, our GT only requires  $\tau$  regressions of a  $d_y$ -dimensional outcome and, hence, only needs to estimate the *first moment* of a *much lower dimensional* random variable. Compared to G-Net, our estimation strategy is unproblematic as it does **not** fit unnecessary nuisance. We provide a detailed comparison in Supplement F.
+
+Finally, RMSNs (Lim et al., 2018) also rely on pseudo-outcome regressions. However, their pseudo-outcomes are constructed via inverse propensity weighting, which leads to pseudo-outcomes with larger variance than ours:
+
+**Proposition 3.** *Pseudo-outcomes constructed via inverse propensity weighting have larger variance than pseudo-outcomes in our G-transformer.*
+
+*Proof.* See Supplement E. □
+
+## 5 EXPERIMENTS
+
+We show the performance of our GT against key neural methods for estimating CAPOs over time (see Table 1). Further details (e.g., implementation details, hyperparameter tuning, runtime) are given in Supplement L. We report ablation studies of our GT in Supplement G.1.
+
+### 5.1 SYNTHETIC DATA
+
+First, we follow common practice in benchmarking for causal inference (Bica et al., 2020; Li et al., 2021; Lim et al., 2018; Melnychuk et al., 2022) and evaluate the performance of our GT against other baselines on fully synthetic data. The use of synthetic data is beneficial as it allows us to simulate the outcomes under a sequence of interventions, which are unknown in real-world datasets. Thereby, we are able to evaluate the performance of all methods for estimating CAPOs over time. Here, our main aim is to show that our GT is *robust against increasing levels of confounding*.
+
+{8}------------------------------------------------
+
+|  | $\gamma = 10$ | $\gamma = 11$ | $\gamma = 12$ | $\gamma = 13$ | $\gamma = 14$ | $\gamma = 15$ | $\gamma = 16$ | $\gamma = 17$ | $\gamma = 18$ | $\gamma = 19$ | $\gamma = 20$ |
+|-|-|-|-|-|-|-|-|-|-|-|-|
+| CRN (Bica et al., 2020) | 4.05 ± 0.55 | 5.45 ± 1.68 | 6.17 ± 1.27 | 4.98 ± 1.40 | 5.24 ± 0.33 | 4.84 ± 0.95 | 5.41 ± 1.20 | 5.09 ± 0.77 | 5.08 ± 0.87 | 4.47 ± 0.84 | 4.80 ± 0.70 |
+| TE-CDE (Seeday et al., 2022) | 4.08 ± 0.54 | 4.21 ± 0.42 | 4.33 ± 0.11 | 4.48 ± 0.47 | 4.39 ± 0.38 | 4.67 ± 0.65 | 4.84 ± 0.46 | 4.31 ± 0.38 | 4.44 ± 0.53 | 4.61 ± 0.42 | 4.72 ± 0.45 |
+| CT (Melnychuk et al., 2022) | 3.44 ± 0.73 | 3.70 ± 0.77 | 3.60 ± 0.62 | 3.87 ± 0.68 | 3.88 ± 0.75 | 3.87 ± 0.65 | 5.26 ± 1.67 | 4.04 ± 0.74 | 4.13 ± 0.90 | 4.30 ± 0.72 | 4.49 ± 0.94 |
+| RMSNs (Lim et al., 2018) | 3.34 ± 0.20 | 3.41 ± 0.17 | 3.61 ± 0.25 | 3.76 ± 0.25 | 3.92 ± 0.26 | 4.22 ± 0.40 | 4.30 ± 0.52 | 4.48 ± 0.59 | 4.60 ± 0.46 | 4.47 ± 0.53 | 4.62 ± 0.51 |
+| G-Net (Li et al., 2021) | 3.51 ± 0.37 | 3.71 ± 0.33 | 3.80 ± 0.29 | 3.89 ± 0.27 | 3.91 ± 0.26 | 3.94 ± 0.26 | 4.05 ± 0.37 | 4.09 ± 0.41 | 4.22 ± 0.53 | 4.21 ± 0.55 | 4.24 ± 0.45 |
+| <b>GT (ours)</b> | 3.13 ± 0.22 | 3.16 ± 0.14 | 3.31 ± 0.20 | 3.27 ± 0.14 | 3.30 ± 0.11 | 3.49 ± 0.30 | 3.53 ± 0.26 | 3.56 ± 0.26 | 3.41 ± 0.29 | 3.59 ± 0.21 | 3.71 ± 0.27 |
+| Rel. improvement | 6.4% | 7.3% | 7.9% | 12.9% | 15.0% | 9.9% | 12.9% | 13.1% | 17.4% | 14.8% | 12.5% |
+
+Table 2: RMSE on synthetic data based on the tumor growth model with  $\tau = 2$ . Our GT consistently outperforms all baselines. We highlight the relative improvement over the best-performing baseline. Reported: average RMSE  $\pm$  standard deviation over five seeds.
+
+Our main evaluation metric is the *root mean squared error* (RMSE), which is the appropriate evaluation metric for estimating CAPOs and is standard in the literature (Bica et al., 2020; Li et al., 2021; Lim et al., 2018; Melnychuk et al., 2022). Of note, all baselines and our GT are inherently designed for CAPO estimation. Hence, the best-performing method for estimating CAPOs is immediately the best at estimating conditional average treatment effects CATEs).
+
+**Setting:** For this, we use data based on the pharmacokinetic-pharmacodynamic tumor growth model (Geng et al., 2017), which is a standard dataset for benchmarking causal inference methods in the time-varying setting (Bica et al., 2020; Li et al., 2021; Lim et al., 2018; Melnychuk et al., 2022). Here, the outcome  $Y_t$  is the volume of a tumor that evolves according to the stochastic process  $Y_{t+1} = (1 + \rho \log \left( \frac{K}{Y_t} \right) - \alpha_c c_t - (\alpha_r d_t + \beta_r d_t^2) + \epsilon_t) Y_t$ , where  $\alpha_c$ ,  $\alpha_r$ , and  $\beta_r$  control the strength of chemo- and radiotherapy, respectively, and where  $K$  corresponds to the carrying capacity, and where  $\rho$  is the growth parameter. The radiation dosage  $d_t$  and chemotherapy drug concentration  $c_t$  are applied with probabilities  $\sigma(\gamma/D_{\max}(\bar{D}_{15}(Y_{t-1} - \bar{D}_{\max}/2)))$ , where  $D_{\max}$  is the maximum tumor volume,  $\bar{D}_{15}$  the average tumor diameter of the last 15 time steps, and  $\gamma$  controls the confounding strength. We use the same parameterization as in (Melnychuk et al., 2022). For training, validation, and testing, we sample  $N = 1000$  trajectories of lengths  $T \leq 30$  each.
+
+We are interested in the performance of our GT for increasing levels of confounding. We thus increase the confounding from  $\gamma = 10$  to  $\gamma = 20$ . For each level of confounding, we fix an arbitrary intervention sequence and simulate the outcomes under this intervention for testing.
+
+**Results:** Table 2 shows the average RMSE over five different runs for a prediction horizon of  $\tau = 2$ . Of note, we emphasize that our comparison is fair (see hyperparameter tuning in Supplement L.1). We make the following observations:
+
+First, our GT outperforms all baselines by a significant margin. Importantly, as our GT performs proper adjustments for time-varying confounding, it is robust against increasing  $\gamma$ . In particular, our GT achieves a performance improvement over the best-performing baseline of up to 17.4%. Further, our GT is highly stable, as can be seen by low standard deviation in the estimates, especially compared to the baselines. In sum, our GT performs best in estimating the CAPOs, especially under increasing confounding strength.
+
+Second, the ① baselines that do not perform proper adjustments (i.e., **CRN** (Bica et al., 2020), **TE-CDE** (Seeday et al., 2022), and **CT** (Melnychuk et al., 2022)) exhibit large variations in performance and are thus highly unstable. This is expected, as they do not target the correct causal estimand and, accordingly, suffer from the increasing confounding.
+
+Third, the baselines with ② [problematic adjustment strategies](#) (i.e., **RMSNs** (Lim et al., 2018) and **G-Net** (Li et al., 2021)) are slightly more stable than the no-adjustment baselines. This can be attributed to that the tumor growth model has no time-varying covariates  $X_t$  and to that we are only focusing on  $\tau = 2$ -step ahead predictions, both of which reduce the variance. However, the RMSNs and G-Net are still significantly worse than the estimates provided by our GT.
+
+### 5.2 SEMI-SYNTHETIC DATA
+
+Next, we study how our GT performs when (i) the covariate space is *high-dimensional* and when (ii) the *prediction windows  $\tau$  become larger*. For this, we use semi-synthetic data, which, similar to the fully-synthetic dataset allows us to access the ground-truth outcomes under an interventional sequence of treatments for benchmarking.
+
+{9}------------------------------------------------
+
+|  | $N = 1000$ |  |  |  |  | $N = 2000$ |  |  |  |  | $N = 3000$ |  |  |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  | $\tau = 2$ | $\tau = 3$ | $\tau = 4$ | $\tau = 5$ | $\tau = 6$ | $\tau = 2$ | $\tau = 3$ | $\tau = 4$ | $\tau = 5$ | $\tau = 6$ | $\tau = 2$ | $\tau = 3$ | $\tau = 4$ | $\tau = 5$ | $\tau = 6$ |
+| CRN (Bica et al., 2020) | 0.42 ± 0.11 | 0.58 ± 0.21 | 0.74 ± 0.31 | 0.84 ± 0.42 | 0.95 ± 0.51 | 0.39 ± 0.12 | 0.50 ± 0.14 | 0.58 ± 0.15 | 0.64 ± 0.16 | 0.70 ± 0.17 | 0.37 ± 0.10 | 0.46 ± 0.11 | 0.56 ± 0.13 | 0.65 ± 0.16 | 0.75 ± 0.21 |
+| TE-CR (Seelke et al., 2022) | 0.76 ± 0.09 | 0.85 ± 0.15 | 1.07 ± 0.22 | 1.15 ± 0.25 | 1.24 ± 0.29 | 0.70 ± 0.08 | 0.87 ± 0.17 | 1.06 ± 0.25 | 1.14 ± 0.30 | 1.27 ± 0.32 | 0.71 ± 0.09 | 0.78 ± 0.09 | 0.89 ± 0.11 | 0.94 ± 0.12 | 1.02 ± 0.13 |
+| CT (Melnychuk et al., 2022) | 0.33 ± 0.14 | 0.44 ± 0.18 | 0.53 ± 0.21 | 0.57 ± 0.19 | 0.60 ± 0.19 | 0.31 ± 0.11 | 0.41 ± 0.13 | 0.49 ± 0.15 | 0.55 ± 0.15 | 0.60 ± 0.15 | 0.32 ± 0.10 | 0.40 ± 0.11 | 0.49 ± 0.12 | 0.55 ± 0.13 | 0.61 ± 0.15 |
+| RMSNs (Lim et al., 2018) | 0.57 ± 0.16 | 0.73 ± 0.20 | 0.87 ± 0.22 | 0.94 ± 0.20 | 1.02 ± 0.20 | 0.62 ± 0.15 | 0.73 ± 0.21 | 0.85 ± 0.25 | 0.96 ± 0.26 | 1.05 ± 0.28 | 0.66 ± 0.17 | 0.76 ± 0.21 | 0.86 ± 0.23 | 0.93 ± 0.21 | 1.00 ± 0.20 |
+| G-Net (Li et al., 2021) | 0.56 ± 0.14 | 0.73 ± 0.17 | 0.86 ± 0.18 | 0.95 ± 0.20 | 1.03 ± 0.21 | 0.55 ± 0.12 | 0.72 ± 0.14 | 0.87 ± 0.18 | 1.00 ± 0.22 | 1.12 ± 0.26 | 0.54 ± 0.11 | 0.72 ± 0.15 | 0.88 ± 0.21 | 1.00 ± 0.26 | 1.11 ± 0.32 |
+| GT (ours) | 0.30 ± 0.07 | 0.36 ± 0.11 | 0.44 ± 0.13 | 0.47 ± 0.12 | 0.54 ± 0.13 | 0.27 ± 0.07 | 0.32 ± 0.09 | 0.38 ± 0.10 | 0.42 ± 0.08 | 0.48 ± 0.08 | 0.21 ± 0.07 | 0.31 ± 0.08 | 0.36 ± 0.09 | 0.42 ± 0.10 | 0.48 ± 0.10 |
+| Rel. improvement | 9.5% | 19.7% | 16.3% | 16.7% | 18.8% | 15.3% | 22.5% | 22.0% | 25.6% | 25.6% | 26.7% | 24.6% | 25.2% | 24.6% | 21.6% |
+
+Table 3: RMSE on semi-synthetic data based on the MIMIC-III extract. Our GT consistently outperforms all baselines. We highlight the relative improvement over the best-performing baseline. Reported: average RMSE  $\pm$  standard deviation over five seeds.
+
+**Setting:** We build upon the MIMIC-extract (Wang et al., 2020), which is based on the MIMIC-III dataset (Johnson et al., 2016). Here, we use  $d_x = 25$  different vital signs as time-varying covariates and as well as gender, ethnicity, and age as static covariates. Then, we simulate observational outcomes for training and validation, and interventional outcomes for testing, respectively. Our data-generating process is taken from (Melnychuk et al., 2022), which we refer to for more details. In summary, the data generation consists of three steps: (1)  $d_y = 2$  untreated outcomes  $\tilde{Y}_t^j$ ,  $j = 1, 2$ , are simulated according to  $\tilde{Y}_t^j = \alpha_0^j \text{B-spline}(t) + \alpha_1^j g^j(t) + \alpha_2^j f_V^j(X_t) + \epsilon_t$ , where  $\alpha_0^j$ ,  $\alpha_1^j$  and  $\alpha_2^j$  are weight parameters,  $\text{B-spline}(t)$  is sampled from a mixture of three different cubic splines, and  $f_V^j(\cdot)$  is a random Fourier features approximation of a Gaussian process. (2) A total of  $d_a = 3$  synthetic treatments  $A_t^l$ ,  $l = 1, 2, 3$ , are applied with probability  $\sigma(\gamma_1^l Y_{t-1}^A + \gamma_2^l f_V^l(X_t) + b^l)$  where  $\gamma_1^l$  and  $\gamma_2^l$  are fixed parameters that control the confounding strength for treatment  $A^l$ ,  $Y_t^{A,l}$  is an averaged subset of the previous  $l$  treated outcomes,  $b^l$  is a bias term, and  $f_V^l(\cdot)$  is a random function that is sampled from an RFF (random Fourier features) approximation of a Gaussian process. (3) The treatments are applied to the untreated outcomes via
+
+$$Y_t^j = \tilde{Y}_t^j + \sum_{i=t-\omega^j}^t \frac{\min_{l=1,\dots,d_a} \mathbb{1}\{A_t^l=1\} p_t^l \beta^{l,j}}{(\omega^j - i)^2}, \quad (22)$$
+
+where  $\omega^j$  is the effect window for treatment  $A^l$  and  $\beta^{l,j}$  controls the maximum effect of treatment  $A^l$ .
+
+We run different experiments for training, testing, and validation sizes of  $N = 1000$ ,  $N = 2000$ , and  $N = 3000$ , respectively, and set the time window to  $30 \leq T \leq 50$ . As the covariate space is high-dimensional, we thereby study how robust our GT is with respect to estimation variance.
+
+**Results:** Table 3 shows the average RMSE over five different runs. Again, we emphasize that our comparison is fair (see hyperparameter tuning in Supplement L). We make three observations:
+
+First, our GT consistently outperforms all baselines by a large margin. The performance of GT is robust across all sample sizes  $N$ . Further, it is stable across different prediction windows  $\tau$ . We observe that our GT has a better performance compared to the strongest baseline of up to 26.7%. Further, the results show the clear benefits of our GT in high-dimensional covariate settings and for longer prediction windows  $\tau$ . In addition, our GT is highly stable, as its estimates exhibit the lowest standard deviation among all baselines. In sum, our GT consistently outperforms all the baselines.
+
+Second, ① baselines that do not perform proper adjustments (i.e., CRN (Bica et al., 2020), CT (Melnychuk et al., 2022)) tend to perform better than baselines with **problematic adjustment strategies** (i.e., RMSNs (Lim et al., 2018), G-Net (Li et al., 2021)). The reason is that the former baselines are (i) regression-based (ii) do not require IPW pseudo-outcomes. Hence, they can better handle the high-dimensional covariate space. They are, however, biased as they do not adjust for time-varying confounders and thus still perform significantly worse than our GT.
+
+Third, baselines with ② problematic adjustment strategies (i.e., RMSNs (Lim et al., 2018), G-Net (Li et al., 2021)) struggle with the high-dimensional covariate space and larger prediction windows  $\tau$ . This can be expected, as RMSNs suffer from overlap violations and thus produce unstable inverse propensity weights. Similarly, G-Net suffers from the curse of dimensionality, as it requires estimating a  $(d_x + d_y) \times (\tau - 1)$ -dimensional distribution.
+
+**Conclusion:** In this paper, we propose the GT, a novel end-to-end method that adjusts for time-varying confounding, while **avoiding problematic adjustment strategies for estimating** of CAPOs. For this, we propose a regression-based learning algorithm that sets our GT apart from existing baselines. Therefore, we expect our GT to be an important step toward personalized medicine.
+
+ Rest of paper (reference and Appendix) is removed.

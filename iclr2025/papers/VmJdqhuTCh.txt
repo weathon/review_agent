@@ -1,0 +1,234 @@
+
+
+{0}------------------------------------------------
+
+# FREQUENCY-GUIDED MASKING FOR ENHANCED VISION SELF-SUPERVISED LEARNING
+
+Amin Karimi Monsefi<sup>§</sup>, Mengxi Zhou<sup>§</sup>, Nastaran Karimi Monsefi<sup>†</sup>
+
+Ser-Nam Lim<sup>‡</sup>, Wei-Lun Chao<sup>§</sup>, Rajiv Ramnath<sup>§</sup>
+
+{karimimonsefi.1, chao.209, ramnath.6}@osu.edu, sernam@ucf.edu
+
+<sup>§</sup>The Ohio State University, <sup>†</sup>Hamedan University of Technology, <sup>‡</sup>University of Central Florida
+
+## ABSTRACT
+
+We present a novel *frequency-based* Self-Supervised Learning (SSL) approach that significantly enhances its efficacy for pre-training. Prior work in this direction masks out pre-defined frequencies in the input image and employs a reconstruction loss to pre-train the model. While achieving promising results, such an implementation has two fundamental limitations as identified in our paper. First, using pre-defined frequencies overlooks the variability of image frequency responses. Second, pre-trained with frequency-filtered images, the resulting model needs relatively more data to adapt to naturally looking images during fine-tuning. To address these drawbacks, we propose **FO**urier transform compression with **se**lf-Knowledge distillation (**FOLK**), integrating two dedicated ideas. First, inspired by image compression, we adaptively select the masked-out frequencies based on image frequency responses, creating more suitable SSL tasks for pre-training. Second, we employ a two-branch framework empowered by knowledge distillation, enabling the model to take both the filtered and original images as input, largely reducing the burden of downstream tasks. Our experimental results demonstrate the effectiveness of **FOLK** in achieving competitive performance to many state-of-the-art SSL methods across various downstream tasks, including image classification, few-shot learning, and semantic segmentation. <https://github.com/aminK8/FOLK>
+
+## 1 INTRODUCTION
+
+In recent years, Self-Supervised Learning (SSL) has gained considerable interest in the context of visual pre-training. This interest stems from its prominent capability of extracting meaningful visual representations from the vast expanse of readily available, unlabeled images without the need for costly manual labeling (Ben-Shaul et al., 2024; Su et al., 2024; Almalki & Latecki, 2024). Key to this advancement is several pre-training methods established with different pretext tasks, including multi-view contrastive learning (Oord et al., 2018; Chen et al., 2020b; Tian et al., 2020b; He et al., 2020), Masked Image Modeling (MIM) (Bao et al., 2021; He et al., 2022a; Xie et al., 2022; Monsefi et al., 2024a; Oquab et al., 2024), Masked Frequency Modeling (MFM) (Xie et al., 2023; Liu et al., 2023; Zheng et al., 2024), and self-supervised Knowledge Distillation (KD) (Kakogorgogiou et al., 2022; Zhou et al., 2022; Chen et al., 2020c; Chen & He, 2021; Caron et al., 2021). In the recent popular approach of Masked Image Modeling (MIM), a key strategy involves masking portions of an image and then tasking models with either reconstructing these hidden sections or generating feature representations for them (Bao et al., 2021; Xie et al., 2022; He et al., 2022a; Yi et al., 2023). Through this process, the model is encouraged to learn robust feature representations that capture the underlying structure between unmasked and masked image parts, thereby enhancing its understanding of image semantics.
+
+Instead of masking in the spatial domain (MIM), Masked Frequency Modeling (MFM) (Xie et al., 2023) introduced a self-supervised approach that masks frequency components of the input image. Since high-level semantics and low-level details of an image can be separated into different frequency components (Oppenheim & Lim, 1981; Piotrowski & Campbell, 1982; Navard & Yilmaz, 2024), the frequency domain offers a more convenient avenue for revealing underlying image patterns. The pretext task in MFM is to predict the masked frequencies from the frequency-filtered
+
+{1}------------------------------------------------
+
+![Figure 1: Detailed visualizations of the proposed masking approach. The figure is a 2x5 grid of images. Row 1: (a) Original Image (a dog), (b) Low-pass Filtered (a purple square with a green circle), (c) Low-pass Result (a blurry dog), (d) High-pass Filtered (a teal square with a purple circle), (e) High-pass Result (a dark, edge-detected dog). Row 2: (f) Com Filtered (a purple square with a green starburst), (g) Com Result (a blurry dog), (h) RCom Filtered (a teal square with a purple starburst), (i) RCom Result (a dark, edge-detected dog).](c803f6f6e2c49429d2951832bd0f208d_img.jpg)
+
+Figure 1: Detailed visualizations of the proposed masking approach. The figure is a 2x5 grid of images. Row 1: (a) Original Image (a dog), (b) Low-pass Filtered (a purple square with a green circle), (c) Low-pass Result (a blurry dog), (d) High-pass Filtered (a teal square with a purple circle), (e) High-pass Result (a dark, edge-detected dog). Row 2: (f) Com Filtered (a purple square with a green starburst), (g) Com Result (a blurry dog), (h) RCom Filtered (a teal square with a purple starburst), (i) RCom Result (a dark, edge-detected dog).
+
+Figure 1: Detailed visualizations outlining our proposed masking approach compared to the low/high-pass filters used in the MFM method (Xie et al., 2023). Figures b, d, f, h here show the retained frequencies after applying the corresponding filter (zoom-in views on the shifted spectrum for better comparison). Figures c, e, g, i show the restored image from the retained frequencies. More examples can be found in Appendix D. All images used in this paper are from ImageNet (Deng et al., 2009).
+
+image (see Section 3.1). It has two main advantages: first, it can help avoid issues encountered when analyzing raw pixel values in the spatial domain, such as spatial redundancy (Wang et al., 2020; Chen et al., 2023); second, unlike the patch-based masking used in MIM which often restricts the model to a Vision Transformer (ViT), MFM is suitable for both ViT and Convolutional Neural Network (CNN)-based models.
+
+However, though MFM (Xie et al., 2023) has demonstrated promising results, it has two fundamental limitations. Firstly, MFM uses constant filters, controlled by a pre-defined hyperparameter *radius*, for masking in the frequency spectrum. This disregards the intrinsic structure specific to individual images, which leads to a less challenging task for reconstruction (see Figure 1b and Figure 1d). Secondly, in the pretext stage, MFM only shows frequency-masked images to the model without a mechanism to properly expose the raw information of the original images. This potentially restricts the pre-trained model’s understanding of normal image distribution which further hampers MFM’s training efficiency and model effectiveness, especially making it unsuitable in a few-shot learning scenario (see Section 4.2.2).
+
+Our motivation is to achieve more effective vision pre-training through MFM, by addressing its aforementioned limitations. To this end, we propose a novel framework that integrates **F**ourier transform compression with se**L**f-**K**nowledge distillation, termed as **FOLK**. Similar to MFM and dissimilar to MIM, FOLK applies masking to image frequency responses and embraces both ViT and CNN architectures. Furthermore, it resolves MFM’s problems from two main perspectives.
+
+Firstly, instead of adopting constant filters, we seek an improved masking scheme that considers each image’s unique frequency responses, to improve the pre-training efficiency and model effectiveness. Inspired by the attention-based masking in MIM approaches such as AttMask (Kakogeorgiou et al., 2022), where the most critical parts of the image are hidden from the student model to create a more challenging pretext task, FOLK utilizes the Fourier transform compression (Pratt et al., 1969) concept to mask the most critical parts in image frequency responses. Two types of filters, the *Com* filter and its counterpart, the *RCom* filter, are designed to retain (or remove) the highest coefficient values within the frequency spectrum (see Fig. 1). In contrast to the constant filters used in MFM, these *Com* and *RCom* filters adaptively mask the frequencies that carry the essence (or finer details) of each individual image, creating greater variations across training samples. Hence, a
+
+{2}------------------------------------------------
+
+more challenging pretext task is presented to the model, enforcing its understanding of macro and micro visual cues uniquely held by each image.
+
+Secondly, we question how to properly expose natural image information to the model during pre-training to enhance fine-tuning efficiency. To this end, FOLK incorporates a knowledge distillation strategy using a self-supervised teacher-student design. With the original image fed to the teacher model, and the frequency-masked image fed to the student, the student model learns not only to reconstruct the masked frequencies (as what MFM does), but also to reconstruct the original image’s representation (generated by the teacher model) from the frequency-masked view of the same image. This multi-task teacher-student approach allows for model perception on both masked and original image realms, hence enhancing training stability and the pre-trained model’s efficacy when applied to downstream tasks, as demonstrated in our experimental findings (Section 4.2).
+
+To summarize, our contributions are threefold:
+
+- We introduce a novel masking technique in masked frequency modeling with *Com* and *RCom* filters, which presents a meaningful and considerably more challenging pretext task for efficient SSL.
+- We propose the FOLK framework, an innovative multi-task self-supervision methodology with self-knowledge distillation to allow for model perception on both frequency-masked images and original images in the pre-training stage.
+- Through extensive experimentation, we demonstrate the efficacy of FOLK. Our findings indicate that FOLK performs on par or better than many state-of-the-art MIM and MFM techniques in various downstream tasks, including image classification, few-shot learning, and semantic segmentation.
+
+## 2 RELATED WORK
+
+### 2.1 SELF-SUPERVISED LEARNING
+
+Self-supervised Learning (SSL) methods have been developed to exploit large-scale unlabeled data for learning discriminative representations, which can then benefit a variety of downstream tasks (Chong et al., 2023). Early SSL approaches rely on several pretext tasks, such as rotation prediction (Gidaris et al., 2018), jigsaw puzzle (Noroozi & Favaro, 2016), and colorization (Zhang et al., 2016). A branch of more recent studies follows a contrastive SSL paradigm (Chen et al., 2020b;c; Ci et al., 2022; Chen et al., 2020d; Tian et al., 2020b; Perera et al., 2024). SimCLR (Chen et al., 2020b;c; Monsefi et al., 2024b; Zhou et al., 2024) considers two augmentations of a given image as positives and the augmentations of all other images in the batch as negatives, on top of which a contrastive loss is utilized for model learning. MOCO (He et al., 2020; Chen et al., 2020d) maintains a dynamic dictionary of encoded representations with a momentum-updated encoder to generate consistent embeddings for contrastive learning. Instead of relying on negative samples and large training batches, BYOL (Grill et al., 2020) adopts a teacher-student framework that enforces consistency between representations of two augmented views of the same image generated by the two models. More recently, Correlational Image Modeling (CIM) (Li et al., 2023) operates by predicting correlation maps between randomly cropped image regions (exemplars) from a given image (context). It employs a bootstrap learning architecture with online and target encoders and a simple cross-attention mechanism to process the exemplars and context.
+
+### 2.2 MASKED IMAGE MODELING
+
+Masked Image Modeling (MIM) is an exciting approach to self-supervised visual learning. The central concept is to rebuild or reconstruct the hidden parts of images or to predict general characteristics like the image’s category (Bao et al., 2021; Zhou et al., 2022; Chen et al., 2020a; Xie et al., 2022; Wei et al., 2022). It draws inspiration from the success of masked language modeling in natural language processing (Devlin et al., 2018; Liu et al., 2019), adapting the concept to the visual domain. Specifically, BEiT (Bao et al., 2021) utilizes a discrete pre-trained Variational AutoEncoder (VAE) to create discrete tokens for image patches, then it tasks the model with predicting such discrete tokens of masked patches in images. The iBOT method (Zhou et al., 2022) offers
+
+{3}------------------------------------------------
+
+improvements over BEiT by adopting a teacher-student self-distillation strategy where the teacher model simultaneously serves as an online tokenizer, instead of using a pre-trained discrete VAE. MAE (He et al., 2022a) takes a more aggressive masking strategy, with typically around 75% of patches being masked, and recovers the missing pixels using an autoencoder. To further investigate which parts of an image should be masked for efficient self-supervisory, AttMask (Kakogorgogiou et al., 2022) proposes the utilization of an attention map generated by a teacher model, and masks the highly attended patches from the image for the student model learning.
+
+### 2.3 DISTILLATION-BASED MODELING
+
+Knowledge Distillation (KD) in general endeavors to transfer knowledge from a complex, teacher model to its simpler, student counterpart (Buciluă et al., 2006; Hinton et al., 2015). This is often achieved by aligning the network logits (Hinton et al., 2015; Zhou et al., 2021) or intermediate representations (Romero et al., 2014), as well as designated statistics between teach and student models (Tian et al., 2020a; Ahn et al., 2019; He et al., 2022b; Chen et al., 2021). In the self-supervised domain, SEED (Fang et al., 2021) innovates by training a student encoder to mirror the similarity score distribution inferred by a larger, pre-trained teacher across a spectrum of instances. The EMA teacher, adopted by numerous SSL methodologies (Grill et al., 2020; He et al., 2020; Zhou et al., 2022; Caron et al., 2021), leverages the benefits of knowledge distillation to foster stabilized training and improved model efficacy. Our method extends the single model approach used by MFM (Xie et al., 2023) to a teacher-student distillation strategy for robust visual representation learning.
+
+## 3 METHOD
+
+### 3.1 PRELIMINARY AND BACKGROUND
+
+In the domain of self-supervised learning for visual models, MFM (Xie et al., 2023) introduces a novel approach that diverges from traditional spatial domain masking strategies. By leveraging the frequency domain, which encapsulates both high-frequency details and low-frequency elements, MFM bases its learning process on the masking of frequency components and the prediction of the masked frequencies. More specifically, given a single-channel image<sup>1</sup>  $x \in \mathbb{R}^{H \times W}$ , the frequency representation is obtained via 2D Fast Fourier transform (FFT)  $\mathcal{F}(x)$ :
+
+$$\mathcal{F}(x)(u, v) = \sum_{h=0}^{H-1} \sum_{w=0}^{W-1} x(h, w) e^{-i2\pi(\frac{uh}{H} + \frac{vw}{W})}, \quad (1)$$
+
+where  $x(h, w)$  represents the pixel value at the spatial coordinate  $(h, w)$  on the image, while  $\mathcal{F}(x)(u, v)$  denotes the complex frequency value at the coordinate  $(u, v)$  on the spectrum. Here,  $e$  is Euler's number, and  $i$  is the imaginary unit.
+
+To mask some frequencies from the spectrum and task a model with the reconstruction of these missing frequencies, a frequency-masked image  $\tilde{x}$  is first obtained by:
+
+$$\tilde{x} = \mathcal{F}^{-1}(\mathcal{F}(x) \odot M), \quad (2)$$
+
+where  $M \in \{0, 1\}^{H \times W}$  is a mask, with 0 denoting corresponding frequencies being masked and 1 denoting frequencies being retained.  $\mathcal{F}^{-1}$  denotes the inverse Fourier transform operation, and  $\odot$  signifies element-wise multiplication. The learning objective of MFM, designed to minimize the discrepancy between the reconstructed and the original frequency components, can then be written as:
+
+$$\mathcal{L}_{MFM} = \|\mathcal{F}(x) - \mathcal{F}(g_\theta(\tilde{x}))\|_2 \odot (1 - M)\|_2, \quad (3)$$
+
+<sup>1</sup>For RGB images, the procedure is applied to each channel independently.
+
+{4}------------------------------------------------
+
+![Diagram of the Informed Filtering process. An input image x is transformed via FFT to its frequency spectrum F(x). A 'Random Selection' icon indicates the start of the filtering. Two parallel paths, Com and RCom, are shown. The Com path uses a mask M to filter F(x) into F(x) ⊙ M, which is then transformed back via iFFT to produce the reconstructed image x̂. The RCom path follows a similar process but results in a different reconstructed image x̂. A dice icon at the bottom right indicates that the final output is a random selection between the two reconstructed images.](690fce4fb5c9cbb8beb560cb2a3fcbeb_img.jpg)
+
+Diagram of the Informed Filtering process. An input image x is transformed via FFT to its frequency spectrum F(x). A 'Random Selection' icon indicates the start of the filtering. Two parallel paths, Com and RCom, are shown. The Com path uses a mask M to filter F(x) into F(x) ⊙ M, which is then transformed back via iFFT to produce the reconstructed image x̂. The RCom path follows a similar process but results in a different reconstructed image x̂. A dice icon at the bottom right indicates that the final output is a random selection between the two reconstructed images.
+
+Figure 2: The frequency-based filtering process with our proposed informed filters,  $Com$  and  $RCom$ . A portion of frequencies with the highest magnitude will be determined to create the masks. The process randomly returns the resulting image from the  $Com$  or  $RCom$  filter.
+
+where  $\mathcal{F}(x)$  is the frequency spectrum of the original image,  $\mathcal{F}_r(\hat{x})$  is the reconstructed spectrum using a neural network model  $g_\theta$ , parameterized by  $\theta$ . And  $\mathbb{1} - M$  indicates that only the masked areas of the frequency spectrum are considered for loss.
+
+### 3.2 FOLK FRAMEWORK
+
+Before introducing our proposed method, we start by re-emphasizing the MFM method (Xie et al., 2023) limitations. Firstly, notice that, in Eq. 3, the MFM’s loss depends on the filter  $M$  applied to the spectrum. However, the low/high-pass filters used in MFM are simple, using a circular area with a fixed radius (see Fig. 1). This can lessen the difficulty of the frequency reconstruction task hence hampering the model learning. Another limitation of MFM is that the model only sees frequency-masked images in the pre-training stage, expressed by  $g_\theta(\hat{x})$  in Eq. 3. As a result, the pre-trained model may be relatively unfamiliar with natural images and requires more data during fine-tuning to adapt effectively (see Section 4.2.2).
+
+To overcome these limitations and achieve effective masked frequency modeling, we propose the FOLK framework. Our key ideas involve the creation of informed frequency-based filters,  $Com$  and  $RCom$ , as well as a self-distillation strategy based on a teacher-student design.
+
+#### 3.2.1 INFORMED FILTERS
+
+Successful vision pre-training largely depends on the suitable and challenging enough pretext task presented to the model. Demonstrated by AttMask (Kakogeorgiou et al., 2022), masking the most-attended patches in images creates a more effective training scheme than random masking for MIM approaches. However, for MFM methods, this gap still exists as only constant masking/filters have been explored (Xie et al., 2023), which presumably presents a less challenging task in the pre-training.
+
+To bridge this gap, we introduce two types of filters,  $Com$  and  $RCom$ , for informed masking. Inspired by Fourier image compression techniques (Pratt et al., 1969), where the most significant frequencies (those with the highest magnitudes) that carry the bulk of an image’s visual information are preserved while other frequencies are discarded for efficient storage or bandwidth usage, our  $Com$  filters selectively retain these significant frequencies and discard the rest. This approach highlights the main semantics of an image for the model and necessitates the reconstruction of the less significant frequencies that correspond to finer details, such as edges. Conversely,  $RCom$  filters remove the significant frequencies and require their reconstruction from the finer details preserved by the less significant frequencies. By applying both filter types during pre-training, the model is effectively trained to comprehend both macro and micro visual cues, thereby enhancing its generalizability and effectiveness in downstream tasks.
+
+The generation of  $Com$  and  $RCom$  filters is illustrated in Fig. 2, with the pseudocode available in Appendix A.4. The input image is first converted to grayscale to ensure the creation of a single
+
+{5}------------------------------------------------
+
+![Diagram of the Proposed FOLK Framework. The process starts with an 'Input' image x, which is split into two views, u and v. These views are processed by an 'Informed Filtering' block to produce frequency-masked views, u-tilde and v-tilde. The student model (Student) takes u-tilde and v-tilde as input. It consists of a backbone g_theta and two heads: a frequency head h_theta (connected via [CLS]) and a missing frequency mask (MFM) head h_hat_theta (connected via Patch). The MFM head outputs a loss L_MFM via FFT. The teacher model (Teacher) takes u and v as input. It consists of a backbone g_phi and a head h_phi (connected via [CLS]). The teacher's head h_phi outputs a loss L_dis. The teacher's parameters are updated from the student's parameters using an Exponential Moving Average (EMA). A 'Stop Gradient' symbol is shown on the teacher's head h_phi.](191a4a245a7d36d03be9a990d0f758f5_img.jpg)
+
+Diagram of the Proposed FOLK Framework. The process starts with an 'Input' image x, which is split into two views, u and v. These views are processed by an 'Informed Filtering' block to produce frequency-masked views, u-tilde and v-tilde. The student model (Student) takes u-tilde and v-tilde as input. It consists of a backbone g\_theta and two heads: a frequency head h\_theta (connected via [CLS]) and a missing frequency mask (MFM) head h\_hat\_theta (connected via Patch). The MFM head outputs a loss L\_MFM via FFT. The teacher model (Teacher) takes u and v as input. It consists of a backbone g\_phi and a head h\_phi (connected via [CLS]). The teacher's head h\_phi outputs a loss L\_dis. The teacher's parameters are updated from the student's parameters using an Exponential Moving Average (EMA). A 'Stop Gradient' symbol is shown on the teacher's head h\_phi.
+
+Figure 3: The Proposed FOLK Framework. Two views ( $u$  and  $v$ ) of the input image are processed through the informed filtering process, introduced in Figure 2. This yields two frequency-masked views ( $\tilde{u}$  and  $\tilde{v}$ ) which serve as the input to the student model. The student model is tasked with reconstructing the missing frequencies from the masked view  $\tilde{u}$  (or  $\tilde{v}$ ), as well as reconstructing the feature representation of the other original view  $v$  (or  $u$ ), generated by the teacher model, using the masked view  $\tilde{u}$  (or  $\tilde{v}$ ). The student model  $g_\theta$  and the teacher model  $g_\phi$ , with their corresponding heads  $h_\theta$  and  $h_\phi$ , have the same architecture but different parameters, except that the student has an additional MFM head  $\hat{h}_\theta$ . Only the student model (with its both heads) is updated through back-propagation, while the teacher parameters are periodically updated with an exponential moving average (EMA) of the corresponding student parameters.
+
+common filter for all three RGB channels, as generating and applying filters separately to each channel can result in unnatural and corrupted visual information. The image is converted to a frequency spectrum using 2D FFT, after which the frequency components with the highest magnitudes are identified based on a threshold uniformly sampled from a predefined set of values  $\{[0.005, 0.01, 0.05]\}$  in our experiments, detailed in Appendix Section B.5.1). The informed filters are then created to retain (*Com*) or mask (*RCom*) these frequencies. The two filters are randomly selected with an equal possibility (i.e. 50%) and applied to the spectrum (effects of different selection probabilities are provided in Appendix Section B.5.2). By applying inverse FFT to the filtered spectrum, we restore a frequency-masked image which will serve as an input to the model during pre-training. It is important to note that *Com* and *RCom* filters are uniquely generated based on individual images (examples are provided in Appendix D), which introduces more significant variation in training samples and presents a more challenging training task compared to using constant filters. In addition to comparing our approach with the low/high-passed filters used in MFM (Xie et al., 2023), we also conducted an ablation study using a set of random frequency filters to demonstrate the effectiveness of our proposed informed filters (refer to Appendix B.5.4).
+
+#### 3.2.2 MAKING BACKBONE FAMILIAR WITH NATURAL IMAGES
+
+To further improve the training efficiency and model robustness in masked frequency modeling, we incorporate a self-distillation design (Grill et al., 2020; Caron et al., 2021; Tarvainen & Valpola, 2017) in our proposed approach. The original MFM (Xie et al., 2023) method only tasked the model with the reconstruction of missing frequencies from the frequency-masked view of the image. Such an approach potentially overlooked the data distribution of the original image space, as the model only sees frequency-masked images in pre-training, resulting in higher data demands to adapt to naturally looking images during fine-tuning. To resolve this issue, we propose to properly inject the original image information into the training process via a self-distillation technique (see Section 2.3 for more information about self-distillation). Here, we present our FOLK framework, detailed in Fig. 3. Note that FOLK does not require additional training stages for pre-processing, such as the offline tokenizer employed by BEiT (Bao et al., 2021).
+
+{6}------------------------------------------------
+
+FOLK starts by generating two views,  $u$ , and  $v$ , from an input image  $x$ , following the same data augmentations adopted by DINO (Caron et al., 2021). After applying 2D FFT to the view  $u$  (or  $v$ ), the  $Com$  and  $RCom$  filters are uniquely generated according to this view (detailed in Section 3.2.1 and Fig. 2). One filter is then randomly selected and applied to the frequency spectrum, and the retained frequency components are processed through inverse FFT to restore a frequency-masked view  $\tilde{u}$  (or  $\tilde{v}$ ), see Equation 2. The student model receives this frequency-masked view  $\tilde{u}$  (or  $\tilde{v}$ ) and predicts against two targets: reconstruction of the missing frequencies discarded by the filter, and reconstruction of the feature representation of the other original view  $v$  (or  $u$ ) generated by the teacher model.
+
+Two different heads are appended to the student model, each facilitating one of the prediction tasks. The MFM head  $\hat{h}_\theta$  serves to reconstruct the missing frequencies, with a single linear layer implementation following the original design proposed in MFM (Xie et al., 2023). The student head  $h_\theta$  (and teacher head  $h_\phi$ ), aiming at the reconstruction of the feature representation of the other original view, adopts a three-layer multi-layer perceptron (MLP) design. Moreover, the student head (and teacher head) is followed by a scaled softmax function to transform the outputs into probability distributions for the computation of a distillation loss (described below). More specifically,
+
+$$P_s(x)^{(i)} = \frac{\exp(f_\theta(x)^{(i)}/\tau_s)}{\sum_{k=1}^K \exp(f_\theta(x)^{(k)}/\tau_s)}, \quad (4)$$
+
+where  $f_\theta(x) = h_\theta(g_\theta(x))$ .  $K$  is the output dimension of  $h$ , and  $\tau_s > 0$  is a temperature parameter. A similar formula holds for the teacher counterpart with  $P_t$  and  $\tau_t$ . To sharpen the output distributions—particularly for the teacher—we employ a scaled softmax function alongside the centering technique introduced in Caron et al. (2021). This combination helps prevent model collapse and reduces the dependency on large batch sizes during training. Detailed descriptions of the heads are provided in Appendix A.3.
+
+The intended revealing of unmasked original image information is effectively achieved through FOLK’s teacher-student design. During pre-training, the teacher model sees naturally looking images, which better align with those encountered during the fine-tuning stage, thereby enhancing fine-tuning efficiency, particularly in few-shot learning scenarios. On the other hand, the student model only observes masked views but is guided by the teacher model using the following distillation loss. Both the student and teacher models  $g_\theta$  and  $g_\phi$ , with their heads  $h_\theta$  and  $h_\phi$ , share the same architecture and initialization but have distinct parameters during training. Only the student model  $g_\theta$  and its both heads  $h_\theta$  and  $\hat{h}_\theta$  are updated by the loss back-propagation, while the teacher parameters are periodically updated with an exponential moving average (EMA) of the corresponding student parameters.
+
+A distillation loss is employed to enforce the less-informed student model to emulate the more knowledgeable teacher model who perceives the original views. For a single input image  $x$ , this loss can be written as:
+
+$$\mathcal{L}_{\text{dis}} = -[P_t(u) \log(P_s(\tilde{v})) + P_t(v) \log(P_s(\tilde{u}))]. \quad (5)$$
+
+where  $u, v$  are two different views of  $x$ , and  $\tilde{u}, \tilde{v}$  are the corresponding frequency-masked views.  $P_s$  and  $P_t$  are the student and teacher output probability distributions introduced in Eq. 4. The EMA update to the teacher is then ruled by  $\phi \leftarrow \lambda\phi + (1 - \lambda)\theta$ , ensuring a gradual integration of knowledge over time.
+
+Note that, same as MFM (Xie et al., 2023), FOLK features compatibility with both ViT and CNN-based architectures. Illustrated in Fig. 3, when using a ViT-based model as the student (and teacher), the patch tokens out of the final encoder layer are fed into the MFM head, whereas the class token  $[CLS]$  is directed to the student (and teacher) head. Conversely, when using a CNN-based model, the framework utilizes the final feature maps out of the CNN encoder as the input for the MFM head. An average-pooled feature map from the original feature maps will serve as the input to the student (and teacher) head. We provide experiments and results using a CNN model (i.e. ResNet-50 (He et al., 2016)) in Appendix B.2. Hence, FOLK facilitates a consistent approach across different architectural paradigms.
+
+{7}------------------------------------------------
+
+#### 3.2.3 COMPREHENSIVE LOSS CALCULATION
+
+Finally, a comprehensive loss can be derived by integrating the two primary loss components:
+
+$$\mathcal{L}_{\text{tot}} = \alpha \cdot \mathcal{L}_{\text{dis}} + \mathcal{L}_{\text{MFM}}. \quad (6)$$
+
+where a hyperparameter  $\alpha$  controls the weights between two loss terms, which is set as 1 in our experiments, unless stated otherwise. Note that for a single input image,  $\mathcal{L}_{\text{MFM}}$  takes an average over two terms for the two different views. This comprehensive loss facilitates the simultaneous model learning on the two tasks introduced above, the masked frequencies reconstruction (through  $\mathcal{L}_{\text{MFM}}$ ) and original image feature reconstruction with self-distillation (through  $\mathcal{L}_{\text{dis}}$ ). Furthermore, an ablation study for different choices of the hyperparameter  $\alpha$  is provided in Section B.5.3.
+
+#### 3.2.4 COMPARISONS WITH OTHER SELF-DISTILLATION-BASED METHODS
+
+Though FOLK deliberately leverages self-distillation to overcome the limitations of MFM — particularly its inability to expose the model to natural images — it is also important to clarify FOLK’s distinctions from other self-distillation-based methods such as DINO (Caron et al., 2021), AttMask (Kakogeorgiou et al., 2022), and iBOT (Zhou et al., 2022). In contrast to the spatial domain augmentation paradigms adopted by these methods (e.g. random cropping and masking on the original images), FOLK performs augmentation in the frequency domain by masking with adaptive filters and presenting frequency-masked images to the student model to enhance its visual understandings. Note that the input to the teacher model is only spatially augmented (i.e. random cropping), thereby preserving the model’s perception of natural images during pretraining. Moreover, FOLK incorporates a combination of both reconstructive and comparative losses, presenting rational yet more challenging pretraining tasks compared to approaches that rely solely on comparative losses, such as DINO and iBOT. Hence, we do not consider FOLK a close replication of previously presented methods. Please refer to Appendix Section C for a more detailed comparison.
+
+## 4 EXPERIMENTS
+
+In this section, we detail the experimental setup and evaluate our proposed FOLK framework on classification tasks using both full fine-tuning and few-shot learning approaches. Additional experiments, including semantic segmentation as a downstream task and ablation studies, are provided in Appendix B for further insights and comprehensive results.
+
+### 4.1 SETUP
+
+In this study, we employ three well-established model architectures as the foundation for our experiments: the ViT-Small (ViT-S/16), ViT-Base (ViT-B/16)(Dosovitskiy et al., 2021) and the ResNet-50 (He et al., 2016) (For ResNet-50 results see Appendix Section B.2). These models are chosen for their proven effectiveness and versatility, showing the power of our model with different types of model architecture. We adopt the ImageNet-1K training dataset (Deng et al., 2009) without labels for pre-training our self-supervised learning.
+
+Our model’s performance is evaluated across two critical areas: image classification and semantic segmentation. For image classification, we continue to leverage the ImageNet-1K dataset (Deng et al., 2009) to assess the generalizability and effectiveness of the learned features. In contrast, for semantic segmentation, we utilize the ADE20K dataset (Zhou et al., 2017), a standard benchmark in scene parsing and segmentation tasks. This bifurcated approach to evaluation ensures a thorough analysis of the models’ capabilities in varied contexts. Our computational infrastructure supports these extensive experiments, consisting of four nodes, each of which has four NVIDIA A100 80GB GPUs, in total 16 GPUs. Please see Appendix A for implementation details.
+
+{8}------------------------------------------------
+
+| Method | Ref | Data | Epoch | Token | ViT-S | ViT-B |
+|-|-|-|-|-|-|-|
+| Scratch | (Touvron et al., 2021) | - | - | - | 79.9 | 81.8 |
+| MAE | (He et al., 2022a) | INet-1K | 300 | ✓ | 80.6 | 82.9 |
+| iBOT | (Zhou et al., 2022) | INet-1K | 1600 | ✓ | 81.1 <sup>†</sup> | <b>84.0<sup>‡</sup></b> |
+| BEiT | (Bao et al., 2021) | INet-1K<br>+ DALL-E | 300 | ✓ | 81.3 | 82.9 |
+| AttMask | (Kakogeorgiou et al., 2022) | INet-1K | 300 | ✓ | 81.3 | N/A |
+| MoCo V3 | (Ci et al., 2022) | INet-1K | 600 | - | 81.4 | 83.2 |
+| DINO | (Caron et al., 2021) | INet-1K | 1600 | - | 81.5 | 82.8 |
+| MFM | (Xie et al., 2023) | INet-1K | 300 | - | 81.6 | 83.1 |
+| MFM* | (Xie et al., 2023) | INet-1K | 300 | - | 81.2 | 82.9 |
+| MFM<br>+ R/Com* | (Xie et al., 2023) | INet-1K | 300 | - | 81.4 | 83.2 |
+| <b>FOLK</b> | Ours | INet-1K | 300 | - | <b>81.6</b> | <b>83.4</b> |
+| <b>FOLK</b> | Ours | INet-1K | 800 | - | <b>82.1</b> | <b>84.0</b> |
+
+Table 1: Top-1 results of fine-tuning self-supervised approaches utilizing ViT-S/16 and ViT-B/16 as encoders for INet-1K (ImageNet-1K). All recorded data were resized to images of size  $224 \times 224$ . Data means the pre-training dataset, and token means methods that need a masked token. \*Our reproduced results with MFM official code through a pre-training phase of 300 epochs followed by 200 epochs of full fine-tuning. Also, MFM + R/Com means using the MFM approach with our proposed filters instead of its original low/high-pass filters. <sup>†</sup> Reported in AttMask paper with 300 pre-training epochs. <sup>‡</sup> iBOT ViT-B is pre-trained on 1600 epochs based on their report.
+
+### 4.2 EXPERIMENTAL ANALYSIS
+
+#### 4.2.1 IMAGE CLASSIFICATION
+
+In this section, we focus on the fine-tuning capabilities of different vision pre-training techniques using the ViT-S/16 and ViT-B/16 encoders on the ImageNet-1K dataset. The motivation behind this analysis stems from the need to understand how different SSL strategies, which range from traditional methods to novel approaches like the FOLK method introduced here, perform under uniform testing conditions with the well-established ImageNet benchmark dataset (Deng et al., 2009).
+
+Table 1 presents the top-1 accuracy results of various SSL approaches fine-tuned on ImageNet-1K using both ViT-S/16 and ViT-B/16 encoders. Methods utilizing masked token strategies, such as MAE, BEiT, iBOT, and AttMask, consistently outperform the baseline, achieving up to 81.3% with ViT-S and 84.0% with ViT-B with huge number of pre-training epochs. These improvements highlight the effectiveness of masked token approaches in enhancing model performance, particularly when extensive pre-training epochs or additional data (e.g., DALL-E (Ramesh et al., 2021) for BEiT) are employed.
+
+However, our proposed FOLK method demonstrates superior performance without relying on tokens or external datasets. With only 300 epochs of pre-training, FOLK achieves 81.6% accuracy with ViT-S and 83.4% with ViT-B, matching or surpassing other methods that require more epochs or additional data. Extending the pre-training to 800 epochs, FOLK further improves the ViT-S and ViT-B accuracy to 82.1% and 84.0%, surpassing all other methods in the ViT-S and ViT-B category under similar conditions or lower number of pre-training epochs. These results showcase FOLK’s ability to enhance learning efficiency and model efficacy by integrating learning from dual inputs—filtered and original images—without the complexities of token masking or the need for external data sources.
+
+#### 4.2.2 FEW SHOT LEARNING
+
+Our few-shot learning experiment’s motivation lies in demonstrating the robustness and efficiency of our FOLK framework compared to other pre-training methodologies, especially in scenarios characterized by limited data availability. In this context, we particularly challenge the efficacy of the FOLK model against the MFM approach and others under the premise that showing original im-
+
+{9}------------------------------------------------
+
+ages (solving the second weakness of MFM by applying KD) significantly enhances performance on few-shot learning tasks.
+
+In this experiment, we aim to highlight FOLK’s superior adaptability and efficiency by fine-tuning pre-trained models using only 10% of the ImageNet-1K dataset over 200 epochs. This setup allows us to critically assess the influence of learning rate adjustments on performance under sparse data conditions. We explore variations in base learning rates and warm-up periods using a cosine learning rate strategy for optimization (Gotmare et al., 2019).
+
+| Method | BLR = 2e-4<br>WUp = 0 | BLR = 2e-4<br>WUp = 100 | BLR = 2e-3<br>WUp = 5 | AVG | MAX | Epoch |
+|-|-|-|-|-|-|-|
+| iBOT | 64.0 | 71.1 | 2.0 | 45.7 | 71.1 | 800 |
+| AttMask | 69.8 | 71.0 | 31.3 | 57.4 | 71.0 | 300 |
+| MFM | 57.7 | 58.5 | 41.9 | 52.7 | 58.5 | 300 |
+| MFM + Com/RCom | 66.3 | 63.9 | 59.9 | 63.4 | 66.3 | 300 |
+| <b>FOLK</b> | 71.2 | 68.1 | 62.2 | 67.2 | 71.2 | 300 |
+| <b>FOLK</b> | 76.3 | 73.5 | 63.9 | 71.2 | 76.3 | 800 |
+| <b>FOLK<sup>‡</sup></b> | <b>77.4</b> | <b>74.9</b> | <b>66.4</b> | <b>72.9</b> | <b>77.4</b> | 800 |
+
+Table 2: Results of few-shot learning that fine-tunes the pre-trained ViT-S with different approaches for 200 epoch with 10% of labeled data from ImageNet-1k. BLR: Base Learning Rate, means the peak value of the learning rate, and WUp: Warm Up, refers to the initial epochs during which the learning rate increases from 0 to the predefined BLR. After reaching the BLR, the learning rate then decreases according to a cosine function, from the BLR back down to 0. AVG: average. MAX: Maximum.<sup>‡</sup> 1000 fine-tune epochs.
+
+The results in Table 2 highlight FOLK consistently outperforms methods like iBOT, AttMask, MFM, and MFM with Com/RCom filters across different base learning rates (BLR) and warm-up (WUp) settings. For instance, with a BLR of  $2 \times 10^{-4}$  and no warm-up (WUp=0), FOLK achieves a top-1 accuracy of 71.2%, surpassing iBOT’s 64.0%, AttMask’s 69.8%, MFM’s 57.7%, and MFM with Com/RCom’s 66.3%. When the pre-training epochs are increased to 800, FOLK’s performance further improves, reaching 76.3% accuracy under the same BLR and WUp settings, and even achieving 77.4% when fine-tuned for 1000 epochs (denoted as FOLK<sup>‡</sup>). The average accuracy across the three learning rate settings for FOLK with 800 pre-training epochs is 71.2%, significantly higher than iBOT’s 45.7% with the same number of pre-training epochs. Notably, FOLK maintains robust performance even when the learning rate is less optimal, such as achieving 62.2% accuracy with a higher BLR of  $2 \times 10^{-3}$  and a short warm-up period (WUp=5), where other methods like iBOT drop drastically to 2.0% accuracy. These results demonstrate that FOLK not only excels in leveraging limited labeled data but also exhibits resilience to variations in fine-tuning hyperparameters, underscoring its effectiveness and adaptability compared to other state-of-the-art methods in few-shot learning scenarios.
+
+## 5 CONCLUSION
+
+In this paper, we introduce the FOLK framework, a novel SSL method that addresses the limitations of previous frequency-based pre-training approaches. By integrating Fourier transform compression with self-knowledge distillation, FOLK adaptively selects frequencies for masking based on unique image responses, which allows the model to focus on more distinctive image features in the frequency domain, thereby enhancing the pre-training efficiency and model efficacy. Moreover, our dual-branch framework, which leverages both filtered and original images in pre-training, minimizes the adaptation requirements for natural-looking images in downstream tasks. Our experimental results demonstrate the effectiveness of FOLK, achieving competitive performance compared to many leading SSL methods. Notably, FOLK excels in tasks such as image classification, few-shot learning, and semantic segmentation, all while requiring fewer pre-training epochs.
+
+## ACKNOWLEDGMENTS
+
+This project was made possible, in part, by support from the National Science Foundation grant number OAC-2018627 and from the Ohio Supercomputer Center.
+
+ Rest of paper (reference and Appendix) is removed.

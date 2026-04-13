@@ -1,0 +1,312 @@
+
+
+{0}------------------------------------------------
+
+# TEST-TIME ADAPTATION FOR REGRESSION BY SUBSPACE ALIGNMENT
+
+Kazuki Adachi<sup>\*†</sup> Shin'ya Yamaguchi<sup>\*†</sup> Atsutoshi Kumagai<sup>\*</sup> Tomoki Hamagami<sup>‡</sup>
+
+<sup>\*</sup>NTT Corporation <sup>†</sup>Kyoto University <sup>‡</sup>Yokohama National University  
+ {kazuki.adachi,shinya.yamaguchi,atsutoshi.kumagai}@ntt.com  
+ hamagami@ynu.ac.jp
+
+## ABSTRACT
+
+This paper investigates *test-time adaptation (TTA) for regression*, where a regression model pre-trained in a source domain is adapted to an unknown target distribution with unlabeled target data. Although regression is one of the fundamental tasks in machine learning, most of the existing TTA methods have classification-specific designs, which assume that models output class-categorical predictions, whereas regression models typically output only single scalar values. To enable TTA for regression, we adopt a feature alignment approach, which aligns the feature distributions between the source and target domains to mitigate the domain gap. However, we found that naive feature alignment employed in existing TTA methods for classification is ineffective or even worse for regression because the features are distributed in a small subspace and many of the raw feature dimensions have little significance to the output. For an effective feature alignment in TTA for regression, we propose *Significant-subspace Alignment (SSA)*. SSA consists of two components: subspace detection and dimension weighting. Subspace detection finds the feature subspace that is representative and significant to the output. Then, the feature alignment is performed in the subspace during TTA. Meanwhile, dimension weighting raises the importance of the dimensions of the feature subspace that have greater significance to the output. We experimentally show that SSA outperforms various baselines on real-world datasets. The code is available at <https://github.com/kzkadc/regression-tta>.
+
+## 1 INTRODUCTION
+
+Deep neural networks have achieved remarkable success in various tasks (LeCun et al., 1998a; Krizhevsky et al., 2012; He et al., 2016; Dargan et al., 2020). In particular, regression, which is one of the fundamental tasks in machine learning, is widely used in practical tasks such as human pose estimation or age prediction (Lathuilière et al., 2019). The successes of deep learning have usually relied on the assumption that the training and test datasets are sampled from an i.i.d. distribution. In the real world, however, such an assumption is often invalid since the test data are sampled from distributions different from the training one due to distribution shifts caused by changes in environments. The performance of these models thus deteriorates when a distribution shift occurs (Hendrycks & Dietterich, 2019; Recht et al., 2019). To address this problem, *test-time adaptation (TTA)* (Liang et al., 2023) has been studied. TTA aims at adapting a model pre-trained in a source domain (training environment) to the target domain (test environment) with only unlabeled target data. However, most of the existing TTA methods are designed for classification; that is, TTA for regression has not been explored much (Liang et al., 2023). Regarding TTA for classification, two main approaches have been explored: entropy minimization and feature alignment.
+
+The entropy minimization approach was introduced by Wang et al. (2021), and the subsequent methods follow this approach (Zhou & Levine, 2021; Niu et al., 2022; Zhang et al., 2022; Zhao et al., 2023; Enomoto et al., 2024). Although entropy is a promising proxy of the performance on the target domain, entropy minimization is classification-specific because it assumes that a model directly outputs predictive distributions, *i.e.*, a probability for each class. In contrast, typical regression models output only single scalar values, not distributions. Thus, we cannot use the entropy minimization approach for regression models.
+
+{1}------------------------------------------------
+
+Table 1: Number of valid (having non-zero variance) feature dimensions and feature subspace dimensions (*i.e.*, the rank of the feature covariance matrix), and  $R^2$  scores on the test datasets. Although the original feature space has 2048 dimensions in the experiment except for the California Housing dataset, the features of the regression models are distributed within the subspaces that have less than a hundred dimensions. Our method improves  $R^2$  scores by the feature subspace in most cases, whereas the naive feature alignment sometimes diverged (displayed as ‘-’) because of too few valid dimensions. See Section 4.3.1 for more details.
+
+| Dataset | #Valid dims. | #Subspace dims. | $R^2$ (↑) |  |  |
+|-|-|-|-|-|-|
+|  |  |  | Source | Naive feature alignment | SSA (ours) |
+| SVHN | 353 | 14 | 0.406 | - | <b>0.511</b> |
+| UTKFace | 2041 | 76 | 0.020 | 0.705 | <b>0.731</b> |
+| Biwi Kinect* | 713 | 34.5 | 0.706 | 0.753 | <b>0.778</b> |
+| California Housing (100 dims.) | 45 | 40 | 0.605 | - | <b>0.639</b> |
+
+\*The average over a model trained on each gender/target is reported.
+
+Another approach, the feature alignment, preliminarily computes the statistics of intermediate features of the source dataset after pre-training in the source domain (Ishii & Sugiyama, 2021; Kojima et al., 2022; Eastwood et al., 2022; Adachi et al., 2023; Jung et al., 2023). Then, upon moving to the target domain, the feature distribution of the target data is aligned with the source distribution by matching the target feature statistics with the pre-computed source ones without accessing the source dataset. Although this approach seems applicable to regression because it allows arbitrary forms of the model output, it assumes to use all feature dimensions to be aligned, and does not sufficiently consider the nature of regression tasks. For instance, regression models trained with standard mean squared error (MSE) loss tend to make features less diverse than classification models do (Zhang et al., 2023). In particular, we experimentally observed that the features of a trained regression model are distributed in only a small subspace of the entire feature space (Table 1). In this sense, naively aligning all feature dimensions makes the performance suboptimal or even be harmful in regression as shown in Table 1 because it equally treats important feature dimensions and degenerated unused ones.
+
+In this paper, we address TTA for regression on the basis of the feature alignment approach. To resolve the aforementioned feature alignment problem in TTA for regression, we propose *Significant-subspace Alignment* (SSA). SSA consists of two components: *subspace detection* and *dimension weighting*. Subspace detection uses principal component analysis (PCA) to find a subspace of the feature space in which the features are concentrated. This subspace is representative and significant to the model output. Then, we perform feature alignment within this subspace, which improves the effectiveness and stability of TTA by focusing only on valid feature dimensions in the subspace. Further, in regression, a feature vector is finally projected onto a one-dimensional line so as to output a scalar value. Thus, the subspace dimensions that have an effect on the line need a precise feature alignment. To do so, dimension weighting raises the importance of the subspace dimensions with respect to their effect on the output.
+
+We conducted experiments on various regression tasks, such as UTKFace (Zhang et al., 2017), Biwi Kinect (Fanelli et al., 2013), and California Housing (Nugent, 2017). The results showed that our SSA retains the important feature subspace during TTA and outperforms existing TTA baselines that were originally designed for classification by aligning the feature subspace.
+
+## 2 PROBLEM SETTING
+
+We consider a setting with a neural network regression model  $f_\theta : \mathcal{X} \rightarrow \mathbb{R}$  pre-trained on a labeled source dataset  $\mathcal{S} = \{(\mathbf{x}_i^s, y_i^s) \in \mathcal{X} \times \mathbb{R}\}_{i=1}^{N_s}$ , where  $\mathbf{x}_i^s$  and  $y_i^s$  are an input and its label, and  $\mathcal{X}$  is the input space. Our goal is to adapt  $f_\theta$  to the target domain by using an unlabeled target dataset  $\mathcal{T} = \{\mathbf{x}_i^t \in \mathcal{X}\}_{i=1}^{N_t}$  without accessing  $\mathcal{S}$ . Note that the target labels  $y_i^t \in \mathbb{R}$  are not available. In the source dataset  $\mathcal{S}$ , the data  $\{(\mathbf{x}_i^s, y_i^s)\}$  are sampled from the source distribution  $p_s$  over  $\mathcal{X} \times \mathbb{R}$ . In the target dataset  $\mathcal{T}$ , we assume covariate shift (Shimodaira, 2000), which is a distribution shift that often occurs in the real world. In other words, the target data  $\mathbf{x}_i^t$  are sampled from the target distribution  $p_t$  over  $\mathcal{X}$  that is different from  $p_s$ , but the predictive distribution is the same, *i.e.*,  $p_s(\mathbf{x}) \neq p_t(\mathbf{x})$  and  $p_s(y|\mathbf{x}) = p_t(y|\mathbf{x})$ .
+
+{2}------------------------------------------------
+
+![Figure 1: Overview of significant-subspace alignment (SSA). The diagram illustrates the process of aligning source and target domain feature distributions. In the source domain (pre-training), a source dataset S is processed by a feature extractor g_phi to produce features z_i^s. These are then processed by a regressor h_phi (w^T z + b) to produce predictions y_i^s. In the target domain (test-time adaptation), a target dataset T is processed by the same feature extractor g_phi to produce features z_i^t. The regressor h_phi is then used to produce predictions y_i^t. The alignment process involves: 0. Pre-training the source model on S; 1. Pre-computing significant subspace w^s, z^s from S; 2. Aligning target features in the subspace with L_TTA. A 2D plot shows the source and target feature distributions (ellipses) and the significant subspace (line w^s). The alignment is achieved by minimizing the TTA loss L_TTA_phi.](1b7d539e02a202c2cf2d97698b911447_img.jpg)
+
+Figure 1: Overview of significant-subspace alignment (SSA). The diagram illustrates the process of aligning source and target domain feature distributions. In the source domain (pre-training), a source dataset S is processed by a feature extractor g\_phi to produce features z\_i^s. These are then processed by a regressor h\_phi (w^T z + b) to produce predictions y\_i^s. In the target domain (test-time adaptation), a target dataset T is processed by the same feature extractor g\_phi to produce features z\_i^t. The regressor h\_phi is then used to produce predictions y\_i^t. The alignment process involves: 0. Pre-training the source model on S; 1. Pre-computing significant subspace w^s, z^s from S; 2. Aligning target features in the subspace with L\_TTA. A 2D plot shows the source and target feature distributions (ellipses) and the significant subspace (line w^s). The alignment is achieved by minimizing the TTA loss L\_TTA\_phi.
+
+Figure 1: Overview of significant-subspace alignment (SSA). A more detailed procedure is listed in Algorithm 1.
+
+We split the regression model  $f_\theta$  into a feature extractor  $g_\phi : \mathcal{X} \rightarrow \mathbb{R}^D$  and linear regressor  $h_\psi(\mathbf{z}) = \mathbf{w}^\top \mathbf{z} + b$ , where  $D$  is the number of feature dimensions,  $\mathbf{w} \in \mathbb{R}^D$ ,  $b \in \mathbb{R}$ ,  $\phi$  and  $\psi = (\mathbf{w}, b)$  are the parameters of the models. The whole regression model using the feature extractor and linear regressor is denoted by  $f_\theta = h_\psi \circ g_\phi$ , where  $\theta = (\phi, \psi)$ .
+
+## 3 TEST-TIME ADAPTATION FOR REGRESSION
+
+In this section, we describe the basic idea behind *Significant-subspace Alignment (SSA)* in Section 3.1 and describe it in detail in Section 3.2. Our method can be applied regardless of the form of input data since SSA does not rely on input-specific method, such as image data augmentations or self-supervised tasks.
+
+### 3.1 BASIC IDEA: FEATURE ALIGNMENT
+
+The basic idea of our TTA method for regression is to align the feature distributions of the source and target domains instead of using entropy minimization, as usually done in TTA for classification. As we assume a covariate shift where the input distribution changes, we update the feature extractor  $g_\phi$  to pull back the target feature distribution to the source one. Here, we describe a naive implementation of the idea and its problem.
+
+First, in the source domain, we compute the source feature statistics (mean and variance of each dimension) on  $\mathcal{S}$  after the source training:
+
+$$\boldsymbol{\mu}^s = \frac{1}{N_s} \sum_{i=1}^{N_s} \mathbf{z}_i^s, \quad \boldsymbol{\sigma}^{s^2} = \frac{1}{N_s} \sum_{i=1}^{N_s} (\mathbf{z}_i^s - \boldsymbol{\mu}^s) \odot (\mathbf{z}_i^s - \boldsymbol{\mu}^s), \quad (1)$$
+
+where  $\mathbf{z}_i^s = g_\phi(\mathbf{x}_i^s) \in \mathbb{R}^D$  is a source feature and  $\odot$  is the element-wise product.
+
+Then, we move to the target domain, where we cannot access the source dataset  $\mathcal{S}$ . Given a target mini-batch  $\mathcal{B} = \{\mathbf{x}_i^t\}_{i=1}^B$  sampled from  $\mathcal{T}$ , we compute the mini-batch mean and variance  $\hat{\boldsymbol{\mu}}^t$  and  $\hat{\boldsymbol{\sigma}}^{t^2}$  analogously to Equation (1).
+
+For feature alignment, we seek to make the target statistics similar to the source ones. For this purpose, we use the KL divergence as Nguyen et al. (2022) proved that it is included in an upper bound of the target error in unsupervised domain adaptation. Concretely, we minimize the KL divergence between two diagonal Gaussian distributions  $\mathcal{N}(\boldsymbol{\mu}^s, \boldsymbol{\sigma}^{s^2})$  and  $\mathcal{N}(\hat{\boldsymbol{\mu}}^t, \hat{\boldsymbol{\sigma}}^{t^2})$ :
+
+$$\mathcal{L}_{\text{TTA}}(\phi) = \sum_{d=1}^D D_{\text{KL}} \left( \mathcal{N}(\mu_d^s, \sigma_d^{s^2}) \parallel \mathcal{N}(\hat{\mu}_d^t, \hat{\sigma}_d^{t^2}) \right) + D_{\text{KL}} \left( \mathcal{N}(\hat{\mu}_d^t, \hat{\sigma}_d^{t^2}) \parallel \mathcal{N}(\mu_d^s, \sigma_d^{s^2}) \right), \quad (2)$$
+
+where the subscripts  $d$  represent the  $d$ -th elements of the mean and variance vectors. Here, we used both directions of the KL divergence because it empirically had good results as recommended by Nguyen et al. (2022). The KL divergence between two univariate Gaussians can be written in a closed form (Duchi, 2007)
+
+$$D_{\text{KL}} \left( \mathcal{N}(\mu_1, \sigma_1^2) \parallel \mathcal{N}(\mu_2, \sigma_2^2) \right) = [\log(\sigma_2^2/\sigma_1^2) + \{(\mu_1 - \mu_2)^2 + \sigma_1^2\}/\sigma_2^2 - 1] / 2. \quad (3)$$
+
+{3}------------------------------------------------
+
+However, in regression models, the features tend to be less diverse than in classification (Zhang et al., 2023). In addition to the insight from Zhang et al. (2023), we observed that the features of a regression model trained on  $\mathcal{S}$  are distributed in only a small subspace of the feature space and many dimensions of the feature space had zero variances. Table 1 shows the numbers of valid (having non-zero variance) feature dimensions and feature subspace dimensions (see Section 4.3.1 for more details). This property makes the naive feature alignment described above unstable since the KL divergence in Equation (3) includes the variance in the denominator. Also, this naive feature alignment is ineffective because many of the feature dimensions have a small effect on the subspace.
+
+### 3.2 SIGNIFICANT-SUBSPACE ALIGNMENT
+
+In this section, we describe our method, Significant-subspace Alignment (SSA), to tackle the aforementioned problem of naive feature alignment. Figure 1 shows an overview of SSA. As described in Section 3.1, the features of a regression model tend to be distributed in a small subspace of the feature space. Thus, we introduce *subspace detection* to detect a subspace that is representative and significant to the output and then perform feature alignment in the subspace. Subspace detection is similar to principal component analysis (PCA). Further, in our regression model, a feature  $\mathbf{z} = g_\phi(\mathbf{x})$  is projected onto a one-dimensional line determined by  $\mathbf{w}$  of  $h_\psi$  in order to output a scalar value  $\mathbf{w}^\top \mathbf{z} + b$ . Thus, a subspace basis  $\mathbf{v}_d^s$  whose direction is not orthogonal to  $\mathbf{w}$  needs precise feature alignment. We use *dimension weighting* to prioritize such dimensions.
+
+**Subspace detection.** After the training on the source dataset  $\mathcal{S}$ , we detect the subspace in which the source features are distributed. Instead of computing the variance of each dimension as Equation (1), we compute the covariance matrix:
+
+$$\Sigma^s = \frac{1}{N_s} \sum_{i=1}^{N_s} (\mathbf{z}_i^s - \boldsymbol{\mu}^s)(\mathbf{z}_i^s - \boldsymbol{\mu}^s)^\top, \quad (4)$$
+
+where the source mean vector  $\boldsymbol{\mu}^s$  is the same as Equation (1).
+
+Then, we detect the source subspace. On the basis of PCA, the subspace is spanned by the eigenvectors of the covariance matrix  $\Sigma^s$ , denoted by  $\mathbf{v}_k^s$  ( $\|\mathbf{v}_k^s\|_2 = 1$ ). The corresponding eigenvalues  $\lambda_k^s$  represent the variance of the source features along the direction  $\mathbf{v}_k^s$ . We use the top- $K$  largest eigenvalues  $\lambda_1^s, \dots, \lambda_K^s$  ( $\lambda_1^s > \dots > \lambda_K^s$ ), the corresponding source bases  $\mathbf{v}_1^s, \dots, \mathbf{v}_K^s$ , and the source mean  $\boldsymbol{\mu}^s$  as the source statistics.
+
+**Dimension weighting.** Since we assume that the output is computed with a linear regressor  $h_\psi(\mathbf{z}) = \mathbf{w}^\top \mathbf{z} + b$ , the effect of a subspace dimension  $\mathbf{v}_d^s$  to the output is determined by  $\mathbf{w}^\top \mathbf{v}_d^s$ . To prioritize the subspace dimensions that have larger effect on the output, we determine the weight of each subspace dimension as follows:
+
+$$\alpha_d = 1 + |\mathbf{w}^\top \mathbf{v}_d^s|. \quad (5)$$
+
+$\alpha_d$  assigns a larger weight when the direction along a subspace basis  $\mathbf{v}_d^s$  affects the output, or keep the weight to one when not.
+
+**Feature alignment.** This step is done in the target domain. Given a target mini-batch  $\mathcal{B}$  sampled from the target dataset  $\mathcal{T}$ , we project the target features  $\mathbf{z}_i^t = g_\phi(\mathbf{x}_i^t)$  into the source subspace and then compute the feature alignment loss. The projection of the target feature is computed as follows:
+
+$$\tilde{\mathbf{z}}_i^t = \mathbf{V}^s(\mathbf{z}_i^t - \boldsymbol{\mu}^s), \quad (6)$$
+
+where  $\mathbf{V}^s = [\mathbf{v}_1^s, \dots, \mathbf{v}_K^s]^\top \in \mathbb{R}^{K \times D}$ . With  $\tilde{\mathbf{z}}_i^t \in \mathbb{R}^K$ , we compute the projected target mean and variance over the mini-batch analogously to Equation (1); this is denoted by  $\tilde{\boldsymbol{\mu}}^t$  and  $\tilde{\boldsymbol{\sigma}}^{t2}$ . On the other hand, the projected source mean and variance are **0** and the eigenvalues  $\boldsymbol{\lambda}^s = [\lambda_1^s, \dots, \lambda_K^s]$  since  $\Sigma^s \mathbf{v}_k^s = \lambda_k^s \mathbf{v}_k^s$ . Thus, the KL divergence in the detected subspace is computed between two  $K$ -dimensional diagonal Gaussians  $\mathcal{N}(\mathbf{0}, \boldsymbol{\lambda}^s)$  and  $\mathcal{N}(\tilde{\boldsymbol{\mu}}^t, \tilde{\boldsymbol{\sigma}}^{t2})$ . Using subspace detection and dimension weighting, the loss of SSA is:
+
+$$\begin{aligned} \mathcal{L}_{\text{TTA}}(\phi) &= \sum_{d=1}^K \alpha_d \{ D_{\text{KL}}(\mathcal{N}(\mathbf{0}, \lambda_d^s) \| \mathcal{N}(\tilde{\mu}_d^t, \tilde{\sigma}_d^{t2})) + D_{\text{KL}}(\mathcal{N}(\tilde{\mu}_d^t, \tilde{\sigma}_d^{t2}) \| \mathcal{N}(\mathbf{0}, \lambda_d^s)) \} \\ &= \frac{1}{2} \sum_{d=1}^K \alpha_d \left( \frac{(\tilde{\mu}_d^t)^2 + \lambda_d^s}{\tilde{\sigma}_d^{t2}} + \frac{(\tilde{\mu}_d^t)^2 + \tilde{\sigma}_d^{t2}}{\lambda_d^s} - 2 \right). \end{aligned} \quad (7)$$
+
+{4}------------------------------------------------
+
+During TTA, we optimize the feature extractor  $g_\phi$  to minimize  $\mathcal{L}_{\text{TTA}}$ , *i.e.*, we seek  $\phi^* = \min_\phi \mathcal{L}_{\text{TTA}}(\phi)$ . We update only the affine parameters  $\gamma$  and  $\beta$  of the normalization layers such as batch normalization (Ioffe & Szegedy, 2015) or layer normalization (Ba et al., 2016) inspired by Tent (Wang et al., 2021). This strategy is effective not only to retain the source knowledge but also to enable flexible adaptation (Frankle et al., 2021; Burkholz, 2024). The procedure of SSA is listed in Algorithm 1 of the Appendix.
+
+**Is diagonal Gaussian distribution appropriate?** For computing KL divergence of  $\mathcal{L}_{\text{TTA}}$ , we assume the source and target feature distributions as diagonal Gaussian. This is reasonable because features are likely to follow a Gaussian distribution when projected onto the feature subspace detected by subspace detection as the number of original feature dimensions increases by the central limit theorem, as described in Figure 3 and Section 4.3.4. Moreover, since subspace detection uses the PCA, the features projected onto the subspace are decorrelated. Thus, assuming that each dimension is independent, *i.e.*, diagonal, is also reasonable.
+
+## 4 EXPERIMENT
+
+This section provides empirical analysis of feature subspaces and evaluations of SSA on various regression tasks. First, we checked whether the learned features are distributed in a small subspace (Section 4.3.1) and then evaluated the regression performance (Sections 4.3.2 and 4.3.3). We also analyzed the effect of the TTA methods from the perspective of the feature subspace (Section 4.3.4).
+
+### 4.1 DATASET
+
+We used regression datasets with two types of covariate shift, *i.e.*, domain shift and image corruption. **SVHN-MNIST.** SVHN (Netzer et al., 2011) and MNIST (LeCun et al., 1998b) are famous digit-recognition datasets. Although they are mainly used for classification, we used them for regression by training models to directly output a scalar value of the label. We used SVHN and MNIST as the source and target domains, respectively.
+
+**UTKFace (Zhang et al., 2017).** UTKFace is a dataset consisting of face images. The task is to predict the age of the person in an input image. For the source model, we trained models on the original UTKFace images. For the target domain, we added corruptions such as noise or blur to the images. The types of corruption were the same as those of ImageNet-C (Hendrycks & Dietterich, 2019). We applied 13 types of corruption at the highest severity level of the five levels.
+
+**Biwi Kinect (Fanelli et al., 2013).** Biwi Kinect is a dataset consisting of person images. The task is to predict the head pose of the person in an input image in terms of pitch, yaw, and roll angles. We separately trained models to predict each angle. The source and target domains are the gender of the person in the image. We conducted experiments on six combinations of the source/target gender and task, *i.e.*, {male  $\rightarrow$  female, female  $\rightarrow$  male}  $\times$  {pitch, yaw, roll}. We trained regression models to directly output head pose angles in radian, which are roughly in  $(-0.4\pi, 0.4\pi)$ .
+
+**California Housing (Nugent, 2017).** California Housing is a tabular dataset aiming at predicting housing prices from the information of areas. We split the dataset into non-coastal and coastal areas for the source and target domains in accordance with He et al. (2024).
+
+More details of the datasets are provided in Appendix C.1.
+
+### 4.2 SETTING
+
+**Source model.** We used ResNet-26 (He et al., 2016) for SVHN, ResNet-50 for UTKFace and Biwi Kinect, and an MLP for California Housing. We modified the last fully-connected layer to output single scalar values and trained the models with the standard MSE loss on each dataset and task. The details of the training are provided in Appendix C.
+
+**Test-time adaptation with SSA (ours).** We minimized  $\mathcal{L}_{\text{TTA}}$  on the target datasets. We used the outputs of the penultimate layer of the model as features, which had 2048 dimensions. We set the number of dimensions of the feature subspace to  $K = 100$  as the default throughout the experiments. More detailed settings are provided in Appendix C.3.
+
+**Baseline.** Since there are no TTA baselines designed for regression, we compared SSA with TTA methods designed for classification but can be naively modified to regression: *Source* (no adaptation), *BN-adapt* (Benz et al., 2021), *Feature restoration (FR)* (Eastwood et al., 2022), *Prototype*,
+
+{5}------------------------------------------------
+
+Table 2: Test scores on SVHN-MNIST. The best scores are **bolded**.
+
+| Method | $R^2(\uparrow)$ | RMSE ( $\downarrow$ ) | MAE ( $\downarrow$ ) |
+|-|-|-|-|
+| Source | 0.406 | 2.232 | 1.608 |
+| DANN | $0.307_{\pm 0.09}$ | $2.406_{\pm 0.16}$ | $1.489_{\pm 0.09}$ |
+| TTT | $0.288_{\pm 0.02}$ | $2.443_{\pm 0.03}$ | $1.597_{\pm 0.03}$ |
+| BN-adapt | $0.396_{\pm 0.00}$ | $2.251_{\pm 0.01}$ | $1.458_{\pm 0.00}$ |
+| Prototype | $0.491_{\pm 0.00}$ | $2.065_{\pm 0.01}$ | $1.479_{\pm 0.01}$ |
+| FR | $0.369_{\pm 0.01}$ | $2.300_{\pm 0.02}$ | $1.631_{\pm 0.02}$ |
+| VM | $-0.685_{\pm 1.27}^{1.27}$ | $75.83_{\pm 1.52}$ | $75.78_{\pm 1.52}$ |
+| RSD | $0.252_{\pm 0.12}$ | $2.497_{\pm 0.20}$ | $1.703_{\pm 0.20}$ |
+| SSA (ours) | <b><math>0.511_{\pm 0.03}</math></b> | <b><math>2.024_{\pm 0.06}</math></b> | <b><math>1.209_{\pm 0.04}</math></b> |
+| Oracle | $0.874_{\pm 0.00}$ | $1.028_{\pm 0.00}$ | $0.575_{\pm 0.00}$ |
+
+*Variance minimization (VM)*, and *RSD* (Chen et al., 2021). In addition, we used the following methods other than TTA as baselines: *test-time training (TTT)* (Sun et al., 2020), *DANN* (Ganin et al., 2016), and *Oracle* (fine-tuning using labels; performance upper bound). The details of the baseline methods are described in Appendix C.3.
+
+### 4.3 RESULT
+
+#### 4.3.1 NUMBER OF DIMENSIONS OF THE FEATURE SUBSPACE
+
+After the pre-training on the source dataset, we counted the numbers of valid feature dimensions (i.e., having non-zero variances) and dimensions of the feature subspace in which the source features are distributed. The latter value corresponds to the rank of the covariance matrix of the source features in Equation (4). Table 1 shows the result of each source dataset and regression test  $R^2$  scores. Although the number of feature dimensions is 2048 in ResNet, many feature dimensions of the regression models have zero variance because of ReLU activation. This is the cause of the failure of the naive feature alignment, as described in Section 3.1. Moreover, the source features are distributed in only a small subspace with fewer than a hundred dimensions. In the California Housing dataset, we can also see the same tendency that the number of the subspace dimensions is only 40 whereas the number of the entire feature dimensions is 100. This property limits the performance of the naive feature alignment in regression since aligning the entire feature space is ineffective to the subspace in which the features are actually distributed.
+
+In the MLP used for the California Housing dataset, the subspace dimensions compared to the entire feature space is higher than the ResNets used for the other datasets. One explanation for this difference is model capacity and task complexity. MLP’s capacity is low relative to the task (California Housing)’s complexity. On the other hand, the ResNet-26, which has high capacity, resulted in lower subspace dimensions on SVHN, which has low complexity.
+
+#### 4.3.2 REGRESSION PERFORMANCE
+
+We evaluated the regression performance in terms of the  $R^2$  score (coefficient of determination), which is widely used in regression tasks (see Appendix B). Tables 2 and 3 show the scores for the SVHN-MNIST and California Housing. In the both cases, SSA outperformed the baselines; some of them even underperformed the Source. This is because the baselines were designed for classification tasks and they broke the feature subspaces learned by the source model (see Section 4.3.4). On the other hand, RSD (Chen et al., 2021) is originally designed for regression in UDA but did not work in the California Housing dataset because of numerical instability of SVD performed on every target feature batch. In contrast, our method is stable since it avoids degenerated dimensions during TTA. Table 4 shows the  $R^2$  scores on the UTKFace with image corruption. We can see that SSA had the highest  $R^2$  scores for most of the corruption types. In particular, SSA outperformed the baselines by a large margin on noise-type corruption which significantly degraded the performance of Source. Table 5 shows the  $R^2$  scores on Biwi Kinect with genders different from the source domains. SSA constantly had higher  $R^2$  scores than the baselines; the baselines’ scores sometimes significantly dropped or even diverged (Prototype). In summary, SSA consistently improved the scores whereas
+
+Table 3: Test  $R^2$  score and RMSE on California Housing.
+
+| Method | $R^2(\uparrow)$ | RMSE ( $\downarrow$ ) | MAE ( $\downarrow$ ) |
+|-|-|-|-|
+| Source | 0.605 | 0.684 | 0.516 |
+| BN-adapt | $0.318_{\pm 0.00}$ | $0.899_{\pm 0.00}$ | $0.699_{\pm 0.00}$ |
+| Prototype | $-0.726_{\pm 0.01}$ | $1.431_{\pm 0.00}$ | $1.196_{\pm 0.00}$ |
+| FR | $0.510_{\pm 0.01}$ | $0.762_{\pm 0.01}$ | $0.534_{\pm 0.01}$ |
+| RSD | - | - | - |
+| SSA (ours) | <b><math>0.639_{\pm 0.00}</math></b> | <b><math>0.655_{\pm 0.00}</math></b> | <b><math>0.469_{\pm 0.00}</math></b> |
+| Oracle | $0.729_{\pm 0.00}$ | $0.567_{\pm 0.00}$ | $0.404_{\pm 0.00}$ |
+
+{6}------------------------------------------------
+
+Table 4: Test  $R^2$  scores on UTKFace with image corruption (higher is better). The best scores are **bolded**.
+
+| Method | Defocus blur | Motion blur | Zoom blur | Contrast | Elastic transform | Impulse noise | Pixelate | Gaussian noise | Shot noise | Brightness | Fog | Snow | Mean |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+| Source | 0.410 | 0.159 | 0.658 | -3.906 | 0.711 | 0.069 | 0.595 | -2.536 | -2.539 | -2.522 | 0.661 | -0.029 | -0.544 | -0.678 |
+| DANN | 0.512 | 0.586 | 0.637 | -0.720 | 0.729 | 0.698 | 0.807 | -4.341 | -3.114 | -3.744 | 0.590 | -0.131 | -0.425 | -0.609 |
+| TTT | 0.748 | 0.761 | 0.773 | 0.778 | 0.826 | 0.772 | 0.861 | 0.525 | 0.532 | 0.477 | 0.775 | 0.307 | 0.489 | 0.671 |
+| BN-Adapt | 0.727 | 0.759 | 0.763 | 0.702 | 0.826 | 0.775 | 0.850 | 0.510 | 0.510 | 0.446 | 0.790 | 0.392 | 0.452 | 0.654 |
+| Prototype | -1.003 | -1.020 | -1.016 | -0.719 | -0.967 | -0.908 | -0.974 | -0.514 | -0.512 | -0.512 | -1.004 | -0.823 | -0.822 | -0.830 |
+| FR | 0.794 | <b>0.839</b> | 0.849 | 0.756 | <b>0.899</b> | 0.825 | <b>0.946</b> | 0.509 | 0.522 | 0.458 | 0.861 | 0.408 | 0.428 | 0.700 |
+| VM | -2.006 | -1.991 | -2.037 | -1.889 | -1.918 | -1.915 | -1.751 | -2.181 | -2.207 | -2.176 | -1.927 | -2.250 | -2.197 | -2.035 |
+| RSD | 0.789 | 0.833 | 0.851 | 0.749 | 0.897 | 0.825 | 0.941 | 0.502 | 0.503 | 0.445 | 0.852 | 0.419 | 0.500 | 0.701 |
+| SSA (ours) | <b>0.803</b> | <b>0.839</b> | <b>0.851</b> | <b>0.792</b> | <b>0.899</b> | <b>0.829</b> | 0.943 | <b>0.580</b> | <b>0.592</b> | <b>0.560</b> | <b>0.863</b> | <b>0.440</b> | <b>0.517</b> | <b>0.731</b> |
+| Oracle | 0.856 | 0.890 | 0.889 | 0.862 | 0.917 | 0.873 | 0.960 | 0.635 | 0.652 | 0.635 | 0.895 | 0.519 | 0.671 | 0.789 |
+
+Table 5: Test  $R^2$  scores on Biwi Kinect (higher is better). The best scores are **bolded**.
+
+| Method | Female → Male |  |  | Male → Female |  |  | Mean |
+|-|-|-|-|-|-|-|-|
+|  | Pitch | Roll | Yaw | Pitch | Roll | Yaw |  |
+| Source | 0.759 | 0.956 | 0.481 | 0.763 | 0.791 | 0.485 | 0.706 |
+| DANN | $0.698_{\pm 0.03}$ | $0.826_{\pm 0.03}$ | $-0.039_{\pm 0.08}$ | $0.711_{\pm 0.01}$ | $0.850_{\pm 0.01}$ | $0.076_{\pm 0.05}$ | $0.520_{\pm 0.02}$ |
+| TTT | $-0.062_{\pm 0.20}$ | $0.600_{\pm 0.00}$ | $0.031_{\pm 0.02}$ | $0.750_{\pm 0.00}$ | $0.729_{\pm 0.00}$ | $-0.321_{\pm 0.00}$ | $0.288_{\pm 0.03}$ |
+| BN-adapt | $0.771_{\pm 0.00}$ | $0.953_{\pm 0.00}$ | $0.493_{\pm 0.01}$ | $0.832_{\pm 0.00}$ | $0.842_{\pm 0.00}$ | <b><math>0.585_{\pm 0.00}</math></b> | $0.746_{\pm 0.00}$ |
+| Prototype | $-318_{\pm 0.00}$ | - | - | - | - | - | - |
+| FR | $-1.27_{\pm 0.70}$ | $0.742_{\pm 0.05}$ | $-2.69_{\pm 0.79}$ | $0.622_{\pm 0.06}$ | $0.855_{\pm 0.01}$ | $-0.406_{\pm 0.30}$ | $-0.357_{\pm 0.23}$ |
+| VM | $-0.302_{\pm 0.00}$ | $-0.062_{\pm 0.00}$ | $-0.089_{\pm 0.00}$ | $-0.101_{\pm 0.01}$ | $-0.045_{\pm 0.00}$ | $0.001_{\pm 0.00}$ | $-0.100_{\pm 0.00}$ |
+| RSD | $0.783_{\pm 0.02}$ | $0.954_{\pm 0.00}$ | $0.489_{\pm 0.02}$ | $0.832_{\pm 0.00}$ | $0.846_{\pm 0.01}$ | - | - |
+| SSA (ours) | <b><math>0.860_{\pm 0.00}</math></b> | <b><math>0.962_{\pm 0.00}</math></b> | <b><math>0.513_{\pm 0.01}</math></b> | <b><math>0.869_{\pm 0.00}</math></b> | <b><math>0.886_{\pm 0.00}</math></b> | $0.575_{\pm 0.00}$ | <b><math>0.778_{\pm 0.00}</math></b> |
+| Oracle | $0.966_{\pm 0.00}$ | $0.981_{\pm 0.00}$ | $0.804_{\pm 0.00}$ | $0.959_{\pm 0.00}$ | $0.970_{\pm 0.00}$ | $0.811_{\pm 0.00}$ | $0.915_{\pm 0.00}$ |
+
+the baselines sometimes even underperformed Source. Moreover, SSA worked well not only on image data but also tabular data.
+
+#### 4.3.3 ABLATION STUDY
+
+We performed an ablation study on the subspace detection and dimension weighting. For the SSA variant without subspace detection (*i.e.*, naively aligning the entire feature space), we simply selected the top- $K$  feature dimensions that had the largest variances. In this case, we directly used the weight of the linear regressor  $h_\psi$  to compute the dimension weight  $\alpha_d$  as  $\alpha_d = 1 + |w_d|$  instead of Equation (5). Table 6 shows the test  $R^2$  scores with and without subspace detection and dimension weighting on each dataset. Without subspace detection, the scores were worse than Source on MNIST and Biwi Kinect, and of the same level as simple baselines like BN-adapt (Benz et al., 2021) on UTKFace (Table 4). In contrast, subspace detection significantly improved the scores on all three datasets. Dimension weighting also improved the scores, although the gain was smaller than in the case of subspace detection. This is because the variance of the feature subspace dimension correlates with the weight; *i.e.*, the top- $K$  selected dimensions with respect to variance tended to have high importance to the output. Table 7 lists the correlation coefficients between the top  $K = 100$  variances of the source features along the source bases  $\lambda_s^k$  and the corresponding dimension weight  $\alpha_d$ . We can see that there are strong correlations in the three datasets we used. But we can
+
+Table 6: Test  $R^2$  scores of SSA with and without subspace detection and dimension weighting. Scores averaged over corruption types and gender-task combinations are reported for UTKFace and Biwi Kinect, respectively. The best scores are **bolded**.
+
+| Subspace | Weight | SVHN | UTKFace | Biwi Kinect | California |
+|-|-|-|-|-|-|
+|  |  | $0.333_{\pm 0.04}$ | $0.642_{\pm 0.27}$ | $0.672_{\pm 0.24}$ | $0.626_{\pm 0.01}$ |
+| ✓ |  | $0.508_{\pm 0.04}$ | $0.728_{\pm 0.16}$ | $0.778_{\pm 0.17}$ | $0.633_{\pm 0.00}$ |
+| ✓ | ✓ | <b><math>0.511_{\pm 0.03}</math></b> | <b><math>0.731_{\pm 0.16}</math></b> | <b><math>0.778_{\pm 0.17}</math></b> | <b><math>0.639_{\pm 0.00}</math></b> |
+| Source |  | 0.406 | 0.020 | 0.706 | 0.605 |
+
+{7}------------------------------------------------
+
+Table 7: Correlation coefficients between the top  $K = 100$  variances of source features along the source bases  $\lambda_d^s$  and weight  $\alpha_d$  in Equation (5).
+
+| Dataset | SVHN | UTKFace | Biwi Kinect<br>(Female, Pitch) |
+|-|-|-|-|
+| Correlation | 0.787 | 0.917 | 0.782 |
+
+![Figure 2: Reconstruction error of features reconstructed with the source bases relative to the original target features. The figure contains three line plots: (a) SVHN, (b) UTKFace (Gaussian noise), and (c) Biwi Kinect (Female → Male, Pitch). Each plot shows Mean rec. error L on the y-axis versus Number of subspace bases n on the x-axis. Four methods are compared: SSA (ours) (solid blue line), BN-adapt (dashed orange line), Source, Prototype (dotted green line), and FR (dash-dot red line). In all cases, SSA (ours) achieves the lowest reconstruction error, especially as n increases. FR and VM are not plotted in (a) due to high errors.](d864789b0d8384da1d22fd6a5d76bbdf_img.jpg)
+
+Figure 2: Reconstruction error of features reconstructed with the source bases relative to the original target features. The figure contains three line plots: (a) SVHN, (b) UTKFace (Gaussian noise), and (c) Biwi Kinect (Female → Male, Pitch). Each plot shows Mean rec. error L on the y-axis versus Number of subspace bases n on the x-axis. Four methods are compared: SSA (ours) (solid blue line), BN-adapt (dashed orange line), Source, Prototype (dotted green line), and FR (dash-dot red line). In all cases, SSA (ours) achieves the lowest reconstruction error, especially as n increases. FR and VM are not plotted in (a) due to high errors.
+
+Figure 2: Reconstruction error of features reconstructed with the source bases relative to the original target features. Note that Source and Prototype are the same, since Prototype does not update the feature extractor of the model. FR (Eastwood et al., 2022) and VM are not plotted in (a) because they had huge errors.
+
+expect that dimension weighting can raise the importance of the feature dimensions that have low variance but affect the output, which further improves regression performance.
+
+Next, we investigated the effect of the number of feature subspace dimensions  $K$ . We varied  $K$  within  $\{10, 25, 50, 75, 100, 200, 400, 1000, 2048\}$ . Table 8 shows the test  $R^2$  scores. Although the best  $K$  differs among the datasets,  $K = 100$  consistently produced competitive results. With increasing  $K$ , the best or competitive scores were when  $K$  was close to the number of the subspace dimensions in Table 1. This indicates the importance of the subspace feature alignment. When  $K \geq 400$  in MNIST and  $K > 1000$  in Biwi Kinect, the loss became unstable or diverged because SSA attempted to align too many degenerated feature dimensions. In contrast, although setting  $K \geq 1000$  gave the good scores on UTKFace,  $K = 100$  produced a competitive score. Appendix D.4 provides the results for California Housing, which we observed the same tendency with the other three datasets. From these results, although  $K$  is a hyperparameter, we can determine  $K$  before accessing the test dataset by calculating the number of the source feature subspace dimensions.
+
+#### 4.3.4 FEATURE SUBSPACE ANALYSIS
+
+**Feature reconstruction.** To verify that the reason why the baseline methods degrade the regression performance is that they affect the feature subspace learned by the source model as mentioned in Section 4.3.2, we examined the reproducibility of the target features with the source bases  $\mathbf{V}^s$  after TTA. That is, the target features can be represented by a linear combination of the source bases if the model retains the source subspace throughout TTA and the target features fit within the subspace. To measure this quantitatively, we computed the reconstruction error  $L$  as the Euclidean distance between a target feature vector  $\mathbf{z}^t$  and  $\mathbf{z}_n^t$ , the one reconstructed with  $n$  source bases:
+
+$$L = \|\mathbf{z}_n^t - \mathbf{z}^t\|_2, \quad \mathbf{z}_n^t = \boldsymbol{\mu}^s + \sum_{d=1}^n ((\mathbf{z}^t - \boldsymbol{\mu}^s)^\top \mathbf{v}_d^s) \mathbf{v}_d^s, \quad (8)$$
+
+where  $\mathbf{z}^t$  is a target feature vector extracted with the model after TTA, and  $n$  is the number of dimensions of the source subspace listed in Table 1.
+
+Figure 2 plots the reconstruction error  $L$  versus  $n$  on the three datasets. The error decreased as  $n$  increased for all methods, but SSA reduced the error with a smaller  $n$  than in those of the baselines, indicating that it could make the target features fit within the source subspace. Especially in the case
+
+{8}------------------------------------------------
+
+![Figure 3: Histograms of three randomly selected target feature dimensions. The figure is divided into three main sections: (a) SVHN-MNIST, (b) UTKFace (Gaussian noise), and (c) Biwi Kinect (Female to Male, Pitch). Each section contains two columns of histograms. The left column shows 'Original features' and the right column shows 'Projected features'. In the original features, the distributions are highly concentrated at zero. In the projected features, the distributions are much broader and more Gaussian-like.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 3: Histograms of three randomly selected target feature dimensions. The figure is divided into three main sections: (a) SVHN-MNIST, (b) UTKFace (Gaussian noise), and (c) Biwi Kinect (Female to Male, Pitch). Each section contains two columns of histograms. The left column shows 'Original features' and the right column shows 'Projected features'. In the original features, the distributions are highly concentrated at zero. In the projected features, the distributions are much broader and more Gaussian-like.
+
+Figure 3: Histograms of three randomly selected target feature dimensions. **Left:** Original features. **Right:** Projected features.
+
+of Biwi Kinect (c), the baseline methods produced larger errors than Source; *i.e.*, they broke the learned subspace.
+
+In terms of feature alignment, Figure 4 in Appendix D.2 visualizes and evaluates the feature gap between the domains in the subspace.
+
+**Another effect of subspace detection.** Subspace detection has another effect on feature alignment. We used the KL divergence between two diagonal Gaussian distributions in Equation (3) to measure the distribution gap between the source and target features, under the assumption that the features follow a Gaussian distribution. Here, while it is not clear that the assumption actually holds especially when features are output through activation functions like ReLU as in ResNet, we argue that the subspace detection of SSA has, in addition to an effective feature alignment, the effect of making such features follow a distribution close to a Gaussian.
+
+We visualized the histograms of the target features  $\mathbf{z}_i^t$  extracted with the source model and ones projected to the source subspace with Equation (6). Figure 3 show the histograms of three randomly selected dimensions of the original and projected features of the three datasets. In the left column of each figure, the histograms of the original features concentrate on zero because of the ReLU activation and do not follow a Gaussian distribution, which makes the KL divergence computation with Equation (3) inaccurate. On the other hand, the histograms of the projected features in the right columns are close to Gaussians. Thus, subspace detection makes it easier to align the features with the Gaussian KL divergence.
+
+The reason why the projected features follow a Gaussian distribution can be interpreted as follows. From Equation (6), the  $k$ -th element of a projected feature vector  $\tilde{\mathbf{z}}_{i,k}^t$  is
+
+$$\tilde{\mathbf{z}}_{i,k}^t = \sum_{d=1}^D (z_{i,d}^t - \mu_d^s) v_{k,d}^s. \quad (9)$$
+
+Here, we regard each term  $a_{i,d} := (z_{i,d}^t - \mu_d^s) v_{k,d}^s$  as a random variable. Assuming that  $a_{i,d}$  is independent of the feature dimension  $d$ , the central limit theorem guarantees that the distribution of the projected features, *i.e.*, the sum of  $a_{i,d}$ , becomes closer to a Gaussian as the total number of dimensions  $D$  increases.
+
+## 5 RELATED WORK
+
+### 5.1 UNSUPERVISED DOMAIN ADAPTATION
+
+Unsupervised domain adaptation (UDA) has been actively studied as a way to transfer knowledge in the source domain to the target domain (Csurka, 2017). Theoretically, it is known that the upper bound of the error on the target domain includes a distribution gap term between the source and target domains (Ben-David et al., 2010; Ganin et al., 2016; Nguyen et al., 2022). For regression, Cortes & Mohri (2011) theoretically explored regression UDA. RSD (Chen et al., 2021) and DARE-GRAM (Nejjari et al., 2023) take into account that the feature scale matters in regression and explicitly align the feature scale during the feature alignment. However, UDA requires the source and target datasets to be accessed simultaneously during training, which can be restrictive when datasets cannot be accessed due to privacy or security concerns, or storage limitations.
+
+More recently, source-free domain adaptation (SFDA), which does not access the source dataset during adaptation, has been studied. The SFDA setting is similar to TTA in that SFDA adapts
+
+{9}------------------------------------------------
+
+models with only unlabeled target data. However, SFDA requires to store the whole target dataset and access the dataset for multiple epochs to train additional models (Li et al., 2020; Xia et al., 2021; Chu et al., 2022; Sanyal et al., 2023; He et al., 2024) or perform clustering (Liang et al., 2020). On the other hand, TTA does not train additional models nor access the target dataset for multiple epochs, which enables instant adaptation with low computational resource and storage.
+
+### 5.2 TEST-TIME TRAINING
+
+Test-time training (TTT) is also similar to TTA as it adapts models with unlabeled target data. The main difference is that TTT requires to modify the model architecture and training procedure in the source domain. The main approach of TTT is additionally training an self-supervised branch simultaneously with the main supervised task in the source domain. Then, during adaptation, the model is updated via minimizing the self-supervised loss on the target data. On the basis of this approach, TTT methods with various self-supervised tasks have been proposed such as rotation prediction (Sun et al., 2020), contrastive learning (Liu et al., 2021), clustering (Hakim et al., 2023), or distribution modeling with normalizing flow (Osowiechi et al., 2023). However, adding additional losses to the training prohibits the use of off-the-shelf pre-trained models or may potentially affect the performance of the main task. In contrast, TTA accepts arbitrary training methods in the source domain and thus off-the-shelf-models can be adapted.
+
+### 5.3 TEST-TIME ADAPTATION
+
+Test-time adaptation (TTA) aims to adapt a model trained on the source domain to the target domain without accessing the source data (Liang et al., 2023). TTA can be applied in a wider range of situations than SFDA and TTT in that TTA does not train additional models or modify the model architecture and source pre-training. TTA for classification has attracted attention for its practicality. Various types of TTA methods have been developed.
+
+**Entropy-based.** Wang et al. (2021) found that the entropy of prediction strongly correlates with accuracy on the target domain and proposed test-time entropy minimization (Tent), which is the most representative of the TTA methods. BACS (Zhou & Levine, 2021), MEMO (Zhang et al., 2022), EATA (Niu et al., 2022) and DELTA (Zhao et al., 2023) follow the idea of Tent and improve adaptation performance. T3A (Iwasawa & Matsuo, 2021) adjusts the prototype in the feature space during testing. IST (Ma, 2024) employs graph-based pseudo label modification. However, these TTA methods are designed for classification and cannot be applied to regression. For instance, computing entropy, which is widely adopted in TTA, requires a predictive probability for each class, whereas ordinary regression models only output a single predicted value. Thus, we investigate an approach that does not rely on entropy.
+
+**Feature alignment.** Feature alignment is based on the insight of UDA and makes the target feature distribution close to the source one. Since accessing the source data is restricted in the TTA setting, methods based on the feature alignment match the statistics of the target features to those of the pre-computed source. BN-adapt (Benz et al., 2021) updates the feature mean and variance stored in batch normalization (BN) layers (Ioffe & Szegedy, 2015). DELTA (Zhao et al., 2023) modifies BN and introduces class-wise loss re-weighting. CFA (Kojima et al., 2022), BUFR (Eastwood et al., 2022), CAFe (Adachi et al., 2023), and CAFA (Jung et al., 2023) incorporate pre-computed source statistics. Although some of these methods are directly applicable to regression, we have observed that they are not effective or even degrade regression performance.
+
+**Other tasks.** TTA for depth estimation (Li et al., 2023) super resolution (Deng et al., 2024), point cloud (Wang et al., 2024), and person re-identification (Adachi et al., 2024) are proposed. But they have task-specific architectures or methods and cannot be applied to ordinary regression.
+
+## 6 CONCLUSION
+
+We proposed significant-subspace alignment (SSA), a novel test-time adaptation method for regression models. Since we have found that the naive feature alignment fails in regression TTA because of the learned features being distributed in a small subspace, we incorporated subspace detection and dimension weighting procedures into SSA. Experimental results show that SSA achieved higher  $R^2$  scores on various regression tasks than did baselines that were originally designed for classification tasks. We will extend TTA to further broader tasks and settings such as concept drift in the future.
+
+ Rest of paper (reference and Appendix) is removed.

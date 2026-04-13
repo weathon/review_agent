@@ -1,0 +1,306 @@
+
+
+{0}------------------------------------------------
+
+# BEYOND PARAMETER COUNT: IMPLICIT BIAS IN SOFT MIXTURE OF EXPERTS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+The traditional viewpoint on Sparse Mixture of Experts (MoE) models is that instead of training a single *large* expert, which is computationally expensive, we can train many *small* experts. The hope is that if the total parameter count of the small experts equals that of the singular large expert, then we retain the representation power of the large expert while gaining computational tractability and promoting expert specialization. The recently introduced Soft MoE replaces the Sparse MoE’s discrete routing mechanism with a differentiable gating function that smoothly mixes tokens. While this smooth gating function successfully mitigates the various training instabilities associated with Sparse MoE, it is unclear whether it induces implicit biases that affect Soft MoE’s representation power or potential for expert specialization. We prove that Soft MoE with a single arbitrarily powerful expert cannot represent simple convex functions. This justifies that Soft MoE’s success cannot be explained by the traditional viewpoint of many small experts collectively mimicking the representation power of a single large expert, and that multiple experts are actually *necessary* to achieve good representation power (even for a fixed total parameter count). Continuing along this line of investigation, we introduce a notion of expert specialization for Soft MoE, and while varying the number of experts yet fixing the total parameter count, we consider the following (computationally intractable) task. Given any input, how can we discover the expert subset that is specialized to predict this input’s label? We empirically show that when there are many small experts, the architecture is implicitly biased in a fashion that allows us to efficiently approximate the specialized expert subset. Our method can be easily implemented to potentially reduce computation during inference. For example, using our method on ImageNet, one can perform inference using only 1/8 of the experts and still retain 99% of the test accuracy of using all experts.
+
+## 1 INTRODUCTION
+
+It has been well established that scaling the size (i.e., parameter count) of models is necessary for state of the art prediction power (Kaplan et al., 2020; Bahri et al., 2021), but naively scaling the model size is infeasible due to hardware constraints and computational costs. Mixture of Experts (MoE) layers in a model allow one to achieve this goal, while mitigating the increased computational costs for training and inference that accompany a naively larger model. These have been successfully deployed in practice, in a variety of contexts such as language (Fedus et al., 2022) and vision (Ruiz et al., 2021), and MoE layers are considered critical to achieve state of the art performance in today’s models (Jiang et al., 2024).
+
+The archetypical MoE layer is the Sparse MoE (Shazeer et al., 2017). Here, each token is only given to a subset of experts, and a router is trained to discretely match a token to its expert subset. Since a single (large) expert can represent complex functions, the traditional viewpoint is that one should partition the large expert into multiple (small) experts, so that the total parameter count of all experts is unchanged. The hope is that the model’s representation power is similar since the total parameter count is the same and since experts can specialize to the tokens they see (rather than all tokens) (Chen et al., 2022). Yet, training and inference are faster, because any single token activates only a subset of experts rather than all of them.
+
+{1}------------------------------------------------
+
+054  
+055  
+056  
+057  
+058  
+059  
+060  
+061  
+062  
+063  
+064  
+065  
+066  
+067  
+068  
+069  
+070  
+071  
+072  
+073  
+074  
+075  
+076  
+077  
+078  
+079  
+080  
+081  
+082  
+083  
+084  
+085  
+086  
+087  
+088  
+089  
+090  
+091  
+092  
+093  
+094  
+095  
+096  
+097  
+098  
+099  
+100  
+101  
+102  
+103  
+104  
+105  
+106  
+107
+
+While the Sparse MoE allows scaling of model size, its discrete routing causes optimization issues and load balancing difficulties during training. To tackle these issues, many variants of Sparse MoE have been introduced, such as routing a token to only a single expert (Fedus et al., 2022), incorporating linear programs to ensure load balancing (Lewis et al., 2021) or having the experts select tokens (instead of tokens selecting experts) (Zhou et al., 2022). However, all these approaches remain discrete in nature, and thus suffer from at least some degree of training instability.
+
+To alleviate these issues, the recently introduced Soft MoE (Puigcerver et al., 2024) eschews discrete matching in favor of a smoother approach. It computes for each expert a convex combination of the input tokens, and the expert only sees this convex combination. The final output of the model is then a convex combination of each expert’s output. This approach is fully differentiable, and hence is more stable than the Sparse MoE. This novel Soft MoE architecture has been shown to outperform all other baselines on challenging large scale vision tasks, and can scale to thousands of experts (Puigcerver et al., 2024). Moreover, recent results show that the Soft MoE is a promising avenue towards providing empirical scaling laws for deep reinforcement learning (Obando-Ceron et al., 2024).
+
+Thus, while the Sparse MoE constructs a discrete mapping between tokens and experts, the Soft MoE computes convex combinations of tokens that are fed to experts, and then computes convex combinations of the expert outputs, which together promote stabler and faster training.
+
+The majority of prior work on MoE focuses on computational issues, such as efficient and stable training. In our paper, we adopt an orthogonal perspective. In particular, it remains unclear whether Soft MoE’s specific manner of combining tokens and experts creates any unexpected implicit architectural biases. Indeed, it is not even clear that its soft gating mechanism preserves the traditional MoE dogma that many small experts have similar representation power to a single large expert with the same total parameter count. It is also unclear whether combining tokens and experts completely destroys the possibility (or discoverability) of expert specialization, which is what one traditionally desires from an MoE (especially in the regime of many experts) (Krishnamurthy et al., 2023; Dai et al., 2024). Thus, we investigate for the existence of such biases, through the lens of *varying the number of experts*. In this paper, we make progress along this line of investigation by making the following contributions:
+
+- We prove that the Soft MoE with a single neural network expert, even with arbitrarily many parameters, cannot represent simple convex functions (while empirically we show that multiple experts can). Thus, in contrast to the traditional viewpoint, having multiple experts is actually necessary to have non-trivial representation power in Soft MoE.
+- We introduce a notion of specialization for Soft MoE. While discovering specialized experts generally seems intractable, we empirically demonstrate that as we increase the number of experts, even while fixing the total parameter count, the architecture is implicitly biased in a manner that allows us to efficiently approximate the specialized expert set (see Figure 1).
+- Our method for discovering specialized experts can be easily implemented for reducing computation at inference.
+
+These contributions thus show there are benefits to using a large number of small experts relative to a small number of large experts, and notably, these benefits are often non-computational.
+
+![Figure 1: A line graph showing Accuracy (%) on the y-axis (ranging from 30 to 100) versus the Proportion of Total Experts n Selected by Algorithm 1 (%) on the x-axis (ranging from 0 to 100). The graph displays performance for different total numbers of experts n (21, 22, 23, 24, 25, 26, 27, 28, 29). The curves show that as the proportion of selected experts increases, accuracy generally increases and plateaus. The curves for larger n values (e.g., n=29) are consistently higher than those for smaller n values (e.g., n=21) for the same proportion of selected experts, indicating that performance uniformly improves with larger n.](1ac0e11d90bece49015adc89be472a39_img.jpg)
+
+Figure 1: A line graph showing Accuracy (%) on the y-axis (ranging from 30 to 100) versus the Proportion of Total Experts n Selected by Algorithm 1 (%) on the x-axis (ranging from 0 to 100). The graph displays performance for different total numbers of experts n (21, 22, 23, 24, 25, 26, 27, 28, 29). The curves show that as the proportion of selected experts increases, accuracy generally increases and plateaus. The curves for larger n values (e.g., n=29) are consistently higher than those for smaller n values (e.g., n=21) for the same proportion of selected experts, indicating that performance uniformly improves with larger n.
+
+Figure 1: Our Algorithm 1 selects a *specialized* subset of the experts to utilize for inference. Given any proportion of  $n$  (the total number of experts) to select, its performance uniformly improves with larger  $n$ .
+
+{2}------------------------------------------------
+
+## 2 PROBLEM FORMULATION
+
+### 2.1 PRELIMINARIES
+
+We begin by briefly discussing the Soft MoE architecture (Puigcerver et al., 2024). Throughout our paper, we assume there is a single slot per expert, since this is the most performant setting in practice. Let  $X \in \mathbb{R}^{m \times d}$  denote the tokenized input, so that there are  $m$  tokens each in  $\mathbb{R}^d$ . The MoE layer is equipped with  $n$  experts  $\{f_j : \mathbb{R}^d \rightarrow \mathbb{R}^d\}_{j=1}^n$ , each of which is typically implemented as a feedforward network. The router is parameterized by  $\Phi \in \mathbb{R}^{d \times n}$ . Given an input  $X$ , the parameters  $\Phi$  are used to compute matrices  $D(X), C(X) \in \mathbb{R}^{m \times n}$  which are defined elementwise as
+
+$$D(X)_{ij} = \frac{\exp((X\Phi)_{ij})}{\sum_{i'=1}^m \exp((X\Phi)_{i'j})} \quad \text{and} \quad C(X)_{ij} = \frac{\exp((X\Phi)_{ij})}{\sum_{j'=1}^n \exp((X\Phi)_{ij'})}. \quad (1)$$
+
+Note that each column of  $D(X)$  and each row of  $C(X)$  sums to one. With this notation in hand, we formally define the Soft MoE layer below.
+
+**Definition 1** The Soft MoE is a function  $\text{sMoE}_{\{f_j\}_{j=1}^n}^\Phi : \mathbb{R}^{m \times d} \rightarrow \mathbb{R}^{m \times d}$  defined as
+
+$$\text{sMoE}_{\{f_j\}_{j=1}^n}^\Phi(X) = C(X)\tilde{Y}(X) \quad \text{where} \quad \tilde{Y}(X) = \begin{bmatrix} f_1((D(X)^T X)_1) \\ \vdots \\ f_n((D(X)^T X)_n) \end{bmatrix}.$$
+
+The Soft MoE thus computes  $n$  different convex combinations of the tokens in  $X$ , where the weights of the  $j$ th convex combination are given by the  $j$ th column of  $D(X)$ . It then applies expert  $f_j$  to the  $j$ th convex combination, for each  $j = 1, 2, \dots, n$ . Finally, it computes  $m$  different convex combinations of these expert outputs, where the weights of the  $i$ th convex combination are given by the  $i$ th row of  $C(X)$ . Note that each expert processes a single vector in  $\mathbb{R}^d$ , and that  $\text{sMoE}$  is differentiable whenever the experts are. This results in more stable training relative to Sparse MoE, where each expert is given a subset of the  $m$  tokens via a discrete matching algorithm. The Soft MoE has shown significant empirical success in vision (Puigcerver et al., 2024) and reinforcement learning (Obando-Ceron et al., 2024).
+
+### 2.2 OUR INVESTIGATION
+
+At a high level, the Sparse MoE is designed with the following principle. Say we desire a model with  $b$  total parameters, because we believe that  $b$  allows for sufficiently large representation power. Instead of using a single large network ( $n = 1$ ) with  $b$  parameters, we use  $n > 1$  smaller experts each with  $b/n$  parameters. The hope is that we have similar representation power to the  $n = 1$  case since the total parameter count is the same, but we have faster computation because each token only activates a small subset of experts (Shazeer et al., 2017; Fedus et al., 2022). Moreover, one also hopes that each expert can specialize to the specific type of tokens it sees (Chen et al., 2022; Krishnamurthy et al., 2023; Dai et al., 2024).
+
+The Soft MoE is motivated in a similar fashion. It also splits a single large model with  $b$  parameters into  $n \geq 1$  smaller experts each with  $b/n$  parameters, hoping that representation power is unchanged. However, Soft MoE differs significantly from Sparse MoE in how it uses these experts. While Sparse MoE discretely assigns tokens to experts, Soft MoE computes convex combinations of tokens and expert outputs. Due to this significant difference, it is unclear how the original motivations for Sparse MoE apply to Soft MoE.
+
+As one example of how Soft MoE might deviate from the original motivations for Sparse MoE, consider the extreme case when  $n = 1$ . Here, Sparse MoE's router trivially routes all tokens to the expert, and so classical results show that Sparse MoE can represent arbitrary continuous functions (Cybenko, 1989; Hornik, 1991). But in Soft MoE, the gating function is non-trivial even in  $n = 1$ , and so it is possible that Soft MoE has poor representation power even when the expert is very powerful. If this were true, then it would challenge the conventional wisdom that Soft MoE's empirical success with  $n > 1$  smaller experts (each with  $b/n$  parameters) is simply because they
+
+{3}------------------------------------------------
+
+mimic (albeit computationally efficiently) the representation power of a single large expert (with  $b$  parameters). Instead, it would suggest that Soft MoE has some implicit bias that enables its practical success. To this end, we ask the following question.
+
+*Q1: Can a large single expert in Soft MoE represent simple functions?*
+
+Our motivation for this question has thus far primarily been scientific. Nevertheless, we believe this question is also practically relevant, since there are empirical results in reinforcement learning (RL) which show that Soft MoE with a single expert can outperform traditional neural network architectures (Obando-Ceron et al., 2024). Indeed, a negative answer to Q1 would imply that there are implicit biases in Soft MoE that assist in its improved empirical performance.
+
+As a second example of how Soft MoE might deviate from the original motivations for Sparse MoE, consider the following. Since Soft MoE combines all tokens before feeding them to an expert, and since it combines all experts to produce its final output, it is natural to wonder whether this prohibits expert specialization. Indeed, this limitation is acknowledged in the seminal work (Puigcerver et al., 2024). We thus ask the following question.
+
+*Q2: Is there a notion of expert specialization in Soft MoE, and if so, can it be efficiently discovered?*
+
+The remainder of this paper is devoted to answering Q1 (in Section 3) and Q2 (in Section 4).
+
+## 3 REPRESENTATION FAILURE OF A SINGLE EXPERT
+
+In this section, we answer Q1 from Section 2.2. We first recall the definition of Lipschitz functions.
+
+**Definition 2** A function  $h : \mathbb{R}^{k_1} \rightarrow \mathbb{R}^{k_2}$  is  $L$ -Lipschitz if  $\|h(x) - h(y)\|_2 \leq L\|x - y\|_2$  for all  $x, y \in \mathbb{R}^{k_1}$ .
+
+Recall that any neural network is Lipschitz (Virmaux & Scaman, 2018). Our main result shows that Soft MoE with a single Lipschitz expert  $f$  is incapable of representing simple target functions. This result holds even when this expert  $f$  is arbitrarily powerful (and possibly non-parametric). It also holds when the output of the Soft MoE layer is passed to an arbitrarily powerful Lipschitz function  $g$  (as would be the case in a practical implementation, since the MoE would be a layer that prepends a powerful neural network function, rather than a standalone layer). Below we formally state our result.
+
+**Theorem 1** Fix any  $m \geq 2$ ,  $d \geq 1$  and  $n = 1$ . Define the target function  $t : \mathbb{R}^{m \times d} \rightarrow \mathbb{R}$  as  $t(X) = \|X\|_2$ . Assume the existence of  $\Phi \in \mathbb{R}^{d \times 1}$ ,  $f : \mathbb{R}^d \rightarrow \mathbb{R}^d$  and  $g : \mathbb{R}^{m \times d} \rightarrow \mathbb{R}$  such that
+
+$$|t(X) - g(\text{sMoE}_f^\Phi(X))| \leq \max\{1, t(X)/20\} \text{ for all } X \in \mathbb{R}^{m \times d}.$$
+
+Then there are no  $L_f, L_g \geq 0$  such that  $f$  is  $L_f$ -Lipschitz and  $g$  is  $L_g$ -Lipschitz.
+
+The proof is deferred to Appendix A. Let us discuss this result.
+
+**Notion of Approximation.** The theorem says that we cannot approximate  $t$  over  $X \in \mathbb{R}^{m \times d}$  up to an error that scales as  $\max\{1, t(X)/20\}$ . While the domain is unbounded, which is slightly non-standard, our approximation error is also unbounded since we allow it to scale with  $t(X)$  (unlike traditional results which require approximation to within a fixed constant tolerance). Indeed, it is trivial that the constant function zero can approximate  $t(X)$  over all of  $\mathbb{R}^d$  up to an error of  $t(X)$ . Our notion of error is only slightly smaller than this.
+
+**Residual Connections.** In a practical implementation, one would use residual connections so that the function  $g$  would typically receive both  $X$  and  $\text{sMoE}_f^\Phi(X)$  as input instead of just  $\text{sMoE}_f^\Phi(X)$ . In such a setting, our result would of course not apply, since one could use  $g$  alone to approximate  $t(X)$ , while completely ignoring  $\text{sMoE}_f^\Phi(X)$ . Nevertheless, we believe it is worth studying the setting without residual connections, because if  $g$  did not leverage  $\text{sMoE}_f^\Phi(X)$ , then there would be no point of using a Soft MoE layer at all.
+
+**Benign Target.** The target function  $t$  is extremely benign. Indeed, it is convex and 1-Lipschitz. So it a priori seems intuitive to try and approximate it with a Lipschitz expert  $f$  and subsequent Lipschitz
+
+{4}------------------------------------------------
+
+architecture  $g$ . Yet, we cannot approximate  $t$  even when  $f, g$  have arbitrarily large Lipschitz constants. This is in stark contrast to the classical neural network approximation literature, where relatively simple feedforward networks can represent arbitrary continuous functions (Cybenko, 1989; Hornik, 1991).
+
+**Permutation Invariant Target.** Let  $\sigma : \mathbb{R}^{m \times d} \rightarrow \mathbb{R}^{m \times d}$  be any function that permutes the rows of its input. It is easily shown that  $\sigma$  commutes with  $\text{sMoE}_{\{f_j\}_{j=1}^n}^\Phi$ . This implies that one cannot represent target functions that vary based on permutations of their input’s rows. A result which relied on this property would not be very satisfying, since in practice this issue is handled by adding positional encoding to the input (Vaswani et al., 2017). However, our target function  $t$  satisfies  $t(\sigma(X)) = t(X)$  for any permutation function  $\sigma$ . Indeed, an examination of the proof in Appendix A shows that the result hinges on the particular manner in which tokens are combined before being passed to the expert.
+
+**Normalizing Input.** In practice, one may normalize the input  $X$  before passing it to the Soft MoE, and in this case Theorem 1 is trivially inapplicable. Nevertheless, since the performance with or without normalization is typically very comparable (Puigcerver et al., 2024), we believe the result remains interesting.
+
+**Multiple Experts.** We are unable to prove a theorem for the ability of multiple experts to represent  $t$ . In Appendix B, however, we show empirically that increasing the number of experts leads to monotonic performance improvement for representing  $t$ , even when the total expert parameter count is fixed.
+
+Theorem 1 (and the experiment in Appendix B) thus provides a negative answer to Q1 raised in Section 2.2. It therefore challenges the conventional wisdom that Soft MoE’s empirical success with  $n > 1$  smaller experts (each with  $b/n$  parameters) is simply because they mimic the representation power of a single large expert (with  $b$  parameters). Instead, it suggests that Soft MoE has implicit biases that assist in its improved performance. A precise characterization of these biases and their role in this improvement is beyond our paper’s scope. Nevertheless, we view our result as a stepping stone towards understanding and potentially furthering the true power of Soft MoE. Indeed, recent results show that Soft MoE with even a single expert can outperform traditional architectures (Obando-Ceron et al., 2024). Our Theorem 1 shows that this improvement *cannot be because of improved representation power*.
+
+## 4 SPECIALIZATION OF EXPERTS
+
+In this section, we tackle Q2 from Section 2.2.
+
+### 4.1 WHAT DOES SPECIALIZATION MEAN?
+
+We begin by noting that since the Soft MoE combines tokens before feeding them to experts, it seems a priori unlikely that experts specialize, as acknowledged in the seminal work (Puigcerver et al., 2024). Indeed, it is unclear what it even means for an expert to specialize; for instance it seems difficult to consider specialization of an expert to a subset of tokens.
+
+Instead, our notion of specialization is whether there exists, for any input  $X \in \mathbb{R}^{m \times d}$ , an  $X$ -dependent (relatively small) subset of experts that are sufficient to accurately predict the label for that input  $X$ . Recall from Definition 1 that the output of the Soft MoE layer is  $C(X)\tilde{Y}(X)$ , where  $\tilde{Y}(X) \in \mathbb{R}^{n \times d}$  stores the output of expert  $i$  in row  $i$ . Hence, zeroing out a row  $i$  of  $\tilde{Y}(X)$  means that expert  $i$  does not contribute anything to the final prediction. If we can zero out many rows of  $\tilde{Y}(X)$  without affecting the final prediction, then the remaining experts can be understood to have specialized to the input  $X$ , since this means that only these remaining experts were actually required to make an accurate prediction, and these experts did not require contributions from the other zeroed out experts. By contrast, if zeroing out rows of  $\tilde{Y}(X)$  changes the prediction, then this indicates a lack of expert specialization, since the knowledge required to predict correctly on  $X$  was non-trivially spread out across each of the  $n$  experts.
+
+{5}------------------------------------------------
+
+### 4.2 DOES SPECIALIZATION EXIST?
+
+To test whether specialization occurs, we consider the following small experiment. For  $n \in \{4, 8, 16\}$  we train a simple neural network that comprises of a Soft MoE layer with  $n$  experts, followed by a linear prediction head, on the MNIST dataset (LeCun et al., 2010). The experts in the MoE are each (identical architecture) MLP with one hidden layer and ReLU activation, and we denote the number of parameters in a single expert to be  $d_{E,n}$ . As we increase  $n$ , we decrease the width of each expert (i.e. the number of units in the hidden layer), so that the total (i.e., summed over all experts) number of parameters  $nd_{E,n}$  is constant for all values of  $n$ . By holding the total number of expert parameters constant, we keep the total expressivity constant, and thus ensure that we do not bias the results for larger numbers of experts. See Appendix D.1 for further details of this experimental setup.
+
+We train each network, and for the sake of a fair comparison across  $n$ , we select for each  $n$  a model that has  $\approx 97.5\%$  test accuracy. We emphasize that our aim is to investigate the impact of  $n$  on expert specialization, thus we need to first ensure that each setting of  $n$  achieves the same test performance. Then, for each of the  $n$  models and each test datapoint  $X$  we do the following: (a) we use an exhaustive search to identify whether there exists an expert subset of size  $k = n/4$  that predicts the label for  $X$  correctly (b) we randomly zero out  $3n/4$  rows of  $\tilde{Y}(X)$ , so we are only predicting using a random set of  $k = n/4$  experts, and check whether it predicts the label for  $X$  correctly. For both settings, we compute the average prediction accuracy over all 10,000 test points. Note for both settings that the number of expert parameters involved in prediction is invariant to the number of experts  $n$ .
+
+The first row of Table 1 shows that expert specialization occurs, especially for larger  $n$  (even though each of the experts for larger  $n$  are smaller in parameter count). Figure 5 in Appendix D.1 shows that the best  $k$ -subsets identified are diverse, indicating the expert subsets are indeed specialized to the input. However, the exhaustive search used to generate this result is generally intractable for larger models. It is also not useful for prediction in the wild, since this procedure requires knowledge of the label of each test point  $X$ . Moreover, the second row of Table 1 shows that we cannot hope to find the best subset simply via random selection.
+
+|  | $n = 4$ | $n = 8$ | $n = 16$ |
+|-|-|-|-|
+| Best $k$ -Subset Accuracy (%) | 94.69 | 99.90 | 100.00 |
+| Random $k$ -Subset Accuracy (%) | $46.57 \pm 0.44$ | $51.95 \pm 0.46$ | $58.94 \pm 0.34$ |
+
+Table 1: Results for experiment in Section 4.2, where a subset of the experts of size  $k = n/4$  was used to predict the labels. For the Random subset results, we report the mean and standard deviation over 10 random seeds.
+
+### 4.3 AN ALGORITHM FOR BEST EXPERT SELECTION
+
+The results of the experiment in Section 4.2 demonstrate the existence of expert specialization, albeit in a small experiment. However, the same results show that identifying the best subset of experts cannot be done as simply as via random selection. Since identifying the true best subset of  $k$  experts ostensibly has  $\Omega\binom{n}{k}$  computational complexity, it is of interest to discover an efficient algorithm which can rapidly approximate the best subset, especially before moving on to larger experiments. Beyond our current motivations of checking for the existence of expert specialization, such an algorithm could also be useful at inference time to reduce computational expense without loss in accuracy (see Section 4.5).
+
+To this end, we recall from Definition 1 that given an input  $X$ , the final output of the Soft MoE is  $C(X)\tilde{Y}(X)$ , i.e. row  $i$  of the final output is a convex combination of the rows of  $\tilde{Y}(X)$  where the combination weights are given by row  $i$  of  $C(X)$ . So a natural attempt to identify the most important experts are those given the most weight by  $C(X)$ . Algorithm 1 formalizes this intuition.
+
+Note that Algorithm 1 is computationally efficient, requires no separate training, and can be implemented in just a few lines of code. We also note that it can be easily adapted to handle a batched input in a vectorized fashion (see Appendix C). Its output  $\tilde{Y}(X) \in \mathbb{R}^{n \times d}$  equals  $\tilde{Y}(X)$  on  $k$  rows, and is zero in the other  $n - k$  rows. Thus, Algorithm 1 can be used to identify a performant subset of experts at inference time, and then construct the final Soft MoE output by only doing a forward
+
+{6}------------------------------------------------
+
+#### **Algorithm 1** Best Expert Subset Selection
+
+**Require:** number of experts  $k$  to use for prediction, Soft MoE  $\text{sMoE}_{\{f_j\}_{j=1}^n}^\Phi$ , input  $X \in \mathbb{R}^{m \times d}$
+
+- 1: Compute  $C(X) \in \mathbb{R}^{m \times n}$  as in Equation 1.
+- 2: Define  $C_{\text{sum}} \in \mathbb{R}^n$  entrywise as  $C_{\text{sum},j} = \sum_{i=1}^m C(X)_{ij}$  for  $j = 1, 2, \dots, n$ .
+- 3: Define  $S_k \subseteq \{1, 2, \dots, n\}$  to be the indices corresponding to the  $k$  largest entries of  $C_{\text{sum}}$ .
+- 4: Define  $\hat{Y}(X) \in \mathbb{R}^{n \times d}$  entrywise as
+
+$$\hat{Y}(X)_{ij} = \begin{cases} (f_i((D(X)^T X)_i))_j & \text{if } i \in S_k \\ 0 & \text{if } i \notin S_k \end{cases},$$
+
+- for each  $i = 1, 2, \dots, n$  and  $j = 1, 2, \dots, d$ .
+- 5: **return**  $\hat{Y}(X)$ .
+
+pass through  $k$  experts instead of all  $n$  experts. In the regime of many large experts, this can yield computational advantages at inference time, and we explore this further in Section 4.5.
+
+### 4.4 EMPIRICAL PERFORMANCE OF ALGORITHM 1
+
+In line with the experimental setup assumed by the seminal work (Puigcerver et al., 2024), we demonstrate the efficacy of Algorithm 1 on a suite of image classification tasks. We provide results across a wide range of model scales and architectures, including architectures beyond the ViT model class that was used to introduce Soft MoE.
+
+#### 4.4.1 EXPERIMENTAL SETUP
+
+We experiment on 4 datasets: MNIST, CIFAR10, CIFAR100 (Krizhevsky, 2009) and ImageNet-1k (Deng et al., 2009). For MNIST, we use the same experimental setup as in Section 4.2. Recall that the network used is very simple, and consists entirely of a Soft MoE layer and a prediction head. This small network has merely 318K total parameters, of which 307K are expert parameters. As a more practical setting, we use the Astroformer-1 architecture (Dagli, 2023) for CIFAR10 and CIFAR100. This hybrid transformer-convolutional architecture achieves excellent performance on these datasets without leveraging extra training data. We modify Astroformer-1 by replacing the MLPs in the transformer blocks with Soft MoE layers, analogous to the standard practice that is followed in ViTs (Puigcerver et al., 2024). This model is larger, and has 180M total parameters, of which 150M are expert parameters. Finally, we adopt the same Soft MoE variant of the ViT architecture (Dosovitskiy et al., 2021) used by the seminal work (Puigcerver et al., 2024) on the ImageNet-1k dataset. Specifically, it replaces the MLPs in the latter half of the encoder blocks of the ViT Base model with Soft MoE layers. This is the largest architecture we consider, and it has 513M total parameters, of which 454M are expert parameters. Due to compute constraints, scaling up our experimental protocol further (either with external pretraining data or larger model sizes) is infeasible. Nevertheless, our setup spans a range of model architecture types and scales, as well as several canonical datasets. We defer further details of the various architectures and their modifications to Appendix D.2.
+
+For each dataset and associated network architecture, we do the following. We train a suite of models where each model has a different  $n$  (total number of experts) in each Soft MoE layer. Each model is trained *from scratch* without utilizing any external data. As discussed in Section 4.2, when we increase  $n$  we correspondingly decrease the number of parameters in each expert, to ensure the total expert expressivity is (roughly) constant. After training each network, we select for each  $n$  a model that has the same test accuracy (as discussed in Section 4.2, this is important because we are investigating the impact of varying  $n$  on Algorithm 1’s test performance, and so we must ensure the original networks have similar test performance). For each of these trained networks and various values of  $k$ , we then evaluate Algorithm 1’s performance on the test set. Concretely, we compute the test accuracy of using the  $k$  experts found by Algorithm 1 for each datapoint in the test set, and compare this to the test accuracy of randomly selecting  $k$  experts for each datapoint in the test set.
+
+{7}------------------------------------------------
+
+![Figure 2: Results for MNIST, CIFAR10 and ImageNet-1k experiments. The figure contains three line plots: (a) MNIST, (b) CIFAR10, and (c) ImageNet-1k. Each plot shows Accuracy (%) on the y-axis versus the number of experts n on the x-axis. The x-axis is on a log2 scale, with values 2^1, 2^2, 2^3, 2^4, 2^5, 2^6. The legend for all plots includes: Alg 1 (solid line with circles), Rand (dashed line with circles), k=n/2 (blue), k=n/4 (orange), and k=n/8 (green). In (a) MNIST, accuracy increases with n and is higher for larger k. In (b) CIFAR10, Alg 1 with k=1 and k=2 maintains high accuracy while random selection drops. In (c) ImageNet-1k, Alg 1 with k=n/8 maintains high accuracy while random selection drops significantly.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 2: Results for MNIST, CIFAR10 and ImageNet-1k experiments. The figure contains three line plots: (a) MNIST, (b) CIFAR10, and (c) ImageNet-1k. Each plot shows Accuracy (%) on the y-axis versus the number of experts n on the x-axis. The x-axis is on a log2 scale, with values 2^1, 2^2, 2^3, 2^4, 2^5, 2^6. The legend for all plots includes: Alg 1 (solid line with circles), Rand (dashed line with circles), k=n/2 (blue), k=n/4 (orange), and k=n/8 (green). In (a) MNIST, accuracy increases with n and is higher for larger k. In (b) CIFAR10, Alg 1 with k=1 and k=2 maintains high accuracy while random selection drops. In (c) ImageNet-1k, Alg 1 with k=n/8 maintains high accuracy while random selection drops significantly.
+
+Figure 2: Results for MNIST, CIFAR10 and ImageNet-1k experiments in Section 4.4. We depict the test accuracy as a function of  $n$ , for Algorithm 1 and Random selection, and for various choices of  $k$ . For the Random selection results, we report the mean over 10 random seeds. For CIFAR10, we only reported results with  $k = 1$  and  $k = 2$ . This is because  $k > 2$  had accuracies that were nearly identical to using all experts. We hypothesize this is because CIFAR10 is relatively easy for the powerful Astroformer architecture.
+
+#### 4.4.2 EXPERIMENTAL RESULTS
+
+In Figures 2 and 3 we depict, for each dataset and various choices of  $k$ , the performance of Algorithm 1 relative to the random selection scheme. We make two main observations.
+
+The first observation is that Algorithm 1’s accuracy may deteriorate (relative to using all experts) when  $k < n$  and  $n$  is small. But if  $n$  is big, then Algorithm 1’s accuracy is often very close to that of using all the experts, even when  $k \ll n$ . For instance, on MNIST, using the  $k = n/2$  experts selected by Algorithm 1 gives nearly the same performance as using all experts when  $n \geq 64$ , but has poor performance when  $n \leq 8$ . This result consistently holds across the various datasets/architectures/model scales considered: e.g. Table 13b shows that on ImageNet-1k, when  $n$  is high enough, Algorithm 1 can use just 1/8 of the experts while retaining over 99% of the original accuracy of using all the experts. This shows that as  $n$  increases, Algorithm 1 is better poised to discover specialized experts, even though the number of expert parameters is invariant to  $n$ .
+
+We believe this is an instance of the implicit bias that exists in Soft MoE. Concretely, the experts identified by Algorithm 1 for an input  $X$  are those highest weighted by  $C_{\text{sum}}$ , which is derived from  $C(X)$ . Our result thus shows that as  $n$  increases, the Soft MoE trains in a manner such that the  $C(X)$  matrix is more informative for which experts are useful in correctly predicting the label of  $X$ , even though such a property is not explicitly enforced during training! In Appendix D.4, we show that the skewness of  $C_{\text{sum}}$  does not change significantly as  $n$  increases, which suggests that the specialization identified by Algorithm 1 is not trivial by simply dropping marginally weighted experts. While we do not have a formal explanation for why this phenomenon occurs, we conjecture that this is an implicit bias that allows the specialized subsets to be more easily identified by  $C_{\text{sum}}$  as  $n$  increases. A different view of the same results in Figure 2a is provided in Figure 1.
+
+The second observation is that Algorithm 1’s test performance dominates that of random selection. And often, Algorithm 1 is far better than random selection, as is particularly evident in CIFAR10 and ImageNet-1k, where random selection is very poor (see Figure 2). There are instances where random selection has decent accuracy, such as in CIFAR100 (see Figure 3). So to further validate our result, we use the following statistic to measure how much better Algorithm 1 is relative to random selection. We first compute the standard deviation of the random selection test accuracies (which were obtained by averaging over 10 random seeds). Our statistic is then the number of standard deviations by which Algorithm 1 exceeds the mean random selection accuracy. When this statistic is large, it means that Algorithm 1 found an expert subset whose performance is statistically significantly larger than that of the typical random expert subset. The results are shown in Table 2 where we observe very large values for this statistic. This shows that our Algorithm 1 significantly outperforms random selection for CIFAR100, even though random selection has decent performance on this dataset. Analogous tables for the other datasets are provided in Appendix D.3.
+
+{8}------------------------------------------------
+
+![Figure 3: A line graph showing Accuracy (%) on the y-axis (ranging from 60 to 80) versus n on the x-axis (logarithmic scale from 2^1 to 2^7). The graph compares Algorithm 1 (Algl) and Random selection for different values of k (n, n/2, n/4, n/8). Algl 1. k=n (blue squares) maintains high accuracy around 80%. Algl 1. k=n/2 (orange circles) and Algl 1. k=n/4 (green triangles) show lower accuracy, starting around 75% and 65% respectively at n=2^2 and increasing towards 80% as n increases. Random selection for k=n/2 (blue diamonds), k=n/4 (orange squares), and k=n/8 (green diamonds) shows significantly lower accuracy, starting around 70% and 60% and increasing towards 75% and 65% respectively.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 3: A line graph showing Accuracy (%) on the y-axis (ranging from 60 to 80) versus n on the x-axis (logarithmic scale from 2^1 to 2^7). The graph compares Algorithm 1 (Algl) and Random selection for different values of k (n, n/2, n/4, n/8). Algl 1. k=n (blue squares) maintains high accuracy around 80%. Algl 1. k=n/2 (orange circles) and Algl 1. k=n/4 (green triangles) show lower accuracy, starting around 75% and 65% respectively at n=2^2 and increasing towards 80% as n increases. Random selection for k=n/2 (blue diamonds), k=n/4 (orange squares), and k=n/8 (green diamonds) shows significantly lower accuracy, starting around 70% and 60% and increasing towards 75% and 65% respectively.
+
+Figure 3: Results for CIFAR100 experiments from Section 4.4.
+
+|  | $n$ |  |  |  |  |
+|-|-|-|-|-|-|
+|  | 2 | 8 | 16 | 64 | 128 |
+| $k = n/2$ | 6.23 | 6.73 | 1.89 | 3.47 | 2.49 |
+| $k = n/4$ | - | 7.31 | 6.34 | 4.56 | 4.50 |
+| $k = n/8$ | - | 21.22 | 28.20 | 13.96 | 5.74 |
+
+Table 2: Each cell is the number of standard deviations that the test accuracy of Algorithm 1 is above the mean test accuracy of Random selection, on the CIFAR100 dataset. For the Random selection, we used 10 random seeds to obtain its mean and standard deviation.
+
+### 4.5 FASTER INFERENCE VIA ALGORITHM 1
+
+In practice, one typically trains a very large model (with many Soft MoE layers, each with many experts) a single time, then the model is deployed and repeatedly utilized for inference. It is thus of great interest to speed up computation through Soft MoE modules, since this leads to faster inference. Algorithm 1 is well suited for this purpose. The preceding sections show that when the number of experts  $n$  is large, then Algorithm 1 can rapidly and cheaply find a small subset of experts that can predict any datapoint with minimal expected accuracy loss. So it can potentially be used for faster inference through the Soft MoE.
+
+A full examination of the usefulness of Algorithm 1 for faster inference is beyond the scope of our paper. A proper analysis would require massive industry-scale models, and would also be very application specific because it would depend on the type and number of devices used for inference, as well as the extent of distributed computing and per-device parallelization. We lack the compute capacity to do such a thorough study. Nevertheless, it is immediate that in the regime of many large experts, where a forward pass through an expert has non-trivial cost, Algorithm 1 should save computation since its overhead is relatively negligible. As a simple example to show the potential of Algorithm 1 for faster inference, we consider the same ViT architecture from Section 4.4 with 8 total experts, but with each expert being much larger, such that the whole model has 2.32B parameters, of which 2.27B parameters are in the experts. We measure the total wall clock time elapsed during a forward pass through the 6 Soft MoE layers, where each layer will only utilize  $k$  experts as prescribed by Algorithm 1. The results are presented in Table 3, and show that smaller values of  $k$  yield significant speedups. See Appendix D.5 for further details on this experiment.
+
+|  | $k = n$ | $k = 3n/4$ | $k = n/2$ | $k = n/4$ |
+|-|-|-|-|-|
+| batch = 1 | $21.50 \pm 0.20$ | $19.46 \pm 0.23$ | $14.75 \pm 0.35$ | $9.96 \pm 0.19$ |
+| batch = 100 | $99.03 \pm 0.28$ | $78.26 \pm 0.51$ | $78.86 \pm 0.36$ | $51.69 \pm 0.79$ |
+
+Table 3: Wall clock time of performing a single forward pass (of random data) through the 6 Soft MoE layers using Algorithm 1, with either a single datapoint or a batch of 100 datapoints. The unit of all values are milliseconds. For each batch size, we report the mean and standard deviation over 100 trials.
+
+## 5 RELATED WORK
+
+**Mixture of Experts.** Our work falls squarely in the literature on MoEs, which originated several decades ago (Jacobs et al., 1991; Jordan & Jacobs, 1993) and has been revived as the Sparse MoE (Shazeer et al., 2017). Nevertheless, there is a significant difference between our investigation and the majority of past work. The majority of past work in MoE focuses primarily on computational considerations, such as (in the context of Sparse MoE) routing a token to only a single expert for efficiency (Fedus et al., 2022), and ensuring load balancing by incorporating linear programs (Lewis et al., 2021) or having the experts select tokens (Zhou et al., 2022) or re-routing dropped tokens (Zeng et al., 2024). Indeed, the Soft MoE (Puigcerver et al., 2024) was recently introduced to address the various training instabilities suffered by Sparse MoE, and performs very well in applications like vision (Puigcerver et al., 2024), RL (Obando-Ceron et al., 2024) and audio processing (Cappellazzo et al., 2024). By contrast, our investigation begins with a more fundamental question – what are the
+
+{9}------------------------------------------------
+
+implicit biases that occur as a result of Soft MoE’s particular manner of combining tokens and expert outputs? While analogous fundamental investigations of the gating function do exist in the context of Sparse MoEs (Chen et al., 2022; Dikkala et al., 2023) and some of its variants (Nguyen et al., 2023; 2024), to the best of our knowledge this line of investigation is novel in Soft MoE.
+
+**Expert Specialization.** The use of MoE layers in a network is often motivated by the desire for expert specialization, since this implies a more efficient use of the network parameters. To our knowledge, all prior work on expert specialization has been conducted in the context of Sparse MoE. While some studies demonstrate that expert specialization may occur for Sparse MoE (Chen et al., 2022; Dikkala et al., 2023), others show that specialization is often limited and requires architectural innovations (Krishnamurthy et al., 2023; Dai et al., 2024; Oldfield et al., 2024). These innovations are different than Soft MoE, where it is not even a priori clear what expert specialization means. Indeed, the seminal work acknowledges this limitation (Puigcerver et al., 2024). In our paper, we offer a notion of expert specialization in Soft MoE, and show not only that it occurs but can be efficiently detected.
+
+**Sparse Activation & Pruning.** Our work is also related to the literature on sparsely activating or pruning a network, since our Algorithm 1 can be viewed as a form of pruning at inference. For instance, there is work on using RL to conditionally activate only certain units in a generic network for faster training and inference (Bengio et al., 2016), pruning CNN kernels for efficient inference (Molchanov et al., 2017), and developing adaptive computation modules for transformers (Wójcik et al., 2023). While a complete survey of this vast area is beyond the current scope (Blalock et al., 2020), we emphasize that our form of pruning is entirely specific to Soft MoE, since it relies on the  $C(X)$  matrix. It can be used with or without many other types of pruning.
+
+## 6 DISCUSSION
+
+**Limitations.** Our work has a number of limitations. While our Theorem 1 is a negative result for a single expert’s representation power, we are unable to prove a corresponding positive result for multiple experts (although in Appendix B we provide empirical evidence for increased representation power as the number of experts increases). A different limitation is that we are unable to provide a thorough analysis of the extent to which Algorithm 1 can reduce computation at inference (due to a lack of compute capacity). We believe both limitations provide exciting directions for future work.
+
+**Conclusion.** In this paper, we studied the Soft Mixture of Experts architecture. We eschewed the traditional viewpoint of scaling expert parameter count in a manner that allows efficient training and inference. Instead, we adopted an orthogonal perspective, and studied implicit biases that arise from Soft MoE’s particular manner of combining token and expert outputs. We showed that even with an arbitrarily powerful single expert, Soft MoE cannot represent simple convex functions, thus showing that good representation power is predicated on having multiple experts. We also introduced a notion of expert specialization for Soft MoE, and provided an algorithm that efficiently discovers specialized experts when the number of experts is large. Overall, our analysis (both theoretical and empirical) highlights non-traditional reasons for why using many smaller experts is preferable to using fewer larger experts, even when the total expert parameter count remains fixed.
+
+## REFERENCES
+
+- Martín Abadi, Ashish Agarwal, Paul Barham, Eugene Brevdo, Zhifeng Chen, Craig Citro, Greg S. Corrado, Andy Davis, Jeffrey Dean, Matthieu Devin, Sanjay Ghemawat, Ian Goodfellow, Andrew Harp, Geoffrey Irving, Michael Isard, Yangqing Jia, Rafal Jozefowicz, Lukasz Kaiser, Manjunath Kudlur, Josh Levenberg, Dandelion Mané, Rajat Monga, Sherry Moore, Derek Murray, Chris Olah, Mike Schuster, Jonathon Shlens, Benoit Steiner, Ilya Sutskever, Kunal Talwar, Paul Tucker, Vincent Vanhoucke, Vijay Vasudevan, Fernanda Viégas, Oriol Vinyals, Pete Warden, Martin Wattenberg, Martin Wicke, Yuan Yu, and Xiaoqiang Zheng. TensorFlow: Large-scale machine learning on heterogeneous systems, 2015. URL <https://www.tensorflow.org/>. Software available from tensorflow.org.
+- Jason Ansel, Edward Yang, Horace He, Natalia Gimelshein, Animesh Jain, Michael Voznesensky, Bin Bao, Peter Bell, David Berard, Evgenii Burovskii, Geeta Chauhan, Anjali Chourdia, Will Constable, Alban Desmaison, Zachary DeVito, Elias Ellison, Will Feng, Jiong Gong, Michael
+
+ Rest of paper (reference and Appendix) is removed.
