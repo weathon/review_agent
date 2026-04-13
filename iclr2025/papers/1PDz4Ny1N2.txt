@@ -1,0 +1,339 @@
+
+
+{0}------------------------------------------------
+
+# BRIDGING JENSEN GAP FOR MAX-MIN GROUP FAIRNESS OPTIMIZATION IN RECOMMENDATION
+
+Chen Xu<sup>1</sup>, Yuxin Li<sup>1</sup>, Wenjie Wang<sup>2</sup>, Liang Pang<sup>3</sup>, Jun Xu<sup>1</sup>\*, Tat-Seng Chua<sup>4</sup>
+
+<sup>1</sup> Gaoling School of Artificial Intelligence, Renmin University of China, Beijing, China
+
+<sup>2</sup> School of Information Science and Technology,
+
+University of Science and Technology of China, Hefei, China
+
+<sup>3</sup> Institute of Computing Technology, Chinese Academy of Sciences, Beijing, China,
+
+<sup>4</sup> NExT++ Research Center, National University of Singapore, Singapore
+
+{xc\_chen, yuxin\_li}@ruc.edu.cn, wenjiewang96@gmail.com,
+
+pangliang@ict.ac.cn, junxu@ruc.edu.cn, dcsccts@nus.edu.sg
+
+## ABSTRACT
+
+Group max-min fairness (MMF) is commonly used in fairness-aware recommender systems (RS) as an optimization objective, as it aims to protect marginalized item groups and ensures a fair competition platform. However, our theoretical analysis indicates that integrating MMF constraint violates the assumption of sample independence during optimization, causing the loss function to deviate from linear additivity. Such nonlinearity property introduces the Jensen gap between the model’s convergence point and the optimal point if mini-batch sampling is applied. Both theoretical and empirical studies show that as the mini-batch size decreases and the group size increases, the Jensen gap will widen accordingly. Some methods using heuristic re-weighting or debiasing strategies have the potential to bridge the Jensen gap. However, they either lack theoretical guarantees or suffer from heavy computational costs. To overcome these limitations, we first theoretically demonstrate that the MMF-constrained objective can be essentially reformulated as a group-weighted optimization objective. Then we present an efficient and effective algorithm named FairDual, which utilizes a dual optimization technique to minimize Jensen gap. Our theoretical analysis demonstrates that FairDual can achieve a sub-linear convergence rate to the globally optimal solution and the Jensen gap can be well bounded under a mini-batch sampling strategy with random shuffle. Extensive experiments conducted using six large-scale RS backbone models on three publicly available datasets demonstrate that FairDual outperforms all baselines in terms of both accuracy and fairness. Our data and codes are shared at <https://github.com/XuChen0427/FairDual>.
+
+## 1 INTRODUCTION
+
+Group max-min fairness (MMF) has gained significant attention in industrial recommender systems (RS), as it seeks to provide support for marginalized item groups, where item groups are usually divided by item categories or providers (Xu et al., 2023; Patro et al., 2020; Xu et al., 2024b). For example, optimizing MMF can alleviate the low exposure problem of small sellers in the Amazon RS platform (Patro et al., 2020). As illustrated in European competition law (Jones et al., 2014), protecting these weak supplier groups is essential for preventing large platforms from engaging in unfair strategies, thereby ensuring fair competition (Matten et al., 2008).
+
+Formally, the group MMF optimization objective entails calculating the overall utility of each group and maximizing the utility of the least advantaged group. Typically, group utility computation often necessitates aggregating the overall recommendation ranking list over a specified period (Xu et al., 2023; Do et al., 2021; Xu et al., 2024b), for example, the group utility could be the exposures of action movies within a day. Due to the limited ranking slots, adjusting the exposure of items to improve the
+
+\*Corresponding author. Work partially done at Engineering Research Center of Next-Generation Intelligent Search and Recommendation, Ministry of Education.
+
+{1}------------------------------------------------
+
+utility of one item group will inevitably affect the ranking outcomes of other item groups. Therefore, the loss function with the MMF constraint for RS violates a crucial assumption: the independence of samples, resulting in the MMF loss of different item groups not adhering to linear additivity (see theoretical proof in Section 4).
+
+We theoretically and empirically show that the non-linear additivity property of the MMF-constrained objective will introduce a Jensen gap (Gao et al., 2017; Ullah et al., 2021) between the model’s convergence point and the optimal point when if mini-batch sampling is applied for optimization (see Section 4). Meanwhile, it is proved that as the mini-batch size decreases and the group size increases, the Jensen gap will become more pronounced in the optimization process, significantly harming the model’s performance. However, mini-batch sampling strategies are essential for accelerating the model training process, especially as data and model sizes in RS continue to grow, such as the development of large language models (LLMs) based RS (Bao et al., 2023; Lin et al., 2024a;b).
+
+Some previous approaches have the potential to bridge the Jensen gap for RS. One type of heuristic approach can be applied to bridge the Jensen gap, such as sample re-weighting strategies (Chen et al., 2023b; Wen et al., 2022), which dynamically assigns a higher weight to the weaker group across different batches. However, the effectiveness of this research line is limited due to the lack of theoretical guarantees. Another type of work utilizes machine learning techniques that can help to optimize the non-linear additive loss functions. For example, Abernethy et al. (2022); Cousins (2022) have proposed sampling strategies to obtain unbiased samples, while some methods utilize debiasing gradient descent (Demidovich et al., 2023; Agarwal et al., 2018) to introduce a bias correction term in the gradient. However, these methods cannot be applied to existing large-scale industrial RS, as they often require a convex optimization process that is impractical for RS that typically serves millions of users and hundreds of groups.
+
+To overcome the challenges for bridging the Jensen gap, in this paper, we firstly theoretically demonstrate that the optimization objectives when incorporating group MMF constraint can be essentially reformulated as a group-weighted accuracy optimization objective on different groups. Then, we introduce a large-scale friendly, and effective algorithm called FairDual to optimize the group-weighted objective for minimizing the Jensen gap. Specifically, we formulate the fairness-constraint problem as its dual, where the dual variable (referred to as the shadow price in economics (Drèze and Stern, 1990)) can be interpreted as the sample weight assigned to each sample in the mini-batch optimization process. Then, FairDual leverages dual-optimization techniques to optimize the weight of different group losses utilizing dual mirror gradient techniques efficiently.
+
+Our theoretical analysis demonstrates that FairDual can achieve a sub-linear convergence rate to the globally optimal point under a random shuffling mini-batch training style. Moreover, the Jensen gap can be well bounded (See Section 5.2.3) even when confronted with small mini-batch sizes and large group sizes. Extensive experiments using six large-scale RS backbone models on three publicly available datasets show that FairDual consistently reduces the Jensen gap and outperforms all baselines with a large margin in terms of both accuracy and fairness while achieving better efficiency.
+
+## 2 RELATED WORK
+
+**Fairness concept in RS.** One common categorization is based on the involvement of different stakeholders (Abdollahpouri et al., 2020; Abdollahpouri and Burke, 2019), divides fairness into individual fairness (Marras et al., 2022; Li et al., 2021), which aims to ensure equitable treatment for individual users, and group fairness, which classifies items into various groups (Xu et al., 2023; 2024b; Patro et al., 2020; Naghiae et al., 2022; Wu et al., 2021). Various approaches have been proposed to optimize fairness utilizing different fairness objectives. For instance, Patro et al. (2020) proposed using the Shapley value, while Do and Usunier (2022) suggested optimizing the Gini Index. On the other hand, works such as Xu et al. (2023); Do et al. (2021); Xu et al. (2024b) advocate for optimizing MMF, which requires every group should receive a “minimum wage”. Typically, we mainly focus on the group MMF, which is closer to the industrial scenarios since certain studies propose to ensure minimum item exposures for attracting providers to join or enhancing the visibility of specific item categories (Patro et al., 2020; Xu et al., 2024b; Zhu et al., 2020).
+
+**Optimizing fairness in RS.** When optimizing fairness, previous research often categorizes methods into three categories based on recommendation phases, including pre-processing (Calmon et al.,
+
+{2}------------------------------------------------
+
+2017; Xiong et al., 2024; Xu et al., 2024a), post-processing (Xu et al., 2023; Patro et al., 2020; Wu et al., 2021; Xu et al., 2024c) and in-processing (Narasimhan et al., 2020; Tang et al., 2023). In this paper, we theoretically demonstrate that the in-processing method constrained by group MMF can be essentially reformulated as a re-weighting approach. Prior research employed static or dynamic group weights to achieve fairness. For static weights, Jiang et al. (2024); Xiong et al. (2024) proposes to set item weight according to its popularity and the Wasserstein distance of two groups, respectively. For dynamic weighting, some work (Chen et al., 2023b; Chai and Wang, 2022; Wen et al., 2022) propose to design weights based on the training state, while Hu et al. (2023) employs a dynamic re-weighting strategy to mitigate distribution shifts between training and test data. Roh et al. (2020) also proposes to set different batch sizes to optimize fairness. However, these methods are either designed for simple cases involving only two groups, or they lack theoretical guarantees when applied to group MMF settings.
+
+**Optimizing fairness in ML.** In machine learning (ML), previous work aims to optimize different fairness functions to achieve various social welfare objectives. For example, the power-mean welfare family seeks to balance accuracy and fairness objectives by applying the exponential form (Cousins, 2021; 2023) and max-min fairness (Abernethy et al., 2022; Agarwal et al., 2018) aims to support the worst-off groups. When optimizing fairness, we commonly try to optimize a nonlinear fairness function. When adopting optimization methods such as stochastic gradient descent (SGD), an unavoidable bias will exist (Demitdovich et al., 2023; Hu et al., 2020). To bridge this bias, previous ML methods have employed sampling strategies (Abernethy et al., 2022; Cousins, 2022) to obtain unbiased samples, while some methods have utilized debiasing SGD (Demitdovich et al., 2023; Agarwal et al., 2018) to mitigate the bias. However, these works cannot be applied to large-scale industrial RS since they often require a convex optimization process that is impractical for RS tasked with serving millions of users and hundreds of groups. To efficiently bridge the Jensen gap, our method improves debiasing SGD by developing a large-scale friendly mirror SGD learning algorithm.
+
+## 3 FORMULATION
+
+In RS, let  $\mathcal{U}, \mathcal{I}$  be the set of users and items, and each item  $i \in \mathcal{I}$  is associated with a unique group  $g \in \mathcal{G}$ , where the set of items associated with  $g$  is denoted as  $\mathcal{I}_g$ . In RS, an item  $i$  may belong to a different group  $g$  (e.g., a movie can be categorized under various genres such as action, or drama). We define the number of groups to which the item  $i$  belongs as  $n_i$ .
+
+Suppose that the RS manages a set of user-item historical interactions  $\mathcal{D} = \{(u, i, c_{u,i})\}$ , where each tuple  $(u, i, c_{u,i})$  records that a user  $u \in \mathcal{U}$  accessed the system and interacted with an item  $i \in \mathcal{I}$  with behavior  $c_{u,i} \in \{0, 1\}$ .  $c_{u,i} = 1$  means that the user  $u$  clicked/purchased the item  $i$ , and 0 otherwise. The task of recommendation becomes, based on the user-item interactions in  $\mathcal{D}$ , learning an empirical estimation  $\hat{c}_{u,i} = f(u, i)$  for real label  $c_{u,i}$ . Then RS will suggest  $K$  items to the user according to predicted preference scores  $\hat{c}_{u,i}$ , with the ranking list denoted as  $L_K(u) \in \mathcal{I}^K$ . In general, the  $f(\cdot)$  can be either the traditional matrix factorization model (He et al., 2016) or more advanced LLMs-based recommender models (Bao et al., 2023).
+
+Following the practice in recommendation tasks (He et al., 2017; 2016), the cross-entropy loss  $-c_{u,i} \log(\hat{c}_{u,i})$  is regarded as a common and better choice compared to other loss functions. Meanwhile, to fulfill the group MMF requirement (Patro et al., 2020; Xu et al., 2024b), the recommendation model also strives to maintain the expected utility of a specific group  $g$  (where the group's utility is defined as the negative sum of the entropy loss within the group) exceeds a basic threshold  $M$ . MMF constraint aims to ensure every group can receive the required group-specific "minimum wage" during the training phases. Formally, we can write the ideal optimization objective as follows:
+
+$$\mathcal{L} = \min_{\hat{c}_{u,i}} \underbrace{- \sum_{u \in \mathcal{U}} \sum_{i \in \mathcal{I}} c_{u,i} \log(\hat{c}_{u,i})}_{\text{recommendation accuracy loss}} \quad \text{s.t.} \quad \max_{g \in \mathcal{G}} \underbrace{\sum_{u \in \mathcal{U}} \sum_{i \in L_K(u)} - \frac{\mathbb{I}(i \in \mathcal{I}_g)}{n_i m_g} c_{u,i} \log(\hat{c}_{u,i})}_{\text{MMF constraint: loss of worst-off group } g \text{ should at or smaller than } M} \leq M, \quad (1)$$
+
+where  $\mathbb{I}(\cdot)$  denotes the indicator function, and the number of users  $|\mathcal{U}|$  could represent the daily or weekly user traffic. The  $m_g$  can be regarded as the weight for different group  $g$ . Note that, following the practice in time-aware RS (Kang and McAuley, 2018b; Sun et al., 2019), we utilize the recent  $H$  interactions, which represent the truncated user historical behavior numbers.
+
+{3}------------------------------------------------
+
+![Figure 1: Loss converges simulation with 1000 users and 1000 items. (a) Jensen gap J(B) vs Batch size B (2, 4, 8, 16, 32, 64, 128, 256, 512). (b) Jensen gap J(B) vs Group size G (3, 7, 11, 15, 19, 23, 27). (c) Converged trace under different batch sizes (B=2, 8, 32) showing converge points and optimal points.](e94f3bbb6f7501b9a1344dd0210e5dd8_img.jpg)
+
+Figure 1: Loss converges simulation with 1000 users and 1000 items. (a) Jensen gap J(B) vs Batch size B (2, 4, 8, 16, 32, 64, 128, 256, 512). (b) Jensen gap J(B) vs Group size G (3, 7, 11, 15, 19, 23, 27). (c) Converged trace under different batch sizes (B=2, 8, 32) showing converge points and optimal points.
+
+Figure 1: Loss converges simulation with 1000 users and 1000 items. Sub-figure (a) and (b) illustrate the distance away from the optimal point (*i.e.*, Jensen gap) *w.r.t.* mini-batch and group size, respectively. Figure (a) was conducted with the same group size ( $G=7$ ) under different batch sizes, while Figure (b) was conducted with the same batch size ( $B=32$ ) under different group sizes. Sub-figure (c) describes the converged trace under different batch sizes.
+
+## 4 PROBLEM ANALYSIS
+
+In real-world scenarios, the number of users  $|\mathcal{U}|$  is often large, and a mini-batch sampling strategy with a batch size of  $B$  is often necessary due to the large computational costs. Each batch only contains a subset of users. However, we show that the non-linear additivity property of the MMF-based objective will introduce the Jensen gap between the model’s convergence point and the optimal point when employing mini-batch sampling strategies.
+
+In this section, we analyze why the Jensen gap exists and how it will influence the model’s convergence in both theoretical and empirical ways.
+
+### 4.1 THEORETICAL ANALYSIS
+
+Firstly, we will re-write the optimization objective using the following theorem:
+
+**Theorem 1.** For a vector  $\mathbf{x} \in \mathbb{R}^n$ ,  $\mathbf{x}^i$  denotes the element of the vector raised to the power of  $i$ . Similarly,  $\log(\mathbf{x})$  denotes the element of the vector reduced as  $\log(\mathbf{x}_i)$ . Let  $\mathbf{A} \in \mathbb{R}^{|\mathcal{I}| \times |\mathcal{G}|}$  is the item-group adjacent matrix, and  $\mathbf{A}_{ig} = 1$  indicates item  $i \in \mathcal{I}_g$ , and 0 otherwise. Let  $\mathbf{w} \in \mathbb{R}^{|\mathcal{I}|} = [-\sum_{u \in \mathcal{U}} c_{u,i} \log(\hat{c}_{u,i})]_{i \in \mathcal{I}}$  and its feasible region is  $\mathcal{W} = \{\mathbf{w} | \sum_{i \in \mathcal{I}} c_{u,i} \leq K, \forall u \in \mathcal{U}, c_{u,i} \in [0, 1]\}$ . Then there exist  $t \in [0, \infty)$  (value of  $t$  relates to the value of  $M$ ) and a weight vector  $\mathbf{b} \in \mathbb{R}^{|\mathcal{G}|} \geq 0$ , *s.t.* Equation (1) can be optimized as:
+
+$$\mathcal{L} = \min_{\mathbf{w} \in \mathcal{W}} \mathbf{b}^\top (\hat{\mathbf{A}}^\top \mathbf{w})^{1+t} \quad (2)$$
+
+where  $\hat{\mathbf{A}}$  is the row-normalized matrix for  $\mathbf{A}$ :  $\hat{\mathbf{A}} = \text{diag}(\mathbf{A}\mathbf{1})^{-1} \mathbf{A}$ .  $\text{diag}(\mathbf{x})$  denotes to construct a diagonal matrix based on vector  $\mathbf{x}$ .
+
+The detailed proof of Theorem 1 can be seen in Appendix A. When transforming the original optimization process in Equation (1) into Equation (2), we can easily observe that the loss function does not adhere to linear additivity. Then the Jensen gap will arise under mini-batch sample strategy by formulating it using the following theorem:
+
+**Theorem 2.** Under mini-batch sample strategies, we partition the user set  $\mathcal{U}$  into  $|\mathcal{U}|/B$  subsets and perform optimization on each subset. Let  $\mathbf{e}^j \in \mathbb{R}^{|\mathcal{G}|}$  be the group accumulated utility under  $j$ -th partition, where each element  $\mathbf{e}_{u,g}^j = -\sum_{u \in \mathcal{U}_j} \sum_{i \in \mathcal{I}_g} c_{u,i} \log(\hat{c}_{u,i})$ . Let  $f(\mathbf{x}) = \mathbf{x}^{t+1}$ . We can write the mini-batch optimizing loss objective  $\mathcal{L}^B$  as:  $\mathcal{L}^B = \min \sum_{j=1}^{|\mathcal{U}|/B} \mathbf{b}^\top f(\mathbf{e}_j)$ , where  $\mathcal{U}_j$  is the  $j$ -th partition of the user set  $\mathcal{U}$ . Then, Jensen gap (Gao et al., 2017; Ullah et al., 2021) is defined as:
+
+$$J(B) = |\mathcal{L}^B - \mathcal{L}| = |\mathcal{L}^B - \min \mathbf{b}^\top f\left(\sum_{j=1}^{|\mathcal{U}|/B} \mathbf{e}_j\right)| \neq 0. \quad (3)$$
+
+When optimizing Equation (2) under the mini-batch sampling style, the mini-batch size  $B$  becomes smaller and group size  $\mathcal{G}$  becomes larger, the Jensen gap  $J(B)$  will become larger. Moreover, when
+
+{4}------------------------------------------------
+
+the mini-batch size becomes smaller, we are more likely to underestimate the original loss, i.e.,  $\mathcal{L}^B \leq \mathcal{L}$ . The loss underestimation will result in the Jensen gap.
+
+The detailed proof of Theorem 2 can be seen in Appendix C. The intuitive reason behind the Jensen gap raised by group MMF is that the accuracy-fairness trade-off problem does not adhere to linear additive attributes. Essentially, the combination of different batches forms a concave function. Mini-batch size and group size both measure the degree of data partitioning, where smaller batch sizes and larger group sizes lead to fewer data partitions. As a result, due to the non-linear and intricate function form of a neural network (Sun, 2019), these errors in estimating the loss function impede the model from converging to the optimal point, thus diminishing the performance. Next, we will give an empirical analysis to prove this.
+
+### 4.2 EMPIRICAL ANALYSIS
+
+In this section, we illustrate a simulation (Figure 1) conducted under the assumption of knowing every user-item true preference score to validate the correctness of our theoretical analysis. We use the simple recommendation model: Matrix Factorization (Singh and Gordon, 2008) since we can have a closed-form expression on parameter updating. Then we apply a common mini-batch training strategy to optimize accuracy-fairness objective based on the parameters outlined in Xu et al. (2023); Patro et al. (2020), with the accuracy-fairness coefficient of 0.5.
+
+As shown in Figure 1 (a) and (b), we uncover that the Jensen gap (distance away from the optimal point) will deviate with smaller mini-batch sizes and larger group sizes. Figure (c) describes the converge trace under different batch sizes by mapping the top-K simplex space of three groups of recommendation ranking to a 2-dimensional space through a topological homeomorphic transformation (Kozlov, 2008). Figure 1 (c) also indicates that different batch sizes result in different gradient optimization directions, with smaller batch sizes leading to larger shifts in the error of the optimization direction. These empirical results confirm the correctness of our theoretical analysis.
+
+For other types of fairness, such as the power-mean welfare family (Cousins, 2021) and the Gini welfare function (Do and Usunier, 2022), also exhibit non-linear properties, leading to analogous Jensen gap phenomena. We discuss them in the Appendix H and Appendix M.
+
+## 5 METHOD
+
+In this section, we will introduce our method FairDual.
+
+### 5.1 OPTIMIZING MAX-MIN FAIRNESS AS GROUP-WEIGHTED OBJECTIVE
+
+In this section, in order to tackle this problem, we show that the MMF-constrained objective can be regarded as the group-weighted optimization problem using the following theorem:
+
+**Theorem 3.** *By introducing the dual variable  $\mu$ , the dual form of the Equation (1) is*
+
+$$\mathcal{L}' = \min_{c_{u,i}} - \sum_{u \in \mathcal{U}} \sum_{g \in \mathcal{G}} s_g \sum_{i \in \mathcal{I}_g} c_{u,i} \log(\hat{c}_{u,i}), \quad (4)$$
+
+where  $s_g = 1 - \mu_g$  and  $\mu = \arg \min_{\mu \in \mathcal{M}} \left( \max_{u \in \mathcal{U}} \sum_{g \in \mathcal{G}} s_g \sum_{i \in \mathcal{I}_g} c_{u,i} \log(\hat{c}_{u,i}) + \lambda r^*(\mu) \right)$ , where  $r^*(\mu) = \max_{w_g \leq m_g} \left( \min_{g \in \mathcal{G}} m_g (\hat{A}w)_g + \hat{A}^\top w \mu / \lambda \right) = \sum_g m_g \mu_g / \lambda + 1$ ,  $\mathcal{M} = \left\{ \mu \mid \sum_{g \in \mathcal{S}} \mu_g m_g \geq -\lambda, \forall \mathcal{S} \in \mathcal{G}_s \right\}$ , where  $\mathcal{G}_s$  is the set of all subsets of  $\mathcal{G}$  (i.e., power set).
+
+The detailed proof of Theorem 3 can be seen in Appendix F. From Theorem 3, we observe that the recommendation task constrained by max-min fairness can be viewed as a re-weighting approach across different groups on the original loss function solely optimized for accuracy.
+
+Intuitively,  $s_g = 1 - \mu_g$  is the negative shadow price (Drèze and Stern, 1990). The high shadow price  $\mu_g$  indicates that this constraint is the primary factor constraining accuracy optimization. Conversely, a low or zero shadow price suggests that the fairness constraint currently imposes little restriction on accuracy. Specifically, a high  $s_g$  signifies that this constraint is the primary factor limiting fairness
+
+{5}------------------------------------------------
+
+#### **Algorithm 1: FairDual**
+
+---
+
+**Require:** Dataset  $\mathcal{D} = \{u, i, c_{u,i}\}$ , item-group adjacent matrix  $\mathbf{A}$ , dual learning rate  $\eta$ , trade-off coefficient  $\lambda$ ,  $m_{\text{freeze}}^i(\cdot)$  updating step  $\beta$ , batch size  $B$  and sample item number  $Q$  and the weight  $m_g$  for each group  $g$ .  $\mathbf{A} = \text{diag}(\mathbf{A}\mathbf{1})^{-1}\mathbf{A}$ .
+
+**Ensure:** The model parameters of  $m^i(\cdot), m^u(\cdot)$ .
+
+- 1: **for**  $n = 1, \dots, N$  **do**
+- 2:   Set  $\gamma_{1,g} = m_g, \forall g \in \mathcal{G}$
+- 3:   **for**  $j = 1, \dots, |\mathcal{U}|/B$  **do**
+- 4:     **if**  $(n * |\mathcal{N}|/B + j)\%B = 0$  **then**
+- 5:       Copy parameters from  $m^i(\cdot)$  to  $m_{\text{freeze}}^i(\cdot)$  and get all item embedding  $\mathbf{E}$
+- 6:       Initialize dual solution  $\boldsymbol{\mu} = 0$ , and momentum gradient  $\mathbf{g} = 0$  and  $t = 0$ .
+- 7:     **end if**
+- 8:     Get sub-dataset  $\{u, i, c_{u,i}\}_{b=1}^B$  and user feature  $\mathbf{e}_u$  and item feature  $\mathbf{e}_i$
+- 9:      $\mathcal{L}^j = [-c_{u,i} \log(\hat{c}_{u,i})]_{b=1}^B$ ,  $\mathbf{s}^j = \mathbf{1} - \hat{\mathbf{A}}^j \boldsymbol{\mu}$
+- 10:     Apply gradient descent based on loss  $(\mathbf{s}^j)^\top \mathcal{L}^j$
+- 11:      $\tilde{\mathbf{w}}_b = \sum_{k=1}^K (\mathbf{e}_{u_b}^\top \mathbf{E}^b)_{[k]}, \forall b$
+- 12:      $\tilde{\mathbf{g}}^j = -(\hat{\mathbf{A}}^j)^\top \tilde{\mathbf{w}} + \gamma_j$ ,  $\mathbf{g}^j = \alpha \tilde{\mathbf{g}}^j + (1 - \alpha)\mathbf{g}$ ,  $\mathbf{g} = \mathbf{g}^j$
+- 13:      $\gamma_j = \gamma_{j-1} - (\hat{\mathbf{A}}^j)^\top \tilde{\mathbf{w}}, \boldsymbol{\mu} = \arg \min_{\boldsymbol{\mu}_0 \in \mathcal{M}} [(g^j)^\top \boldsymbol{\mu}_0 + \eta \|\boldsymbol{\mu}_0 - \boldsymbol{\mu}\|_2^2]$
+- 14:   **end for**
+- 15: **end for**
+
+---
+
+optimization for group  $g$ , whereas a low or zero  $s_g$  implies that the accuracy constraint for group  $g$  currently has little impact on the overall optimization.
+
+### 5.2 FAIRDUAL
+
+We then will introduce our method FairDual under random shuffling mini-batch training strategies. The overall workflow of FairDual under every two batches  $j$  and  $j + 1$  can be seen in Figure 2. According to analysis in Theorem 3, under each epoch, the overall optimization process will become:
+
+$$\mathcal{L}^B = \min \sum_{j=1}^{|\mathcal{U}|/B} (\mathbf{s}^j)^\top \mathbf{L}^j, \quad (5)$$
+
+where  $\mathbf{L}^j \in \mathbb{R}^B$ ,  $\mathbf{s}^j \in \mathbb{R}^B$  is loss and its weight under  $j$ -th batch. Next, we will explain how  $\mathbf{L}^j$  and  $\mathbf{s}^j$  update on each batch  $j$ . Detailed algorithm workflow can be seen in Algorithm 1. Note that, following the practice in Bao et al. (2023), we utilize the user's historical behaviors to represent each user, thereby treating each sample as a unique user.
+
+#### 5.2.1 ACCURACY LOSS CONSTRUCTING
+
+In the mainstream recommender architectures, the primary objective is to make the predicted score close to the true user preference. That is, at each batch  $j$ , there are  $B$  user-item pair  $\{(u, i)\}_{b=1}^B$  arrives. Then the loss vector  $\mathcal{L}^j$  is computed as:
+
+$$\mathbf{L}^j = [-c_{u,i} \log(\hat{c}_{u,i})]_{b=1}^B, \quad (6)$$
+
+where  $\hat{c}_{u,i} = -d(\mathbf{e}_u, \mathbf{e}_i) \leq 1$ , where  $d(\cdot)$  is the normalized distance between embedding  $\mathbf{e}_u, \mathbf{e}_i$ . The commonly used distance metric is the dot-product, i.e.  $d(\mathbf{e}_u, \mathbf{e}_i) = -\mathbf{e}_u^\top \mathbf{e}_i$ , and the  $\mathbf{e}_u$  and  $\mathbf{e}_i$  are calculated by a complex model, i.e.  $\mathbf{e}_u = m^u(u), \mathbf{e}_i = m^i(i)$ , where  $m^u(\cdot)$  and  $m^i(\cdot)$  are two embedding extraction networks. Typically, the user  $u$  is represented by the item-clicked history sequences before clicking the item  $i$ :  $[i^1, i^2, \dots, i^n]$ , where  $n$  is the fixed item sequence length.
+
+Note that in text-based recommendation models such as BigRec (Bao et al., 2023) and Recformer (Li et al., 2023), each item  $i$  is represented as a sequence of words in natural language:  $i = [w^1, w^2, \dots, w^l]$ , where  $l$  is the length of the sentence and user behaviors are also represented in prompt form (Bao et al., 2023). In such cases, Equation (6) is extended to
+
+{6}------------------------------------------------
+
+![Figure 2: Overall workflow of FairDual under every two batches j and j+1. The diagram illustrates the data flow and processing steps. On the left, a 'Frozen item feature extractor m^freeze(·)' processes 'Items' and 'Users' to produce 'Extract all item embedding', which are stored in 'Stored item embeddings E'. A dashed box labeled 'Copy every β batches' indicates a periodic update of the extractor. The main part shows two batches, 'Batch j' and 'Batch j+1'. In 'Batch j', 'Item feature extractor m^j(·)' and 'User feature extractor m^u^j(·)' process items and users to generate 'Target item embeddings e_t' and 'Target item embeddings e_u'. These are multiplied by 'Weight s^j' to produce 'Loss l^j' and 'Predicted ranking scores ŵ'. A 'Sample Q items' step is shown. In 'Batch j+1', the process repeats with 'Loss l^{j+1}' and 'Weight s^{j+1}'. A 'History g^j' and 'Sub-gradient g^{j+1}' are shown, with an arrow indicating the update of μ^{j+1} from μ^j and g^{j+1}.](1956f44611abd5c3c41049836aa78ad8_img.jpg)
+
+Figure 2: Overall workflow of FairDual under every two batches j and j+1. The diagram illustrates the data flow and processing steps. On the left, a 'Frozen item feature extractor m^freeze(·)' processes 'Items' and 'Users' to produce 'Extract all item embedding', which are stored in 'Stored item embeddings E'. A dashed box labeled 'Copy every β batches' indicates a periodic update of the extractor. The main part shows two batches, 'Batch j' and 'Batch j+1'. In 'Batch j', 'Item feature extractor m^j(·)' and 'User feature extractor m^u^j(·)' process items and users to generate 'Target item embeddings e\_t' and 'Target item embeddings e\_u'. These are multiplied by 'Weight s^j' to produce 'Loss l^j' and 'Predicted ranking scores ŵ'. A 'Sample Q items' step is shown. In 'Batch j+1', the process repeats with 'Loss l^{j+1}' and 'Weight s^{j+1}'. A 'History g^j' and 'Sub-gradient g^{j+1}' are shown, with an arrow indicating the update of μ^{j+1} from μ^j and g^{j+1}.
+
+Figure 2: Overall workflow of FairDual under every two batches  $j$  and  $j + 1$ .
+
+$\log \hat{c}_{u,i} = \sum_{t=1}^l \log(P(w^t))$ , where  $P(w)$  refers to the predicted probability of the word  $w$  generated by the LLMs, while other equations remain unchanged.
+
+#### 5.2.2 MIRROR GRADIENT DECENT FOR GROUP WEIGHT
+
+For each batch  $j$ , the model needs to decide the weight  $s^j$  for each sample. The weight  $s^j$  is computed utilizing mirror-gradient descent (Balseiro et al., 2021) technique. Specifically,
+
+$$s^j = \mathbf{1} - \hat{\mathbf{A}}^j \mu^j, \quad (7)$$
+
+where  $\hat{\mathbf{A}}^j \in \mathbb{R}^{B \times |\mathcal{G}|}$  represents the row-normalized item-group adjacency matrix for  $\mathbf{A}$  in batch  $j$  (see details in Equation (2)), with  $\mathbf{A}_{ib,g} = 1$  indicating that the  $b$ -th item in batch  $i_b \in \mathcal{I}_g$  belongs to group  $g$ , and 0 otherwise. And  $\mu^j$  is the dual variable at  $j$ -th batch, which updates as:
+
+$$\mu^j = \arg \min_{\mu} \left[ (\mathbf{g}^j)^\top \mu + \eta \|\mu - \mu^{j-1}\| \right], \quad \text{s.t.} \sum_{j=1}^g \mu_j m_j + \lambda \geq 0, \forall g = 1, 2, \dots, |\mathcal{G}|, \quad (8)$$
+
+where  $\eta$  is the learning rate,  $\mathbf{g}^j$  is the sub-gradient of the Equation (4) *w.r.t.* the dual variable  $\mu^j \in \mathbb{R}^{|\mathcal{G}|}$ . The projection step can be efficiently solved using convex optimization solvers (Balseiro et al., 2021) since  $\mathcal{D}$  is coordinate-wisely symmetric.
+
+Specifically, to ensure smoothness and make use of historical information, we utilize the momentum gradient descent to update  $\mathbf{g}^j$ :
+
+$$\mathbf{g}^j = \alpha \tilde{\mathbf{g}}^j + (1 - \alpha) \mathbf{g}^{j-1}, \quad \tilde{\mathbf{g}}^j = \partial(s^j \mathcal{L}^j + \lambda r^*(\mu^j)) = -(\mathbf{A}^j)^\top \tilde{\mathbf{w}} + \gamma_j, \quad (9)$$
+
+where  $\gamma_j \in \mathbb{R}^{|\mathcal{G}|}$  is the vector, whose element of index  $g$  denotes the remaining required loss (*i.e.*, reward) for the group  $g$  at batch step  $j$ ,  $\tilde{\mathbf{w}} \in \mathbb{R}^B$  represents the estimated ranking score that each user query will receive. However, given the vast size of the item corpus in recommendation systems, conducting a full ranking on all items is impractical. Therefore, we randomly sample  $Q$  items to approximate the ranking scores across all items. The  $Q$  items' embeddings are denoted as  $\mathbf{E}^j \in \mathbb{R}^{Q \times d}$ . Formally, for the  $b$ -th element  $\tilde{w}_b$ , we can write:  $\tilde{w}_b = \sum_{k=1}^K (\mathbf{E}^j e_{u_b})_{[k]}$ , where  $\mathbf{x}_{[k]}$  denote the  $k$ -th largest element in vector  $\mathbf{x}$  and  $K$  is the ranking size.
+
+Note that  $\mathbf{E}^b$  is sampled from the pre-stored item embedding  $\mathbf{E} \in \mathbb{R}^{|\mathcal{I}| \times d}$ , which is pre-calculated using the freezer network  $m_{\text{freeze}}^i(\cdot)$ . This is done to mitigate the significant fluctuations in  $\tilde{\mathbf{w}}$  caused by unstable training (Fan et al., 2020). To achieve this, we freeze the item feature extractor  $m^i(\cdot)$  as  $m_{\text{freeze}}^i(\cdot)$  and transfer the parameters from  $m^i(\cdot)$  to  $m_{\text{freeze}}^i(\cdot)$  every  $\beta$  batches. For the first batch process, we initialize  $\mathbf{g}^1$  as 0, which will not make an effect on the first batch.
+
+#### 5.2.3 BOUND ON JENSEN GAP
+
+We will provide the Jensen gap converge analysis of FairDual in the following theorem.
+
+{7}------------------------------------------------
+
+**Theorem 4** (Bound on Jensen Gap). *There exists  $H > 0$  such that  $\|\mu^j - \mu\|_2^2 \leq H$  and function  $\|\cdot\|_2^2$  is  $\sigma$ -strongly convex. Then, there exists  $L > 0$ , the Jensen gap of FairDual can be bounded as:*
+
+$$J(B) \leq \frac{H}{\eta} + \frac{|U|L|\mathcal{G}|^2}{B(1-\alpha)\sigma}\eta + \frac{L|\mathcal{G}|^2}{2(1-\alpha)^2\sigma\eta}. \quad (10)$$
+
+When setting learning rate  $\eta = O(B^{-1/2})$ , the bound of Jensen gap is comparable with  $O(B^{-1/2})$ .
+
+The detailed proof can be seen in Appendix G. From Theorem 4, it is apparent that the Jensen gap will widen as the batch size  $B$  decreases and the group size  $|\mathcal{G}|$ , as well as the max-min fairness degree  $\lambda$ , increase. However, FairDual demonstrates a sub-linear convergence rate concerning the batch size  $B$ , and it maintains strong performance even with small batch sizes and large group sizes across various fairness degrees.
+
+## 6 EXPERIMENT
+
+We conduct experiments to demonstrate the effectiveness of the proposed FairDual.
+
+### 6.1 EXPERIMENTAL SETTINGS
+
+**Datasets.** The experiments are conducted on the commonly used two widely used and publicly available recommendation datasets, including MIND (Wu et al., 2020)<sup>1</sup>, Amazon-Book and Amazon-Electronic (He and McAuley, 2016)<sup>2</sup>. Their detailed statistical information is in Appendix I.
+
+**Evaluation.** We arrange all interactions in the dataset chronologically by their timestamps and employ the first 80% interactions as training data. The remaining 20% of interactions are divided equally, with each 10% segment used for validation and testing, respectively, during evaluation.
+
+Regarding the metric, following the practice in Dai et al. (2023), we utilize Normalized Discounted Cumulative Gain (NDCG) and mean Reciprocal Rank (MRR) to measure the accuracy:  $\text{NDCG@K} = \frac{1}{|U|} \sum_{u=1}^{|U|} \frac{\sum_{i \in L(u)} (2^{n_{u,i}} - 1) / (\log_2(j+1))}{(2^{n_{u,i}^*} - 1) / (\log_2(\text{rank}_i + 1))}$ ,  $\text{MRR@K} = \frac{1}{|U|} \sum_{u=1}^{|U|} \frac{1}{\text{rank}_i}$ , where  $\text{rank}_i$  is the rank of the first correct answer. Meanwhile, we employ MMF@K to gauge the degree of fairness, which quantifies the aggregated ranking score of the 20% worst-off groups (Do et al., 2021; Xu et al., 2023).
+
+**Backbones and baselines.** For the backbone, we first select three large-scale recommender models: **NRMS** (Wu et al., 2019), **RecFormer** (Li et al., 2023) and **BigRec** (Bao et al., 2023). Note that BigRec only utilizes 1024 samples to train due to large computational cost.
+
+For the baselines, we choose several fair-aware re-weight baselines that aim to improve group MMF: **UNI** (without considering fairness), **DRO** (Hashimoto et al., 2018), **S-DRO** (Wen et al., 2022), **Prop** (Hu et al., 2023), **IFairLRS** (Jiang et al., 2024) and **Maxmin Sample** (Abernethy et al., 2022).
+
+The detailed descriptions of the backbones and baselines are in Appendix I.
+
+**Implementation details.** We provide our detailed running environment, all hyper-parameter settings, utilized LLMs settings, and used the toolkit in Appendix I.
+
+### 6.2 EXPERIMENTAL RESULTS ON FULL DATASETS
+
+Firstly, we conduct experiments to show the performance of FairDual and other baselines across all large-scale recommendation backbones. Table 1 presents the experimental outcomes for our FairDual model and the baseline methods across all datasets, respectively. Table 2 presents the experimental outcomes for our FairDual model and the baseline methods across other different backbones on the MIND dataset. To make fair comparisons, all the baselines were tuned to their hyperparameters to obtain the best trade-off accuracy and fairness performance under our settings.
+
+From the experiments, it is evident that FairDual consistently outperforms the baseline methods across all datasets and various base models, spanning different top-K ranking sizes. This is reflected
+
+<sup>1</sup><https://microsoftnews.msn.com>
+
+<sup>2</sup><http://jmcauley.ucsd.edu/data/amazon/>
+
+{8}------------------------------------------------
+
+Table 1: Performance comparisons between ours and the baselines on three datasets under best-performing BigRec backbones. The \* means the improvements are statistically significant (t-tests and  $p$ -value  $< 0.05$ ). The bold number indicates that the accuracy value exceeds that of all the baselines.
+
+| Models/Metrics | $K = 5$ |  |  | $K = 10$ |  |  | $K = 20$ |  |  |
+|-|-|-|-|-|-|-|-|-|-|
+|  | NDCG (%) | MRR (%) | MMF (%) | NDCG (%) | MRR (%) | MMF (%) | NDCG (%) | MRR (%) | MMF (%) |
+| MIND | UNI | 1.02 | 0.79 | 1.63 | 1.50 | 0.98 | 2.33 | 2.16 | 1.16 |
+|  | DRO | 0.90 | 0.67 | 1.81 | 1.37 | 0.87 | 2.51 | 1.94 | 1.02 |
+|  | Prop | 1.11 | 0.88 | 1.97 | 1.62 | 1.09 | 2.53 | 2.14 | 1.23 |
+|  | S-DRO | 0.91 | 0.70 | 1.87 | 1.42 | 0.91 | 2.41 | 1.93 | 1.04 |
+|  | IFairLRs | 0.87 | 0.66 | 2.21 | 1.27 | 0.83 | 2.91 | 1.78 | 0.97 |
+|  | Maxmin sample | 0.98 | 0.75 | 2.25 | 1.49 | 0.96 | 1.71 | 2.19 | 1.15 |
+|  | <b>Ours</b> | <b>1.15*</b> | <b>0.88</b> | <b>2.82*</b> | <b>1.69*</b> | <b>1.11</b> | <b>2.99*</b> | <b>2.28*</b> | <b>1.27*</b> |
+|  | improv(%) | 3.60 | 0.00 | 25.33 | 4.32 | 1.83 | 2.75 | 4.10 | 3.25 |
+| Book | UNI | 2.99 | 2.79 | 8.44 | 3.19 | 2.87 | 8.32 | 3.44 | 2.94 |
+|  | DRO | 2.94 | 2.72 | 8.39 | 3.15 | 2.81 | 8.29 | 3.37 | 2.87 |
+|  | Prop | 2.64 | 2.45 | 8.68 | 2.83 | 2.53 | 8.30 | 3.05 | 2.59 |
+|  | S-DRO | 2.61 | 2.44 | 8.37 | 2.80 | 2.52 | 8.21 | 3.06 | 2.59 |
+|  | IFairLRs | 2.30 | 2.16 | 8.46 | 2.51 | 2.25 | 8.20 | 2.76 | 2.32 |
+|  | Maxmin sample | 2.49 | 2.31 | 6.80 | 2.72 | 2.43 | 6.80 | 2.97 | 2.74 |
+|  | <b>Ours</b> | <b>3.11*</b> | <b>2.88</b> | <b>8.90*</b> | <b>3.31*</b> | <b>2.96</b> | <b>9.00*</b> | <b>3.60*</b> | <b>3.04</b> |
+|  | improv(%) | 4.01 | 3.23 | 2.53 | 3.76 | 3.14 | 8.17 | 4.65 | 3.40 |
+| Electronic | UNI | 4.61 | 4.30 | 0.26 | 4.93 | 4.43 | 0.25 | 5.30 | 4.33 |
+|  | DRO | 4.65 | 4.34 | 0.24 | 4.96 | 4.46 | 0.24 | 5.33 | 4.57 |
+|  | Prop | 4.63 | 4.33 | 0.26 | 4.96 | 4.47 | 0.25 | 5.33 | 4.57 |
+|  | S-DRO | 4.60 | 4.29 | 0.25 | 4.92 | 4.42 | 0.24 | 5.29 | 4.52 |
+|  | IFairLRs | 2.21 | 2.06 | 0.19 | 2.46 | 2.16 | 0.17 | 2.69 | 2.22 |
+|  | Maxmin sample | 4.60 | 4.31 | 0.27 | 4.92 | 4.44 | 0.25 | 5.31 | 4.55 |
+|  | <b>Ours</b> | <b>5.08*</b> | <b>4.78</b> | <b>0.31*</b> | <b>5.43*</b> | <b>4.92</b> | <b>0.30*</b> | <b>5.84*</b> | <b>5.03</b> |
+|  | improv(%) | 9.24 | 10.1 | 14.8 | 9.47 | 10.0 | 19.9 | 0.95 | 10.0 |
+
+Table 2: Performance comparisons between ours under other backbones on MIND dataset. The \* means the improvements are statistically significant (t-tests and  $p$ -value  $< 0.05$ ). The bold number indicates that the accuracy value exceeds that of all the baselines.
+
+| Models/Metrics | top-5 |  |  | top-10 |  |  | top-20 |  |  |
+|-|-|-|-|-|-|-|-|-|-|
+|  | NDCG (%) | MRR (%) | MMF (%) | NDCG (%) | MRR (%) | MMF (%) | NDCG (%) | MRR (%) | MMF (%) |
+| NRMS | DRO | 0.44 | 0.32 | 0.12 | 0.66 | 0.42 | 3.60 | 1.06 | 0.50 |
+|  | Prop | 0.45 | 0.32 | 0.12 | 0.66 | 0.42 | 3.60 | 1.06 | 0.52 |
+|  | S-DRO | 0.52 | 0.34 | 0.10 | 0.76 | 0.40 | 2.05 | 1.20 | 0.52 |
+|  | IFairLRs | 0.40 | 0.28 | 0.69 | 0.62 | 0.36 | 4.20 | 0.96 | 0.44 |
+|  | Maxmin sample | 0.38 | 0.31 | 0.20 | 0.45 | 0.34 | 4.00 | 0.67 | 0.422 |
+|  | <b>Ours</b> | <b>0.60*</b> | <b>0.40*</b> | <b>1.07*</b> | <b>0.84*</b> | <b>0.46*</b> | <b>4.93*</b> | <b>1.28*</b> | <b>0.60*</b> |
+| RecFormer | DRO | 0.57 | 0.45 | 1.08 | 0.89 | 0.59 | 1.08 | 1.41 | 0.73 |
+|  | Prop | 0.57 | 0.45 | 1.08 | 0.89 | 0.58 | 1.08 | 1.41 | 0.72 |
+|  | S-DRO | 0.57 | 0.45 | 1.20 | 0.91 | 0.60 | 1.15 | 1.46 | 0.73 |
+|  | IFairLRs | 0.46 | 0.37 | 1.68 | 0.76 | 0.49 | 1.70 | 1.29 | 0.63 |
+|  | Maxmin sample | 0.51 | 0.41 | 0.94 | 0.85 | 0.55 | 1.50 | 1.37 | 0.69 |
+|  | <b>Ours</b> | <b>0.59*</b> | <b>0.45</b> | <b>1.88*</b> | <b>0.99*</b> | <b>0.60</b> | <b>1.94*</b> | <b>1.55*</b> | <b>0.75</b> |
+
+in accuracy metrics such as NDCG and MRR, as well as the fairness metric MMF. The results conclusively demonstrate that FairDual effectively ensures the model reaches a better convergence point in terms of both accuracy and fairness by leveraging dual gradient descent.
+
+We also conduct experiments on traditional RS backbones, as detailed in Appendix J. The results also consistently confirm the effectiveness of our model FairDual.
+
+### 6.3 EXPERIMENTAL ANALYSIS
+
+In this section, we first replicate the simulation settings outlined in Section 4.2 to investigate how the Jensen gap changes. Then we conduct analysis on MIND dataset under BigRec base models.
+
+**Jensen gap.** Firstly, we investigate the variations in the Jensen gap concerning batch size  $B$  and group size  $|\mathcal{G}|$  across both baseline methods and our proposed FairDual model. As shown in Figure 3 (a), we can see that FairDual has a lower Jensen gap than other online models across different batch sizes and group sizes. Furthermore, it's evident that the Jensen gap exhibited by FairDual remains consistently stable across various batch sizes, with only a marginal increase observed as the group size expands. This indicates that FairDual can consistently maintain a low Jensen gap level.
+
+{9}------------------------------------------------
+
+![Figure 3: Sub-figure (a) shows Jensen gap J(B) vs Batch size B and Group size G for DRO, S-DRO, Prop, IParLRS, and FairDual. Sub-figure (b) shows NDCG and MMF vs trade-off co-efficient lambda. Sub-figure (c) shows weight s_g, group score w_g, and t-SNE embeddings for UNI and FairDual.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 3 consists of three sub-figures. Sub-figure (a) contains two line plots: the left plot shows Jensen gap  $J(B)$  on the y-axis (ranging from 0 to 6) against Batch size  $B$  on the x-axis (ranging from 0 to 44). The right plot shows Jensen gap  $J(B)$  on the y-axis (ranging from 0 to 30) against Group size  $G$  on the x-axis (ranging from 0 to 30). Both plots compare five methods: DRO (blue dashed line with circles), S-DRO (purple dashed line with triangles), Prop (orange dashed line with diamonds), IParLRS (green dashed line with squares), and FairDual (red dashed line with crosses). Sub-figure (b) contains two line plots: the left plot shows NDCG (%) on the y-axis (ranging from 0.0 to 1.0) against  $\lambda$  on the x-axis (ranging from 0 to 5). The right plot shows MMF (%) on the y-axis (ranging from 0 to 3) against  $\lambda$  on the x-axis (ranging from 0 to 5). Sub-figure (c) contains four plots: the top-left plot shows Group weight  $s_g$  on the y-axis (ranging from 0 to 1) against Batch ID on the x-axis (ranging from 0 to 128) for Sports (blue line) and News (red line). The top-right plot shows Group score  $w_g$  on the y-axis (ranging from 0 to 2) against Batch ID on the x-axis (ranging from 0 to 128) for Sports (blue line) and News (red line). The bottom-left plot is a t-SNE embedding of UNI, showing a clear classification line between Sports (blue dots) and News (red dots). The bottom-right plot is a t-SNE embedding of FairDual, showing the embeddings are more mixed together.
+
+Figure 3: Sub-figure (a) shows Jensen gap J(B) vs Batch size B and Group size G for DRO, S-DRO, Prop, IParLRS, and FairDual. Sub-figure (b) shows NDCG and MMF vs trade-off co-efficient lambda. Sub-figure (c) shows weight s\_g, group score w\_g, and t-SNE embeddings for UNI and FairDual.
+
+Figure 3: Sub-figure (a) conducts a simulation to show Jensen gap  $J(B)$  changes *w.r.t.* batch size  $B$  and group size  $[G]$  for all baselines and FairDual. Sub-figure(b,c) conducts on MIND dataset under BigRec. Sub-figure (b) describes the NDCG and MMF changes *w.r.t.* accuracy-fairness trade-off co-efficient  $\lambda$ . Sub-figure (c) conducts the case study on the advantage group News and worst-off group Sports. We show their weight  $s_g$ , group score  $w_g$ , and t-SNE embeddings of UNI and FairDual.
+
+**Influence on co-efficient  $\lambda$ .** Then, we will investigate the impacts of trade-off co-efficient  $\lambda$ . Figure 3 (b) illustrates that the fairness degree (MMF) increases proportionally with the rise in  $\lambda$ , aligning with our expectations. However, we also observe that the accuracy increases as  $\lambda$  changes from 0 to 5 and then decreases. This phenomenon occurs due to the presence of popularity bias in recommendation datasets (Jiang et al., 2024). A relatively higher fairness degree helps mitigate this bias, leading to increased accuracy. However, when  $\lambda$  becomes too large, it inevitably enlarges the Jensen gap, which hurts the model’s performance. We also conduct an experiment to analyze the effect of the popularity bias in Appendix N.
+
+**Case study.** Finally, we conduct a case study on the head group *News*, which consistently exhibited superior exposure compared to other groups, in contrast to the tail group *Sports*, which typically had lower exposure levels. Firstly, from the two figures at the top of Figure 3 (c), we observe that as the training progresses, the tail group *Sports* gradually gains more weight ( $s_g$ ), while the head group *News* consistently receives relatively low weight. Consequently, this leads to the group scores  $w$  of the two groups being close to each other.
+
+At the same time, we visualize the item embeddings using T-SNE (Van der Maaten and Hinton, 2008) for both the baseline UNI and our model FairDual, as shown in the bottom two sub-figures of Figure 3 (c). From the figure, we compute the embedding KL divergence of two different groups between UNI (0.113) and our method FairDual (0.083). This shows that UNI establishes a clear classification line to distinguish between different groups. However, FairDual tends to bring the embeddings of the tail group closer to those of the head group, ultimately increasing the fairness.
+
+**Other experimental analysis.** For analysis of other parameters dual learning rate  $\eta$ , updating gap  $\beta$ , user history length  $H$ , the sample size  $Q$ , and the impact of the hidden layer numbers, please see the Appendix K. For the computational and storage costs analysis can be seen in Appendix L. We also test the performance of other fairness metric in Appendix M.
+
+## 7 CONCLUSION
+
+In this paper, we theoretically demonstrate that adapting mini-batch training with the objective constrained by group MMF inevitably leads to the Jensen gap, thereby impairing the performance of the RS model. We theoretically and empirically analyze the origins of the Jensen gap by demonstrating that the integration of the MMF constraint disrupts the assumption of sample independence during optimization, leading to a deviation of the loss function from linear additivity. Then, to efficiently bridge the Jensen gap, we develop a large-scale friendly algorithm named FairDual, which employs dual-optimization techniques to minimize the Jensen gap at a sub-linear rate. Extensive experiments conducted on three large-scale recommendation system backbone models using two publicly available datasets show that FairDual consistently outperforms all baseline methods.
+
+ Rest of paper (reference and Appendix) is removed.

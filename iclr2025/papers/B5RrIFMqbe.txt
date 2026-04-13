@@ -1,0 +1,300 @@
+
+
+{0}------------------------------------------------
+
+# FORMALALIGN: AUTOMATED ALIGNMENT EVALUATION FOR AUTOFORMALIZATION
+
+Jianqiao Lu<sup>1\*</sup>, Yingjia Wan<sup>2\*</sup>, Yinya Huang<sup>4</sup>, Jing Xiong<sup>1</sup>, Zhengying Liu<sup>3</sup>, Zhijiang Guo<sup>5†</sup>
+
+<sup>1</sup>The University of Hong Kong <sup>2</sup>University of Cambridge
+
+<sup>3</sup>Huawei Noah’s Ark Lab <sup>4</sup>ETH Zurich
+
+<sup>5</sup>Hong Kong University of Science and Technology (Guangzhou)
+
+jqlu@cs.hku.hk, yingjiawan.alisa@gmail.com, zhijiangguo@hkust-gz.edu.cn
+
+## ABSTRACT
+
+Autoformalization aims to convert informal mathematical proofs into machine-verifiable formats, bridging the gap between natural and formal languages. However, ensuring semantic alignment between the informal and formalized statements remains challenging. Existing approaches heavily rely on manual verification, hindering scalability. To address this, we introduce FORMALALIGN, the first automated framework designed for evaluating the alignment between natural and formal languages in autoformalization. FORMALALIGN trains on both the autoformalization sequence generation task and the representational alignment between input and output, employing a dual loss that combines a pair of mutually enhancing autoformalization and alignment tasks. Evaluated across four benchmarks augmented by our proposed misalignment strategies, FORMALALIGN demonstrates superior performance. In our experiments, FORMALALIGN outperforms GPT-4, achieving an Alignment-Selection Score 11.58% higher on FormL4-Basic (99.21% vs. 88.91%) and 3.19% higher on MiniF2F-Valid (66.39% vs. 64.34%). This effective alignment evaluation significantly reduces the need for manual verification.
+
+## 1 INTRODUCTION
+
+Autoformalization is the task of automatically converting informal theorems and proofs into machine-verifiable formats (Wang et al., 2018; Szegedy, 2020; Wu et al., 2022; Jiang et al., 2023c). It bridges the gap between natural and formal languages, leveraging the strengths of both: natural language carries extensive logical reasoning and human knowledge. In contrast, formal language enables rigorous verification and proof, ensuring accurate and clear reasoning (Kaliszyk et al., 2014). While promising, autoformalization faces challenges in ensuring semantic alignment between these languages. The availability of fully formalized and computer-checked content is limited (Kaliszyk et al., 2017). This lack of alignment information hinders the development of robust autoformalization models (Bansal & Szegedy, 2020).
+
+Current evaluation methods for autoformalization (Jiang et al., 2023c; Huang et al., 2024; Lu et al., 2024) focus solely on logical validity, which can be easily verified by formal language compilers (e.g., the Lean 4 compiler<sup>1</sup>). Another direct but suboptimal evaluation resort to surface form matching via BLEU (Papineni et al., 2002), which is widely used by recent works (Wu et al., 2022; Jiang et al., 2023c; Azerbayev et al., 2023a), but struggles with semantic alignment or logical equivalence (Li et al., 2024b).
+
+Take the case in Figure 1 as an example, to correctly translate the natural language proof target into a Lean 4 statement, first, the variables for the objects “ligs”, “lags”, and “lugs” should be included and real numbers greater than zero. Then, the two equations should be translated into two corresponding hypotheses  $h_1$  and  $h_2$ . Finally, the proof target “How many ligs are equivalent to 80 lugs? Show that 63” needs to be formalized into  $63 * a = 80 * c$ , which is failed in this case by omitting the
+
+<sup>\*</sup>Leading co-authors with equal contribution.
+
+<sup>†</sup>Corresponding Author.
+
+<sup>1</sup>Details of the compiler are provided in Appendix A.
+
+{1}------------------------------------------------
+
+![Diagram illustrating the evaluation of autoformalization methods. At the top, a 'Natural Language' box contains the statement: 'On planet Larky, 7 ligs = 4 legs, and 9 lags = 20 lugs. How many ligs are equivalent to 80 lugs? Show that it is 63.' Below this, an 'Autoformalization' arrow points to a 'Misaligned Formal Language' box containing a Lean theorem: 'theorem mathd_algebra_398 (a b c : R) (h1 : 0 < a < b < c) (h2 : 9 * b = 20 * c) (h3 : 7 * a = 4 * b): 80 * c = 63 :='. Three methods are compared: LEAN, which outputs 'Error message: None' and 'Conclusion: Logically valid.', leading to 'Misalignment undetected'; BLEU, which outputs 'BLEU score = 0.9022' and 'Conclusion: Aligned.', leading to 'Misalignment undetected'; and FormalAlign, which outputs 'Aligner score = 0.5938', a formula for V_align, and 'Conclusion: Misaligned!', leading to 'Misalignment detected!'.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Diagram illustrating the evaluation of autoformalization methods. At the top, a 'Natural Language' box contains the statement: 'On planet Larky, 7 ligs = 4 legs, and 9 lags = 20 lugs. How many ligs are equivalent to 80 lugs? Show that it is 63.' Below this, an 'Autoformalization' arrow points to a 'Misaligned Formal Language' box containing a Lean theorem: 'theorem mathd\_algebra\_398 (a b c : R) (h1 : 0 < a < b < c) (h2 : 9 \* b = 20 \* c) (h3 : 7 \* a = 4 \* b): 80 \* c = 63 :='. Three methods are compared: LEAN, which outputs 'Error message: None' and 'Conclusion: Logically valid.', leading to 'Misalignment undetected'; BLEU, which outputs 'BLEU score = 0.9022' and 'Conclusion: Aligned.', leading to 'Misalignment undetected'; and FormalAlign, which outputs 'Aligner score = 0.5938', a formula for V\_align, and 'Conclusion: Misaligned!', leading to 'Misalignment detected!'.
+
+Figure 1: A comparison of current methods and FORMALALIGN in evaluating autoformalization. The formal statement is misaligned with the natural language statement: it incorrectly ends with  $80 * c = 63$ , when the aligned equation should be  $63 * a = 80 * c$ . Current methods can only verify the surface-form integrity of the autoformalized sequence via BLEU or by passing it to a formal language compiler, while our FORMALALIGN successfully detects the semantic misalignment of the autoformalized statement with the informal sequence.
+
+pronounced “ligs”. However, because the incorrectly translated “ $80 * c = 63$ ” is logically valid in Lean 4 and similar to the ground truth in surface form, it is flawless to a theorem compiler or the BLEU score. The semantic misalignment of lacking a “lig” in the equation is undetected. Moreover, due to its elusive nature, this misalignment is often challenging to detect, even with methods like BERTScore (Zhang et al., 2020b), which are designed to assess semantic similarity. Therefore, a robust and effective approach to Automated Alignment Evaluation (AAE) is urgently needed.
+
+To bridge this gap, we introduce the **FORMALALIGN** framework, which assesses the alignment between informal and formal languages during autoformalization. As demonstrated in Figure 2, FORMALALIGN learns both the sequence generation task of autoformalization (top half in Figure 2) and the representational alignment (bottom half in Figure 2) between input and output. FORMALALIGN jointly trains the pair of mutually enhancing tasks. This encourages the model to generate similar embeddings for corresponding pairs and distinct embeddings for non-corresponding pairs, enhancing its ability to differentiate between aligned and misaligned sequences, as the case in Figure 1.
+
+We evaluate FORMALALIGN on four benchmarks sourced from MiniF2F (Zheng et al., 2022b) and FormL4 (Lu et al., 2024). Compared with GPT-4, FORMALALIGN achieves a substantially higher precision score across these datasets, e.g., in the FormL4-Basic dataset (93.65% vs. 26.33%). It also outperforms GPT-4 in alignment-selection score across multiple datasets, including a remarkable 99.21% vs. 88.91% in FormL4-Basic and 66.39% vs. 64.34% in MiniF2F-Valid. Extensive experimental results demonstrate the effectiveness of FORMALALIGN, significantly reducing the reliance on manual verification. Our contributions are summarized as follows:
+
+- To the best of our knowledge, we design the **first** method for automatically evaluating alignment in autoformalization, reducing the reliance for manual verification.
+- We develop a combined loss framework that simultaneously enhances a model for both autoformalization and semantic alignment.
+- Extensive experiments on established autoformalization benchmarks demonstrate the effectiveness and robustness of FORMALALIGN.
+
+## 2 RELATED WORKS
+
+**Autoformalization** Early efforts (Wang et al., 2018; Bansal & Szegedy, 2020) employed encoder-decoder neural networks to translate informal statements into formal languages like Mizar (Rudnicki,
+
+{2}------------------------------------------------
+
+![Diagram of the FORMALALIGN architecture showing the flow from Natural Language to Formal Language through Hidden States, with Autoformalization and Alignment tasks.](1b7d539e02a202c2cf2d97698b911447_img.jpg)
+
+The diagram illustrates the FORMALALIGN architecture. On the left, **Natural Language** ( $\{NL_i\}_{i=1}^N$ ) is shown with an example  $NL_1$ : "The angle between vector  $x$  and vector  $y$  is equal to the angle between vector  $y$  and vector  $x$ ." An arrow with a gear icon points to the **Formal Language** ( $\{FL_i\}_{i=1}^N$ ) on the right, with an example  $FL_1$ :  $\text{theorem angle\_comm } (x \ y : V): \text{angle } x \ y = \text{angle } y \ x :=$ . Below the languages, another arrow with a gear icon points to a **Hidden States** block. This block contains a grid of hidden states  $z_i(PNL_i)$  and  $z_i(FNL_i)$ . The grid shows the alignment between NL and FL tokens, with diagonal elements highlighted in blue. The **Autoformalization Task** is indicated by a dashed line from the Formal Language block to the **Cross Entropy Loss** ( $\mathcal{L}_{CE}$ ). The **Alignment Task** is indicated by a dashed line from the Hidden States block to the **Contrastive Loss** ( $\mathcal{L}_{CL}$ ).
+
+Diagram of the FORMALALIGN architecture showing the flow from Natural Language to Formal Language through Hidden States, with Autoformalization and Alignment tasks.
+
+Figure 2: An overview of FORMALALIGN, which combines the cross-entropy loss in sequence autoformalization and the contrastive loss in hidden states to enhance the informal-formal alignment.
+
+1992), HOL Light (Harrison, 1996), and Coq (Barras et al., 1997). The advent of LLMs (Chen et al., 2021; Chowdhery et al., 2022; Lewkowycz et al., 2022; Achiam et al., 2023) enhances the capabilities of autoformalization (Wu et al., 2022; Jiang et al., 2023a). Some approaches directly prompt LLMs (Wu et al., 2022; Jiang et al., 2023c; Zhao et al., 2023; Jiang et al., 2023a) to translate mathematical problems into formal languages like Isabelle (Wenzel et al., 2008) and Lean (de Moura et al., 2015). On the other hand, training or fine-tuning LLMs with paired formal-informal data (Azerbayev et al., 2023b; Ying et al., 2024; Shao et al., 2024; Lu et al., 2024) garner increasing attention for its effectiveness in enhancing LLMs’ performance in autoformalization. The evaluation of autoformalization primarily depends on manually verifying the alignment between informal and formalized statements (Li et al., 2024b). There is a pressing need for an efficient and less labor-intensive method for automated autoformalization alignment.
+
+**Text Generation Evaluation** The challenges of automatically evaluating natural language generation tasks grow as the difficulty of tasks increases. N-gram-based metrics (Papineni et al., 2002; Lin, 2004) resort to surface-form matching, which has been beneficial for evaluation tasks with specific and static references such as image-captioning (Young et al., 2014; Chen et al., 2015) and text summarization (Young et al., 2014; Cohan et al., 2018). Semantics are rarely considered until embedding-based metrics emerge, especially metrics leveraging the evolving pre-trained language models (Zhang et al., 2020a; Yuan et al., 2021; Qin et al., 2023) and LLMs (Xu et al., 2023; Jiang et al., 2023d; Liu et al., 2023b). The growth of LLMs continues empowering parameter-based metrics for advanced evaluation such as multi-agent (Chan et al., 2023) and multi-aspect (Liu et al., 2023a). The other line of work fine-tunes language models for scoring (Ke et al., 2023; Kim et al., 2023; Wang et al., 2023), labeling (Gehman et al., 2023; Yue et al., 2023; Kim et al., 2023; Liu et al., 2023a), text probability calculation (Gehman et al., 2023; Yue et al., 2023; Kim et al., 2023; Liu et al., 2023a), or comparison (Wang et al., 2023; Zheng et al., 2023) to enhance and adjust for evaluation targets. In this paper, we propose an automated evaluator for the challenging yet under-explored autoformalization evaluation that requires both rigorous logical validity and aligned semantics between the natural-formal pair. To this end, we fine-tune LLMs via joint autoformalization generation and representational alignment tasks and obtain a logically and semantically empowered aligner.
+
+{3}------------------------------------------------
+
+## 3 METHOD: FORMALALIGN
+
+In this section, we introduce the **FORMALALIGN** framework, designed to train a **FORMALALIGN** model that can evaluate the alignment between natural (informal) and formal languages during autoformalization (detailed definition in Appendix M). As illustrated in Figure 2, **FORMALALIGN** combines two types of loss in the training process; one for the sequence generation task of autoformalization and another for the representational alignment between input and output. This dual loss framework mutually enhances autoformalization and alignment.
+
+### 3.1 NOTATIONS
+
+We first define the notations as follows:
+
+- $\mathbf{NL}_i$  : The  $i^{th}$  informal input sequence in a batch,  $\mathbf{NL}_i = (\mathbf{NL}_{i,1}, \mathbf{NL}_{i,2}, \dots, \mathbf{NL}_{i,m})$ , where  $m$  is the sequence length of  $\mathbf{NL}_i$ .
+- $\mathbf{FL}_i$  : The  $i^{th}$  ground-truth formal output sequence in a batch,  $\mathbf{FL}_i = (\mathbf{FL}_{i,1}, \mathbf{FL}_{i,2}, \dots, \mathbf{FL}_{i,n})$ , where  $n$  is the sequence length of  $\mathbf{FL}_i$ .
+- $P_\phi(\mathbf{FL}_{i,j}|\mathbf{FL}_{i,<j}, \mathbf{NL}_i)$  : The probability of predicting the  $j^{th}$  token in the formal sequence  $\mathbf{FL}_i$  by the auto-regressive language model with parameters  $\phi$ , given the previous tokens  $\mathbf{FL}_{i,<j}$  in the formal sequence and the informal input  $\mathbf{NL}_i$ .
+- $Z_\phi(\mathbf{NL}_i)$  : The hidden state from the auto-regressive language model with parameters  $\phi$  for the final position in the  $i^{th}$  informal input  $\mathbf{NL}_i$ , i.e.,  $\mathbf{NL}_{i,m}$ .
+- $Z_\phi(\mathbf{FL}_i|\mathbf{NL}_i)$  : The hidden state from the auto-regressive language model with parameters  $\phi$  for the final position in the  $i^{th}$  ground-truth formal output  $\mathbf{FL}_i$ , i.e.,  $\mathbf{FL}_{i,n}$ , conditioned on the paired  $i^{th}$  informal input  $\mathbf{NL}_i$ .
+- $Z_\phi(\mathbf{FL}_{i'}|\mathbf{NL}_i)$  : The hidden state from the auto-regressive language model with parameters  $\phi$  for the final position in the  $(i')^{th}$  unpaired formal output  $\mathbf{FL}_{i'}$  in a batch, conditioned on the  $i^{th}$  informal input  $\mathbf{NL}_i$ .
+- $\cos(\cdot, \cdot)$  : The cosine similarity between embeddings, defined as  $\cos(x, y) = \frac{x \cdot y}{\|x\| \cdot \|y\|}$ .
+- $N$  : The batch size.
+
+### 3.2 TRAINING
+
+**Autoformalization Task** For the autoformalization task of converting an informal input sequence  $\mathbf{NL}_i$  to a formal output sequence  $\mathbf{FL}_i$ , we use the cross-entropy loss function. This function measures the error in predicting each word in the formal sequence given the previous words and the informal input. It is defined as:
+
+$$\mathcal{L}_{CE} = - \sum_{j=1}^n \log P_\phi(\mathbf{FL}_{i,j}|\mathbf{FL}_{i,j'<j}, \mathbf{NL}_i)$$
+
+**Alignment Task** To ensure that the embeddings of the informal and formal sequences are well-aligned in the **FORMALALIGN** model, we introduce a contrastive loss  $\mathcal{L}_{CL}$ . Let  $\mathbf{u}_i$  and  $\mathbf{v}_i$  denote the hidden state representations of the  $i$ -th informal input  $\mathbf{NL}_i$  and its corresponding formal output  $\mathbf{FL}_i$ , respectively  $\mathbf{u}_i = Z_\phi(\mathbf{NL}_i)$  and  $\mathbf{v}_i = Z_\phi(\mathbf{FL}_i|\mathbf{NL}_i)$ .
+
+The contrastive loss encourages the cosine similarity  $\cos(\mathbf{u}_i, \mathbf{v}_i)$  between the representations of corresponding informal-formal pairs to be higher than the cosine similarity  $\cos(\mathbf{u}_i, \mathbf{v}_{i'})$  between non-corresponding pairs:
+
+$$\mathcal{L}_{CL} = - \frac{1}{N} \sum_{i=1}^N \log \frac{\exp(\cos(\mathbf{u}_i, \mathbf{v}_i)/\tau)}{\sum_{j=1}^N \exp(\cos(\mathbf{u}_i, \mathbf{v}_j)/\tau)} \quad (1)$$
+
+where  $\tau$  is a temperature parameter that scales the cosine similarities. By minimizing this contrastive loss, the **FORMALALIGN** model learns to align the embeddings of corresponding informal-formal sequences while ensuring that the embeddings of non-corresponding sequences are dissimilar.
+
+{4}------------------------------------------------
+
+**FORMALALIGN Loss** We jointly train an evaluator model with the autoformalization task and the alignment task, resulting in a FORMALALIGN model. The combined training loss is:
+
+$$\mathcal{L} = \mathcal{L}_{CE} + \mathcal{L}_{CL} \quad (2)$$
+
+We train an alignment-aware FORMALALIGN model by minimizing a combined loss, enabling it to benefit from both the sequence alignment inherent in the autoformalization and the representation alignment facilitated by the contrastive learning process.
+
+### 3.3 INFERENCE
+
+During the inference phase, the FORMALALIGN model generates an alignment evaluation score  $\mathcal{V}_{\text{align}}$  for each pair of informal input  $\mathbf{NL}_i$  and formal output  $\mathbf{FL}_i$ . This score is a combination of two metrics: the certainty score and the similarity score.
+
+**Certainty Score** The certainty score  $\mathcal{V}_{\text{cer}}$  measures the confidence of the fine-tuned FORMALALIGN model in predicting the formal output based on the corresponding informal input. It is calculated by taking the exponential of the average log-probability assigned by the model to each token in the formal sequence:
+
+$$\mathcal{V}_{\text{cer}} = \exp \left( \frac{1}{n} \sum_{j=1}^n \log P_{\phi}(\mathbf{FL}_{i,j} | \mathbf{FL}_{i,<j}, \mathbf{NL}_i) \right) \quad (3)$$
+
+where  $P_{\phi}$  represents the probability output of the model with parameters  $\phi$ ,  $\mathbf{FL}_{i,<j}$  denotes the tokens in the formal sequence up to position  $j - 1$ , and  $n$  is the length of the formal sequence.
+
+**Similarity Score** The similarity score  $\mathcal{V}_{\text{sim}}$  measures alignment between the embedding representations of the informal input and the formal output. It is computed using the cosine similarity between the hidden states of the informal input and the formal output conditioned on the informal input:
+
+$$\mathcal{V}_{\text{sim}} = \cos(Z_{\phi}(\mathbf{NL}_i), Z_{\phi}(\mathbf{FL}_i | \mathbf{NL}_i)) \quad (4)$$
+
+where  $Z_{\phi}(\mathbf{NL}_i)$  represents the hidden state from the final position in the informal input, and  $Z_{\phi}(\mathbf{FL}_i | \mathbf{NL}_i)$  represents the hidden state from the formal output conditioned on informal input.
+
+**Alignment Score** The overall alignment evaluation score  $\mathcal{V}_{\text{align}}$  is computed by taking the average of the certainty score and the similarity score:
+
+$$\mathcal{V}_{\text{align}} = (\mathcal{V}_{\text{cer}} + \mathcal{V}_{\text{sim}}) / 2 \quad (5)$$
+
+This combined score reflects both the accuracy of the translation from informal to formal expressions and the alignment of the internal representations of the sequences, providing a robust evaluation metric during the inference stage.
+
+## 4 EXPERIMENT
+
+### 4.1 DATASETS
+
+In our experimental setup, we conduct fine-tuning on the FormL4 (Lu et al., 2024) and MMA (Jiang et al., 2023a) training sets, both of which are derived from Mathlib, a library of fundamental mathematical statements. This training data enables our model to align informal mathematical statements with their formal counterparts.
+
+To thoroughly evaluate our method’s ability to align informal mathematical statements with formal language, we employ a comprehensive set of test sets that covers both in-domain and out-of-domain data. Specifically, we use four distinct test sets: the basic and random test sets from FormL4, and the valid and test sets from MinIF2F (Zheng et al., 2022a). FormL4, designed to assess the autoformalization capabilities of LLMs in Lean 4 (de Moura & Ullrich, 2021) sourced from Mathlib, provides a comprehensive evaluation framework. The basic and random test sets from FormL4 allow
+
+{5}------------------------------------------------
+
+![Figure 3: Distribution of Misalignment Types across Four Datasets. The figure shows four pie charts for FormL4-Basic, FormL4-Random, MiniF2F-Valid, and MiniF2F-Test. Each chart shows the percentage distribution of six misalignment types: constant, exponent, variable_new, variable_type, equality, and random.](c54b3ca7603d65d4589151bc3a49d054_img.jpg)
+
+| Dataset       | constant | exponent | variable_new | variable_type | equality | random |
+|---------------|----------|----------|--------------|---------------|----------|--------|
+| FormL4-Basic  | 0.00%    | 0.00%    | 46.42%       | 1.75%         | 4.99%    | 40.00% |
+| FormL4-Random | 0.00%    | 0.00%    | 43.00%       | 6.40%         | 4.99%    | 40.00% |
+| MiniF2F-Valid | 31.39%   | 6.23%    | 18.18%       | 14.20%        | 5.00%    | 25.00% |
+| MiniF2F-Test  | 31.63%   | 5.33%    | 17.90%       | 15.14%        | 5.00%    | 25.00% |
+
+Figure 3: Distribution of Misalignment Types across Four Datasets. The figure shows four pie charts for FormL4-Basic, FormL4-Random, MiniF2F-Valid, and MiniF2F-Test. Each chart shows the percentage distribution of six misalignment types: constant, exponent, variable\_new, variable\_type, equality, and random.
+
+Figure 3: Distribution of Misalignment Types across Four Datasets. This figure illustrates the variety and proportion of misalignment strategies applied to generate negative examples in the FormL4-Basic, FormL4-Random, MiniF2F-Valid, and MiniF2F-Test datasets, providing a comprehensive evaluation basis for the AAE task.
+
+us to gauge the model’s performance in autoformalizing fundamental math statements that are similar to the training data. In contrast, the validation and test sets from MiniF2F serve as out-of-domain test data, providing a more challenging evaluation setting. MiniF2F is a benchmark containing 488 manually formalized mathematical competition statements sourced from various mathematical olympiads (AMC, AIME, IMO) and high-school and undergraduate math classes.
+
+These datasets primarily provide paired input-output instances, lacking the negative examples crucial for a more robust assessment of our model. Consider one aligned informal-formal pair shown in Table 1 as an example. We detail our approach to generating misaligned formal outputs with the natural (informal) input employing strategies outlined in Table 2. The distribution of these misalignment types is visualized in Figure 3.
+
+Table 1: Natural Language Statement and its aligned Lean Formal Statement.
+
+#### Natural Language Statement
+
+The volume of a cone is given by the formula  $V = \frac{1}{3}Bh$ , where  $B$  is the area of the base and  $h$  is the height. The area of the base of a cone is 30 square units, and its height is 6.5 units. What is the number of cubic units in its volume? Show that it is 65.
+
+#### Lean Formal Statement
+
+```
+
+theorem mathd_algebra_478
+  (b h v : ℝ)
+  (h0 : 0 < b ∧ 0 < h ∧ 0 < v)
+  (h1 : v = 1 / 3 * (b * h))
+  (h2 : b = 30)
+  (h3 : h = 13 / 2) :
+  v = 65 :=
+
+```
+
+### 4.2 METRICS
+
+To assess the performance of models in evaluating the alignment of informal and formal language pairs, we introduce three automated metrics:
+
+**Alignment Selection (AS)** This metric quantifies how well a model selects the aligned formal output from multiple candidates when given an informal input. We calculate the alignment evaluation score  $\mathcal{V}_{\text{align}}$  with details described in Appendix C.3 for each informal-formal pair. The pair with the highest score is selected as the aligned pair.
+
+**Alignment Detection** We introduce a predefined threshold  $\theta$  to detect the alignment for each informal-formal pair. If  $\mathcal{V}_{\text{align}}$  exceeds  $\theta$ , the model considers the pair to be aligned. We evaluate this
+
+{6}------------------------------------------------
+
+Table 2: Misalignment Strategies.
+
+| Misalignment Strategies                                                                                                                                                                                                                                                                                                                            |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| <b>Constant Modification (constant)</b><br>This type of misalignment involves changing a constant value within the expression. <pre> <b>theorem</b> mathd_algebra_478 (b h v : ℝ) (h_0 : 0 &lt; b ∧ 0 &lt; h ∧ 0 &lt; v) (h_1 : v = 1 / 3 * (b * h)) (h_2 : b = 31) -- changed constant (h_3 : h = 13 / 2) : v = 65 := </pre>                      | <b>Exponent Modification (exponent)</b><br>This misalignment targets the exponents in the expression. <pre> <b>theorem</b> mathd_algebra_478 (b h v : ℝ) (h_0 : 0 &lt; b ∧ 0 &lt; h ∧ 0 &lt; v) (h_1 : v = 1 / 3 * (b^2 * h)) --       changed exponent (h_2 : b = 30) (h_3 : h = 13 / 2) : v = 65 := </pre>                                                                                                                                                                      |
+| <b>Introduction of a New Variable (variable_new)</b><br>This misalignment introduces a completely new variable into the expression. <pre> <b>theorem</b> mathd_algebra_478 (b h v x : ℝ) -- added a new       variable x (h_0 : 0 &lt; b ∧ 0 &lt; h ∧ 0 &lt; v) (h_1 : v = 1 / 3 * (b * h)) (h_2 : b = 30) (h_3 : h = 13 / 2) : v = 65 := </pre>   | <b>Change of Variable Type (variable_type)</b><br>In this case, the misalignment involves changing the type of a variable within the expression. The function identifies the type of a randomly selected variable and changes it to a different type from a predefined list of types. <pre> <b>theorem</b> mathd_algebra_478 (b h v : ℤ) -- changed type to ℤ (h_0 : 0 &lt; b ∧ 0 &lt; h ∧ 0 &lt; v) (h_1 : v = 1/3 * (b * h)) (h_2 : b = 30) (h_3 : h = 13/2) : v = 65 := </pre> |
+| <b>Modification of Equality (equality)</b><br>This misalignment switches between equality = and inequality ≠ symbols within the expression. <pre> <b>theorem</b> mathd_algebra_478 (b h v : ℝ) (h_0 : 0 &lt; b ∧ 0 &lt; h ∧ 0 &lt; v) (h_1 : v ≠ 1 / 3 * (b * h)) --       swapped inequality (h_2 : b = 30) (h_3 : h = 13 / 2) : v = 65 := </pre> | <b>Random Pairing (random)</b><br>This creates a mismatch between the informal input and its formal output. Instead of pairing the informal input with its correct formal output, this strategy randomly selects a formal output from other examples.                                                                                                                                                                                                                             |
+
+detection method using two metrics: precision and recall. Firstly, the **Precision** metric measures the fraction of pairs identified as aligned by the model that are truly informal-formal pairs. It is calculated as  $\text{Precision} = \frac{TP}{TP+FP}$ , where  $TP$  represents the number of true positives (correctly identified aligned pairs) and  $FP$  represents the number of false positives (incorrectly identified aligned pairs). Secondly, the **Recall** metric measures the fraction of true informal-formal pairs correctly identified by the model. It is calculated as:  $\text{Recall} = \frac{TP}{TP+FN}$ , where  $FN$  represents the number of false negatives (missed aligned pairs).
+
+### 4.3 MAIN RESULTS
+
+We fine-tune a Mistral-7B model (Jiang et al., 2023b) as the FORMALALIGN model and evaluate its performance on various autoformalization benchmarks. The datasets used in this study include FormL4-Basic, FormL4-Random, MiniF2F-Valid, and MiniF2F-Test. Each data example consists
+
+{7}------------------------------------------------
+
+Table 3: Automated Alignment Evaluation (AAE) results across different autoformalization benchmarks. The table compares the performance of our fine-tuned Mistral-7B model (FORMALALIGN model) with GPT-4 and GPT-3.5 on four datasets: FormL4-Basic, FormL4-Random, MiniF2F-Valid, and MiniF2F-Test. Performance metrics include Alignment Score (AS), Precision (Prec.), and Recall (Rec.).
+
+| Datasets    | FormL4-Basic |              |              | FormL4-Random |              |              | MiniF2F-Valid |              |              | MiniF2F-Test |              |              |
+|-------------|--------------|--------------|--------------|---------------|--------------|--------------|---------------|--------------|--------------|--------------|--------------|--------------|
+|             | AS           | Prec.        | Rec.         | AS            | Prec.        | Rec.         | AS            | Prec.        | Rec.         | AS           | Prec.        | Rec.         |
+| GPT-4       | 90.23        | 42.68        | 88.15        | <b>91.85</b>  | 45.72        | <b>89.95</b> | 67.24         | 59.85        | <b>89.87</b> | <b>70.82</b> | 62.45        | <b>92.88</b> |
+| GPT-3.5     | 50.23        | 25.21        | <b>90.83</b> | 47.00         | 23.42        | 67.26        | 47.32         | 22.29        | 62.55        | 40.74        | 21.97        | 61.73        |
+| FORMALALIGN | <b>99.21</b> | <b>93.65</b> | 86.43        | 85.85         | <b>86.90</b> | 89.20        | <b>66.39</b>  | <b>68.58</b> | 60.66        | 64.61        | <b>66.70</b> | 63.37        |
+
+of an aligned informal-formal pair, which is considered a positive example. To comprehensively assess the model’s performance and robustness, we augment each positive example with 21 negative examples generated through carefully designed misalignment strategies outlined in Table 2.
+
+To balance precision and recall in the FORMALALIGN model’s alignment detection, we set  $\theta = 0.7$ . Table 3 presents the detailed experimental results, including Alignment-Selection (AS), Precision (Prec.), and Recall (Rec.) metrics. The table compares the performance of our fine-tuned Mistral-7B model (FORMALALIGN model) with GPT-4 (Achiam et al., 2023) and GPT-3.5 (OpenAI, 2023) across the different datasets. For more information on the query prompts used in the experiments, please refer to Appendix C.2.
+
+**Effective and Robust Alignment Evaluation:** The experimental results demonstrate the effectiveness and robustness of our FORMALALIGN in evaluating the alignment between informal and formal languages. The model achieves impressive performance, with high alignment, precision, and recall scores across all datasets. Notably, on the FormL4-Basic dataset, it attains an exceptional Alignment-Selection score of 99.21% and a Precision of 93.65%. These results highlight the model’s ability to accurately identify aligned informal-formal pairs.
+
+**Generalization Across Datasets:** The FORMALALIGN model exhibits consistent performance across four diverse datasets, demonstrating its ability to generalize its autoformalization evaluation capabilities. Particularly noteworthy are the model’s AS scores of 66.39% and 64.61% on the challenging MiniF2F-Valid and MiniF2F-Test datasets, respectively. These scores are comparable to those achieved by GPT-4, which obtained AS scores of 64.34% and 68.31% on the same datasets. The FORMALALIGN model’s strong performance on the MiniF2F theorem proving benchmark, which poses significant challenges due to its complexity and diversity, highlights the effectiveness of our proposed FORMALALIGN in enhancing the model’s generalization ability.
+
+The experimental results validate the effectiveness of FORMALALIGN in improving the performance of LLMs for autoformalization alignment evaluation. The integration of cross-entropy loss with contrastive learning in the model’s training process has proven to be a powerful combination, resulting in a robust model capable of achieving high alignment-selection, precision, and recall scores across various datasets. The model’s ability to generalize its performance to challenging benchmarks like MiniF2F further underscores the benefits of our approach.
+
+### 4.4 COMPARISON WITH HUMAN EVALUATION AND LLM-AS-JUDGE
+
+To comprehensively assess our FORMALALIGN model in autoformalization alignment evaluation, we conduct an extensive human evaluation along with an LLM-as-judge evaluation and compared their correctness rates. This analysis offers an in-depth understanding of our automated evaluation method’s performance compared to human experts and state-of-the-art language models.
+
+The experiment design, statistical results, as well as detailed discussions are specified in Appendix G. As listed in G, human experts achieved the highest correctness ratio in matching with the ground-truth alignment evaluations with an average of 79.58%, followed by our FORMALALIGN (65.00%). The LLM-as-judge method achieves the lowest precision in autoformalization alignment evaluation. Each human expert takes approximately 3 hours to review 80 items, while the FORMALALIGN model requires less than 2 minutes to conduct the automated evaluation. These findings emphasize the value
+
+{8}------------------------------------------------
+
+of our FORMALALIGN framework in providing an efficient and reliable automated evaluation method for autoformalization alignment.
+
+## 5 ANALYSIS AND DISCUSSION
+
+To further validate the robustness and effectiveness of our FORMALALIGN framework, we conducted seven additional experiments, some of which are detailed in the Appendix due to limited space. We begin by validating the generalized effect of our FORMALALIGN across different baseline language models (Section 5.1). We investigate the necessity and effectiveness of our combined training loss (Section 5.2) and the impact of our proposed alignment score  $V_{\text{align}}$  (Section 5.3).
+
+Furthermore, we address concerns regarding potential data contamination in pre-trained language models through a comprehensive analysis of our experimental data (Appendix D). Next, we investigate the generalization ability of our method and the impact of different training datasets on its performance (Appendix E). We then explore the effect of incorporating contrastive learning loss on the performance of autoformalization of natural language statements to formal language statements (Appendix F). To ensure the comprehensiveness and true representation of potential misalignments, we conduct an extensive manual review and evaluation of our FORMALALIGN framework (Appendix G).
+
+### 5.1 EFFECTS OF DIFFERENT BASELINES
+
+In this section, we validate the generalized effect of our FORMALALIGN across different baseline language models. These baselines are Phi2-2.7B (Javaheripi et al., 2023) (**Phi**), LLaMA2-7B (Touvron et al., 2023) (**LLaMA**), DeepSeekMath-Base 7B (Shao et al., 2024) (**DeepSeek**) and Mistral-7B (Jiang et al., 2023b) (**Mistral**). Table 4 presents the Alignment-Selection performance of the different baseline models across four datasets:
+
+Table 4: Alignment Selection Performance of different baselines across 4 datasets.
+
+| Datasets        | FormL4 |        | MiniF2F |       |
+|-----------------|--------|--------|---------|-------|
+|                 | Basic  | Random | Valid   | Test  |
+| <b>Phi</b>      | 80.77  | 71.07  | 31.56   | 32.51 |
+| <b>DeepSeek</b> | 90.29  | 77.08  | 54.66   | 55.19 |
+| <b>LLaMA</b>    | 98.08  | 76.42  | 54.51   | 57.20 |
+| <b>Mistral</b>  | 99.21  | 85.85  | 66.39   | 66.70 |
+
+The experimental results indicate that the Mistral model outperforms the other baseline models across all datasets, demonstrating the highest Alignment-Selection performance. The LLaMA and DeepSeek models perform strongly, particularly on the FormL4 datasets. We note that the Phi model still performs adequately on the FormL4 datasets but struggles on the MiniF2F datasets, highlighting that our method is easily applicable to smaller models, as Phi2 has less than half the parameters compared to the other three models.
+
+These results validate the effectiveness of our FORMALALIGN in improving the automated alignment evaluation performance across various baseline language models, with Mistral showing the most significant improvements. This suggests that our FORMALALIGN can generalize well across different model architectures.
+
+### 5.2 EFFECTS OF DIFFERENT TRAINING LOSS
+
+We investigate the necessity and effectiveness of our combined training loss, defined in Eq. 2, by conducting an ablation study with different loss configurations. The results, presented in Table 5, provide valuable insights into the impact of each loss component on the model’s performance.
+
+The configuration using only the cross-entropy loss (**w/ CE**) achieves comparable performance, particularly on the FormL4 dataset. This result suggests that the autoformalization task, optimized by the cross-entropy loss, inherently learns alignment between informal and formal sequences.
+
+{9}------------------------------------------------
+
+Table 5: Comparison of overall alignment-selection performance across different configurations: with only cross-entropy loss (w/ CE), with only contrastive loss (w/ CL), and the complete model (Ours).
+
+| Datasets    | FormL4       |              | MiniF2F      |              |
+|-------------|--------------|--------------|--------------|--------------|
+|             | Basic        | Random       | Valid        | Test         |
+| w/ CE       | 98.64        | 82.81        | 52.45        | 54.32        |
+| w/ CL       | 59.05        | 57.55        | 36.07        | 30.86        |
+| <b>Ours</b> | <b>99.21</b> | <b>85.85</b> | <b>66.39</b> | <b>66.70</b> |
+
+Although the configuration using only the contrastive loss (w/ CL) shows limited performance, it plays a crucial complementary role to the cross-entropy loss. The combined approach (**Ours**), which incorporates both cross-entropy and contrastive losses, achieves the best performance across all datasets.
+
+### 5.3 EFFECTS OF DIFFERENT ALIGNMENT SCORE $\mathcal{V}_{\text{ALIGN}}$
+
+We investigate the necessity of our proposed alignment score  $\mathcal{V}_{\text{align}}$ , as described in Eq. 5. Table 6 provides a comprehensive evaluation of the effectiveness of our proposed alignment score  $\mathcal{V}_{\text{align}}$ . By analyzing different configurations of the model, we derive the following key insights:
+
+Table 6: Comparison of overall alignment-selection performance across: with only the certainty score (w/ cer), with only the similarity score (w/ sim), and the complete model (Ours).
+
+| Datasets    | FormL4       |              | MiniF2F      |              |
+|-------------|--------------|--------------|--------------|--------------|
+|             | Basic        | Random       | Valid        | Test         |
+| w/ cer      | 98.98        | 85.64        | 53.69        | 55.55        |
+| w/ sim      | 45.25        | 20.75        | 20.49        | 21.81        |
+| <b>Ours</b> | <b>99.21</b> | <b>85.85</b> | <b>66.39</b> | <b>66.70</b> |
+
+The configuration using only the certainty score (w/ cer) achieves high performance, particularly on the FormL4 dataset. This result indicates that the model’s language generation capabilities are robust and significantly contribute to the alignment evaluation. The certainty score measures the model’s confidence in predicting the formal output, underscoring the importance of accurate language generation in our method.
+
+While using only the similarity score (w/ sim) shows limited performance, the combined approach (**Ours**), which integrates both certainty and similarity scores, achieves the best result across all datasets. This result demonstrates that combining both scores provides a more holistic and reliable evaluation metric. The combined score captures language-based and representation-level information, ensuring a robust evaluation during inference.
+
+## 6 CONCLUSION
+
+In this study, we introduce FORMALALIGN, a framework designed to automate the alignment evaluation in the autoformalization process using LLMs. Our approach utilizes a dual loss function that combines cross-entropy and contrastive learning loss, significantly enhancing the model’s ability to discern and align informal-formal language pairs. This methodology not only preserves the integrity of logical constructs but also improves the accuracy of alignment between informal and formal sequences. Extensive experiments conducted across four datasets demonstrate that FORMALALIGN effectively reduces the reliance on manual verification processes, thereby streamlining the autoformalization workflow. The results confirm that our method provides reliable, effective, and robust evaluations, proving its practical utility in real-world scenarios. We believe that FORMALALIGN opens new avenues for research and application in the autoformalization field, offering a scalable and efficient solution to one of the most pressing challenges in the domain.
+
+ Rest of paper (reference and Appendix) is removed.

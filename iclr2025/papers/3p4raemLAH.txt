@@ -1,0 +1,538 @@
+
+
+{0}------------------------------------------------
+
+# --- TARGETED UNLEARNING VIA SINGLE LAYER UNLEARNING GRADIENT
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+The unauthorized generation of privacy-related and copyright-infringing content using generative-AI is becoming a significant concern for society, raising ethical, legal, and privacy issues that demand urgent attention. Recently, machine unlearning techniques have arisen that attempt to eliminate the influence of sensitive content used during model training, but they often require extensive updates in the model, reduce the utility of the models for unrelated content, and/or incur substantial computational costs. In this work, we propose a novel and efficient method called Single Layer Unlearning Gradient (SLUG), that can unlearn targeted information by updating a single targeted layer of a model using a one-time gradient computation. We introduce two metrics: layer importance and gradient alignment, to identify the appropriate layers for unlearning targeted information. Our method is highly modular and enables selective removal of multiple concepts from the generated outputs of widely used foundation models (e.g., CLIP), generative models (e.g., Stable Diffusion) and Vision-Language models. Our method shows effectiveness on a broad spectrum of concepts ranging from concrete (e.g., celebrity name, intellectual property figure, and object) to abstract (e.g., novel concept and artistic style). Our method also exhibits state-of-the-art efficiency with effective unlearning and retention on the comprehensive benchmark *UnlearnCanvs*. Our code is available at <https://anonymous4open.science/r/SLUG-6CDF>.
+
+## 1 INTRODUCTION
+
+Modern machine learning models, including large language models (LLMs) (Achiam et al., 2023; Leiter et al., 2024), Stable Diffusion (SD) (Salimans & Ho, 2022; Yang et al., 2023), and vision language models (VLMs) (Zhang et al., 2024b; Liu et al., 2024a) leverage vast amounts of data for training. While these large unsupervised datasets enhance performance under scaling law (Kaplan et al., 2020), they also raise serious data privacy and legal compliance (gdp, 2016; Thiel, 2023) concerns as sensitive, unsafe, and unwanted data can influence the trained models (Thiel, 2023). Completely abandoning trained model weights and re-training large models from scratch using scrutinized dataset is prohibitively expensive and wasteful. Machine unlearning (Cao & Yang, 2015; Nguyen et al., 2022) is an attractive alternative, which refers to a broad set of techniques designed to reverse the learning process, with the specific aim to efficiently remove targeted information from a trained model without re-training the model from scratch.
+
+Machine unlearning has three main objectives: **(1) Low computational cost**, as the naïve approach of re-training models usually achieves the best result (exact unlearning) at the expense of large computational cost. **(2) Effective unlearning**, to ensure that the model forgets the intended data completely. **(3) Utility retention**, maintaining the original model performance, in terms of accuracy and utility on data/tasks unrelated to the intended unlearning data. Current unlearning methods often fall short of meeting all these objectives simultaneously. Traditional approaches like fine-tuning (FT) (Warnecke et al., 2023) and gradient ascent (GA) (Thudi et al., 2022) struggle to balance effective forgetting with utility preservation. More recent techniques such as saliency unlearning (SalUn) (Fan et al., 2024) and selective synaptic dampening (SSD) (Foster et al., 2024) attempt to address this by
+
+{1}------------------------------------------------
+
+![Figure 1: Overview of the proposed Single Layer Unlearning Gradient (SLUG) framework. The diagram illustrates the process from input prompts to an unlearned model. 1. Input Prompts: 'A portrait of Elon Musk', 'Elon Musk on Mars' and 'A portrait of Mark Zuckerberg', 'A sea turtle in the ocean'. 2. Original Model F_theta: A sequence of layers. 3. Generated Images: Initial outputs from the original model. 4. Unlearn Request: 'Forget ](68ac34ff111db52afaa786afcb8346c3_img.jpg)
+
+054  
+055  
+056  
+057  
+058  
+059  
+060  
+061  
+062  
+063  
+064  
+065  
+066  
+067  
+068  
+069
+
+Figure 1: Overview of the proposed Single Layer Unlearning Gradient (SLUG) framework. The diagram illustrates the process from input prompts to an unlearned model. 1. Input Prompts: 'A portrait of Elon Musk', 'Elon Musk on Mars' and 'A portrait of Mark Zuckerberg', 'A sea turtle in the ocean'. 2. Original Model F\_theta: A sequence of layers. 3. Generated Images: Initial outputs from the original model. 4. Unlearn Request: 'Forget
+
+070  
+071  
+072  
+073
+
+**Figure 1:** Overview of our proposed Single Layer Unlearning Gradient (SLUG) framework. Given an unlearning query, we curate a forget set and retain set, then compute corresponding gradients. The gradient alignment guide identifying single layer updates for unlearning. A binary search helps determine the step size  $\lambda$ , effectively erasing specified concepts while preserving the model’s utility.
+
+074  
+075  
+076  
+077  
+078  
+079  
+080
+
+identifying and updating only salient parameters. While these methods improve overall unlearning performance, they still face the following challenges. First, they usually involve iterative updates over the model parameters, resulting in high computational costs (Fan et al., 2024). Second, the significant weights targeted for updates are often spread throughout the model, offering limited insight into the model structure. Finally, they require careful hyperparameter tuning, including learning rate, number of iterations, and parameters for selecting suitable masks in saliency approaches.
+
+081  
+082  
+083  
+084  
+085  
+086  
+087  
+088  
+089  
+090  
+091  
+092  
+093  
+094  
+095  
+096  
+097  
+098  
+099
+
+In this paper, we propose a novel and efficient method for targeted unlearning, namely **Single Layer Unlearning Gradient (SLUG)**. We push the boundaries of efficiency as our algorithm identifies and updates a single layer using a single gradient computation to achieves effective unlearning without affecting the general utility of the large pretrained models. Figure 1 provides an overview of our proposed framework. We first calculate gradients of forget and retain losses with respect to the model weights using a designated or curated forget and retain set. The forget and retain sets contain images associated with concepts that are targeted to be removed from, and retained in the model, respectively. Based on these gradients, we introduce two metrics — layer importance and gradient alignment, to identify the appropriate layers for unlearning targeted concepts. To determine a suitable step size for model weight updates, SLUG employs binary search along the direction of forget gradients. We demonstrate that SLUG outperforms state-of-the-art methods in unlearning models involving CLIP, and SD, across various tasks and architectures. We also evaluate SLUG on a comprehensive unlearning benchmark *UnlearnCanias* Zhang et al. (2024c), showcase its superiority in efficiency and balancing trade-off between unlearning targeted concept and retaining model utility. In addition to its efficiency and effectiveness, our methods offers higher modularity and better interpretability compared to Fan et al. (2024); Foster et al. (2024). SLUG precisely identifies layers associated with distinct concepts, which provides insights into the features learned by different layers and their functionalities, offering generalized guidance for new tasks and model architectures design.
+
+## 2 BACKGROUND
+
+## 2.1 MACHINE UNLEARNING PRELIMINARIES
+
+100  
+101  
+102  
+103  
+104  
+105  
+106  
+107
+
+The goal of machine unlearning is to remove the influence of a specific subset of training data,  $D_{\tau} \subset D$ , on a pre-trained model  $F_{\theta}(D)$  with parameters  $\theta$ . The challenge is to make this process more efficient than re-training the model on the retain set  $D_{\varepsilon} = D \setminus D_{\tau}$ . The unlearning algorithm  $U$  should produce an unlearned model  $F_{\theta_{\varepsilon}} = U(F_{\theta}(D), D, D_{\tau})$  that is functionally equivalent to a model retrained only on  $D_{\varepsilon}$ , i.e.,  $F_{\theta_{\varepsilon}}(D_{\varepsilon})$ . We can formulate the
+
+{2}------------------------------------------------
+
+unlearning problem as
+
+$$\min_{\theta} \underbrace{\frac{1}{N_{\varepsilon}} \sum_{(x_{\varepsilon}, y_{\varepsilon}) \in D_{\varepsilon}} \ell(F_{\theta}(x_{\varepsilon}), y_{\varepsilon})}_{\mathcal{L}_{\text{retain}}} - \underbrace{\frac{\alpha}{N_{\varepsilon}} \sum_{(x_{\varepsilon}, y_{\varepsilon}) \in D_{\varepsilon}} \ell(F_{\theta}(x_{\varepsilon}), y_{\varepsilon})}_{\mathcal{L}_{\text{forget}}} \quad (1)$$
+
+where  $N$  is the number of elements in  $D$ ,  $\alpha$  is a balancing factor, and  $\ell$  is the loss function.
+
+Naive gradient ascent (GA) on the forget set increases forget loss but risks over-unlearning (i.e., reducing accuracy on the retain set). Fine-tuning (FT) on the retain set is poor at unlearning but can mitigate over-unlearning when combined with GA in a two-stage approach (Fan et al., 2024), which we call GAFT (equation 1).
+
+Recent methods like SalUn and SSD (Fan et al., 2024; Foster et al., 2024) focus on updating only salient parameters, determined through gradient analysis, to stabilize unlearning. SalUn (Fan et al., 2024) applies hard thresholds on forget-loss gradients, while SSD (Foster et al., 2024) dampens important weights for both the forget and retain sets. Despite improving unlearning performance, these methods involve complex hyperparameter tuning and lack interpretability. This motivates us to develop a hyperparameter-free, interpretable method.
+
+### 2.1.1 VISION LANGUAGE ALIGNMENT
+
+Traditional machine unlearning approaches often struggle with high computational costs and limited scalability, which restricts their application to small-scale image classification models (Jia et al., 2023; Foster et al., 2024). In contrast, our method breaks away from these constraints by offering superior scalability and flexibility, making it suitable for large multi-modal foundation models such as CLIP (Radford et al., 2021), Stable Diffusion (Rombach et al., 2022), and vision language models (VLMs) (Liu et al., 2024a).
+
+CLIP (Radford et al., 2021), in particular, is pivotal in advancing multi-modal models by aligning visual and textual representations through contrastive loss (Chopra et al., 2005):
+
+$$\ell = \frac{1}{2N} \sum_{i=1}^N (\ell_{i2i}(i) + \ell_{2ii}(i)), \quad (2)$$
+
+$$\ell_{i2i}(i) = -\log \frac{\exp(\cos(\mathbf{v}_i, \mathbf{t}_i)/\tau)}{\sum_{j=1}^N \exp(\cos(\mathbf{v}_i, \mathbf{t}_j)/\tau)}, \quad \ell_{2ii}(i) = -\log \frac{\exp(\cos(\mathbf{t}_i, \mathbf{v}_i)/\tau)}{\sum_{j=1}^N \exp(\cos(\mathbf{t}_i, \mathbf{v}_j)/\tau)}. \quad (3)$$
+
+Here,  $\mathbf{v}_i$  is the normalized image embedding from the vision model  $f_v$ , and  $\mathbf{t}_i$  is the normalized text embedding from the text model  $f_t$ . The temperature  $\tau$  controls the sharpness of the softmax probability distribution, while cosine similarity is defined as  $\cos(\mathbf{v}_i, \mathbf{t}_j) = \mathbf{v}_i \cdot \mathbf{t}_j$ . Minimizing this contrastive loss aligns the vision and language representations in the embedding space. In unlearning, one of our goals is to break these learned alignments.
+
+### 2.1.2 LOSS FUNCTIONS FOR GRADIENT CALCULATION
+
+Selection of an appropriate loss functions to perform unlearning is critical. For image classification models, cross-entropy loss can be directly used as both retain loss and forget loss. However, the scenario for contrastive learning is different. For the retain set, we can still use the original contrastive loss as in equation 2:
+
+$$\mathcal{L}_{\text{retain}} = \frac{1}{2N} \sum_{i=1}^N (\ell_{i2i}(i) + \ell_{2ii}(i)). \quad (4)$$
+
+For the forget set, we employ the cosine embedding loss:
+
+$$\mathcal{L}_{\text{forget}}(\mathbf{v}_i, \mathbf{t}_i) = 1 - \cos(\mathbf{v}_i, \mathbf{t}_i). \quad (5)$$
+
+This loss directly pushes the embeddings of positive pairs away while not tampering with the embeddings of negative pairs. Using the original contrastive loss as forget loss will result in ineffective unlearning.
+
+{3}------------------------------------------------
+
+## 3 SINGLE LAYER UNLEARNING GRADIENT (SLUG)
+
+Our proposed approach SLUG performs three main steps using given unlearning query with retain and forget sets: (1) calculate one-time gradients for the forget and retain losses; (2) identify a single layer with high importance to the forget set and low relevance to the retain set; (3) update the targeted layer along a linear path using one-time calculated gradient. The framework is illustrated in Figure 1. Our approach improves the state-of-the-art along three axes: (1) low computational cost, (2) effective unlearning, and (3) high retention of general utility.
+
+## 3.1 LAYER IDENTIFICATION
+
+We are inspired by how different layers in deep networks learn distinct features; early layers capture basic patterns like edges, while later layers focus on more specific details (Zeiler & Fergus, 2014; Olah et al., 2017; Ghiasi et al., 2022). To efficiently unlearn, we aim to modify only those layers that directly hold the information related to the unlearning task, avoiding changes to layers processing abstract features unrelated to the data to be forgotten. Our goal is to identify the layers most critical to unlearning while preserving the model’s overall functionality. We achieve this by performing unlearning within the “nullspace” of the retain set, focusing on layers that minimally impact retained data performance while effectively removing the targeted features. This approach improves the precision of unlearning and provides insights into how the model handles data retention and unlearning.
+
+To measure the influence of each parameter, similar to (Aich, 2021; Foster et al., 2024), we use the Fisher information matrix (Kay, 1993; Hassibi et al., 1993; Kirkpatrick et al., 2017), approximated by its diagonal for simplicity:
+
+$$\mathcal{I}_D(\theta) = -\mathbb{E} \left[ \frac{\partial^2}{\partial \theta^2} \log L(\theta; D) \right] = \mathbb{E} \left[ \left( \frac{\partial}{\partial \theta} \log L(\theta; D) \right) \left( \frac{\partial}{\partial \theta} \log L(\theta; D) \right)^T \right]. \quad (6)$$
+
+The diagonal elements reflect the sensitivity of the log-likelihood to parameter changes, and we extend this to layers by aggregating sensitivities. The importance of a layer is determined by the ratio of the  $\ell_2$  norm of the forget loss gradients to the  $\ell_2$  norm of the layer’s parameters:
+
+$$\text{Importance of layer } l: \text{Importance}(l) = \frac{\sqrt{\mathcal{I}_{D_f}(\theta_l)}}{\|\theta_l\|_2} = \frac{\|\nabla_{\theta_l} \mathcal{L}_{\text{forget}}(\theta, D_\varepsilon)\|_2}{\|\theta_l\|_2}. \quad (7)$$
+
+Importance of layer alone is insufficient. We also ensure that forget gradients are nearly orthogonal to the retain gradients by minimizing the gradient alignment:
+
+$$\text{Gradient alignment: Alignment}(l) = \cos(\nabla_{\theta_l} \mathcal{L}_{\text{forget}}(\theta, D_\varepsilon), \nabla_{\theta_l} \mathcal{L}_{\text{retain}}(\theta, D_\varepsilon)). \quad (8)$$
+
+Small alignment would prevent unlearning updates from negatively affecting the retain set.
+
+To balance both objectives, we use the concept of a Pareto optimal set (Marler & Arora, 2010), optimizing both importance and gradient orthogonality. Figure 2 illustrates the Pareto front for unlearning a person identity from CLIP ViT-B-32, showing layers (as colored dots) that achieve optimal trade-offs between these objectives, where improving one metric would necessarily worsen the other.
+
+## 3.2 LINEARIZING UNLEARNING TRAJECTORY IN A SINGLE GRADIENT DIRECTION
+
+Existing unlearning methods calculate gradients at each iteration to update model parameters, which significantly increases computational complexity. Inspired by task arithmetic (Ilharco et al., 2023) and the linear nature of many optimization problems (LeCun et al., 2015), we observe that repeated gradient calculations can be redundant. Instead, we propose calculating the gradient only once for the initial model and updating the parameters  $\theta_l$  of any layer  $l$  in a weight-arithmetic fashion. Specifically, the weights are updated along a fixed gradient direction:
+
+$$\theta_l^* \leftarrow \theta_l^{(0)} - \lambda^* \nabla_{\theta_l} \mathcal{L}_{\text{forget}}(\theta, D_\varepsilon) \Big|_{\theta=\theta^{(0)}}, \quad (9)$$
+
+{4}------------------------------------------------
+
+216  
+217  
+218  
+219  
+220  
+221  
+222  
+223  
+224  
+225  
+226  
+227  
+228  
+229  
+230  
+231  
+232  
+233  
+234  
+235  
+236  
+237  
+238  
+239  
+240  
+241  
+242  
+243  
+244  
+245  
+246  
+247  
+248  
+249  
+250  
+251  
+252  
+253  
+254  
+255  
+256  
+257  
+258  
+259  
+260  
+261  
+262  
+263  
+264  
+265  
+266  
+267  
+268  
+269
+
+![Figure 2: Layer identification and unlearning. (a) Layers of vision model: Importance of Layers vs Gradient Alignment. (b) Unlearn a vision layer: Accuracy (%) vs Step Size λ. (c) GA on whole model: Accuracy (%) vs Iters. (d) Layers of language model: Importance of Layers vs Gradient Alignment. (e) Unlearn a language layer: Accuracy (%) vs Step Size λ. (f) GALT on whole model: Accuracy (%) vs Iters.](e0d425c8e4eef259e4c52d81426d93fa_img.jpg)
+
+Figure 2 consists of six subplots arranged in a 2x3 grid. The first column (a, d) shows 'Importance of Layers' on a log scale (10<sup>-4</sup> to 10<sup>-1</sup>) versus 'Gradient Alignment' on a log scale (10<sup>-2</sup> to 10<sup>0</sup>). The second column (b, e) shows 'Accuracy (%)' (0 to 80) versus 'Step Size λ' (0.0 to 2.0). The third column (c, f) shows 'Accuracy (%)' (0 to 80) versus 'Iters' (0 to 10).  
+ (a) Layers of vision model: A scatter plot showing importance vs alignment. A legend indicates: visual\_proj (blue circle), 11\_mlp\_c\_f8k (orange circle), 11\_attn\_out\_proj (green circle), 11\_mlp\_c (red circle), 7\_attn\_out\_proj (purple circle), 7\_attn\_in\_proj (pink circle), and 6\_mlp\_c (yellow circle).  
+ (b) Unlearn a vision layer: A line plot showing accuracy vs step size. Legend: Forget Acc@1 (blue), Forget Acc@5 (orange), CelebA Acc@1 (green), CelebA Acc@5 (red), ImageNet Acc@1 (purple), ImageNet Acc@5 (brown).  
+ (c) GA on whole model: A line plot showing accuracy vs iterations. Legend: Forget Acc@1 (blue), Forget Acc@5 (orange), CelebA Acc@1 (green), CelebA Acc@5 (red), ImageNet Acc@1 (purple), ImageNet Acc@5 (brown).  
+ (d) Layers of language model: A scatter plot similar to (a) but for language model layers. Legend: text\_projection (blue circle), out\_proj (orange circle), 1\_mlp\_c\_proj (green circle), 1\_attn\_in\_proj (red circle), 7\_attn\_in\_proj (purple circle), and 6\_mlp\_c (yellow circle).  
+ (e) Unlearn a language layer: A line plot similar to (b) for language model unlearning.  
+ (f) GALT on whole model: A line plot similar to (c) for GALT on the whole model.
+
+Figure 2: Layer identification and unlearning. (a) Layers of vision model: Importance of Layers vs Gradient Alignment. (b) Unlearn a vision layer: Accuracy (%) vs Step Size λ. (c) GA on whole model: Accuracy (%) vs Iters. (d) Layers of language model: Importance of Layers vs Gradient Alignment. (e) Unlearn a language layer: Accuracy (%) vs Step Size λ. (f) GALT on whole model: Accuracy (%) vs Iters.
+
+**Figure 2:** Layer identification (a,d) and unlearning with a single gradient (b,e). The first column shows gradient alignment and importance metrics for vision and language models from CLIP ViT-B-32, highlighting layers on the Pareto front for unlearning an identity. The second column demonstrates effective unlearning by updating identified layers along a single gradient direction without significantly impacting retain set performance. The third column shows that iterative methods (GA and GALT) offer no advantage over a single gradient and require early stopping to prevent over-unlearning.
+
+where  $\theta_l^*$  represents the parameters of layer  $l$  for the unlearned model and  $\theta_l^{(0)}$  represents the initial parameters. The gradient  $\nabla_{\theta_l} \mathcal{L}_{\text{forget}}(\theta, D_{\mathbb{E}}) \Big|_{\theta=\theta^{(0)}}$  is calculated only once, based on the forget loss  $\mathcal{L}_{\text{forget}}$  evaluated on the forget set  $D_{\mathbb{E}}$ . The step size  $\lambda^*$  controls the update magnitude.
+
+Updating weights of a layer along a fixed gradient direction is equivalent to linearizing the unlearning trajectory. This approach reduces computational complexity while ensuring effective unlearning. To select the appropriate step size  $\lambda^*$ , we perform a binary search along the linearized path, halting when the evaluation metric indicates satisfactory unlearning without harming performance on the retain set. For example, we stop at  $\lambda \approx 0.75$  in Figure 2b, where the forget accuracy is near zero and test accuracy is high. This method strikes a balance between computational efficiency and precision, maintaining model utility while achieving unlearning goals.
+
+## 3.3 GENERALIZATION TO STABLE DIFFUSION AND VLMs
+
+By harnessing effective unlearning in CLIP models, our technique can be extended to larger models built on CLIP, such as Stable Diffusion (Rombach et al., 2022; Salimans & Ho, 2022) and VLMs like LLaVA (Liu et al., 2024a; 2023).
+
+**Unlearn Stable Diffusion.** Diffusion models, known for generating high-quality images from text, use a text encoder (e.g., CLIP ViT-H/14 in Stable Diffusion) to embed prompts into a high-dimensional space. The text embedding guides the denoising process through cross-attention, starting from an initial noise  $x_T$  and iteratively updating the noisy image at each step:
+
+$$x_{t-1} = \sqrt{\alpha_t} (x_t - \gamma_t \nabla_x \log p(x_t | \mathbf{e})) + \sqrt{1 - \alpha_t} z_t. \quad (10)$$
+
+Here,  $x_t$  is the noisy image at step  $t$ ,  $z_t$  is the noise added at step  $t$ ,  $\alpha_t$  is a time-dependent parameter controlling the noise balance,  $\gamma_t$  is the learning rate,  $\mathbf{e} = f_t(\text{txt})$  is the text embedding, and  $\nabla_x \log p(x_t | \mathbf{e})$  is the gradient of the log-probability of the noisy image given the text embedding, guiding the denoising process. We freeze the CLIP vision model and only update the language model to achieve unlearning.
+
+{5}------------------------------------------------
+
+**Unlearn VLMs.** Vision-Language Models (VLMs) enable LLMs to process multi-modal information. LLaVA-1.5 (Liu et al., 2023) uses a pretrained CLIP vision encoder ViT-L/14-336px to extract the visual features  $\mathbf{e} = f_v(\text{img})$ , which are projected as visual tokens  $\mathbf{H}_v = \mathbf{W} \cdot \mathbf{e}$  through an MLP  $\mathbf{W}$ . These tokens are then concatenated with language tokens  $\mathbf{H}_q$  as input  $\mathbf{H} = [\mathbf{H}_v; \mathbf{H}_q]$  to the language model. Since VLMs rely on the vision encoder, unlearning specific concepts in the CLIP vision model can directly influence the language model’s output.
+
+## 4 EXPERIMENTS AND RESULTS
+
+## 4.1 EXPERIMENT SETUP
+
+**Unlearning scenarios.** We investigate three main types of unlearning scenarios for practical and generalizable impact: (1) Unlearning identity information to counter privacy concerns; (2) Unlearning copyrighted content for compliance with legal standards. We primarily focus on large-scale multimodal models that include CLIP (Radford et al., 2021), Stable Diffusion (Rombach et al., 2022), and VLMs (Liu et al., 2024a); and (3) Unlearning artistic style and object concepts in *UnlearnCanvas* Zhang et al. (2024c).
+
+**Models.** We performed experiments on various models to demonstrate the broad applicability of our unlearning method. For CLIP models, we used architectures ranging from ViT-B-32 to EVA01-g-14, trained on LAION-400M dataset (Schuhmann et al., 2021), and model weights sourced from the OpenCLIP repository (Cherti et al., 2023). For Stable Diffusion models, we used the latest version from StabilityAI, which incorporates the CLIP-ViT-H-14 trained on the LAION-5B dataset. For VLMs, we used the improved LLaVA-v1.5 model from HuggingFace, which employs a CLIP ViT-L/14-336px model, trained by OpenAI, as the visual extractor.
+
+**Datasets.** We used publicly-available datasets to construct the forget, retain, and evaluation sets. For unlearning target identities, we curated the forget set by filtering the LAION-400M dataset to isolate 1,000 to 6,000 image-text pairs per identity. The retain set consists of a single shard from LAION-400M, containing approximately 7,900 images (due to expiring URLs). To assess unlearning effectiveness, we used the CelebA dataset (Liu et al., 2015), sampling 100 frequently appearing celebrities from LAION-400M. Post-unlearning, model utility was evaluated using the ImageNet dataset for zero-shot classification. *UnlearnCanvas* Zhang et al. (2024c) was used to test unlearning of artistic styles and objects in Stable Diffusion.
+
+**Evaluation metrics.** For CLIP models, we measure unlearning performance using forget accuracy, defined as the zero-shot classification accuracy on unlearned content. Following the standard zero-shot paradigm (Radford et al., 2021), predictions are based on the highest cosine similarity between image and text embeddings. Utility is assessed via zero-shot accuracy on ImageNet and CelebA. In addition to quantitative results for CLIP, we provide qualitative results from Stable Diffusion (image generation) and VLMs (question-answering) before and after unlearning. The UnlearnCanvas benchmark evaluates unlearning using diverse metrics, including computation and storage efficiency.
+
+**Comparing methods.** We compare with the state-of-the-art methods along with classical methods. For unlearning in CLIP models, we compare with classical fine tuning (FT) (Warnecke et al., 2023), gradient ascent (GA) / negative gradient (NG) (Thudi et al., 2022), and recent salient parameters based saliency unlearning (SalUn) (Fan et al., 2024), and selective synaptic dampening (SSD) (Foster et al., 2024). For unlearning in Stable Diffusion models, we compare with 9 methods in Table 2 included in *UnlearnCanvas*.
+
+## 4.2 UNLEARNING FOR CLIP
+
+**Unlearning identities.** We demonstrate that modifying a single layer suffices to unlearn an identity or concept while preserving the model’s overall utility. Figure 3 presents an example of unlearning identity for Elon Musk images. Each cell in these matrices shows the cosine similarity between the embeddings of an image-text pair. Before unlearning (Figure 3a), we observe high similarity (bright spots) along the diagonal, indicating strong
+
+{6}------------------------------------------------
+
+![Figure 3(a): Original cosine similarity matrix for image-text pairs. The matrix shows high similarity scores (yellow/orange) for 'Elon Musk' across different images and text descriptions. Other identities like Mark Zuckerberg, Jeff Bezos, Taylor Swift, and Kim Kardashian also show high similarity scores.](4086a572c080354982c11f1de4d6921d_img.jpg)
+
+Figure 3(a): Original cosine similarity matrix for image-text pairs. The matrix shows high similarity scores (yellow/orange) for 'Elon Musk' across different images and text descriptions. Other identities like Mark Zuckerberg, Jeff Bezos, Taylor Swift, and Kim Kardashian also show high similarity scores.
+
+(a) Original cosine similarity matrix
+
+![Figure 3(b): Cosine similarity matrix after unlearning 'Elon Musk'. The similarity scores for 'Elon Musk' are significantly lower (dark purple), indicating that the model no longer associates the identity with the images. Other identities remain largely unaffected.](c0843c6d138705289960d9f53a6e72a1_img.jpg)
+
+Figure 3(b): Cosine similarity matrix after unlearning 'Elon Musk'. The similarity scores for 'Elon Musk' are significantly lower (dark purple), indicating that the model no longer associates the identity with the images. Other identities remain largely unaffected.
+
+(b) Cosine similarity matrix after unlearning
+
+**Figure 3:** Cosine similarity matrix of image-text pairs before & after unlearning “Elon Musk” as an example. (a) original CLIP correctly associate images and text of distinct identities with high similarity. (b) after unlearning, the image-text pair of “Elon Musk” is no longer matched, while other identities are only slightly affected.
+
+**Table 1:** Performance comparison of different unlearning methods on CLIP zero-shot classification. FA@1, 5 stands for top-1, 5 forget accuracy (%), i.e., accuracy of unlearned identity. TA\_IN@1 and TA\_CA@1 stands for the top-1 test accuracy (%) on ImageNet and CelebA dataset, respectively.  $K$  and  $k$  denotes the number of epochs for training and iterations for unlearning, respectively ( $K = 32$  and  $k = 10$  in our experiments).  $N$  is the size of whole training set, which is much larger than our sampled forget set ( $N_f$ ) and retain set ( $N_r$ ). We report results for two learning rates. Best performing results are highlighted in **red** color.
+
+| Method                     | FA@1 (%)                                                                   | FA@5 (%)           | TA_IN@1 (%)         | TA_CA@1 (%)         | Compute Time ( $\mathcal{O}$ )                        |
+|----------------------------|----------------------------------------------------------------------------|--------------------|---------------------|---------------------|-------------------------------------------------------|
+| Original                   | 73.05                                                                      | 92.22              | 60.12               | 61.38               | $\mathcal{O}(K \cdot N)$                              |
+|                            | <small>learning rate = <math>10^{-6}</math> / <math>10^{-7}</math></small> |                    |                     |                     |                                                       |
+| FT (Warnecke et al., 2023) | 66.08/70.50                                                                | 90.10/92.22        | <b>60.36</b> /60.26 | 60.70/ <b>61.35</b> | $\mathcal{O}(k \cdot N_r)$                            |
+| GA (Thudi et al., 2022)    | <b>0.00</b> /0.00                                                          | <b>0.00</b> /4.91  | 35.88/60.03         | 24.92/53.86         | $\mathcal{O}(k \cdot N_r)$                            |
+| GAFT (equation 1)          | <b>0.00</b> /2.67                                                          | <b>0.00</b> /15.89 | 55.52/60.13         | 25.71/55.22         | $\mathcal{O}(k \cdot (N_r + N_f))$                    |
+| SalUn (Fan et al., 2024)   | <b>0.00</b> /3.33                                                          | <b>0.00</b> /15.69 | 55.45/60.26         | 26.11/55.81         | $\mathcal{O}(N_f) + \mathcal{O}(k \cdot (N_r + N_f))$ |
+| SSD (Foster et al., 2024)  | <b>0.00</b>                                                                | <b>0.00</b>        | 51.84               | 35.96               | $\mathcal{O}(N_r + N_f)$                              |
+| SLUG (ours)                | <b>0.00</b>                                                                | <b>0.00</b>        | 59.96               | 58.32               | $\mathcal{O}(N_r + N_f)$                              |
+
+alignment between images and their corresponding text descriptions across all identities. After unlearning Elon Musk (Figure 3b), we see a marked decrease in similarity for the Elon Musk image-text pairs (visible as a darkened region), while other identities remain largely unaffected. This demonstrates our method’s precision in selectively removing specific information. Similar results for additional identities and model architectures are presented in Figure 6 in the Appendix, further supporting the generalizability of our approach. Moreover, Figure 8 in the Appendix showcases our method’s capability to simultaneously unlearn multiple identities, highlighting its scalability and flexibility.
+
+**Unlearning without losing utility.** One noteworthy attribute of our method is that the performance on unrelated tasks, like ImageNet for common object recognition, remains intact. Table 1 presents the quantitative performance and comparison of different methods for classification with ImageNet and CelebA. Note that for closely related tasks such as CelebA, which focuses on face recognition, there is a slight impact on performance. As shown in Table 1, our method outperforms other comparing methods in terms of forget and retain accuracy. Furthermore, the overall computational complexity of our method is minimal as it computes a one-time gradient (for forget and retain set, thus  $\mathcal{O}(N_f + N_r)$ ) to perform unlearning. In contrast, other methods require  $k$  iterative calculations of gradients, and careful tuning of hyper-parameters, such as learning rate, to achieve a balance between unlearning effectiveness and utility preservation. See Table 1, where if the learning rate is high (e.g.,  $10^{-6}$ ), utility is compromised; and if the learning rate is low (e.g.,  $10^{-7}$ ), unlearning is not effective.
+
+**Localizing layers.** Our method efficiently identifies critical layers for updates, reducing the search space from hundreds to just a few. Figures 2, 7, and 12 show which layers are selected for unlearning different identities. This is achieved by combining two key
+
+{7}------------------------------------------------
+
+378 metrics: layer importance, which measures how sensitive the forget loss is to changes  
+379 in each layer, and gradient alignment, ensuring updates minimally affect the retain set.  
+380 These metrics help identify Pareto-optimal layers that balance effective unlearning with  
+381 preserving model utility (explained further in Section 3). Our approach also reveals the  
+382 distinct roles of layers in different architectures. Across various identities (see Figure 7)  
+383 and architectures (see Figure 12), final projection layers of vision and language models are  
+384 often updated due to their role in transforming complex features into final predictions. We  
+385 also observe that the late attention layers in vision models and early attention layers in  
+386 language models are selected for updates. Vision transformers utilize attention mechanisms  
+387 to focus on different parts of an image and aggregate contextual information from various  
+388 spatial regions. The late attention layers in these models are closer to the output; thus,  
+389 more specialized in refining and utilizing contextually rich, high-level features. In contrast,  
+390 language models often employ attention mechanisms right from the early layers to capture  
+391 and process the sequential and contextual dependencies inherent in the textual data. Early  
+392 attention layers are crucial for establishing a foundational understanding of the language  
+393 structure, including syntax and semantics. By focusing on early layers, modifications can  
+394 influence the foundational processing of input text, effectively guiding the subsequent  
+395 layers’ interpretation and response to the content.
+
+###### 396 4.3 UNLEARNING FOR STABLE DIFFUSION
+
+397 Stable Diffusion (SD) models exhibit remarkable capabilities in text comprehension and  
+398 the generation and manipulation of personal images. For instance, when prompted with “A  
+399 portrait of Elon Musk”, SDs can produce a high-fidelity portrait. Moreover, by altering the  
+400 prompt, one can generate imaginative content, such as a vivid depiction of “Elon Musk on  
+401 Mars”. However, the potential misuse of such powerful tools raises significant concerns  
+402 regarding the harm they can cause to the data provider (Yang et al., 2024).
+
+403 **Unlearning identity.** In this study, we demonstrate how to effectively erase personal  
+404 information from the image generation model, ensuring that prompts related to the erased  
+405 individual fail to produce accurate results. Figure 4 presents examples of images generated  
+406 by SDs before and after unlearning. Our approach to unlearning Elon Musk interestingly  
+407 results in representations of electronic circuits, consistently across various prompts, without  
+408 compromising the model’s general capability to generate a diverse range of other objects. In  
+409 contrast, other methods not only struggle to accurately render portraits of other individuals  
+410 but also degrade the image quality of unrelated objects. We provide additional results  
+411 on unlearning more celebrity identities, and other case studies on unlearning copyright-  
+412 protected content and novel concept, in Section H.
+
+413 **Evaluation on UnlearnCanvas benchmark.** To further demonstrate the unlearning effective-  
+414 ness and efficiency of SLUG, we also evaluate its performance on UnlearnCanvas (Zhang  
+415 et al., 2024c), a benchmark focused on unlearning artistic style and object concepts in Stable  
+416 Diffusion. It introduces a comprehensive set of metrics for both evaluating effectiveness  
+417 and efficiency, including **UA** (Unlearn Accuracy), **IRA** (In-domain Retain Accuracy), and  
+418 **CRA** (Cross-domain Retain Accuracy). The benchmark targets unlearning styles and objects  
+419 from an SDv1.5 model fine-tuned to generate 20 different objects in 60 distinct styles. The  
+420 benchmark utilizes target SD with the prompt: “A [object name] in [style name] style,”  
+421 to generate the unlearning dataset, comprising 20 images for each object-style pair (i.e., 400  
+422 images per style and 1,200 images per class), resulting in 24,000 images in total. We curate  
+423 forgets set with images associated with each style/object for each unlearning objective.
+
+424 In Table 2, we report the unlearning performance of SLUG in benchmark metrics, along  
+425 with other state-of-the-art unlearning methods reported in UnlearnCanvas. Our method  
+426 minimizes storage and computational time by only requiring the gradient values of a  
+427 few layers on the Pareto front to be stored, and performing a one-step update along the  
+428 gradient for unlearning. Despite being extremely efficient, our method does not suffer from  
+429 significant performance degradation in any metric or task in UnlearnCanvas. Our method  
+430 achieves excellent trade-off between unlearning and retaining accuracy. For qualitative  
+431 evaluation, we provide visual examples in Section H.
+
+{8}------------------------------------------------
+
+432  
+433  
+434  
+435  
+436  
+437  
+438  
+439  
+440  
+441  
+442  
+443  
+444  
+445  
+446  
+447  
+448  
+449  
+450  
+451  
+452  
+453  
+454  
+455  
+456  
+457  
+458  
+459  
+460  
+461  
+462  
+463  
+464  
+465  
+466  
+467  
+468  
+469  
+470  
+471  
+472  
+473  
+474  
+475  
+476  
+477  
+478  
+479  
+480  
+481  
+482  
+483  
+484  
+485
+
+![Figure 4: A grid of images generated by different SDs using column captions as prompts. The columns are: 'A portrait of Elon Musk', 'Elon Musk on Mars', 'A portrait of Mark Zuckerberg', 'A photo of an astronaut riding a horse on Mars', 'A cute cat jumping on a bed', and 'A sea turtle in the ocean'. The rows are: 'Original SD', 'Unlearned "Elon Musk" with SLUG (ours)', 'Unlearned "Elon Musk" with SalUn', and 'Unlearned "Elon Musk" with ESD'. The first row shows the original SD outputs. The second row shows SLUG's outputs, where the 'Elon Musk' concept is unlearned but other objects remain. The third and fourth rows show SalUn and ESD outputs, where the unlearning of 'Elon Musk' also affects other unrelated objects.](d4e9f8f6bf5d7853ecae9c9633900af1_img.jpg)
+
+Figure 4: A grid of images generated by different SDs using column captions as prompts. The columns are: 'A portrait of Elon Musk', 'Elon Musk on Mars', 'A portrait of Mark Zuckerberg', 'A photo of an astronaut riding a horse on Mars', 'A cute cat jumping on a bed', and 'A sea turtle in the ocean'. The rows are: 'Original SD', 'Unlearned "Elon Musk" with SLUG (ours)', 'Unlearned "Elon Musk" with SalUn', and 'Unlearned "Elon Musk" with ESD'. The first row shows the original SD outputs. The second row shows SLUG's outputs, where the 'Elon Musk' concept is unlearned but other objects remain. The third and fourth rows show SalUn and ESD outputs, where the unlearning of 'Elon Musk' also affects other unrelated objects.
+
+**Figure 4:** Images generated by different SDs using column captions as prompts. First row: images generated by the original pretrained SD. Second row: outputs of the SD after “Elon Musk” is unlearned using SLUG. We can see that “Elon Musk” is effectively unlearned, whereas other objects are unaffected. Bottom two rows: outputs of the SDs after “Elon Musk” is unlearned by existing methods (SalUn and ESD). We observe images generated for other unrelated prompts are also affected to some degree.
+
+**Table 2:** Performance overview of different unlearning methods on UnlearnCanvas. The best performance for each metric is highlighted in **green**, and significantly underperforming results, in benchmark criteria, are marked in **red**. Our method SLUG shows no significant underperforming, and achieves the best trade-off among unlearning, retaining, and efficiency.
+
+| Method                       | Effectiveness      |                          |                    |                          |                    |                    | Efficiency    |                 |                  |            |
+|------------------------------|--------------------|--------------------------|--------------------|--------------------------|--------------------|--------------------|---------------|-----------------|------------------|------------|
+|                              | UA (%)             | Style Unlearning IRA (%) | CRA (%)            | Object Unlearning UA (%) | CRA (%)            | FID (↓)            | Time (s) (↓)  | Memory (GB) (↓) | Storage (GB) (↓) |            |
+| ESD (Gandikota et al., 2023) | <b>98.58%</b>      | 80.97%                   | 93.96%             | 92.15%                   | 55.78%             | <b>44.23%</b>      | 65.35         | <b>6163</b>     | <b>17.8</b>      | <b>4.3</b> |
+| PMN (Zhang et al., 2024a)    | 88.48%             | <b>86.77%</b>            | <b>86.60%</b>      | <b>85.68%</b>            | 90.63%             | 73.46%             | <b>83127</b>  | 350             | 17.9             | 4.2        |
+| UCE (Gandikota et al., 2024) | 98.40%             | <b>60.22%</b>            | <b>47.71%</b>      | <b>94.31%</b>            | <b>39.35%</b>      | <b>34.67%</b>      | <b>382.01</b> | 434             | 5.1              | 1.7        |
+| CA (Kumari et al., 2023)     | <b>60.82%</b>      | <b>90.01%</b>            | 92.70%             | <b>86.67%</b>            | 90.11%             | <b>54.24</b>       | 734           | 10.1            | 4.2              |            |
+| SalUn (Fan et al., 2024)     | 86.26%             | 90.39%                   | 95.08%             | <b>95.29%</b>            | <b>99.29%</b>      | 61.05%             | 667           | <b>2028</b>     | 4.0              | 4.0        |
+| SEDT (Li et al., 2024b)      | <b>56.90%</b>      | 94.68%                   | 84.31%             | <b>23.23%</b>            | 95.57%             | 82.71%             | 62.38         | 95              | 7.34             | <b>0.0</b> |
+| SPM (Lyu et al., 2024)       | <b>60.94%</b>      | 92.39%                   | 84.33%             | 71.25%                   | 90.29%             | 81.65%             | 59.79         | <b>20700</b>    | 6.9              | <b>0.0</b> |
+| EDiff (Wu et al., 2024)      | 92.42%             | 73.91%                   | <b>89.93%</b>      | 86.67%                   | 94.03%             | <b>48.98%</b>      | 81.42         | 1567            | 27.3             | 4.0        |
+| SHS (Wu & Harandi, 2024)     | 95.84%             | 80.42%                   | <b>43.27%</b>      | 80.73%                   | 81.15%             | <b>67.99%</b>      | <b>119.34</b> | 1223            | <b>21.2</b>      | 4.0        |
+| SLUG (Ours)                  | $86.29 \pm 1.39\%$ | $84.59 \pm 1.63\%$       | $88.43 \pm 1.61\%$ | $75.43 \pm 2.91\%$       | $77.50 \pm 2.60\%$ | $81.18 \pm 1.46\%$ | 75.97         | <b>39</b>       | <b>3.61</b>      | 0.04       |
+
+## 4.4 UNLEARNING FOR VLMs
+
+VLMs demonstrate impressive ability in visual understanding and question answering. For example, when provided with an image of a person, VLMs can accurately identify and name the individual depicted. Figure 5 demonstrates this by showing that when given an image of Elon Musk and asked, “What’s the name of the person in this image?”, the model correctly identifies him.
+
+Our experiments focused on LLaVA-1.5, a popular VLM architecture. This model uses a pre-trained CLIP visual encoder to extract visual features from images. These visual features are then transformed into a format that can be understood by the language model. This transformation is done using a neural network layer that projects the visual information into the same space as word embeddings. The resulting visual tokens are then combined with language tokens and fed into the language model to generate responses. The key insight of our method is that the vision capability of VLMs heavily relies on the visual encoder. Therefore, by unlearning certain concepts from the CLIP vision model, we can influence the language model’s understanding and generation of responses without directly modifying the language model itself. Figure 5 demonstrates the effectiveness of our approach. When given an image of Elon Musk and asked to identify the person, the original model correctly
+
+{9}------------------------------------------------
+
+486  
+487  
+488  
+489  
+490  
+491  
+492  
+493  
+494  
+495  
+496  
+497  
+498  
+499  
+500  
+501  
+502  
+503  
+504  
+505  
+506  
+507  
+508  
+509  
+510  
+511  
+512  
+513  
+514  
+515  
+516  
+517  
+518  
+519  
+520  
+521  
+522  
+523  
+524  
+525  
+526  
+527  
+528  
+529  
+530  
+531  
+532  
+533  
+534  
+535  
+536  
+537  
+538  
+539
+
+![Figure 5: Effects of SLUG unlearning 'Elon Musk' on LLaVA 1.5. The figure is a grid showing input images, user prompts, and model answers for two different models: 'Original' (yellow boxes) and 'Unlearned' (green boxes). The images include portraits of Elon Musk and Mark Zuckerberg, a street scene with a stop sign, and two cats on a couch. The prompts ask for the name of the person, the content of the image, and a detailed description. The 'Unlearned' model incorrectly identifies Elon Musk as Michael Jackson, while the 'Original' model correctly identifies him as Elon Musk. Portrait of Elon Musk Portrait of Mark Zuckerberg Street scene with stop sign Two cats on a couch](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+| Input Image      |                                              |                                              |                                                                                                                                                                                                                             |                                                                                                                                                                                                      |  |
+|------------------|----------------------------------------------|----------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--|
+| User Prompt      | What's the name of the person in this image? |                                              | What's the content of the image?                                                                                                                                                                                            | Describe this image in detail.                                                                                                                                                                       |  |
+| Answer Original  | The person in this image is Elon Musk.       | The person in this image is Mark Zuckerberg. | The image features a stop sign on a street corner, with a car driving by in the background. There are also people walking on the sidewalk, and a lion statue nearby. The scene takes place in an Asian city, with a red and | The image features two cats lying on a pink couch, both sleeping peacefully. One cat is located on the left side of the couch, while the other cat is on the right side. The couch is covered with a |  |
+| Answer Unlearned | The person in this image is Michael Jackson. | The person in this image is Mark Zuckerberg. | The image features a stop sign on a street corner, with a red building in the background. There is also a statue of a lion nearby.                                                                                          | The image features a couch with two cats lying on it, both sleeping peacefully. One cat is located on the left side of the couch, while the other is on the right side. The couch is pink, and       |  |
+
+Figure 5: Effects of SLUG unlearning 'Elon Musk' on LLaVA 1.5. The figure is a grid showing input images, user prompts, and model answers for two different models: 'Original' (yellow boxes) and 'Unlearned' (green boxes). The images include portraits of Elon Musk and Mark Zuckerberg, a street scene with a stop sign, and two cats on a couch. The prompts ask for the name of the person, the content of the image, and a detailed description. The 'Unlearned' model incorrectly identifies Elon Musk as Michael Jackson, while the 'Original' model correctly identifies him as Elon Musk. Portrait of Elon Musk Portrait of Mark Zuckerberg Street scene with stop sign Two cats on a couch
+
+**Figure 5:** Effects of SLUG unlearning “Elon Musk” on LLaVA 1.5. The third row with yellow boxes shows the answers of the original model, and the forth row with green boxes shows the output of the unlearned model, where Elon Musk is effectively unlearned, whereas other concepts are unaffected.
+
+names him. After applying our unlearning method, the model incorrectly identifies Elon Musk as Michael Jackson, indicating that the specific identity information has been successfully removed. This alteration does not significantly impact the model’s overall utility. Additional examples of this phenomenon are discussed in Section I.
+
+## 5 CONCLUSION
+
+In this work, we introduced SLUG, an efficient machine unlearning method that requires just a single gradient computation and updates only one layer of the model. SLUG enhances unlearning feasibility on large models, especially with constrained hardware, while preserving overall model utility. Our experiments with CLIP, Stable Diffusion, and VLMs show that SLUG outperforms existing methods, particularly in unrelated tasks, with minimal computational overhead. SLUG’s key innovation is its ability to identify and update only the most relevant layers, typically the late layers in vision models, when unlearning concepts like identities or copyrighted content.
+
+This paper demonstrates that highly targeted, minimal interventions can be surprisingly effective for concept removal, suggesting that knowledge in neural networks may be more localized than previously thought. This has implications for our understanding of how information is encoded and stored in deep learning models. The ability to identify specific layers most relevant for particular concepts also provides new insights into the internal representations learned by different parts of neural networks. This contributes to the ongoing effort to improve the interpretability and transparency of AI systems.
+
+**Limitations.** While SLUG shows clear advantages, there are limitations. Our experiments focused on vision-language models, and further testing is needed to evaluate its generalizability to other architectures, such as pure language models or graph neural networks. Additionally, we did not extensively explore long-term stability, adversarial resistance (Goel et al., 2022), or the ability to unlearn more abstract concepts. More work is needed to ensure robustness in adversarial scenarios and over extended periods or retraining.
+
+## REPRODUCIBILITY STATEMENT
+
+We are committed to ensuring reproducibility and have made our source code available, along with a comprehensive README.md to guide setup, execution, and replication of our results. Scripts and pre-computed gradients are also provided for easy reproduction of the main experiments in this paper.
+
+ Rest of paper (reference and Appendix) is removed.

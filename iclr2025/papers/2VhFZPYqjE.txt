@@ -1,0 +1,304 @@
+
+
+{0}------------------------------------------------
+
+# HOW TO GET YOUR LLM TO GENERATE CHALLENGING PROBLEMS FOR EVALUATION
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+The pace of evolution of Large Language Models (LLMs) necessitates new approaches for rigorous and comprehensive evaluation. Traditional human annotation is increasingly impracticable due to the complexities and costs involved in generating high-quality, challenging problems, particularly for tasks such as long-context reasoning. Moreover, the rapid saturation of existing human-curated benchmarks by LLMs further necessitates the need to develop scalable and automatically renewable evaluation methodologies. In this work, we introduce **CHASE**, a unified framework to synthetically generate challenging problems using LLMs without human involvement. For a given task, our approach builds a hard problem in a bottom-up manner from simpler components. Moreover since we want to generate synthetic data for evaluation, our framework decomposes the generation process into independently verifiable sub-tasks, thereby ensuring a high level of quality and correctness. We implement **CHASE** to create evaluation benchmarks across three diverse domains: document-based question answering, repository-level code completion, and math reasoning. The performance of state-of-the-art LLMs on these synthetic benchmarks lies in the range of 40-60% accuracy, thereby demonstrating the effectiveness of our framework at generating hard problems. Our experiments further reveal that the Gemini models significantly outperform other LLMs at long-context reasoning, and that the performance of all LLMs drastically drops by as much as 70% when we scale up the context size to 50k tokens.
+
+## 1 INTRODUCTION
+
+In the past few years, we have witnessed the emergence of powerful Large Language Models (LLMs) (OpenAI Team et al., 2024; Llama Team et al., 2024; Gemini Team et al., 2024) that exhibit remarkable performance over a wide range of tasks. However, the methods and resources for evaluating these models have not kept pace with their rapid evolution and increased capabilities. Contemporary LLMs have saturated many existing reasoning benchmarks (Chen et al., 2021; Cobbe et al., 2021). Developing challenging problems for reasoning tasks, such as math reasoning or code generation, can be both expensive and time-consuming, especially for human annotators with average expertise. Moreover, there are some settings, such as tasks requiring long-context reasoning over hundreds of thousands of tokens, where the generation of high quality data by humans is impracticable. Additionally, we are facing a significant depletion of interesting data that is publicly available (such as SAT exams, Olympiad problems, etc.) for creating benchmarks. Hence, we believe that the conventional approach of developing evaluation benchmarks through human annotation and existing Web content is limited, and it is worthwhile to explore using LLMs for generating evaluation data.
+
+Synthetic data generation has emerged as a powerful paradigm in recent years driven by the wide-spread availability of cheaper and faster LLMs that can effectively follow instructions. The focus of most prior works, however, has been on improving models by generating synthetic data for pre-training (Gunasekar et al., 2023), instruction fine-tuning (Wang et al., 2023; Xu et al., 2024), alignment (Bai et al., 2022), or task-specific fine-tuning (Yue et al., 2024; Wei et al., 2024). In contrast, using synthetic data for evaluation and benchmarking has been relatively underexplored.
+
+There are considerable advantages in using synthetic data for evaluation: it is comparatively inexpensive, highly scalable, and can be renewed periodically to mitigate contamination concerns. However, there are two main challenges: first, *how can we create hard and realistic problems?* and second, *how*
+
+{1}------------------------------------------------
+
+![Figure 1: Illustrating the high-level ideas behind our proposed CHASE framework. The diagram is divided into three main sections. Top left: '1. Bottom-up Problem Creation' shows a flow from 'Instruction to Start from Scratch' or 'Seed Example from Existing Dataset' to an 'LLM Generator', which produces a 'Challenging Problem Context' (Question + Solution). A 'Generation Process' box highlights 'Hide components of solution or reasoning to build difficult context', leading to an 'Easy' version. Top right: '2. Decomposition into Simpler, Verifiable Sub-tasks' shows the 'Challenging Problem Context' being processed by an 'LLM Generator' and an 'LLM Verifier'. The 'LLM Verifier' discards parts, leading to 'Simpler Sub-tasks'. Bottom left: 'Constructing CHASE-QA' shows a 4-step pipeline: 1. Scenario Generation (Persona: Grad student in NYC, Collection Name: Gaze on metro fare collecting), 2. Question Answer Generation (Question: What is the procedure for obtaining increase in fare? Answer: You must notify your landlord with 1 month notice of rent increase...), 3. Irrelevant Information Generation (You can send a counter offer to your landlord for consideration...), and 4. Document Generation (Documents 1, 2, 3). Bottom right: 'Constructing CHASE-Math' shows a pipeline for a math word problem: Seed Problem (Jack had 10 pens. He gave 6 pens to Mary. How many pens does Jack have now? A. 4), Context (Jack had 10 pens. He gave 6 pens to Mary. How many pens does Jack have now? A. 4), Question (How many pens does Jack have now? Answer: Jack has 4 pens now), Breakdown Problem (Context, Question, Answer), Create Continuation (Context: All his things are given away to Mary. Question: How many pens does Jack have now? Answer: Jack has 4 pens now), Final Context (Jack had 10 pens. He gave 6 pens to Mary. How many pens does Jack have now? A. 4), Final Question (How many pens does Jack have now? Answer: Jack has 4 pens now), and Final Answer (all has 12 pens).](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 1: Illustrating the high-level ideas behind our proposed CHASE framework. The diagram is divided into three main sections. Top left: '1. Bottom-up Problem Creation' shows a flow from 'Instruction to Start from Scratch' or 'Seed Example from Existing Dataset' to an 'LLM Generator', which produces a 'Challenging Problem Context' (Question + Solution). A 'Generation Process' box highlights 'Hide components of solution or reasoning to build difficult context', leading to an 'Easy' version. Top right: '2. Decomposition into Simpler, Verifiable Sub-tasks' shows the 'Challenging Problem Context' being processed by an 'LLM Generator' and an 'LLM Verifier'. The 'LLM Verifier' discards parts, leading to 'Simpler Sub-tasks'. Bottom left: 'Constructing CHASE-QA' shows a 4-step pipeline: 1. Scenario Generation (Persona: Grad student in NYC, Collection Name: Gaze on metro fare collecting), 2. Question Answer Generation (Question: What is the procedure for obtaining increase in fare? Answer: You must notify your landlord with 1 month notice of rent increase...), 3. Irrelevant Information Generation (You can send a counter offer to your landlord for consideration...), and 4. Document Generation (Documents 1, 2, 3). Bottom right: 'Constructing CHASE-Math' shows a pipeline for a math word problem: Seed Problem (Jack had 10 pens. He gave 6 pens to Mary. How many pens does Jack have now? A. 4), Context (Jack had 10 pens. He gave 6 pens to Mary. How many pens does Jack have now? A. 4), Question (How many pens does Jack have now? Answer: Jack has 4 pens now), Breakdown Problem (Context, Question, Answer), Create Continuation (Context: All his things are given away to Mary. Question: How many pens does Jack have now? Answer: Jack has 4 pens now), Final Context (Jack had 10 pens. He gave 6 pens to Mary. How many pens does Jack have now? A. 4), Final Question (How many pens does Jack have now? Answer: Jack has 4 pens now), and Final Answer (all has 12 pens).
+
+Figure 1: *Top*: Illustrating the high-level ideas behind our proposed CHASE framework. *Bottom left*: Pipeline for creating an example in CHASE-QA. *Bottom right*: Pipeline for creating a math word problem in CHASE-MATH. The pipeline for CHASE-CODE is illustrated in Figure 4 in Appendix.
+
+can we automatically verify the correctness of the generated data? Typical synthetic data generation pipelines are either focused on self-improvement or on distillation. In the former, a model generates large-scale synthetic data that provides useful guidance for training. However, a large portion of such model-generated data is incorrect (Wang et al., 2023), which makes it difficult to adapt such pipelines for evaluation. Distillation-based approaches use stronger models to generate complex problems for training weaker models (Xu et al., 2024). However, we would like to design an approach that allows us to craft problems that are *challenging* to solve even for the LLM that generated them.
+
+In this work, we present the CHASE framework: **CH**allenging AI with **S**ynthetic Evaluations. Our methodology is based on two main ideas (see Figure 1) geared towards addressing the above-mentioned challenges. First, we create problems in a *bottom-up* manner where we iteratively hide parts of the solution within the problem’s context. This makes problems challenging because finding the solution will require multiple steps of drawing inferences or reasoning over a longer context. Second, we decompose the generation process into simpler, *individually verifiable sub-tasks*. This facilitates fine-grained verification for correctness at each stage of the generation process.
+
+We implemented our framework to create challenging benchmarks across three diverse domains. (1) **CHASE-QA** is a document-based question answering benchmark. The average length of documents for each problem is 6k tokens. This benchmark simulates the real-world application of answering user queries based on information that is spread across multiple documents, most of which may be irrelevant. (2) **CHASE-CODE** is a repository-level code completion benchmark with an average context length of 17k tokens. It consists of problems from two different domains: *data pre-processing functions*, and *algorithms*. This dataset simulates the real-world application of generating code in existing repositories based on user specifications. (3) **CHASE-MATH** is a grade-school level math word problems benchmark consisting of problems involving arithmetic reasoning. We built this benchmark to show the utility of our framework in building challenging problems for seemingly easy tasks on which models have already saturated existing benchmarks (Cobbe et al., 2021).
+
+Experiments with 15 contemporary LLMs show that the datasets generated using CHASE are challenging for all models. The best performing LLMs only achieve accuracies in the range of  $\sim 40 - 60\%$  across the three different domains. We further highlight the utility of CHASE by comparing it with direct prompting-based data generation baselines such as *Evol-Instruct* (Xu et al., 2024), which yield data with significant errors, apart from being relatively easier for models to solve.
+
+{2}------------------------------------------------
+
+![Figure 2: Examples of problems from all three benchmarks created using CHASE. The figure shows three panels: CHASE-QA, CHASE-Code, and CHASE-Math. CHASE-QA shows a document about housing court fines and a question about the percentage increase. CHASE-Code shows a Python function to read a block list and handle outliers, with a question about identifying outliers. CHASE-Math shows a word problem about Nissa and her sisters' salaries and a question about the number of banners.](7ee2d12e8cbaacaf65b0c332d1c76daf_img.jpg)
+
+**CHASE-QA**
+
+**Documents**
+
+Document 1: ...grouping housing court fines based on the prices to be recorded. 1 bedroom apartments in Manhattan can cost a range of \$0 million...
+
+Document 2: ...file a case in housing court if the rent increase is more than 10%...
+
+Document 4: ...increase rent of the tenants by being permitted from the landlord...
+
+**Question**
+
+What is the percentage for refusing increase in rent in New York City?
+
+**Answer**
+
+Notify landlord within 1 month of notice of rent increase. Maximum written communication records. If rent increase is more than 10%, you can file a case in housing court.
+
+**CHASE-Code**
+
+**Repository Context**
+
+```
+def read_block(...):
+    ...
+def get_block_list(...):
+    ...
+def handle_outliers(...):
+    ...
+```
+
+**Problem Statement**
+
+Implement a function with Parameters: df: pandas.DataFrame if data to process. Objective: Normalize the price df by defining a column normalization. Return values: df: DataFrame, if it output of outliers identified before imputation.
+
+**Answer Code**
+
+```
+def process_data(df, target_column, price_col, data_col, window_size, freq_col):
+    if target_column not in df.columns:
+        raise ValueError("target column not found")
+
+    # Step 1: Identify outliers
+    df, total_outliers = handle_outliers(df, target_column)
+    ...
+    return df, total_outliers
+```
+
+**CHASE-Math**
+
+**Context**
+
+Nissa has 60 assistant workers to play chess in her department store's Santa village. A list of the stores that after receiving a letter off from Santa, then 10 of the assistant who are in the group of 60 are named Nissa's friends. After playing chess of 5 with the remaining stores, Nissa decides to host a special festival for the stores. For this celebration, she wants to create 4 times as many banners as the number of groups she formed.
+
+**Question**
+
+How many festive banners will Nissa create for the festival?
+
+**Answer**
+
+Nissa has 60 stores. A list off, so there are 50 - 10 = 40 stores remaining. To more qust, so we have 40 / 10 = 30 stores left. Nissa formed 40 / 5 = 8 groups of stores. So she creates 8 \* 4 = 32 banners.
+
+Figure 2: Examples of problems from all three benchmarks created using CHASE. The figure shows three panels: CHASE-QA, CHASE-Code, and CHASE-Math. CHASE-QA shows a document about housing court fines and a question about the percentage increase. CHASE-Code shows a Python function to read a block list and handle outliers, with a question about identifying outliers. CHASE-Math shows a word problem about Nissa and her sisters' salaries and a question about the number of banners.
+
+Figure 2: Examples of problems from all three benchmarks created using CHASE.
+
+Our results also reveal large gaps in performance between different LLMs, all of which perform similarly on existing benchmarks like MMLU (Hendrycks et al., 2021) or HumanEval (Chen et al., 2021). Lastly, using our long-context benchmarks, we show that the performance of all LLMs decreases drastically (sometimes by upto 70%) when we increase the context size beyond 50k tokens.
+
+## 2 RELATED WORK
+
+**Synthetic data generation.** Prior works have explored generating synthetic data for various stages of an LLM’s development pipeline: pre-training (Gunasekar et al., 2023; Ben Allal et al., 2024), instruction-finetuning (Wang et al., 2023; Xu et al., 2024), alignment (Bai et al., 2022; Lee et al., 2024) and task-specific fine-tuning (Wei et al., 2024; Yu et al., 2024a). The main focus of our work, however, is to generate high-quality challenging problems for evaluation and benchmarking. There is very limited existing literature in this area. Sprague et al. (2024) created a narrative-based question answering (QA) benchmark using a neuro-symbolic pipeline that first samples facts, and then uses an LLM to build a reasoning tree over them, along with generating a narrative. Bohnet et al. (2024) created another synthetic QA benchmark by extracting entities and their reference chains from existing stories and then prompting an LLM to generate questions over them. Gu et al. (2024) create a code understanding benchmark by prompting CodeLlama (Rozière et al., 2024) to generate python functions and their inputs and designing tasks based on predicting either the input or the output for a given function. In contrast to these works, we focus on presenting a general framework which can be used to design scalable pipelines to create challenging benchmarks across multiple domains. Moreover, we focus on realistic tasks such as information-seeking QA and repository-level code generation, both with extremely long contexts that we generate completely from scratch.
+
+**Task-specific synthetic data.** Recent works have explored generating synthetic datasets for content-grounded QA tasks. Dai et al. (2022) use an LLM to develop information-seeking dialogue datasets based on text extracted from Wikipedia and the Web. Yehudai et al. (2024) prompt an LLM with wikipedia text to generate a question-answer pair. In contrast, we take a more application-oriented view and design a benchmark for document-based information-seeking questions that model realistic situations. Moreover, our pipeline generates the entire context (i.e., the documents) from LLMs, which allows a higher degree of control. There has also been significant interest in generating synthetic data for code. Yu et al. (2024b) employ an LLM-based framework to create examples for tasks based on existing raw code data. Wei et al. (2024) generate code instruction data by prompting an LLM with seed code snippets from existing repositories. Luo et al. (2024) generate complex and diverse code instruction-tuning data by applying the *Evol-Instruct* method (Xu et al., 2024) on existing code benchmarks. In this work, we focus on repository-level code completion, where we generate the repository contexts completely from scratch. Moreover, we also synthetically generate the corresponding test code to evaluate each example. Generating synthetic data to improve math reasoning has recently been a very active area of research. Previous work has explored generating new math problems by prompting LLMs with examples from existing datasets (Liu et al., 2023; Yu et al., 2024a; Lu et al., 2024). Similar to our work, some prior works have focused on creating challenging math problems. Shah et al. (2024) employ a human-in-the-loop approach to generate
+
+{3}------------------------------------------------
+
+novel and difficult math problems by prompting LLMs with multiple core skills that must be used in the problem. Liu et al. (2024a) employ iterative question composition where they iteratively prompt an LLM with a seed question to generate more complex variations of it. In this work, we design a completely automated pipeline to craft grade-school level math word problems that are challenging to solve even for the LLM that generated them.
+
+## 3 THE CHASE FRAMEWORK AND BENCHMARKS
+
+Our framework for generating synthetic data is based on two key ideas as illustrated in Figure 1.
+
+### 1. Bottom-up problem creation.
+
+We abandon the forward-thinking approach of first creating a difficult problem and then obtaining the corresponding solution, as followed by most works that create synthetic data for training (Xu et al., 2024; Liu et al., 2024a). If we first synthesize a complex problem and then obtain its corresponding solution from the generating LLM itself, then that problem is inherently solvable by that LLM. However, we wish to craft problems that are challenging even for the model which generates them. Hence, we instead take a different approach where we either generate or start with a simpler problem-solution pair, and then *bottom-up* build a challenging context. We make the problem’s context challenging by systematically *hiding* components of the solution or reasoning such that they need to be either extracted from a long context or inferred based on given information.
+
+### 2. Decomposition into simpler, verifiable sub-tasks.
+
+We design pipelines that break down the generation process into simpler sub-tasks. Each individual LLM in the pipeline (i.e., each inference call) performs a simpler, specific function in the generation process. This provides us with multiple benefits. First, it grants us more control over each step of the generation process. We can treat each step as a task by itself and optimize the corresponding inference parameters individually. This also allows us to better manage the complexity and diversity of the generated data depending on our requirements. Second, and perhaps more importantly, it facilitates fine-grained verification. We deploy LLMs that are not part of the generation process to check the correctness and quality of the generated data at each possible step. We believe that LLMs can be relied upon for verification because our framework makes each verification task smaller and simpler compared to the main task of generating or solving the problem we are crafting.
+
+We show the effectiveness and ease of adaptation of our framework by implementing it to create challenging problems across three diverse domains:
+
+**CHASE-QA** is an open-domain document-grounded question answering task consisting of 671 problems. Each example in CHASE-QA consists of a set of documents and a question-answer pair, as illustrated in Figure 2 left. Models need to reason over a long context (more than 6k tokens) because the information relevant for answering the question is spread across multiple documents.
+
+**CHASE-CODE** is a repository-level code completion benchmark consisting of 220 challenging problems. Given a repository of Python functions, the task is to implement a new function based on a set of objectives provided in natural language, as illustrated in Figure 2 centre. We create data for two broad domains: (1) *data pre-processing* operations such as dataframe manipulation, string processing, file I/O, etc., and (2) *algorithms* such as graph operations, array manipulations, etc.
+
+**CHASE-MATH** is a challenging benchmark of 150 grade-school level math word problems involving only basic arithmetic operations. An example of the task is provided in Figure 2 right.
+
+## 4 CONSTRUCTION PIPELINES
+
+In this section, we discuss our implementation of the CHASE framework for all three domains in more detail. Our pipelines use two different LLMs: the generator **G**, and the verifier **V**.
+
+### 4.1 CONSTRUCTING CHASE-QA
+
+We generate CHASE-QA completely from scratch without relying on existing contexts or any seed examples from previous datasets. Following the CHASE framework, we create each example in a
+
+{4}------------------------------------------------
+
+bottom-up manner by first generating the question-answer pair, and then generating the corresponding documents. Our pipeline for creating CHASE-QA is illustrated in Figure 1 bottom left. We describe it in detail below. The exact prompts are provided in Appendix F.1.
+
+**Generating diverse scenarios.** We begin by first generating a set of diverse realistic scenarios in which a *user persona* seeks to find some information from a *collection of documents*. An example would be a ‘grad student in NYC’ searching the ‘laws on renting and subletting’. We prompt **G** to generate diverse scenarios in the form of a tuple (persona, collection\_name) by bootstrapping it with 5 annotated example scenarios, and later prompting it with its own generated scenarios.
+
+**Generating question-answer pairs.** Each scenario (persona, collection\_name) defines the working environment for creating a particular example. We design programmatic prompts with a given scenario as the variable to prompt **G** to generate a realistic information-seeking question that the persona might want to know about from collection\_name set of documents. For example, a ‘grad student’ might pose the question, ‘what is the procedure for refusing increase in rent?’, whose answer can be found spread across multiple documents about the government’s laws on renting. Apart from the question, **G** must also generate the corresponding answer. We prompt **G** to generate questions and answers where the answers are a composition of multiple points or ideas. Additionally, **G** must generate the outline of the documents (only title and abstract) which will contain the answer. The idea is that it must separate out the answer points and assign them to these different documents.
+
+**Generating irrelevant information.** To make the task more challenging, for each question-answer pair, we prompt **G** to generate other question-answer pairs where the answer is of a similar type or domain as the ground-truth answer. An example of a similar question for our running example with the grad student is ‘what is the process to increase the rent for an apartment I am subletting?’. The intuition is that the corresponding answers to such similar questions will be of a very similar flavour to the ground-truth answer, but ultimately *irrelevant* for answering the question. This will make the generated data challenging since it will confuse the model when all of this similar type of information is spread across a long context. It is, however, important to verify that none of this newly generated irrelevant information is actually relevant for the original question (otherwise it will make our ground-truth answer incomplete). We individually prompt **V** with the original question and each of the supposed irrelevant information points to check if any part of them is relevant for answering the question (see Figure 1 bottom left for an example of an irrelevant point discarded by **V** because it was relevant for the original question).
+
+**Generating documents.** For each example, we have generated a question-answer (QA) pair, along with some similar but irrelevant QA pairs. For each of these QA pairs, we separately prompt **G** to generate long documents where the documents must discuss the corresponding answer points assigned to it, along with many other irrelevant points. All documents discuss distinct information. Together, all these documents form up the context for that example. We verify two main things to ensure the correctness of the task: (1) none of the documents should contain any information relevant for answering the question, apart from the ground-truth answer points, and (2) all of the ground-truth answer points must be discussed somewhere in the documents. We do this by rigorously prompting **V** with individual documents and the ground-truth answer points.
+
+### 4.2 CONSTRUCTING CHASE-CODE
+
+We generate CHASE-CODE completely from scratch without relying on existing contexts or any seed examples from previous datasets. Our pipeline for creating CHASE-CODE is shown in Figure 4 in the Appendix. We describe it in detail below. The exact prompts are provided in Appendix F.2.
+
+**Generating Python functions.** We begin by first generating a set of diverse and realistic Python functions. We prompt **G** to generate Python functions for a particular domain by bootstrapping it with 3 annotated functions in that domain, and later prompting it with its own generated functions. These generated functions will act as the *helper* functions in the repository context which may or may not be called in the answer code function. Given each generated helper function, we prompt **V** to generate a Python code which initializes sample inputs for the function and then calls it using them. We then execute this code to verify whether the generated helper function executes correctly.
+
+{5}------------------------------------------------
+
+**Generating problem statement and answer code.** To create a single example, we randomly sample  $n$  of the previously generated helper functions, and prompt **G** to create a complex function that calls at least  $k$  of these provided helper functions (hereafter called *relevant* helper functions) apart from implementing some other pieces of logic. This complex function is our *answer code*. Additionally **G** must elaborate in natural language what objectives the complex function achieves, which makes up our *problem statement*. Similar to the case of helper functions, we prompt **V** to generate test code to check if the generated answer code executes correctly. Moreover, we need to verify whether the generated problem statement sufficiently specifies the answer code. We prompt **V** with the problem statement and corresponding *relevant* helper functions and check whether the output is semantically equivalent to the answer code (using the test code obtained in the next step).
+
+**Generating test code.** To enable automatic execution-based testing, we prompt **G** with the generated answer function to implement the test code for it in Python. The test code must independently implement the logic of the answer code without access to the corresponding helper functions. It must then initialize the parameters of the answer function with some sample values, and compare its output with its own implementation. We execute the generated test code to check if the corresponding answer code passes. We discard all examples for which (1) the test code does not execute properly, or (2) the test code executes but the answer code fails the test.
+
+**Building code repository.** For each example, we build a unique repository of Python files. The repository consists of the *relevant* helper functions spread across different files, along with  $m$  randomly sampled irrelevant Python functions from our previously generated set. The core difficulty of this task arises from understanding the entire long context of code functions, and identifying which ones are relevant for the provided problem statement.
+
+### 4.3 CONSTRUCTING CHASE-MATH
+
+We sample math word problems (MWP) from existing datasets as seed examples to build our benchmark. Following the CHASE framework, we bottom-up build a more complex problem by iteratively increasing the reasoning depth of the problem. An illustration of the pipeline used for creating CHASE-MATH can be seen in Figure 1 bottom right. We describe the pipeline in more detail below. The exact prompts are provided in Appendix F.3.
+
+**Breaking down seed MWP.** A seed MWP  $s$  is characterised by the tuple  $s = (p, a)$  where  $p$  is the problem, and  $a$  is the answer. We prompt **G** to break down  $p$  into two parts: the context  $c$ , which provides all the information, and the question  $q$ , which asks about some unknown quantity.
+
+**Create continuation of MWP.** We prompt **G** with an initial seed MWP  $s_0 = (p_0, a_0)$  to build a new problem which is a continuation of the previous problem. More precisely, **G** should output a new problem  $s_1 = (p_1, a_1)$ , where the context of  $p_1$ , i.e.,  $c_1$  assumes  $a_0$  as given information (without explicitly stating it). For example, in Figure 1 bottom right, the model assumes *Jack has 4 pens* as given information, and creates a new continuation context, *Jill has thrice as many pens as Jack has now*. The model also generates a new question  $q_1$ , *how many pens does Jill have?* whose answer  $a_1 = 12$  is obtained by performing an arithmetic operation (here, *multiplication by 3*) over  $a_0 = 4$ .
+
+**Combining seed MWP with its continuation.** By combining the original seed problem with its continuation, we get a new MWP  $s = (p, a)$  with a higher reasoning depth, where the context  $c$  of the combined problem  $p$  is a concatenation of the contexts of the seed problem and the continuation  $c = c_0 \cdot c_1$ . The question for the combined problem will be the one generated by the model, i.e.,  $q_1$ , and the corresponding answer  $a = a_1$ . We refer to Figure 1 bottom right for illustration.
+
+**Iteratively increase reasoning depth.** We increase the reasoning depth of a given seed MWP by creating new continuations in an iterative manner. Each new continuation  $s_i$  formed after the  $i^{\text{th}}$  iteration becomes the seed problem for the  $(i + 1)^{\text{th}}$  iteration. The final complex problem after  $j$  successful iterations, i.e., with a reasoning depth of  $j + 1$ , is given by context  $c = c_0 \cdot c_1 \dots c_j$ , question  $q_j$ , and answer  $a = a_j$ .
+
+Since each individual new problem created by **G** has a low reasoning depth of the same difficulty as the problems in the seed datasets, we verify their correctness using a non-identical ensemble of
+
+{6}------------------------------------------------
+
+verifier models  $\{V_1, V_2, \dots, V_n\}$ , each of which has very high performance on the seed dataset. We prompt each  $V_k$  with the generated problem context  $c_i$  and question  $q_i$  and check whether the prediction is the same as the generated answer  $a_i$ . If this fails for any verifier, we discard  $s_i$  and begin generating again with  $s_{i-1}$  as the seed MWP (see Figure 1 bottom right).
+
+## 5 EXPERIMENTS
+
+### 5.1 IMPLEMENTATION DETAILS
+
+**Generating CHASE-QA.** We use GPT-4o (OpenAI Team et al., 2024) as the generator  $G$ , and GPT-4o-mini as the verifier  $V$ . We first sampled 500 different scenarios. For each scenario, we generate 2 different question-answer (QA) pairs. For each of the resulting 1000 unique QA pairs, we obtain *irrelevant* information by generating 4 similar QA pairs. We then generate the corresponding documents containing the ground-truth answer as well as irrelevant information for each of the 1000 examples. To increase the complexity of the resulting benchmark, we carry out a form of rejection sampling. We evaluate GPT-4o-mini twice on the task, and randomly discard half of the problems on which it was correct both times. This yielded the final benchmark of 671 examples.
+
+**Generating CHASE-CODE.** We use GPT-4o-mini (OpenAI Team et al., 2024) as the generator  $G$ , and Gemini-1.5-Flash as the verifier  $V$ . We made this choice because generating even a small amount of challenging code problems required a large number of iterations, since a lot of the model-generated code at various stages would fail to execute or be semantically incorrect. For each domain, we first sampled 500 different helper functions that execute without errors. Then we prompt the model with  $n = 10$  random helper functions to generate a problem statement and corresponding answer code that calls at least  $k = 4$  helper functions. We do this to create 1000 different examples for each domain. Next, we generate up to 10 test codes for each example and keep only those examples for which a generated test code successfully passed for the corresponding answer code. We also carry out the verification of correctness of problem statement as describe before. This way, we end up with 290 examples for the *algorithms* domain and 300 examples for the *data pre-processing* domain. We again use GPT-4o-mini for rejection sampling and randomly discard around half of the problems on which it was correct. This way, we end up with a total of 500 examples in the benchmark, with 250 examples for each domain. For each example, we randomly sample  $m = 100$  *irrelevant* helper functions and distribute them into 10 Python files to constitute the repository context.
+
+**Generating CHASE-MATH.** We again use GPT-4o-mini (OpenAI Team et al., 2024) as the generator  $G$ , and an ensemble of Gemini-1.5-Flash and Llama-3.1-70B as the verifier  $V$ . In practice, we observed that many of the model generated problems would fail at various stages of verification, so it is faster and cheaper to query the smaller models. We start with 2.3k seed problems taken from the test sets of GSM8k (Cobbe et al., 2021) and SVAMP (Patel et al., 2021). We set the maximum and minimum reasoning depth at 8 and 4 respectively. For each problem, we iterate 15 times to generate a problem continuation. Note that many of these iterations fail to produce a correct continuation of the problem, in which case we discard that generation and retry from that point in the subsequent iteration. We carry out this process 3 times. In this manner, we generated around 1500 problems. We then carry out rejection sampling and roughly discarded 75% of the problems that GPT-4o-mini could solve. In the end, we end up with a total of 500 challenging MWPs.
+
+**Task parameters.** For CHASE-QA and CHASE-CODE, we prompt models with the instruction for the task, along with the corresponding long-context and question. The prompt formats are provided in Figure 19 and 28 respectively in Appendix F. For CHASE-MATH, we prompt models with the standard 8-shot chain-of-thought (Wei et al., 2022b). The prompt format is provided in Figure 31 in Appendix F.3. We decode for a maximum of 1024 tokens with a temperature of 0.5.
+
+**Evaluation.** The ground-truth answers for CHASE-QA are verbose text, organized in bullet points. While this simulates real-world complexity, it also makes evaluation difficult. Since it is intractable to employ expert humans for evaluation, we deploy an LLM-as-a-judge to automatically assess the correctness of predictions. A prediction is considered to be correct if and only if it is (1) *complete*, i.e., it includes all the points mentioned in the ground-truth answer, and (2) *relevant*, i.e., it provides information only pertaining to the current question. We use GPT-4o as the judge and measure the
+
+{7}------------------------------------------------
+
+Table 1: The performance of various LLMs on all 3 domains of the CHASE benchmark. We measure the accuracy of the predictions for CHASE-QA and CHASE-MATH, and pass@1 for CHASE-CODE. DATA and ALGO refer to the *data pre-processing and algorithms* subdomains of CHASE-CODE. Numbers in **bold** indicate best performance on domain while underline indicates best-in-class performance.
+
+| MODELS            | QA          | CODE        |             | MATH        |
+|-------------------|-------------|-------------|-------------|-------------|
+|                   |             | DATA        | ALGO        |             |
+| Gemini-1.5-Pro    | <b>63.2</b> | <b>35.6</b> | <b>40.8</b> | <b>65.4</b> |
+| GPT-4o            | 55.3        | 26.8        | 22.4        | 59.8        |
+| Claude-3.5-Sonnet | 36.1        | 19.6        | 25.2        | 64.2        |
+| Gemini-1.5-Flash  | <u>55.1</u> | <u>25.6</u> | <u>31.6</u> | 56.6        |
+| GPT-4o-mini       | 50.2        | 19.6        | 18          | 48.4        |
+| Claude-3-Haiku    | 32.6        | 18          | 25.6        | 44.2        |
+| Llama-3.1-70B     | 41.3        | 12.4        | 18.8        | 53.4        |
+| Mistral Large 2   | 34.1        | 4.8         | 5.2         | <u>59.6</u> |
+| Qwen2.5-72B       | 38.3        | 14.4        | 8.4         | 58.4        |
+| Command R+        | 41.7        | 0           | 0           | 43.2        |
+| DBRX              | 15.7        | 1.2         | 3.2         | 21.6        |
+| Phi-3.5-MoE       | 10.6        | 0.4         | 1.2         | 39.4        |
+| Mistral Small     | 35.5        | 1.2         | 1.6         | 50.6        |
+| Llama-3.1-8B      | <u>25.2</u> | <u>0.8</u>  | 3.2         | 32.2        |
+| Qwen2.5-7B        | 22.2        | 0           | <u>4.4</u>  | <u>42.8</u> |
+
+accuracy as the percentage of predictions judged to be correct. The prompt format used for evaluation is provided in Figure 20 in Appendix F.1. For CHASE-CODE, we measure the pass@1 execution accuracy, i.e., whether the model generated code correctly passes when we execute the corresponding test code in the first attempt. For CHASE-MATH, we measure the exact match accuracy against the ground-truth numerical answer.
+
+**Models.** We evaluated a total of 15 different LLMs: Gemini-1.5-Pro and Flash (Gemini Team et al., 2024), GPT-4o and GPT-4o-mini (OpenAI Team et al., 2024), Claude-3.5-Sonnet Anthropic (2024b), Claude-3-Haiku (Anthropic, 2024a), Llama-3.1 8B and 70B (Llama Team et al., 2024), Mistral Small and Large 2 (Mistral, 2024), Qwen2.5 7B and 72B (Yang et al., 2024a; Team, 2024a), Cohere Command R+ (Cohere, 2024), DBRX-Instruct (Team, 2024b), and Phi-3.5-MoE (Abdin et al., 2024). The details of implementation are provided in Appendix B.
+
+### 5.2 RESULTS AND DISCUSSION
+
+**Performance of models.** Table 1 shows the performance of all 15 LLMs on all three benchmarks. For, CHASE-QA, all models, including the generator (and judge) GPT-4o, find the task challenging. The best performing model is Gemini-1.5-Pro which achieves only about 63% accuracy, suggesting massive room for improvement. All the models struggle even more on CHASE-CODE, with the best performing model only achieving 38.2% average accuracy. For CHASE-MATH, we see that even the most powerful LLMs only achieve 65.4% accuracy on a benchmark composed of grade-school level math word problems. Overall, these results clearly indicate the utility of the CHASE framework in crafting challenging problems that even state-of-the-art LLMs struggle to solve. We provide examples of errors made by Gemini-1.5-Pro on all three benchmarks and analyze them in Appendix E.
+
+![Figure 3: Performance of LLMs decreases uniformly with increasing context sizes for the 100 example subset of CHASE-QA (top) and the 55 example subset of CHASE-CODE (bottom).](aa14b9ec884bf40ce06c161be468cd84_img.jpg)
+
+Figure 3 consists of two bar charts. The top chart, titled 'Performance of LLMs on CHASE-QA vs Context Size', shows Accuracy (%) for four models (Gemini-1.5-Pro, GPT-4o, Llama-3.1-70B, Mistral Large 2) across four context sizes (6k, 15k, 30k, 50k). The bottom chart, titled 'Performance of LLMs on CHASE-CODE vs Context Size', shows Execution Accuracy (%) for the same four models across three context sizes (17k, 32k, 60k). In both charts, accuracy decreases as context size increases.
+
+| Model           | 6k   | 15k  | 30k  | 50k  |
+|-----------------|------|------|------|------|
+| Gemini-1.5-Pro  | ~70% | ~65% | ~55% | ~50% |
+| GPT-4o          | ~55% | ~45% | ~35% | ~30% |
+| Llama-3.1-70B   | ~40% | ~35% | ~25% | ~20% |
+| Mistral Large 2 | ~45% | ~35% | ~25% | ~15% |
+
+| Model           | 17k  | 32k  | 60k  |
+|-----------------|------|------|------|
+| Gemini-1.5-Pro  | ~45% | ~35% | ~25% |
+| GPT-4o          | ~28% | ~12% | ~8%  |
+| Llama-3.1-70B   | ~20% | ~12% | ~8%  |
+| Mistral Large 2 | ~8%  | ~5%  | ~3%  |
+
+Figure 3: Performance of LLMs decreases uniformly with increasing context sizes for the 100 example subset of CHASE-QA (top) and the 55 example subset of CHASE-CODE (bottom).
+
+Figure 3: Performance of LLMs decreases uniformly with increasing context sizes for the 100 example subset of CHASE-QA (top) and the 55 example subset of CHASE-CODE (bottom).
+
+{8}------------------------------------------------
+
+Table 2: Performance of LLMs on data generated by direct prompting approaches without using CHASE.
+
+| MODEL             | QA | MATH |
+|-------------------|----|------|
+| Gemini-1.5-Pro    | 81 | 85.7 |
+| GPT-4o            | 78 | 88.9 |
+| Claude-3.5-Sonnet | 73 | 82.5 |
+
+Table 3: Accuracy of LLMs increases marginally on CHASE-MATH when fine-tuned on data generated by Llama-3.1-8B.
+
+| MODEL        | BASE | FINE-TUNED |
+|--------------|------|------------|
+| Llama-3.1-8B | 30   | 34.7       |
+| Mistral-7B   | 3.3  | 4.7        |
+| Qwen2-7B     | 12.7 | 15.3       |
+
+On all three benchmarks, we see huge variations in performance between the models. Moreover, we observe models different from the generator and verifier (such as Gemini-1.5-Pro) that do better for all three tasks. This stands as a testament to the underlying quality of the generated data and highlights our framework’s potential for differentiating between state-of-the-art LLMs that all perform similarly on standard benchmarks like MMLU (Hendrycks et al., 2021) or HumanEval (Chen et al., 2021). We further note some interesting observations. On both the long-context benchmarks, there is a substantial gap between the Gemini models and the other LLMs, clearly exhibiting the strong long-context reasoning capabilities of Gemini. Another interesting observation is that most of the models are stronger on the *algorithms* domain, while GPT-4o is stronger at *data pre-processing*. This demonstrates the utility of our benchmark at identifying such targeted differences in performance which could be very helpful for real tasks. For math reasoning, we have seen even weaker models like Llama-3.1-8B and Phi-3.5 get around 85 – 90% accuracies on the popular GSM8k and SVAMP benchmarks. However, we see a large difference ( $\sim 25 - 30\%$ ) between their performance and that of the state-of-the-art models, which may be attributed in part to some level of contamination of existing benchmarks (Zhang et al., 2024a).
+
+**Direct generation baseline.** We experimented with directly prompting models to generate challenging data for the QA and math tasks, without using the CHASE framework. For QA, we prompt GPT-4o with unique examples from CHASE-QA as the seed task and instruct it to generate new examples in a manner similar to Honovich et al. (2023) and Wang et al. (2023). For math, we adapt the *Evol-Instruct* method (Xu et al., 2024) to generate more complex problems given seed examples from GSM8k. We carry out the same proportion of rejection sampling as we did for CHASE-QA and CHASE-MATH for fair comparison. We generated a total of 100 examples for both tasks. For the math task, we manually examined the generated problems and found that 34 of them had some kind of error such as the problem text being ambiguous or vague or the reasoning and answer being incorrect. Carrying out a detailed manual verification for the QA problems is impracticable, however, we believe it is highly likely that a significant portion of it is incorrect. We evaluated GPT-4o, Gemini-1.5-Pro, and Claude-3.5-Sonnet on these datasets and provide the results in Table 2. For both tasks, we observe that we are unable to generate challenging data by direct prompting.
+
+**Impact of context size.** We studied the impact of varying the context size for long-context reasoning. For each example in a randomly-sampled 100-example subset of CHASE-QA, we increase the context size by concatenating the documents in that example with irrelevant documents randomly sampled from other examples. For CHASE-CODE, we create a subset of 55 randomly-sampled examples for each of the domains and increase the context size by concatenating irrelevant code functions in the corresponding repository context. Figure 3 plots the performances of 4 LLMs across different context sizes. For both benchmarks, we see a consistent and significant decrease in model performance as we scale up the context size. Hence, even though most modern LLMs have large context sizes (upwards of 128k), they still struggle to reason even at the scale of 30-40k tokens.
+
+**Human verification of LLM judgements.** We measure the correlation of the GPT-4o evaluator’s judgement and 3 human annotators over 100 randomly sampled<sup>1</sup> predictions made by Gemini-1.5-Pro on CHASE-QA. The accuracy of GPT-4o’s judgement as measured against the majority vote of the annotators was 91%. Moreover, Cohen’s kappa (Cohen, 1960) between the majority vote of the annotators and the LLM judge came out to be 0.82, which can be interpreted as almost-perfect agreement. Additional details regarding the setup of these experiments can be found in Appendix B.
+
+<sup>1</sup>but balanced, according to GPT-4o’s judgement.
+
+{9}------------------------------------------------
+
+**Fine-tuning smaller models.** We study whether we can use much smaller models (of around 7B scale) to generate useful fine-tuning data for themselves following CHASE pipelines to perform better on evaluation benchmarks created by stronger models. We generate  $\sim 10k$  math problems using Llama-3.1-8B as both the generator and the verifier and fine-tune 3 small models. Table 3 shows the accuracies on CHASE-MATH before and after fine-tuning on this dataset for all LLMs. We see marginal performance improvements across all models. These results seem to indicate that the evaluation data generated using significantly stronger models cannot be easily solved by such weak models even when fine-tuned on data generated by themselves using the exact same pipeline.
+
+## 6 CONCLUSION
+
+In this work, we presented CHASE, a framework to synthetically generate challenging problems for evaluation. Our framework offers multiple benefits. First, it is scalable and can efficiently generate hundreds of challenging problems. Second, it is renewable, which means it can be used to keep regenerating new datasets for a given task at periodic intervals thereby mitigating contamination concerns which plague most evaluation benchmarks. Third, it can effectively help evaluate tasks (such as long-context reasoning) which are inherently difficult or impracticable for humans to evaluate. Fourth, it provides a very high level of quality and correctness because of extensive verification. And finally, it can be used to generate *difficult* examples for a given task. We implemented CHASE on three different domains: document-based question answering, repository-level code completion, and math reasoning. With the help of extensive experiments, we showed that CHASE successfully generates examples that are difficult even for the state-of-the-art LLMs to solve. Our results raise several interesting questions to explore in future work: (a) How can we modify this framework to more easily adapt to different tasks? (b) What is the utility of this framework in generating data for training LLMs? (c) How can we verify LLM generations more efficiently? We hope our work will catalyze many such studies on using synthetic data for evaluation.
+
+## 7 LIMITATIONS
+
+**Size of benchmarks.** The datasets we generated are comparatively smaller in size. Our framework necessitates querying the generator and especially the verifier many times for crafting each example. While this increases the quality and correctness of the data, it significantly increases the cost of generation. Moreover, a large portion of the intermediate generations in our pipeline are discarded because of extensive verification, which significantly reduces the yield. Our focus in this work is to present the CHASE framework and we believe our experiments, albeit on smaller-sized datasets, convincingly show its utility in generating challenging problems for evaluation. Small benchmarks, if generated with a high bar for quality and correctness, can still be very impactful as evidenced by past works like HumanEval (Chen et al., 2021).
+
+**Instance-level issues.** Some of the examples we generated using CHASE, while being semantically correct, use unnatural or difficult-to-parse language. This is a general trait of text generated from contemporary LLMs, and our framework is unfortunately susceptible to it. Moreover, while we carry out extensive verification of correctness at the instance-level using LLMs, it is still possible that some of the generated examples are incorrect. Verifying long-context reasoning data using non-expert humans is impracticable. To get a sense of the quality, we manually examined 30 random examples each from the generation process of CHASE-QA and CHASE-CODE. We found only 2 errors in CHASE-QA and none in CHASE-CODE. We also examined 100 examples from CHASE-MATH’s pipeline and found 7 that were incorrect. Examples of such errors in generation are discussed in Appendix E. We believe that errors at this scale are acceptable considering the other advantages of the framework and can be factored into the evaluation in future studies.
+
+**Adaptability.** While we have shown how we implemented CHASE on three different domains, it is not trivial to adapt the framework to other tasks. Although the high level ideas behind CHASE are easy enough to follow, it takes multiple trials and errors to design a working pipeline for any given task. However, we are optimistic that advances in LLMs’ abilities to more precisely follow instructions will make such pipelines easier to construct in the future.
+
+ Rest of paper (reference and Appendix) is removed.

@@ -1,0 +1,397 @@
+
+
+{0}------------------------------------------------
+
+# ZERO-SHOT TEXT-BASED PERSONALIZED LOW-LIGHT IMAGE ENHANCEMENT WITH REFLECTANCE GUID- ANCE
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Recent advances in zero-shot low-light image enhancement have largely benefited from the deep image priors encoded in network architectures. However, these models require optimization from scratch for each image and cannot provide personalized results based on user preferences. In this paper, we propose a training-free zero-shot personalized low-light image enhancement model that integrates Retinex domain knowledge into a pre-trained diffusion model, enabling style personalization based on user preferences specified through text instructions. Our contributions are as follows: First, we incorporate the total variation optimization into a single Gaussian convolutional layer, enabling zero-shot Retinex decomposition. Second, we introduce the Contrastive Language-Image Pretraining (CLIP) model into the reflectance-conditioned sampling process of Denoising Diffusion Implicit Models (DDIM), guiding the enhancement according to user-provided text instructions. Third, to ensure consistency in content and structure, we employ patch-wise DDIM inversion to find the initial noise vector and use the reflectance as a condition during the reverse sampling process. Our proposed model, RetinexGDP, supports any image size and produces noise-suppressed results without imposing extra noise constraints. Extensive experiments across nine low-light image datasets show that RetinexGDP achieves performance comparable to state-of-the-art models.
+
+## 1 INTRODUCTION
+
+Low-light image enhancement (LLIE) algorithms aim to restore details hidden in dark areas while preserving color accuracy and naturalness. These algorithms not only enhance the human visual experience but also improve the performance of high-level computer vision tasks Liu et al. (2021a). Retinex-based LLIE models Ren et al. (2018); Xu et al. (2020); Yang et al. (2021); Zhang et al. (2019) have gained attention by incorporating Retinex theory into deep neural networks. According to Retinex theory, an image can be modeled as the product of reflectance and illumination:  $\mathbf{S} = \mathbf{R} \odot \mathbf{I}$ , where  $\odot$  denotes the Hadamard product. Thus, Retinex decomposition, which involves estimating these components, is a central problem for these methods. With the derived reflectance and illumination, models such as those proposed by Hao et al. (2020); Liang et al. (2022), enhance images by adjusting the illumination and denoising the reflectance before recombining the two components. Alternatively, some methods separate illumination from reflectance to achieve enhancement Guo et al. (2017); Zhao et al. (2021). These methods focus on adjusting illumination but pay less attention to the style of the reflectance, which limits their ability to offer personalized image enhancement based on user preferences.
+
+Personalized low-light enhancement (PLIE) is able to enhance low-light image according to diverse user preference, however, it is less explored compared to general LLIE. Existing PLIE models either require users to select preferred images to represent desired styles Kim et al. (2020) or inject user profiles into the network for personalization Bianco et al. (2020). Additionally, these models apply a single style preference vector to all images, limiting the diversity of styles. Recently, masked style modeling is applied to image enhancement, achieving content-aware personalization Kosugi & Yamasaki (2024). Despite the success of these models, a common problem is the inability to enhance unseen images in a preferred style that does not exist in the database. Although researchers
+
+{1}------------------------------------------------
+
+can enrich the database by collecting more diverse preference images, this would require retraining or fine-tuning the network.
+
+In this work, we propose a zero-shot text-based personalized low-light image enhancement model, RetinexGDP, that requires no training or parameter fine-tuning. This model allows users to specify enhancement style preferences via text instructions. The core idea behind RetinexGDP is to integrate Retinex domain knowledge into a pre-trained diffusion model while leveraging Contrastive Language-Image Pretraining (CLIP) Radford et al. (2021) to guide the Generative Diffusion Prior (GDP) Fei et al. (2023). To achieve zero-shot Retinex decomposition, we take the total variation optimization as a layer and incorporate it into a single Gaussian convolutional layer to estimate the illumination map. Instead of designing deep network, our RetinexGDP requires only a single convolutional layer for illumination map estimation. We then compute the corrected reflectance in spatial domain and consider it as the initial enhanced result. At the stage of personalized enhancement, we first find the initial noise vector of the corrected reflectance map by patch-wise DDIM inversion. To maintain the content and structure consistency of diffusion model, the corrected reflectance is used as a conditional input during the reverse sampling process of the diffusion model, where the sampling takes the initial noise vector as starting point and is guided by directional CLIP loss, steering the enhancement toward the style specified by the user through text. Guided by content and style loss, RetinexGDP enhances the low-light image according to user-specified preferences without the need for retraining or fine-tuning from scratch. RetinexGDP is adaptable to images of any input size. Experiments have shown that, despite the absence of additional noise constraints, the enhancement results generated by our model exhibit good performance in noise suppression.
+
+In summary, our main **contributions** are summarized as follows. (I) We propose a zero-shot text-based PLIE model named RetinexGDP, enabling flexible enhancement guided by user preferences specified via text instructions, without the need for additional training or external images. (II) We incorporate the edge-aware property of total variation optimization into a single Gaussian convolutional layer, aiming to perform zero-shot Retinex decomposition. (III) We employ patch-wise DDIM inversion to generate the initial noise vector of corrected reflectance and take the corrected reflectance as condition of DDIM reverse process, maintaining the image content and structures.
+
+## 2 RELATED WORK
+
+**Zero-shot Low-light Image Enhancement.** While deep learning-based methods Zhang et al. (2022); Huang et al. (2023); Zhang et al. (2023); Xu et al. (2023), particularly those combined with the Retinex model Yang et al. (2021); Wu et al. (2022); Xu et al. (2022); Fu et al. (2023), have demonstrated superior performance compared to traditional optimization-based techniques Fu et al. (2016); Guo et al. (2017); Li et al. (2018); Xu et al. (2020), zero-shot low-light image enhancement (LLIE) remains relatively underexplored. Zero\_DCE Guo et al. (2020) and its extension Zero\_DCE++ Li et al. (2021) propose predicting higher-order curves through iterative self-application, independent of paired and unpaired external data. The Retinex decomposition is transformed into a generative problem in Zhao et al. (2021); Liang et al. (2022), where combined deep image priors (DIP) Ulyanov et al. (2020); Gandelsman et al. (2019) are applied to generate latent Retinex components without the need for any external training dataset. Those methods perform zero-shot Retinex decomposition. However, they rely on deep priors encoded in the network structure, with network parameters randomly initialized and no data priors utilized. Consequently, their networks require optimization from scratch for each entry. In this work, we incorporate the edge-preserving property of total variation optimization into a single Gaussian convolutional layer, without requirement of very deep network.
+
+**Personalized Low-light Image Enhancement.** PLIE aims to enhance low-light images based on user preference. Traditional PLIE methods enhance image based on the user’s preference through simple gamma correction or S-curve Kapoor et al. (2014). With the advent of deep learning, convolutional neural networks (CNNs) have been employed to extract preference vectors, which are then used for personalized enhancement Kim et al. (2020). Later, the user profile with feature vectors are integrated to enhance images Bianco et al. (2020). Recently, a style-aware model using a style encoder that learns image embeddings is proposed to map preferred styles to latent codes Song et al. (2021). However, these approaches apply the same preference vector to all images, without considering the content of the preferred images. More recently, masked style modeling is adopted for
+
+{2}------------------------------------------------
+
+![Figure 1: Overview of the RetinexGDP framework. The diagram illustrates the flow from input low-light image S to output enhanced image x0. It consists of two main stages: Retinex Decomposition and Personalized Enhancement. In the decomposition stage, S is processed by Gaussian Conv2D and TV optimization layers to produce reflectance I and illumination I'. In the enhancement stage, I' is gamma-corrected to R, which is then processed by Patch-wise DDIM Inversion and Sampling to produce the final output x0. A CLIP Img/Text Encoder is used for style loss calculation. The legend indicates: Gaussian Conv2D (orange), TV optimization layer (blue), Data flow (dashed line), Element-wise division (circle with slash), Gamma correction (red arrow), and Loss function (yellow arrow).](1b7d539e02a202c2cf2d97698b911447_img.jpg)
+
+The diagram shows the RetinexGDP pipeline. It starts with an input low-light image  $S$ . The first stage is Retinex Decomposition, which uses a Gaussian Conv2D layer ( $G$ ) and a TV optimization layer ( $\text{Prox}_{\text{TV}}^{2D}$ ) to decompose  $S$  into reflectance  $I$  and illumination  $I'$ . The decomposition is formulated as  $I = \text{Prox}_{\text{TV}}^{2D}(S \otimes G_{\sigma}, \lambda)$ . The illumination  $I'$  is then gamma-corrected to produce the reflectance  $R$ . The second stage is Personalized Enhancement, which uses Patch-wise DDIM Inversion and Sampling to generate the enhanced image  $x_0$ . This stage involves an initial noise vector  $\tilde{R}$  and a noise factor  $\epsilon_{\theta}$ . The loss function is a combination of reconstruction loss  $\mathcal{L}_{\text{recon}}$ , perceptual loss  $\mathcal{L}_{\text{per}}$ , and style loss  $\mathcal{L}_{\text{clip}}$ , which is calculated using a CLIP Img/Text Encoder with the text "Summer sunset".
+
+Figure 1: Overview of the RetinexGDP framework. The diagram illustrates the flow from input low-light image S to output enhanced image x0. It consists of two main stages: Retinex Decomposition and Personalized Enhancement. In the decomposition stage, S is processed by Gaussian Conv2D and TV optimization layers to produce reflectance I and illumination I'. In the enhancement stage, I' is gamma-corrected to R, which is then processed by Patch-wise DDIM Inversion and Sampling to produce the final output x0. A CLIP Img/Text Encoder is used for style loss calculation. The legend indicates: Gaussian Conv2D (orange), TV optimization layer (blue), Data flow (dashed line), Element-wise division (circle with slash), Gamma correction (red arrow), and Loss function (yellow arrow).
+
+Figure 1: Overview of our RetinexGDP.  $S$  and  $R$  is the input low-light image and corrected reflectance, respectively.  $\tilde{R}$  denotes the initial noise vector.  $\gamma$  is the gamma factor.  $x_0$  is the enhanced image.  $\mathcal{L}_{\text{recon}}$ ,  $\mathcal{L}_{\text{per}}$ , and  $\mathcal{L}_{\text{clip}}$  denote the reconstruction loss, perceptual loss and style loss, respectively.
+
+content-aware personalized image enhancement Kosugi & Yamasaki (2024). This method employs a transformer encoder to predict style embeddings for unseen images by considering similar content in the preferred image dataset. Nevertheless, the aforementioned methods are either restricted to the style of the collected preferred images or require retraining on new dataset. In our work, the preferred style of enhancement is specified by user-provided text and our personalization requires no training.
+
+**Diffusion Model Based Low-light Image Enhancement.** In recent years, diffusion probabilistic models have achieved significant success in image generation and manipulation. However, challenges remain in effectively integrating low-light images as conditions and designing appropriate diffusion models. To address this, CLE-Diffusion Yin et al. (2023) concatenates the color map with the low-light input to preserve color information. Diff-Retinex Yi et al. (2023) introduces a three-stage framework where two diffusion models adjust reflectance and illumination components. ReCo-Diff Wu et al. (2023) combines the low-light input with the generated image and performs Retinex decomposition at each time step. Other approaches modify the diffusion process itself for low-light enhancement Wang et al. (2023); Jiang et al. (2023). A recent work Reti-diff He et al. (2023) introduces the Retinex priors to latent diffusion, however, it requires additional networks or retraining on external datasets. In contrast, recent works Fei et al. (2023); Jiang et al. (2024); Lv et al. (2024) leverage a pretrained Denoising Diffusion Probabilistic Model (DDPM) as a generative prior to optimize the reverse sampling process, enabling training-free image enhancement. Building on these advancements, we incorporate the Retinex domain knowledge into generative diffusion prior and propose a zero-shot text-based personalized low-light enhancement model.
+
+## 3 METHOD
+
+The goal of this work is to develop a fully text-driven, training-free PLIE model. Our RetinexGDP operates in two stages: zero-shot Retinex decomposition and text-guided personalized enhancement, both of which are training-free. The overview of our RetinexGDP is shown in Fig.1.
+
+### 3.1 ZERO-SHOT RETINEX DECOMPOSITION
+
+Previous Retinex-based LLIE works Zhao et al. (2021); Liang et al. (2022) have leveraged DIP to perform zero-shot Retinex decomposition, exploiting DIP’s inductive bias for Retinex component
+
+{3}------------------------------------------------
+
+generation. In practice, these models require additional hand-crafted priors to ensure piecewise smoothness, which is important to illumination estimation. To eliminate the need for such priors, the edge-aware smoothness properties in a bilateral grid and an encoder-like DIP model is combined to estimate the illumination Zhao et al. (2024). Despite its success in illumination estimation, this approach still necessitates a DIP network comprising many convolutional blocks.
+
+**Is it possible that illumination estimation be performed with a single convolutional layer?** The main challenge is how to embed inductive bias into a convolutional layer to guide optimization towards a piecewise smooth solution. While convolutional blocks possess inductive biases such as locality and translation equivariance and can be used to smooth the details in an image, they are insufficient for decomposing an image into piecewise smooth illumination. In contrast, the TV optimization can be applied to preserve the image edges, as illustrated in Fig.11 in Appendix A.2. Hence, if the edge-preserving smoothness properties of TV optimization can be incorporated into a single convolutional layer, we do not need a deep network for illumination estimation.
+
+**How to incorporate the edge-preserving properties into a single convolutional layer?** Total variation (TV) is an effective regularizer that has been widely used as a smoothness regularization term in denoising. Considering an input image  $\mathbf{X}$  and output  $\mathbf{Y} \in \mathbb{R}^{M \times N}$ , the TV optimization can be defined as:
+
+$$\arg \min_{\mathbf{Y}} \frac{1}{2} \|\mathbf{Y} - \mathbf{X}\|_F^2 + \lambda \|D\mathbf{Y}\|_1, \quad (1)$$
+
+where  $D = [D_x^T, D_y^T]^T$  denote the first order forward finite-difference matrix along the row and column directions respectively, and  $\lambda$  indicates the balance parameter for controlling the strength of regularization.  $\|\cdot\|_F$  and  $\|\cdot\|_1$  denote Frobenius norm and  $L_1$  norm, respectively. Inspired by Yeh et al. (2022), which reports that total variation optimization as a layer (TV layer) provides effective piece-wise properties and can be used to inject specific inductive bias to the deep network during both training and inference. Given an input feature map  $\mathbf{X} \in \mathbb{R}^{C \times H \times W}$  the TV layer outputs a tensor  $\mathbf{Y}$  of the same size. This layer computes the TV proximity operator independently for each channel. The forward operation can be summarized as:
+
+$$\mathbf{Y}_c = \text{Prox}_{\text{TV}}^{2D}(\mathbf{X}_c, \lambda), \quad (2)$$
+
+where  $\text{Prox}_{\text{TV}}^{2D}(\cdot)$  denotes the TV proximity operator, and  $c$  represents  $c$ -th channel of a tensor.
+
+![Figure 2: Illustration of TV optimization as a layer for zero-shot illumination estimation. The diagram shows three stages: 1. 'Single Gaussian Convolutional Layer (SGCL)' takes an input image S and extracts features and patterns, represented by a 3D surface plot. 2. An arrow points to the 'TV Optimization' stage, which shows a 3D surface plot of the output Y, with axes Xaxis, Yaxis, and Zaxis. 3. A final arrow points to the result I, with the caption 'Regularizes the output to smooth details and preserve edges'.](6324b252294c0f5d4e34dad4a1202075_img.jpg)
+
+Figure 2: Illustration of TV optimization as a layer for zero-shot illumination estimation. The diagram shows three stages: 1. 'Single Gaussian Convolutional Layer (SGCL)' takes an input image S and extracts features and patterns, represented by a 3D surface plot. 2. An arrow points to the 'TV Optimization' stage, which shows a 3D surface plot of the output Y, with axes Xaxis, Yaxis, and Zaxis. 3. A final arrow points to the result I, with the caption 'Regularizes the output to smooth details and preserve edges'.
+
+Figure 2: Illustration of TV optimization as a layer for zero-shot illumination estimation.
+
+We therefore incorporate this TV proximity operator as a layer into a single convolutional layer, as shown in Fig.2. Previous study seamlessly integrated the differentiable TV layer into a deep neural network for training purposes Yeh et al. (2022), in which both the convolutional kernel and the balance parameters are trainable within this setup. However, our objective is to develop a training-free model, which means our illumination estimation model involves only the forward process without a backward process for parameter updates. This presents a problem as the parameters of the convolutional layer are random values, leading to wrong illumination estimation, as shown in Fig. 3(a). We observe distinct differences in the illumination maps produced by the vanilla convolutional TV layer across the three experiments. [Inaccurate or inconsistent illumination estimation can result in incorrect image enhancement outcomes.](#)
+
+To mitigate this issue, we adopt a strategy wherein we replace the vanilla convolutional kernel with a *Gaussian* kernel. The coefficients of this Gaussian filter are sampled from a normal distribution
+
+{4}------------------------------------------------
+
+216  
+217  
+218  
+219  
+220  
+221  
+222  
+223  
+224  
+225  
+226  
+227  
+228  
+229  
+230  
+231  
+232  
+233  
+234  
+235  
+236  
+237  
+238  
+239  
+240  
+241  
+242  
+243  
+244  
+245  
+246  
+247  
+248  
+249  
+250  
+251  
+252  
+253  
+254  
+255  
+256  
+257  
+258  
+259  
+260  
+261  
+262  
+263  
+264  
+265  
+266  
+267  
+268  
+269
+
+![Figure 3: Comparison of illumination estimation. (a) TV layer using vanilla convolution shows three experiments (Exp. 1, Exp. 2, Exp. 3) with dark, noisy results. (b) TV layer using Gaussian convolution shows three experiments (Exp. 1, Exp. 2, Exp. 3) with smoother, more consistent illumination estimation.](edd10d3006553f0a7a5a7f844ed8cd01_img.jpg)
+
+Figure 3: Comparison of illumination estimation. (a) TV layer using vanilla convolution shows three experiments (Exp. 1, Exp. 2, Exp. 3) with dark, noisy results. (b) TV layer using Gaussian convolution shows three experiments (Exp. 1, Exp. 2, Exp. 3) with smoother, more consistent illumination estimation.
+
+Figure 3: Comparison of illumination estimation when TV layer uses vanilla convolution kernel and Gaussian kernel.
+
+with mean 0 and variance  $\sigma^2$ . Hence, we define our Gaussian TV layer for illumination estimation by:
+
+$$I_c = \text{Prox}_{\text{TV}}^{2D}(S_c \otimes G_\sigma, \lambda), \quad (3)$$
+
+where  $\otimes$  denotes the convolution operation, and  $G_\sigma$  denotes the Gaussian filter.  $S$  is the input image.  $\lambda$  is the balance parameter in Eq. 1. Consequently, the Fourier spectrum of our Gaussian TV layer can be manipulated by adjusting the value of  $\sigma$ . With a predefined  $\sigma$  and fixed kernel size, the parameters of Gaussian TV layer are deterministic, leading to consistent illumination estimation. Despite the absence of a training process, the Gaussian TV layer is capable of generating a piece-wise smooth illumination, as demonstrated in Fig. 3(b).
+
+This illumination estimation method offers several advantages. First, it requires no external images for training and relies solely on the input single image itself, thus overcoming challenges associated with dataset collection. Second, it necessitates no additional hand-crafted priors or loss functions to drive optimization, thereby streamlining our illumination estimation procedure. Third, our Gaussian TV layer requires only one convolutional layer.
+
+Once the illumination is obtained, we directly compute the reflectance in spatial domain. Since a corrected reflectance can be regarded as initial enhanced image Guo et al. (2017); Zhao et al. (2024), we consider the corrected reflectance as initial enhanced image. However, the reflectance obtained by uncorrected illumination cannot be considered as a initial enhanced image. We therefore use Gamma correction to obtain the corrected illumination  $I^\gamma$ , where  $\gamma$  is the Gamma correction factor. Then we compute the corrected reflectance according to Retinex model:
+
+$$R_c = S_c \oslash I^\gamma, c \in \{R, G, B\}, \quad (4)$$
+
+where  $\oslash$  is spatial division operation and  $c$  indicates the  $c$ -th channel in RGB color space.
+
+A sample of Retinex decomposition in our RetinexGDP is shown in Figure 4. Notably, the illumination map exhibits piece-wise smooth characteristic, ensuring that rich details and color information are entirely preserved in the reflectance. The corrected reflectance, as the initial enhanced image, is utilized in the subsequent stage of personalized enhancement.
+
+![Figure 4: The results of Retinex decomposition. The figure shows five panels: Low-light (original dark image), Illumination (piece-wise smooth map), Corrected illumination (enhanced map), Reflectance (detailed map), and Corrected reflectance (final enhanced image).](c77403039b2f646be3509139acc05f6f_img.jpg)
+
+Figure 4: The results of Retinex decomposition. The figure shows five panels: Low-light (original dark image), Illumination (piece-wise smooth map), Corrected illumination (enhanced map), Reflectance (detailed map), and Corrected reflectance (final enhanced image).
+
+Figure 4: The results of Retinex decomposition.
+
+### 3.2 TEXT-BASED PERSONALIZED LOW-LIGHT ENHANCEMENT
+
+**Finding initial noise vector of corrected reflectance using patch-wise DDIM inversion.** The initial noise vector plays a crucial role in maintaining the fidelity of the generated original image.
+
+{5}------------------------------------------------
+
+The Illustration of finding the initial noise vector of corrected reflectance is shown in Fig.5. DDIM inversion aims to deterministically noising the corrected reflectance  $\mathbf{R}$  to obtain a noise vector  $\hat{\mathbf{R}}$ , which differs from the pure noise strategy of GDP Fei et al. (2023). In the inversion process, the corrected reflectance  $\mathbf{R}$  is first divided into  $M$  overlapping patches, which are cropped with a stride of  $p$ . For each patch, we obtain the noised intermediate result. At each time step  $t$ , the diffusion model computes the mean  $\mu^m$  and variance  $\Sigma^m$  of Gaussian noise for each patch. During the diffusion process, these values are iteratively shifted to reflect the overall mean and variance for the entire image.
+
+![Figure 5: Illustration of finding the initial noise vector of corrected reflectance using patch-wise DDIM inversion. The diagram shows the process of adding element-wise noise to a corrected reflectance image R to produce an initial noise vector R-hat. The legend indicates: R Corrected reflectance, ⊕ Element-wise addition, ϵ_ϕ(·) DDIM Inversion, R-hat Initial noise vector, G Weight vector, Ω, ϕ Noise mean and variance. The process involves dividing R into overlapping patches, applying DDIM inversion to each patch to get noise parameters (μ^1, Σ^1, ..., μ^m, Σ^m), and then aggregating these using a weight vector G and noise mean and variance Ω, ϕ to produce the final noise vector R-hat.](a7d78d22e465dea388b31d0739f9d0cd_img.jpg)
+
+Figure 5: Illustration of finding the initial noise vector of corrected reflectance using patch-wise DDIM inversion. The diagram shows the process of adding element-wise noise to a corrected reflectance image R to produce an initial noise vector R-hat. The legend indicates: R Corrected reflectance, ⊕ Element-wise addition, ϵ\_ϕ(·) DDIM Inversion, R-hat Initial noise vector, G Weight vector, Ω, ϕ Noise mean and variance. The process involves dividing R into overlapping patches, applying DDIM inversion to each patch to get noise parameters (μ^1, Σ^1, ..., μ^m, Σ^m), and then aggregating these using a weight vector G and noise mean and variance Ω, ϕ to produce the final noise vector R-hat.
+
+Figure 5: Illustration of finding the initial noise vector of corrected reflectance using patch-wise DDIM inversion.
+
+Since the patches overlap, the overlapping areas are computed multiple times. Therefore, it is crucial to record the number of times these overlapping areas are noised to ensure accurate calculations. A binary patch mask  $\mathbf{P}^m$  is used to locate the overlapping areas, and weight vector  $\mathbf{G}$  is used to maintain a count of how often each pixel in the overlapped areas is included in a patch:  $\mathbf{G} = \mathbf{G} + \mathbf{P}^m$ , where  $m$  indicate  $m$ -th patch. The final mean and variance for the whole image at each time step are then obtained by computing the weighted average of  $\Omega_t$  and the variance vector  $\phi_t$ :  $\Omega_t = \Omega_t \oslash \mathbf{G}$ ,  $\phi_t = \phi_t \oslash \mathbf{G}$ , where  $\oslash$  represents the element-wise division. This approach ensures that the contributions from overlapping patches are aggregated, preserving the consistency of the image's structure and content during the subsequent sampling process.
+
+**Text-based sampling conditioned on reflectance.** The initial noise vector  $\hat{\mathbf{R}}$  produced through DDIM inversion, rather than a pure Gaussian noise, is taken as the starting point in the reverse denoising step, to maintain the data consistency. To provide a high-quality and more reliable condition for the guided diffusion model Dharaiwal & Nichol (2021), we additionally use the corrected reflectance  $\mathbf{R}$  as the condition in the reverse denoising process. By conditioning on the corrected reflectance, our method ensures that the generated outputs maintain the original image's structure and texture while enhancing low-light image.
+
+We now describe how to perform reverse sampling from  $\hat{\mathbf{R}}$ . If the reverse denoising distribution  $P(x_{t-1} | x_t)$  is adopted to a conditional distribution  $P(x_{t-1} | x_t, \mathbf{R})$ ,  $P(\mathbf{R} | x_t)$  can be a probability that  $x_t$  will be denoised to a high-quality image consistent to  $\mathbf{R}$ , and according to Dharaiwal & Nichol (2021), its heuristic approximation is formulated as
+
+$$P(\mathbf{R} | x_t) = \frac{1}{Z} \exp(-[\lambda_1 \mathcal{L}_c(x_t, \mathbf{R}) + \lambda_2 \mathcal{L}_s(x_t, \mathbf{R}, \mathbf{d})]). \quad (5)$$
+
+where  $Z$  is a normalizing factor,  $\mathcal{L}_c$  and  $\mathcal{L}_s$  indicate the image content and style distance metrics, respectively.  $\mathcal{L}_c$  is consist of reconstruction loss  $\mathcal{L}_{recon}$  and perceptual loss  $\mathcal{L}_{perp}$ . It ensures that the fine details and structures in the reflectance map are preserved. We use pretrained CLIP model to style distance  $\mathcal{L}_s$ .  $\mathcal{L}_s$  ensures the generated image matches the desired style, as guided by the user's text prompt.  $\mathbf{d}$  is the text instruction of enhancement style, and  $\lambda_1$  and  $\lambda_2$  are scaling factors for controlling the magnitude of guidance. In this way, the conditional transition  $P(x_{t-1} | x_t, \mathbf{R})$  can be approximately obtained through the unconditional transition  $P(x_{t-1} | x_t)$  by shifting the mean of the unconditional distribution:  $\mu = \mu + \Sigma \nabla_{x_t} \log P(\mathbf{R} | x_t)$ , where
+
+$$\nabla_{x_t} \log P(\mathbf{R} | x_t) = -\lambda_1 \nabla_{x_t} \mathcal{L}_c(x_t, \mathbf{R}) - \lambda_2 \nabla_{x_t} \mathcal{L}_s(x_t, \mathbf{R}, \mathbf{d}) \quad (6)$$
+
+Therefore, we can add guidance on the generation process by direct adding the mean shift (the gradients of loss function for content and style) to the intermediate denoised image. the gradients are
+
+{6}------------------------------------------------
+
+added to the denoised image at each time step, which is actually shifting the mean of the unconditional distribution. Shifting mean enables the generated images during DDIM sampling to be closer to the distribution of personalized augmented images while maintaining consistent content.
+
+Instead of directly compute the gradients between the intermediate denoised image and the initial reflectance, to avoid the regression-to-the-mean effects, we compute the gradients of the linear combination of them:  $\tilde{x}_{0,t-1} = \eta x_{0,t-1} + (1 - \eta)x_{0,t}$ , where  $\eta = \sqrt{1 - \bar{\alpha}_t}$ . In practice, the condition is a linear combination of  $\mathbf{R}$  and  $\tilde{\mathbf{R}}$ .  $\tilde{\mathbf{R}}$  is sampled by  $\tilde{\mathbf{R}}_t = \sqrt{\bar{\alpha}_t} \mathbf{R}_0 + \sqrt{1 - \bar{\alpha}_t} \epsilon$ , and  $\mathbf{R}_t = \eta \mathbf{R}_0 + (1 - \eta) \tilde{\mathbf{R}}_t$ . We investigate the impact of  $\eta$  on enhancement performance in Appendix.A.5.1. By finetuning the scale factors of loss functions while specifying the preference with text prompt, we can control the guidance.
+
+#### 3.2.1 LOSS FUNCTIONS
+
+The loss functions used in the framework contain two parts: content guidance  $\mathcal{L}_c$  and style guidance  $\mathcal{L}_s$ . To preserve structure and texture consistency between the reconstructed image and the initial enhanced image,  $\mathcal{L}_c$  is consist of reconstruction loss  $\mathcal{L}_{recon}$  and perceptual loss  $\mathcal{L}_{per}$ .
+
+**Reconstruction loss.** We aim to maintain the structure and texture consistency between the enhanced image and the input image, except for noise and illumination. To ensure this similarity, we minimize the Mean Squared Error (MSE) between the corrected reflectance, i.e., the initial enhanced image, and the output.
+
+$$\mathcal{L}_{recon} = \|\tilde{x}_{0,t} - \mathbf{R}_t\|_2^2, \quad (7)$$
+
+where  $\mathbf{R}_t$  and  $\tilde{x}_{0,t}$  denote  $t$ -th sampled corrected reflectance and the linear combination of intermediate output, respectively.
+
+**Perceptual loss.** Additionally, to improve visual sharpness of the enhanced image, we adopt the perceptual loss defined by the similarity on the extracted feature maps from 2 layers of the pre-trained VGG19 network.
+
+$$\mathcal{L}_{per} = \|\phi_k(\tilde{x}_{0,t}) - \phi_k(\mathbf{R}_t)\|_2^2, \quad (8)$$
+
+where  $\phi_k(\cdot)$  denotes the extracted feature using  $k$ -th layer of the pre-trained VGG19 network.
+
+**Style loss.** We use directional CLIP loss Gal et al. (2022) to align the direction between text instructions and image pairs in the CLIP embedding space. However, we find that the source text prompt does not benefit content consistency. In our experiment, the source text prompt (if used) describes the style of the corrected reflectance, while the target text prompt describes the desired style. However, there appears to be a misalignment between natural language descriptions and the reflectance component. Therefore, we modify the directional CLIP loss by removing the source prompt:
+
+$$\mathcal{L}_{clip}(\tilde{x}_{0,t}, \mathbf{R}_t, p_{target}) = 1 - \frac{\Delta I \cdot E_{txt}(p_{target})}{\|\Delta I\| \|E_{txt}(p_{target})\|}, \quad (9)$$
+
+where  $\Delta I = E_{img}(\tilde{x}_{0,t}) - E_{img}(\mathbf{R}_t)$ .  $E_{img}$  and  $E_{txt}$  are CLIP's image embedding and text embedding obtained by image encoder  $E_{img}$  and text encoder  $E_{txt}$ , respectively. Users can specify their preferred style using text prompts, denoted as  $p_{target}$ , such as "summer sunset" or "bright daylight," for personalized enhancement.
+
+## 4 EXPERIMENTS
+
+**Experimental setups.** The kernel size of the Gaussian TV layer is 7, with stride 1, and the value of  $\sigma$  is set to 0.5. We adjust the balance parameter  $\lambda$  in the Gaussian TV layer to 30, and perform a single iteration. The Gamma factor  $\gamma$  is set to 0.5. We use the pretrained unconditional guided diffusion model as our backbone Dhariwal & Nichol (2021). For the pretrained CLIP model, we adopt "ViT-B-32". The scaling factor for  $\mathcal{L}_{recon}$ ,  $\mathcal{L}_{per}$  and  $\mathcal{L}_{clip}$  are set to 5000, 100 and 7000, respectively. The total number of time steps,  $T$ , is 50, and we space the step size from  $T$  to  $T'$ , where  $T'$  is set to 25 in our experiment. Additionally, we employ patch strategy in both the inversion and reverse processes, with the patch size set to 256. Our experiments are conducted on a single TITAN X GPU.
+
+{7}------------------------------------------------
+
+![Figure 6: A grid of image enhancement results. The top section shows two rows of images. The first row includes an 'Input' image and five enhanced versions with labels: 'Autumn day light', 'Summer sunset', 'Blue sky', 'Winter morning', and 'Input'. The second row includes an 'Input' image and three enhanced versions with labels: 'Strong contrast', 'Subtle brightness', and 'Input'. The bottom section shows a single row of three images: an 'Input' image, an enhanced version labeled 'Rich saturation and refined tones', and another enhanced version labeled 'Cool tones of a winter twilight'.](892f25e3d71d8e315a2a51092a8a8da7_img.jpg)
+
+Figure 6: A grid of image enhancement results. The top section shows two rows of images. The first row includes an 'Input' image and five enhanced versions with labels: 'Autumn day light', 'Summer sunset', 'Blue sky', 'Winter morning', and 'Input'. The second row includes an 'Input' image and three enhanced versions with labels: 'Strong contrast', 'Subtle brightness', and 'Input'. The bottom section shows a single row of three images: an 'Input' image, an enhanced version labeled 'Rich saturation and refined tones', and another enhanced version labeled 'Cool tones of a winter twilight'.
+
+Figure 6: The enhanced results guided with different text instructions. Zoom in for better viewing.
+
+**Baseline Implementations.** The proposed model is compared against with 10 state-of-the-art LLIE models: Training-based models: Zero DCE Guo et al. (2020), SNRXu et al. (2022), DCCNet Zhang et al. (2022), UHDFour Li et al. (2023), URetinexNetWu et al. (2022), DiffLLJiang et al. (2023), CLIPLITLiang et al. (2023). Training-free models: RetinexDIP Zhao et al. (2021), DRP Liang et al. (2022), NeuralBRZhao et al. (2024).
+
+**Metrics.** Three no-reference image assessment metrics (NIQE, CPCQIGu et al. (2017) and NIQMC Gu et al. (2018)) are utilized in the paper. Since LOL and VELOL datasets have paired images, we therefore use PSNR and SSIM metrics to evaluate our model.
+
+**Datasets.** We evaluate our model on 9 public datasets including 224 real images (DICMLee et al. (2012), ExDarkLoh & Chan (2019), FusionMa et al. (2015), LIMEGuo et al. (2017), NASA, NPEWang et al. (2013), VV, LOL dataset Wei et al. (2018) and VELOL datasetLiu et al. (2021b)).
+
+### 4.1 PERSONALIZED LOW-LIGHT IMAGE ENHANCEMENT.
+
+We enhance low-light image under different text guidance that describes various styles. The enhanced results guided with different text instructions are given in Fig.6. It can be observed that, with the input nighttime or insufficient light image, our RetinexGDP successfully enhances low-light image according to user preferred style specified by text, and both the structures and textures are preserved well. For example, when the preference specified with "summer sunset", in the enhanced image, the leaves of the trees turn green, the evening glow on the horizon displays an orange hue. When the preference specified with "Blue light", giving the entire image a cold atmosphere. In addition, without denoising post-processing, our RetinexGDP does not amplify the noises, leading to the enhanced results more pleasing.
+
+### 4.2 GENERAL LOW-LIGHT IMAGE ENHANCEMENT
+
+**Qualitative assessments.** We present enhanced results obtained from real low-light datasets, as shown in Fig. 7 and 8. From Figure 7, our RetinexGDP not only restores details hidden in the dark, but also effectively removes noise. In contrast to other supervised models, such as CLIP-LIT and DiffLL, our enhanced results have higher image contrast and vivid color, without over-enhancing relatively bright areas, as shown in Fig.8.
+
+**Quantitative assessments.** We quantitatively assess the performance of our RetinexGDP and competitive methods across 9 datasets, as shown in Table 1. While our model does not achieve the top performance across all datasets, it consistently exhibits competitive results on several datasets, showcasing its versatility and robustness in various real-world scenarios. For instance, considering
+
+{8}------------------------------------------------
+
+432  
+433  
+434  
+435  
+436  
+437  
+438  
+439  
+440  
+441
+
+![Figure 7: Denoising performance comparison with the state-of-the-art LLIE methods on real dataset. The figure shows a 2x6 grid of images. The first row shows the original low-light images and the results from Zero_DCE, RetinexDIP, DRP, NeuralBR, and URetinexNet. The second row shows the results from SNR, DCCNet, UHDFour, DiffLL, CLIP-LIT, and the proposed method (Ours).](0ba998c66ef6a980bac9c0c12e9452bf_img.jpg)
+
+Figure 7: Denoising performance comparison with the state-of-the-art LLIE methods on real dataset. The figure shows a 2x6 grid of images. The first row shows the original low-light images and the results from Zero\_DCE, RetinexDIP, DRP, NeuralBR, and URetinexNet. The second row shows the results from SNR, DCCNet, UHDFour, DiffLL, CLIP-LIT, and the proposed method (Ours).
+
+Figure 7: Denoising performance comparison with the state-of-the-art LLIE methods on real dataset.
+
+442  
+443  
+444  
+445  
+446  
+447  
+448  
+449  
+450  
+451  
+452  
+453
+
+![Figure 8: Image contrast visual comparison with the state-of-the-art LLIE methods on LOL and VELOL dataset. The figure shows a 2x6 grid of images. The first row shows the original low-light images and the results from CLIP-LIT, DIFELL, Ours, and the Ground Truth (GT). The second row shows the results from Low-light, CLIP-LIT, DIFELL, Ours, and GT.](aaec7c7044d764c324cdb35c0201da6f_img.jpg)
+
+Figure 8: Image contrast visual comparison with the state-of-the-art LLIE methods on LOL and VELOL dataset. The figure shows a 2x6 grid of images. The first row shows the original low-light images and the results from CLIP-LIT, DIFELL, Ours, and the Ground Truth (GT). The second row shows the results from Low-light, CLIP-LIT, DIFELL, Ours, and GT.
+
+Figure 8: Image contrast visual comparison with the state-of-the-art LLIE methods on LOL and VELOL dataset.
+
+454  
+455  
+456  
+457  
+458  
+459  
+460  
+461  
+462  
+463  
+464  
+465  
+466  
+467  
+468  
+469
+
+Table 1: Average NIQE ↓, NIQM C ↑, and CPCQI ↑ scores across seven datasets. Training-free models are highlighted in gray. The best image quality is marked in red (1st), green (2nd), and blue (3rd). A “-” indicates results are unavailable due to memory issues.
+
+| Method | DICM |  |  | ExDark |  |  | Fusion |  |  | LIME |  |  | Nasa |  |  | NPEA |  |  | VV |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  | NL | M | C | NL | M | C | NL | M | C | NL | M | C | NL | M | C | NL | M | C | NL | M | C |
+| URetinexNet | 3.50 | 5.17 | 0.73 | 3.74 | 5.18 | 0.87 | 3.90 | 5.07 | 0.85 | 4.33 | 5.02 | 0.90 | 3.27 | 5.14 | 0.84 | 4.08 | 5.00 | 0.85 | 3.03 | 5.14 | 0.79 |
+| SNR | 4.16 | 5.17 | 0.63 | 4.29 | 5.29 | 0.68 | 4.93 | 5.00 | 0.64 | 5.69 | 5.23 | 0.72 | 5.23 | 5.28 | 0.57 | 4.15 | 4.98 | 0.67 | 3.77 | 4.98 | 0.45 |
+| DCCNet | 3.29 | 5.02 | 0.75 | 3.75 | 5.07 | 0.74 | 4.29 | 4.80 | 0.77 | 4.26 | 5.04 | 0.88 | 3.18 | 5.16 | 0.87 | 3.50 | 4.74 | 0.75 | 3.56 | 5.11 | 0.76 |
+| UHDFour | 3.46 | 5.09 | 0.75 | 3.90 | 5.00 | 0.71 | 4.38 | 4.85 | 0.72 | 4.55 | 4.97 | 0.85 | 3.33 | 5.29 | 0.85 | 3.62 | 4.94 | 0.74 | - | - | - |
+| DiffusionLL | 2.93 | 5.22 | 0.77 | 3.27 | 5.04 | 0.79 | 3.30 | 5.19 | 0.80 | 3.58 | 4.92 | 0.95 | 2.81 | 5.33 | 0.82 | 3.24 | 5.00 | 0.81 | 2.92 | 5.36 | 0.88 |
+| CLIPLIT | 3.01 | 5.05 | 0.84 | 3.63 | 4.84 | 1.04 | 3.74 | 5.09 | 1.00 | 3.99 | 5.09 | 1.00 | 3.16 | 5.19 | 1.04 | 3.71 | 4.97 | 0.96 | 3.02 | 5.20 | 1.00 |
+| Zero_DCE | 2.83 | 5.12 | 0.82 | 3.54 | 4.96 | 0.97 | 3.58 | 5.21 | 0.91 | 3.76 | 4.84 | 1.06 | 3.57 | 5.09 | 0.87 | 2.97 | 4.89 | 0.92 | 3.21 | 5.40 | 0.89 |
+| LightenDiffusion | 3.39 | 5.23 | 0.90 | 3.34 | 5.14 | 0.80 | 3.43 | 5.21 | 0.78 | 4.04 | 5.10 | 0.94 | 3.08 | 5.48 | 0.89 | 3.03 | 5.14 | 0.79 | 3.58 | 5.38 | 0.77 |
+| FourierDiff | 3.97 | 4.94 | 0.86 | 3.80 | 5.17 | 0.82 | 4.33 | 4.66 | 0.83 | 4.21 | 5.16 | 0.97 | 3.37 | 4.75 | 0.85 | 3.72 | 5.06 | 0.84 | 3.36 | 4.75 | 0.85 |
+| RetinexDIP | 3.37 | 5.13 | 0.86 | 3.74 | 4.86 | 1.13 | 3.40 | 5.33 | 1.05 | 3.82 | 4.88 | 1.16 | 3.58 | 5.41 | 1.02 | 3.00 | 5.15 | 1.04 | 2.48 | 5.45 | 1.06 |
+| DRP | 4.68 | 5.24 | - | 4.79 | 5.17 | - | 5.71 | 5.28 | - | 5.99 | 5.31 | - | 4.30 | 5.62 | - | 5.29 | 5.37 | - | 8.80 | 5.45 | - |
+| NeuralBR | 3.39 | 5.29 | 0.88 | 3.79 | 4.72 | 1.08 | 3.41 | 5.23 | 1.05 | 3.74 | 5.03 | 1.14 | 2.97 | 5.19 | 1.04 | 3.72 | 5.15 | 1.05 | 3.21 | 5.40 | 0.89 |
+| RetinexGDP | 4.02 | 5.12 | 0.84 | 4.80 | 4.97 | 0.81 | 5.22 | 5.27 | 0.86 | 5.54 | 5.06 | 0.94 | 4.11 | 5.48 | 0.91 | 4.21 | 5.38 | 0.75 | 4.10 | 5.26 | 0.74 |
+
+470  
+471  
+472  
+473  
+474  
+475  
+476  
+477  
+478  
+479  
+480  
+481
+
+our NIQM C score on the NPEA dataset, as detailed in Table 1, our RetinexGDP model achieves the highest score.
+
+Furthermore, we specifically compare our RetinexGDP with models trained on the LOL dataset, as shown in Table 2. Compared to training-based models, such as CLIP-LIT, our model achieves significantly higher PSNR scores: 26.39% on LOL and 8.7% on VELOL. Similarly, against training-free models such as RetinexDIP, RetinexGDP delivers substantial improvements, with 82.3% higher PSNR on LOL and 48.9% on VELOL. In contrast, without being specifically trained on the LOL or VELOL datasets, RetinexGDP achieves superior performance.
+
+### 4.3 ABLATION STUDY
+
+482  
+483  
+484  
+485
+
+**Loss function and text prompts.** We conduct an ablation study on the loss function and text specified preference, as shown in Table 3. We observe that using only content guidance ( $\mathcal{L}_{recon}$  and  $\mathcal{L}_{per}$ ) yields the enhanced image with better image quality, while the addition of text instruction may result in a slight drop in performance. More visual results are given in Appendix A.5.2.
+
+{9}------------------------------------------------
+
+Table 2: Average PSNR↑/SSIM↑/NIQE ↓/NIQMCT/CPCQI↑ on LOL and VELOL. Training-free models are highlighted in gray.
+
+| Method | LOL |  |  |  |  | VELOL |  |  |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|
+|  | P↑ | S↑ | N↓ | M↓ | C↓ | P↑ | S↑ | N↓ | M↓ | C↓ |
+| Zero-DCE | 14.86 | 0.54 | 7.77 | 4.01 | 1.15 | <b>18.06</b> | 0.58 | 8.06 | 3.92 | 1.20 |
+| CLIP-LIT | 12.39 | 0.49 | 8.29 | 3.37 | <b>1.21</b> | 15.18 | 0.53 | 8.41 | 3.37 | <b>1.27</b> |
+| RetinexDIP | 8.59 | 0.30 | 6.90 | 2.41 | 1.10 | 11.08 | 0.32 | <b>7.22</b> | 2.65 | 1.10 |
+| NeuralBR | 11.36 | 0.44 | 7.52 | 3.68 | LIT | 14.04 | 0.47 | 7.56 | 3.67 | 1.22 |
+| GDP | 13.93 | <b>0.63</b> | <b>6.17</b> | <b>5.34</b> | 0.67 | 13.04 | 0.55 | 7.59 | <b>4.29</b> | 0.40 |
+| RetinexGDP | <b>15.66</b> | <b>0.66</b> | <b>6.26</b> | <b>5.26</b> | 0.85 | <b>16.51</b> | <b>0.69</b> | <b>6.92</b> | <b>4.97</b> | 0.96 |
+
+Table 3: Ablation study on loss and text.
+
+| Loss | N↓ | M↑ | C↑ |
+|-|-|-|-|
+| $L_{rrecon}$ | <b>5.44</b> | 5.03 | <b>1.05</b> |
+| $L_{rrecon}$ w/ text | 6.47 | 4.81 | 0.69 |
+| $L_{rrecon} + L_{per}$ | <b>5.58</b> | <b>5.07</b> | 0.96 |
+| $L_{rrecon} + L_{per}$ w/ text | 5.63 | 5.01 | 0.89 |
+
+**Patch-wise DDIM inversion.** The patch strategy in the DDIM inversion not only accommodates inputs of any size but also aids in preserving structure and textures, as demonstrated in Fig.9. Without the patch strategy, structures tend to be distorted (as seen in the red box), and artifacts tend to appear in darker areas (as observed in the white box).
+
+![Figure 9: Ablation study on patch-wise DDIM inversion. The figure shows three images of a person holding a bowl. The first image is the 'Input'. The second image, labeled 'w/ patch strategy', shows a red box around the bowl and a white box in the dark area. The third image, labeled 'w/o patch strategy', shows a distorted bowl and artifacts in the dark area.](d3f6de4fe9f9138fc6afc584b5104433_img.jpg)
+
+Figure 9: Ablation study on patch-wise DDIM inversion. The figure shows three images of a person holding a bowl. The first image is the 'Input'. The second image, labeled 'w/ patch strategy', shows a red box around the bowl and a white box in the dark area. The third image, labeled 'w/o patch strategy', shows a distorted bowl and artifacts in the dark area.
+
+Figure 9: Ablation study on patch-wise DDIM inversion.
+
+**Linear combination factor of corrected reflectance.** The loss function used in reverse sampling process, both the intermediate result  $x_{0,t}$  and corrected reflectance are linear combination. We find the factor for linear combination  $\eta$  play an important role in the denoising process, as shown in Fig.10. When  $\eta = \sqrt{\alpha_t}$ ,  $\eta$  increases as the value of  $\alpha_t$  gradually increases, resulting in smoother enhanced results. In contrast, when  $\eta = \sqrt{1 - \alpha_t}$ , the model generates detailed results.
+
+![Figure 10: Ablation study on factor of combination η. The figure shows two rows of images. Row (a) is labeled η = √α_t and shows five images at t=1, t=5, t=10, t=15, t=20. Row (b) is labeled η = √(1 - α_t) and shows five images at t=1, t=5, t=10, t=15, t=20. Both rows show a door and a window. The images in row (a) are smoother, while the images in row (b) are more detailed.](0a90113d6c8989e8b3c89c5cf9f926d7_img.jpg)
+
+Figure 10: Ablation study on factor of combination η. The figure shows two rows of images. Row (a) is labeled η = √α\_t and shows five images at t=1, t=5, t=10, t=15, t=20. Row (b) is labeled η = √(1 - α\_t) and shows five images at t=1, t=5, t=10, t=15, t=20. Both rows show a door and a window. The images in row (a) are smoother, while the images in row (b) are more detailed.
+
+Figure 10: Ablation study on factor of combination  $\eta$ . Zoom in for a better view.
+
+## 5 CONCLUSION
+
+In this paper, we have introduced RetinexGDP, a zero-shot PLIE model that combines a generative pretrained diffusion model with domain knowledge from Retinex theory. RetinexGDP enables flexible enhancement guided by user preferences specified via text instructions, obviating the necessity for additional training data or external images. We incorporate TV optimization into a single Gaussian convolutional layer for zero-shot illumination estimation, streamlining the pipeline of Retinex decomposition. To maintain the content and structure consistency, we employ patch-wise DDIM inversion to find the initial noise vector of corrected reflectance and perform sampling conditioned on the corrected reflectance. While our zero-shot, training-free PLIE method may not outperform state-of-the-art models across all datasets, it delivers competitive results. Its key strength lies in the ability to flexibly customize enhancement styles through text prompts, offering a unique and adaptable solution. This novel feature brings valuable flexibility to low-light enhancement, deserving further attention from the research community.
+
+**Limitations:** RetinexGDP has limitation in real-time enhancement due to the inversion process. This limitation may be solved by inversion-free method Xu et al. (2024).
+
+ Rest of paper (reference and Appendix) is removed.

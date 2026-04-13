@@ -1,0 +1,333 @@
+
+
+{0}------------------------------------------------
+
+# DEEP CLUSTERING WITH ASSOCIATIVE MEMORIES
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Deep clustering – joint representation learning and latent space clustering – is a well studied problem especially in computer vision and text processing under the deep learning framework. While the representation learning is generally differentiable, clustering is an inherently discrete optimization task, requiring various approximations and regularizations to fit in a standard differentiable pipeline. This leads to a somewhat disjointed representation learning and clustering. Recently, Associative Memories were utilized in the end-to-end differentiable **CLAM** clustering scheme (Saha et al., 2023). In this work, we show how Associative Memories enable a novel take on deep clustering, **DCLAM**, simplifying the whole pipeline and tying together the representation learning and clustering more intricately. Our experiments showcase the advantage of **DCLAM**, producing improved clustering quality regardless of the architecture choice (convolutional, residual or fully-connected) or data modality (images or text).
+
+## 1 INTRODUCTION
+
+The goal of clustering is to find coherent groups in a dataset. It is an important unsupervised learning task, and given the generality of the task, many different methods have been proposed for effective clustering (Xu & Tian, 2015; Zaki & Meira Jr, 2020). At a technical level, clustering critically relies on a notion of (pairwise) distance (or similarity) to distinguish pairs of data samples as being “similar” or “different”, and the insights from clustering can be uninformative or misleading without such a meaningful distance. When dealing with numerical data  $S \subset \mathbb{R}^d$  with  $d$  dimensions, metrics such as Euclidean distance are commonly used. Nevertheless, even with numerical data and an appropriate notion of distance, increasing data dimensionality (that is, increasing  $d$ ) makes clustering computationally hard as well as conceptually difficult since the separation between similar pairs and dissimilar ones can start to vanish (Verleysen & François, 2005; Steinbach et al., 2004; Assent, 2012).
+
+In various domains, both these problems manifest – first, the raw representation of samples can be extremely high dimensional (consider the number of pixels in an image, or the number of words in a vocabulary for a bag-of-words representation of documents); second, while we have an *ambient* representation, standard notions of vector distances (such as Euclidean) do not necessarily make sense – for example, Euclidean distance based on pixels can be large between an image and a slightly shifted version of it, which can be problematic if the content of an image is translation or rotation invariant.
+
+One effective approach to handle these challenges is through *deep clustering* (Zhou et al., 2024), where the goal is to both learn a low dimensional *latent* space where standard distance metrics are meaningful, and to cluster or group the points at the same time. For the latent representations to be faithful to the original samples, deep clustering ensures that there is no significant information loss in the latent space, leading to the common use of autoencoders (AEs) (Rumelhart et al., 1985; Baldi, 2012; Bank et al., 2023) that learn latent representations (via an encoder) which can be used to reconstruct the original samples (via a decoder). The goal of deep clustering is to discover the cluster structure in the latent space while ensuring low reconstruction loss. This is a widely studied problem, especially in image datasets (Caron et al., 2018; Chang et al., 2017). While an autoencoder is usually differentiable, standard clustering schemes (such as  $k$ -means (MacQueen, 1967) or agglomerative (Johnson, 1967)) are inherently discrete methods, since *hard* clustering (where each sample is only assigned to a single cluster) is a discrete optimization problem. To incorporate it in a differentiable deep learning pipeline, clustering is often “softened” by allowing samples to be partially assigned to multiple clusters, although various “regularizations” push the soft assignments to
+
+{1}------------------------------------------------
+
+match hard assignments approximately (Xie et al., 2016; Guo et al., 2017a). The recent **CLAM** (Saha et al., 2023) algorithm handles the dichotomy between hard assignments and differentiability via the use of associative memories, yielding an end-to-end differentiable clustering approach. Nevertheless, **CLAM** works only in the ambient  $d$ -dimensional data space, and is not designed to learn effective lower dimensional latent representations, which poses challenges when clustering high-dimensional data.
+
+As noted above, deep clustering tackles the joint objective of learning a good latent representation where the points also cluster well. Whereas minimizing reconstruction loss is a prerequisite for deep representation learning, one option for clustering in latent space is to first *pretrain* an autoencoder to minimize the reconstruction loss, and then to freeze this latent space. Next, one can apply some clustering scheme to group the points in that (frozen) space. Many AE based existing deep learning methods adopt this scheme by either freezing both the encoder and decoder, or freezing only the decoder (Xie et al., 2016; Guo et al., 2017b; 2021; Chazan et al., 2019; Huang et al., 2023).
+
+In this paper, we consider a new approach that fine-tunes the autoencoder (i.e., both the encoder and decoder) so that it modifies the latent space along with the task of finding clusters, while also ensuring end-to-end differentiability via the use of associative memories (significantly extending (Saha et al., 2023)). Our key insight and contribution is that we seamlessly combine the clustering and reconstruction loss objectives into one expression that tackles the task of **clustering-guided latent representations**, whereas previous deep clustering methods considered these separately. Our work makes the following contributions:
+
+- We propose **DECLAM**, which uses associative memories to formulate a novel joint loss function that simultaneously learns effective representations and clusters in the latent space, resulting in our simplified deep clustering formulation.
+- We conduct a thorough evaluation on image and text datasets, demonstrating that **DECLAM** significantly improves the clustering quality over both traditional (in ambient space) and deep clustering (in latent space) baselines.
+- We show that **DECLAM** retains superior representation quality as measured by the reconstruction loss; it is also agnostic to the encoder/decoder architecture choice.
+
+## 2 RELATED WORK
+
+Clustering is a long-studied and well-reviewed problem in computer science, with various formulations and several applications (Kaufman & Rousseeuw, 2009; Zaki & Meira Jr, 2020). Given the success of deep learning, deep clustering has also attracted attention over the past decade (Ren et al., 2024; Aljalbout et al., 2018; Zhou et al., 2024). Inspired by t-SNE (Van der Maaten & Hinton, 2008), Xie et al. (2016) introduced DEC, enhancing clustering and feature representation by minimizing the Kullback-Leibler Divergence (KLD) to an auxiliary target distribution. However, a drawback is abandoning the decoder layer after pre-training, impacting the embedded space and clustering performance. Guo et al. (2017a) showed that keeping the decoder layer improves clustering (IDEC), and Guo et al. (2017b) proposed DCEC using convolutional autoencoders (CAE). Chazan et al. (2019) proposed DAMIC, a mixture of autoencoders for clustering, determined by minimizing the reconstruction loss without needing a regularization term. However, they leverage multiple AEs in their model, while we focus on schemes using a single AE. Huang et al. (2023) introduced an innovative embedded autoencoder architecture by incorporating it into both the encoding and decoding units of the outer autoencoder. Guo et al. (2021) proposed DEKM which works on the embedding space (after pretraining) and transforms it to a new cluster-friendly space using an orthonormal transformation matrix. However, discarding the decoder after pretraining for both of these methods may lead to the distortion of the embedded space, consequently hurting clustering performance. In addressing the automatic inference of the number of clusters in a dataset, Ronen et al. (2022) introduced DeepDPM. They proposed a novel loss inspired by EM in the Bayesian Gaussian Mixture Model framework, facilitating a new amortized inference in mixture models. It is worth noting that DeepDPM diverges from the typical encoder-decoder architecture, opting instead for a multilayer perceptron model.
+
+While many deep clustering methods utilize KLD as a clustering objective, it falls short in preserving the global data structure (which implies that only within-cluster distances are prioritized, leaving uncertainties regarding between-cluster similarities), leading Oskouei et al. (2023) (EDCWRN) to advocate for cross-entropy over KLD. They incorporate feature weighting to emphasize essential
+
+{2}------------------------------------------------
+
+features for clustering and employ a neighborhood technique to encourage similar representations for samples within the same cluster. Addressing another challenge with KLD regarding the presence of hard, misclassified samples, Cai et al. (2022) introduced focal loss to enhance label assignment in deep clustering methods and improved the representation learning module with a contractive penalty term, capturing more discriminative representations. However, it could lead to unintentional bias in the optimization focus between the representation learning and clustering modules. Dang et al. (2021) introduce a novel deep clustering framework (NNM) based on a two-level nearest neighbors matching approach. Distinguishing itself from prior methods (Van Gansbeke et al., 2020), NNM incorporates matching at both local and global levels, resulting in a notable enhancement in clustering performance. It also leverages SimCLR (Chen et al., 2020) to pretrain a representation learning model using the state-of-the-art contrastive learning loss. In our work, we rethink the deep clustering problem at a architecture agnostic level by leveraging the capabilities of associative memories. Thus, various architectural and pretraining advancements would also benefit our proposed scheme.
+
+Recently, Saha et al. (2023) introduced **CLAM**, an end-to-end differentiable clustering approach, utilizing Dense Associative Memories (AMs) for clustering. AMs adeptly store multidimensional vectors as fixed point attractor states in a recurrent dynamical system. AMs form associations between the initial state and a final state (memory), creating disjoint basins of attractions which are crucial for clustering. A prominent example of AM is the classical Hopfield Network (Hopfield, 1982). It exhibits limited memory capacity, approximately storing only  $\approx 0.14d$  arbitrary memories in a  $d$  dimensional data domain (McEliece et al., 1987; Amit et al., 1985). Subsequently, Krotov & Hopfield (2016) proposed Dense Associative Memory (Dense AM) or Modern Hopfield Network introducing rapidly growing non-linearities (activation functions) into the system. This innovation allows for a denser arrangement of memories and achieves super-linear (in  $d$ ) memory capacity (Demircigil et al., 2017; Lucibello & Mézard, 2023). With softmax activation, Dense AMs are closely related to the attention mechanism used in transformers (Ramsauer et al., 2020; Krotov & Hopfield, 2021; Hoover et al., 2024). Further, Schaeffer et al. (2023) demonstrates that the energy function of **CLAM**'s AM network is equal to a scaled negative log-likelihood of a Gaussian mixture model. In our work, we study the joint task of learning effective latent representations and clustering in the latent space. We continuously refine both the encoder and decoder networks and at the same time integrate the AM learning dynamics to cluster the points into  $k$  groups. This bears semblance to vector-quantized variational AEs (van den Oord et al., 2017), where the task is to learn a discrete vector code for each point. Nevertheless, this assignment is non-differentiable, requiring gradient approximation, and there is no clustering objective considered. Also related is the task of deep metric learning (Kaya & Bilge, 2019), where the task is to learn a distance function between samples in latent space. Nevertheless, this requires the use of labeled data for full or weak supervision. As such, the coupling of deep clustering with AMs as done in **DCLAM** for cluster-guided latent space learning has not been considered in the literature before.
+
+## 3 PRELIMINARIES
+
+We denote an input set as  $S \subset \mathbb{R}^d$  in the ambient space, with an input  $x \in S$ , and  $[n]$  a  $n$ -length index set  $\{1, \dots, n\}$ .
+
+### 3.1 DEEP CLUSTERING BASICS
+
+Deep clustering is an unsupervised task, where we have to learn (usually lower dimensional) representations such that (i) no (critical) information is lost in the latent lower dimensional representations, and (ii) the data in the latent space forms well-separated clusters. To ensure that no information is lost in the latent space, we learn an encoder  $\mathbf{e} : \mathbb{R}^d \rightarrow \mathbb{R}^m$  ( $m < d$ ) that maps the input  $x \in \mathbb{R}^d$  to a latent space (that is,  $\mathbf{e}(x) \in \mathbb{R}^m$ ), along with a decoder  $\mathbf{d} : \mathbb{R}^m \rightarrow \mathbb{R}^d$  that maps the latent representation back to the original ambient space. Encoder  $\mathbf{e}$  and decoder  $\mathbf{d}$  together give us an autoencoder, and the loss of information is often measured as the *reconstruction loss*:
+
+$$\mathcal{L}_r(\mathbf{e}, \mathbf{d}) = \sum_{x \in S} \ell_r(x, \mathbf{e}, \mathbf{d}) = \sum_{x \in S} \|x - \mathbf{d}(\mathbf{e}(x))\|^2. \quad (1)$$
+
+This loss term does not account for the cluster structure in the latent space. For that purpose, we consider  $k$  cluster centers  $\rho = \{\rho_1, \dots, \rho_k\} \subset \mathbb{R}^m$  in the latent space, so that the corresponding
+
+{3}------------------------------------------------
+
+clustering loss is given by:
+
+$$\mathcal{L}_c(\mathbf{e}, \boldsymbol{\rho}) = \sum_{x \in S} \ell_c(x, \mathbf{e}, \boldsymbol{\rho}) = \sum_{x \in S} \min_{i \in [k]} \|\mathbf{e}(x) - \rho_i\|^2, \quad (2)$$
+
+which measures how close a sample is to its closest cluster center in the latent space with the  $\min_{i \in [k]}$  performed on a per-sample basis to denote the discrete assignment. A small value of  $\mathcal{L}_c(\mathbf{e}, \boldsymbol{\rho})$  implies that all points in the latent space are close to their respective cluster centers.
+
+Unsupervised deep clustering is often considered in the following form (Guo et al., 2017a;b; Cai et al., 2022)
+
+$$\min_{\mathbf{e}, \mathbf{d}, \boldsymbol{\rho}} \mathcal{L}_r(\mathbf{e}, \mathbf{d}) + \gamma \mathcal{L}_c(\mathbf{e}, \boldsymbol{\rho}) \quad (3)$$
+
+where  $\gamma \geq 0$  is a hyperparameter that balances the clustering loss  $\mathcal{L}_c$  and the reconstruction loss  $\mathcal{L}_r$ . This  $\gamma$  plays a critical role in balancing the two terms in Eq. (3).
+
+While this hyperparameter  $\gamma$  can be handled via hyperparameter optimization, there is an inherent challenge in the above objective — the terms  $\mathcal{L}_c$  and  $\mathcal{L}_r$  are not inherently comparable. The per-sample clustering loss  $\ell_c(x, \mathbf{e}, \boldsymbol{\rho})$  is a loss computed between entities in the latent space  $\mathbb{R}^m$ , while per-sample reconstruction loss  $\ell_r(x, \mathbf{e}, \mathbf{d})$  is a loss between items in the ambient space  $\mathbb{R}^d$ . Thus, the scale of these two terms can be very different, making it hard to select a good value for  $\gamma$ .
+
+Usual implementations of deep clustering (Guo et al., 2017a;b; Oskouei et al., 2023) adopt the following strategy: (i) First, an autoencoder (that is,  $\mathbf{e}$  and  $\mathbf{d}$ ) is “pretrained” with the data to achieve low reconstruction error (that is, low  $\mathcal{L}_r$  by setting  $\gamma = 0$  in Eq. (3)), and (ii) second,  $\gamma$  is set to a positive value in Eq. (3), and the clustering loss  $\mathcal{L}_c$  is minimized by learning the cluster centers  $\boldsymbol{\rho}$ , and “fine-tuning” the encoder  $\mathbf{e}$ , while the reconstruction loss  $\mathcal{L}_r$  stays low by changing the decoder  $\mathbf{d}$  accordingly *if the balancing hyperparameter  $\gamma$  is set appropriately, which can be a challenge*.
+
+### 3.2 DENSE ASSOCIATIVE MEMORIES AND CLUSTERING
+
+Given  $k$  memories  $\{\boldsymbol{\rho}_1, \dots, \boldsymbol{\rho}_k\}$ ,  $\boldsymbol{\rho}_i \in \mathbb{R}^d$ , and a point or particle  $v \in \mathbb{R}^d$ , **CLAM** (Saha et al, 2023) defines the energy function for  $v$  as follows:
+
+$$E(v) = -\frac{1}{\beta} \log \left( \sum_{i \in [k]} \exp(-\beta \|\boldsymbol{\rho}_i - v\|^2) \right) \quad (4)$$
+
+with the scalar  $\beta > 0$  playing the role of inverse “temperature”. As  $\beta$  increases, the  $\exp(\cdot)$  function emphasizes the leading term, suppressing the others. In **CLAM**, the attractor dynamics are driven by gradient descent on the energy landscape. This controls the movement of  $v$  over time through  $dv/dt$ , ensuring a decrease in energy:
+
+$$\tau \frac{dv}{dt} = -\frac{1}{2} \nabla_v E = \sum_{i \in [k]} (\boldsymbol{\rho}_i - v) \text{softmax}(-\beta \|\boldsymbol{\rho}_i - v\|^2) \quad (5)$$
+
+Here,  $\tau > 0$  is a characteristic time constant that determines how quickly the particle will move on the energy landscape, and  $\text{softmax}(\cdot)$  represents the softmax function applied to the scaled distances to the memories, given as
+
+$$\text{softmax}(-\beta \|\boldsymbol{\rho}_i - v\|^2) = \frac{\exp(-\beta \|\boldsymbol{\rho}_i - v\|_2^2)}{\sum_{j \in [k]} \exp(-\beta \|\boldsymbol{\rho}_j - v\|_2^2)} \quad (6)$$
+
+Given the state vector  $v^t$  as step  $t$ , the energy-based AM update for step  $t + 1$  is given via gradient descent on the energy:
+
+$$v^{t+1} = A_\rho(v^t) = v^t + \tau \frac{dv}{dt} \Big|_{v=v^t} \quad (7)$$
+
+Here we denote the AM update via the operator  $A_\rho(v)$  defined above, and we use the notation  $A_\rho^T(v)$  to denote  $A_\rho(A_\rho(\dots A_\rho(v)))$ , where the operator  $A_\rho$  is applied to  $v$  recursively for  $T$  steps. The attractor dynamics ensure that every memory  $\rho_i$ ,  $i \in [k]$ , forms a “basin of attraction”, and with enough recursions  $T$ , any particle will usually converge to exactly one of these memories  $\rho_i$ , which
+
+{4}------------------------------------------------
+
+thus act as cluster centers. The differentiability of the recursive dynamics is what makes **CLAM** an end-to-end differentiable clustering scheme, with the memories learned via standard backpropagation. However, it is important to note that **CLAM** is not a deep clustering method, since there is no representation learning involved. Of course, one can apply **CLAM** in latent space learned by a pretrained autoencoder, but we show that this is not an effective strategy. Instead, we next propose our novel **DCCLAM** approach that is inherently a deep clustering method that jointly clusters and learns effective latent representations.
+
+## 4 DCCLAM: DEEP CLUSTERING WITH ASSOCIATIVE MEMORIES
+
+Existing deep clustering methods need to solve Eq. (3) explicitly, which involves the critical  $\gamma$  hyperparameter to appropriately balance the clustering and reconstruction losses. Here, we will show how AM enables the removal of the critical  $\gamma$  hyperparameter in the deep clustering objective (Eq. (3)), while still maintaining the intent of Eq. (3) to balance the clustering loss and the reconstruction loss.
+
+![Diagram of the DCCLAM pipeline. An input x in Ambient Space R^d is encoded by e into e(x) in Latent Space R^m. The encoder e is part of an autoencoder with decoder d. The encoder e is also part of an associative memory (AM) block. The AM block takes e(x) and current centers rho and produces a new state vector v^{t+1}. The decoder d takes v^{t+1} and produces d(A_p^T(e(x))) in Ambient Space R^d. The AM-inspired loss L is the sum of the reconstruction loss ||x - d(A_p^T(e(x)))||^2 and the clustering loss ||e(x) - d(A_p^T(e(x)))||^2.](53f1f7d17b3e7aae62169c41d2a88a77_img.jpg)
+
+Diagram of the DCCLAM pipeline. An input x in Ambient Space R^d is encoded by e into e(x) in Latent Space R^m. The encoder e is part of an autoencoder with decoder d. The encoder e is also part of an associative memory (AM) block. The AM block takes e(x) and current centers rho and produces a new state vector v^{t+1}. The decoder d takes v^{t+1} and produces d(A\_p^T(e(x))) in Ambient Space R^d. The AM-inspired loss L is the sum of the reconstruction loss ||x - d(A\_p^T(e(x)))||^2 and the clustering loss ||e(x) - d(A\_p^T(e(x)))||^2.
+
+Figure 1: **DCCLAM**: AM-enabled deep clustering. The solid arrows  $\longrightarrow$  denote the forward-pass to compute the single loss term in Eq. (8). The dashed arrows  $\dashrightarrow$  denote the backward pass showing the single loss driving all updates.
+
+Recall from Eq. (7) that  $A_p(v^t)$  denotes the AM dynamics step, given as  $v^{t+1} = A_p(v^t) = v^t + \tau \frac{dv^t}{dt}$ , where  $v^{t+1}$  is the new state vector obtained by updating  $v^t$ , and recall that  $A_p^T(v)$  denotes the dynamics for  $T$  steps. Consider the pipeline depicted in Fig. 1: The input  $x$  is mapped into the latent space as  $e(x)$  by the encoder  $e$ , and then the attractor dynamics operator  $A_p: \mathbb{R}^m \rightarrow \mathbb{R}^m$  based on the current centers  $\rho = \{\rho_1, \dots, \rho_k\}$  is applied to  $e(x)$  for  $T$  recursions, resulting in  $A_p^T(e(x))$  (which will be close to one of the cluster centers). Then this representation (effectively of a cluster center) is passed through the decoder  $d$  to get  $d(A_p^T(e(x))) \in \mathbb{R}^d$  in the ambient space. We can then optimize for the following loss:
+
+$$\min_{e, d, \rho} \tilde{\mathcal{L}}(e, d, \rho) = \sum_{x \in S} \tilde{\ell}(x, e, d, \rho) = \sum_{x \in S} \|x - d(A_p^T(e(x)))\|^2 \quad (8)$$
+
+Here AM becomes the intricate part of the encoder that transforms the embedding space (obtained by the encoder) into a clustering-friendly new space to find clusters (as opposed to the existing deep clustering schemes that use different additional loss functions, e.g., clustering loss in Eq. (3) and/or regularizations to get a similar effect). This AM enabled *novel deep clustering loss*  $\tilde{\mathcal{L}}$  is a single
+
+#### Algorithm 1: DCCLAM Algorithm
+
+```
+
+1 Train( $S, k, N, T, \epsilon_e, \epsilon_d, \epsilon_\rho, \gamma$ )
+2 Pretrain ( $e, d$ ) as autoencoder,
+3 minimizing  $\mathcal{L}_r(e, d)$ 
+4  $\rho \leftarrow \{e(x), x \in M\}$ ,  $M$  are random  $k$ 
+5 samples from  $S$ 
+6 for epoch  $n = 1, \dots, N$  do
+7   for batch  $B \in S$  do
+8     Batch loss  $\tilde{\mathcal{L}}_B \leftarrow 0$ 
+9     for example  $x \in B$  do
+10       $v \leftarrow e(x)$  // encode
+11       $\bar{v} \leftarrow A_p^T(v)$  // AM steps
+12       $\tilde{\ell} \leftarrow \|x - d(\bar{v})\|^2$  // loss
+13       $\tilde{\mathcal{L}}_B \leftarrow \tilde{\mathcal{L}}_B + \tilde{\ell}$ 
+14       $\rho_i \leftarrow \rho_i - \epsilon_\rho \nabla_{\rho_i} \tilde{\mathcal{L}}_B \quad \forall i \in [k]$ 
+15       $e \leftarrow e - \epsilon_e \nabla_e \tilde{\mathcal{L}}_B$ 
+16       $d \leftarrow d - \epsilon_d \nabla_d \tilde{\mathcal{L}}_B$ 
+17 return  $e, d, \rho$ 
+18
+19 Infer( $S, e, d, \rho$ )
+20 Cluster assignments  $C \leftarrow \emptyset$ 
+21 for  $x \in S$  do
+22    $\bar{v} \leftarrow A_p^T(e(x))$   $C \leftarrow$ 
+23    $C \cup \{\arg \min_{i \in [k]} \|\rho_i - \bar{v}\|^2\}$ 
+24 return Per-point cluster assignments  $C$ 
+
+```
+
+{5}------------------------------------------------
+
+term that elegantly combines all the parameters in the deep learning pipeline – for the encoder  $\mathbf{e}$ , the cluster centers  $\rho$  and the decoder  $\mathbf{d}$ .
+
+To see the relationship between the novel **DECLAM** loss compared to the traditional deep clustering loss in Eq. (8), let us assume that the decoder  $\mathbf{d} : \mathbb{R}^m \rightarrow \mathbb{R}^d$  is  $C_d$ -Lipschitz continuous. Then, considering the per-sample loss  $\tilde{\ell}$  in Eq. (8), and applying the triangle inequality and the AM–GM inequality, we can show that
+
+$$\begin{aligned}\tilde{\ell}(x, \mathbf{e}, \mathbf{d}, \rho) &= \|x - \mathbf{d}(\mathbf{A}_\rho^T(\mathbf{e}(x)))\|^2 \\ &\leq 2(\|x - \mathbf{d}(\mathbf{e}(x))\|^2 + \|\mathbf{d}(\mathbf{e}(x)) - \mathbf{d}(\mathbf{A}_\rho^T(\mathbf{e}(x)))\|^2) \\ &\leq 2(\|x - \mathbf{d}(\mathbf{e}(x))\|^2 + C_d^2 \|\mathbf{e}(x) - \mathbf{A}_\rho^T(\mathbf{e}(x))\|^2) \\ &= 2\mathcal{L}_r(x, \mathbf{e}, \mathbf{d}) + 2C_d^2 \ell_c(x, \mathbf{e}, \rho),\end{aligned}\tag{9}$$
+
+where the last inequality uses the Lipschitz continuity, and the last equality comes from the definition of the clustering loss in the latent space with the AM dynamics operator. Summing the above inequalities over  $x \in S$  gives us
+
+$$\mathcal{L}_r \leq \tilde{\mathcal{L}} \leq \gamma_1 \mathcal{L}_r + \gamma_2 \mathcal{L}_c\tag{10}$$
+
+where the upperbound of  $\tilde{\mathcal{L}}$  is (a scaled version of) the standard deep clustering objective of the weighted combination of the reconstruction loss  $\mathcal{L}_r$  and the clustering loss  $\mathcal{L}_c$  in Eq. (3).
+
+Alg. 1 shows the pseudo-code for **DECLAM**. It first pretrains encoder  $\mathbf{e}$  and decoder  $\mathbf{d}$ , and starts from  $k$  random prototypes  $\rho$ . The cluster assignment is done with  $T$  recursion of the AM attractor dynamics operator  $\mathbf{A}_\rho$  parameterized with the centers  $\rho = \{\rho_i, i \in [k]\}$ . The per-sample loss  $\tilde{\ell}$  of **DECLAM** (line 10) is added to the batch loss. We optimize for  $N$  epochs via gradient descent, with learning rates  $\{\epsilon_e, \epsilon_d, \epsilon_\rho\}$  for  $\mathbf{e}, \mathbf{d}, \rho$  respectively. Upon solving Eq. (8), we obtain a trained encoder and decoder, and memories in the latent space, and we can utilize them to obtain the final partition the data (see the **Infer** subroutine in Alg. 1).
+
+Our **DECLAM** deep clustering provides various advantages: (i) First, it does not involve any balancing hyperparameter  $\gamma$  since the loss involves all parameters in a single term in the per-sample loss  $\tilde{\ell}(x, \mathbf{e}, \mathbf{d}, \rho)$ . (ii) Second, the updates for all the parameters in the pipeline are more explicitly tied together with the  $\mathbf{d} \circ \mathbf{A}_\rho^T \circ \mathbf{e}$  composition in the  $\mathbf{d}(\mathbf{A}_\rho^T(\mathbf{e}(x)))$  term. *This ties the representation learning and clustering objectives more intricately.* (iii) Third, it continues to have all the advantages of traditional deep clustering, being end-to-end differentiable since all operators in the above composition are differentiable, and performing a discrete cluster center assignment with  $T$  recursions of the attractor dynamics operator  $\mathbf{A}_\rho$ . (iv) Forth, this deep clustering is completely architecture agnostic – we can select a problem dependent encoder and decoder (for example, convolutional or residual networks for images or fully-connected feed-forward networks for text or tabular data). (v) Fifth, it does not involve any additional entropy regularization based hyperparameters as with existing deep clustering algorithms.
+
+On a less technical level, Fig. 1 clearly highlights how the overall information flow in the deep clustering pipeline is simplified. *The AM plays a critical role in this pipeline with the ability to obtain the actual closest center  $\mathbf{A}_\rho^T(\mathbf{e}(x))$  in a differentiable manner.* It is also worth emphasizing that there are fundamental difference between how **DECLAM** uses AMs versus **CLAM**. In the latter, AM is utilized to act as a differentiable argmin solver for the  $k$ -means objective whereas in **DECLAM**, which involves representation learning, AM recursion actually has a more elaborate effect. The AM augmented encoder ( $\mathbf{A}_\rho^T \circ \mathbf{e}$ ) explicitly creates basins of attraction in the latent space, and moves/pushes the latent representations of the points into these basins, thereby explicitly inducing a clustered data distribution in the latent space. While the encoder is moving points into basins of attraction, the **DECLAM** loss tries to minimize the information loss in the latent representations by having the decoder reconstruct these relocated latent representations.
+
+## 5 EMPIRICAL EVALUATION
+
+**Dataset details.** To evaluate **DECLAM**, we conducted our experiments on eight standard benchmark datasets, including USPS<sup>1</sup> (Hull, 1994), Fashion-MNIST<sup>2</sup> (Xiao et al., 2017), CIFAR-10 and CIFAR-
+
+<sup>1</sup><https://www.kaggle.com/datasets/bistaamanga/uspss-dataset>
+
+<sup>2</sup><https://github.com/zalandoresearch/fashion-mnist>
+
+{6}------------------------------------------------
+
+100<sup>3</sup> (Krizhevsky, 2009), STL-10<sup>4</sup> (Coates et al., 2011), Caltech\_birds2010<sup>5</sup> (Welinder et al., 2010),  
+20-NG from sklearn<sup>6</sup> and Reuters-10k from TensorFlow datasets<sup>7</sup>. The later two are text datasets,  
+whereas the others are image datasets. For both text datasets, we calculate TFIDF (Sammut & Webb,  
+2010) features based on the 2000 most frequent words, following a similar approach as Oskouei  
+et al. (2023). However, we consider the original number of categories as the true number of clusters,  
+which is 46 for Reuters-10k and 20 for 20-NG. For Caltech\_birds2010, as there are images of various  
+shapes, we resize all images to (128, 128, 3) for uniformity and ease of implementation. Table 1  
+provides the statistics for the datasets used in our experiments.
+
+Table 1: Descriptions of various benchmark datasets, used in our experiments.
+
+| Dataset           | Short name | # Points | Shape         | # Classes | # Type |
+|-------------------|------------|----------|---------------|-----------|--------|
+| Fashion MNIST     | FM         | 60000    | (28, 28, 1)   | 10        | Image  |
+| CIFAR-10          | C-10       | 50000    | (32, 32, 3)   | 10        | Image  |
+| CIFAR-100         | C-100      | 50000    | (32, 32, 3)   | 100       | Image  |
+| USPS              | USPS       | 2007     | (16, 16, 1)   | 10        | Image  |
+| STL-10            | STL        | 5000     | (96, 96, 3)   | 10        | Image  |
+| Caltech_birds2010 | CBird      | 3000     | (128, 128, 3) | 200       | Image  |
+| Reuters-10k       | R-10k      | 11228    | 2000          | 46        | Text   |
+| 20-NG             | 20NG       | 18846    | 2000          | 20        | Text   |
+
+**Baseline methods.** We conduct a comparative analysis of **DECLAM** against established clustering  
+methods like  $k$ -means (Lloyd, 1982), agglomerative clustering (or Agglo.) (Müllner, 2011) and  
+**CLAM** (Saha et al., 2023) in the ambient space, and with DCEC (Guo et al., 2017b), DEKM (Guo  
+et al., 2021) and EDCWRN (or EDC) Oskouei et al. (2023) deep clustering methods in the latent  
+space. We evaluate  $k$ -means, agglomerative clustering, and **CLAM** in the ambient space (denoted as  
+NAE for No AE) and in the latent space obtained through a pretrained Convolutional Autoencoder  
+(CAE) as used in DCEC (Guo et al., 2017b). For DCEC and DEKM, we consider a ResNet-based  
+AE (RAE) (Wickramasinghe et al., 2021) along with their original CAE. For **DECLAM**, we extend our  
+exploration to include not only the CAE and RAE architectures but also EDCWRN-based (Oskouei  
+et al., 2023) Autoencoder (EAE) (originally proposed by Guo et al. (2017a)) to analyze its impact  
+on the algorithm. We also compare **DECLAM** with state-of-the-art SimCLR (Chen et al., 2020) based  
+(contrastive learning) SCAN (Van Gansbeke et al., 2020) and NNM (Dang et al., 2021) deep clustering  
+schemes. Detailed parameter setting of the networks are in Appendix A.2, while implementation  
+details are in Appendix A.3.
+
+**Evaluation of deep clustering.** A common metric to evaluate and benchmark deep clustering  
+algorithms is by computing the overlap between the obtained clusters in the latent space (thus,  
+partitions) and a semantic partitioning of the data (for example, using some ground-truth labels  
+of the data that were not used for solving Eq. (3)) with metrics such as the Normalized Mutual  
+Information (NMI) (Vinh et al., 2009). While this is a fair metric to compare methods on, *it is critical  
+to ensure that NMI (or any other label-dependent metric) is not utilized for hyperparameter selection*  
+since that is leaking supervision into the unsupervised task of deep clustering, making the overall  
+process a supervised learning pipeline. Unfortunately, for many of reported results, it is not clear how  
+hyperparameters are selected without being influenced at NMI (since they simply report results with  
+the highest NMI). Even for the sole purpose of evaluation, NMI like metrics might only tell us how  
+the learned clusters in the latent space match some semantic partitioning (often manual) of the data,  
+and do not provide any information regarding the reconstruction quality (and thus the information  
+loss in the latent space). Thus, it is easily possible to have high NMI with poor reconstruction loss,  
+which may not align with the primary goals of deep clustering. Existing literature typically report  
+NMI without explicitly discussing reconstruction loss.
+
+<sup>3</sup><https://www.cs.toronto.edu/~kriz/cifar.html>
+
+<sup>4</sup><https://cs.stanford.edu/~acoates/stl10/>
+
+<sup>5</sup>[https://www.tensorflow.org/datasets/catalog/caltech\\_birds2010](https://www.tensorflow.org/datasets/catalog/caltech_birds2010)
+
+<sup>6</sup>[https://scikit-learn.org/0.19/datasets/twenty\\_newsgroups.html](https://scikit-learn.org/0.19/datasets/twenty_newsgroups.html)
+
+<sup>7</sup>[https://www.tensorflow.org/api\\_docs/python/tf/keras/datasets/reuters/load\\_data](https://www.tensorflow.org/api_docs/python/tf/keras/datasets/reuters/load_data)
+
+{7}------------------------------------------------
+
+We believe that the hyperparameters should be selected based on unsupervised metrics – metrics that do not utilize any ground-truth label information to evaluate clustering quality – given the unsupervised nature of the deep clustering problem. Thus, we consider the strategy of optimizing for the Silhouette Coefficient (SC) (Rousseeuw, 1987) while keeping the reconstruction loss (RL) below some user-defined threshold. See Appendix A.1 for details on other metrics used.
+
+Table 2: Per-method best SC across all architectures (while RRL is within 10% of the respective pretrained AE loss), comparing **DC1AM** to baselines. Best for each dataset is in bold. See text for further details. *Higher SC is better, but lower RRL is better*. The top set of rows are vision datasets, and the bottom set are text datasets. A ‘-’ indicates not applicable (NA); e.g., DCEC, DEKM, SCAN, NNM work only on image datasets. Further, we report SCAN and NNM results only on C-10, C-100 and STL, since these are the only datasets for which pretrained contrastive encoders are available. **x<sup>▼</sup>** indicates negative RRL which means the RL of the method is x% less than the pretrained AE loss.
+
+| Dataset | SC              |        |              |              |               |       |       |       |              | RRL                    |                         |                        |                         |
+|---------|-----------------|--------|--------------|--------------|---------------|-------|-------|-------|--------------|------------------------|-------------------------|------------------------|-------------------------|
+|         | <i>k</i> -means | Agglo. | <b>DC1AM</b> | DCEC         | DEKM          | EDC   | SCAN  | NNM   | <b>DC1AM</b> | DCEC                   | DEKM                    | EDC                    | <b>DC1AM</b>            |
+| FM      | 0.257           | 0.201  | 0.279        | <b>0.923</b> | <b>0.260</b>  | 0.483 | -     | -     | <b>0.970</b> | 9.8                    | <b>13.9<sup>▼</sup></b> | 10                     | 1.6 <sup>▼</sup>        |
+| C-10    | 0.084           | 0.372  | 0.208        | 0.787        | <b>0.116</b>  | 0.511 | 0.541 | 0.587 | <b>0.863</b> | 9.6                    | 8.6                     | 10                     | <b>19.5<sup>▼</sup></b> |
+| C-100   | 0.015           | 0.149  | 0.053        | <b>0.470</b> | <b>-0.007</b> | 0.311 | 0.321 | 0.358 | <b>0.598</b> | 7.5                    | <b>34.3<sup>▼</sup></b> | 10                     | <b>1.4<sup>▼</sup></b>  |
+| USPS    | 0.195           | 0.158  | 0.194        | <b>0.935</b> | 0.217         | 0.461 | -     | -     | 0.891        | <b>5.3<sup>▼</sup></b> | 4.3                     | 0.0                    | 8.7                     |
+| STL     | 0.079           | 0.270  | 0.108        | <b>0.259</b> | <b>0.082</b>  | 0.411 | 0.552 | 0.540 | <b>0.891</b> | 9.2                    | 0.6                     | <b>4.9<sup>▼</sup></b> | 10                      |
+| CBird   | -0.019          | 0.094  | -0.026       | 0.311        | -0.032        | 0.171 | -     | -     | <b>0.448</b> | 10                     | <b>0.0</b>              | 10                     | 9.1                     |
+| R-10k   | -0.010          | 0.114  | -0.002       | -            | -             | 0.023 | -     | -     | <b>0.564</b> | -                      | -                       | 10                     | <b>10</b>               |
+| 20NG    | -0.021          | 0.114  | -0.008       | -            | -             | 0.101 | -     | -     | <b>0.197</b> | -                      | -                       | 10                     | <b>10</b>               |
+
+Table 3: Per-method best RRL across all architectures (while SC is within 10% of the best SC of the method) comparing **DC1AM** to baselines. Best for each dataset is in bold. See text for further details. *Higher SC is better, but lower RRL is better*. **x<sup>▼</sup>** indicates negative RRL which means the RL of the method is x% less than the pretrained AE loss.
+
+| Dataset | SC              |        |              |              |              |       |       |       |              | RRL                     |      |                       |                         |
+|---------|-----------------|--------|--------------|--------------|--------------|-------|-------|-------|--------------|-------------------------|------|-----------------------|-------------------------|
+|         | <i>k</i> -means | Agglo. | <b>DC1AM</b> | DCEC         | DEKM         | EDC   | SCAN  | NNM   | <b>DC1AM</b> | DCEC                    | DEKM | EDC                   | <b>DC1AM</b>            |
+| FM      | 0.257           | 0.201  | 0.279        | <b>0.898</b> | <b>0.785</b> | 0.521 | -     | -     | <b>0.922</b> | <b>9.8<sup>▼</sup></b>  | 321  | 143                   | <b>42.2</b>             |
+| C-10    | 0.084           | 0.372  | 0.208        | <b>0.786</b> | <b>0.622</b> | 0.541 | 0.541 | 0.587 | <b>0.809</b> | <b>0.9<sup>▼</sup></b>  | 180  | 74.3                  | <b>20.4<sup>▼</sup></b> |
+| C-100   | 0.015           | 0.149  | 0.053        | <b>0.572</b> | <b>0.447</b> | 0.337 | 0.321 | 0.358 | <b>0.921</b> | <b>18.6</b>             | 870  | 33.3                  | <b>27.5</b>             |
+| USPS    | 0.195           | 0.158  | 0.194        | <b>0.929</b> | <b>0.843</b> | 0.491 | -     | -     | <b>0.914</b> | <b>26.3<sup>▼</sup></b> | 2326 | 40                    | 8.7                     |
+| STL     | 0.079           | 0.270  | 0.108        | <b>0.812</b> | <b>0.804</b> | 0.431 | 0.552 | 0.540 | <b>0.923</b> | <b>79.2</b>             | 234  | 155                   | <b>27.7</b>             |
+| CBird   | -0.019          | 0.094  | -0.026       | 0.282        | 0.018        | 0.188 | -     | -     | <b>0.413</b> | 286                     | 1036 | 102                   | <b>1.8</b>              |
+| R-10k   | -0.010          | 0.114  | -0.002       | -            | -            | 0.035 | -     | -     | <b>0.673</b> | -                       | -    | <b>60</b>             | 120                     |
+| 20NG    | -0.021          | 0.114  | -0.008       | -            | -            | 0.099 | -     | -     | <b>0.287</b> | -                       | -    | <b>25<sup>▼</sup></b> | 50                      |
+
+**Q1: How does DC1AM compare against baselines?** We present the best Silhouette Coefficient or SC achieved (while constraining the reconstruction loss or RL to be within 10% of the pretrained AE loss) by **DC1AM**, and the baselines for all 8 datasets in Table 2. As it is hard to compare the raw RL numbers if the base AE is different for different methods, we define the relative RL (RRL) metric as follows:
+
+$$RRL = \frac{RL - RL_p}{RL_p} \quad (11)$$
+
+where  $RL_p$  is the pretrained/base RL. We report the best SC per method with  $RRL \leq 10\%$ . From Table 2, we see across both image and text datasets, **DC1AM** consistently outperforms traditional and deep clustering baselines in terms of SC while keeping RRL relatively low. To provide a comprehensive view alongside SC, we also present the best RRL (while constraining the SC to be within 10% of the best/peak SC of the method) in Table 3 and visualize both SC and RL in Fig. 2 for all of the six image datasets. These results demonstrate that **DC1AM** excels not only in achieving the best SC but also in minimizing RL compared to the baselines. Note that SCAN and NNM do not have a reconstruction loss term as they work on the pre-trained (pretext) model by SimCLR (Chen et al., 2020) and utilize only the encoder (discarding the decoder) for clustering purpose. For additional insights, in Appendix B.1, we present the best SC (while keeping RL within 10% of the pretrained AE loss) and its corresponding NMI, RL, and cluster sizes and balance obtained by all schemes in Table 8. Simultaneously, Table 9 displays the best RL (while keeping SC within 10% of the best SC of the method) and its associated SC, NMI, and cluster sizes. We also present Table 10 which
+
+{8}------------------------------------------------
+
+![Figure 2: Six scatter plots (a-f) showing Reconstruction Loss vs. 1-SC for six datasets: (a) F-MNIST, (b) CIFAR-10, (c) CIFAR-100, (d) USPS, (e) STL-10, and (f) CBird. Each plot compares various methods (Kmeans, Aggl, CAM, DCEC, DEKM, EDCWRN, DCIAM) and architectures (NAE, CAE, RAE, EAE). DCIAM consistently shows lower reconstruction loss and higher 1-SC across all datasets.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 2: Six scatter plots (a-f) showing Reconstruction Loss vs. 1-SC for six datasets: (a) F-MNIST, (b) CIFAR-10, (c) CIFAR-100, (d) USPS, (e) STL-10, and (f) CBird. Each plot compares various methods (Kmeans, Aggl, CAM, DCEC, DEKM, EDCWRN, DCIAM) and architectures (NAE, CAE, RAE, EAE). DCIAM consistently shows lower reconstruction loss and higher 1-SC across all datasets.
+
+Figure 2: Reconstruction loss and clustering quality (1-SC) for all six image datasets. Different markers stand for various AE architectures, and different colors signify distinct methods. *Lower is better for both axes*, since we plot 1-SC on the y-axis.
+
+displays the best NMI and its associated SC, RL, and cluster sizes. **DCIAM** consistently outperforms traditional and deep clustering baselines in terms of all SC, RL and NMI metrics.
+
+Table 4: SC for image datasets, comparing **DCIAM** to baselines with different encoder/decoder architectures. Best for each dataset is in bold. See text for details. *Higher is better*.
+
+| Dataset | Convolutional AE |              |              | ResNet AE    |              |              | EAE   |              |
+|---------|------------------|--------------|--------------|--------------|--------------|--------------|-------|--------------|
+|         | DCEC             | DEKM         | <b>DCIAM</b> | DCEC         | DEKM         | <b>DCIAM</b> | EDC   | <b>DCIAM</b> |
+| FM      | <b>0.923</b>     | <b>0.785</b> | <b>0.970</b> | <b>0.824</b> | <b>0.742</b> | <b>0.922</b> | 0.521 | <b>0.715</b> |
+| C-10    | 0.787            | <b>0.622</b> | <b>0.863</b> | 0.667        | <b>0.461</b> | <b>0.697</b> | 0.541 | <b>0.731</b> |
+| C-100   | <b>0.572</b>     | <b>0.047</b> | <b>0.598</b> | <b>0.557</b> | <b>0.036</b> | <b>0.921</b> | 0.337 | <b>0.636</b> |
+| USPS    | <b>0.935</b>     | <b>0.882</b> | <b>0.914</b> | <b>0.909</b> | <b>0.843</b> | <b>0.914</b> | 0.491 | <b>0.911</b> |
+| STL     | <b>0.766</b>     | <b>0.745</b> | <b>0.919</b> | <b>0.812</b> | <b>0.804</b> | <b>0.865</b> | 0.431 | <b>0.923</b> |
+| CBird   | 0.386            | 0.018        | <b>0.448</b> | 0.282        | 0.035        | <b>0.377</b> | 0.188 | <b>0.446</b> |
+
+**Q2: Is DCIAM’s improvement agnostic to selected architecture?** Table 4 shows that the performance improvements achieved by **DCIAM** is independent of the Autoencoder (AE) architecture choice. **DCIAM** with all three architectures – CAE, EAE, and RAE – consistently outperforms their respective baselines, DCEC, DEKM and EDCWRN with similar architecture. That is, within each type of AE, **DCIAM** has better results than DCEC and DEKM, or EDC. This not only underscores the superiority of the internal algorithm of **DCIAM** over the corresponding baselines but also suggests the potential for further improvement with some more advanced AE architecture.
+
+**Further results.** We qualitatively evaluate the clusters found by **DCIAM** in Fig. 3 for Fashion MNIST (10 clusters) and Caltech Birds (10 out of 200 clusters), visualizing the learned memories (or cluster centers), and the corresponding closest and farthest cluster members (as measured in the latent space) from the centers. In most cases, the memories form an average image that match the closest images well. The farthest cluster members still appear similar to their memories in most cases, but do start changing significantly in some cases: (i) In the 2nd row (block 2) for FMNIST an image that looks like a pant is grouped with dresses though the overall image shape is still similar. (ii) In the 5th row
+
+{9}------------------------------------------------
+
+(block 1) for CBird, the memory and the closest image are very similar but the farthest image appears significantly different.
+
+![Figure 3: Visualizing DCLAM clusters for (a) Fashion MNIST and (b) Caltech Birds. (a) shows a 5x3 grid of red-tinted images of clothing items like shirts, pants, and shoes. The first column shows the learned memory for each row, the second shows the closest image, and the third shows the farthest image. (b) shows a similar 5x3 grid of images of birds, also with memory, closest, and farthest columns.](349ca0a6a9c2e2651a4deeeaf8be6da1_img.jpg)
+
+Figure 3: Visualizing DCLAM clusters for (a) Fashion MNIST and (b) Caltech Birds. (a) shows a 5x3 grid of red-tinted images of clothing items like shirts, pants, and shoes. The first column shows the learned memory for each row, the second shows the closest image, and the third shows the farthest image. (b) shows a similar 5x3 grid of images of birds, also with memory, closest, and farthest columns.
+
+Figure 3: Visualizing **DCLAM** clusters for (a) Fashion MNIST and (b) Caltech Birds, with the learned memories (left column in each block) and the corresponding closest (center column in block) and farthest (right column in block) images within their clusters.
+
+In addition to the above, we discuss our thorough empirical evaluation in Appendix B, reporting various clustering metrics in Appendix B.1, and visualizing the evolution of the latent memories (cluster centers) in Appendix B.2.
+
+## 6 LIMITATIONS AND FUTURE WORK
+
+In this paper, we introduce a fresh integration of associative memories in a deep neural network module to create the innovative deep clustering algorithms **DCLAM** that leverages the AM attractor dynamics. Our findings demonstrate that **DCLAM** significantly surpasses standard prototype-based clustering and existing deep clustering methods. However, it is worth noting that **DCLAM** is still sensitive to hyperparameters and requires pretraining to avoid latent space collapse. Inspired by **DCLAM**’s outstanding performance, our future work aims to extend it to multimodal deep clustering. We plan to explore new energy functions and update dynamics to enhance spectral and semantic clustering. [Having flexibility to add other encoder/decoder frameworks with DCLAM, we aim to explore transformer-based AE approaches in the future.](#) Additionally, leveraging **DCLAM**’s flexibility, we intend to automate the estimation of the number of clusters directly from the data.
+
+## REPRODUCIBILITY STATEMENT
+
+We have included details of all the hyperparameter settings and other implementation details in Section 5 and in Appendix A. Our code will also be made available after the review period to facilitate reproducibility.
+
+## ETHICS
+
+This paper studies the core technical problem of unsupervised deep clustering. We do not anticipate any obvious issues of concern that need to be highlighted.
+
+## REFERENCES
+
+Martín Abadi, Paul Barham, Jianmin Chen, Zhifeng Chen, Andy Davis, Jeffrey Dean, Matthieu Devin, Sanjay Ghemawat, Geoffrey Irving, Michael Isard, et al. {TensorFlow}: a system for {Large-Scale} machine learning. In *12th USENIX symposium on operating systems design and implementation (OSDI 16)*, pp. 265–283, 2016.
+
+ Rest of paper (reference and Appendix) is removed.

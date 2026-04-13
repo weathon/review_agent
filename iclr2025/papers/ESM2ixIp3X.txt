@@ -1,0 +1,383 @@
+
+
+{0}------------------------------------------------
+
+# REVISITING AND EXTENDING SIMILARITY-BASED METRICS IN SUMMARY FACTUAL CONSISTENCY DETECTION
+
+**Anonymous authors**
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Cutting-edge abstractive summarisers generate fluent summaries, but the factuality of the generated text is not guaranteed. Early summary factuality evaluation metrics are usually based on n-gram overlap and embedding similarity, but are reported fail to align with human annotations. Therefore, many techniques for detecting factual inconsistencies build pipelines around natural language inference (NLI) or question-answering (QA) models with additional supervised learning steps. In this paper, we revisit similarity-based metrics, showing that this failure stems from the use of reference texts for comparison and the granularity of the comparison. We propose a new zero-shot factuality evaluation metric, SentenceBERT Score (SBERTScore), which compares sentences between the summary and the source document. It outperforms widely-used word-word metrics including BERTScore and can compete with existing NLI and QA-based factuality metrics on the benchmark without needing any fine-tuning. Our experiments indicate that each technique has different strengths, with SBERTScore particularly effective at identifying correct summaries. Additionally, we demonstrate how a combination of techniques is more effective at detecting various types of error.<sup>1</sup>
+
+## 1 INTRODUCTION
+
+The rapid development of natural language generation techniques has created new challenges for evaluation. For instance, in recent years, state-of-the-art abstractive summarisation models have set new records on benchmarks many times (Zhang et al., 2020; Lewis et al., 2019; Zhao et al., 2022). However, investigation (Maynez et al., 2020; Pagnoni et al., 2021; Durmus et al., 2020; Koto et al., 2022) shows that these models are prone to generate factually inconsistent summaries. Evaluation metrics, such as ROUGE (Lin, 2004), have not undergone the same pace of improvement, and therefore fail to reflect this issue. The first step towards improving summary factuality is to develop an evaluation metric to assess summary factual consistency conditioned on the given source document.
+
+Recent factuality metrics mainly fall into two types. 1) NLI-based metrics (Kryscinski et al., 2020; Laban et al., 2022) predict the probability that the given summary is entailed by the source document. 2) QA-based metrics (Durmus et al., 2020; Fabbri et al., 2021b; Scialom et al., 2021) simulate the process of a human performing reading comprehension tasks and compute the factuality score based on how many questions generated from the summary can be correctly answered from the given source document. These two paradigms need to train their models on a large-scale dataset, but existing factuality datasets are usually insufficient.
+
+Similarity-based metrics are proposed to handle synonyms that cause n-gram-based methods to fail (Zhang et al., 2019). However, they are not favoured by most previous work as they do not improve the performance of reflecting summary factuality (Maynez et al., 2020; Pagnoni et al., 2021; Durmus et al., 2020). In this work, our empirical experiments validate that the failure of similarity-based metrics are from unfair experimental settings. NLI and QA-based metrics compare generated summaries against source document while similarity-based metrics take a reference summary as input.
+
+<sup>1</sup>All the code will be made available upon acceptance.
+
+{1}------------------------------------------------
+
+We show that BERTScore (Zhang et al., 2019) can provide useful factual consistency evaluation by comparing generated summaries to sources.
+
+In addition, we extend the similarity-based metric to the sentence level, as comparing individual words offers very limited insights into factual consistency, and factually consistent sentences can be constructed in entirely different ways. The proposed method, Sentence-BERT Score (SBERTScore), computes cosine similarity between sentence embeddings (Reimers & Gurevych, 2019). Like BERTScore, it is computationally-efficient and can be applied out-of-the-box with no dataset-specific training, but also takes the composition and order of words into account, so can better represent the semantics of the complete sentence compared to the contextualised word embeddings used by BERTScore. We conduct a case study to show the benefits of using sentence embeddings. Comparison on a factuality benchmark (Tang et al., 2023) shows that SBERTScore outperforms BERTScore in overall performance, but BERTScore can work better in the extreme case.
+
+We also compare BERTScore and SBERTScore against recent NLI and QA-based factuality metrics. Similarity-based metrics do not require any additional training steps as they benefit from high-quality general-purpose pretrained embeddings, and has much less computational complexity at inference time. Results show that both similarity-based metrics can outperform NLI-based metrics in the same zero-shot setting, and even work better than some metrics specifically trained for factuality evaluation. Importantly, the design of BERTScore and SBERTScore avoids truncating long source documents, instead selecting an appropriate granularity to segment the sources before feeding them into the model. Further analysis of agreement between metrics, as well as the types of errors (Tang et al., 2023) they detect, indicates that SBERTScore can capture different kinds of errors than NLI and QA-based methods. We show that a simple combination of metrics can outperform the individual base metrics, which suggests that combining diverse metrics may be a promising direction for future research.
+
+Our contributions are three-fold:
+
+- We conduct an empirical evaluation, which reveals that the previous underperformance of metrics such as BERTScore is due to the use of reference summaries. Zero-shot similarity-based metrics are competitive with recent factuality metrics that require additional training.
+- We develop the token-level similarity-based metric BERTScore into sentence-level SBERTScore and improve the performance of detecting factual inconsistency.
+- We show that different evaluation metrics are necessary to capture different types of error, and introduce a simple combination that outperforms the state of the art.
+
+## 2 RELATED WORK
+
+### 2.1 NLI-BASED FACTUALITY METRICS
+
+The NLI task is similar to predicting factual consistency between source document and generated summary. Hence, previous research (Barrantes et al., 2020; Falke et al., 2019) attempted to transfer NLI models to factual consistency detection. However, a subsequent study (Kryscinski et al., 2020) showed that those NLI models are only as good as random guessing. Therefore, a series of work (Kryscinski et al., 2020; Laban et al., 2022) made efforts to build up datasets for training factuality metrics. Although the dataset can be synthesised using entity swapping to save the effort of collecting human annotations, the error distribution is not the same as real summaries (Pagnoni et al., 2021). Some recent work (Utama et al., 2022; Soleimani et al., 2023) applied language generation models to augment the quality of training set and received better performance.
+
+Another strand of research into NLI-based factuality prediction focused on the granularity of the input text. Early works (Barrantes et al., 2020; Falke et al., 2019; Kryscinski et al., 2020) concatenate the system summary with the whole source document as the input. Firstly, this often requires truncating the source document to fit the length limit, which can lead to underestimating factuality due to the information loss. Secondly, the NLI models applied in their work are trained on much shorter sentence pairs. Directly applying these models on long text such as source documents does not align with their training data distribution. Following work (Goyal & Durrett, 2020; Laban et al., 2022; Schuster et al., 2022) investigated the effect of performing inference at different levels, including word, dependency, sentence, and paragraph, revealing that segmenting source documents
+
+{2}------------------------------------------------
+
+into sentences and dependency arcs is more suitable for current NLI models. This inspired us to explore the suitability of different input text granularities for similarity-based evaluation metrics, which have not been investigated in past work.
+
+### 2.2 QA-BASED FACTUALITY METRICS
+
+QA-based metrics (Chen et al., 2018; Wang et al., 2020; Durmus et al., 2020; Fabbri et al., 2021b) assemble multiple modules with different functions. An answer selection module first selects a set of answers from the summary, usually including named entities and noun phrase chunks. A question generation module conditioned upon the selected answers is applied on the summary as context to raise questions. The QA component answers the generated questions conditioned on the given source document. The final score is then computed on the overlapping extent of the two answer sets. This paradigm provides an interpretable way to assess factuality by showing questions with inconsistent answers. However, since several text generation models are involved in the evaluation process, this methodology usually requires a large training dataset and is time-consuming at inference time. We were therefore motivated to investigate alternatives, as factuality datasets are usually small and domain-specific, and the evaluation process is expected to be prompt.
+
+### 2.3 SIMILARITY-BASED FACTUALITY METRICS
+
+BERTScore (Zhang et al., 2019) is used as a stronger baseline than ROUGE (Lin, 2004) in factual consistency detection, but it does not correlate well with human judgements (Pagnoni et al., 2021). Bao et al. (2023) attempted to feed source document to BERTScore, but they did not compare its performance against metrics using other methodologies. They also tried to extend BERTScore to sentence-level without using sentence embeddings, leading to unsuccessful results. Koto et al. (2022) adapted BERTScore by averaging the three highest token scores and showed that it can detect the information overlap of system summaries and source documents, but there was still a large performance gap with other metrics (Fabbri et al., 2021b). In this work, we successfully extend similarity-based metric to sentence-level and reveal that its zero-shot setting is competitive to other metrics specifically trained for factual consistency detection.
+
+## 3 SENTENCE-BERT SCORE
+
+BERTScore Zhang et al. (2019) computes similarity at the word-level by comparing the embeddings of words in the generated text with their closest match in the source or reference text. However, factual consistency should be judged at a higher level, as sentences containing similar words can express different meanings. Therefore, we propose the sentence-level evaluation metric, Sentence-BERT Score (SBERTScore), utilising sentence transformers (Reimers & Gurevych, 2019) to capture the meaning of the complete sentence. The *precision* and *recall* of our proposed metric are defined as follows.  $S_{(D,S)}$  represent the sentence set of the given source document and summary respectively, and  $s_{(i,j)}$  are the sentences in the sets.
+
+$$SBERT_{prec} = \frac{1}{|S_S|} \sum_{s_i \in S_S} \max_{s_j \in S_D} \text{cossim}(s_i, s_j) \quad (1)$$
+
+$$SBERT_{recall} = \frac{1}{|S_D|} \sum_{s_j \in S_D} \max_{s_i \in S_S} \text{cossim}(s_i, s_j) \quad (2)$$
+
+In practice, sentence transformers can generate embeddings for any texts shorter than 512 tokens, which need not be single, complete sentences. Therefore, we investigate three different granularities, and test them in Section 5.3 to find the most suitable setup for SBERTScore:
+
+**Sent** Segment the input text into sentences.
+
+**Doc** Take the whole text as input and truncate the part that exceeds the length limit.
+
+{3}------------------------------------------------
+
+**Mean** Segment the input text into sentences and take the average sentence embedding to represent the whole input.
+
+Regarding *precision*, *recall* and *F1 measure*: precision is better suited to capturing factuality because it reflects the extent to which summary sentences are supported by source sentences. We test this hypothesis in the following Section 5.1.
+
+### 3.1 COMPUTATIONAL EFFICIENCY
+
+SBERTScore applies an all-purpose embedding model as the backbone, which provides reliable sentence embeddings that can be used out-of-box without the cost of additional training, in contrast to other metrics based on NLI or QA. SBERTScore also has advantages at inference time. We denote the number of sentences in the system summary and source document as  $N$  and  $M$  respectively. The majority of inference time is spent on calling the backbone model to process the input sentences. NLI-based metrics need to take each sentence pair once, therefore the number of inputs that the backbone model processes is  $\mathcal{O}(NM)$ . SBERTScore uses a similar backbone but only needs to compute the embedding once for each sentence, so the complexity is  $\mathcal{O}(N + M)$ . The runtime of QA-based metrics is much greater than the other two as multiple models are involved in question generation and answering, thus has the lowest efficiency. We randomly sampled 1000 pieces of data from the benchmark, and test the runtime of QuestEval (Scialom et al., 2021), SummaC<sub>(ZS, Conv)</sub> (Laban et al., 2022), BERTScore (Zhang et al., 2019) and SBERTScore on Intel(R) Core(TM) i9-10900X CPU @ 3.70GHz with NVIDIA A5000. Results in Appendix A show that SBERTScore only comes after BERTScore in processing speed, and is 3 times faster than the rival NLI-based method SummaC<sub>(ZS, Conv)</sub> and 30 times faster than the QA-based metric QuestEval.
+
+## 4 EXPERIMENTAL SETTINGS
+
+### 4.1 DATASETS
+
+To evaluate our proposed factuality metric against alternatives, we use the benchmark built by Tang et al. (Tang et al., 2023), which consists of summaries and human annotations sampled from nine existing factuality datasets, including XSumFaith (XSF) (Maynez et al., 2020), Polytope (Huang et al., 2020), FactCC (Kryscinski et al., 2020), SummEval (Fabbri et al., 2021a), FRANK (Pagnoni et al., 2021), QAGS (Wang et al., 2020), CLIFF (Cao & Wang, 2021), Goyal 21' (Goyal & Durrett, 2021), and XENT (Cao et al., 2021). The dataset characteristics are shown in Table 1. All
+
+| Dataset | Annotator Number | Size | Source Length | Summary Length |
+|-|-|-|-|-|
+| XSF | 3 | 2353 | 505.0 | 28.1 |
+| Polytope | 3 | 1268 | 691.5 | 83.1 |
+| FactCC | 2 | 1434 | 728.4 | 21.8 |
+| SummEval | 8 | 1698 | 453.7 | 79.2 |
+| FRANK | 3 | 1393 | 692.1 | 67.5 |
+| QAGS | 3 | 474 | 414.2 | 45.9 |
+| CLIFF | 2 | 600 | 576.9 | 45.8 |
+| Goyal' 21 | 2 | 100 | 504.3 | 29.9 |
+| XENT | 5 | 696 | 436.6 | 32.9 |
+| Average | 3.4 | 1112.8 | 572.8 | 50.4 |
+
+Table 1: Dataset characteristics in the benchmark. Source/Summary Length refer to the number of tokens counted based on the results of Roberta-large tokenizer respectively(Liu et al., 2019).
+
+source documents are English news articles, originally from the validation and test set of two news summarisation benchmarks, CNN/DM (See et al., 2017) and XSum (Narayan et al., 2018). Corresponding summaries were generated by a range of abstractive summarisers, including BART (Lewis et al., 2019), PEGASUS (Zhang et al., 2020), and BERTSumAbs (Liu, 2019). We remove data from CNN/DM in Goyal 21', as its validation set is extremely imbalanced (only 1 consistent example in the validation set), which impairs the classification threshold selection.
+
+{4}------------------------------------------------
+
+### 4.2 PERFORMANCE EVALUATION
+
+Following previous work (Pagnoni et al., 2021; Tang et al., 2023; Laban et al., 2022; Fabbri et al., 2021b; Kryscinski et al., 2020), we select a threshold for each metric using the validation set and report their balanced accuracy and correlations to human annotation. Balanced accuracy is defined as:
+
+$$\text{BalancedAcc} = \frac{1}{2} \left( \frac{TP}{TP + FN} + \frac{TN}{TN + FP} \right),$$
+
+where  $TP$ ,  $TN$ ,  $FP$ , and  $FN$  refer to the number of true positives, true negatives, false positives, and false negatives, respectively. In addition, we report Area Under Curve of Receiver Operating Characteristic (ROC-AUC) (Fawcett, 2006), which does not require a threshold to reflect the metrics’ ability to discriminate consistent and inconsistent summaries. Results’ significance is computed via t-test.
+
+### 4.3 EVALUATION METRICS FOR COMPARISON
+
+This section introduces factuality metrics studied for comparison.
+
+**QAFactEval** Fabbri et al. (2021b) conducted a comprehensive evaluation of the components of QA-based metrics. They aggregated more advanced models into a single system and optimised a pipeline for computing consistency scores.
+
+**QuestEval** Scialom et al. (2021) proposed a QA-based framework to compute consistency scores for given text pairs. They first select an answer set from the candidate text, then generate questions using the other text as input with conditions from the answer set. The QA module answers the questions and the overlap between the two answer sets is counted to obtain precision and recall. They use F1 measure as the final factual consistency score.
+
+**DAE** Goyal & Durrett (2020) extract dependencies from given texts using dependency parsing. They train a model to predict entailment at the dependency-level. The final score is the average entailment score over all dependency arcs in the given source and summary.
+
+**SummaC<sub>{ZS, Conv}</sub>** Laban et al. (2022) train a sentence-level NLI model and compute the entailment scores for all pairs of sentences from the source document and the summary. **ZS** stands for zero-shot, where the final entailment score is the average of the maximum entailment score for each sentence in the summary. **Conv** is a variant with an extra learned convolutional layer that aggregates the entailment score matrix to a final score.
+
+**ROUGE-{1, 2, L}** Lin (2004) propose an evaluation metric by counting the overlapping words or n-grams between the given reference and candidate text pairs.
+
+**BERTScore** Zhang et al. (2019) report the average cosine similarity of the matched word embeddings provided by BERT Devlin et al. (2018) or other related models.
+
+FactCC, SummaC<sub>{ZS, Conv}</sub>, DAE are NLI-based metrics, and QuestEval, QAFactEval are QA-based metrics. To have a fair comparison, we use the pretrained RoBERTa-large Liu et al. (2019) as the backbone for BERTScore and all-roberta-large-v1 Reimers & Gurevych (2019) for SBERTScore. The two checkpoints have identical numbers of layers, and the only difference is that they are trained for different text embeddings.
+
+## 5 EXPERIMENTS AND RESULTS
+
+In this section, we first investigate the suitability of different settings for similarity-based metrics. We also look into a case study to better understand the metrics’ behaviour when processing negation and neutral sentences. Then we test metric performance on the benchmark. The last subsection reports the error analysis and agreement between different factuality metrics and demonstrates the benefit of metric combination.
+
+{5}------------------------------------------------
+
+### 5.1 COMPARISON OF PRECISION, RECALL, AND F1
+
+For similarity-based metrics, we compare *precision*, *recall*, and *F1 measure* to select the most informative way to measure the overlap between tokens or sentences in the source and summary. From the definition (Equation 1), *precision* relates better to the accuracy of the information included in the summary, while *recall* (Equation 2) reflects how completely the summary covers the source document. Table 2 supports our hypothesis that *precision* can assess generated summaries more accurately from the perspective of factuality. Therefore, we report *precision* of BERTScore and SBERTScore in the following sections.
+
+| Metric | Precision | Recall | F1 |
+|-|-|-|-|
+| BERTScore | 0.759 | 0.627 | 0.710 |
+| SBERTScore | <b>0.779</b> | 0.644 | 0.703 |
+
+Table 2: Average balanced accuracy on the benchmark using *precision*, *recall*, and *F1 measure*. The highest result is in **bold**, which is significantly higher than the second best result with  $p < 0.05$ .
+
+### 5.2 COMPARISON TEXT SELECTION
+
+We investigate the effect of taking (source, summary) and (reference, summary) as input to n-gram matching and similarity-based metrics. Table 3 shows that the choice of comparison text makes a huge difference to the same evaluation metric. The highest results on (reference, summary) pairs are only as good as a random guess, while the performance on (source, summary) pairs is greatly improved. References may be unsuitable since they carry less information than the source document, and often contain extrinsic knowledge aggregated by human writers (Maynez et al., 2020), especially in XSum (Narayan et al., 2018).
+
+| Metric | Reference | Source |
+|-|-|-|
+| Rouge 1 | 0.491 | 0.638 |
+| Rouge 2 | 0.318 | 0.706 |
+| Rouge L | 0.491 | 0.674 |
+| BERTScore | 0.500 | 0.759 |
+| SBERTScore | 0.499 | <b>0.779</b> |
+
+Table 3: Average balanced accuracy computed on different comparison texts on the benchmark. The highest result is in **bold**. All results in the source column are significantly higher than their corresponding results in the upper bracket with  $p < 0.05$ .
+
+### 5.3 TEXT GRANULARITY SELECTION
+
+As performance can vary based on how the input text is segmented and processed before being fed into the sentence-transformer, we test the settings mentioned above in different combinations to build up a recommendation for using SBERTScore. For BERTScore, we only test word level embeddings since it has been reported that BERT does not perform well in representing higher level text embeddings (Reimers & Gurevych, 2019). For SBERTScore, we additionally test word level input to better understand the contribution of granularity to the improvement.
+
+SBERTScore on sentence-sentence level achieves the highest score in Table 4. It also outperforms BERTScore on the same word-word level similarity, indicating that the improvement is brought by both the architecture and the appropriate text granularity. For document-level, the performance drops greatly when it is applied on the source document, as 45.76% of the source documents are truncated. Inputting the summary at document level has a much smaller effect as the summary length is usually much shorter than the length limit. Segmenting the source documents at the right granularity can avoid the information loss brought by the length limit while producing more suitable embeddings for judging factuality.
+
+A simplification to SBERTScore is to compute the mean sentence embedding for an input document, avoiding the need to search for the maximum similarity while still processing sentences individually
+
+{6}------------------------------------------------
+
+| Model | Granularity | Balanced Accuracy |
+|-|-|-|
+| BERTScore | Word-Word | 0.759 |
+| SBERTScore | Word-Word | 0.767 |
+|  | Sent-Sent | <b>0.779</b> |
+|  | Doc-Sent | 0.576 |
+|  | Sent-Doc | 0.746 |
+|  | Doc-Doc | 0.684 |
+|  | Mean-Sent | 0.602 |
+|  | Sent-Mean | 0.565 |
+|  | Mean-Mean | 0.512 |
+
+Table 4: Balanced accuracy with different text granularities as input. The highest balanced accuracy is highlighted in **bold**, which is significantly higher than the second best result with  $p < 0.05$ .
+
+with SBERT. In Table 4, we observe that averaging either source or summary will lead to worse balanced accuracy, which justifies the sentence granularity proposed in Section 3.
+
+### 5.4 CASE STUDY: NEGATION
+
+BERTScore is reported to struggle at handling negation accurately (Leiter et al., 2022). Here, we present a case study to illustrate the performance of SBERTScore when processing negation. Consider the four examples sentences below:
+
+- $S_1$  I like rainy days because they make me feel relaxed  
+ $S_2$  I don't like rainy days because they don't make me feel relaxed.  
+ $S_3$  I enjoy rainy days because they make me feel calm.  
+ $S_4$  I enjoy listening to music at rainy days.
+
+Table 5 shows the BERTScores and SBERTScores obtained by comparing the given sentence pairs. BERTScore fails to identify the negation in  $S_2$  and assigns a high score despite its inconsistency with  $S_1$ . SBERTScore does better since it works on the sentence-level where negation could have a larger influence. However, the comparison between SBERTScores of  $\langle S_1, S_2 \rangle$  and  $\langle S_1, S_4 \rangle$  indicates that it is not sensitive enough to distinguish between negation and neutral expressions.  $\langle S_1, S_4 \rangle$  do not contradict one another, so should receive a higher score than  $\langle S_1, S_2 \rangle$ , yet both pairs have very similar SBERTScores. Future research is therefore required into handling negation.
+
+| Metric | $\langle S_1, S_2 \rangle$ | $\langle S_1, S_3 \rangle$ | $\langle S_1, S_4 \rangle$ |
+|-|-|-|-|
+| BERTScore | 0.984 | 0.988 | 0.915 |
+| SBERTScore | 0.720 | 0.975 | 0.701 |
+
+Table 5: BERTScore and SBERTScore of example sentence pairs.
+
+### 5.5 BENCHMARK COMPARISON WITH NLI AND QA-BASED METHODS
+
+The detailed results on each sub-dataset are shown in Table 6. We find that metric performance varies across different datasets, suggesting that choosing a suitable metric will, in practice, depend on the situation. Therefore, we provide an assessment of overall performance, we combine the data from each origin (CNNNDM or XSum) in Table 7a and Table 7b. For a fair comparison, we only report the DAE results on CNNNDM as it is trained on human annotated XSum validation set which overlaps with the benchmark dataset.
+
+QAFactEval outperforms other metrics on all splits of the dataset. Both similarity-based metrics outperform the zero-shot NLI baseline on both splits. SBERTScore and BERTScore achieve second best on the CNNNDM and XSum split respectively, suggesting the opposite conclusion to previous studies (Fabbri et al., 2021b; Pagnoni et al., 2021; Durmus et al., 2020), that similarity-based metrics can work well and even outperform trained factuality metrics in zero-shot settings given a suitable
+
+{7}------------------------------------------------
+
+comparison text. SBERTScore outperforms BERTScore across the whole dataset and CNNDM split as Table 3 and Table 7 shows, but it is not as good as BERTScore on the XSum split. We speculate that this is because all summaries in the XSum split are single sentences, which highly compress the meaning from multiple sentences in the document. Therefore there is only one comparison sentence pair applied in Eq 1, preventing SBERTScore from averaging scores over sentences and leading to degeneration. Some evidence for this is that SummaC<sub>Zs</sub>, which averages the maximum scores in each column of the score matrix in the same way as our metric, also underperforms on XSum. However, both SummaC<sub>Conv</sub> and BERTScore, as comparable alternatives to these two metrics respectively, still average scores from several comparisons, thus having better performance.
+
+| Metric | Dataset |  |  |  |  |  |  |  |  |
+|-|-|-|-|-|-|-|-|-|-|
+|  | XSF | Polytope | FactCC | SEval | FRANK | QAGS | CLIFF | Goyal' 21 | XENT |
+| QAFactEval | 0.604 | <b><u>0.827</u></b> | 0.843 | <b><u>0.830</u></b> | <b><u>0.729</u></b> | <b><u>0.692</u></b> | 0.703 | 0.754 | 0.613 |
+| QuestEval | 0.605 | <u>0.708</u> | 0.655 | 0.713 | <u>0.567</u> | 0.607 | 0.691 | <b><u>0.797</u></b> | 0.601 |
+| DAE | - | 0.782 | 0.704 | 0.716 | 0.695 | 0.586 | 0.734 | - | - |
+| SummaC <sub>Conv</sub> | <b><u>0.655</u></b> | 0.744 | <b><u>0.891</u></b> | 0.793 | 0.655 | 0.629 | <b><u>0.744</u></b> | 0.552 | <b><u>0.668</u></b> |
+| SummaC <sub>Zs</sub> | 0.549 | <b><u>0.786</u></b> | <b><u>0.835</u></b> | 0.781 | 0.672 | <b><u>0.673</u></b> | 0.700 | 0.466 | 0.490 |
+| BERTScore | 0.527 | <u>0.779</u> | 0.632 | 0.759 | <b><u>0.676</u></b> | 0.586 | <b><u>0.724</u></b> | <b><u>0.657</u></b> | <b><u>0.601</u></b> |
+| SBERTScore | <b><u>0.608</u></b> | 0.772 | 0.754 | <b><u>0.827</u></b> | 0.655 | 0.596 | 0.701 | 0.605 | 0.581 |
+
+Table 6: Balanced accuracy of different metrics on each dataset. Metrics in the top require training while the bottom ones are zero-shot. The best results of each column in the two sections are **highlighted**. Underline indicates the result is significantly better than the second best one in the same section with  $p < 0.05$ .
+
+| Metric | CNNDM |  |  |  |
+|-|-|-|-|-|
+|  | Balanced Acc. | ROC-AUC | Pearson $\rho$ | Spearman $\rho$ |
+| QAFactEval | <b><u>0.757</u></b> | <b><u>0.823</u></b> | <b><u>0.547</u></b> | <b><u>0.469</u></b> |
+| QuestEval | 0.670 | 0.736 | 0.361 | 0.343 |
+| DAE | 0.696 | 0.747 | 0.405 | 0.358 |
+| SummaC <sub>Conv</sub> | 0.737 | 0.796 | 0.446 | 0.430 |
+| SummaC <sub>Zs</sub> | 0.686 | 0.759 | 0.407 | 0.377 |
+| BERTScore | 0.692 | 0.767 | 0.405 | 0.388 |
+| SBERTScore | <b><u>0.720</u></b> | <b><u>0.804</u></b> | <b><u>0.458</u></b> | <b><u>0.441</u></b> |
+
+(a) Metric performance on the CNNDM split.
+
+| Metric | XSum |  |  |  |
+|-|-|-|-|-|
+|  | Balanced Acc. | ROC-AUC | Pearson $\rho$ | Spearman $\rho$ |
+| QAFactEval | <b><u>0.705</u></b> | <b><u>0.773</u></b> | <b><u>0.423</u></b> | <b><u>0.403</u></b> |
+| QuestEval | 0.665 | 0.711 | 0.403 | 0.307 |
+| SummaC <sub>Conv</sub> | 0.604 | 0.654 | 0.210 | 0.223 |
+| SummaC <sub>Zs</sub> | 0.577 | 0.607 | 0.181 | 0.156 |
+| BERTScore | <b><u>0.695</u></b> | <b><u>0.738</u></b> | <b><u>0.342</u></b> | <b><u>0.346</u></b> |
+| SBERTScore | 0.605 | 0.653 | 0.227 | 0.222 |
+
+(b) Metric performance on the XSum split.
+
+Table 7: Performance of different metrics on each dataset split. Metrics in the top require training while the bottom ones are zero-shot. The best results of each column on the two sections are **highlighted** and are significantly better than the next best one in their section with  $p < 0.05$ .
+
+### 5.6 ERROR ANALYSIS AND METRIC COMBINATION
+
+Previous studies (Pagnoni et al., 2021; Tang et al., 2023) point out that different metrics can be sensitive to different errors, inspiring us to look into the possibility of combining different
+
+{8}------------------------------------------------
+
+metrics. We first investigate the error type sensitivity of BERTScore and SBERTScore, following the coarse error type taxonomy in Tang et al. (2023). Errors are classified from two perspectives. Errors made up by text pieces that appear in the source document are noted as *Intrinsic*, otherwise *Extrinsic*. The error attributes are further classified as either *NounPhrase* or *Predicate*. All errors from XSF (Maynez et al., 2020), FRANK (Pagnoni et al., 2021), Goyal 21’ (Goyal & Durrett, 2021), and CLIFF (Cao & Wang, 2021) are annotated with a subset of  $\{Intrinsic, Extrinsic\} \times \{NounPhrase, Predicate\}$ . For summaries from XSum, they have two special additional error types,  $\{IntrinsicSentence, ExtrinsicSentence\}$ , if the whole sentence is inconsistent. We report the recall of each metric in Table 8 as it reflects their sensitivity to each type of error, as well as correct summaries.
+
+The results demonstrate that metrics have different strengths. Benefiting from the properties of similarity, BERTScore and SBERTScore perform better on extrinsic than intrinsic errors for the same attribute type. Compared to the recall of errors, the most impressive ability of SBERTScore is to identify correct summaries. It significantly outperforms all the other metrics on CNN/DM, and comes only after SummaC<sub>ZS</sub> on XSum. High recall on correct summaries suggests that SBERTScore will not easily misjudge a consistent summary. In other words, if a summary is assigned with low SBERTScore, then it is very likely to be an unfaithful summary to the source document. We investigate the case where NLI and QA-based metrics fail but SBERTScore makes a correct judgement in Appendix B.
+
+| Metric | CNN/DM |  |  |  |  |
+|-|-|-|-|-|-|
+|  | Intrinsic |  | Extrinsic |  | Correct |
+|  | NP. | P. | NP. | P. |  |
+| QAFactEval | 0.546 | 0.509 | 0.791 | 0.633 | 0.401 |
+| QuestEval | <b>0.695</b> | 0.582 | 0.777 | <b>0.742</b> | 0.309 |
+| DAE | 0.575 | 0.509 | 0.668 | 0.609 | <b>0.436</b> |
+| SummaC <sub>Conv</sub> | 0.684 | <b>0.782</b> | <b>0.841</b> | 0.711 | 0.287 |
+| SummaC <sub>ZS</sub> | 0.632 | <b>0.745</b> | <b>0.800</b> | 0.711 | 0.314 |
+| BERTScore | <b>0.661</b> | 0.636 | 0.741 | <b>0.719</b> | 0.342 |
+| SBERTScore | 0.454 | 0.436 | 0.586 | 0.563 | <b>0.522</b> |
+
+(a) Error type analysis on CNN/DM.
+
+| Metric | Xsum |  |  |  |  |  |  |
+|-|-|-|-|-|-|-|-|
+|  | Intrinsic |  |  | Extrinsic |  |  | Correct |
+|  | NP. | P. | Sent. | NP. | P. | Sent. |  |
+| QAFactEval | <b>0.671</b> | <b>0.720</b> | 0.882 | 0.532 | 0.631 | 0.808 | 0.304 |
+| QuestEval | 0.493 | 0.553 | <b>0.941</b> | 0.520 | <b>0.644</b> | <b>0.849</b> | <b>0.387</b> |
+| SummaC <sub>Conv</sub> | 0.551 | 0.629 | 0.294 | <b>0.640</b> | 0.619 | 0.715 | 0.371 |
+| SummaC <sub>ZS</sub> | <b>0.676</b> | <b>0.652</b> | 0.824 | 0.569 | 0.589 | 0.523 | <b>0.418</b> |
+| BERTScore | 0.538 | 0.621 | <b>0.882</b> | <b>0.597</b> | 0.631 | 0.782 | 0.375 |
+| SBERTScore | 0.498 | 0.644 | 0.706 | 0.532 | <b>0.661</b> | <b>0.808</b> | 0.397 |
+
+(b) Error type analysis on XSum.
+
+Table 8: Recall (sensitivity) of each metric on different types of errors, as well as correct summaries. The best results of each column in the two sections are **highlighted**. Underline indicates the result is significantly better than the second best in the same section with  $p < 0.05$ . We remove the results of DAE for a fair comparison as it is trained on the annotated validation set of XSum.
+
+Furthermore, we investigate the agreement among different metrics on the benchmark to find out whether they can be complementary to each other. The Kohen’s  $\kappa$  scores in Appendix C show weak agreement ( $< 0.45$ ) among the metrics. Considering that these metrics have similar balanced accuracy, it suggests that a combination of comparison approaches could be more effective than relying on a single metric. We simply test this idea by combining pairs of distinct evaluation metrics using logical *AND* (both metrics must mark the summary as consistent) and *OR* (the summary is marked as consistent if at least one metric marks it consistent).
+
+{9}------------------------------------------------
+
+486  
+487  
+488  
+489  
+490  
+491  
+492  
+493  
+494  
+495  
+496  
+497  
+498  
+499  
+500  
+501  
+502  
+503  
+504  
+505  
+506  
+507  
+508  
+509  
+510  
+511  
+512  
+513  
+514  
+515  
+516  
+517  
+518  
+519  
+520  
+521  
+522  
+523  
+524  
+525  
+526  
+527  
+528  
+529  
+530  
+531  
+532  
+533  
+534  
+535  
+536  
+537  
+538  
+539
+
+![Figure 1: A heatmap showing the average balanced accuracy of combined metrics on a benchmark. The metrics are QAFactEval, QuestEval, DAE, SummaC-ZS, SummaC-Conv, BERTScore, and SBERTScore. The diagonal cells are blue, representing the balanced accuracy of the original evaluation metric. The upper triangular matrix shows the balanced accuracy of joint metrics using OR, and the lower triangular matrix shows the balanced accuracy based on AND. Red blocks highlight improvements over two original metrics, and green blocks highlight declines.](7801d00a216dc4dc8a7d210dcb5fe3c5_img.jpg)
+
+|  | QAFactEval | QuestEval | DAE | SummaC-ZS | SummaC-Conv | BERTScore | SBERTScore |
+|-|-|-|-|-|-|-|-|
+| QAFactEval | 0.817 | 0.760 | 0.797 | 0.786 | 0.812 | 0.780 | 0.795 |
+| QuestEval | 0.815 | 0.758 | 0.762 | 0.747 | 0.764 | 0.747 | 0.752 |
+| DAE | 0.828 | 0.803 | 0.807 | 0.780 | 0.801 | 0.780 | 0.791 |
+| SummaC-ZS | 0.814 | 0.793 | 0.809 | 0.782 | 0.781 | 0.764 | 0.769 |
+| SummaC-Conv | 0.795 | 0.784 | 0.795 | 0.791 | 0.789 | 0.786 | 0.790 |
+| BERTScore | 0.796 | 0.771 | 0.786 | 0.777 | 0.762 | 0.759 | 0.775 |
+| SBERTScore | 0.801 | 0.784 | 0.795 | 0.791 | 0.778 | 0.763 | 0.779 |
+
+Figure 1: A heatmap showing the average balanced accuracy of combined metrics on a benchmark. The metrics are QAFactEval, QuestEval, DAE, SummaC-ZS, SummaC-Conv, BERTScore, and SBERTScore. The diagonal cells are blue, representing the balanced accuracy of the original evaluation metric. The upper triangular matrix shows the balanced accuracy of joint metrics using OR, and the lower triangular matrix shows the balanced accuracy based on AND. Red blocks highlight improvements over two original metrics, and green blocks highlight declines.
+
+Figure 1: Average balanced accuracy of combined metrics on the benchmark. The diagonal is the balanced accuracy of the original evaluation metric (highlighted in blue). The upper triangular matrix is the balanced accuracy of joint metrics using *OR* and the lower triangular matrix is based on *AND*. Red blocks highlight the balanced accuracy that is improved over two original metrics, and green blocks highlight those are lower than both original metrics. All improvements and declines are statistically significant with  $p < 0.05$ .
+
+The joint balanced accuracy of each combination is shown in Figure 1. The lower triangular matrix indicates that logical *AND* can improve the balanced accuracy, while the upper triangular matrix suggests that logical *OR* reduces performance, demonstrating that individual factuality metrics may suffer from false positives. Logical *AND* introduces a double-checking mechanism, which raises the accuracy by mitigating the false consistent rate and improving the true inconsistent rate. Appendix B shows two examples where logical operations correct a misclassification. We further investigate the use case of *AND* on SBERTScore and QuestEval and their confusion matrix in Appendix D.
+
+## 6 CONCLUSION
+
+In this paper, we investigated the suitable settings for similarity-based factuality evaluation metrics and proposed a new sentence-level metric, SBERTScore. We showed that, given source documents as input, similarity-based evaluation metrics computed on sentence-sentence level are competitive with more complex NLI and QA-based factuality-oriented metrics, and do not require a supervised learning step on the target domain. Furthermore, our proposed metric better aligns with human binary annotations than many trained metrics on the CNNDM split and across the whole dataset. Therefore, we conclude that zero-shot similarity-based metrics are a promising approach. We illustrate a limitation of similarity-based metrics when processing negation and highly similar but neutral input text, which suggests a direction for future research. We also showed that our proposed metric has high recall of correct summaries, and that there is low agreement between different factuality metrics, with similarity-based metrics making different errors to QA and NLI-based metrics. Building on this, we demonstrated that integrating metrics by logical *AND* can improve balanced accuracy on benchmark datasets.
+
+## REFERENCES
+
+- Forrest Bao, Ruixuan Tu, Ge Luo, Yinfei Yang, Hebi Li, Minghui Qiu, Youbiao He, and Cen Chen. DocAsRef: An empirical study on repurposing reference-based summary quality metrics as reference-free metrics. In Houda Bouamor, Juan Pino, and Kalika Bali (eds.), *Findings of the Association for Computational Linguistics: EMNLP 2023*, pp. 1226–1235, Singapore, December 2023. Association for Computational Linguistics. doi: 10.18653/v1/2023.findings-emnlp.87. URL <https://aclanthology.org/2023.findings-emnlp.87>.
+
+ Rest of paper (reference and Appendix) is removed.

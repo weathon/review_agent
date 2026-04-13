@@ -41,6 +41,7 @@ PROVIDER = "zai"
 
 OPENROUTER_API_KEY = os.environ["OPENROUTER_API_KEY"]
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+OLLAMA_CLOUD_BASE_URL = "http://localhost:11434/v1/"
 ZAI_BASE_URL = "https://api.z.ai/api/coding/paas/v4/"
 
 base_model = "qwen/qwen3.5-flash-02-23" 
@@ -48,9 +49,20 @@ base_model = "qwen/qwen3.5-flash-02-23"
 # - plain OpenRouter chat model id, e.g. "deepseek/deepseek-v3.2"
 # - Claude Agent SDK, e.g. "claude:claude-sonnet-4-5"
 # - OpenAI Agent SDK via OpenRouter, e.g. "openai_agent:deepseek/deepseek-v3.2"
-MODEL_HARSH = f"qwen/qwen3.6-plus" 
-MODEL_NEUTRAL = f"{base_model}"
-MODEL_SPARK = f"qwen/qwen3.6-plus" 
+# MODEL_HARSH = f"gpt-5.4" 
+# MODEL_NEUTRAL = f"{base_model}" 
+# MODEL_SPARK = f"qwen/qwen3.6-plus" 
+# MODEL_RELATED_WORK = f"{base_model}:online" 
+# MODEL_FILTER = f"{base_model}"
+# # MODEL_MERGER = f"zai:glm-5.1" #用zai coding plan白嫖
+# MODEL_MERGER = "gpt-5.4"
+# MODEL_PARSER = "openai/gpt-5.4-nano" 
+# MODEL_FIND_HUMAN = "openai_agent:minimax-m2.7"
+# MODEL_SCORER = "openai_agent:gpt-5.4"
+
+MODEL_HARSH = f"gpt-5.4" 
+MODEL_NEUTRAL = f"ollama:qwen3.5:397b-cloud" 
+MODEL_SPARK = f"ollama:qwen3.5:397b-cloud" 
 MODEL_RELATED_WORK = f"{base_model}:online" 
 MODEL_FILTER = f"{base_model}"
 # MODEL_MERGER = f"zai:glm-5.1" #用zai coding plan白嫖
@@ -59,7 +71,8 @@ MODEL_PARSER = "openai/gpt-5.4-nano"
 MODEL_FIND_HUMAN = "openai_agent:minimax-m2.7"
 MODEL_SCORER = "openai_agent:gpt-5.4"
 
-human_review_dir = "/home/wg25r/review_agent/iclr2025_data"
+human_review_dir = "/home/wg25r/review_agent/iclr2026_balanced"
+# human_review_dir = "/home/wg25r/review_agent/iclr2025_data"
 MODEL_QA = "minimax-m2.7"
 
 MAX_RETRIES = 10
@@ -205,17 +218,11 @@ def _get_client(api_key: str | None = None) -> AsyncOpenAI:
 
 
 
-def _get_zai_client(api_key: str | None = None) -> AsyncOpenAI:
-    """Create an AsyncOpenAI client pointed at OpenRouter."""
-    resolved_api_key = api_key
-    if not resolved_api_key:
-        raise ValueError(
-            "ZAI_API_KEY environment variable not set.\n"
-            "Set it in .env or export it."
-        )
-    return AsyncOpenAI(api_key=resolved_api_key, base_url=ZAI_BASE_URL)
+def _get_ollama_client() -> AsyncOpenAI:
+    resolved_api_key = "ollama"
+    return AsyncOpenAI(api_key=resolved_api_key, base_url=OLLAMA_CLOUD_BASE_URL)
 
-zai_client = _get_zai_client(os.environ["ZAI_API_KEY"])
+ollama_client = _get_ollama_client()
 
 
 
@@ -773,10 +780,6 @@ async def run_merge(
             user_prompt=user_prompt_review,
             model_id=MODEL_MERGER[len("openai_agent:"):],
         )
-    elif MODEL_MERGER.startswith("zai:"):
-        review_text, cost = await _call_openai(
-            zai_client, "merger", merger_prompt, user_prompt_review, MODEL_MERGER.split(":", 1)[1]
-        )
     else:
         review_text, cost = await _call_openai(
             client, "merger", merger_prompt, user_prompt_review, MODEL_MERGER,
@@ -1111,9 +1114,15 @@ async def run_pipeline(
             run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue=venue),
         ]
         if not skip_neutral:
-            tasks.append(run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue=venue))
+            if MODEL_NEUTRAL.startswith("ollama:"):
+                tasks.append(run_reviewer(ollama_client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL.replace("ollama:", ""), venue=venue))
+            else:
+                tasks.append(run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue=venue))
         if not skip_spark:
-            tasks.append(run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue=venue))
+            if MODEL_SPARK.startswith("ollama:"):
+                tasks.append(run_reviewer(ollama_client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK.replace("ollama:", ""), venue=venue))
+            else:
+                tasks.append(run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue=venue))
         if not skip_related_work:
             tasks.append(run_related_work_search(client, paper_content))
         tasks.append(run_human_finder(pp, human_review_dir))

@@ -1,0 +1,403 @@
+
+
+{0}------------------------------------------------
+
+# CLIPPING IMPROVES ADAM AND ADAGRAD WHEN THE NOISE IS HEAVY-TAILED
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Methods with adaptive stepsizes, such as [AdaGrad](#) and [Adam](#), are essential for training modern Deep Learning models, especially Large Language Models. Typically, the noise in the stochastic gradients is heavy-tailed for the later ones. Gradient clipping provably helps to achieve good high-probability convergence for such noises. However, despite the similarity between [AdaGrad/Adam](#) and [Clip-SGD](#), the current understanding of the high-probability convergence of [AdaGrad/Adam](#)-type methods is limited in this case. In this work, we prove that [AdaGrad/Adam](#) (and their delayed version) can have provably bad high-probability convergence if the noise is heavy-tailed. We also show that gradient clipping fixes this issue, i.e., we derive new high-probability convergence bounds with polylogarithmic dependence on the confidence level for [AdaGrad](#) and [Adam](#) with clipping and with/without delay for smooth convex/non-convex stochastic optimization with heavy-tailed noise. Our empirical evaluations highlight the superiority of clipped versions of [AdaGrad/Adam](#) in handling the heavy-tailed noise.
+
+## 1 INTRODUCTION
+
+Stochastic first-order optimization methods such as Stochastic Gradient Descent (SGD) ([Robbins & Monro, 1951](#)) are the methods of choice in training modern Machine Learning (ML) and Deep Learning (DL) models ([Shalev-Shwartz & Ben-David, 2014](#); [Goodfellow et al., 2016](#)). There are multiple reasons for that, including but not limited to their simplicity, computation cost, memory usage, and generalization. However, standard SGD is rarely used due to its sensitivity to the choice of stepsize. Therefore, methods such as [AdaGrad](#) ([Streeter & McMahan, 2010](#); [Duchi et al., 2011](#)) and [Adam](#) ([Kingma & Ba, 2014](#)), which use adaptive<sup>1</sup> stepsizes, are much more popular in the DL community ([Vaswani et al., 2017](#); [You et al., 2019](#); [Nikishina et al., 2022](#); [Moskvoretskii et al., 2024](#)). In particular, [Adam](#)-type methods are not just easier to tune but they also typically achieve much better results in terms of the model performance than SGD in the training of Large Language Models (LLMs) ([Devlin et al., 2019](#); [Zhang et al., 2020](#)).
+
+In the attempt to explain the later phenomenon, [Zhang et al. \(2020\)](#) consider the noise distribution in the stochastic gradients appearing in the pre-training of the BERT model ([Devlin et al., 2019](#)) and show that (i) the gradient noise is heavy-tailed in this case, (ii) [Adam](#) significantly outperforms SGD (with momentum), (iii) [Clip-SGD](#) ([Pascanu et al., 2013](#)) also converges better than SGD for such problems, and (iv) [Clip-SGD](#) is provably convergent (in-expectation) when the noise has bounded  $\alpha$ -th moment for some  $\alpha \in (1, 2]$  while SGD can diverge for  $\alpha < 2$ . Moreover, gradient clipping also plays a central role in the recent advances on the *high-probability convergence* of stochastic methods under the heavy-tailed noise ([Gorbunov et al., 2020](#); [Cutkosky & Mehta, 2021](#); [Sadiev et al., 2023](#); [Nguyen et al., 2023](#)). Taking into account the similarities between [Adam](#) and [Clip-SGD](#) (the former one can be seen as [Clip-SGD](#) with momentum and iteration-dependent clipping level), one can conjecture that [Adam](#) enjoys good theoretical high-probability convergence when the gradient noise is heavy-tailed. If this was true, it would be perfectly aligned with the observations from ([Zhang et al., 2020](#)) about the connection between the noise in the gradients and [Adam](#)’s performance. Moreover, some recent works show that [AdaGrad/Adam](#) have provable convergence
+
+<sup>1</sup>Throughout the paper, we use the word “adaptivity” in its general meaning: stepsizes are adaptive if they depend on the (stochastic) gradients or function values. We emphasize that, in this sense, an adaptive method can still have parameters affecting its convergence.
+
+{1}------------------------------------------------
+
+under generalized smoothness assumptions (Faw et al., 2023; Wang et al., 2023; Li et al., 2023; Wang et al., 2024). Since Clip-SGD has similar convergence properties and since some authors explicitly mention that in this regard Adam and Clip-SGD are similar<sup>2</sup>, it is natural to conjecture that clipping is not needed in Adam/AdaGrad.
+
+However, there are no theoretical results showing the high-probability convergence with *polylogarithmic dependence on the confidence level* of Adam under the heavy-tailed noise and even in the case of the bounded variance. Even for simpler “twin”<sup>3</sup> such as AdaGrad there exists a similar gap in the literature. Moreover, Mosbach et al. (2020) apply gradient clipping even for Adam in the fine-tuning of BERT and ALBERT (Lan et al., 2019) models. However, Mosbach et al. (2020) do not report the results that can be achieved by Adam without clipping. Therefore, it remains unclear whether and when the gradient clipping is needed for AdaGrad/Adam and whether AdaGrad/Adam enjoy desirable high-probability convergence under the heavy-tailed noise.
+
+In this work, we address this gap in the literature, i.e., we consider the following questions:
+
+*Does the high-probability complexity of Adam/AdaGrad without clipping has polylogarithmic dependence on the confidence level under the heavy-tailed noise?*
+
+*Does clipping improve the convergence of AdaGrad/Adam under the heavy-tailed noise?*
+
+We provide a negative answer to the first question and a positive answer to the second one.
+
+### 1.1 OUR CONTRIBUTIONS
+
+The main contributions of this work are summarized below.
+
+- **Negative results for Adam and AdaGrad.** We show that the high-probability complexities of Adam and AdaGrad and their variants with delay by Li & Orabona (2020) do not have polylogarithmic dependence on the confidence level in the worst case when the noise is heavy-tailed. In particular, we design an example of a convex stochastic optimization problem such that the noise is heavy-tailed and the high-probability convergence complexity of Adam/AdaGrad has the inverse-power dependence on the target accuracy and confidence level.
+- **Clipping fixes Adam and AdaGrad.** We prove that the above issue can be addressed via gradient clipping. That is, we derive high-probability complexity results for Clip-Adam and Clip-AdaGrad (with and without momentum) in the case of smooth convex (for the methods with delay) and non-convex (for the methods with and without delay) optimization with the heavy-tailed noise having bounded  $\alpha$ -th moment with  $\alpha \in (1, 2]$ . The obtained results have the desired polylogarithmic dependence on the confidence level. Moreover, in the non-convex case, the derived complexities are optimal up to logarithmic factors, and match the complexity of Clip-SGD in the convex case up to logarithmic factors.
+- **Numerical experiments.** We conducted numerical experiments for synthetic and real-world problems. More precisely, we illustrate the superiority of different versions of Adam/AdaGrad with clipping to the non-clipped versions of Adam/AdaGrad on a simple quadratic problem with additive heavy-tailed noise in the gradients. Next, we also test Adam with and without clipping on the fine-tuning of ALBERT Base model (Lan et al., 2019) on CoLa and RTE datasets (Wang et al., 2018) and observe that Adam with clipping significantly outperforms Adam without clipping when the noise is heavy-tailed.
+
+### 1.2 PRELIMINARIES
+
+In this section, we formalize the setup. We focus on unconstrained minimization problems
+
+$$\min_{x \in \mathbb{R}^d} f(x), \quad (1)$$
+
+<sup>2</sup>Pan & Li (2023) write in the abstract: “We conclude that the sharpness reduction effect of adaptive coordinate-wise scaling is the reason for Adam’s success in practice.” In addition, Zhou et al. (2020) mention in the discussion of the related work: “... adaptation in ADAM provides a clipping effect.”
+
+<sup>3</sup>The existing convergence results for Adam often require the choice of parameters that make Adam very similar to AdaGrad with momentum (Défossez et al., 2022); see more details in Section 1.3.
+
+{2}------------------------------------------------
+
+where the differentiable function  $f(x)$  is accessible through the calls of stochastic first-order oracle returning an approximation  $\nabla f_\xi(x)$  of  $\nabla f(x)$ . Here  $\xi$  is a random variable following some distribution  $\mathcal{D}$  that may be dependent on  $x$  and time. In the simplest case,  $f_\xi(x)$  is a loss function on the data sample  $\xi$  and  $f(x) = \mathbb{E}_{\xi \sim \mathcal{D}}[f_\xi(x)]$  is a population risk (Shalev-Shwartz & Ben-David, 2014).
+
+**Notation.** The notation is quite standard in this work. We use  $\mathbb{E}_\xi[\cdot]$  to denote an expectation w.r.t. random variable  $\xi$ . All norms are standard Euclidean ones:  $\|x\| = \sqrt{\langle x, x \rangle}$ . The ball centered at  $x$  with a radius  $R$  is defined as  $B_R(x) := \{y \in \mathbb{R}^d \mid \|y - x\| \leq R\}$ . We also use  $x^*$  to denote (any) solution of (1) and  $f_* := \inf_{x \in \mathbb{R}^d} f(x)$ . Clipping operator with clipping level  $\lambda > 0$  is defined as  $\text{clip}(x, \lambda) := \min\{1, \lambda/\|x\|\}x$  for  $x \neq 0$  and  $\text{clip}(x, \lambda) := 0$  for  $x = 0$ .
+
+**Assumptions.** We start with the assumption<sup>4</sup> about the noise.
+
+**Assumption 1.** *There exists set  $Q \subseteq \mathbb{R}^d$  and  $\sigma \geq 0, \alpha \in (1, 2]$  such that the oracle satisfies*
+
+$$\mathbb{E}[\|\nabla f_\xi(x)\|] = \nabla f(x), \quad \mathbb{E}[\|\nabla f_\xi(x) - f(x)\|^\alpha] \leq \sigma^\alpha. \quad (2)$$
+
+The above assumption is used in many recent works (Zhang et al., 2020; Chakos & Mehta, 2021; Sadiiev et al., 2023; Nguyen et al., 2023). When  $\alpha < 2$ , it allows the stochastic gradients to have unbounded variance, e.g., Lévy  $\alpha$ -stable noise. When  $\alpha = 2$ , it reduces to the standard bounded variance assumption (Nemirovski et al., 2009; Ghadimi & Lan, 2012; 2013; Takáč et al., 2013).
+
+Next, we make a standard assumption about the smoothness of the objective function.
+
+**Assumption 2.** *There exists set  $Q \subseteq \mathbb{R}^d$  and  $L > 0$  such that for all  $x, y \in Q$*
+
+$$\|\nabla f(y) - \nabla f(x)\| \leq L \|y - x\|, \quad \|\nabla f(x)\|^2 \leq 2L(f(x) - f_*). \quad (3)$$
+
+We emphasize that the second part of (3) follows from the first part if  $Q = \mathbb{R}^d$ . However, in more general situations, this is not always the case; see (Sadiiev et al., 2023, Appendix B) for further details. Interestingly, when  $Q$  is a compact set, function  $f$  can have non-Lipschitz gradients (e.g., polynomially growing with  $x$  on  $\mathbb{R}^d$ , see also (Patel et al., 2022; Patel & Berahas, 2022)).
+
+In addition, for some of our results, we assume that the objective is convex.
+
+**Assumption 3 (Optional).** *There exists set  $Q \subseteq \mathbb{R}^d$  such that for all  $x, y \in Q$*
+
+$$f(y) \geq f(x) + \langle \nabla f(x), y - x \rangle. \quad (4)$$
+
+Finally, for the methods without the delay, we assume that function  $f$  is bounded.
+
+**Assumption 4 (Optional).** *There exists constant  $M > 0$  such that for all  $x \in \mathbb{R}^d$*
+
+$$f(x) - f_* \leq M. \quad (5)$$
+
+A stronger version of the above assumption (boundedness of the empirical risk) is used in (Li & Liu, 2023), which is the only existing work analyzing AdaGrad with gradient clipping.
+
+**Why high-probability convergence?** The vast majority of the existing literature on stochastic optimization focuses on the in-expectation convergence guarantees only. In particular, for some metric  $\mathcal{P}(x)$  quantifying the output's quality, e.g.,  $\mathcal{P}(x) = f(x) - f(x^*)$ ,  $\|\nabla f(x)\|^2$ ,  $\|x - x^*\|^2$ , such guarantees provide upper bounds on the number of iterations/oracle calls required for a method to find  $x$  such that  $\mathbb{E}[\mathcal{P}(x)] \leq \varepsilon$ . However, during recent years, high-probability convergence guarantees have been gaining a lot of attention as well. Such guarantees give upper bounds on the number of iterations/oracle calls required for a method to find  $x$  such that  $\mathbb{P}\{\mathcal{P}(x) \leq \varepsilon\} \geq 1 - \delta$ , where  $\delta$  is usually called confidence level or failure probability. One can argue that using Markov's inequality, one can easily deduce a high-probability guarantee from an in-expectation one: if
+
+<sup>4</sup>Similarly to (Sadiiev et al., 2023), for our results, it is sufficient to make all the assumptions only on some set  $Q$ . This set is typically bounded and depends on some metric of sub-optimality of the starting point, e.g., the distance from the starting point to the optimum. We emphasize that our assumptions are strictly weaker than corresponding ones for  $Q = \mathbb{R}^d$ . To achieve this kind of generality, we prove that the proposed method does not leave some set  $Q$  with high probability.
+
+{3}------------------------------------------------
+
+$\mathbb{E}[\mathcal{P}(x_{K(\varepsilon\delta)})] \leq \varepsilon\delta$ , where  $x_{K(\varepsilon\delta)}$  is an output of the method after  $K(\varepsilon\delta)$  iterations/oracle calls, then  $\mathbb{P}\{\mathcal{P}(x_{K(\varepsilon\delta)}) > \varepsilon\} < \mathbb{E}[\mathcal{P}(x_{K(\varepsilon\delta)})]/\varepsilon \leq \delta$ . Unfortunately, for many methods such as **SGD** (Ghadimi & Lan, 2013)  $K(\varepsilon)$  has inverse-power dependence on  $\varepsilon$  implying that  $K(\varepsilon\delta)$  has inverse-power dependence on  $\varepsilon\delta$ , leading to a noticeable deterioration when  $\delta$  is small. Therefore, deriving high-probability complexities with *polylogarithmic dependence on  $\delta$*  requires a separate and thorough consideration and analysis. Moreover, such bounds more accurately reflect the methods' behavior than in-expectation ones (Gorbunov et al., 2020).
+
+### 1.3 RELATED WORK
+
+**High-probability convergence.** The first results showing the high-probability convergence of **SGD** and its variants are derived under the sub-Gaussian noise assumption for convex and strongly convex problems by Nemirovski et al. (2009); Ghadimi & Lan (2012); Harvey et al. (2019) for non-convex problems by Li & Orabona (2020). Although the distribution of the noise is near-sub-Gaussian in some cases, like in the training of ResNet50 (He et al., 2016) on ImageNet (Russakovsky et al., 2015) as shown by Zhang et al. (2020), this assumption does not cover even the distributions with bounded variance. To relax the sub-Gaussian noise assumption, Nazin et al. (2019) consider a truncated version of Stochastic Mirror Descent, which is closely related to **Clip-SGD**, and prove its high-probability complexity with polylogarithmic dependence on  $\delta$  under bounded variance assumption for convex smooth problems on the bounded domain. In the strongly convex case, Davis et al. (2021) propose a general approach for obtaining high-probability convergence based on the robust distance estimation and show accelerated high-probability rates in the strongly convex case. Next, for the unconstrained problems, Gorbunov et al. (2020) prove the first high-probability convergence results for **Clip-SGD** and the first accelerated high-probability rates in the convex case for a version of **Clip-SGD** with Nesterov's momentum (Nesterov, 1983). This result is generalized to the problems with Hölder-continuous gradients by Gorbunov et al. (2021). Cutkosky & Mehta (2021) derive the first high-probability convergence results under Assumption 1 with  $\alpha < 2$  for a version of **Clip-SGD** with normalization and Polyak's momentum (Polyak, 1964) in the case of non-convex problems with bounded gradient. Sadiiev et al. (2023) remove the bounded gradient assumption in the non-convex case and also prove the first high-probability convergence results under Assumption 1 for **Clip-SGD** and its accelerated version in the convex and strongly convex cases. Nguyen et al. (2023) provide improved results in the non-convex case under Assumption 1 and also improved the dependency on the logarithmic factors in the convergence bounds. The generalization to the composite and distributed optimization problems is developed by Gorbunov et al. (2024). It is also worth mentioning (Jakovetić et al., 2023; Puchkin et al., 2024) who consider potentially heavier noise than in Assumption 1 through utilizing the additional structure of the noise such as (near-)symmetry. This direction is further explored by Kornilov et al. (2024) and adjusted to the case of the zeroth-order stochastic oracle.
+
+**AdaGrad and Adam.** **AdaGrad**<sup>5</sup> (Streeter & McMahan, 2010; Duchi et al., 2011) has the following update-rule
+
+$$x_{t+1} = x_t - \frac{\gamma}{b_t} \nabla f_{\xi_t}(x_t), \quad \text{where } b_t = \sqrt{b_{t-1}^2 + (\nabla f_{\xi_t}(x_t))^2} \quad (\text{AdaGrad-CW})$$
+
+where all operations (taking a square and taking a square root of a vector, division by a vector) are performed coordinate-wise. The method is analyzed in many works, including (Streeter & McMahan, 2010; Duchi et al., 2011; Zou et al., 2018; Chen et al., 2018; Ward et al., 2020; Défossez et al., 2022; Faw et al., 2022) to name a few. However, the high-probability convergence of **AdaGrad** is studied under restrictive assumptions such as almost surely sub-Gaussian noise (Li & Orabona, 2020; Liu et al., 2023) or without such an assumption but with inverse-power dependence on the confidence level  $\delta$  (Wang et al., 2023) or boundedness of the empirical risk and (non-central)  $\alpha$ -th moment (Li & Liu, 2023), which in the worst case implies boundedness of the stochastic gradient (see the discussion after Theorem 4). In contrast, our results for **Clip-Adam(D)/Clip-M-AdaGrad(D)** hold under Assumption 1 (and under additional Assumption 4 for the methods without delay) and have polylogarithmic dependence on the confidence level  $\delta$ .
+
+<sup>5</sup>The original **AdaGrad** is described in formula (AdaGrad-CW). However, for the sake of simplicity, we use the name **AdaGrad** to describe a "scalar" version of **AdaGrad** also known as **AdaGrad-Norm** (Ward et al., 2020), see Algorithm 1 for the pseudocode. A similar remark holds for **Adam**.
+
+{4}------------------------------------------------
+
+Adam (Kingma & Ba, 2014) can be seen as a modification of AdaGrad with an exponential moving average  $b_t^2$  of the squared stochastic gradients and with Polyak’s momentum (Polyak, 1964):
+
+$$x_{t+1} = x_t - \frac{\gamma}{b_t} m_t, \quad (\text{Adam-CW})$$
+
+$$m_t = \beta_1 m_{t-1} + (1 - \beta_1) \nabla f_{\xi_t}(x_t), \quad b_t = \sqrt{\beta_2 b_{t-1}^2 + (1 - \beta_2) (\nabla f_{\xi_t}(x_t))^2}, \quad (6)$$
+
+where all operations (taking a square and taking a square root of a vector, division by a vector) are performed coordinate-wise. Although the original proof by Kingma & Ba (2014) has a flaw spotted by Reddi et al. (2019), one can still show the convergence of Adam when  $\beta_2$  goes to 1 (Défossez et al., 2022; Zhang et al., 2022; Wang et al., 2024). Moreover, for any fixed  $\beta_1$  and  $\beta_2$  such that  $\beta_1 < \sqrt{\beta_2}$ , e.g., for the default values  $\beta_1 = 0.9$  and  $\beta_2 = 0.999$ , Adam is not guaranteed to converge (Reddi et al., 2019, Theorem 3). Therefore, the standard choice of  $\beta_2$  in theory is  $\beta_2 = 1 - 1/K$ , where  $K$  is the total number of steps, and that is why, as noticed by Défossez et al. (2022), AdaGrad and Adam are “twins”. Indeed, taking  $\beta_1 = 0$  (no momentum) and  $\beta_2 = 1 - 1/K$  in (6) we get that  $b_t^2 = (1 - 1/K)^{t+1} b_{-1}^2 + \frac{1}{K} \sum_{k=0}^t (1 - 1/K)^{t-k} (\nabla f_{\xi_k}(x_k))^2 = \Theta(b_{-1}^2 + \frac{1}{K} \sum_{k=0}^t (\nabla f_{\xi_k}(x_k))^2)$  since  $1/4 = (1 - 1/2)^2 \leq (1 - 1/K)^{t-k} \leq 1$  for  $0 \leq k \leq t \leq K$ . Thus, up to the rescaling of  $\gamma$  and  $b_{-1}^2$  the effective stepsize of Adam-CW is  $\Theta(\cdot)$  of the effective stepsize of AdaGrad-CW (though the points where the gradients are calculated can be quite different for these two methods). This aspect explains why AdaGrad and Adam have similar proofs and convergence guarantees. The high-probability convergence of Adam is studied by Li et al. (2023) under bounded noise and sub-Gaussian noise assumptions, while our results for Clip-Adam(D) do not require such assumptions.
+
+## 2 FAILURE OF Adam/AdamD AND AdaGrad/AdaGradD WITH MOMENTUM
+
+#### Algorithm 1 Adam/AdamD and M-AdaGrad/M-AdaGradD
+
+---
+
+**Input:** Stepsize  $\gamma > 0$ , starting point  $x_0 \in \mathbb{R}^d$ , initial constant  $b_{-1} > 0$  (for Adam and M-AdaGrad) or  $b_0 > 0$  (for AdamD and M-AdaGradD), momentum parameters  $\beta_1, \beta_2 \in [0, 1]$
+
+- 1: Set  $m_{-1} = 0$
+- 2: for  $t = 0, 1, \dots$  do
+- 3:  $m_t = \beta_1 m_{t-1} + (1 - \beta_1) \nabla f_{\xi_t}(x_t)$
+- 4: if no delay then
+- 5:  $b_t = \begin{cases} \sqrt{\beta_2 b_{t-1}^2 + (1 - \beta_2) \|\nabla f_{\xi_t}(x_t)\|^2} & \text{for Adam} \\ \sqrt{b_{t-1}^2 + \|\nabla f_{\xi_t}(x_t)\|^2} & \text{for M-AdaGrad} \end{cases}$
+- 6: else
+- 7:  $b_{t+1} = \begin{cases} \sqrt{\beta_2 b_t^2 + (1 - \beta_2) \|\nabla f_{\xi_t}(x_t)\|^2} & \text{for AdamD} \\ \sqrt{b_t^2 + \|\nabla f_{\xi_t}(x_t)\|^2} & \text{for M-AdaGradD} \end{cases}$
+- 8: end if
+- 9:  $x_{t+1} = x_t - \frac{\gamma}{b_t} m_t$
+- 10: end for
+
+---
+
+In this section, we present the negative result on the convergence of Adam, AdaGrad with Momentum (M-AdaGrad), and their delayed versions – AdamD/M-AdaGradD (Li & Orabona, 2020).
+
+**Theorem 1.** For any  $\sigma > 0$  and sufficiently small  $\varepsilon, \delta \in (0, 1)$ , there exist problems (1) such that Assumptions 1, 2, 3, hold with  $L = 1$ ,  $\alpha = 2$ , and the iterates produced by Adam(D)/M-AdaGrad(D) with  $x_0$  such that  $\|x_0 - x^*\| \gg \gamma L$  and with  $\beta_2 = 1 - 1/r$  for Adam(D) satisfy:
+
+$$\mathbb{P}\{f(x_T) - f(x^*) \geq \varepsilon\} \leq \delta \implies T = \Omega\left(\text{poly}(\varepsilon^{-1/2}, \delta^{-1/2})\right), \quad (7)$$
+
+i.e., the complexity of Adam(D)/M-AdaGrad(D) has inverse-power dependence on  $\delta$ .
+
+{5}------------------------------------------------
+
+*Sketch of the proof.* To construct our example, we consider the Huber loss function (Huber, 1992)
+
+$$f(x) = \begin{cases} \frac{1}{2}x^2, & \text{if } |x| \leq \nu, \\ \nu(|x| - \frac{1}{2}\nu), & \text{otherwise,} \end{cases} \quad (8)$$
+
+and design two specific sequences of noises (one for **Adam/M-AdaGrad** and the second one for **AdamD/M-AdaGradD**). For **Adam/M-AdaGrad**, we consider a discrete additive noise for the first step such that Markov’s inequality holds as equality, and for the remaining steps, noise equals zero. Then, with high probability,  $b_t$  becomes large after the first step, which slows down the method. As for **AdamD/M-AdaGradD**, similarly to Sadiev et al. (2023), we add the noise only to the last step: since  $b_t$  is constructed using the norm of the previous stochastic gradient, the noise is independent of the stepsize and can spoil the last iterate. See the complete proofs and details in Appendix B.  $\square$
+
+Interestingly, in the above example, it is sufficient to consider the noise with bounded variance to show that the high-probability convergence rates of **Adam(D)/M-AdaGrad(D)** depend polynomially on  $\varepsilon^{-1}$  and  $\delta^{-1/2}$ . Moreover, following a similar argument to (Zhang et al., 2020, Remark 1), one can show the non-convergence of **AdamD/M-AdaGradD** when  $\alpha < 2$ . We also conjecture that for  $\alpha < 2$  one can show even worse dependence on  $\varepsilon$  and  $\delta$  for **Adam/AdaGrad** (or even non-convergence) since  $b_t$  will grow with high probability even faster in this case. Moreover, we also emphasize that the negative result for **Adam(D)** is established only for  $\beta_2 = 1 - 1/T$ , which is a standard assumption to ensure convergence of Adam-type methods. Nevertheless, the negative result of Theorem 1 provides necessary evidence that **Adam(D)/M-AdaGrad(D)** do not achieve desired high-probability convergence rates and motivates us to apply clipping to **Adam(D)/M-AdaGrad(D)**.
+
+## 3 NEW RESULTS FOR **Adam** AND **AdaGrad** WITH CLIPPING
+
+### --- Algorithm 2 **Clip-Adam/Clip-AdamD** and **Clip-M-AdaGrad/Clip-M-AdaGradD** ---
+
+**Input:** Stepsize  $\gamma > 0$ , starting point  $x_0 \in \mathbb{R}^d$ , initial constant  $b_{-1} > 0$  (for **Adam** and **M-AdaGrad**) or  $b_0 > 0$  (for **AdamD** and **M-AdaGradD**), momentum parameters  $\beta_1, \beta_2 \in [0, 1]$ , level of clipping  $\lambda > 0$
+
+```
+
+1: Set  $m_{-1} = 0$ 
+2: for  $t = 0, 1, \dots$  do
+3:    $m_t = \beta_1 m_{t-1} + (1 - \beta_1) \text{clip}(\nabla f_{\xi_t}(x_t), \lambda)$ 
+4:   if no delay then
+5:      $b_t = \begin{cases} \sqrt{\beta_2 b_{t-1}^2 + (1 - \beta_2) \|\text{clip}(\nabla f_{\xi_t}(x_t), \lambda)\|^2} & \text{for Clip-Adam} \\ \sqrt{b_{t-1}^2 + \|\text{clip}(\nabla f_{\xi_t}(x_t), \lambda)\|^2} & \text{for Clip-M-AdaGrad} \end{cases}$ 
+6:   else
+7:      $b_{t+1} = \begin{cases} \sqrt{\beta_2 b_t^2 + (1 - \beta_2) \|\text{clip}(\nabla f_{\xi_t}(x_t), \lambda)\|^2} & \text{for Clip-AdamD} \\ \sqrt{b_t^2 + \|\text{clip}(\nabla f_{\xi_t}(x_t), \lambda)\|^2} & \text{for Clip-M-AdaGradD} \end{cases}$ 
+8:   end if
+9:    $x_{t+1} = x_t - \frac{\gamma}{b_t} m_t$ 
+10: end for
+
+```
+
+---
+
+**Methods.** To address the issue indicated in Theorem 1, we consider **Clip-Adam(D)/Clip-M-AdaGrad(D)** (see Algorithm 2). In contrast to the existing practice (Pan & Li, 2023), we use clipping of the stochastic gradient not only in the update rule for momentum buffer  $m_t$  (Line 3 in Algorithm 2), but also in the computation of the scaling factor  $b_t$  (Lines 5 and 7 in Algorithm 2). The role of clipping in  $m_t$  is similar to the role of clipping in **Clip-SGD**-type methods: it prevents the method from too large steps that may occur due to the presence of the heavy-tailed noise in the gradients. In this regard, it is important to select clipping level in such a way that bias and variance of the estimator are balanced. However, the role of clipping in  $b_t$  is different: clipping prevents  $b_t$  from growing too quickly since such a growth can lead to poor high-probability guarantees (see the proof’s sketch of Theorem 1). We note that clipping is also used in **Clip-AdaGrad** (without momentum) for both  $m_t$  and  $b_t$  computation by Li & Liu (2023) but the authors do not comment about the role of clipping in  $b_t$  and use restrictive assumptions as we explain later in this section.
+
+{6}------------------------------------------------
+
+**Convergence results.** We derive new high-probability convergence bounds for the generalized method formalized as Algorithm 2 in the convex and non-convex cases. The following theorem gives the main result for **Clip-AdamD/Clip-AdaGradD** in the convex case.
+
+**Theorem 2** (Convex Case). *Let  $K > 0$  and  $\delta \in (0, 1]$  and Assumptions 1, 2, and 3 hold for  $Q = B_{2R}(x^*)$  for some  $R \geq \|x_0 - x^*\|$ . Assume that  $\beta_1 \in [0, 1]$ ,  $\beta_2 = \frac{K}{K+1}$  (for **Clip-AdamD**)*
+
+$$\gamma = \Theta \left( \min \left\{ \frac{(1 - \beta_1)^2 b_0}{LA}, \frac{\sqrt{1 - \beta_1} R b_0}{\sigma(K + 1)^{\frac{1}{\alpha}} A^{\frac{\alpha-1}{\alpha}}} \right\} \right), \quad \lambda = \Theta \left( \frac{\sqrt{1 - \beta_1} b_0 R}{\gamma A} \right), \quad (9)$$
+
+where  $A = \ln(4(K+1)/\delta)$ . Then, to guarantee  $f(\bar{x}_K) - f(x^*) \leq \varepsilon$  with probability at least  $1 - \delta$  for  $\bar{x}_K = \frac{1}{K+1} \sum_{t=0}^K x_t$ , **Clip-AdamD/Clip-M-AdaGradD** requires :
+
+$$\tilde{O} \left( \max \left\{ \frac{LR^2}{(1 - \beta_1)^3 \varepsilon}, \left( \frac{\sigma R}{(1 - \beta_1)^{\frac{3}{2}} \varepsilon} \right)^{\frac{\alpha}{\alpha-1}}} \right\} \right) \text{ iterations/oracle calls.} \quad (10)$$
+
+Moreover, with probability at least  $1 - \delta$ , all iterates  $\{x_t\}_{t=0}^K$  stay in  $Q$ .
+
+Next, we present our main results for **Clip-AdamD/Clip-M-AdaGradD** and **Clip-Adam/Clip-M-AdaGrad** in the non-convex case.
+
+**Theorem 3** (Non-Convex Case: Methods with Delay). *Let  $K > 0$  and  $\delta \in (0, 1]$  and Assumptions 1 and 2 hold for  $Q = \{x \in \mathbb{R}^d \mid \exists y \in \mathbb{R}^d : f(y) \leq f_* + 2\Delta \text{ and } \|x - y\| \leq \sqrt{\Delta}/20\sqrt{L}\}$  for some  $\Delta \geq f(x^0) - f_*$ . Assume that  $\beta_1 \in [0, 1]$ ,  $\beta_2 = \frac{K}{K+1}$  (for **Clip-AdamD**)*
+
+$$\gamma = \Theta \left( \min \left\{ \frac{(1 - \beta_1)^2 b_0}{L(K + 1)^{\frac{\alpha-1}{\alpha}} A^{\frac{\alpha-1}{\alpha}}}, \frac{\sqrt{1 - \beta_1} b_0 \sqrt{\Delta}}{\sqrt{L} \sigma (K + 1)^{\frac{\alpha-1}{\alpha}} A^{\frac{\alpha-1}{\alpha}}} \right\} \right), \quad (11)$$
+
+$$\lambda = \Theta \left( \frac{(1 - \beta_1)^{\frac{\alpha-1}{\alpha}} b_0 \Delta^{\frac{\alpha-1}{\alpha}}}{\sigma^{\frac{\alpha-1}{\alpha}} L^{\frac{\alpha-1}{\alpha}} (K + 1)^{\frac{\alpha-1}{\alpha}} A^{\frac{\alpha-1}{\alpha}}} \right), \quad \lambda = \Theta \left( \frac{\sqrt{1 - \beta_1} b_0 \sqrt{\Delta}}{\sqrt{L} \gamma A (K + 1)^{\frac{\alpha-1}{\alpha}}} \right), \quad (12)$$
+
+where  $A = \ln(4(K+1)/\delta)$ . Then, to guarantee  $\frac{1}{K+1} \sum_{t=0}^K \|\nabla f(x_t)\|^2 \leq \varepsilon$  with probability at least  $1 - \delta$  **Clip-AdamD/Clip-M-AdaGradD** requires the following number of iterations/oracle calls:
+
+$$\tilde{O} \left( \max \left\{ \left( \frac{L\Delta}{(1 - \beta_1)^3 \varepsilon} \right)^{\frac{3\alpha-2}{2\alpha-1}}, \left( \frac{\sigma \sqrt{L\Delta}}{(1 - \beta_1)^{\frac{3}{2}} \varepsilon} \right)^{\frac{3\alpha-2}{2\alpha-2}}, \left( \sigma^{\frac{2\alpha-1}{2\alpha-1}} (L\Delta)^{\frac{\alpha-1}{2\alpha-1}} \right)^{\frac{3\alpha-2}{2\alpha-2}} \right\} \right). \quad (13)$$
+
+Moreover, with probability at least  $1 - \delta$ , all iterates  $\{x_t\}_{t=0}^K$  stay in  $Q$ .
+
+**Theorem 4** (Non-Convex Case: Methods without Delay). *Let  $K > 0$  and  $\delta \in (0, 1]$  and Assumptions 1, 2, 4 hold for  $Q = \mathbb{R}^d$ . Assume that  $\beta_1 \in [0, 1]$ ,  $\beta_2 = 1 - \frac{1}{K}$  (for **Clip-Adam**)*
+
+$$\gamma = \Theta \left( \min \left\{ \frac{b_{-1}}{L(K + 1)^{\frac{\alpha-1}{\alpha}} A^{\frac{\alpha-1}{\alpha}}}, \frac{b_{-1} \sqrt{M}}{\sqrt{L} \sigma (K + 1)^{\frac{\alpha-1}{\alpha}} A^{\frac{\alpha-1}{\alpha}}} \right\} \right), \quad (14)$$
+
+$$\lambda = \Theta \left( \frac{b_{-1} M^{\frac{\alpha-1}{\alpha}}}{\sigma^{\frac{\alpha-1}{\alpha}} L^{\frac{\alpha-1}{\alpha}} (K + 1)^{\frac{\alpha-1}{\alpha}} A^{\frac{\alpha-1}{\alpha}}} \right), \quad \lambda = \Theta \left( \frac{b_{-1} \sqrt{M}}{\sqrt{L} \gamma A (K + 1)^{\frac{\alpha-1}{\alpha}}} \right), \quad (15)$$
+
+where  $A = \ln(4/\delta)$ . Then, to guarantee  $\frac{1}{K+1} \sum_{t=0}^K \|\nabla f(x_t)\|^2 \leq \varepsilon$  with probability at least  $1 - \delta$  **Clip-Adam/Clip-M-AdaGrad** requires the following number of iterations/oracle calls:
+
+$$\tilde{O} \left( \frac{1}{(1 - \beta_1)^{\frac{3}{2}}} \max \left\{ \left( \frac{LM}{\varepsilon} \right)^{\frac{3\alpha-2}{2\alpha-1}}, \left( \frac{\sigma \sqrt{LM}}{\varepsilon} \right)^{\frac{3\alpha-2}{2\alpha-2}}, \left( \frac{\sigma^{\frac{2\alpha-1}{2\alpha-1}} (L\Delta)^{\frac{\alpha-1}{2\alpha-1}}}{\varepsilon} \right)^{\frac{3\alpha-2}{2\alpha-2}} \right\} \right). \quad (16)$$
+
+**Discussion of the results.** Theorems 2, 3, and 4 provide high-probability complexities for **Clip-Adam(D)/Clip-M-AdaGrad(D)** with *polylogarithmic* dependence on the confidence level  $\delta$ . Up to the differences in logarithmic factors, these complexities coincide with the best-known ones for
+
+{7}------------------------------------------------
+
+378  
+379  
+380  
+381  
+382  
+383  
+384  
+385  
+386  
+387  
+388  
+389  
+390  
+391  
+392  
+393  
+394  
+395  
+396  
+397  
+398  
+399  
+400  
+401  
+402  
+403  
+404  
+405  
+406  
+407  
+408  
+409  
+410  
+411  
+412  
+413  
+414  
+415  
+416  
+417  
+418  
+419  
+420  
+421  
+422  
+423  
+424  
+425  
+426  
+427  
+428  
+429  
+430  
+431
+
+![Figure 1: Performance of different versions of AdaGrad (with and without clipping/delay) with stepsizes gamma = 1 (first row) and gamma = 1/16 (second row) on the quadratic problem. The figure contains four subplots arranged in a 2x2 grid. The top-left plot shows ||x_t - x^*||^2 vs Number of Iterations for AdaGrad (red) and Clip-AdaGrad (teal) with gamma=1. The top-right plot shows the same for AdaGradD (red) and Clip-AdaGradD (teal) with gamma=1. The bottom-left plot shows ||x_t - x^*||^2 vs Number of Iterations for AdaGrad (red) and Clip-AdaGrad (teal) with gamma=1/16. The bottom-right plot shows the same for AdaGradD (red) and Clip-AdaGradD (teal) with gamma=1/16. In all cases, the clipped versions (teal) achieve lower error and more stable performance compared to the standard versions (red).](a71911ad87414271aeb190e0eebcb989_img.jpg)
+
+Figure 1: Performance of different versions of AdaGrad (with and without clipping/delay) with stepsizes gamma = 1 (first row) and gamma = 1/16 (second row) on the quadratic problem. The figure contains four subplots arranged in a 2x2 grid. The top-left plot shows ||x\_t - x^\*||^2 vs Number of Iterations for AdaGrad (red) and Clip-AdaGrad (teal) with gamma=1. The top-right plot shows the same for AdaGradD (red) and Clip-AdaGradD (teal) with gamma=1. The bottom-left plot shows ||x\_t - x^\*||^2 vs Number of Iterations for AdaGrad (red) and Clip-AdaGrad (teal) with gamma=1/16. The bottom-right plot shows the same for AdaGradD (red) and Clip-AdaGradD (teal) with gamma=1/16. In all cases, the clipped versions (teal) achieve lower error and more stable performance compared to the standard versions (red).
+
+Figure 1: Performance of different versions of **AdaGrad** (with and without clipping/delay) with stepsizes  $\gamma = 1$  (first row) and  $\gamma = 1/16$  (second row) on the quadratic problem.
+
+**Clip-SGD** (Sadiev et al., 2023; Nguyen et al., 2023). Moreover, the leading terms in (13) and (16) are optimal up to logarithmic factors (Zhang et al., 2020), though the first terms in (13) and (16) can be improved (Arjevani et al., 2023). In the convex case, the first term in (10) is not optimal (Nemirovskij & Yudin, 1983) and can be improved (Gorbunov et al., 2020; Sadiev et al., 2023). The optimality of the second term in (10) is still an open question.
+
+It is also worth mentioning that the existing high-probability complexities for **Adam/AdaGrad**-type (without clipping) methods either have inverse power dependence on  $\delta$  (Wang et al., 2023) or have polylogarithmic dependence on  $\delta$  but rely on the assumption that the noise is sub-Gaussian/bounded (Li & Orabona, 2020; Liu et al., 2023; Li et al., 2023), which is stronger than bounded variance assumption. Under the additional assumption that the empirical risk is bounded and the (non-central)  $\alpha$ -th moment of the stochastic gradient are bounded and the empirical risk is smooth, which are stronger than Assumptions 4, 1 and 2 respectively, Li & Liu (2023) derive a similar bound to (16) for **Clip-AdaGrad**. We emphasize that boundedness and smoothness of the empirical risk imply the boundedness and smoothness of all  $f_\xi(x)$  in the worst case (e.g., when the distribution  $\mathcal{D}$  is discrete). Therefore, in the worst case, these assumptions imply the boundedness of  $\nabla f_\xi(x)$  (in view of the second part of (3) for function  $f_\xi$ ), meaning that the noise is bounded and, thus, sub-Gaussian. In this case, clipping is not needed for **AdaGrad** to achieve good high-probability convergence guarantees as shown by Li & Orabona (2020); Liu et al. (2023). Our Theorem 4 extends this result to the momentum version of **Clip-AdaGrad** under less restrictive assumptions (not implying sub-Gaussianity of the noise) and gives the first high-probability convergence bounds for **Clip-Adam** with polylogarithmic dependence on  $\delta$ . Moreover, to the best of our knowledge, Theorems 2 and 3 are the first results showing high-probability convergence of **Adam/AdaGrad**-type methods with polylogarithmic dependence on the confidence level in the case of the heavy-tailed noise without extra assumptions such as Assumption 4. Moreover, we also show that the iterates of **Clip-AdamD/Clip-M-AdaGradD** do not leave set  $Q$  with high probability, where  $Q = B_{2R}(x^*)$  in the convex case and  $Q = \{x \in \mathbb{R}^d \mid \exists y \in \mathbb{R}^d : f(y) \leq f_* + 2\Delta \text{ and } \|x - y\| \leq \sqrt{\Delta/20\sqrt{L}}\}$  in the non-convex case. Further details and proofs are deferred to Appendix C.
+
+## 4 NUMERICAL EXPERIMENTS
+
+In this section, we illustrate numerically that clipping indeed helps **AdaGrad** and **Adam** to achieve better high-probability convergence.
+
+{8}------------------------------------------------
+
+432  
+433  
+434  
+435  
+436  
+437  
+438  
+439  
+440  
+441  
+442  
+443  
+444  
+445  
+446  
+447  
+448  
+449  
+450  
+451  
+452  
+453  
+454  
+455  
+456  
+457  
+458  
+459  
+460  
+461  
+462  
+463  
+464  
+465  
+466  
+467  
+468  
+469  
+470  
+471  
+472  
+473  
+474  
+475  
+476  
+477  
+478  
+479  
+480  
+481  
+482  
+483  
+484  
+485
+
+![Figure 2: Gradient noise evolution for Adam on CoLa and RTE datasets. The figure consists of eight histograms arranged in a 2x4 grid. The top row shows results for the CoLa dataset at 0, 178, 356, and 534 steps. The bottom row shows results for the RTE dataset at 0, 104, 208, and 312 steps. Each histogram displays the distribution of noise norm, with a blue histogram and a black fitted curve. Each plot includes statistics: mu, sigma, Po, and Pao.](91be14371a97fb5ce9eeb29ae18d07c3_img.jpg)
+
+Figure 2 displays eight histograms showing the evolution of gradient noise for the **Adam** optimizer across two datasets: CoLa (top row) and RTE (bottom row). The histograms are evaluated at different stages of training steps: 0 steps,  $\approx 1/3$  of all steps,  $\approx 2/3$  of all steps, and the final number of steps.
+
+**CoLa Dataset (Top Row):**
+
+- CoLa, 0 steps:**  $\mu = 8.31$ ,  $\sigma = 6.77$ ,  $P_o = 10.286$ ,  $P_{ao} = 13335$
+- CoLa, 178 steps:**  $\mu = 20.05$ ,  $\sigma = 7.20$ ,  $P_o = 13.734$ ,  $P_{ao} = 10000$
+- CoLa, 356 steps:**  $\mu = 22.35$ ,  $\sigma = 7.31$ ,  $P_o = 16.060$ ,  $P_{ao} = 10000$
+- CoLa, 534 steps:**  $\mu = 21.62$ ,  $\sigma = 6.83$ ,  $P_o = 11.429$ ,  $P_{ao} = 9337$
+
+**RTE Dataset (Bottom Row):**
+
+- RTE, 0 steps:**  $\mu = 21.26$ ,  $\sigma = 7.54$ ,  $P_o = 19.734$ ,  $P_{ao} = 10000$
+- RTE, 104 steps:**  $\mu = 15.26$ ,  $\sigma = 6.10$ ,  $P_o = 16.734$ ,  $P_{ao} = 10000$
+- RTE, 208 steps:**  $\mu = 16.26$ ,  $\sigma = 6.10$ ,  $P_o = 16.734$ ,  $P_{ao} = 1333$
+- RTE, 312 steps:**  $\mu = 23.80$ ,  $\sigma = 7.00$ ,  $P_o = 17.143$ ,  $P_{ao} = 7$
+
+Figure 2: Gradient noise evolution for Adam on CoLa and RTE datasets. The figure consists of eight histograms arranged in a 2x4 grid. The top row shows results for the CoLa dataset at 0, 178, 356, and 534 steps. The bottom row shows results for the RTE dataset at 0, 104, 208, and 312 steps. Each histogram displays the distribution of noise norm, with a blue histogram and a black fitted curve. Each plot includes statistics: mu, sigma, Po, and Pao.
+
+Figure 2: Gradient noise evolution for **Adam** on CoLa (the first row) and RTE (the second row) datasets. Histograms were evaluated after 0 steps, after  $\approx 1/3$  and  $\approx 2/3$  of all steps, and in the end.
+
+**Quadratic problem.** In the first experiment, we test the performance of different versions of **AdaGrad** with and without clipping on the 1-dimensional quadratic objective with additive heavy-tailed noise:  $f(x) = x^2/2$ ,  $\nabla f_\xi(x) = x + \xi$ , where the noise  $\xi$  has probability density function  $p(t) = \frac{3}{4(1+|t|)^{2.5}}$ . In this case, Assumption 1 is satisfied with any  $\alpha \in (1, 1.5)$  and the  $\alpha$ -th moment is unbounded for  $\alpha \geq 1.5$ . Moreover, the function is strongly convex and  $L$ -smooth with  $L = 1$ . We choose  $x_0 = 2$ ,  $b_0 = 3$  (for the versions of **AdaGrad** with delay),  $b_{-1} = 3$  (for other cases),  $\lambda = 1/2$  for the methods with clipping, and choose  $\gamma$  from  $\{1, 1/16, 1/128\}$ . Each method was run 100 times with different seeds.
+
+The results are given in Figure 1, where for each method, we show its trajectory in terms of the squared distance to the solution for  $\gamma = 1$  and  $\gamma = 1/16$  (the results for  $\gamma = 1/128$  are given in Appendix D.1). More precisely, solid lines correspond to the median value of the squared distances, and the error bands cover the areas from the 10-th to 90-th percentiles of  $(x_t - x^*)^2$ . These results show that clipped versions of **AdaGrad** (with and without delay) achieve better convergence with higher probability than their non-clipped counterparts. Moreover, versions with clipping exhibit similar behavior to each other. That is, the error bands for **Clip-AdaGrad(D)** are lower than for **AdaGrad(D)** (note that the vertical axis is shown in the logarithmic scale making the error bands for **Clip-AdaGrad(D)** look wider than for **AdaGrad(D)**, while they are not). In general, the observed results for **AdaGrad**-type methods are perfectly aligned with the theory developed in this paper. We provide the results for **Adam** with and without clipping/delay in Appendix D.1.
+
+**ALBERT Base v2 fine-tuning.** In the second part of our experiments, we consider fine-tuning the pre-trained ALBERT Base v2 model (Lan et al., 2019) on CoLa and RTE datasets (Wang et al., 2018). Since **Adam**-based algorithms are the methods of choice for NLP tasks, in the main part of the paper, we focus on **Adam** and its clipped versions – **Clip-Adam** and **Clip-AdamD** – and provide additional experiments with **AdaGrad**-based methods in Appendix D.2. We took a pre-trained model from the Hugging Face library. Then, the model was fine-tuned following the methodology suggested by Mosbach et al. (2020). More precisely, we used linear warmup with warmup ratio being 0.1, and hyperparameters were  $\beta_1 = 0.9$ ,  $\beta_2 = 0.999$ ,  $b = \epsilon 1$ , where  $\mathbf{1} = (1, 1, \dots, 1)^\top \in \mathbb{R}^d$ . We tuned batchsize and stepsize  $\gamma$  for **Adam** and selected best values from  $\{4, 8, 16, 32\}$  for the batchsize and from  $\{10^{-6}, 3 \cdot 10^{-6}, 10^{-5}, 3 \cdot 10^{-5}, 10^{-4}\}$  for  $\gamma$ . For the CoLa dataset, the best batchsize was 16 and  $\gamma = 10^{-5}$ , and for the RTE dataset, the best batchsize was 8 and  $\gamma = 10^{-5}$ . For the methods with clipping, we used the same batchsize and stepsize as for **Adam** and tuned the clipping level for the two types of clipping<sup>6</sup>. We tested coordinate-wise clipping with  $\lambda \in \{0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1\}$  and layer-wise clipping with
+
+<sup>6</sup>We did not consider the global/norm clipping (the considered in theory), since typically coordinate-wise or layer-wise clipping work better in training neural networks.
+
+{9}------------------------------------------------
+
+![Figure 3: Validation loss for ALBERT Base v2 fine-tuning task on the CoLa and RTE datasets. The figure contains two line plots. The left plot is titled 'CoLa, Adam vs Clip-Adam' and shows validation loss on the y-axis (ranging from 0.495 to 0.625) against the number of steps on the x-axis (ranging from 0 to 500). The right plot is titled 'RTE, Adam vs Clip-Adam' and shows validation loss on the y-axis (ranging from 0.00 to 0.07) against the number of steps on the x-axis (ranging from 0 to 300). Both plots compare Clip-Adam (blue line) and Adam (red line). In both cases, Clip-Adam achieves lower validation loss than Adam. Shaded regions around the lines represent the 5th and 95th percentiles of the validation loss.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 3: Validation loss for ALBERT Base v2 fine-tuning task on the CoLa and RTE datasets. The figure contains two line plots. The left plot is titled 'CoLa, Adam vs Clip-Adam' and shows validation loss on the y-axis (ranging from 0.495 to 0.625) against the number of steps on the x-axis (ranging from 0 to 500). The right plot is titled 'RTE, Adam vs Clip-Adam' and shows validation loss on the y-axis (ranging from 0.00 to 0.07) against the number of steps on the x-axis (ranging from 0 to 300). Both plots compare Clip-Adam (blue line) and Adam (red line). In both cases, Clip-Adam achieves lower validation loss than Adam. Shaded regions around the lines represent the 5th and 95th percentiles of the validation loss.
+
+Figure 3: Validation loss for ALBERT Base v2 fine-tuning task on the CoLa and RTE datasets.
+
+$\lambda \in \{0.1, 0.2, 0.5, 1, 2, 5, 10\}$ . For the CoLa dataset, the best results were achieved with  $\lambda = 1$  for layer-wise clipping and  $\lambda = 0.02$  for coordinate-wise clipping, and for the RTE dataset, the best results were achieved with  $\lambda = 2$  for layer-wise clipping and  $\lambda = 0.005$  for coordinate-wise clipping. In the main text, we show the results with layer-wise clipping and defer the results with coordinate-wise clipping to Appendix D.2.
+
+Before comparing the methods, we ran **Adam** and checked how heavy-tailed the noise in the stochastic gradients is along the trajectory. In particular, for both tasks, we selected 4 iterates corresponding to the starting point, points generated after  $\approx 1/3$  and  $\approx 2/3$  of all steps, and the last iterate. Then, for each of these points, we sampled size-16 (for CoLa) and size-8 (for RTE) mini-batched estimator  $\nabla f_\xi(x)$  of the gradient 1000 times, saved the resulting norms of the differences  $\|\nabla f_\xi(x) - \nabla f(x)\|$ , and plotted their histogram, i.e., we plotted the histograms of the noise norm. Moreover, we also measure the heavy-tailedness of the noise following the approach from (Gorbunov et al., 2022): we compute two metrics  $\rho_{mR} = F_{1.5}(\|\nabla f_\xi(x) - \nabla f(x)\|)$ , which quantifies “mild” heavy tails, and  $\rho_{eR} = F_3(\|\nabla f_\xi(x) - \nabla f(x)\|)$  introduced by Jordanova & Petkova (2017), which quantifies “extreme” heavy tails, where  $F_\alpha(\|\nabla f_\xi(x) - \nabla f(x)\|) = \mathbb{P}\{\|\nabla f_\xi(x) - \nabla f(x)\| > Q_3 + \alpha(Q_3 - Q_1)\}$  and  $Q_i$  is the  $i$ -th quantile of  $\|\nabla f_\xi(x) - \nabla f(x)\|$ . To illustrate the heavy-tailedness clearly, we divide these metrics to the ones computed for the standard normal distribution ( $\rho_{mRN}$  and  $\rho_{eRN}$ ) and show  $\rho_{mR} = \rho_{mR}/\rho_{mRN}$  and  $\rho_{eR} = \rho_{eR}/\rho_{eRN}$  on the plots.
+
+The histograms are provided in Figure 2, where we additionally estimate the mean and standard deviation and plot the density of the normal distribution with these parameters (black curve). For the CoLa dataset, the noise distribution changes significantly after the start of the training, and its mean drifts to the right. However, the standard deviation does not change significantly, and, more importantly, metrics  $\rho_{mR}$  and  $\rho_{eR}$  remain quite large, showing that the distribution is significantly heavy-tailed. In contrast, for the RTE dataset, the noise distribution does not drift significantly, and, interestingly,  $\rho_{eR}$  decreases towards the end of training and becomes zero, while  $\rho_{mR}$  stays in the interval  $[5, 10]$ . Therefore, the noise distribution has much heavier tails for CoLa than for RTE.
+
+Then, similarly to the experiments with the quadratic problem, we ran the methods 100 times, and for each step, we computed the median value of the validation loss and its 5-th and 95-th percentiles. The results are presented in Figure 3, where the solid lines correspond to the medians and the error bands cover the areas between 5-th and 95-th percentiles. As expected, **Adam** exhibits poor high-probability convergence on the CoLa datasets where the noise is significantly heavy-tailed, and **Clip-Adam** shows much better performance: the area between 5-th and 95-th percentiles is relatively narrow for **Clip-Adam**. In contrast, for the RTE dataset, **Clip-Adam** performs similarly to **Adam**. This is also expected since the noise is much less heavy for RTE, as Figure 2 shows. Taking into account the negative results from Section 2, and the upper bounds from Section 3, we conclude that these numerical results are well-aligned with the theory developed in the paper.
+
+## REFERENCES
+
+- Yossi Arjevani, Yair Carmon, John C Duchi, Dylan J Foster, Nathan Srebro, and Blake Woodworth. Lower bounds for non-convex stochastic optimization. *Mathematical Programming*, 199(1):165–214, 2023.
+
+ Rest of paper (reference and Appendix) is removed.

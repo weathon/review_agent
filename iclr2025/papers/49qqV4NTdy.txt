@@ -1,0 +1,301 @@
+
+
+{0}------------------------------------------------
+
+# UNDERSTANDING ALIGNMENT IN MULTIMODAL LLMs: A COMPREHENSIVE STUDY
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Preference alignment has become a crucial component in enhancing the performance of Large Language Models (LLMs), yet its impact in Multimodal Large Language Models (MLLMs) remains comparatively underexplored. Similar to language models, MLLMs for image understanding tasks encounter challenges like hallucination. In MLLMs, hallucination can occur not only by stating incorrect facts but also by producing responses that are inconsistent with the image content. A primary objective of alignment for MLLMs is to encourage these models to align responses more closely with image information. Recently, multiple works have introduced preference datasets for MLLMs and examined different alignment methods, including Direct Preference Optimization (DPO) and Proximal Policy Optimization (PPO). However, due to variations in datasets, base model types, and alignment methods, it remains unclear which specific elements contribute most significantly to the reported improvements in these works. In this paper, we independently analyze each aspect of preference alignment in MLLMs. We start by categorizing the alignment algorithms into two groups, offline (such as DPO), and online (such as online-DPO), and show that combining offline and online methods can improve the performance of the model in certain scenarios. We review a variety of published multimodal preference datasets and discuss how the details of their construction impact model performance. Based on these insights, we introduce a novel way of creating multimodal preference data called Bias-Driven Hallucination Sampling (BDHS) that needs neither additional annotation nor external models, and show that it can achieve competitive performance to previously published alignment work for multimodal models across a range of benchmarks.
+
+## 1 INTRODUCTION
+
+Recent advancements in Multimodal Large Language Models (MLLMs) have significantly improved our understanding of vision-language tasks. By integrating visual signals with Large Language Models (LLMs), these models have demonstrated enhanced capabilities in multimodal understanding, reasoning, and interaction (Liu et al., 2023c; 2024; Bai et al., 2023; McKinzie et al., 2024).
+
+Typically, MLLMs are pre-trained on large image-text datasets to develop foundational multimodal knowledge and skills, then undergo post-training for conversational capabilities, instruction following, helpfulness, and safety. Despite rapid advancements in recent years, significant challenges persist.
+
+A notable problem is the tendency of MLLMs to produce responses that are not factually grounded in the visual input, commonly referred to as hallucinations, leading to inaccuracies such as incorrect descriptions of non-existent visual elements (Liu et al., 2023a; Cui et al., 2023). This undermines the trustworthiness of MLLMs in many practical applications.
+
+Preference alignment methods have proven effective in reducing hallucinations and generating responses more closely aligned with human preferences for LLMs (Zhao et al., 2023b; Rafailov et al., 2023; Azar et al., 2024; Guo et al., 2024; Yuan et al., 2024; Ahmadian et al., 2024; Tang et al., 2024a). These methods utilize pairwise preference data to fine-tune the model, which can be based on Reinforcement Learning from Human Feedback (RLHF) (Christiano et al., 2017; Stiennon et al., 2020), Direct Alignment from Preferences (DAP) (Rafailov et al., 2023; Azar et al., 2024; Zhao et al., 2023b), or Online Direct Alignment from Preferences (Online-DAP) (Yuan et al., 2024; Guo et al., 2024).
+
+{1}------------------------------------------------
+
+While alignment in LLMs has been extensively studied, alignment for MLLMs has not yet been investigated to the same extent. Sun et al. (2023) and Zhou et al. (2024) aligned LLaVA 1.5 (Liu et al., 2023b) using Proximal Policy Optimization (PPO) and Direct Preference Optimization (DPO), respectively, while Li et al. (2023a) and Yu et al. (2023b) employed DPO and its variations to align Qwen-VL (Bai et al., 2023) and Muffin (Yu et al., 2023a) models. Notably, besides different alignment strategies and often different base models, all these works also introduce novel preference datasets for alignment with various sizes, collection, and generation schemes. As a result, while each of these studies offers valuable insights into alignment for MLLMs, it can sometimes be difficult to strongly attribute reported improvements to the individual proposed choices.
+
+In this paper, we examine each component of multimodal alignment independently. First, we categorize alignment methods into two types: offline methods, which utilize preference pairs collected prior to training (e.g., DPO), and online methods, which involve sampling from the model during policy optimization (e.g., RLHF and Online-DAP). We conduct a comprehensive study over popular online and offline alignment methods, all aligning the popular LLaVA 1.6 model (Liu et al., 2024) using a fixed data regimen and study their benefits and shortcomings. To our knowledge, this is the first time that such study is conducted with MLLMs.
+
+Further, we study the different methods for building pairwise preferences using public datasets. We break down the main components of preference data into three parts: prompts, chosen responses and rejected responses (Table 1). For each of those components, we investigate how their source, diversity, and quality can affect the resulting alignment. Additionally, we examine how the size of the alignment dataset impacts downstream performance.
+
+Based on our comprehensive ablations, we identify a few key desiderata in alignment strategies for MLLMs and introduce a simple, novel preference data sampling scheme we call Bias-Driven Hallucination Sampling (BDHS). Despite not utilizing any human annotation nor the input of any external teacher model such as GPT-4-V, we show that BDHS can achieve competitive performance against even much larger preference datasets constructed under different regimes.
+
+## 2 ALIGNMENT
+
+Preference alignment uses pairwise preference data. Each pair is linked to a text prompt, denoted as  $x_{\text{text}}$ , and an associated image,  $x_{\text{img}}$ , together forming the input  $x = (x_{\text{img}}, x_{\text{text}})$ . The responses include a preferred one,  $y^+$ , and a non-preferred or rejected one,  $y^-$ . See Section 3 for a more thorough discussion of these components. In this section, we focus on the various ways that a preference dataset,  $\mathcal{D} = \{(x, y^+, y^-)\}_{i=1}^N$ , is used by alignment approaches.
+
+### 2.1 REINFORCEMENT LEARNING FROM HUMAN FEEDBACK (RLHF)
+
+RLHF was the initial method used for alignment (Christiano et al., 2017; Stiennon et al., 2020), involving the training of a reward model (RM) from pairwise preferences and then optimizing a policy using the RM via reinforcement learning (RL). In RLHF, a reward model is initially trained on the preference pairs as described in Stiennon et al. (2020). The training of this reward model uses a straightforward cross-entropy loss, treating the binary choice – preferred or rejected – as a categorical label. The objective function for training the reward model,  $r_\phi$ , is as follows:
+
+$$L_{\text{RM}} = -\log(\sigma(r_\phi(x, y^+) - r_\phi(x, y^-))) , \quad (1)$$
+
+where  $\sigma$  is the logistic function.
+
+Next, the model (i.e., policy),  $\pi_\phi$ , is fine-tuned through RL using the trained reward model to optimize the following objective:
+
+$$\max_{\pi_\phi} \mathbb{E}_{x \sim \mathcal{D}, y \sim \pi_\phi(y|x)} [r_\phi(x, y) - \beta D_{\text{KL}}(\pi_\phi(y|x) || \pi_{\text{ref}}(y|x))] . \quad (2)$$
+
+An additional KL penalty term  $D_{\text{KL}}(\cdot)$  is incorporated to discourage significant deviations of  $\pi_\phi$  from the initial model,  $\pi_{\text{ref}}$  (Stiennon et al., 2020), and  $\beta$  is a hyperparameter which adjusts the effect of this term in the overall objective.
+
+Since the RM is learned in all RL-based approaches, it remains an imperfect approximation even when trained on human preferences. Previous work has shown that if not handled carefully, over-optimizing
+
+{2}------------------------------------------------
+
+for the RM can hurt the performance of the aligned model (Gao et al., 2023a). This adds a layer of challenge to these methods.
+
+Different RL algorithms apply unique strategies to optimize the RL objective (Equation 2). In Appendix C we investigate the complexities of RL-based alignment for MLLMs, examining how different algorithms affect model performance. Specifically, we evaluate the impact of using PPO (Schulman et al., 2017; Stiennon et al., 2020; Ouyang et al., 2022) and REINFORCE Leave-One-Out (RLOO) (Williams, 1992; Ahmadian et al., 2024) in comparison to other alignment methods.
+
+### 2.2 DIRECT ALIGNMENT FROM PREFERENCE
+
+This family of approaches directly utilizes preference data,  $D$ , to optimize the policy,  $\pi_\theta$ . By eliminating the need to train a reward model, these methods significantly simplify the preference optimization pipeline. Furthermore, the gradient of all objectives can be precisely computed, distinguishing these methods from traditional RLHF approaches. The most widely used objective in MLLM alignment is DPO (Rafailov et al., 2023) (Equation 3). We have conducted the majority of our experiments using DPO to ensure comparability with other studies in MLLM alignment. In Appendix E, we also examine DPO alongside two other common offline methods, IPO (Azar et al., 2024) and SLiC (Zhao et al., 2023b). For a unified derivation of common direct alignment methods refer to Tang et al. (2024b). For brevity, we only recap the DPO loss function:
+
+$$L_{\text{DPO}}(\pi_\theta; \pi_{\text{ref}}) = \mathbb{E}_{(x, y^+, y^-) \sim D} \left[ -\log \sigma \left( \beta \log \frac{\pi_\theta(y^+ | x) \pi_{\text{ref}}(y^- | x)}{\pi_{\text{ref}}(y^+ | x) \pi_\theta(y^- | x)} \right) \right]. \quad (3)$$
+
+We will omit the dependency on  $\pi_{\text{ref}}$  from subsequent equations for simplicity.
+
+It is important to note that most preference datasets are not derived from the model being aligned and are collected offline. Even when the data is constructed based on the model that is undergoing alignment, the samples encountered during training do not account for changes in the model over training. This leads to a distribution shift between the model that generated the data and the model being aligned, which can be considered a disadvantage of these methods.
+
+### 2.3 ONLINE DIRECT ALIGNMENT FROM PREFERENCE
+
+Recently, a new family of algorithms has been proposed for aligning LLMs. These methods do not train a separate reward model. Instead, they employ either the model that is being aligned (Yuan et al., 2024) or a different LLM (Guo et al., 2024) to obtain online feedback to create preference pairs. These pairs are then used to optimize the objective function via for example DPO. This approach eliminates the complexity of training a separate reward model while still taking advantage of online samples from the model, thereby avoiding distribution shifts.
+
+We explore the use of LLaVA 1.6-34B (Liu et al., 2024) as annotator to generate online preference pairs, motivated by its strong performance on a multitude of multimodal benchmarks. Additionally, we investigate a hybrid approach that combines online and offline approaches. This method involves sampling from the offline preference data with a probability  $p$ ,  $(y^+, y^-)$ , and sampling from the model with a probability  $1 - p$ ,  $(\tilde{y}^+, \tilde{y}^-)$ . Equation 4 details this approach.
+
+$$L_{\text{Mixed-DPO}}(\pi_\theta) = \mathbb{E}_{\substack{(x, y^+, y^-) \sim D \\ (\tilde{y}^+, \tilde{y}^-) \sim \pi_\theta}} [\alpha L_{\text{DPO}}(y^+, y^-, x; \pi_\theta) + (1 - \alpha) L_{\text{DPO}}(\tilde{y}^+, \tilde{y}^-, x; \pi_\theta)], \quad (4)$$
+
+where  $\alpha \sim \text{Bernoulli}(p)$ . In our experiments we use  $p = 0.5$ . This algorithm is similar to techniques used in off-policy RL methods like Q-learning (Hester et al., 2018), where a replay buffer includes samples from both the model and expert demonstrations. We found this approach particularly effective when the online and offline methods have complementary effects on the model’s final performance.
+
+## 3 MULTIMODAL PREFERENCE DATA
+
+Preference datasets have three main components: the prompts, the chosen and the rejected responses. Responses are usually constructed by prompting one or more MLLMs, typically excluding the model being aligned. Those responses are associated with a preference signal. There are two
+
+{3}------------------------------------------------
+
+|           | Type       | Name  | Size                           | Text                               | Prompt                       | Image                        | Chosen | Response     | Rejected | Judge  | Preference Signal |
+|-----------|------------|-------|--------------------------------|------------------------------------|------------------------------|------------------------------|--------|--------------|----------|--------|-------------------|
+| Human     | LLaVA-RLHF | 10k   | LLaVA-Instruct-150k            | COCO                               | LLaVA 1.5                    | LLaVA 1.5                    | human  | ranking      |          |        |                   |
+|           | RLHF-V     | 5.7k† | UniMM-Chat                     | Various†                           | Muffin/Various†(corrected)   | Muffin/Various †             | human  | construction |          |        |                   |
+|           |            |       |                                |                                    |                              |                              |        |              |          |        |                   |
+| Synthetic | VLFeedback | 80k   | 9 datasets (LLaVA, SVIT, etc.) | 12 MLLMs (LLaVA 1.5, GPT-4V, etc.) |                              |                              |        |              |          | GPT-4V | ranking           |
+|           | NLF        | 63k   | LLaVA-Instruct-150k            | COCO                               | DRESS <sub>n</sub> (refined) | DRESS <sub>n</sub>           | GPT-4V | construction |          |        |                   |
+|           | POVID      | 17k   | LLaVA-Instruct-150k            | COCO                               | SFT Ground truth             | SFT Ground truth (corrupted) | GPT-4V | construction |          |        |                   |
+
+Table 1: Recently published multimodal preference datasets. † denotes the updated dataset version.
+
+![Figure 1: Overview of the BDHS method. The diagram shows a flow from input to response. Input consists of a prompt x_text ('Describe this image in detail.'), an image x_img of oranges, and a sampled attention mask m. These are combined into input x̃. This is processed by 'Split each sentence at a random position. Complete sentences via model inference.' to produce multiple partial responses. These are then processed by 'Guided Generation' using the attention mask to produce an SFT response y⁺. Simultaneously, the partial responses are processed by 'BDHS response ỹ⁻' which generates a response with hallucinations. Finally, 'Similarity Scoring via Sequence Embeddings' is used to compare y⁺ and ỹ⁻. If similarity > ε_s, the process loops back to 'Sample new mask'.](d3ca266c298aeb34b019960c6c36f187_img.jpg)
+
+Figure 1: Overview of the BDHS method. The diagram shows a flow from input to response. Input consists of a prompt x\_text ('Describe this image in detail.'), an image x\_img of oranges, and a sampled attention mask m. These are combined into input x̃. This is processed by 'Split each sentence at a random position. Complete sentences via model inference.' to produce multiple partial responses. These are then processed by 'Guided Generation' using the attention mask to produce an SFT response y⁺. Simultaneously, the partial responses are processed by 'BDHS response ỹ⁻' which generates a response with hallucinations. Finally, 'Similarity Scoring via Sequence Embeddings' is used to compare y⁺ and ỹ⁻. If similarity > ε\_s, the process loops back to 'Sample new mask'.
+
+Figure 1: Overview of the BDHS method including the optional iterative variant in gray. For each re-generation, both the image attention mask and the sentence split positions are resampled. The image is taken from the LLaVA Instruct dataset.
+
+sources: (a) datasets that rely on **human annotators** to compose the preference, such as LLaVA-RLHF (Sun et al., 2023) or RLHF-V Yu et al. (2023b), and (b) datasets with **synthetic annotations**, commonly originating from GPT-4V acting as a ranker or corrupter, such as DRESS (Chen et al., 2023), VLFeedback (Li et al., 2023a) and POVID Zhou et al. (2024). Table 1 presents those datasets.
+
+Another way to organize those datasets is to consider the nature of the preference signal. LLaVA-RLHF and VLFeedback use **ranking**: responses are sampled, then ranked by humans or GPT-4V. Other works use a **construction** approach: signal is obtained by correcting responses, such as RLHF-V and DRESS, or by corrupting them such as POVID. In Appendix F.1, we provide more details.
+
+One constant, however, among those methods is the cost to build the preference – whether using a strong MLLM or humans. In the next section, we propose a method to mitigate this requirement.
+
+### 3.1 BIAS-DRIVEN HALLUCINATION SAMPLING (BDHS)
+
+Hallucinations in MLLMs often express the underlying language models’ inherent biases, for example towards frequently cooccurring objects or object attributes (Li et al., 2023b; Qian et al., 2024; Zhou et al., 2024). In other words, the MLLM may choose to draw from its parametric knowledge or textual context  $x_{\text{text}}$  when instead it should have more strongly considered information from the image  $x_{\text{img}}$  in question. Zhou et al. (2024) suggest to trigger inherent biases directly by presenting noisy images  $\tilde{x}_{\text{img}}$  to the model when generating the non-preferred response  $\tilde{y}^-$  via teacher-forcing (POVID-style image distortion). While this method has desirable characteristics, such as not requiring external teacher models or human annotation to construct preference pairs, as well as generating samples that are at least partially informed by the policy under alignment, it carries some notable drawbacks. Zhou et al. (2024) show that selecting too few diffusion steps can yield insufficient corruption, whereas
+
+{4}------------------------------------------------
+
+too many diffusion steps negatively impacts the generated responses, as the model mainly identifies noise respective to *pixels*. In our experiments, we further found that the proposed teacher-forcing can introduce non-sensical responses. Further details about POVID-style image distortion are provided in Appendix G.1 and an example with non-sensical responses in Appendix G.7.
+
+Inspired by the POVID work, we aim to address its main identified shortcomings: 1. We propose to rethink the method of corrupting the signal from the input image from a pixel-based approach to one that limits access in the latent space via attention masking, which we argue more directly achieves the underlying motivation of triggering the inherent bias of the underlying language model. 2. We introduce a new reference-guided generation strategy that allows corrupted responses to remain largely true to the chosen response while still introducing meaningful divergence, without introducing non-sensical continuations introduced by token-based teacher forcing. 3. We use an off-the-shelf sentence embedding to verify that the generated rejected response is meaningfully distinct from the original reference to focus the resulting feedback signal on hallucinations over mere stylistic difference. We refer to our novel technique as **Bias-Driven Hallucination Sampling (BDHS)**. BDHS is annotation free and computationally efficient to the point that rejected responses can be generated online, which we explore in Section 4.4. An overview of the method can be found in Figure 1, with further details provided in the following subsections.
+
+Let  $\tilde{x} = (x_{\text{text}}, \tilde{x}_{\text{img}}, m)$  denote the modified input with (optional noisy) image  $\tilde{x}_{\text{img}}$  and attention mask  $m$ . Suppose the MLLM encodes image  $\tilde{x}_{\text{img}}$  to  $k$  embedding vectors, each vector with dimension  $d$ . Then,  $m$  is defined as a boolean mask of dimension  $k$ . We suggest to randomly sample the mask  $m = (m_1, m_2, \dots, m_k)$  according to a uniform distribution  $\mathcal{U}(0, 1)$  and threshold  $\rho_{\text{th}} \in [0, 1]$  where each element  $m_i = 1$  if  $\rho_i \geq \rho_{\text{th}}$  for  $\rho_i \sim \mathcal{U}(0, 1)$  or  $m_i = 0$  otherwise. By masking the image embeddings using  $m$ , the model only pays attention to a subset of the  $k$  embedding vectors to generate the response  $\tilde{y}^-$ . Where the remaining signal is not sufficient, the MLLM can only draw on its parametric knowledge to answer, thus inducing hallucination. By allowing access to some part of the image, we encourage more realistic hallucinations.
+
+Keeping the generated corrupted response  $\tilde{y}^-$  close to the preferred one,  $y^+$ , supports the optimizer in paying more attention to the image as only the non-overlapping portion is affected by the modified input  $\tilde{x}$ . Otherwise, responses  $\tilde{y}^-$  and  $y^+$  could diverge early on or  $\tilde{y}^-$  could even represent a generic response hinting on missing image information. Instead, in order to maintain consistency in style and structure we propose a reference-guided sampling strategy, where we “diverge” and “rejoin” from  $y^+$  at random points in every sentence to form  $\tilde{y}^-$ . A formal description of the algorithm is provided in Appendix G.3.
+
+Similar to our observation in Online-DAP, BDHS responses  $\tilde{y}^-$  can still be very similar to the ground truth  $y^+$ , especially when the pivot position is late in the sentence. To maximize learning utility of BDHS preference pairs, this is undesirable.
+
+While further increasing  $\rho_{\text{th}}$  or biasing towards early pivot positions in the reference-guided generation could minimize such trivial generations, this introduces additional hyperparameters and can lead to less realistic dispreferred responses. Instead, we realize BDHS in an iterative fashion.
+
+Once  $\tilde{y}^-$  is generated, a semantic similarity score w.r.t.  $y^+$  is computed using an off-the-shelf sentence embedding model<sup>1</sup>. A new response  $\tilde{y}^-$  is sampled if the cosine similarity is above a pre-defined threshold  $\epsilon_s$ . After reaching the maximum number of iterations  $N_{\text{BDHS}}$ ,  $\tilde{y}^-$  is generated according to input  $\tilde{x}$  without any reference guidance. Appendix G provides the actual algorithm for BDHS including similarity scoring and several examples.
+
+This additional comparison avoids  $\tilde{y}^-$  responses that are trivial rephrasings. Moreover, measuring the number of examples that need re-generation allows intuitive tuning of the  $\rho_{\text{th}}$  hyper parameter.
+
+## 4 EXPERIMENTS
+
+In this section, we empirically evaluate different aspects of aligning MLLMs. We start by summarizing our key findings in Section 4.1. We conduct our ablations on the LLaVA 1.6-7B Vicuna model, as it is both well studied and exhibits relatively strong performance across a range of multimodal tasks (Liu et al., 2024). Notably, this model provides stronger baseline performance over the more
+
+<sup>1</sup>We use the *all-mpnet-base-v2* sentence embedding model (Reimers & Gurevych, 2019) with  $\epsilon_s = 0.97$ .
+
+{5}------------------------------------------------
+
+| Model         | Alignment  | Dataset                  | POPE †       | MMHAL †     | MMHAL <sup>†</sup> † | LLaVA <sup>m</sup> † | VQAT †       | GQA †        | MMVet †      | Recall <sup>POPE</sup> † |
+|---------------|------------|--------------------------|--------------|-------------|----------------------|----------------------|--------------|--------------|--------------|--------------------------|
+| LLaVA 1.6-7B  | –          | –                        | 86.40        | 2.95        | 2.75                 | 80.85                | 64.85        | 64.23        | 43.94        | 68.13                    |
+| LLaVA 1.6-13B | –          | –                        | 86.23        | <u>3.23</u> | <u>3.18</u>          | 86.10                | <u>65.7</u>  | <u>64.8</u>  | 48.26        | 68.13                    |
+| LLaVA 1.6-34B | –          | –                        | 87.73        | <u>3.50</u> | <u>3.46</u>          | 88.35                | <u>69.5</u>  | <u>67.1</u>  | 53.90        | 71.17                    |
+| OnmlMM-12B†   | –          | –                        | –            | 3.14        | –                    | 74.3                 | –            | –            | –            | –                        |
+| LLaVA 1.6-7B† | DPO        | STIC                     | –            | –           | –                    | 79.2                 | 65.2         | –            | <u>45.0</u>  | –                        |
+| LLaVA 1.5-7B† | RLAIF-V    | RLAIF-V                  | –            | <u>3.06</u> | –                    | 64.9                 | –            | –            | –            | –                        |
+| OnmlMM-12B†   | RLAIF-V    | RLAIF-V                  | –            | <u>3.36</u> | –                    | 74.3                 | –            | –            | –            | –                        |
+| LLaVA 1.6-7B  | DPO        | POVID (Full)             | 88.09        | <u>3.16</u> | <u>3.07</u>          | 78.63                | 64.56        | 64.12        | 40.60        | 73.48                    |
+| LLaVA 1.6-7B  | Online-DPO | POVID(Full)              | 86.49        | 2.88        | 2.94                 | 82.61                | 64.88        | 64.31        | 43.26        | 68.45                    |
+| LLaVA 1.6-7B  | Mixed-DPO  | POVID (Full)             | 88.03        | 2.83        | <u>3.10</u>          | 82.75                | 64.93        | <u>64.47</u> | 42.80        | <u>74.53</u>             |
+| LLaVA 1.6-7B  | DPO        | POVID (Full)             | 88.09        | <u>3.16</u> | <u>3.07</u>          | 78.63                | 64.56        | 64.12        | 40.60        | 73.48                    |
+| LLaVA 1.6-7B  | DPO        | BDHS (POVID, 5k)         | 88.75        | 2.61        | 2.71                 | 86.33                | 65.07        | 63.97        | 43.4         | <u>75.58</u>             |
+| LLaVA 1.6-7B  | DPO        | Online-BDHS (POVID, 5k)  | <u>88.83</u> | 2.80        | 2.99                 | 85.03                | 65.09        | 63.65        | 43.12        | 74.09                    |
+| LLaVA 1.6-7B  | DPO        | + POVID (5k)             | 88.38        | 2.82        | 2.81                 | 84.01                | <u>65.42</u> | 64.50        | <u>45.46</u> | 74.00                    |
+| LLaVA 1.6-7B  | DPO        | VLFeedback (Full)        | 81.84        | 2.96        | 2.99                 | <u>90.75</u>         | 62.93        | 62.53        | 43.85        | 66.67                    |
+| LLaVA 1.6-7B  | DPO        | VLFeedbackCorrupted (5k) | 87.52        | 3.03        | 3.01                 | <u>88.64</u>         | 65.30        | 64.19        | 42.16        | 70.13                    |
+| LLaVA 1.6-7B  | DPO        | BDHS (VLFeedback, 5k)    | 88.10        | 2.77        | 2.87                 | <u>86.68</u>         | 65.27        | 64.33        | 43.39        | 72.43                    |
+
+Table 2: Main results. The best and second best results are shown in **bold** and underlined, respectively. If a larger model outperforms all aligned 7B models, it is indicated by **bold and underline**. † denotes results reported from referenced papers, and a dash (–) marks benchmarks that are not reported. Rows in blue are contributions of this paper.
+
+common choice of LLaVA 1.5-7B in the multimodal alignment literature and we generally observe correspondingly smaller relative improvements from alignment. We carefully select a set of benchmarks to measure overall helpfulness and hallucination propensity. Our study reveals shortcomings in existing benchmarks, particularly around measuring hallucinations. Please refer to Appendix B.1 for details. We also include an in-depth ablation study on the components we have discussed in the paper, offering a clearer view of effect. We begin with equalizing the experimental conditions on public preference datasets (Section 4.2). We then highlight desiderata for a high-quality preference dataset (Section 4.3) and show that BDHS can be a simple and effective mechanism following such best practices (Section 4.4). Additionally, we compare RL-based methods (Appendix C), Online and Mixed-DPO strategies (Appendix D.3), as well as various offline approaches (Appendix E).
+
+### 4.1 KEY COMPONENTS IN MLLM ALIGNMENT PIPELINE
+
+We summarize our main findings and compare results with other SOTA models in Table 2. First, we fixed the base model (LLaVA 1.6-7B) and studied the effects of online vs. offline methods using the POVID alignment data (Zhou et al., 2024). While offline DPO shows more significant improvement on benchmarks that consider hallucination, such as POPE and MMHALBench-V, Online-DPO enhances benchmarks evaluating the quality of answers in an open question answering setup, like LLaVABench-in-the-Wild. This is intuitive, as the preference pairs in POVID are specifically designed to reduce hallucinations whereas the online samples from the model may provide other signals. Mixed-DPO allows to incorporate the benefits of both approaches and the results show consistent improvement over both online and offline methods.
+
+When using Online-DPO or Mixed-DPO strategies, we typically depend on advanced models like LLaVA 1.6-34B to rank the online samples generated by the model. However, access to such models is not always guaranteed. We discuss this limitation in more detail in Appendix D.2. Additionally, the construction of the POVID dataset also involves using a superior model such as GPT-4V to inject noise into SFT data. Our proposed BDHS method does not require additional annotators or preference data, and relies exclusively on SFT data already available from the instruction tuning of the base model. Despite this simplicity, it consistently outperforms the models that utilize the larger POVID dataset (i.e. both offline and Mixed-DPO) in most benchmarks. Implementing BDHS in an online format further closes this performance gap in MMHALBench-V, establishing BDHS as a compelling and cost-effective alternative to other more resource-intensive approaches. Combining the POVID dataset with the online-BDHS approach (referred to as Online-BDHS  $\cup$  POVID), with the exception of MMHALBench-V, consistently outperforms the model that uses only the POVID dataset across all benchmarks. It also surpasses STIC (Deng et al., 2024) and RLAIF-V (Yu et al., 2024) on the reported benchmarks. We further discuss the enhanced efficacy of our approach over Zhou et al. (2024) in Section 4.4.
+
+While Section 4.3 provides a detailed analysis of various preference datasets, we highlight key findings from the VLFeedback dataset here, as they contribute significantly to building an effective alignment strategy. Unlike POVID, both VLFeedback and its variant, VLFeedbackCorrupted(5k),
+
+{6}------------------------------------------------
+
+| Model                                                        | Dataset                       | POPE <sup>†</sup> | MMHAL <sup>†</sup>   | MMHAL <sup>†</sup> | LLaVA <sup>W</sup> | VQAT <sup>†</sup> | GQAT <sup>†</sup> | MMVet <sup>†</sup> | Recall <sup>max</sup> |
+|--------------------------------------------------------------|-------------------------------|-------------------|----------------------|--------------------|--------------------|-------------------|-------------------|--------------------|-----------------------|
+| LLaVA 1.6-7B                                                 | –                             | 86.40             | 2.95                 | 2.75               | 80.85              | 64.85             | 64.23             | 43.94              | 68.13                 |
+| <b>Public datasets</b>                                       |                               |                   |                      |                    |                    |                   |                   |                    |                       |
+| LLaVA 1.6-7B                                                 | VLFeedback (80k)              | 81.84             | 2.96                 | 2.99               | 90.55              | 62.93             | 62.54             | 43.85              | 66.67                 |
+| LLaVA 1.6-7B                                                 | POVID (17k)                   | 88.09             | 3.16                 | 3.07               | 78.05              | 64.56             | 64.12             | 40.60              | 73.48                 |
+| LLaVA 1.6-7B                                                 | RLHF-V (5.7k)                 | 83.86             | 3.15                 | 3.26               | 70.58              | 64.75             | 62.89             | 37.16              | 64.26                 |
+| <b>Public datasets, randomly subsampled to 5,000 samples</b> |                               |                   |                      |                    |                    |                   |                   |                    |                       |
+| LLaVA 1.6-7B                                                 | VLFeedback (5k)               | 86.31             | 2.92                 | 3.00               | 83.10              | 65.06             | 64.09             | 43.21              | 68.03                 |
+| LLaVA 1.6-7B                                                 | POVID (5k)                    | 88.18             | 2.93                 | 2.93               | 81.89              | 64.90             | 64.34             | 43.39              | 71.80                 |
+| LLaVA 1.6-7B                                                 | RLHF-V (5k)                   | 84.39             | 3.25                 | 3.35               | 72.09              | 64.85             | 63.35             | 39.72              | 64.68                 |
+| <b>Previously published</b>                                  |                               |                   |                      |                    |                    |                   |                   |                    |                       |
+| Qwen-VL-Chat                                                 | VLFeedback (Li et al., 2023a) | –                 | 3.02                 | –                  | –                  | –                 | –                 | 49.9               | –                     |
+| Muffin                                                       | RLHF-V (Yu et al., 2023b)     | –                 | (52.11) <sup>†</sup> | –                  | –                  | –                 | –                 | –                  | –                     |
+| LLaVA 1.5                                                    | POVID (Zhou et al., 2024)     | 86.90             | 2.69                 | –                  | 68.7               | –                 | –                 | 31.8               | –                     |
+
+Table 3: Results for LLaVA 1.6-7B Vicuna (Liu et al., 2024) aligned with DPO on VLFeedback, POVID, RLHF-V. Results highlighted in gray are the results reported by the original authors. <sup>†</sup> denotes MMHALBench for which Yu et al. (2023b) strictly reported the human-corrected hallucination rate.
+
+select the “chosen response” in the preference pairs from the top responses ranked by GPT-4V, selected from a pool of model-generated responses. Compared to re-using SFT data, this approach potentially offers an additional supervisory signal to the model, leading to enhanced performance on benchmarks like LLaVABench-in-the-Wild, where such aligned models even outperform the unaligned 13B and 34B models from the same family.
+
+Notably, we introduce VLFeedbackCorrupted (5k), a small dataset leveraging corruption injection to generate the “rejected response”, which performs competitively to the much larger ranking-based VLFeedback (full) dataset. These experiments demonstrate the effectiveness of two strategies in constructing preference data: First, learning from strong (highly-ranked) responses seems to yield a distillation-like benefit. Second, using subtle differences between “chosen” and “rejected” responses, as opposed to just rank-based pairs (like in VLFeedback (full)), can significantly reduce hallucinations, even in a limited data regiment.
+
+Finally, we replace the noise injection strategy using GPT-4 with our proposed BDHS. We observe a slight reduction of the MMHALBench-V and LLaVABench-in-the-Wild scores compared to the GPT-4V based approach, but note that the achieved result still represents meaningful improvements over the baseline. On all other metrics, BDHS shows comparable or even superior results, establishing BDHS as a strong alternative to GPT-4V in this pipeline.
+
+In the rest of this section, we conduct a comprehensive ablation study on each of the components discussed earlier, aiming to offer insights into the typical trade-offs encountered in alignment strategies.
+
+### 4.2 REMOVING CONFOUNDING FACTORS FOR PREVIOUSLY PUBLISHED DATASETS
+
+We analyze RLHF-V (Yu et al., 2023b), VLFeedback (Li et al., 2023a) and POVID (Zhou et al., 2024) as they offer a fair blend between human and synthetic sources, and between constructed and ranked preference signal composition. As it is challenging to determine what are the properties that characterize a high-quality preference dataset, we first replicate alignment using the published datasets against LLaVA 1.6-7B with DPO. Additionally, we sub-sample all datasets to a consistent size of 5,000 examples to remove effect sizes. Results are reported in Table 3.
+
+Zhou et al. (2024) have conducted a similar experiment using LLaVA 1.5, however they do not control for dataset size. We were successful in replicating certain observations published by these authors. POVID reaches the highest score on POPE. Zhou et al. (2024) also reports the highest MMHALBench scores with POVID, which we were able to reproduce using LLaVA 1.6, although this is only true when size correction is not applied. Upon normalizing for size, POVID’s performance equaled that of VLFeedback and was lower than RLHF-V.
+
+In other domains, our experiment have shown divergent trends. While Zhou et al. (2024) demonstrated that all preference datasets improved LLaVA 1.5 on MMVet, our findings with LLaVA 1.6 exhibited a reverse trend: all our runs did not match up to the baseline. Interestingly, as the datasets grew larger, we witnessed a further deviation from the baseline. We hypothesize that these preference datasets lack the necessary information to improve MMVet over the notably stronger baseline LLaVA 1.6
+
+{7}------------------------------------------------
+
+introduced, which necessitates specialized knowledge (see Appendix B.1). VLFeedback, to a certain extent, may possess some of this knowledge thanks to its diverse prompts. By restricting dataset sizes, we further limit the potential alterations on the non-aligned model, as the results stay closer to the baseline.
+
+Notable, VLFeedback moderately improves LLaVABench-in-the-Wild when the size restriction limit is applied. When aligning on the complete VLFeedback, the largest dataset in these experiments, we see further improvement and can achieve the highest score on that benchmark.
+
+### 4.3 DESIDERATA FOR PREFERENCE DATASETS
+
+We examine the components of a multimodal preference dataset and investigate the following options. The explored choices are further summarized in Table 4.
+
+- **Prompts** We compared (i) a diverse prompt strategy mixing multiple datasets to (ii) prompts only from LLaVA-Instruct-150k, which was already seen during the SFT stage of the base model.
+- **Chosen responses** We introduced 3 settings: (i) diverse responses from multiple MLLMs; (ii) LLaVA responses only, (iii) GPT-4V responses only.
+- **Rejected responses** We introduced 2 settings: (i) diverse responses from multiple MLLMs, and (ii) corruption of the chosen responses.
+
+In order to construct these preference dataset ablations cheaply and reproducibly, we leverage the size and diversity of the VLFeedback dataset (Li et al., 2023a). VLFeedback possesses several properties that makes it a good sandbox: (a) the prompts, derived from 9 datasets (LLaVA-Instruct-150k, SVIT, LLaVAR, etc.), are diverse, (b) the chosen and rejected responses are sampled from 12 MLLMs making them very diverse too – ~37% responses are from GPT-4V, and ~35% from the LLaVA 1.5 series, (c) finally, the large size of VLFeedback, 80,000 quadruplets of responses that can be paired together, makes it simpler to isolate specific aspects.
+
+| Datasets               | Prompts |           | Chosen Responses |       |        | Rejected Responses |                           |
+|------------------------|---------|-----------|------------------|-------|--------|--------------------|---------------------------|
+|                        | diverse | LLaVA-SFT | diverse          | LLaVA | GPT-4V | diverse            | chosen corrupted by GPT-4 |
+| VLFeedback             | ✓       |           | ✓                |       |        | ✓                  |                           |
+| + corrupting strategy  | ✓       |           | ✓                |       |        |                    | ✓                         |
+| <b>prompts</b>         |         |           |                  |       |        |                    |                           |
+| LLaVA prompts          |         | ✓         | ✓                |       |        |                    | ✓                         |
+| <b>model responses</b> |         |           |                  |       |        |                    |                           |
+| GPT-4V responses only  |         | ✓         |                  |       | ✓      |                    | ✓                         |
+| LLaVA responses only   |         | ✓         |                  | ✓     |        |                    | ✓                         |
+
+Table 4: Controlled settings for multimodal preference dataset exploration. We decompose the preference datasets into prompts, chosen and rejected responses and we then aim at identifying factors contributing to the dataset quality.
+
+**Corruption strategy** Reranking is originally used to determine chosen and rejected responses in VLFeedback (see Section 3). In order to remove variation introduced by the original rejected responses (e.g., style change between MLLMs) and permit a tighter control on ablations, we replace rejected responses from the original VLFeedback samples with corrupted versions of the preferred responses. Similar to the method in (Zhou et al., 2024), we leverage GPT-4 to specifically introduce realistic hallucinations, assisted by a few shots for illustration (see Appendix F.2).
+
+**Results** Following Section 4.2, we apply DPO alignment on the LLaVA 1.6-7B model, and we limit all the datasets to 5,000 samples. In Table 5, we report the results of this experiment. First, we show that our corruption strategy achieves improvements over the baseline comparable in magnitude to the ranking-based preference signal in the original VLFeedback data. In some benchmarks, like MMHAL-Bench-V, we even observe improvements, while notably MMVet shows some regressions. Nevertheless, we argue that this represents a reasonable baseline to adopt for easier iteration on the following ablations. In Appendix F.3, we provide more analysis on this strategy.
+
+Next, we explore the impact of novelty of the prompts used for alignment, by sampling another 5k preference data generated with the same corruption mechanism solely from prompts that are a part of the LLaVA SFT mixture. These are examples that the baseline model would have already been trained
+
+{8}------------------------------------------------
+
+| Dataset                                  | POPE ↑         | MMHAL ↑      | MMHAL <sup>✓</sup> ↑ | LLaVA <sup>W</sup> ↑ | VQA <sup>†</sup> ↑ | GQA ↑          | MMVet ↑        | Recall <sup>cooc</sup> ↑ |
+|------------------------------------------|----------------|--------------|----------------------|----------------------|--------------------|----------------|----------------|--------------------------|
+| Baseline                                 | 86.40          | 2.95         | 2.75                 | 80.85                | 64.85              | 64.23          | 43.94          | 68.13                    |
+| VLFeedback (5k)<br>+ corrupting strategy | 86.31<br>85.59 | 2.92<br>3.39 | 3.00<br>3.33         | 83.10<br>86.65       | 65.06<br>65.20     | 64.09<br>63.87 | 43.21<br>37.98 | 68.03<br>68.66           |
+| <b>prompts</b>                           |                |              |                      |                      |                    |                |                |                          |
+| LLaVA prompts                            | 87.63          | 2.85         | 2.96                 | 86.55                | 65.13              | 64.25          | 41.47          | 70.44                    |
+| <b>model responses</b>                   |                |              |                      |                      |                    |                |                |                          |
+| GPT-4V responses only                    | 86.78          | 3.30         | 3.02                 | 86.77                | 65.06              | 64.02          | 40.14          | 69.08                    |
+| LLaVA responses only                     | 87.52          | 3.03         | 3.01                 | 88.64                | 65.30              | 64.19          | 42.16          | 70.13                    |
+
+Table 5: We started from VLFeedback with its diverse prompts and responses, and we then applied targeted sampling and corruption to isolate factors contributing to the dataset quality.
+
+on during the SFT stage, so one may argue the baseline has already been taught a desirable response for. Interestingly, we observe that this shows similar improvement. We still observe comparable lift on LLaVABench-in-the-Wild, and while MMHAL-Bench-V shows less dramatic improvement over the baseline compared to the more diverse corruption-based sample, this may be due to more verbose responses, as indicated by higher recall. POPE even improves somewhat significantly and the regression in MMVet is also less pronounced.
+
+Finally, we explore the impact of the construction of the accepted response in the alignment data. One could argue that for responses derived from stronger model such as GPT-4V, improvements may also be the result of learning from this stronger teacher model. Therefore, we conduct two experiments: one, where we sample data where the preferred response comes from GPT-4V only, and one where the preferred response comes from LLaVA 1.5-7B, a model generally weaker than the base model under alignment in this experiment. Interestingly, we do not observe any benefit from learning from GPT-4V generated responses, in fact, our results suggest that positive samples derived from LLaVA 1.5-7B led to a slightly stronger model post alignment.
+
+These findings suggests that useful preference data can be derived cheaply, even from responses from relatively weaker models, as long as one can effectively sample and identify relatively desirable answers from the model as their preferred response, and introduce targeted corruption to create dispreferred responses.
+
+### 4.4 ABLATIONS ON BDHS
+
+Section 3.1 introduces BDHS as a technique to generate corrupted responses directly using the model subject to alignment. While our proposed approach is purely based on image attention masking, we also evaluate a variant that consumes noisy images instead, motivated by the teacher-forced *POVID-style image distortion* introduced in Zhou et al. (2024) (see Section G.1). In the following, BDHS with attention masking ( $\rho_{\text{att}} = 0.99$  and  $N_{\text{BDHS}} = 5$ ) is denoted as  $\text{BDHS}_{\text{att}}$  and BDHS with noisy images in the input as  $\text{BDHS}_{\text{noise}}$ . The number of additive noise steps for  $\text{BDHS}_{\text{noise}}$  is set to  $N = 500$  similar to the image distortion in Zhou et al. (2024).
+
+All ablations in Table 6 are based on our 5k subset of POVID as introduced in Section 4.2. POVID contains LLaVA Instruct responses  $y^+$  as well as GPT-4V corrupted non-preferred responses  $y^-$ . While  $y^+$  is shared between all ablations, we start with substituting  $y^-$  from external supervision by the BDHS model response  $\tilde{y}^-$  and invoke standard DPO as shown in the first 3 rows after the LLaVA 1.6-7B baseline results. The proposed variants consistently improve over the baseline for POPE and LLaVABench-in-the-Wild. They regress on MMHALBench, however, as discussed in Section B.1, this benchmark has limitations so we mainly focus on MMHALBench-V instead for which all  $\text{BDHS}_{\text{att}}$  variants perform comparable to the baseline while the online rollout of  $\tilde{y}^-$  even improves over it. Notably, we also observe significantly higher  $\text{Recall}^{\text{cooc}}$ , suggesting richer responses.  $\text{BDHS}_{\text{noise}}$  results in lower scores for LLaVABench-in-the-Wild while the attention masking approach  $\text{BDHS}_{\text{att}}$  almost maintains the baseline scores.
+
+The lower partition of Table 6 starts with plain DPO on the POVID (5k) dataset as reference and then each subsequent approach incorporates both the existing response  $y^-$  from external supervision as well as  $\tilde{y}^-$  derived from the policy. Hereby, the two non-preferred responses are incorporated into the DAP framework by averaging the losses of  $(y^+, y^-)$  and  $(y^+, \tilde{y}^-)$  according to Equation 5.
+
+{9}------------------------------------------------
+
+| $y^-$ from external supervision | $\tilde{y}^-$ derived from policy    | POPE $\uparrow$ | MMHal $\uparrow$ | MMHal $^V \uparrow$ | LLaVA $^W \uparrow$ | VQA $^T \uparrow$ | GQA $\uparrow$ | MMVet $\uparrow$ | Recall $^{\text{pos}} \uparrow$ |
+|---------------------------------|--------------------------------------|-----------------|------------------|---------------------|---------------------|-------------------|----------------|------------------|---------------------------------|
+| -                               | -                                    | 86.40           | <b>2.95</b>      | 2.75                | 80.85               | 64.85             | 64.23          | 43.94            | 68.13                           |
+| -                               | BDHS $_{\text{ann}}$ (Offline, ours) | 88.60           | 2.37             | 2.48                | 84.53               | 65.05             | 64.14          | 41.38            | 75.16                           |
+| -                               | BDHS $_{\text{ann}}$ (Offline, ours) | 88.75           | 2.61             | 2.71                | <b>86.33</b>        | 65.07             | 63.97          | 43.4             | <b>75.58</b>                    |
+| -                               | BDHS $_{\text{ann}}$ (Online, ours)  | <b>88.83</b>    | 2.80             | <b>2.99</b>         | 85.03               | 65.09             | 63.65          | 43.12            | 74.09                           |
+| GPT-4V (POVID)                  | -                                    | 88.18           | 2.93             | 2.93                | 81.89               | 64.90             | <b>64.34</b>   | 43.39            | 71.80                           |
+| GPT-4V (POVID)                  | POVID-style image distortion         | 88.33           | 2.84             | 2.64                | 80.15               | 64.21             | 63.79          | 41.28            | 69.39                           |
+| GPT-4V (POVID)                  | BDHS $_{\text{ann}}$ (Offline, ours) | 88.58           | 2.76             | 2.45                | 84.36               | 65.31             | 64.26          | 43.95            | 75.05                           |
+| GPT-4V (POVID)                  | BDHS $_{\text{ann}}$ (Offline, ours) | 88.56           | 2.85             | 2.72                | 85.35               | 65.39             | 64.11          | 43.26            | 75.05                           |
+| GPT-4V (POVID)                  | BDHS $_{\text{ann}}$ (Online, ours)  | 88.38           | 2.82             | 2.81                | 84.01               | <b>65.42</b>      | 64.30          | <b>45.46</b>     | 74.00                           |
+
+Table 6: Ablation results for BDHS including baseline and reference approaches. All results based on LLaVA 1.6-7B, using DPO and the POVID (5k) sample for the source of images and prompt. Whenever both  $y^-$  from external supervision and  $\tilde{y}^-$  derived from policy (either online or offline) are incorporated, the average loss is computed using equation 5.
+
+Therefore, the Online-BDHS method uses Online-DPO in a considerable simplified setting compared to the full Online-DPO realization equation 4, as the formulation presented here does not depend on a dedicated external annotator (see Section 2.3).
+
+All the BDHS ablations improve significantly on LLaVABench-in-the-Wild compared to the DPO baseline and POVID-style image distortion. The BDHS $_{\text{ann}}$  with attention masking performs significantly better on MMVet compared to BDHS $_{\text{noise}}$ . Notably, BDHS $_{\text{ann}}$  consistently outperforms the POVID-style image distortion across all benchmarks. We follow the published implementation of Zhou et al. (2024), however, surprisingly the *POVID-style image distortion* performs worse compared to plain DPO via POVID (5k), which differs from the LLaVA 1.5-7B alignment results in their paper. Presumably, the non-sensical responses from teacher-forcing could lower the performance while trading off with the existing GPT4-V preference pairs.
+
+While online approaches with BDHS improve on certain benchmarks, we emphasize that even the offline dataset created with BDHS $_{\text{ann}}$  and without additional response from external supervision already constitutes a cost-effective baseline that consistently performs well across all benchmarks.
+
+## 5 CONCLUSION AND FUTURE WORK
+
+In this study, we investigate preference alignment’s role in improving MLLM performance, particularly in reducing hallucinations. We evaluate various alignment strategies, including offline, online, and hybrid approaches, across different datasets. Our analysis of existing multimodal preference datasets allows for directly comparing their impact on model performance, controlled for data size and the base model under alignment. We further isolate individual differences between these datasets via additional ablations and show that corruption-based preference data can achieve hallucination reduction comparable to sampling and ranking-based approaches, and that learning from novel and diverse inputs, or from responses from superior models surprisingly does not lead to further improvements. Based on these insights, we present a simple preference dataset generation strategy we call BDHS, which uses only existing SFT data, eliminating the need for a superior model, human labelers, or other complex means of constructing preference data. Applied to LLaVA 1.6, this simple methods yield significant improvements across benchmarks, demonstrating its potential.
+
+This study not only enhances our understanding of preference alignment but also establishes a foundation for further research into MLLM preference alignment. We identify several gaps in the community’s approach to aligning MLLMs. Firstly, while considerable research has been conducted on various alignment methods for LLMs, including both online and offline approaches, these studies are less common in the context of MLLMs. For instance, RLH(ADF) is extensively discussed in LLM literature, highlighting its potential over simpler methods like DPO. Although we provide some insights into RL-based alignment for MLLMs and the evaluation of reward models, a significant gap remains between LLM and MLLM research in this domain. Secondly, we emphasize the need for better hallucination benchmarks to help understand model improvements. Moreover, our thorough analysis of published multimodal preference data reveals insufficient coverage in existing datasets, which may contribute to the absence of significant improvements in some benchmarks. Lastly, while BDHS effectively generates preference data to reduce hallucination, further research is needed to address other factors causing hallucination in MLLMs, such as insufficient real-world knowledge.
+
+We hope these insights inspires further research and helps the community tackle ongoing challenges in this field.
+
+ Rest of paper (reference and Appendix) is removed.

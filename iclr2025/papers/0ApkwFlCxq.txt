@@ -1,0 +1,447 @@
+
+
+{0}------------------------------------------------
+
+# COMPUTAGEBENCH: EPIGENETIC AGING CLOCKS BENCHMARK
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+The success of clinical trials of longevity drugs relies heavily on identifying integrative health and aging biomarkers, such as biological age. Epigenetic aging clocks predict the biological age of an individual using their DNA methylation profiles, commonly retrieved from blood samples. However, there is no standardized methodology to validate and compare epigenetic clock models as yet. We propose ComputAgeBench, a unifying framework that comprises such a methodology and a dataset for comprehensive benchmarking of different clinically relevant aging clocks. Our methodology exploits the core idea that reliable aging clocks must be able to distinguish between healthy individuals and those with aging-accelerating conditions. Specifically, we collected and harmonized 66 public datasets of blood DNA methylation, covering 19 such conditions across different ages and tested 13 published clock models. We believe our work will bring the fields of aging biology and machine learning closer together for the research on reliable biomarkers of health and aging.
+
+## 1 INTRODUCTION
+
+Longevity drugs (*a.k.a., geroprotectors*) appear to be on the brink of entering clinical practice to slow down or reverse the features of aging (Moqri et al., 2024; Justice et al., 2018). The research community is yet to identify proper biomarkers of aging and rejuvenation that could be used as clinical trial endpoints instead of or in combination with observations on patient lifespans (Schork et al., 2022). Biological age (BA) has been proposed as one of such surrogate biomarkers of aging, defined as a *generalized measure of human health* compared to the average health of individuals at a given age within a population (Yousefi et al., 2022; Jylhävä et al., 2017). Thus, if an individual has a biological age of 40 at the chronological age of 30, it is assumed that their overall health corresponds to that of an average 40-year-old in the population. This relationship can be concisely expressed as
+
+$$B = C + \Delta, \quad (1)$$
+
+where  $B$  represents biological age,  $C$  denotes chronological age (*i.e.*, time since birth), and  $\Delta$  symbolizes BA *acceleration* (or deceleration, if negative).
+
+In general, BA can be estimated from a set of biomarkers  $X$  with a model (algorithm)  $f : X \rightarrow B$ , also called an *aging clock*. However, BA is latent: it has no ground truth value that can be measured directly and then used to train an aging clock model  $f$  in a classical supervised fashion, making clock validation a nontrivial task (Sluiskes et al., 2024). This obstacle forces researchers to introduce various additional assumptions about the aging clock behavior (Klemera & Doubal, 2006; Horvath, 2013; Pierson et al., 2019; Rutledge et al., 2022), as well as to experiment with different machine learning models (including penalized linear regressions, such as ElasticNet, support vector machines, decision trees, transformer-based neural networks, *etc.* (Rutledge et al., 2022; Urban et al., 2023)) and underlying types of data  $X$  (Putin et al., 2016; Xia et al., 2020; Holzschreck et al., 2021). The vast majority of aging clocks, though, rely primarily on DNA methylation data, also called *epigenetic* aging clocks (Hannum et al., 2013; Levine et al., 2018; Lu et al., 2019; Galkin et al., 2021; Ying et al., 2024). Summarizing abundant discussions about a “good” mathematical description of BA in the literature (Moskalev, 2019; Rutledge et al., 2022; Moqri et al., 2024), we elicited four of its defining properties, formalized as follows.
+
+Let  $X \in \mathbb{R}^p$ , where  $p$  is the number of biomarkers in data,  $B \in \mathbb{R}$ , and  $f : X \rightarrow B$ . Given the aging acceleration  $\Delta = B - C$ , the following four properties hold:
+
+{1}------------------------------------------------
+
+![Figure 1: ComputAgeBench benchmarking methodology. The diagram shows the flow from blood data and chronological age (C) to a dataset X of CpG site methylation levels. A model f is trained to predict biological age (B). The difference Δ = B - C is then computed and compared between a healthy control group and an age-accelerating condition group using a p-value test.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+054  
+055  
+056  
+057  
+058  
+059  
+060  
+061  
+062  
+063
+
+The diagram illustrates the ComputAgeBench workflow. On the left, 'Blood data' from a tube and 'Chronological Age  $C$ ' (indicated by a person icon) are input. This leads to a 'CpG site' visualization showing DNA methylation levels. This data is organized into 'Dataset  $X$ ', a table with columns for CpG sites and a column for 'C'. Rows represent averaging across cells. An arrow labeled 'Averaging across cells' points to the dataset. The dataset is used to train a 'Model' (represented by a clock icon), which outputs 'Biological Age  $B$ '. The formula  $B = f(X)$  and  $\Delta = B - C$  are shown. The model's output  $\Delta$  is then used in 'ComputeAgeBench', which compares 'Healthy control' and 'Age accelerating condition' groups using a p-value test, shown in a box plot.
+
+Figure 1: ComputAgeBench benchmarking methodology. The diagram shows the flow from blood data and chronological age (C) to a dataset X of CpG site methylation levels. A model f is trained to predict biological age (B). The difference Δ = B - C is then computed and compared between a healthy control group and an age-accelerating condition group using a p-value test.
+
+064  
+065  
+066  
+067
+
+Figure 1: ComputAgeBench: benchmarking various epigenetic aging clock models. For a dataset  $X$ , obtained by profiling DNA methylation at CpG sites in bulk blood samples, an aging clock model  $f$  is trained to distinguish healthy individuals from those with pre-defined aging-accelerating conditions.
+
+- 068  
+069  
+070  
+071  
+072  
+073  
+074  
+075
+1.  $B$  is expressed in the same time units as  $C$ ;
+  2.  $\Delta$  allows distinguishing between healthy individuals and individuals with aging-accelerating or decelerating conditions (AACs or ADCs), such as severe chronic diseases;
+  3.  $B$  helps to predict the remaining lifespan better than  $C$  does (Moskalev, 2019);
+  4.  $B$  helps to predict the time to onset of chronic age-related diseases (e.g., the Alzheimer’s) better than  $C$  does (Moskalev, 2019).
+
+076  
+077  
+078  
+079  
+080  
+081  
+082  
+083  
+084  
+085
+
+Garnered together, these properties motivated us to construct a benchmarking methodology for validating the potential biological age predictors. In property #1, the model  $f$  should output age values in a biologically meaningful range, comparable with a typical lifespan, e.g., from 0 to 120 years for the humans. To investigate if a model  $f$  satisfies the 2<sup>nd</sup> property, we can define a panel of aging-accelerating (or decelerating) conditions and test if the predicted  $\Delta$  allows distinguishing the individuals with an AAC/ADC from a control group, according to an appropriate statistical test. To validate the compliance with the 3<sup>rd</sup> and the 4<sup>th</sup> properties, one also needs data on mortality and multi-morbidity. That is, the information about the timing of death or the onset of chronic age-related diseases, along with a prior measurement of a set of relevant biomarkers. It is important to note that such data are highly sensitive and are generally not publicly available.
+
+086  
+087  
+088  
+089  
+090  
+091  
+092  
+093  
+094  
+095  
+096  
+097
+
+*DNA methylation* (DNAm) is the most prevalent measurement employed in the construction of aging clocks (Xia et al., 2021). From a chemical point of view, DNA methylation refers to a covalent modification of DNA nucleotides by the methyl groups (Greenberg & Bourc’his, 2019). Specifically, cytosine nucleotides (C) followed by guanine nucleotides (G), also referred to as cytosines in a CpG context or simply CpG sites (CpGs), are methylated most often in the mammalian cells, making it the most well-studied type of DNA methylation (Seale et al., 2022) (refer to Fig. 1 for visualization of the DNA and CpGs). This epigenetic modification plays a crucial role in regulating gene expression and is engaged in a variety of cellular events, varying significantly across different species, tissues, and the lifespan. DNA methylation levels per site are usually reported quantitatively as beta values that represent the methylation proportion at a specific CpG site in the range from 0 to 1, where 0 indicates no methylation, and 1 indicates complete methylation across all the cells in the sample (Fig. 1).
+
+098  
+099  
+100  
+101  
+102  
+103  
+104  
+105  
+106  
+107
+
+Importantly, despite the numerous recent publications of various aging clocks (Xia et al., 2021; Rutledge et al., 2022; Yousefi et al., 2022), including the ones built on DNA methylation, no systematic open access benchmark, which would include standardized panel of datasets, diseases, interventions, or other conditions, has been proposed to date to validate the aforementioned properties. In this paper, we introduce such a benchmark to validate the 1<sup>st</sup> and the 2<sup>nd</sup> properties in epigenetic aging clocks. To do this, we developed a methodology for identifying aging-accelerating conditions, which relies on simple, yet strict and evidence-based principles for defining and selecting a panel of aging-accelerating conditions. We collected an unprecedented number of DNA methylation datasets for the respective conditions from dozens of published studies. We also developed a cumulative benchmarking score that aggregates two error-based tasks and two simple, but informative tasks based on common statistical tests. Ultimately, this cumulative score enables comparing aging clock ability to satisfy the 1<sup>st</sup> and the 2<sup>nd</sup> properties.
+
+{2}------------------------------------------------
+
+To demonstrate our methodology in a clinically relevant scenario, we specifically focused on the blood-, saliva-, and buccal-based epigenetic biomarkers obtained via a microarray-based technology. Such biomarkers are widespread in clinical testing and aging clock construction (Campagna et al., 2021; Rutledge et al., 2022). We then examined 13 published epigenetic clocks and provided their benchmarking results.
+
+## 2 RELATED WORK AND BACKGROUND
+
+### 2.1 AGING CLOCK CONSTRUCTION METHODOLOGY
+
+Because the BA ground truth values cannot be measured, and, therefore, a direct validation of aging clocks is problematic, previous studies introduced various approaches to construct aging clocks with different underlying assumptions. The most widespread one, belonging to the so-called “first-generation aging clocks”, uses an assumption that a model  $f$  can be trained to predict chronological age, *i.e.*,  $C = \hat{C} + \varepsilon = f(X) + \varepsilon$ , and its predictions will correspond to BA:  $B = \hat{C}$ . The simplicity of this approach has made it attractive for decades, and it is still used today to train new aging clocks on new types of data (Hollingsworth et al., 1965; Voitenko & Tokar, 1983; Duggirala et al., 2002; Varshavsky et al., 2023; Prosz et al., 2024). In fact, BA obtained by this approach can satisfy the 2<sup>nd</sup> (Horvath, 2013) and the 3<sup>rd</sup> (Kuiper et al., 2023) properties from our definition. However, using this assumption in Eq. (1) leads us to the conclusion that  $\varepsilon = -\Delta$ . It then turns out that the perfect solution of the chronological age prediction problem, *i.e.*, minimizing the prediction error so that  $\varepsilon \rightarrow 0$ , leads to the inability of a clock to identify any aging acceleration or deceleration. Namely, it implies that  $\Delta \rightarrow -0$ , which is also known as *the biomarkers paradox* (Hochschild, 1989; Klemera & Doubal, 2006). Supporting this concept, it has been shown that the clocks featuring strong correlation with the chronological age poorly correlate with the population mortality (Zhang et al., 2019) (hence they fail to satisfy the 3<sup>rd</sup> property). As a consequence, validating clock performance in terms of accuracy of chronological age prediction becomes meaningless, because high accuracy may not necessarily correspond to a biologically relevant clock. Despite the obvious methodological challenges of this approach, it is worth noting that the vast majority of aging clocks belong to the first generation (Sluiskes et al., 2024).
+
+Seeking for a better solution, researchers experimented with survival models, which led to the development of “second-generation aging clocks”. In this approach, models are trained to predict time to death (Levine et al., 2018; Lu et al., 2019; Hertel et al., 2016), and the resulting prediction is rescaled to age units to represent BA, therefore addressing the 3<sup>rd</sup> and the 4<sup>th</sup> properties of a “good” BA estimator. However, there is no open large-scale DNA methylation data containing time-to-death or multi-morbidity measurements, with existing studies being either available upon an authorized request or being held completely private (see Appendix A.7).
+
+### 2.2 ATTEMPTS TO COMPARE EPIGENETIC AGING CLOCKS
+
+Despite reported attempts to compare the performance of different aging clocks, a benchmark with a standardized panel of datasets, diseases, interventions, or other conditions has not been proposed yet. As a result, different comparative studies employ widely varying validation data and approaches (Moqri et al., 2024; Ying et al., 2024; Kuiper et al., 2023; Mei et al., 2023; Wang et al., 2021; Huan et al., 2022; Chervova et al., 2022; Liu et al., 2020; Maddock et al., 2020; McCrory et al., 2021). As highlighted in a recent review on biomarker validation by Moqri et al. (2024), “*for a reliable comparison across studies, ... biomarker formulations should be established ‘a priori’ and not be further modified during validation*”. In the same line of thought, we propose to define a standardized and a justified procedure for clock benchmarking *before* constructing any predictive model.
+
+Two approaches we propose as essential tasks in our benchmark entail related prior art. For example, Porter et al. (2021) and Mei et al. (2023) used one-sample or two-sample aging acceleration tests for clock validation. Ying et al. (2024) employed two-sample tests across multiple aging clocks. These authors implicitly tested the 2<sup>nd</sup> property of “good” aging clocks discussed above. Likewise, there were also attempts to test the 3<sup>rd</sup> and the 4<sup>th</sup> properties separately. In other works, including the recently updated pre-print of Biolearn (Ying et al., 2023), a Python-based framework for aging clock training and testing in ongoing development, authors performed Cox Proportional Hazards analysis and calculated hazard ratios with statistical significance to test if BA estimates of selected clocks are
+
+{3}------------------------------------------------
+
+capable of predicting all-cause mortality or the onset of age-related diseases (e.g., cardiovascular events) (Kuiper et al., 2023; Wang et al., 2021; McCrory et al., 2021; Huan et al., 2022; Chervova et al., 2022; Ying et al., 2023). However, these prior studies are either small-scale (Ying et al., 2024), limited to predicting the chronological age (Liu et al., 2020), or miss standardized datasets and compare only a small number of models (Porter et al., 2021; Mei et al., 2023), or rely on mortality and disease data that are under restricted access (Ying et al., 2023). Therefore, while developing our methodology, we attempted to mitigate all mentioned drawbacks.
+
+## 3 BENCHMARKING METHODOLOGY
+
+An infographic overview of the proposed benchmarking of aging clocks is shown in Fig. 2.
+
+### 3.1 CRITERIA FOR SELECTING AGING-ACCELERATING CONDITIONS
+
+In the context of clock benchmarking, we propose to define an aging-accelerating condition (AAC) as a biological condition that satisfies the following three criteria (Fig. 2B). First, having an AAC must lead to decreased life expectancy (LE) compared to the general population, even when treated with existing therapies. Second, an AAC must be chronic (to safely assume that it has sufficient time to drive observable changes in DNAm). And third, an AAC must manifest itself systemically, so that it can be expected to affect DNAm in blood, saliva, and buccal cells (hereafter referred to as BSB).
+
+Importantly, the decrease in LE and the corresponding increase in mortality must result mainly from intrinsic organismal causes rather than from socioeconomic factors and self-destructive behaviors related to a given condition. The second criterion is aimed at excluding short-term conditions such as acute infectious diseases, stressful events, and other confounding DNAm-alternating accidents, whose effects might not induce significant changes in DNAm data obtained from BSB, or, on the contrary, might last too briefly to be reliably detected. The third part of the AAC definition precludes us from considering events with long-lasting and life-threatening consequences that might be difficult to observe in BSB-derived data. For instance, a bone fracture (unless it is a critical bone marrow reserve) or some types of malignancies.
+
+Conversely, an aging-decelerating condition (ADC) is defined as a condition that increases LE, compared to the general population, and features the same second and third criteria as an AAC. With human data, however, the ADCs are difficult to determine, as the human lifespan-increasing interventions are yet to emerge. To avoid ambiguous interpretation, we omitted such conditions in our benchmarking of human aging clocks (see Appendix A.5 and Table A2 for more details).
+
+### 3.2 CRITERIA FOR DATASET SELECTION
+
+Aiming to provide a comprehensive, easily accessible, and clinically relevant toolbox for the ongoing research on human epigenetic clocks, we relied on the following five criteria while performing the datasets aggregation (Fig. 2C). *First*, all datasets in the benchmark must feature *open access to pre-processed data*, without any data access requests or raw data processing required. *Second*, we only used data obtained from the BSB samples. *Third*, chronological ages must be annotated with, at most, one year intervals (e.g., without age binning by decades), including only samples from the age range of 18–90 years<sup>1</sup>. The only exception to this requirement are the individuals with certain *progeroid* conditions, such as the Hutchinson-Gilford progeria syndrome, who survive approximately 12 to 13 years on average: these conditions resemble premature aging so strikingly (Schnabel et al., 2021) that we included patients aged under 18 years into the benchmark. *Fourth*, we employ data obtained only with the Illumina Infinium BeadChip (27K, 450K, and 850K) methylation microarrays, as they remain to be the most popular technologies for human DNAm profiling and clock construction. *Fifth*, we applied thresholds of at least 10 samples per dataset, 5 samples with an AAC per dataset, and 10 samples with an AAC across all datasets to attain sufficient statistical power.
+
+<sup>1</sup>Reporting increased or decreased biological age for people outside of this range is debatable.
+
+{4}------------------------------------------------
+
+![Figure 2: ComputAgeBench methodology. A) Flowchart of the pipeline: Clock training -> Benchmarking on predefined dataset -> BenchScore (Low/High) -> Applying the clock for BA estimation. A Dataset of aging-accelerating conditions (AACs) is used for training, with the assumption that AAC increases BA. B) Criteria for condition selection: 1. Decreases life expectancy, even if treated; 2. Chronic (has sufficient time to drive changes in DNAm); 3. Manifests systemically (affects DNAm in blood, saliva, or buccal cells). C) Criteria for dataset selection: 1. Open access to pre-processed data; 2. Sample sources: blood, saliva, and buccal cells (BSB); 3. Annotated ages: 18-90 yo (except progeroid); 4. Data type: DNA methylation microarrays (27K/450K/850K); 5. 10+ samples per dataset, 10+ samples per condition. D) Classes of aging-accelerating conditions (AACs): Neurodegenerative diseases (NDD), Musculoskeletal diseases (MSD), Respiratory diseases (RSD), Cardiovascular diseases (CVD), Liver diseases (LD), Metabolic diseases (MBD), Kidney diseases (KD), Immune system diseases (ISD), Progeroid syndromes (PGS). E) Overview of benchmarking data: A circular sunburst plot showing 66 unique data sources categorized into nine broad groups: NDD, MSD, ISD, CVD, HND, AS, PG, MB, and OP. Each segment is labeled with a condition abbreviation and its corresponding GEO dataset ID.](690fce4fb5c9cbb8beb560cb2a3fcbeb_img.jpg)
+
+216  
+217  
+218  
+219  
+220  
+221  
+222  
+223  
+224  
+225  
+226  
+227  
+228  
+229  
+230  
+231  
+232  
+233  
+234  
+235  
+236  
+237  
+238  
+239  
+240  
+241  
+242  
+243  
+244  
+245
+
+**A**
+
+Clock training → Benchmarking on predefined dataset → BenchScore (Low/High) → Applying the clock for BA estimation
+
+Dataset of aging-accelerating conditions (AACs) → Assumption: AAC increases BA
+
+**B** Criteria for condition selection
+
+1. **Decreases life expectancy**, even if treated
+2. **Chronic**  
+↳ has sufficient time to drive changes in DNAm
+3. **Manifests systemically**  
+↳ affects DNAm in blood, saliva, or buccal cells
+
+**C** Criteria for dataset selection
+
+1. **Open access** to pre-processed data
+2. Sample sources: **blood, saliva, and buccal cells** (BSB)
+3. Annotated ages: **18-90 yo** (except progeroid)
+4. Data type: **DNA methylation microarrays** (27K/450K/850K)
+5. **10+ samples per dataset, 10+ samples per condition**
+
+**D** Classes of aging-accelerating conditions (AACs)
+
+- Neurodegenerative diseases (NDD)
+- Musculoskeletal diseases (MSD)
+- Respiratory diseases (RSD)
+- Cardiovascular diseases (CVD)
+- Liver diseases (LD)
+- Metabolic diseases (MBD)
+- Kidney diseases (KD)
+- Immune system diseases (ISD)
+- Progeroid syndromes (PGS)
+
+**E** Overview of benchmarking data
+
+66 unique data sources (labeled by their Gene Expression Omnibus dataset identification numbers and conditions) from more than 50 studies.
+
+Figure 2: ComputAgeBench methodology. A) Flowchart of the pipeline: Clock training -> Benchmarking on predefined dataset -> BenchScore (Low/High) -> Applying the clock for BA estimation. A Dataset of aging-accelerating conditions (AACs) is used for training, with the assumption that AAC increases BA. B) Criteria for condition selection: 1. Decreases life expectancy, even if treated; 2. Chronic (has sufficient time to drive changes in DNAm); 3. Manifests systemically (affects DNAm in blood, saliva, or buccal cells). C) Criteria for dataset selection: 1. Open access to pre-processed data; 2. Sample sources: blood, saliva, and buccal cells (BSB); 3. Annotated ages: 18-90 yo (except progeroid); 4. Data type: DNA methylation microarrays (27K/450K/850K); 5. 10+ samples per dataset, 10+ samples per condition. D) Classes of aging-accelerating conditions (AACs): Neurodegenerative diseases (NDD), Musculoskeletal diseases (MSD), Respiratory diseases (RSD), Cardiovascular diseases (CVD), Liver diseases (LD), Metabolic diseases (MBD), Kidney diseases (KD), Immune system diseases (ISD), Progeroid syndromes (PGS). E) Overview of benchmarking data: A circular sunburst plot showing 66 unique data sources categorized into nine broad groups: NDD, MSD, ISD, CVD, HND, AS, PG, MB, and OP. Each segment is labeled with a condition abbreviation and its corresponding GEO dataset ID.
+
+Figure 2: ComputAgeBench methodology. A) The proposed pipeline for constructing aging clocks features an important step of validating the model on pre-defined aging-acceleration conditions that satisfy criteria (B) and are collected into datasets that meet criteria (C) for individual study design. D) Major classes that include putative aging-accelerating conditions. E) Aggregated dataset panel for benchmarking aging clocks, comprising 66 unique data sources (labeled by their Gene Expression Omnibus dataset identification numbers and conditions) from more than 50 studies. See Table A2 for the full names and Table A3 for the population-based evidence for including each condition.
+
+### 3.3 COLLECTING AAC DATASETS FOR BENCHMARKING
+
+To cover as many organismal systems affected by age-related conditions as possible, we split the aggregated data into nine broad categories (Fig. 2D): cardiovascular diseases (CVD), immune system diseases (ISD), kidney diseases (KDD), liver diseases (LVD), metabolic diseases (MBD), musculoskeletal diseases (MSD), neurodegenerative diseases (NDD), respiratory diseases (RSD), and progeroid syndromes (PGS). In each class, we identified several AACs relying on the established lists of age-related diseases and on the leading causes of death (Mei et al., 2023; Li et al., 2021; Ferrari et al., 2024), including closely associated conditions and other conditions mentioned in a variety of epigenetic clock studies (Horvath, 2013; Levine et al., 2018; Ying et al., 2024; Mei et al., 2023; Horvath et al., 2018). The corresponding AACs with their abbreviations and population-based evidence for their inclusion are provided in Appendix (Tables A2 and A3, respectively).
+
+Dataset search was performed using the NCBI Gene Expression Omnibus (GEO) database, an *omics* data repository with unrestricted access (<https://www.ncbi.nlm.nih.gov/geo/>). We applied filters to include the *Homo sapiens* species and all types of methylation-related studies: methylation profiling by single-nucleotide polymorphism (SNP) array, methylation profiling by
+
+{5}------------------------------------------------
+
+array, methylation profiling by genome tiling array, and methylation profiling by high throughput sequencing (methylation microarray data can be found in any of these study types).
+
+Upon performing the dataset search, only a portion of AACs from seven condition classes were retained (see Appendix and Table A3). All five dataset selection criteria were met by none of the found kidney- and liver-related AAC datasets. The resulting list of 66 datasets (Reynolds et al., 2014; Nazarenko et al., 2015; Soriano-Tàrraga et al., 2016; Istas et al., 2017; Cullell et al., 2022; Harris et al., 2012; Horvath & Levine, 2015; Gross et al., 2016; Zhang et al., 2016; Li Yim et al., 2016; Ventham et al., 2016; Zhang et al., 2017; 2018; Oriol-Tordera et al., 2020; DiNardo et al., 2020; Oriol-Tordera et al., 2022; Esteban-Cantos et al., 2023; Liu et al., 2013; Fernandez-Rebollo et al., 2018; Rhead et al., 2017; Clark et al., 2020; Tao et al., 2021; de la Calle-Fabregat et al., 2021; Julià et al., 2022; Chen et al., 2023; Day et al., 2013; Rakyan et al., 2011; Lunnon et al., 2015; Ramos-Molina et al., 2019; Noronha et al., 2022; Marabita et al., 2013; Lunnon et al., 2014; Horvath & Ritz, 2015; Castro et al., 2019; Kular et al., 2018; Chuang et al., 2017; 2019; Ntranos et al., 2019; Ewing et al., 2019; Carlström et al., 2019; Roubroeks et al., 2020; Go et al., 2020; Dabin et al., 2020; Bingen et al., 2022; Esterhuyse et al., 2015; Chen et al., 2021; 2020; Maierhofer et al., 2019; Bejaoui et al., 2022; Qannan et al., 2023) comprises 65 blood studies and 1 saliva study, and is visualized in Fig. 2E. An overview of all datasets, dataset sizes, and their age distributions is provided in Fig. A1. Descriptive statistics for all datasets are provided in Fig. A2.
+
+We unified the metadata of all datasets by retrieving only the relevant metadata columns and formatting them into the appropriate data types, similarly to what was proposed by the authors of Biolearn (Ying et al., 2023), another recent effort in the clock community. We also added the condition and condition class annotation, thus obtaining a single metadata file with 10,410 rows (samples) and the following columns: SampleID, DatasetID (dataset GEO accession number), PlatformID (sequencing platform), Tissue (blood or saliva), CellType (whole blood or cell type after sorting), Gender, Age, Condition, and Class (see also Appendix A.9 for details on data processing).
+
+### 3.4 EPIGENETIC AGE PREDICTORS
+
+Any blood-based epigenetic aging clock that predicts BA in age units (or can be re-scaled to them) can be validated in our benchmark. We tested 13 publicly available epigenetic clock models trained on adult human data to evaluate sample age (Table A4), with the model coefficients retrieved from the corresponding studies. Among the collected first-generation clocks, 6 were trained purely on blood samples (Hannum et al., 2013; Ying et al., 2024; Lin et al., 2016; Vidal-Bralo et al., 2016), and 3 models were trained on multiple tissues (Horvath, 2013; Zhang et al., 2019; Horvath et al., 2018). Among the second-generation clocks, all were blood-based, and 2 models relied entirely on CpG sites as predictive features (Levine et al., 2018; Higgins-Chen et al., 2022), while the other 2 required additional information about gender and chronological age as inputs (Lu et al., 2019; 2022). Because the extracted datasets contained missing values, we imputed them with the "gold standard" beta values averaged for each CpG site retrieving them from the R "SeSAMe" package (Zhou et al., 2018) (for the results on comparing imputation methods, see Appendix A.3). We also ensured that no data in the benchmark was used to train any of the selected clocks, and that all clock input and output structures are consistent with each other ("harmonized", as described by Ying et al. (2023)). The clock models evaluated by us are described in Table A4.
+
+### 3.5 BENCHMARKING TASKS FOR EVALUATING AGING CLOCKS
+
+To benchmark aging clock models, we propose four tasks: relative aging acceleration prediction (Fig. 3A), absolute aging acceleration prediction (Fig. 3B), chronological age prediction accuracy (Fig. 3C), and systematic chronological age prediction bias (Fig. 3D). In the first two tasks, the clocks are tested if they can correctly predict aging acceleration in the predefined panel of AAC datasets.
+
+In the relative aging acceleration prediction task (AA2 task), we test aging clock ability to distinguish AAC from healthy control (HC) samples in a dataset containing both sample groups. After predicting ages in each dataset corresponding to this task using various clock models, we apply a two-sample Welch's test per dataset and calculate a one-sided P-value (i.e.,  $H_A : \Delta_{AAC} > \Delta_{HC}$ ) to determine if mean aging acceleration in the AAC cohort is significantly greater than that in the HC cohort (Fig. 3A). Next, we apply the Benjamini-Hochberg correction procedure for controlling the
+
+{6}------------------------------------------------
+
+false discovery rate (FDR) of predictions across all datasets, with an adjusted P-value less than 0.05 considered indicative of statistical significance. We selected a parametric test due to the assumption of normal distribution of  $\Delta$ , a fundamental trait of the multivariate linear regression models commonly used in aging clock construction.
+
+In the absolute aging acceleration prediction task (AA1 task), we test clock ability to correctly predict positive aging acceleration for an AAC in the absence of the HC cohort. For each dataset in this task, we predict ages using various clock models, apply a one-sample Student’s t-test and calculate a one-sided P-value (i.e.,  $H_A : \Delta_{AAC} > 0$ ) to determine if mean aging acceleration in the AAC cohort is significantly greater than zero (Fig. 3B). As before, we apply the Benjamini-Hochberg correction procedure for controlling FDR with the same adjusted P-value threshold.
+
+Clearly, the first task (AA2) provides a more rigorous way to test aging clocks compared to AA1, because it helps to control potential covariate shifts, but the second task (AA1) deserves its place in the list, as it allows including more data into the panel to overcome data scarcity. The third task is aimed at distinguishing good predictors of chronological age from predictors of biological age. Due to the paradox of biomarkers mentioned above, it is highly unlikely that the same model could combine both these properties. Yet, the good predictors of chronological age are believed to be useful in forensics (Paparazzo et al., 2023) or data labeling, where the chronological age information is lacking. We chose median absolute aging acceleration ( $Med(|\Delta|)$ ), a full equivalent of median absolute error, for testing clock performance. We calculate it across HC samples from the whole dataset panel and report it as a single number expressed in years.
+
+We introduced the fourth task, a prediction bias task, to evaluate the robustness of a given aging clock model to covariate shift between the original clock training dataset and the datasets from the proposed benchmark. Covariate shift, also referred to as batch effect in bioinformatics, denotes the shift between covariate distributions in two datasets. For instance, the distribution of methylation values for a given CpG site could be centered around 0.45 in one dataset and around 0.55 in the other one—a common scenario in DNAm and other omics data. Because each clock is trained on healthy controls, we expect age deviation of HC samples to be zero on average (i.e.,  $E(\Delta_{HC}) = 0$ ). In practice, however, due to the presence of a covariate shift between the training and testing data, a clock might produce biased predictions, resulting in a systemic bias and adding or subtracting extra years for a healthy individual coming from an external dataset. The goal of the fourth task is to control for such systemic bias in clock predictions. Therefore, as a benchmarking metric for this task, we calculated median aging acceleration ( $Med(\Delta)$ ) across HC samples from the entire dataset panel, which reflects the systematic shift in clock predictions caused by differences between datasets.
+
+### 3.6 CUMULATIVE BENCHMARKING SCORE
+
+We define cumulative benchmarking score such that it would account for the main drawback of AA1 task, namely, the sensitivity to positive model bias. Let  $S_{AA2}$  denote total score of a model in AA2 task and  $S_{AA1}$  from the AA1 task (both  $S_{AA2}$  and  $S_{AA1}$  represent the number of datasets evaluated correctly by a model in the respective task), then the cumulative benchmarking score is:
+
+$$BenchScore = S_{AA2} + S_{AA1} \cdot \left( 1 - \frac{\max(0, Med(\Delta))}{Med(|\Delta|)} \right). \quad (2)$$
+
+Consequently, if a model is positively biased, its performance in the AA1 task will be penalized by the bracketed coefficient by the  $S_{AA1}$ , the largest when the model bias  $Med(\Delta)$  is zero. Because  $Med(\Delta) \leq Med(|\Delta|)$ , this coefficient is limited to the  $[0, 1]$  interval.
+
+While designing our metric, we aimed for simplicity and interpretability. At the same time, we sought to include more data in the benchmark to address data scarcity caused by the underrepresentation of certain AACs. Admittedly, there could be a more optimal solution for the metric, but we also believe that such a solution must be proposed by a continuous collaborative discussion between the aging clock and machine learning communities, which we are eager to establish.
+
+{7}------------------------------------------------
+
+![Figure 3: ComputAgeBench tasks and performance of aging clock models. Panels A-D show benchmarking tasks: (A) Age acceleration two sample test (AA2), (B) Age acceleration one sample test (AA1), (C) Chronological age prediction accuracy, and (D) Chronological age prediction bias. Panels E and F show task results for AA2 and AA1 respectively, split by condition class (CVD, ISD, MBD, MSD, NDD, PGS, RSD).](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+378  
+379  
+380  
+381  
+382  
+383  
+384  
+385  
+386  
+387  
+388  
+389  
+390  
+391  
+392  
+393  
+394  
+395  
+396  
+397  
+398  
+399
+
+**A** Age acceleration two sample test (AA2)
+
+**B** Age acceleration one sample test (AA1)
+
+**C** Chronological age prediction accuracy
+
+**D** Chronological age prediction bias
+
+**E** Age acceleration two sample test (AA2) results
+
+**F** Age acceleration one sample test (AA1) results
+
+| Model        | CVD | ISD  | MBD | MSD | NDD  | PGS | RSD | Total |
+|--------------|-----|------|-----|-----|------|-----|-----|-------|
+| PhenoAgeV2   | 0/3 | 7/10 | 0/4 | 3/6 | 6/12 | 1/3 | 3/4 | 20/42 |
+| GrimAgeV2    | 0/3 | 7/10 | 0/4 | 1/6 | 2/12 | 2/3 | 2/4 | 14/42 |
+| GrimAgeV1    | 0/3 | 7/10 | 0/4 | 1/6 | 2/12 | 2/3 | 2/4 | 14/42 |
+| PhenoAgeV1   | 0/3 | 5/10 | 0/4 | 2/6 | 0/12 | 1/3 | 1/4 | 9/42  |
+| YingCausAge  | 0/3 | 4/10 | 0/4 | 0/6 | 1/12 | 1/3 | 0/4 | 6/42  |
+| YingAdaptAge | 0/3 | 3/10 | 0/4 | 0/6 | 1/12 | 1/3 | 0/4 | 5/42  |
+| Lin          | 0/3 | 3/10 | 0/4 | 0/6 | 0/12 | 0/3 | 1/4 | 5/42  |
+| HorvathV2    | 0/3 | 4/10 | 0/4 | 0/6 | 0/12 | 1/3 | 0/4 | 5/42  |
+| HorvathV1    | 0/3 | 3/10 | 0/4 | 0/6 | 0/12 | 0/3 | 0/4 | 3/42  |
+| Zhang19_EN   | 0/3 | 1/10 | 0/4 | 0/6 | 0/12 | 1/3 | 0/4 | 2/42  |
+| Hannum       | 0/3 | 1/10 | 0/4 | 0/6 | 0/12 | 0/3 | 0/4 | 1/42  |
+| VidalBrals   | 0/3 | 0/10 | 0/4 | 0/6 | 0/12 | 0/3 | 0/4 | 0/42  |
+| YingDamAge   | 0/3 | 0/10 | 0/4 | 0/6 | 0/12 | 0/3 | 0/4 | 0/42  |
+
+  
+
+| Model        | CVD | ISD | MBD | MSD | NDD | Total |
+|--------------|-----|-----|-----|-----|-----|-------|
+| GrimAgeV2    | 3/3 | 9/9 | 2/2 | 2/5 | 4/5 | 20/24 |
+| Zhang19_EN   | 0/3 | 9/9 | 1/2 | 5/5 | 4/5 | 19/24 |
+| Hannum       | 1/3 | 9/9 | 2/2 | 2/5 | 3/5 | 17/24 |
+| GrimAgeV1    | 1/3 | 9/9 | 2/2 | 2/5 | 1/5 | 15/24 |
+| VidalBrals   | 1/3 | 9/9 | 1/2 | 1/5 | 1/5 | 13/24 |
+| HorvathV2    | 0/3 | 9/9 | 0/2 | 0/5 | 3/5 | 13/24 |
+| HorvathV1    | 0/3 | 7/9 | 1/2 | 2/5 | 2/5 | 12/24 |
+| YingAdaptAge | 1/3 | 4/9 | 1/2 | 2/5 | 3/5 | 11/24 |
+| Lin          | 0/3 | 8/9 | 0/2 | 0/5 | 1/5 | 9/24  |
+| PhenoAgeV2   | 0/3 | 5/9 | 1/2 | 2/5 | 1/5 | 9/24  |
+| PhenoAgeV1   | 0/3 | 6/9 | 0/2 | 0/5 | 1/5 | 7/24  |
+| YingDamAge   | 0/3 | 5/9 | 1/2 | 0/5 | 0/5 | 6/24  |
+| YingCausAge  | 0/3 | 2/9 | 0/2 | 0/5 | 0/5 | 2/24  |
+
+Figure 3: ComputAgeBench tasks and performance of aging clock models. Panels A-D show benchmarking tasks: (A) Age acceleration two sample test (AA2), (B) Age acceleration one sample test (AA1), (C) Chronological age prediction accuracy, and (D) Chronological age prediction bias. Panels E and F show task results for AA2 and AA1 respectively, split by condition class (CVD, ISD, MBD, MSD, NDD, PGS, RSD).
+
+400  
+401  
+402  
+403  
+404  
+405  
+406  
+407  
+408  
+409  
+410  
+411
+
+Figure 3: ComputAgeBench tasks and performance of aging clock models. A-D) The four benchmarking tasks. (C) illustrates that chronological age prediction accuracy is measured by median absolute error ( $Med(|\Delta|)$ ) across all predictions. For a limiting case of prediction bias sketched in (D), all samples were predicted with positive age acceleration, leading to a strictly positive value of  $Med(\Delta)$ , graphically represented as a red arrow pointing to a cross. E) AA2 task results split into columns by condition class, where scores demonstrate the number of datasets per class, where a given clock model detected significant difference between the HC and AAC cohorts. F) AA1 task results: same as (E), but the statistics are calculated for datasets containing the AAC cohort alone.
+
+## 4 RESULTS
+
+412  
+413  
+414  
+415  
+416  
+417  
+418  
+419
+
+The most rigorous of the four, AA2 task demonstrates that second-generation aging clocks (PhenoAgeV2 (Higgins-Chen et al., 2022), GrimAgeV1 (Lu et al., 2019), GrimAgeV2 (Lu et al., 2022), and PhenoAgeV1 (Levine et al., 2018)) appear on top, particularly at predicting aging acceleration for the ISD class (Fig. 3E, Supplementary Materials Fig. A5). Nevertheless, all clocks failed to detect aging acceleration in patients with cardiovascular and metabolic diseases, at least at the statistically significant level (see Figs. A3 and A4 for results without FDR correction). Modest scores (<50% datasets in total) on the AA2 task across all models are expected, as no clocks had specifically been calibrated to pass this benchmarking task.
+
+420  
+421  
+422  
+423  
+424
+
+In contrast, the first-generation aging clocks by Zhang et al. (2019) and Hannum et al. (2013) populated the top of the AA1 leaderboard, in addition to the GrimAge, exhibiting good scores across multiple condition classes (Fig. 3F, Supplementary Materials Fig. A6). Notably, combining the results of this task with the model bias task exposes the potential source of the exceptional “robustness” in predicting accelerated aging in datasets without healthy controls.
+
+425  
+426  
+427  
+428  
+429  
+430  
+431
+
+The task of chronological age prediction accuracy reveals two undeniable leaders: HorvathV2 (Horvath et al., 2018) and HorvathV1 (Horvath, 2013) clocks (Table 1), specifically tuned for this task on large multi-tissue datasets. Notably, clocks predicting chronological age with  $Med(|\Delta|) \geq 18$  years would be inferior to a constant model yielding a 50 y.o. prediction (average age across all HC samples in the benchmark). Unless scaled, such clocks can hardly be used for inferring accelerated aging.
+
+Finally, to prove the validity of AA1 performance, a clock should also pass the task for being unbiased. We show that the AA1 leader, GrimAgeV2 clock (Lu et al., 2022), is also characterized by
+
+{8}------------------------------------------------
+
+Table 1: Benchmarking results.
+
+| Model name        | AA2 score | AA1 score | $Med( \Delta )$ , years         | $Med(\Delta)$ , years | <i>BenchScore</i> |
+|-------------------|-----------|-----------|---------------------------------|-----------------------|-------------------|
+| <b>PhenoAgeV2</b> | <b>20</b> | 9         | $7.6 \pm 0.1$                   | $-2.6 \pm 0.1$        | <b>29.0</b>       |
+| GrimAgeV1         | 14        | 15        | $7.5 \pm 0.1$                   | $5.7 \pm 0.1$         | 17.4              |
+| PhenoAgeV1        | 9         | 7         | $8.0 \pm 0.1$                   | $-4.2 \pm 0.2$        | 16.0              |
+| GrimAgeV2         | 14        | 20        | $9.8 \pm 0.1$                   | $9.3 \pm 0.1$         | 15.1              |
+| HorvathV1         | 3         | 12        | $5.4 \pm 0.1$                   | $-0.1 \pm 0.1$        | 15.0              |
+| HorvathV2         | 5         | 12        | <b><math>4.1 \pm 0.1</math></b> | $1.1 \pm 0.1$         | 13.9              |
+| VidalBralo        | 0         | 13        | $9.1 \pm 0.1$                   | $0.1 \pm 0.2$         | 12.8              |
+| Lin               | 5         | 9         | $7.5 \pm 0.1$                   | $2.1 \pm 0.2$         | 11.4              |
+| YingAdaptAge      | 5         | 11        | $20.0 \pm 0.2$                  | $12.5 \pm 0.5$        | 9.1               |
+| YingCausAge       | 6         | 2         | $9.0 \pm 0.1$                   | $1.3 \pm 0.2$         | 7.7               |
+| YingDamAge        | 0         | 6         | $19.5 \pm 0.3$                  | $-14.5 \pm 0.5$       | 6.0               |
+| Zhang19_EN        | 2         | 19        | $10.5 \pm 0.2$                  | $9.6 \pm 0.2$         | 3.7               |
+| Hannum            | 1         | 17        | $7.5 \pm 0.1$                   | $6.3 \pm 0.1$         | 3.7               |
+
+a large prediction bias for the HC samples (Table 1), warning us against considering its AA1 task score reliable. On the other hand, the top-2 unbiased HorvathV1 clock (Horvath, 2013) and Vidal-Bralo clock (Vidal-Bralo et al., 2016) have low prediction bias, rendering their AA1 performance as more trustworthy.
+
+To account for the discrepancies of AA1 task interpretation regarding the prediction bias, we devised *cumulative benchmarking score* (Table 1) which penalizes AA1 score by the magnitude of prediction bias (see Eq. 2). With such a metric, a second-generation aging clock PhenoAgeV2 (Higgins-Chen et al., 2022) becomes the most robust model in terms of distinguishing individuals with aging-accelerating conditions from the healthy cohort. This model is a leader, according to the cumulative benchmarking score and the AA2 task score. Closely behind it, are the other second-generation clocks: GrimAgeV1 (Lu et al., 2019), PhenoAgeV1 (Levine et al., 2018), and GrimAgeV2 (Lu et al., 2022). On the other hand, our results indicate that even the classic first-generation aging clocks, such as HorvathV1 (Horvath, 2013) and HorvathV2 (Horvath et al., 2018), can perform quite reliably in predicting biological age, at least for some condition classes. It is noteworthy that in both AA1 and AA2 tasks, many aging clocks perform well in detecting accelerated aging caused by immune system diseases, which are mostly represented by human immunodeficiency virus (HIV) infection in our dataset, while the other disease classes are only captured by *some* clocks, allegedly indicating that they were implicitly and unintentionally trained for certain subset of diseases. These results generalize previous findings (Mei et al., 2023) and show that comprehensive benchmarking of aging clocks can resolve the controversy regarding their robustness and utility.
+
+## 5 DISCUSSION
+
+Biological age is an elusive concept that cannot be measured and validated directly, which necessitates careful choice of model assumptions to avoid methodological errors and false discoveries while estimating it. While maintaining some degree of correlation between predicted and chronological age is desirable, the biomarkers paradox (Klempera & Douhal, 2006) precludes one from automatically accepting a BA estimation as acceptable (via the classic performance metrics of chronological age prediction accuracy). From a methodological perspective, training BA predictors to estimate time to death or a disease onset remains the most rigorous approach to aging clock validation, as these events can be measured directly. However, obtaining such data is challenging due to various ethical and financial constraints. At present, no open access data of DNA methylation with mortality labels are available for public clock benchmarking (see Appendix A.7).
+
+While mortality data remain unavailable, we propose to validate clocks by their ability to demonstrate BA acceleration *in a fixed pre-determined panel of datasets* for established aging-accelerating diseases or predict decelerated aging in the datasets of lifespan-prolonging interventions. For that, we developed our benchmark, where each aging clock could be tested across 4 distinct tasks. **We gathered an unprecedented number of DNA methylation datasets from more than 50 studies,**
+
+{9}------------------------------------------------
+
+covering 19 putative aging-accelerating conditions. Notably, no aging-decelerating conditions have been confirmed for the benchmark study (see Appendix A.5). It should be taken into account that *in vitro* cell reprogramming cannot serve as validation data for the deceleration effect, because, as has previously been shown (Kriukov et al., 2023), such data are essentially out-of-domain with regard to blood DNA methylation across aging.
+
+To showcase our benchmark, we tested 13 different published models and revealed that the second-generation aging clocks, namely, PhenoAge (Levine et al., 2018), GrimAge (Lu et al., 2019), and their upgraded variants (Higgins-Chen et al., 2022; Lu et al., 2022), were the most successful, according to the cumulative benchmarking score. As these clocks had initially been designed to predict all-cause mortality, they were expected to be robust in distinguishing aging-accelerating conditions. Yet, our findings reinforce the growing trends in training BA predictors based on mortality rather than chronological age (Yousefi et al., 2022; Moqri et al., 2024).
+
+As blood DNA methylation generally comes from the immune cells, which would be directly affected by the HIV, it is not surprising that the majority of clocks managed to discern accelerated aging in the immune system-related conditions (featured predominantly by the HIV infection in our dataset). This result supports the notion that the blood-based clocks might be implicitly attuned to such conditions, while only a few clocks are capable of successfully capturing accelerated aging in the other disease classes.
+
+Remarkably, some datasets were evaluated incorrectly by all models, which may have several possible explanations apart from the poor clock performance. First, a strong covariate shift between these data and the training data might impede model performance on some datasets. Second, some selected conditions might not induce accelerated aging in blood, either by itself or by the design of the original study (see Limitations in Appendix A.1). Third, the multidimensionality of aging as a biological phenomenon might not allow for correct prediction of all aging-accelerating conditions by such univariate measures as the blood-based epigenetic clocks. In favor of this notion, it has recently been shown that different organ systems have different aging trajectories (Schaum et al., 2020; Oh et al., 2023), suggesting several directions for the future research, outlined in Appendix A.2.
+
+## 6 CONCLUSION
+
+In this work, we developed the first systematic benchmark for evaluating blood-based epigenetic aging clocks. We believe it will help longevity researchers and data scientists to better gauge the power of existing biomarkers of aging, quantitatively assessing their role, limitations, and reliability. We anticipate that, as a result of such computational paradigm, rapid and reliable clinical trials of lifespan-extending therapies will become an attainable reality in a not-so-distant future.
+
+## 7 REPRODUCIBILITY STATEMENT
+
+We assured the reproducibility of our pipeline by providing a Google Colab notebook ([https://colab.research.google.com/drive/1\\_nrGMUd8oH8ADNWUPnEXhr4ZAjLZQohm](https://colab.research.google.com/drive/1_nrGMUd8oH8ADNWUPnEXhr4ZAjLZQohm)), which allows to download all datasets and benchmark all clocks considered in this article. References to our code and dataset repositories will become available after the double-blind review.
+
+## REFERENCES
+
+- Yosra Bejaoui, Aleem Razzaq, Noha A Yousef, Junko Oshima, Andre Megarbane, Abeer Qannan, Ramya Potabattula, Tanvir Alam, George M Martin, Henning F Horn, Thomas Haaf, Steve Horvath, and Nady El Haj. DNA methylation signatures in blood DNA of Hutchinson-Gilford progeria syndrome. *Aging Cell*, 21(2):e13555, February 2022.
+
+Jeremy M Bingen, Lindsay V Clark, Mark R Band, Ilyas Munzir, and Michael D Carrithers. Differential DNA methylation associated with multiple sclerosis and disease modifying treatments in an underrepresented minority population. *Front. Genet.*, 13:1058817, 2022.
+
+Maria Pia Campagna, Alexandre Xavier, Jeannette Lechner-Scott, Vicky Maltby, Rodney J Scott, Helmut Butzkueven, Vilija G Jokubaitis, and Rodney A Lea. Epigenome-wide association studies: current knowledge, strategies, and recommendations. *Clinical epigenetics*, 13:1–24, 2021.
+
+ Rest of paper (reference and Appendix) is removed.

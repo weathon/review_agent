@@ -1,0 +1,324 @@
+
+
+{0}------------------------------------------------
+
+# NEXTBESTPATH: EFFICIENT 3D MAPPING OF UNSEEN ENVIRONMENTS
+
+Shiyao Li<sup>1</sup>, Antoine Guédon<sup>1</sup>, Clémentin Boittiaux<sup>1</sup>, Shizhe Chen<sup>2</sup>, Vincent Lepetit<sup>1</sup>
+
+<sup>1</sup>LIGM, École Nationale des Ponts et Chaussées, IP Paris, Univ Gustave Eiffel, CNRS, France  
+ {firstname.lastname}@enpc.fr
+
+<sup>2</sup>Inria, École normale supérieure, CNRS, PSL Research University, France  
+ {firstname.lastname}@inria.fr
+
+## ABSTRACT
+
+This work addresses the problem of active 3D mapping, where an agent must find an efficient trajectory to exhaustively reconstruct a new scene. Previous approaches mainly predict the next best view near the agent's location, which is prone to getting stuck in local areas. Additionally, existing indoor datasets are insufficient due to limited geometric complexity and inaccurate ground truth meshes. To overcome these limitations, we introduce a novel dataset AiMDoom with a map generator for the Doom video game, enabling to better benchmark active 3D mapping in diverse indoor environments. Moreover, we propose a new method we call next-best-path (NBP), which predicts long-term goals rather than focusing solely on short-sighted views. The model jointly predicts accumulated surface coverage gains for long-term goals and obstacle maps, allowing it to efficiently plan optimal paths with a unified model. By leveraging online data collection, data augmentation and curriculum learning, NBP significantly outperforms state-of-the-art methods on both the existing MP3D dataset and our AiMDoom dataset, achieving more efficient mapping in indoor environments of varying complexity. Project page: <https://shiyao-li.github.io/nbp/>
+
+## 1 INTRODUCTION
+
+Autonomous 3D mapping of new scenes holds substantial importance for vision, robotics, and graphics communities, with applications including digital twins. In this paper, we focus on the problem of active 3D mapping, where the goal is for an agent to find the shortest possible trajectory to scan the entire surface of a new scene using a depth sensor.
+
+This task is extremely challenging as the agent has to identify an efficient trajectory without knowing the scene in advance. Existing works can be broadly categorized into rule-based and learning-based approaches. Rule-based approaches, such as frontier-based exploration (FBE) (Yamauchi, 1997), utilize heuristic rules to select optimal frontiers at the boundaries of the already-known space for the next movement. Though being simple and generalizable, they fail to leverage data priors to develop more efficient planning strategies. To address this, learning-based methods, often referred to as next-best-view planning (NBV), train parametric policies for action prediction. Although NBV approaches have demonstrated promising results, most of them only are evaluated on single-object datasets or outdoor scenes (Guédon et al., 2022; Chang et al., 2015; Peralta et al., 2020), ignoring a critical but more difficult setting of indoor environments for active 3D mapping applications.
+
+Existing indoor datasets (Xia et al., 2018; Chang et al., 2017), however, offer limited geometry complexity and often include imperfect ground truth meshes, making them inadequate to fully evaluate model performance in complex indoor environments. In this work, we automatically construct a new indoor dataset called AiMDoom for active 3D mapping. AiMDoom is built upon a map generator for the Doom video game, and features a wide range of indoor settings of four difficulty levels: Simple, Normal, Hard and Insane. As illustrated in Figure 1a, even in relatively simple indoor settings of our dataset, the state-of-the-art NBV approach MACARONS (Guédon et al., 2023) is frequently trapped in a limited area and misses substantial portions of the scene. This limitation arises because
+
+{1}------------------------------------------------
+
+![Figure 1: Reconstruction results and trajectories of MACARONS and our NBP model. (a) MACARONS (simple scene) shows a partial reconstruction of a simple indoor scene with a green trajectory. (b) Our NBP (simple scene) shows a complete reconstruction of the same simple scene with a blue trajectory. (c) Our NBP (hard scene) shows a complete reconstruction of a complex indoor scene with a yellow trajectory.](c803f6f6e2c49429d2951832bd0f208d_img.jpg)
+
+Figure 1: Reconstruction results and trajectories of MACARONS and our NBP model. (a) MACARONS (simple scene) shows a partial reconstruction of a simple indoor scene with a green trajectory. (b) Our NBP (simple scene) shows a complete reconstruction of the same simple scene with a blue trajectory. (c) Our NBP (hard scene) shows a complete reconstruction of a complex indoor scene with a yellow trajectory.
+
+Figure 1: Reconstruction results and trajectories of MACARONS (Guédon et al., 2023) and our NBP model. Guédon et al. (2023) fails to fully map the environment in simple scenes (a), while our NBP model manages to capture the full scene (b), even in much more complex geometry (c).
+
+most NBV methods only look one step ahead to identify the next best view in neighbouring regions, making it difficult to explore under-reconstructed areas at far distances.
+
+Some recent works (Chen et al., 2024; Feng et al., 2024; Zhan et al., 2022; Georgakis et al., 2022) attempt to overcome this limitation by searching for the next optimal view across a broader range. For example, Georgakis et al. (2022) utilizes a strategy that relies on averaging predicted uncertainties at each point along every sampled path, and uses a trained point-goal navigation model. However, training separate uncertainty map prediction and navigation models is less efficient, and the scene uncertainty does not directly align with the ultimate objective of 3D mapping.
+
+Therefore, we further propose a novel approach called next-best-path (NBP) planning, which shifts from NBV approaches that predict a single nearby view, to predicting an optimal path in a unified model. Our model is composed of three key components: a mapping progress encoder, a coverage gain decoder and an obstacle map decoder. The mapping progress encoder efficiently encodes the currently reconstructed point cloud along with the agent’s past trajectory. Based on the encoded representation, the coverage gain decoder predicts a value map over a large spatial range centred on the agent’s current location. Each cell in the map represents the surface coverage gain accumulated along the optimal trajectory from the agent’s location to the cell, which corresponds to the final metric for active mapping. The cell with the highest value score is viewed as a long-term goal. The obstacle map decoder predicts obstacles in both seen and unseen regions by leveraging the agent’s current knowledge of the scene. This allows us to compute the shortest path to the long-term goal while avoiding obstacles. To train the model, we collect data online and iteratively improve the model. We also propose a data augmentation method that exploits a property of shortest paths and a combined curriculum and multitask learning strategy to enhance training efficiency.
+
+We evaluate our methods on the existing indoor benchmark MP3D (Chang et al., 2017) and our dataset AiMDoom. The proposed NBP model significantly outperforms state-of-the-art methods on both datasets from simple (Figure 1b) to more complex indoor environments (Figure 1c).
+
+Our key contributions can be summarized as follows:
+
+- We introduce AiMDoom, the first benchmark to systematically evaluate active mapping in indoor scenes of different levels of difficulties.
+- We propose a novel next-best-path approach that jointly predicts long-term goals with optimal reconstruction coverage gains, and obstacle maps for trajectory planning.
+- Our approach achieved state-of-the-art results on both the AiMDoom and MP3D datasets.
+
+## 2 RELATED WORK
+
+**Active Mapping.** Active mapping aims to exhaustively reconstruct a 3D scene in the shortest possible time with a moving agent. Unlike SLAM (Chaplot et al., 2020; Placed et al., 2023; Matsuki et al., 2024), which addresses both localization and mapping, active mapping focuses on reconstruction, continuously selecting viewpoints to cover the entire scene, assuming the pose is known. Early methods often relied on frontier-based exploration (FBE) approaches (Yamauchi, 1997). The key idea is to move the agent toward a heuristically selected frontier along the boundary between reconstructed and unknown regions of the scene. Among different strategies (Bircher et al., 2016;
+
+{2}------------------------------------------------
+
+Table 1: **Comparison between AiMDoom and prior indoor 3D datasets.** Navigation complexity is the maximum ratio of geodesic to euclidean distances between any two navigable locations in the scene. Universal accessibility means whether windows and doors are accessible.
+
+| Dataset                       | Replica | RoboTHOR | MP3D    | Gibson<br>(4+ only) | ScanNet | HM3D    | AiMDoom (Ours) |         |         |         |
+|-------------------------------|---------|----------|---------|---------------------|---------|---------|----------------|---------|---------|---------|
+|                               |         |          |         |                     |         |         | Simple         | Normal  | Hard    | Insane  |
+| Number of scenes              | 18      | 75       | 90      | 571 (106)           | 1613    | 1000    | 100            | 100     | 100     | 100     |
+| Floor space (m <sup>2</sup> ) | 2.19k   | 3.17k    | 101.82k | 217.99k (17.74k)    | 39.98k  | 365.42k | 63.33k         | 134.84k | 321.38k | 548.85k |
+| Navigation complexity         | 5.99    | 2.06     | 17.09   | 14.25 (11.90)       | 3.78    | 13.31   | 11.31          | 18.38   | 36.05   | 45.25   |
+| Universal accessibility       | ✗       | ✗        | ✗       | ✗                   | ✗       | ✗       | ✓              | ✓       | ✓       | ✓       |
+| Easy expansion                | ✗       | ✗        | ✗       | ✗                   | ✗       | ✗       | ✓              | ✓       | ✓       | ✓       |
+
+Cieslewski et al., 2017; Zhou et al., 2021; Tao et al., 2023) for frontier selection, moving to the nearest frontier serves as a strong baseline. Additionally, there are efforts (Cao et al., 2021; Xu et al., 2024) that combine global FBE and local planning strategies within a hierarchical optimization framework to enhance exploration. However, these FBE-based approaches are heuristic-based and cannot exploit prior learned from data to explore more efficiently, restricting their performance in complex environments.
+
+To address this limitation, learning-based approaches have been explored to select the next-best views (NBV) for efficient 3D mapping. The NBV-based methods train models to select the optimal pose from nearby camera poses (Guédon et al., 2022; 2023; Lee et al., 2023) or from a limited predefined view space such as a hemisphere (Zhan et al., 2022; Lee et al., 2022; Peralta et al., 2020; Zeng et al., 2020; Mendoza et al., 2020). While these methods show promising results to reconstruct single objects, their performance remains limited in large environments. Due to the narrow search space for the next pose, NBV methods behave like a greedy policy and thus can easily get stuck in local regions. To mitigate this, some works Ramakhya et al. (2022); Chen et al. (2023) use imitation learning to learn from human demonstrates which prioritize unseen exploration but with the cost of heavy labelling. More recently, efforts have been made to enlarge the search range for the next best view (Chen et al., 2024; Ran et al., 2023; Pan et al., 2022; Georgakis et al., 2022). However, these methods are still primarily evaluated on single-object datasets with small moving steps, and often rely on optimizing indirect metrics like reconstruction uncertainty (Georgakis et al., 2022), which are not directly aligned with the goal of exhaustive 3D reconstruction. In this work, we extend the evaluation to more complex indoor environments and also introduce a new surface coverage gain criterion that optimizes the coverage gain along the best trajectory towards a long-term goal.
+
+**3D mapping datasets.** Existing datasets for 3D mapping mainly focus on single isolated objects such as those in ShapeNet (Chang et al., 2015) and OmniObject3D (Wu et al., 2023), or outdoor scenes (Lu et al., 2023; Hardouin et al., 2020), where the agent only needs to move around the scene to achieve full reconstruction. These datasets are comparatively less complex than indoor environments where the agent must enter into the scene. The indoor scenes contain unique challenges such as dead ends and tight corners, which often force the agent to backtrack without significantly improving its objective.
+
+While some works (Yan et al., 2023; Georgakis et al., 2022; Ramakrishnan et al., 2020) incorporate indoor scene datasets such as Gibson (Xia et al., 2018) and MP3D (Chang et al., 2017), these often exhibit significant limitations. Existing synthetic datasets (Straub et al., 2019; Deitke et al., 2020) often lack scene complexity, whereas real-world scans (Dai et al., 2017; Ramakrishnan et al., 2021), despite offering greater representational fidelity, are constrained by limited structural and map diversity and often suffer from substantial noise artifacts. This lack of reliable datasets prevents comprehensive evaluation in active 3D mapping tasks. In this work, we propose a new dataset - AiMDoom, designed for benchmarking active mapping in indoor environments of different complexities.
+
+## 3 THE AiMDOOM DATASET
+
+In this section, we introduce **AiMDoom**, a new dataset for Active 3D Mapping in complex indoor environments based on the **Doom** video game <sup>1</sup>. As Doom features a wide variety of indoor settings, we use its map generator to create four sets of maps of increasing geometric complexity: Simple,
+
+<sup>1</sup>[https://en.wikipedia.org/wiki/Doom\\_\(franchise\)](https://en.wikipedia.org/wiki/Doom_(franchise))
+
+{3}------------------------------------------------
+
+![Figure 2: Maps from our AiMDoom dataset. (a) Bird-eye views of samples from the Simple, Normal, Hard, and Insane levels (from left to right). (b) Representative images showing the internal structural composition of the scene.](dc1e692e5b7efd8e5a2a790c458646d9_img.jpg)
+
+(a) Bird-eye views of samples from the *Simple*, *Normal*, *Hard*, and *Insane* levels (from left to right).
+
+(b) Representative images showing the internal structural composition of the scene.
+
+Figure 2: Maps from our AiMDoom dataset. (a) Bird-eye views of samples from the Simple, Normal, Hard, and Insane levels (from left to right). (b) Representative images showing the internal structural composition of the scene.
+
+Figure 2: **Maps from our AiMDoom dataset.** The AiMDoom dataset includes four levels of geometric complexity with various textures.
+
+Normal, Hard, and Insane. In the following, we first detail how we built these maps and then discuss the key challenges presented in our AiMDoom dataset.
+
+**Dataset construction.** We used the open-source software Obsidian<sup>2</sup> to automatically generate Doom maps as our indoor environments. Four sets of hyperparameters are proposed to control architectural complexity and texture styles in Obsidian. By varying these hyperparameters, we produced maps categorized into Simple, Normal, Hard and Insane difficulty levels. Each difficulty level is made of 100 maps with 70 for training and 30 for evaluation.
+
+The maps include doors and windows, all of which are configured to be open. This allows the agent to see and pass through the doors and windows. We converted the maps to the widely used OBJ format, and used Blender (Community, 2018) to consolidate the texture images of each map into a single texture image. This makes the maps compatible with Pytorch3D (Ravi et al., 2020) and Open3D (Zhou et al., 2018). Further details are presented in the supplementary material.
+
+**Key challenges.** The AiMDoom dataset presents three key challenges for active 3D mapping. Firstly, the dataset features environments with intricate geometries and layouts as shown in Figure 2, making it challenging to determine the optimal exploration direction for effective mapping. Secondly, the maps have small doors and narrow corridors, requiring careful path planning to navigate. Finally, the map diversity requires the reconstruction system to generalize across different scenes. Table 1 compares AiMDoom with existing indoor 3D datasets (Straub et al., 2019; Deitke et al., 2020; Chang et al., 2017; Dai et al., 2017; Xia et al., 2018; Ramakrishnan et al., 2021), highlighting our dataset’s strengths in scene area and navigation complexity.
+
+We will release the dataset along with a comprehensive toolkit to generate the data, which enables easy expansion of the dataset for future research.
+
+## 4 LEARNING ACTIVE 3D MAPPING
+
+### 4.1 OVERVIEW
+
+**Problem definition.** Active 3D mapping aims to control an agent, such as an unmanned aerial vehicle (UAV) or wheeled robot, to efficiently and exhaustively reconstruct a 3D scene. The agent starts at a random location within the scene, and at each time step  $t$ , it receives an RGB-D image  $I_t$  and must predict the next one  $c_t = (c_t^{\text{pos}}, c_t^{\text{rot}})$  in the immediate surrounding of the agent. Here,  $c_t^{\text{pos}}$  denotes the position coordinates, and  $c_t^{\text{rot}}$  represents the orientation angles. The agent continually
+
+<sup>2</sup><https://obsidian-level-maker.github.io/>
+
+{4}------------------------------------------------
+
+![Figure 3: Overview of the proposed next-best-path (NBP) framework. The diagram shows a flow from left to right. On the left, a 'Coverage gain and obstacle map prediction model' takes a reconstructed point cloud $\mathcal{P}_t$ and a mapping progress representation $\mathcal{E}_{c_t}$ as input. These are processed by a 'Mapping Progress Encoder' to produce a feature $e_{c_t}$. This feature is then passed through two parallel decoders: a 'Coverage Gain Decoder' which outputs a 3D value map $M_{c_t}$ (dimensions $W_c, H_c, N_c$) and an 'Obstacle Decoder' which outputs a 2D obstacle map $O_{c_t}$ (dimensions $W_o, H_o$). Both maps are then processed by a 'Decision making' block on the right, which visualizes the maps and outputs a 'next-best path' $\tau_t = (c_t, \dots, c_g)$ and a 'long-term goal' $c_g$.](690fce4fb5c9cbb8beb560cb2a3fcbeb_img.jpg)
+
+Figure 3: Overview of the proposed next-best-path (NBP) framework. The diagram shows a flow from left to right. On the left, a 'Coverage gain and obstacle map prediction model' takes a reconstructed point cloud \$\mathcal{P}\_t\$ and a mapping progress representation \$\mathcal{E}\_{c\_t}\$ as input. These are processed by a 'Mapping Progress Encoder' to produce a feature \$e\_{c\_t}\$. This feature is then passed through two parallel decoders: a 'Coverage Gain Decoder' which outputs a 3D value map \$M\_{c\_t}\$ (dimensions \$W\_c, H\_c, N\_c\$) and an 'Obstacle Decoder' which outputs a 2D obstacle map \$O\_{c\_t}\$ (dimensions \$W\_o, H\_o\$). Both maps are then processed by a 'Decision making' block on the right, which visualizes the maps and outputs a 'next-best path' \$\tau\_t = (c\_t, \dots, c\_g)\$ and a 'long-term goal' \$c\_g\$.
+
+Figure 3: **Overview of the proposed next-best-path (NBP) framework.** The model (left, see Section 4.2) predicts a value map of coverage gain and an obstacle map, which are used for decision making (right, see Section 4.3) to obtain a next-best path.
+
+predicts successive  $c_t$  until a predefined time limit  $T$  is reached. The final output is the reconstructed 3D point cloud of the explored environment.
+
+**Overview of our approach.** Existing approaches for active mapping (Guédon et al., 2022; 2023) typically predict the next camera pose  $c_t$  in a greedy manner, which often suffers from getting stuck in limited areas. To address this limitation, we propose a novel approach that predicts a long-term goal camera pose and uses it to guide the next camera pose selection. Given all past observations and camera poses, our model predicts two key components centred on the agent’s current pose  $c_t$ : (1) a value map  $M_{c_t}$ , which estimates the surface coverage gain of candidate poses  $c$  in the surrounding of  $c_t$ , and (2) an obstacle map  $O_{c_t}$ , which accounts for both visible and predicted unseen obstacles in the environment. From the value map  $M_{c_t}$ , we derive the long-term goal pose  $c_g$  and combine it with the obstacle map  $O_{c_t}$  to compute an optimal path  $\tau_t = (c_t, c_{t+1}, \dots, c_g)$  that navigates the agent from its current pose  $c_t$  to the goal pose  $c_g$ . This long-term goal-driven strategy helps the model avoid the pitfalls of short-sighted decisions and enhances coverage efficiency.
+
+In the following, we first describe the model for  $M_{c_t}$  and  $O_{c_t}$  prediction in Section 4.2, then followed by the decision-making process to determine the next best path  $\tau_t$  in Section 4.3. Finally, in Section 4.4, we introduce the training algorithm for our model.
+
+### 4.2 COVERAGE GAIN AND OBSTACLE PREDICTION MODEL
+
+Figure 3 depicts the deep model we use to predict the coverage gains and the obstacle map. We detail this model below.
+
+**Mapping Progress Encoder.** Let’s denote  $\mathcal{P}_t$  the reconstructed point cloud at each time step  $t$ , obtained by adding the back-projected depth image  $I_t$  to the previously accumulated point cloud  $\mathcal{P}_{t-1}$ . Directly encoding the point cloud via 3D neural networks can be complex and inefficient. Therefore, we convert the 3D point cloud into multiple 2D images as inputs to a 2D-based encoder.
+
+To be specific, we first centre and crop the point cloud based on the agent’s current position  $c_t$ . Centering the input on the agent makes the model invariant to the agent’s position and thus improves generalization. Then, the point cloud is divided into  $K$  horizontal layers along the gravity axis. For each layer, we average the occupancy value along the gravity axis to transform each 3D data into a 2D image. In this image, each pixel encodes the density of 3D points within a specific height range. The stack of  $K$  point cloud projected images provides a simplified yet informative representation of the 3D structure.
+
+Similarly, we project the 3D trajectory of the agent’s past camera poses onto a 2D plane where each pixel denotes the frequency of visits to that location. This plane serves to mitigate the exploratory value of previously traversed regions. We define  $\mathcal{E}_{c_t}$  to include the  $K$  point cloud projected images and a single historical trajectory image.
+
+Given the stacked 2D images of  $\mathcal{E}_{c_t}$ , we employ an Attention UNet (Oktay et al., 2018) encoder with 4 downsampling convolutional blocks to extract mapping progress features  $e_{c_t}$ .
+
+{5}------------------------------------------------
+
+**Coverage Gain Decoder.** This decoder predicts from  $e_{c_t}$  a 3D value map  $M_{c_t} \in \mathbb{R}^{H_c \times W_c \times N_c}$  centered on the agent. It is composed of two upsampling convolutional blocks with an attention mechanism. The first two dimensions of the predicted value map,  $H_c$  and  $W_c$ , correspond to the camera’s 2D position in the environment, while the third dimension  $N_c$  represents different camera orientations. Each value in  $M_{c_t}$  quantifies the estimated coverage gain achievable by moving the camera along the shortest trajectory from its current pose to the specific camera pose. The value map  $M_{c_t}$  guides the selection of both long-term goal poses  $c_g$  and intermediate poses along the trajectory, enabling a two-stage optimization for efficient exploration, which will be discussed in Section 4.3.
+
+**Obstacle Map Decoder.** This decoder predicts the geometric layout  $O_{c_t} \in \mathbb{R}^{H_o \times W_o}$  of the current moving plane, also from the encoder output  $e_{c_t}$ .  $O_{c_t}$  is a binary map representing potential obstacles around the current agent location, which is used for path planning. To be noted,  $O_{c_t}$  includes not only visible obstacles but also anticipated unseen obstacles based on the structure of the partially reconstructed point cloud, providing useful priors for navigation. This decoder is implemented using Attention U-Net with 4 upsampling convolutional blocks, and the output is passed through a sigmoid activation function to generate the binary obstacle map.
+
+### 4.3 DECISION MAKING FOR NEXT-BEST-PATH PREDICTION
+
+We derive both a long-term goal  $c_g$  and next-best-path  $\tau_t = (c_t, c_{t+1}, \dots, c_g)$  from the predicted  $M_{c_t}$  and  $O_{c_t}$ , employing different decision making strategies for training and inference. During training, we balance exploitation and exploration, while we prioritize exploitation during inference.
+
+**Training phase.** We rely on the Boltzmann exploration strategy (Cesa-Bianchi et al., 2017) to sample a camera pose as the goal  $c_g$  based on the value map  $M_{c_t}$ . The probability of selecting a camera pose  $c$  as the goal is given by:
+
+$$P(c_g = c) = \frac{\exp(M_{c_t}[c]/\beta)}{\sum_{c' \in C} \exp(M_{c_t}[c']/\beta)}, \quad (1)$$
+
+where  $C$  represents all possible camera poses within  $M_{c_t}$ ,  $\beta$  is the temperature parameter that balances exploration and exploitation, and  $M_{c_t}[c]$  denotes the value of the cell for candidate  $c$ .
+
+Once the long-term goal  $c_g$  is sampled, we use the Dijkstra algorithm to find the shortest obstacle-free path from the current position  $c_t^{\text{pos}}$  to goal position  $c_g^{\text{pos}}$  with a ground truth obstacle map. To select camera orientation along the path, we also leverage  $M_{c_t}$  to sample one orientation from  $N_c$  potential orientations at each position. This strategy enhances data diversity and alleviates the risk of converging to local optima.
+
+**Inference phase.** At inference, we take  $c_g$  as the pose with the maximum value in  $M_{c_t}$ , and the path planning is based on the predicted obstacle map  $O_{c_t}$  instead of ground truth. Each position in the trajectory is assigned the optimal orientation from the heatmap  $M_{c_t}$  for its location. In practice, the predicted obstacle map may not be entirely accurate. Encountering an unexpected obstacle requires halting the trajectory and initiating a new decision-making phase.
+
+### 4.4 MODEL TRAINING
+
+Algorithm 1 outlines the training procedure for our model. We first gather training data from all training scenes using the current model, and then update the model with the new data. This process is repeated iteratively until the model achieves convergence. We detail below the data collection, training objectives to update the model, and the training strategy.
+
+#### --- Algorithm 1 Training procedure. ---
+
+```
+
+ $N$ : number of training iterations
+ $N_e$ : number of iterations using easy data
+ $S_n$ : the number of trajectories per scene
+Initialize memory  $\mathcal{M} \leftarrow \emptyset$  and model parameters  $\theta$ 
+for  $n \leftarrow 1$  to  $N$  do
+  Initialize training set  $\mathcal{T} \leftarrow \emptyset$ 
+  for each scene in training set  $\mathcal{D}$  do
+    for  $s \leftarrow 1$  to  $S_n$  do
+      Collect training data  $\{d_t\}_{t=1}^L$ 
+      if  $n \leq N_e$  then  $\mathcal{T} \leftarrow \mathcal{T} \cup \{d_t : t \geq 10\}_{t=1}^L$ 
+      else  $\mathcal{T} \leftarrow \mathcal{T} \cup \{d_t\}_{t=1}^L$  endif
+    end for
+  end for
+   $\mathcal{M} \leftarrow \mathcal{M} \cup \mathcal{T}$ 
+   $\mathcal{T} \leftarrow \mathcal{T} \cup \text{RandomSample}(\mathcal{M} \setminus \mathcal{T}, |\mathcal{T}|)$ 
+  for  $e \leftarrow 1$  to  $E$  do
+    Update  $\theta$  with loss in Eq. (3) over  $\mathcal{T}$ 
+  end for
+end for
+return  $\theta$ 
+
+```
+
+---
+
+{6}------------------------------------------------
+
+**Training data collection.** After sampling the goal pose  $c_g$  and the trajectory  $\tau_t$ , we generate ground truth labels to train the value map  $M_{c_t}$  and obstacle map  $O_{c_t}$ .
+
+For  $M_{c_t}$ , we compute the coverage gain for the cell that corresponds to  $c_g$  as the ground truth label. Let  $\mathcal{P}_t$  and  $\mathcal{P}_g$  denote the reconstructed point clouds at pose  $c_t$  and  $c_g$  respectively, where  $\mathcal{P}_g$  is the result of accumulating depth information into  $\mathcal{P}_t$  as the agent moves along the trajectory  $\tau_t$ . By comparing the reconstructed point clouds with the ground truth point cloud  $\mathcal{P}^{\text{GT}}$ , we can obtain the coverage gain  $\Delta\text{Cov}_{c_t \rightarrow c_g}$ :
+
+$$\Delta\text{Cov}_{c_t \rightarrow c_g} = \frac{1}{N_{\text{GT}}} \sum_{i=1}^{N_{\text{GT}}} \left[ \mathbf{1} \left( \min_{y \in \mathcal{P}_g} \|x_i^{\text{GT}} - y\| < \epsilon \right) - \mathbf{1} \left( \min_{y \in \mathcal{P}_t} \|x_i^{\text{GT}} - y\| < \epsilon \right) \right], \quad (2)$$
+
+where  $N_{\text{GT}}$  is the number of points in  $\mathcal{P}^{\text{GT}}$ ,  $\|\cdot\|$  denotes the Euclidean distance, and  $\epsilon$  is a predefined distance threshold. Consequently, we set  $\Delta\text{Cov}_{c_t \rightarrow c_g}$  as the ground truth value for  $M_{c_t}[c_g]$ .
+
+For  $O_{c_t}$ , we use the 3D mesh of the scene to derive the ground truth obstacle map  $O_{c_t}^{\text{GT}}$ . Specifically, we intersect the 3D mesh with a plane at the agent’s height, and project this intersection onto a 2D grid. This 2D grid is binarized to distinguish between obstacles and free space. Finally, we centre the 2D grid around the agent’s current position as  $O_{c_t}^{\text{GT}}$ .
+
+To enhance the efficiency of data generation, we further perform a data augmentation by leveraging the property of Dijkstra’s algorithm, where every sub-path of a shortest path is also a shortest path. From a given path  $\tau_t = (c_0 = c_t, \dots, c_m = c_g)$ , we compute the coverage gain  $\Delta\text{Cov}_{c_i \rightarrow c_j}$  for each segment of the path  $(c_i, c_j)$  where  $0 \leq i < j \leq m$ . More specifically, we update the ground truth values along the Dijkstra path  $M_{c_i}^{\text{GT}}[c_j] = \Delta\text{Cov}_{c_i \rightarrow c_j}$ . We also collect the input  $\mathcal{E}_{c_i}$  and the ground truth of surrounding obstacles  $O_{c_i}^{\text{GT}}$  for each  $c_i \in \tau_t$ . This significantly increases the number of training samples derived from a single trajectory.
+
+We store all augmented pairs  $\{d_l\}_{l=1}^L$ ,  $d_l = (\mathcal{E}_{c_i}, M_{c_i}^{\text{GT}}, O_{c_i}^{\text{GT}})$  in memory for training, where  $L$  is the length of the trajectory.
+
+**Multi-task training.** We jointly train the coverage gain and obstacle map prediction using data stored in memory. We use the mean squared error (MSE) loss for training the coverage gain prediction, and the binary cross-entropy (BCE) loss for training the obstacle map prediction. To balance these two tasks effectively, we apply learnable uncertainty weights for each task, following Kendall et al. (2018). Our multi-task loss function for sample  $d_l$  is formulated as follows:
+
+$$\mathcal{L}(\theta; d_l) = \frac{1}{2\sigma_1^2} \mathcal{L}_{\text{MSE}}(M_{c_i}^{\text{GT}}, \hat{M}_{c_i}) + \frac{1}{2\sigma_2^2} \mathcal{L}_{\text{BCE}}(O_{c_i}^{\text{GT}}, \hat{O}_{c_i}) + \log \sigma_1 + \log \sigma_2, \quad (3)$$
+
+where  $\theta$  represents the model parameters,  $\sigma_1$  and  $\sigma_2$  are learnable uncertainty weights,  $\hat{M}_{c_i}$  and  $\hat{O}_{c_i}$  are the model’s predictions for the coverage gain and obstacle maps respectively.
+
+**Training strategy.** We adopt a curriculum training strategy (Liu et al., 2017; Yuan et al., 2022; Yan et al., 2021; De Lange et al., 2021) to train our model, starting with easier-to-predict samples and gradually incorporating the entire dataset. In particular, we consider that the initial steps of a trajectory are more challenging since the agent has limited observations. Therefore, during the first  $N_e$  training iterations, we exclude samples from the first 10 steps in a trajectory. After  $N_e$  iterations, all samples in a trajectory are used in training.
+
+During each training iteration, we use a balanced combination of previously stored data from the memory and newly collected data generated by the current model (Wulfmeier et al., 2018; Mnih, 2013; Rolnick et al., 2019; Aljundi et al., 2019), which helps prevent catastrophic forgetting. Each training phase is limited to  $E$  epochs to balance between enhancing performance and preventing overfitting on sub-optimal data.
+
+## 5 EXPERIMENTS
+
+### 5.1 EXPERIMENTAL SETUP
+
+**Dataset and simulation setup.** We evaluate our model on the Matterport3D (MP3D) dataset (Chang et al., 2017) and our own AiMDoom dataset.
+
+{7}------------------------------------------------
+
+Table 2: **Evaluation results on AiMDoom Dataset.** For each difficulty level, all baseline models, including ours, are trained from scratch on the corresponding training set to ensure a fair comparison.
+
+|                   | Simple                            |                                   | Normal                            |                                   | Hard                              |                                   | Insane                            |                                   |
+|-------------------|-----------------------------------|-----------------------------------|-----------------------------------|-----------------------------------|-----------------------------------|-----------------------------------|-----------------------------------|-----------------------------------|
+|                   | Final Cov.                        | AUCs                              | Final Cov.                        | AUCs                              | Final Cov.                        | AUCs                              | Final Cov.                        | AUCs                              |
+| Random            | 0.323 $\pm$ 0.156                 | 0.270 $\pm$ 0.135                 | 0.190 $\pm$ 0.124                 | 0.152 $\pm$ 0.103                 | 0.124 $\pm$ 0.082                 | 0.088 $\pm$ 0.060                 | 0.074 $\pm$ 0.048                 | 0.050 $\pm$ 0.035                 |
+| FBE               | 0.760 $\pm$ 0.174                 | 0.605 $\pm$ 0.171                 | 0.565 $\pm$ 0.139                 | 0.415 $\pm$ 0.109                 | 0.425 $\pm$ 0.114                 | 0.311 $\pm$ 0.080                 | 0.330 $\pm$ 0.097                 | 0.239 $\pm$ 0.079                 |
+| SCONE             | 0.577 $\pm$ 0.173                 | 0.483 $\pm$ 0.138                 | 0.412 $\pm$ 0.114                 | 0.313 $\pm$ 0.087                 | 0.290 $\pm$ 0.093                 | 0.210 $\pm$ 0.072                 | 0.196 $\pm$ 0.079                 | 0.140 $\pm$ 0.060                 |
+| MACARONS          | 0.599 $\pm$ 0.200                 | 0.479 $\pm$ 0.172                 | 0.418 $\pm$ 0.120                 | 0.314 $\pm$ 0.088                 | 0.302 $\pm$ 0.097                 | 0.218 $\pm$ 0.070                 | 0.192 $\pm$ 0.078                 | 0.139 $\pm$ 0.058                 |
+| <b>NBP (Ours)</b> | <b>0.879<math>\pm</math>0.142</b> | <b>0.692<math>\pm</math>0.156</b> | <b>0.734<math>\pm</math>0.142</b> | <b>0.526<math>\pm</math>0.112</b> | <b>0.618<math>\pm</math>0.153</b> | <b>0.432<math>\pm</math>0.115</b> | <b>0.472<math>\pm</math>0.095</b> | <b>0.312<math>\pm</math>0.073</b> |
+
+For MP3D, we use the same setting as prior work (Yan et al., 2023) for fair comparison. The input posed depth images have a resolution of  $256 \times 256$  with a horizontal field of view (hFOV) of  $90^\circ$ . The mobile agent starts in the traversable space at a height of  $1.25m$  and chooses its next camera pose by moving forward by  $6.5cm$  or turning left/right by  $10^\circ$ . Depending on the size of each scene, the agent can take a maximum of 1000 or 2000 steps. We focus only on single-floor scenes following Yan et al. (2023) with 10 and 5 scenes in training and evaluation respectively.
+
+For AiMDoom, we utilize a 70/30 train/test split for scenes in each difficulty level. The input RGB-D images are rendered at the resolution of  $456 \times 256$  with a vFOV of  $60^\circ$ . The agent navigates in a traversable space of height  $1.65m$ . The moving step includes 4 position movements (move forward, backward, left, or right by  $1.5m$ ) and 8 rotation movements (turn left or right by increments of  $45^\circ$ , covering the full  $360^\circ$ ). For dense reconstruction, all methods capture three additional images between adjacent poses using linear interpolation. The maximum steps for Simple, Normal, Hard, and Insane levels are set to 100, 200, 400, and 500 respectively, to adapt to their different complexity.
+
+**Evaluation metrics.** We follow prior works (Chen et al., 2024; Guédon et al., 2023) and adopt two key metrics to evaluate the performance of active 3D reconstruction: (1) *Final Coverage* measures the scene coverage at the end of the trajectory, and (2) *AUCs* evaluates the efficiency of the reconstruction process by calculating the area under the curve of coverage over time. The surface coverage is computed using ground truth meshes, consistent with prior work (Guédon et al., 2023). We evaluate five trajectories per scene using identical random initial camera poses for different methods. We report the mean and standard deviation for each metric across all testing trajectories.
+
+For a fair comparison with prior work in MP3D, we employ another set of metrics to evaluate coverage: (1) *Comp. (%)*, the proportion of ground truth vertices within  $5cm$  of any observation, and (2) *Comp. (cm)*, the average minimum distance between ground truth vertices and observations.
+
+**Implementation details.** Our model takes a stack of  $K = 4$  projected 2D images and one previous trajectory projected image as inputs, each with a resolution of  $256 \times 256$  covering a  $40m \times 40m$  exploration area centred on the camera’s current position. The extracted feature  $e_c$ , from the encoder is of size  $16 \times 16 \times 1024$ . The output value map  $M_c$ , is of size  $64 \times 64 \times 8$  and an obstacle map of  $256 \times 256 \times 1$ , both representing the same  $40m \times 40m$  area. The model is trained for at most  $N = 15$  iterations, with the first  $N_e = 1$  iterations using easier samples and  $S_n = 2$  trajectories per scene. For subsequent iterations, we use all samples and reduce the trajectory count to  $S_n = 1$  per scene. Each trajectory has a length of 100 steps and starts at a random location. During the first data collection iteration, we randomly sample 1,000 validation examples from memory and exclude them from training. Gradient accumulation is used in training which results in an effective batch size of 448. The learning rate is set to 0.001 and is decayed by a factor of 0.1 if the validation loss plateaus. We apply early stopping to terminate training when validation loss no longer decreases. The training is performed on a single NVIDIA RTX A6000 GPU, with an average completion time of 25 hours.
+
+### 5.2 COMPARISON WITH STATE OF THE ART METHODS
+
+**MP3D.** We compare our method with five baselines on the MP3D dataset, including: 1) *Random*, which randomly selects a camera pose among all candidates for the next step; 2) *Frontier-based Exploration (FBE)* (Yamauchi, 1997), which heuristically moves the agent to the nearest frontier; 3) *OcAnt* (Ramakrishnan et al., 2020), which predicts the occupancy status of unexplored areas and rewards the agent for accurate predictions; 4) *UPEN* (Georgakis et al., 2022), which utilizes
+
+{8}------------------------------------------------
+
+![Figure 4: Comparison of our NBP method with the state-of-the-art MACARONS method. The figure shows two rows of three 2D occupancy maps. Row (a) shows results from MACARONS, where the robot's trajectory (indicated by colored lines) often gets stuck in local areas, resulting in incomplete maps. Row (b) shows results from the proposed NBP method, where the robot's trajectory is more efficient and covers the scene more thoroughly, leading to better reconstruction.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+(a) Results of MACARONS. It generates complicated trajectories and often gets trapped in local areas.
+
+(b) Results of our NBP method. It efficiently travels in the scene and reconstructs the scene well.
+
+Figure 4: Comparison of our NBP method with the state-of-the-art MACARONS method. The figure shows two rows of three 2D occupancy maps. Row (a) shows results from MACARONS, where the robot's trajectory (indicated by colored lines) often gets stuck in local areas, resulting in incomplete maps. Row (b) shows results from the proposed NBP method, where the robot's trajectory is more efficient and covers the scene more thoroughly, leading to better reconstruction.
+
+Figure 4: **Comparison of our NBP method with the state-of-the-art MACARONS method.** Both methods start from the same initial pose, marked in deep blue. We also include a demonstration video of active mapping using our method in the supplementary materials.
+
+an ensemble of occupancy prediction models to guide the agent towards paths with the highest uncertainty; 5) *ANM* (Yan et al., 2023), which guides exploration through a continually-learned neural scene representation. Results in Table 3 show our NBP performs best, with a 6.23 absolute gain for the completion ratio compared to the state-of-the-art ANM (Yan et al., 2023) model.
+
+Table 3: Comparison on the MP3D dataset.
+
+| Method            | Comp. (%) ↑  | Comp. (cm) ↓ |
+|-------------------|--------------|--------------|
+| Random            | 45.67        | 26.53        |
+| FBE               | 71.18        | 9.78         |
+| UPEN              | 69.06        | 10.60        |
+| OccAnt            | 71.72        | 9.40         |
+| ANM               | 73.15        | 9.11         |
+| <b>NBP (ours)</b> | <b>79.38</b> | <b>6.78</b>  |
+
+self-supervised online learning paradigm. Both approaches select the next camera pose in a greedy manner. Unfortunately, we were unable to include UPEN (Georgakis et al., 2022) and ANM (Yan et al., 2023) in our comparison. These methods rely on the navigation policy DD-PPO (Wijmans et al., 2019) trained on their environments (Savva et al., 2019), which requires extensive GPU hours and thus is infeasible to retrain it on our dataset. However, we implemented FBE (Yamauchi, 1997) on our dataset, a recognized strong baseline in reconstruction and exploration tasks.
+
+As shown in Table 2, our method significantly outperforms the baselines across all metrics on four levels of AiMDoom. While NBV approaches such as SCONE and MACARONS excel in outdoor or single-object scenarios, their performance deteriorates in complex indoor environments. As illustrated in Figure 4, MACARONS struggles to escape local areas due to its short-term focus. It only selects the next best pose in nearby regions, and once these areas - such as the interior of a single room - are fully reconstructed, it has difficulty moving out of the room to explore under-explored, distant regions. In contrast, our approach overcomes this limitation by incorporating long-term goal guidance to determine the next-best path. In addition, our method surpasses the strong baseline FBE. Although FBE enables better exploration compared to state-of-the-art NBV methods on our dataset, its simple heuristic of moving to the nearest frontier leads to sub-optimal scene reconstruction as it lacks strategic planning for efficient coverage.
+
+{9}------------------------------------------------
+
+Despite the superior performance of our model, the results in hard and insane environments are still unsatisfactory, highlighting the significant challenges posed in our dataset.
+
+### 5.3 ABLATION STUDY
+
+In this section, we perform ablation experiments to demonstrate the effectiveness of different components in our model. All the experiments below are conducted on the Normal level of AiMDoom.
+
+**Spatial range of long-term goal.** We compare the impact of different spatial ranges for the prediction of the value map  $M_{c_g}$  and obstacle map  $O_{c_g}$ , which in turn determines the maximum distance of the long-term goals  $c_g$ . Specifically, we experiment with map sizes of  $20m \times 20m$  to  $50m \times 50m$ . The results are presented in Figure 5. When the value map covers a smaller area, the goal  $c_g$  is close to the agent’s current position, leading to behaviour similar to existing NBV methods that struggle with exploration. On the other hand, if the map size is too large, predicting  $M_{c_g}$  and  $O_{c_g}$  becomes much more challenging. Our findings demonstrate that selecting an appropriate spatial range for the value map is crucial for balancing exploration efficiency and prediction accuracy.
+
+![Figure 5: A line graph comparing Final Coverage (%) and AUCs (%) across different spatial ranges (20m, 30m, 40m, 50m) for value map prediction. The left y-axis represents Coverage (%) from 0.66 to 0.74, and the right y-axis represents AUCs (%) from 0.50 to 0.55. The x-axis represents the Range of value map prediction (m) from 20 to 50. The 'Final Coverage' line (blue triangles) starts at ~0.71% at 20m, peaks at ~0.73% at 40m, and drops to ~0.70% at 50m. The 'AUCs' line (orange diamonds) starts at ~0.51% at 20m, peaks at ~0.53% at 30m, and drops to ~0.52% at 50m.](8ee3b76dd49f31624d287885bc2c81ee_img.jpg)
+
+| Range (m) | Final Coverage (%) | AUCs (%) |
+|-----------|--------------------|----------|
+| 20        | ~0.71              | ~0.51    |
+| 30        | ~0.72              | ~0.53    |
+| 40        | ~0.73              | ~0.52    |
+| 50        | ~0.70              | ~0.52    |
+
+Figure 5: A line graph comparing Final Coverage (%) and AUCs (%) across different spatial ranges (20m, 30m, 40m, 50m) for value map prediction. The left y-axis represents Coverage (%) from 0.66 to 0.74, and the right y-axis represents AUCs (%) from 0.50 to 0.55. The x-axis represents the Range of value map prediction (m) from 20 to 50. The 'Final Coverage' line (blue triangles) starts at ~0.71% at 20m, peaks at ~0.73% at 40m, and drops to ~0.70% at 50m. The 'AUCs' line (orange diamonds) starts at ~0.51% at 20m, peaks at ~0.53% at 30m, and drops to ~0.52% at 50m.
+
+Figure 5: Comparisons of different spatial ranges for value map prediction.
+
+**Oracle obstacle map.** In Table 4, we replace the predicted obstacle map with the ground truth obstacle map for path planning during inference, while maintaining to use the predicted value map for long-term goals. Using the oracle obstacle map improves the performance by 0.074 on final coverage and 0.054 on AUCs, but is far from perfect. This suggests that the major bottleneck is the value map prediction.
+
+Table 4: Ablation study on using the oracle map for obstacle avoidance at inference.
+
+| Obstacle Map | Final Cov.                          | AUCs                                |
+|--------------|-------------------------------------|-------------------------------------|
+| Predicted    | $0.734 \pm 0.142$                   | $0.526 \pm 0.112$                   |
+| Oracle       | <b><math>0.808 \pm 0.115</math></b> | <b><math>0.580 \pm 0.105</math></b> |
+
+Table 5: Comparison of single-task and multi-task learning for the value map and obstacle map prediction.
+
+| Strategy    | Final Cov.                          | AUCs                                |
+|-------------|-------------------------------------|-------------------------------------|
+| Single-task | $0.712 \pm 0.136$                   | $0.501 \pm 0.101$                   |
+| Multi-task  | <b><math>0.734 \pm 0.142</math></b> | <b><math>0.526 \pm 0.112</math></b> |
+
+complement each other to enhance learning.
+
+**Multi-task training.** We also explore the influence of multi-task learning in predicting the value map  $M_{c_g}$  and the obstacle map  $O_{c_g}$ . For comparison, we train two separate models that use the same input to predict  $M_{c_g}$  and  $O_{c_g}$  respectively. The results show that multi-task learning improved the precision of obstacle prediction to 0.805, exceeding the 0.754 achieved by single-task learning. Table 5 further demonstrates that multi-task learning achieves better performance, indicating that the two tasks
+
+## 6 CONCLUSION
+
+In this paper, we tackle the challenging problem of active 3D mapping of unknown environments. We introduce a new dataset, AiMDoom, designed to benchmark active mapping in indoor scenes with four difficulty levels. Our evaluations of existing methods on the AiMDoom dataset reveal shortcomings of short-sighted next-best-view prediction in complex large indoor environments. Hence, we propose the next-best-path (NBP) method, which integrates a mapping progress encoder, a coverage gain decoder and an obstacle map decoder. The NBP model can efficiently reconstruct unseen environments guided by predicted long-term goals, achieving state-of-the-art performance on both the MP3D and AiMDoom datasets. However, we observe considerable room for improvement in more difficult levels of our dataset, and the major limitation lies in long-term goal prediction rather than obstacle map prediction.
+
+ Rest of paper (reference and Appendix) is removed.

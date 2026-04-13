@@ -1,0 +1,282 @@
+
+
+{0}------------------------------------------------
+
+# GENERALIZATION THROUGH VARIANCE: HOW NOISE SHAPES INDUCTIVE BIASES IN DIFFUSION MODELS
+
+**John J. Vastola**
+
+Department of Neurobiology  
+Harvard Medical School  
+Boston, MA 02115, USA  
+john.vastola@hms.harvard.edu
+
+## ABSTRACT
+
+How diffusion models generalize beyond their training set is not known, and is somewhat mysterious given two facts: the optimum of the denoising score matching (DSM) objective usually used to train diffusion models is the score function of the training distribution; and the networks usually used to learn the score function are expressive enough to learn this score to high accuracy. We claim that a certain feature of the DSM objective—the fact that its target is not the training distribution’s score, but a noisy quantity only equal to it in expectation—strongly impacts whether and to what extent diffusion models generalize. In this paper, we develop a mathematical theory that partly explains this ‘generalization through variance’ phenomenon. Our theoretical analysis exploits a physics-inspired path integral approach to compute the distributions typically learned by a few paradigmatic under- and overparameterized diffusion models. We find that the distributions diffusion models effectively learn to sample from resemble their training distributions, but with ‘gaps’ filled in, and that this inductive bias is due to the covariance structure of the noisy target used during training. We also characterize how this inductive bias interacts with feature-related inductive biases.
+
+## 1 INTRODUCTION
+
+Diffusion models (Sohl-Dickstein et al., 2015; Song & Ermon, 2019; Ho et al., 2020; Yang et al., 2023) have proven effective at producing high-quality samples (e.g., images) *like* those from some training distribution, but not overwhelmingly so. This ability to generalize is somewhat surprising for two reasons. First, the optimum of the denoising score matching (DSM) objective usually used to train them is the score function of the training distribution (Vincent, 2011; Song & Ermon, 2019), and sampling using this score only reproduces training examples (see Appendix A). Second, the network architectures usually used for score function approximation are highly expressive. Two near-SOTA models developed by Karras et al. (2022) have  $\sim 56$  million (CIFAR-10, trained on 200 million samples) and  $\sim 296$  million parameters (ImageNet-64, trained on 2500 million samples), respectively. Sufficiently expressive models can fit even random noise (Zhang et al., 2017).
+
+A body of empirical work bears on the question of when and to what extent diffusion models generalize. Training data is more likely to be memorized when training sets are small (Sompalli et al., 2023a; Stein et al., 2023; Dar et al., 2024; Kadkhodaie et al., 2024), contain duplicates (Sompalli et al., 2023a; Carlini et al., 2023; Sompalli et al., 2023b), or feature low ‘complexity’ (Sompalli et al., 2023b; Stein et al., 2023). The specific training examples more likely to be memorized are either highly duplicated or outliers (Carlini et al., 2023). Whether generalization happens also strongly depends on model capacity, with Yoon et al. (2023) and Zhang et al. (2024) observing a sharp transition from memorization to generalization as the number of training examples used somewhat outstrips model capacity. However, the relationship between model performance (e.g., FID score) and model size, given a fixed number of training examples, is not monotonic; Karras et al. (2024) observe that their ImageNet models strictly improve (and hence generalize better) as model size increases.
+
+At present, there is arguably no theory that describes when diffusion models generalize and characterizes how the associated inductive biases depend on details like training set structure, the choice
+
+{1}------------------------------------------------
+
+of forward/reverse processes, and model architecture. Most existing theoretical work focuses on orthogonal questions: given a *known ground truth*, can one mathematically guarantee that in some limit (e.g., a large or infinite number of samples from the ground truth distribution) diffusion models recover the ground truth, and bound how score approximation error impacts agreement (Bortoli, 2022; Chen et al., 2023a;c; Han et al., 2024)? The question we are interested in is qualitatively different: given  $M \geq 1$  examples from a data distribution  $p_{\text{data}}$ , how do samples from a model trained on those examples differ from them? For example, does the model effectively interpolate training data? If so, when, and what details does this depend on? Concurrent work (Kamb & Ganguli, 2024; Niedoba et al., 2025) addresses these questions at the level of phenomenology, but not mechanism.
+
+In this paper, we argue that six factors substantially impact how diffusion models generalize.
+
+1. **Noisy objective.** The target of the DSM objective is not the score of the training distribution, but a noisy quantity *only equal to it in expectation*. This quantity, which we call the ‘proxy score’, introduces additional randomness to training, and has extremely high variance at low noise levels (infinite variance, in fact, at zero noise). Intuitively, this makes score function estimates, especially at low noise levels, inaccurate (this is well-known; Karras et al. (2022) remark on this when they discuss their choice of loss weighting). Moreover, this variance is not uniform in state space, but higher in ‘boundary regions’, e.g., regions of state space close to multiple training examples. This provides a useful inductive bias.
+2. **Forward process.** Details of the forward process (e.g., when noise is added, asymmetry in how noise is added along different directions of state space) affect generalization through their influence on the covariance structure of the proxy score.
+3. **Nonlinear score-dependence.** The learned distribution depends nonlinearly on the learned score function through the dynamics of the reverse process. This implies that the average learned distribution is *not* the training distribution, even if the score estimator is unbiased.
+4. **Model capacity.** Models generalize better when # training samples  $\sim$  # model parameters.
+5. **Model features.** Feature-related inductive biases interact with, and can enhance, inductive biases due to the covariance structure of the proxy score.
+6. **Training set structure.** Nontrivial generalization (e.g., interpolation) is substantially more likely when a large number of training examples are near each other in state space; outliers are less likely to be meaningfully generalized.
+
+Hence, details of training (1, 2), sampling (3), model architecture (4, 5), and the training set (6) all interact to determine the details of generalization. Other aspects, like learning dynamics, also almost certainly play a role, but we mostly neglect them here. The first factor is particularly important, and without it we will see that diffusion models do not generalize well; for this reason, we refer to the phenomenon enabled by (1) and affected by (2-6) as **generalization through variance**.
+
+We support this claim using physics-inspired theory. The Martin-Siggia-Rose (MSR) path integral description of stochastic dynamics (Martin et al., 1973), which has also been exploited to characterize random neural networks (Crisanti & Sompolsinsky, 2018) and learning dynamics (Mignacco et al., 2020; Bordelon & Pehlevan, 2022; 2023), plays a pivotal role in our analysis. First, we use the MSR path integral to derive the generic form of ‘generalization through variance’, and then we discuss in specific, analytically tractable cases of interest (e.g., linear models, lazy infinite-width neural networks) how the details change and the role of each of the aforementioned factors. To keep our theoretical analysis tractable, we focus on unconditional, non-latent models.
+
+## 2 PRELIMINARIES
+
+**Data distribution.** Let  $p_{\text{data}}(\mathbf{x}_0)$  denote a data distribution on  $\mathbb{R}^D$ . We are especially but not exclusively interested in the case that  $p_{\text{data}}$  consists of a discrete set of  $1 \leq M < \infty$  examples (e.g., images), so that  $p_{\text{data}}(\mathbf{x}_0) = \sum_{m=1}^M \delta(\mathbf{x}_0 - \boldsymbol{\mu}_m)/M$ , where  $\delta$  is the Dirac delta function.
+
+**Forward/reverse diffusion.** Training a diffusion model involves learning to convert samples from a normal distribution  $p_{\text{noise}}(\mathbf{x}_T) = \mathcal{N}(\mathbf{x}_T; \mathbf{0}, \mathbf{S}_T)$  to samples from  $p_{\text{data}}(\mathbf{x}_0)$  via processes
+
+$$\dot{\mathbf{x}}_t = -\beta_t \mathbf{x}_t + \mathbf{G}_t \boldsymbol{\eta}_t \quad t = 0 \rightarrow t = T \quad \text{forward process, } p_{\text{data}} \rightarrow p_{\text{noise}} \quad (1)$$
+
+$$\dot{\mathbf{x}}_t = -\beta_t \mathbf{x}_t - \mathbf{D}_t \mathbf{s}(\mathbf{x}_t, t) \quad t = T \rightarrow t = \epsilon \quad \text{reverse process, } p_{\text{noise}} \rightarrow p_{\text{data}} \quad (2)$$
+
+{2}------------------------------------------------
+
+Table 1: Popular forward processes in our parameterization. For these,  $G_t := g_t I_D$  and  $S_t = \sigma_t^2 I_D$ .
+
+|        | $\beta_t$                          | $g_t$             | $\alpha_t$                     | $\sigma_t$                                 | end time |
+|--------|------------------------------------|-------------------|--------------------------------|--------------------------------------------|----------|
+| VP-SDE | $\beta_{\min} + \beta_{\text{at}}$ | $\sqrt{2\beta_t}$ | $e^{-\int_0^t \beta_{t'} dt'}$ | $\sqrt{1 - e^{-2\int_0^t \beta_{t'} dt'}}$ | 1        |
+| EDM    | 0                                  | $\sqrt{2t}$       | 1                              | $t$                                        | $T$      |
+
+where  $\eta_t \in \mathbb{R}^K$  is Gaussian white noise,  $G_t \in \mathbb{R}^{D \times K}$  is a nonnegative matrix that controls the noise amplitude,  $D_t := G_t G_t^T / 2$  is the corresponding diffusion tensor,  $\beta_t \geq 0$  controls decay to the origin,  $\epsilon > 0$  is a time cutoff that helps ensure numerical stability, and  $s(\mathbf{x}, t) := \nabla_{\mathbf{x}} \log p(\mathbf{x}|t)$  is the score function. We allow  $G_t$  to be a matrix so we can study how asymmetries affect generalization later. The forward process' marginals are  $p(\mathbf{x}|t) := \int p(\mathbf{x}|\mathbf{x}_0, t) p_{\text{data}}(\mathbf{x}_0) d\mathbf{x}_0$ . The transition probabilities are  $p(\mathbf{x}|\mathbf{x}_0, t) = \mathcal{N}(\mathbf{x}; \alpha_t \mathbf{x}_0, S_t)$ , where  $\alpha_t := e^{-\int_0^t \beta_{t'} dt'}$  and  $S_t := \int_0^t 2D_{t'} \alpha_{t'}^2 dt'$ .
+
+The forward process assumed here is fairly general, and includes popular choices like the VP-SDE (Song et al., 2021) and EDM formulation (Karras et al., 2022) (Table 1). This choice of reverse process is called the probability flow ODE (PF-ODE), and has been shown to have both practical (Song et al., 2021) and theoretical (Chen et al., 2023b) advantages. Since  $s(\mathbf{x}, t)$  is required to run the reverse process but is a priori unknown, “training” a model means approximating  $s(\mathbf{x}, t)$ .
+
+**Denoising score matching.** Given  $P \gg 1$  independent samples from  $p(\mathbf{x}, \mathbf{x}_0, t)$  (note:  $P$  is different than  $M$ , the number of points in discrete  $p_{\text{data}}$ ), one could use a mean-squared-error objective
+
+$$J_0(\theta) := \mathbb{E}_{t, \mathbf{x}} \left\{ \frac{\lambda_t}{2} \|\hat{s}_\theta(\mathbf{x}, t) - s(\mathbf{x}, t)\|_2^2 \right\} = \int \frac{\lambda_t}{2} \|\hat{s}_\theta(\mathbf{x}, t) - s(\mathbf{x}, t)\|_2^2 p(\mathbf{x}|t) p(t) d\mathbf{x} dt \quad (3)$$
+
+to learn a parameterized score estimator  $\hat{s}_\theta(\mathbf{x}, t)$ . Here,  $\lambda_t > 0$  is a positive weighting function and  $p(t)$  is a time-sampling distribution. The DSM objective (Vincent, 2011; Song & Ermon, 2019)
+
+$$J_1(\theta) := \mathbb{E}_{t, \mathbf{x}_0, \mathbf{x}} \left\{ \frac{\lambda_t}{2} \|\hat{s}_\theta(\mathbf{x}, t) - \tilde{s}(\mathbf{x}, t; \mathbf{x}_0)\|_2^2 \right\} = \int \frac{\lambda_t}{2} \|\hat{s}_\theta - \tilde{s}\|_2^2 p(\mathbf{x}, \mathbf{x}_0, t) d\mathbf{x} d\mathbf{x}_0 dt \quad (4)$$
+
+where  $p(\mathbf{x}, \mathbf{x}_0, t) := p(\mathbf{x}|\mathbf{x}_0, t) p_{\text{data}}(\mathbf{x}_0) p(t)$ , is usually used instead. While the folklore justifying this choice is that the score function is not known, this is not true; both  $J_0$  and  $J_1$  are optimized when  $\hat{s}_\theta$  equals the score of the training distribution (see Appendix A), which is known.
+
+We will argue that the real difference between  $J_0$  and  $J_1$  is that  $J_1$  generalizes better, and that this is in part because the **proxy score**  $\tilde{s}(\mathbf{x}, t; \mathbf{x}_0) := \nabla_{\mathbf{x}} \log p(\mathbf{x}|\mathbf{x}_0, t) = S_t^{-1}(\alpha_t \mathbf{x}_0 - \mathbf{x})$  is used as the target instead of the true score. It is a ‘noisy’ version of the true score (see Appendix B), since
+
+$$\mathbb{E}_{\mathbf{x}_0|\mathbf{x}, t}[\tilde{s}(\mathbf{x}, t; \mathbf{x}_0)] = s(\mathbf{x}, t) \quad C_{ij}(\mathbf{x}, t) := \text{Cov}_{\mathbf{x}_0|\mathbf{x}, t}[\tilde{s}_i, \tilde{s}_j] = S_{t,ij}^{-1} + \partial_{ij}^2 \log p(\mathbf{x}|t). \quad (5)$$
+
+Although the proxy score is equal to the score of the training distribution in expectation, neural networks trained on  $J_1$  empirically learn a different distribution and generalize better. We claim that this fact is closely related to the *covariance structure* of the proxy score. Two relevant observations about its form are as follows. First, it is large at small times, since  $S_t \rightarrow \mathbf{0}$  as  $t \rightarrow 0$ . Second, it is large where the log-likelihood  $\log p(\mathbf{x}|t)$  has substantial curvature. In the typical case, where  $p_{\text{data}}$  consists of a discrete set of  $M$  examples, regions of high curvature correspond to the location of training examples and the boundaries between them (Fig. 1; see Appendix C for more discussion).
+
+**Generalization and inductive biases.** In a typical supervised learning setting, one trains a model on one set of data and tests it on another, and defines ‘generalization error’ as performance on the held-out data. Here, we are interested in a different type of problem: *given* a model trained on samples from  $p(\mathbf{x}, \mathbf{x}_0, t)$ , to *what extent* does the learned distribution differ from  $p_{\text{data}}$ , and what are the associated inductive biases? Of particular interest is whether models do three things: (i) interpolation (filling in gaps in the training data), (ii) extrapolation (extending patterns in the training data), and (iii) feature blending (generating samples which include both feature  $X$  and feature  $Y$  even when training examples only involve one of the two features).
+
+In our setting, a subtle but important point is that there is generally no ground truth. For example, the smooth distribution that CIFAR-10 or MNIST images are drawn from does not exist, except in a ‘Platonic’ sense; we are interested in the extent to which diffusion models learn a distribution plausibly *like* a smoothed version of the training distribution.
+
+{3}------------------------------------------------
+
+![Figure 1: Visualization of proxy score variance for four example 2D data distributions. The figure is a 2x5 grid of heatmaps. The rows are labeled 'polygon', 'line', and 'random'. The columns are labeled with time values t: 0.05, 0.1, 0.2, 0.5, 0.75. Each heatmap shows a 2D distribution of point masses (red dots) with a heatmap overlay representing the proxy score variance. As t increases from left to right, the boundary regions at different scales are emphasized.](e94f3bbb6f7501b9a1344dd0210e5dd8_img.jpg)
+
+Figure 1: Visualization of proxy score variance for four example 2D data distributions. The figure is a 2x5 grid of heatmaps. The rows are labeled 'polygon', 'line', and 'random'. The columns are labeled with time values t: 0.05, 0.1, 0.2, 0.5, 0.75. Each heatmap shows a 2D distribution of point masses (red dots) with a heatmap overlay representing the proxy score variance. As t increases from left to right, the boundary regions at different scales are emphasized.
+
+Figure 1: Visualization of proxy score variance ( $\text{tr}(C)/[\text{tr}(C) + \|\mathbf{s}\|_2^2]$ ) for four example 2D data distributions. Each example data distribution is supported on a small number of point masses (red dots). As  $t$  changes (left: small  $t$ , right: large  $t$ ), boundary regions at different scales are emphasized.
+
+## 3 APPROACH: COMPUTING TYPICAL LEARNED DISTRIBUTIONS
+
+The distribution  $q(\mathbf{x}_0|\theta)$  learned by a diffusion model depends on the learned score  $\hat{\mathbf{s}}_\theta$  nonlinearly through PF-ODE dynamics; importantly, we are less interested in how well the score is estimated, and more interested in how estimation errors impact  $q$ . The learned score can be viewed as a random variable, since it depends on the  $P$  samples  $\mathbf{x}^{(i)}, \mathbf{x}_0^{(i)}, t^{(i)} \sim p(\mathbf{x}, \mathbf{x}_0, t)$  used during training. In order to theoretically understand how diffusion models generalize, we aim to obtain an analytic expression for the ‘typical’ learned distribution by averaging  $q$  over sample realizations.
+
+How do we do the required averaging? One of our major contributions is to introduce a theoretical approach for averaging  $q(\mathbf{x}_0)$  over variation due to  $\hat{\mathbf{s}}$ . Below, we describe our approach.
+
+**Writing PF-ODE dynamics in terms of a path integral.** How does one average over the result of an ODE given that, in the case of PF-ODE dynamics, there is generally no closed-form expression for the result? To address this issue, we use a novel **stochastic path integral** representation of PF-ODE dynamics that makes the required average easy to do. If  $q(\mathbf{x}_0|\mathbf{x}_T; \hat{\theta})$  denotes the distribution of PF-ODE outputs given a score estimator  $\hat{\mathbf{s}}_\theta(\mathbf{x}, t)$  and a fixed noise seed  $\mathbf{x}_T$ ,
+
+$$q(\mathbf{x}_0|\mathbf{x}_T; \theta) = \int \mathcal{D}[\mathbf{p}_t] \mathcal{D}[\mathbf{x}_t] \exp \left\{ \int_\epsilon^T i\mathbf{p}_t \cdot [\dot{\mathbf{x}}_t + \beta_t \mathbf{x}_t + \mathbf{D}_t \hat{\mathbf{s}}_\theta(\mathbf{x}_t, t)] dt \right\} \quad (6)$$
+
+where the integral is over all possible paths from  $\mathbf{x}_T$  to  $\mathbf{x}_0$ . (To avoid technical issues, we assume a particular time discretization in all calculations. See Appendix D.) This type of path integral is a time-reversed version of the Martin-Siggia-Rose (MSR) path integral (Martin et al., 1973).
+
+**Averaging over possible sample realizations.** Because the argument of the exponential depends linearly on the score, the required ensemble average is now easy to do. Using  $[\dots]$  to denote it,
+
+$$[q(\mathbf{x}_0|\mathbf{x}_T)] = \int \mathcal{D}[\mathbf{p}_t] \mathcal{D}[\mathbf{x}_t] \exp \left\{ M_1 - \frac{1}{2} M_2 + \dots \right\} \quad (7)$$
+
+$$M_1 := \int_\epsilon^T i\mathbf{p}_t \cdot [\dot{\mathbf{x}}_t + \beta_t \mathbf{x}_t + \mathbf{D}_t \mathbf{s}_{avg}(\mathbf{x}_t, t)] dt \quad M_2 := \int_\epsilon^T \int_\epsilon^T \mathbf{p}_t^T \mathbf{V}(\mathbf{x}_t, t; \mathbf{x}_{t'}, t') \mathbf{p}_{t'} dt dt'$$
+
+where  $\mathbf{s}_{avg}(\mathbf{x}_t, t) := [\hat{\mathbf{s}}_\theta(\mathbf{x}_t, t)]$  is the ensemble’s average score estimator, and  $\mathbf{V}(\mathbf{x}_t, t; \mathbf{x}_{t'}, t') := \mathbf{D}_t \text{Cov}_\theta[\hat{\mathbf{s}}(\mathbf{x}_t, t), \hat{\mathbf{s}}(\mathbf{x}_{t'}, t')] \mathbf{D}_{t'}$  measures ensemble variance. Assuming higher-order terms can be neglected—and hence that the estimator distribution is approximately Gaussian—one can show (see Appendix D) that sampling from  $[q(\mathbf{x}_0|\mathbf{x}_T)]$  is equivalent to integrating an (Ito-interpreted) SDE:
+
+**Proposition 3.1** (Effective SDE description of typical learned distribution). *Sampling from  $[q(\mathbf{x}_0|\mathbf{x}_T)]$  is equivalent to integrating the (Ito-interpreted) SDE*
+
+$$\dot{\mathbf{x}}_t = -\beta_t \mathbf{x}_t - \mathbf{D}_t \mathbf{s}_{avg}(\mathbf{x}_t, t) + \boldsymbol{\xi}(\mathbf{x}_t, t) \quad t = T \rightarrow t = \epsilon \quad (8)$$
+
+with initial condition  $\mathbf{x}_T$ , where  $\mathbf{s}_{avg}(\mathbf{x}_t, t) := [\hat{\mathbf{s}}_\theta(\mathbf{x}_t, t)]$  and where the noise term  $\boldsymbol{\xi}(\mathbf{x}_t, t)$  has mean zero and autocorrelation  $\mathbf{V}(\mathbf{x}_t, t; \mathbf{x}_{t'}, t') := \mathbf{D}_t \text{Cov}_\theta[\hat{\mathbf{s}}(\mathbf{x}_t, t), \hat{\mathbf{s}}(\mathbf{x}_{t'}, t')] \mathbf{D}_{t'}$ .
+
+If  $\hat{\mathbf{s}}$  is unbiased and  $M$  is finite, then the noise term is solely responsible for the difference between true PF-ODE dynamics (which reproduces training examples) and a model’s ‘typical’ sampling
+
+{4}------------------------------------------------
+
+dynamics—i.e., generalization occurs if and only if  $V \neq 0$ . This makes characterizing  $V$ , which we call the *V-kernel* since it reflects ensemble variance, crucially important for understanding how diffusion models generalize. Our remaining theoretical work is to complete two tasks: first, to compute  $s_{avg}$  and  $V$  for a few paradigmatic and theoretically tractable architectures; and second, to study how their precise forms affect  $[q(\mathbf{x}_0)]$ .
+
+## 4 DIFFUSION MODELS THAT MEMORIZE TRAINING DATA STILL GENERALIZE
+
+It is instructive to first consider an extreme case: do diffusion models generalize in the complete *absence* of any model-related inductive biases? Perhaps surprisingly, the answer is yes. In this section, we make this point using a toy model in which training and sampling are interleaved.
+
+Suppose the PF-ODE is integrated backward in time from an initial point  $\mathbf{x}_T$  until  $t = \epsilon$  using first-order Euler updates of size  $\Delta t$ . At each time step, suppose one samples  $\mathbf{x}_{0t} \sim p(\mathbf{x}_0|\mathbf{x}_t, t) = \frac{p(\mathbf{x}_t|\mathbf{x}_0, t)p_{data}(\mathbf{x}_0)}{p(\mathbf{x}_t|t)}$ , constructs the ‘naive’ score estimator  $\hat{s}(\mathbf{x}_t, t) := \mathbf{s}(\mathbf{x}_t, t) + \sqrt{\frac{\kappa}{\Delta t}}[\hat{s}(\mathbf{x}_t, t; \mathbf{x}_{0t}) - \mathbf{s}(\mathbf{x}_t, t)]$ , and uses this estimator as the score for that update. Assume this process continues, with new samples drawn at each time step. Despite this approach using the proxy score directly (so that training data is ‘memorized’), one obtains a nontrivial V-kernel, and hence generalization:
+
+**Proposition 4.1** (Naive score estimator generalizes). *Consider the result of integrating the PF-ODE (Eq. 2) from  $t = T$  to  $t = \epsilon$  using first-order Euler updates of the form*
+
+$$\mathbf{x}_{t-1} = \mathbf{x}_t + \Delta t \left\{ \beta_t \mathbf{x}_t + \mathbf{D}_t \left( \mathbf{s}(\mathbf{x}_t, t) + \sqrt{\frac{\kappa}{\Delta t}}[\hat{s}(\mathbf{x}_t, t; \mathbf{x}_{0t}) - \mathbf{s}(\mathbf{x}_t, t)] \right) \right\}, \quad \mathbf{x}_{0t} \sim p(\mathbf{x}_0|\mathbf{x}_t, t).$$
+
+Then  $[q(\mathbf{x}_0|\mathbf{x}_T)]$  is described by an effective SDE (Eq. 8) with  $s_{avg} = \mathbf{s}$  and V-kernel
+
+$$V(\mathbf{x}_t, t; \mathbf{x}_{t'}, t') := \kappa \mathbf{D}_t \mathbf{C}(\mathbf{x}, t) \mathbf{D}_t \delta(t - t'). \quad (9)$$
+
+See Appendix E for details. Notably, the effective SDE is noisier when the covariance  $\mathbf{C}$  of the proxy score is high, e.g., in boundary regions between training examples. Next, we will see that this is also true for less trivial models, but that the proxy score’s covariance interacts with feature-related biases in order to determine the SDE’s overall noise term.
+
+## 5 FEATURE-RELATED INDUCTIVE BIASES MODULATE GENERALIZATION
+
+Model architecture is known to produce certain inductive biases, with spectral bias being a well-known example (Rahaman et al., 2019; Bordelon et al., 2020; Canatar et al., 2021). How do model-feature-related inductive biases affect the V-kernel? We answer this question below in two interesting but tractable cases: linear models, and (lazy regime) infinite-width neural networks.
+
+### 5.1 THE V-KERNEL OF EXPRESSIVE LINEAR MODELS
+
+In what follows, we may write  $\mathbf{z} := (\mathbf{x}, t)$  to ease notation. Consider a linear score estimator
+
+$$\tilde{\mathbf{s}}_{\theta}(\mathbf{x}, t) = \mathbf{w}_0 + \mathbf{W}\phi(\mathbf{x}, t), \quad (10)$$
+
+where the  $F$  feature maps  $\phi := (\phi_1, \dots, \phi_F)^T$  are linearly independent, smooth functions from  $\mathbb{R}^D \times (0, T]$  to  $\mathbb{R}$  that are square-integrable with respect to the measure  $\lambda_t p(\mathbf{x}, t)$ . The parameters to be estimated are  $\theta := \{\mathbf{w}_0, \mathbf{W}\}$ , with  $\mathbf{w}_0 \in \mathbb{R}^D$  and  $\mathbf{W} \in \mathbb{R}^{D \times F}$ . Note that this estimator is linear in its features, but not necessarily in  $\mathbf{x}$  or  $t$ . The weights that optimize Eq. 4 are (see Appendix F)
+
+$$\mathbf{W}^* = -\mathbf{J}^T \Sigma_{\phi}^{-1} \mathbf{w}_0^* = \mathbf{J}^T \Sigma_{\phi}^{-1} \langle \phi \rangle + \langle \tilde{\mathbf{s}} \rangle \quad (11)$$
+
+where we define  $\langle \dots \rangle := \mathbb{E}_{\mathbf{x}, \mathbf{x}_0, t}[\lambda_t \dots] / \mathbb{E}_t[\lambda_t]$  and matrices
+
+$$\mathbf{J} := -\langle (\phi(\mathbf{x}, t) - \langle \phi \rangle) [\tilde{\mathbf{s}}(\mathbf{x}, t; \mathbf{x}_0) - \langle \tilde{\mathbf{s}} \rangle]^T \rangle \quad \Sigma_{\phi} := \langle (\phi(\mathbf{x}, t) - \langle \phi \rangle) [\phi(\mathbf{x}, t) - \langle \phi \rangle]^T \rangle.$$
+
+When averaged over  $\mathbf{x}_0$  sample realizations, the estimator  $\hat{s}_*(\mathbf{x}, t) = \mathbf{w}_0^* + \mathbf{W}^* \phi(\mathbf{x}, t)$  is unbiased as long as the set of feature maps is sufficiently expressive. Interestingly, this is true regardless of the  $\mathbf{x}$  or  $t$  samples used, provided  $F \leq P$ . The following result characterizes  $[q(\mathbf{x}_0)]$  for linear models:
+
+{5}------------------------------------------------
+
+**Proposition 5.1** (Expressive linear models asymptotically generalize). *Suppose the parameters of an expressive linear score estimator (Eq. 10) with  $F$  features are perfectly optimized according to the DSM objective (Eq. 4) using  $P$  independent samples from  $p(\mathbf{x}, \mathbf{x}_0, t)$ . Define the feature kernel*
+
+$$k(\mathbf{z}; \mathbf{z}') := \frac{1}{\sqrt{F}} [\phi(\mathbf{z}) - \langle \phi \rangle]^T \Sigma_\phi^{-1} [\phi(\mathbf{z}') - \langle \phi \rangle]. \quad (12)$$
+
+Let  $\kappa := F/P$ . Provided that the limit exists and is finite, in the  $P \rightarrow \infty$  limit, we have
+
+$$\mathbf{V}(\mathbf{z}; \mathbf{z}') = \lim_{P \rightarrow \infty} \kappa \mathbf{D}_t \mathbb{E}_{\mathbf{z}''} \left\{ \frac{\lambda_{t''}^2}{|\mathbb{E}_t[\lambda_t]|^2} k(\mathbf{z}; \mathbf{z}'') \mathbf{C}(\mathbf{z}'') k(\mathbf{z}''; \mathbf{z}') \right\} \mathbf{D}_{t'}. \quad (13)$$
+
+Note that if the number of features  $F$  does not scale with  $P$ ,  $\mathbf{V} \equiv \mathbf{0}$ . See Appendix F for the details of our argument. The V-kernel for linear models differs from the naive score's V-kernel (Eq. 9) via the presence of feature-related factors—in particular, the effective SDE is noisier *where features take atypical values*. One expects that these factors can either enhance or compete with noise due to the covariance structure (e.g., noise is higher if features take atypical values in boundary regions).
+
+### 5.2 THE V-KERNEL OF LAZY INFINITE-WIDTH NEURAL NETWORKS
+
+Neural networks in the neural tangent kernel (NTK) regime (Jacot et al., 2018; Bietti & Mairal, 2019) provide another interesting but tractable model. Such networks exhibit ‘lazy’ learning (Chizat et al., 2019) in the sense that weights do not move much from their initial values. Moreover, it is known that they interpolate training data in the absence of parameter regularization or early stopping (Bordelon et al., 2020). If they precisely interpolated their samples, we would expect to recover a V-kernel like the one we computed in Sec. 4; more generally, we expect something similar modified by the spectral inductive biases associated with the architecture (Canatar et al., 2021).
+
+For simplicity, we consider fully-connected networks whose hidden layers all have width  $N$ , which is taken to infinity together with  $P$  (see Appendix G for details). The associated NTK has a Mercer decomposition with respect to the measure  $\lambda_t p(\mathbf{x}, t) / \mathbb{E}[\lambda_t]$ , so  $K$  can be written in terms of  $F$  orthonormal features  $\{\phi_k\}$ :
+
+$$K(\mathbf{x}, t; \mathbf{x}', t') = \sum_k \lambda_k \phi_k(\mathbf{x}, t) \phi_k(\mathbf{x}', t') \int \frac{\lambda_t}{|\mathbb{E}[\lambda_t]|} \phi_k(\mathbf{x}, t) \phi_t(\mathbf{x}, t) p(\mathbf{x}, t) d\mathbf{x} dt = \delta_{kk'}. \quad (14)$$
+
+We assume training involves full-batch gradient descent on  $P$  samples from  $p(\mathbf{x}, \mathbf{x}_0, t)$ , so that the learned score function after training for an amount of ‘time’  $\tau$  has the closed-form solution
+
+$$\hat{\mathbf{s}}(\mathbf{z}) = \hat{\mathbf{s}}_0(\mathbf{z}) + [\tilde{\mathbf{S}} - \hat{\mathbf{S}}_0]^T (\mathbf{I} - e^{-\Lambda_T \mathbf{K} \tau / P}) \mathbf{K}^{-1} \mathbf{k}(\mathbf{z})$$
+
+where  $\hat{\mathbf{s}}_0$  is the network’s initial output,  $\tilde{\mathbf{S}} \in \mathbb{R}^{D \times P}$  contains proxy score samples,  $\hat{\mathbf{S}}_0 \in \mathbb{R}^{D \times P}$  contains the network’s initial outputs given the samples,  $\mathbf{K} \in \mathbb{R}^{P \times P}$  is the kernel Gram matrix,  $\Lambda_T \in \mathbb{R}^{P \times P}$  is a diagonal matrix containing the weighting function  $\lambda_t / \mathbb{E}[\lambda_t]$  evaluated on samples, and  $\mathbf{k}(\mathbf{x}, t)$  is an input-dependent vector whose  $i$ -th component is  $K(\mathbf{x}^{(i)}, t^{(i)}; \mathbf{x}, t)$ . We have:
+
+**Proposition 5.2** (Lazy neural networks asymptotically generalize). *Suppose the parameters of a fully-connected, infinite-width neural network characterized by a rank  $F$  NTK are optimized according to the DSM objective (Eq. 4) using  $P$  independent samples from  $p(\mathbf{x}, \mathbf{x}_0, t)$  via full-batch gradient descent for a training ‘time’  $\tau$ . Define the feature kernel*
+
+$$k(\mathbf{z}; \mathbf{z}') := \frac{1}{\sqrt{F}} \phi(\mathbf{z})^T (\mathbf{I}_F - e^{-\Lambda_T \tau}) \phi(\mathbf{z}'). \quad (15)$$
+
+Let  $\kappa := F/P$ . Provided that the limit exists and is finite, in the  $P \rightarrow \infty$  limit, we have
+
+$$\mathbf{V}(\mathbf{z}; \mathbf{z}') = \lim_{P \rightarrow \infty} \kappa \mathbf{D}_t \mathbb{E}_{\mathbf{z}''} \left\{ \frac{\lambda_{t''}^2}{|\mathbb{E}_t[\lambda_t]|^2} k(\mathbf{z}; \mathbf{z}'') \mathbf{C}(\mathbf{z}'') k(\mathbf{z}''; \mathbf{z}') \right\} \mathbf{D}_{t'}. \quad (16)$$
+
+In the infinite training time limit, we recover the Sec. 4 result with a prefactor  $\kappa(\Delta \mathbf{z}) = \text{const.}$ :
+
+$$\mathbf{V}(\mathbf{z}; \mathbf{z}') = \kappa(\Delta \mathbf{z}) \mathbf{D}_t \mathbf{C}(\mathbf{z}) \mathbf{D}_t \delta(\mathbf{z} - \mathbf{z}'). \quad (17)$$
+
+{6}------------------------------------------------
+
+![Figure 2: A 3x5 grid of plots showing probability density functions. The columns are labeled 'true dist.', 'PF-ODE + true score', 'avg. learned dist.', and two columns for 'increasing F/P' with values 1/4, 1/2, 1, 2, 4. The rows are labeled 'increasing epsilon' with values 0.01, 0.001, 0.0001. Each plot shows three curves: red (average learned dist.), black (true distribution), and gray (PF-ODE approximation). The x-axis is labeled 'x' and ranges from -1 to 1. The y-axis is labeled 'prob. density'.](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+Figure 2: A 3x5 grid of plots showing probability density functions. The columns are labeled 'true dist.', 'PF-ODE + true score', 'avg. learned dist.', and two columns for 'increasing F/P' with values 1/4, 1/2, 1, 2, 4. The rows are labeled 'increasing epsilon' with values 0.01, 0.001, 0.0001. Each plot shows three curves: red (average learned dist.), black (true distribution), and gray (PF-ODE approximation). The x-axis is labeled 'x' and ranges from -1 to 1. The y-axis is labeled 'prob. density'.
+
+Figure 2: Average learned distribution ( $N = 100$ ) for a linear model with Gaussian features trained on different sample draws from a 1D data distribution  $\{-1, 0, 1\}$ . Red: average learned distribution; black: true distribution; gray: PF-ODE approximation of true distribution. Different values of the time cutoff  $\epsilon$  and ratio  $F/P$  are shown. Note that there is more generalization as both become larger.
+
+See Appendix G for the full details of our argument. Interestingly, although the network is not assumed to be in the feature-learning regime, this result interpolates between our pure memorization (Prop. 4.1) and linear model (Prop. 5.1) results as we change the value of the training time  $\tau$ . The feature-related inductive biases that appear are precisely the well-known spectral biases.
+
+See Appendices H and I for discussion of how to obtain analogous results for diffusion models with slightly different training objectives, like those for which a ‘denoiser’ rather than a score approximator is learned (see, e.g., Karras et al. (2022)).
+
+## 6 GENERALIZATION THROUGH VARIANCE: CONSEQUENCES AND EXAMPLES
+
+In this section, we briefly discuss salient consequences of generalization through variance.
+
+**Benign properties of generalization through variance.** In what sense might generalization through variance provide a ‘reasonable’ inductive bias? Its key driver is the proxy score covariance, which is large primarily in boundary regions between training examples (Appendix C), and this fact greatly constrains the way this type of generalization can occur. A data set with one data point (so that  $M = 1$ ) is not generalized, since the proxy score covariance is trivially zero. If the data distribution is primarily supported on some low-dimensional ‘data manifold’, the proxy score covariance tends to be nontrivial only along that manifold, and hence generalization through variance preserves the dimensionality of the data manifold.
+
+Very far from training examples, the proxy score covariance is approximately zero, so there is no generalization through variance. Finally, the effective PF-ODE both follows deterministic PF-ODE dynamics *on average*, since the V-kernel-related noise term has mean zero, and is also *most likely* to follow deterministic PF-ODE dynamics, since the probability of paths that deviate from it can be shown to be somewhat lower. This means that, although effective PF-ODE dynamics differ from the deterministic PF-ODE’s dynamics, they do not *substantially* differ, meaning that regions near training data will still tend to be sampled most. See Appendix J for more details and discussion.
+
+**Memorization and the V-kernel in the small noise limit.** Our characterization of the typical learned distribution  $[q]$  in terms of a stochastic process is somewhat unsatisfying, in part because it remains unclear how the V-kernel affects the way  $[q]$  generalizes  $p_{data}$ . One can make some progress on the issue by making a small noise approximation, which is valid (for example) when models are somewhat underparameterized, so that  $\kappa = F/P$  is somewhat less than 1. When the effective PF-ODE’s noise term is sufficiently small, one can invoke a semiclassical approximation of the relevant path integral. We find (Appendix K) that, at least in this limit,
+
+$$[q(\mathbf{x}_0)] \approx p(\mathbf{x}_0|\epsilon) \frac{1}{\sqrt{\det\left(\frac{1}{\kappa} \frac{\partial^2 S_{cl}(\mathbf{x}_0, \mathbf{x}_T^*(\mathbf{x}_0))}{\partial \mathbf{x}_T \partial \mathbf{x}_T}\right)}} \quad (18)$$
+
+{7}------------------------------------------------
+
+where  $\mathcal{S}_d$  quantifies the (negative log-) likelihood of the most likely path that goes from a noise seed  $x_T$  to a sample  $x_0$ . In words:  $[q]$  equals the ( $\epsilon$ -noise-corrupted) data distribution, times a curvature factor that quantifies the likelihood of small deviations from deterministic PF-ODE dynamics. It is through the V-kernel’s influence on this curvature term that it affects generalization (although unfortunately it appears difficult to be more explicit about how it does so, at least analytically).
+
+**Gap-filling inductive bias.** Given that the V-kernel is especially sensitive to the ‘gaps’ between training examples, one expects that generalization through variance works by effectively filling in these gaps. This appears to be often, but not always, true. First, in its naive form (see, e.g., Sec. 4) generalization through variance can actually *reduce* the probability associated with boundary regions, since the additional noise in those regions makes the dynamics spend less time in them. If there is nontrivial temporal generalization, for example via time-dependent features  $\phi$ , the V-kernel may have a nontrivial temporal autocorrelation structure; we speculate that these autocorrelations may be a key mechanism that allows the dynamics to spend more time in boundary regions.
+
+Second, the details of generalization are strongly modulated by two numbers: the time cutoff  $\epsilon$ , and the ratio  $F/P$  that determines the extent to which a model is over- or underparameterized. Fig. 2 depicts an illustrative one-dimensional example where there are three training examples  $\{-1, 0, 1\}$ , and where the model is linear (see Prop. 5.1) with Gaussian features centered at different values of  $x$  and  $t$ , each with the same width. The average learned distribution (red) tends to differ from both the true distribution (black) and its PF-ODE approximation (gray) in the size of peaks near training data, and in the regions between training data. These differences are larger when  $F/P$  and  $\epsilon$  are larger. Taking both large produces the largest difference, but not obviously the ‘best’ generalization of training data.
+
+**Feature-noise alignment affects generalization.** Different feature sets interact with the structure of the proxy score covariance differently, and hence produce different kinds of generalization. Fig. 3 shows how the same 2D data distribution (four examples, which together determine the vertices of a square) is generalized differently depending on its orientation, and depending on which linear model feature set (here, either Gaussian or Fourier features) is used.
+
+## 7 DISCUSSION
+
+We used a novel path-integral approach to quantitatively characterize the ‘typical’ distribution learned by diffusion models, and find that generalization is influenced by a combination of factors related to training (the DSM objective and forward process; Sec. 2 and 4), sampling (the learned distribution depends nonlinearly on score estimates; Sec. 3), model architecture (Sec. 5), and the data distribution. Below, we use our theory to comment on various previous observations.
+
+**DSM produces noisy estimators, but stable distributions.** Various forms of score ‘mislearning’ are well-known. At small times, scores are hard to learn due to the noisiness of the proxy score target, leading authors like Karras et al. (2022) to suggest a  $p(t)$  that emphasizes intermediate noise scales. Chao et al. (2022) discuss how score estimation errors affect conditional scores. Xu et al. (2023) explicitly study the variance-near-mode-boundaries issue we discussed, and propose a strategy for mitigating it. On the other hand, it is well-known that despite noisy score estimates, diffusion models generally produce smooth output distributions (see, e.g., Luzi et al. (2024)). Moreover, two diffusion models trained on non-overlapping subsets of a data set are often highly similar (Kadkhodaie et al., 2024). These facts are due to noisy score estimates contributing to sample generation through the PF-ODE, which effectively ‘averages’ over estimator noise. Our theory is consistent with these
+
+![Figure 3: Generalization of a 2D data distribution depends on features used and data orientation. The figure shows a 2x3 grid of heatmaps. The rows are labeled 'Gaussian features' and 'Fourier features'. The columns are labeled '0°', '22.5°', and '45°'. Each heatmap shows a 2D distribution with four red dots representing training data points. The distributions vary based on the feature set and orientation, with some showing more pronounced peaks or smoother regions between the training points.](643d86ebba41e16a88461bfcb3741de6_img.jpg)
+
+Figure 3: Generalization of a 2D data distribution depends on features used and data orientation. The figure shows a 2x3 grid of heatmaps. The rows are labeled 'Gaussian features' and 'Fourier features'. The columns are labeled '0°', '22.5°', and '45°'. Each heatmap shows a 2D distribution with four red dots representing training data points. The distributions vary based on the feature set and orientation, with some showing more pronounced peaks or smoother regions between the training points.
+
+Figure 3: Generalization of a 2D data distribution depends on features used and data orientation. Heatmaps of samples from  $N = 100$  linear models are shown in different conditions, with training data (red dots) overlaid. Notice that which gaps are ‘filled in’, e.g., whether a square shape or cross shape is made, depends on both factors.
+
+{8}------------------------------------------------
+
+observations: even the interleaved training-sampling procedure discussed in Sec. 4 produces a well-behaved, smooth distribution.
+
+**DSM produces a boundary-smearing inductive bias.** This has been previously pointed out by authors like Xu et al. (2023). Where we differ from previous authors is in considering this issue a potential strength. Integrating the PF-ODE using the true score reproduces training examples, so it is in some sense beneficial to ‘mislearn’ the score. This particular kind of mislearning is useful for several ways of generalizing point clouds, including interpolation, extrapolation, and feature blending. Moreover, producing this inductive bias is an interesting way diffusion models differ from something like kernel density estimation: boundary regions *across different noise scales* are smeared out, with different scales linked via PF-ODE dynamics, which may provide better generalization than convolving the training distribution with any single kernel.
+
+**Architecture-related inductive biases play a role.** As we showed in Sec. 5, feature/architecture-related inductive biases interact with DSM’s boundary-smearing bias in order to determine how diffusion models generalize. This appears to be consistent, for example, with the Kadkhodaei et al. (2024) finding that diffusion models effectively exhibit ‘adaptive geometric harmonic priors’; their finding is specifically in the context of score estimation using a convolutional neural network (CNN) architecture. It is plausible that this choice encourages a harmonic inductive bias, since CNNs more generally exhibit inductive biases related to translation equivariance (Cohen & Welling, 2016).
+
+**Generalization through variance harmful and helpful.** It is important to note that this kind of generalization is not always helpful. A trivial example is that unconditional models trained on MNIST digit images tend to learn to produce non-digits as output in the absence of label information (see, e.g., Bortoli et al. (2021)). More generally, blending modes may or may not be desirable, since it can produce (e.g.) images very qualitatively different from those of the training distribution.
+
+**Other forms of generalization are possible.** Factors we did not study, like learning dynamics, most likely also partly determine how diffusion models generalize. For example, the use of stochastic gradient descent introduces additional randomness that disfavors converging on sharp local optima (Smith & Le, 2018; Smith et al., 2020). It would be interesting to utilize recent theoretical tools (Bordelon & Pehlevan, 2023) to characterize how learning dynamics impacts generalization, especially in the rich (Geiger et al., 2020; Woodworth et al., 2020) rather than lazy learning regime.
+
+**Comment on memorization.** Determining whether diffusion models memorize data (Sompalli et al., 2023a; Carlini et al., 2023), and if so how to address the issue (Vyas et al., 2023), has become a significant technical and societal issue. Our theory suggests that since generalization through variance happens primarily in boundary regions, diffusion models are unlikely to substantially generalize outliers. Since conditional models involve distributions of much higher effective dimension, one may expect that more training examples are ‘outlier-like’, and hence memorization should happen more often; this is consistent with the observations of Sompalli et al. (2023b). Our theory also suggests why duplications increase memorization: the existence of a strong boundary between modes, which requires modes to have comparable probability mass, is degraded.
+
+**Limitations of theoretical approach.** Our theory is simplified in at least two ways. First, only a simple formulation of training (via DSM) and sampling (via the PF-ODE) from diffusion models is considered. There exist alternatives to DSM, like sliced score matching (Song et al., 2020), and alternative ways of sampling, including using auxiliary momentum-like variables (Dockhorn et al., 2022b). Also, our theoretical analysis neglects variation due to numerical integration schemes, even though these may matter in practice (Liu et al., 2022; Karras et al., 2022; Dockhorn et al., 2022a).
+
+Second, we study only unconditional models for simplicity. This means that in particular do not consider diffusion coupled to attention layers, which enables the text-conditioning behind many of the most striking diffusion-model-related successes (Rombach et al., 2022; Blattmann et al., 2023).
+
+Finally, we do not consider realistic architectures (like U-nets) and rich learning dynamics due to theoretical tractability. However, these challenges are not unique to the current setting. Despite our contribution’s simplicity, we hope that it nonetheless provides a foundation for others to more rigorously understand the inductive biases and generalization capabilities of diffusion models.
+
+{9}------------------------------------------------
+
+## REFERENCES
+
+- Sanjeev Arora, Simon S Du, Wei Hu, Zhiyuan Li, Russ R Salakhutdinov, and Ru-song Wang. On exact computation with an infinitely wide neural net. In H. Wallach, H. Larochelle, A. Beygelzimer, F. d’Alché-Buc, E. Fox, and R. Garnett (eds.), *Advances in Neural Information Processing Systems*, volume 32. Curran Associates, Inc., 2019. URL [https://proceedings.neurips.cc/paper\\_files/paper/2019/file/dbc4d84bfce2284ba11befb853a8c4-Paper.pdf](https://proceedings.neurips.cc/paper_files/paper/2019/file/dbc4d84bfce2284ba11befb853a8c4-Paper.pdf).
+- Alberto Bietti and Julien Mairal. On the inductive bias of neural tangent kernels. In H. Wallach, H. Larochelle, A. Beygelzimer, F. d’Alché-Buc, E. Fox, and R. Garnett (eds.), *Advances in Neural Information Processing Systems*, volume 32. Curran Associates, Inc., 2019. URL [https://proceedings.neurips.cc/paper\\_files/paper/2019/file/c4ef9c39b300931b69a36fb3dbb8d60e-Paper.pdf](https://proceedings.neurips.cc/paper_files/paper/2019/file/c4ef9c39b300931b69a36fb3dbb8d60e-Paper.pdf).
+- Andreas Blattmann, Robin Rombach, Huan Ling, Tim Dockhorn, Seung Wook Kim, Sanja Fidler, and Karsten Kreis. Align your latents: High-resolution video synthesis with latent diffusion models. In *Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)*, pp. 22563–22575, June 2023.
+- Blake Bordelon and Cengiz Pehlevan. Self-consistent dynamical field theory of kernel evolution in wide neural networks. In S. Koyejo, S. Mohamed, A. Agarwal, D. Belgrave, K. Cho, and A. Oh (eds.), *Advances in Neural Information Processing Systems*, volume 35, pp. 32240–32256. Curran Associates, Inc., 2022. URL [https://proceedings.neurips.cc/paper\\_files/paper/2022/file/d027a5c93d484a4312cc486d399c62c1-Paper-Conference.pdf](https://proceedings.neurips.cc/paper_files/paper/2022/file/d027a5c93d484a4312cc486d399c62c1-Paper-Conference.pdf).
+- Blake Bordelon and Cengiz Pehlevan. Self-consistent dynamical field theory of kernel evolution in wide neural networks\*. *Journal of Statistical Mechanics: Theory and Experiment*, 2023(11): 114009, nov 2023. doi: 10.1088/1742-5468/ad01b0. URL <https://dx.doi.org/10.1088/1742-5468/ad01b0>.
+- Blake Bordelon, Abdulkadir Canatar, and Cengiz Pehlevan. Spectrum dependent learning curves in kernel regression and wide neural networks. In Hal Daumé III and Aarti Singh (eds.), *Proceedings of the 37th International Conference on Machine Learning*, volume 119 of *Proceedings of Machine Learning Research*, pp. 1024–1034. PMLR, 13–18 Jul 2020. URL <https://proceedings.mlr.press/v119/bordelon20a.html>.
+- Valentin De Bortoli. Convergence of denoising diffusion models under the manifold hypothesis. *Transactions on Machine Learning Research*, 2022. ISSN 2835-8856. URL <https://openreview.net/forum?id=MhK5aXo3gB>. Expert Certification.
+- Valentin De Bortoli, James Thornton, Jeremy Heng, and Arnaud Doucet. Diffusion schrödinger bridge with applications to score-based generative modeling. In A. Beygelzimer, Y. Dauphin, P. Liang, and J. Wortman Vaughan (eds.), *Advances in Neural Information Processing Systems*, 2021. URL <https://openreview.net/forum?id=9BnCwiXB0ty>.
+- Abdulkadir Canatar, Blake Bordelon, and Cengiz Pehlevan. Spectral bias and task-model alignment explain generalization in kernel regression and infinitely wide neural networks. *Nature Communications*, 12(1):2914, May 2021. ISSN 2041-1723. doi: 10.1038/s41467-021-23103-1. URL <https://doi.org/10.1038/s41467-021-23103-1>.
+- Nicolas Carlini, Jamie Hayes, Milad Nasr, Matthew Jagielski, Vikash Sehwag, Florian Tramèr, Borja Balle, Daphne Ippolito, and Eric Wallace. Extracting training data from diffusion models. In *32nd USENIX Security Symposium (USENIX Security 23)*, pp. 5253–5270, Anaheim, CA, August 2023. USENIX Association. ISBN 978-1-939133-37-3. URL <https://www.usenix.org/conference/usenixsecurity23/presentation/carlini>.
+- Chen-Hao Chao, Wei-Fang Sun, Bo-Wun Cheng, Yi-Chen Lo, Chia-Che Chang, Yu-Lun Liu, Yu-Lin Chang, Chia-Ping Chen, and Chun-Yi Lee. Denoising likelihood score matching for conditional score-based data generation. In *International Conference on Learning Representations*, 2022. URL <https://openreview.net/forum?id=LcF-EEt8cCC>.
+
+ Rest of paper (reference and Appendix) is removed.

@@ -1,0 +1,356 @@
+
+
+{0}------------------------------------------------
+
+# TOWARDS HYPERPARAMETER-FREE OPTIMIZATION WITH DIFFERENTIAL PRIVACY
+
+Ruixuan Liu <sup>\*</sup>
+
+Emory University
+
+ruixuan.liu2@emory.edu
+
+Zhiqi Bu <sup>\*</sup>
+
+Amazon
+
+woodyx218@gmail.com
+
+## ABSTRACT
+
+Differential privacy (DP) is a privacy-preserving paradigm that protects the training data when training deep learning models. Critically, the performance of models is determined by the training hyperparameters, especially those of the learning rate schedule, thus requiring fine-grained hyperparameter tuning on the data. In practice, it is common to tune the learning rate hyperparameters through the grid search that (1) is computationally expensive as multiple runs are needed, and (2) increases the risk of data leakage as the selection of hyperparameters is data-dependent. In this work, we adapt the automatic learning rate schedule to DP optimization for any models and optimizers, so as to significantly mitigate or even eliminate the cost of hyperparameter tuning when applied together with automatic per-sample gradient clipping. Our hyperparameter-free DP optimization is almost as computationally efficient as the standard non-DP optimization, and achieves state-of-the-art DP performance on various language and vision tasks.
+
+## 1 INTRODUCTION
+
+The performance of deep learning models relies on a proper configuration of training hyperparameters. In particular, the learning rate schedule is critical to the optimization, as a large learning rate may lead to divergence, while a small learning rate may slowdown the converge too much to be useful. In practice, people have used heuristic learning rate schedules that are controlled by many hyperparameters. For example, many large language models including LLaMa2 (Touvron et al., 2023) uses linear warmup and cosine decay in its learning rate schedule, which are controlled by 3 hyperparameters. Generally speaking, hyperparameter tuning (especially for multiple hyperparameters) can be expensive for large datasets and large models.
+
+To address this challenge, it is desirable or even necessary to determine the learning rate schedule in an adaptive and data-dependent way, without little if any manual effort. Recent advances such as D-adaptation (Defazio & Mishchenko, 2023), Prodigy (Mishchenko & Defazio, 2024), DoG (Ivgi et al., 2023), DoWG (Khaled et al., 2023), U-DoG (Kreisler et al., 2024), and GeN (Bu & Xu, 2024) have demonstrated the feasibility of automatic learning rate schedule, with some promising empirical results in deep learning (see a detailed discussion in Section 2.3).
+
+While data-dependent learning rate are evolving in the standard non-DP regime, the adaptive data dependency can raise the privacy risks of memorizing and reproducing the training data. As an example, we consider the zeroth-order optimizer (ZO-SGD),
+
+$$\mathbf{w}_{t+1} = \mathbf{w}_t - \eta_{\text{ZO-SGD}} \mathbf{z}_t$$
+
+where  $\mathbf{w}_t$  is the model parameters,  $\mathbf{z}_t$  is a random vector that is independent of any data, and  $\eta_{\text{ZO-SGD}} \approx \frac{\partial L}{\partial n_t}^\top \mathbf{z}_t \in \mathbb{R}$  is the effective learning rate, with  $L$  being the loss value. In Malladi et al. (2023), ZO-SGD can effectively optimize models such as OPT 13B~60B in the few-shot and many-shot settings. Hence, by using an adaptive hyperparameter  $\eta_{\text{ZO-SGD}}$ , the models are able to learn and possibly memorize the training data even if the descent direction is data-independent. In fact, the private information can also leak through other hyperparameters and in other models,
+
+<sup>\*</sup>Equal contribution. This work does not relate to ZB’s position at Amazon.
+
+{1}------------------------------------------------
+
+where an outlier datapoint can be revealed via the membership inference attacks in support vector machines (Papernot & Steinke, 2021).
+
+Specifically, in the regime of deep learning with differential privacy (DP), the privacy risks from the non-DP hyperparameter tuning could render the privacy guarantee non-rigorous. In practice, most work has leveraged the DP optimizers Abadi et al. (2016) to offer the privacy guarantee, where the privatization is only on the gradients, but not on the hyperparameters such as the clipping threshold  $R_g$  and the learning rate  $\eta$ . A common approach is to trial-and-error on multiple  $(R_g, \eta)$  pairs and select the best hyperparameters, as showcased by (Li et al., 2021; Kurakin et al., 2022) in Figure 8.
+
+At high level, there are two approaches to accommodate the privacy risk in hyperparameter tuning: (1) The more explored approach is to assign a small amount of privacy budget to privatize the hyperparameter tuning. Examples include Renyi-DP tuning (Papernot & Steinke, 2021), DP-Hypo (Wang et al., 2023), DP-ZO-SGD (Tang et al., 2024; Liu et al., 2024; Zhang et al.) and many more (Liu & Talwar, 2019; Panda et al., 2024; Koskela & Kulkarni, 2023). However, these methods may suffer from worse performance due to larger DP noise addition from the reduced privacy budget, or high computation overhead. (2) The less explored approach is to adopt hyperparameter-free methods. For instance, (Bu et al., 2023b; Yang et al., 2022) replace the per-sample gradient clipping with the per-sample gradient normalization (i.e. setting  $R_g \approx 0^+$ ), so as to remove the tuning of the hyperparameter  $R_g$  in DP optimizers.
+
+In this work, we work towards the hyperparameter-free optimization with DP, by adapting learning-rate-free methods in DP optimization:
+
+$$\text{DP-SGD} \implies \begin{cases} \text{Vanilla:} & \mathbf{w}_{t+1} = \mathbf{w}_t - \eta_{\text{manual}} \left( \sum_{i \in B} \min\left\{ \frac{R_g}{\|\mathbf{g}_i\|}, 1 \right\} \mathbf{g}_i + \sigma R_g \mathbf{z} \right) \\ \text{Hyperparameter-free:} & \mathbf{w}_{t+1} = \mathbf{w}_t - \eta_{\text{Gen-DP}} \left( \sum_{i \in B} \frac{\mathbf{g}_i}{\|\mathbf{g}_i\|} + \sigma \mathbf{z} \right) \end{cases} \quad (1)$$
+
+Our contributions are summarized as follows:
+
+1. We propose **HyFreeDP**, a hyperparameter-free DP framework that rigorously guarantees DP on the hyperparameter tuning of  $(R_g, \eta_t)$ , and works with any optimizer.
+2. We apply the loss privatization to leverage GeN learning rate under DP, with a specific auto-regressive clipping threshold  $R_t$  that aims to minimize the clipping bias.
+3. We give an end-to-end privacy accounting method that adds  $< 1\%$  more gradient noise, while accurately capturing the loss curvature to determine the adaptive learning rate.
+4. We show the strong performance and high efficiency of our method empirically.
+
+## 2 PRELIMINARIES AND RELATED WORKS
+
+### 2.1 DIFFERENTIALLY PRIVATE OPTIMIZATION
+
+**Overview of DP optimization.** We aim to minimize the loss  $\sum_i L(\mathbf{w}, \mathbf{x}_i)$  where  $\mathbf{w} \in \mathbb{R}^d$  is the model parameters and  $\mathbf{x}_i$  is one of data points with  $1 \leq i \leq N$ . We denote the per-sample gradient as  $\mathbf{g}_t(\mathbf{w}) := \frac{\partial L(\mathbf{w}, \mathbf{x}_t)}{\partial \mathbf{w}} \in \mathbb{R}^d$  and the mini-batch gradient at the  $t^{\text{th}}$  updating iteration as  $\mathbf{m}_t \in \mathbb{R}^d$ , for a batch size  $B \leq N$ ,
+
+$$\mathbf{m}_t(\{\mathbf{g}_i\}_{i=1}^B; R_g, \sigma_g) := \left[ \sum_i^B c_i(R_g) \mathbf{g}_i + \sigma_g R_g \cdot \mathbf{z}_g \right] / B \quad (2)$$
+
+where  $\mathbf{z}_g \sim \mathcal{N}(0, \mathbf{I}_d)$  is the Gaussian noise, and  $c_i(R_g) = \min(R_g / \|\mathbf{g}_i\|, 1)$  is the per-sample gradient clipping factor in (Abadi et al., 2016; De et al., 2022) with  $R_g$  being the clipping threshold.
+
+In particular,  $\mathbf{m}_t$  reduces to the standard non-DP gradient  $\sum_i \mathbf{g}_i / B$  when  $\sigma_g = 0$  and  $R_g$  is sufficiently large (i.e., no clipping is applied). The clipped and perturbed batch gradient becomes the DP gradient  $\mathbf{m} \equiv \mathbf{m}_{\text{DP}}$  whenever  $\sigma_g > 0$ , with stronger privacy guarantee for larger  $\sigma_g$ . On top of  $\mathbf{m}$ , models can be optimized using any optimizer such as SGD and AdamW through
+
+$$\mathbf{w}_{t+1} = \mathbf{w}_t - \eta_t \cdot \mathbf{G}_t(\mathbf{m}_t(\{\mathbf{g}_i\}_{i=1}^B)) \quad (3)$$
+
+{2}------------------------------------------------
+
+in which  $\mathbf{G}_t$  is the post-processing such as momentum, adaptive pre-conditioning, and weight decay.
+
+**Hyper-parameters matter for DP optimization.** Previous works (De et al., 2022; Li et al., 2021) reveal that the performance of DP optimization is sensitive to the hyper-parameter choices. On the one hand, DP by itself brings extra hyper-parameters, such as the gradient clipping threshold  $R_g$ , making the tuning more complex. An adaptive clipping method (Andrew et al., 2021) proposes to automatically learn  $R_g$  at each iteration, with an extra privacy budget that translates to worse accuracy. There are methods that do not incur extra privacy budget. Automatic clipping (or per-sample normalization) (Bu et al., 2023b; Yang et al., 2022) uses  $c_i = 1/\|g_i\|$  to replace the  $R_g$ -dependent per-sample clipping, and thus removes the hyperparameter  $R_g$  from DP algorithms. On the other hand, hyper-parameter tuning for DP training has different patterns than non-DP training and cannot borrow previous experience on non-DP. For example, previous works (Li et al., 2021; De et al., 2022) observe that there is no benefit from decaying the learning rate during training and the optimal learning rate can be much higher than the optimal one in non-DP training.
+
+### 2.2 END-TO-END DP GUARANTEE FOR OPTIMIZATION AND TUNING
+
+However, hyper-parameter tuning enlarges privacy risks (Papernot & Steinke, 2021), and it is necessary to provide end-to-end privacy guarantee for DP. There are two existing technical paths to solve this problem:
+
+- Multiple runs with multiple choices of hyper-parameters, and choose from these choices in a DP manner (Mohapatra et al., 2022; Papernot & Steinke, 2021; Wang et al., 2023; Liu & Talwar, 2019). This path requires some knowledge to determine the choices a priori and consumes a significant privacy budget as well as computation due to the multiple runs. For instance, (Liu & Talwar, 2019) showed that repeated searching with random iterations satisfies  $(3\epsilon, 0)$ -DP if each run was  $(\epsilon, 0)$ -DP.
+- Making DP optimization hyper-parameter free, and only a single run is needed. For example, the automatic clipping (Bu et al., 2023b; Yang et al., 2022) eliminates the hyper-parameter  $R_g$ . Our work follows the second path, aiming to resolve tuning on  $\eta$ —the last critical hyper-parameter—by finding a universal configuration across datasets and tasks.
+
+### 2.3 AUTOMATIC LEARNING RATE SCHEDULE
+
+Automatic learning rate schedules (also known as learning-rate-free or parameter-free methods) have demonstrated promising performance in deep learning, with little to none manual efforts to select the learning rate. Specifically, D-adaptation (Defazio & Mishchenko, 2023), Prodigy (Mishchenko & Defazio, 2024), and DoG (Ivgi et al., 2023) (and its variants) have proposed to estimate  $\eta \approx \frac{D}{G\sqrt{T}}$  where  $D = \|w_0 - w_*\|$  is the initialization-to-minimizer distance,  $G$  is the Lipschitz continuity constant, and  $T$  is the total number of iterations. These methods have their roots in the convergence theory under the convex and Lipschitz conditions, and may not be accurate when applied in the DP regime when the gradient is noisy. In fact, the estimation of  $D$  and  $G$  can deviate significantly from the truth when  $\epsilon$  is small and the number of trainable parameters is large, i.e. the DP noise in gradient is large, as shown in Table 2.
+
+Along an orthogonal direction, GeN (Bu & Xu, 2024) leverages the Taylor approximation of loss to set the learning rate  $\eta_{\text{GeN}}$ , without assuming the Lipschitz continuity or the knowledge of  $D$ . Given any descent vector  $\mathbf{m}$ , omitting the iteration index  $t$  for a brief notation, we can use the GeN learning rate in (4) to approximately minimize  $L$ :
+
+$$\eta_{\text{GeN}}(\mathbf{m}) := \frac{\mathbf{G}^\top \mathbf{m}}{\mathbf{m}^\top \mathbf{H} \mathbf{m}} = \operatorname{argmin}_\eta L(\mathbf{w} - \eta \mathbf{m}) = \mathbf{G}^\top \mathbf{m} \eta + \mathbf{m}^\top \mathbf{H} \mathbf{m} \frac{\eta^2}{2} \approx \operatorname{argmin}_\eta L(\mathbf{w} - \eta \mathbf{m}) \quad (4)$$
+
+in which  $\mathbf{G} = \frac{\partial L}{\partial \mathbf{w}}$  is the gradient and  $\mathbf{H} = \frac{\partial^2 L}{\partial \mathbf{w}^2}$  is the Hessian matrix. Notice that because  $L$  is approximated by a quadratic function, the minimizer  $\eta_{\text{GeN}}$  is unique and in closed form.
+
+Numerically,  $\eta_{\text{GeN}}$  can be computed up to any precision by curve fitting or finite difference. Under the non-DP regime, given a series of  $\eta_i$  and loss values  $L(\mathbf{w} - \eta_i \mathbf{m})$ , Bu & Xu (2024) obtains the
+
+{3}------------------------------------------------
+
+numerator and denominator of  $\eta_{\text{GEN}}$  by solving the problem in (5):
+
+$$m^\top \mathbf{H} m, \mathbf{G}^\top m \approx \operatorname{argmin}_{a,b} \sum_i \left| L(w - \eta_i m) - \left( L(w) - b\eta_i + a \frac{\eta_i^2}{2} \right) \right|^2 \quad (5)$$
+
+Nevertheless, directly applying these non-DP automatic learning rate scheduler with DP gradient in (2) and using  $\eta_{\text{GEN}}(m)$  will violate DP, because the learning rate estimation is obtained from forward passes on batches of private data. We defer the explanation and solution to Section 3.
+
+## 3 LOSS VALUE PRIVATIZATION WITH MINIMAL CLIPPING BIAS
+
+### 3.1 PRIVATIZED QUADRATIC FUNCTION
+
+We emphasize that the learning rate  $\eta_{\text{GEN}}(m)$  is not DP, because even though  $m$  is privatized, the data is accessed without protection through  $\mathbf{G}$  and  $\mathbf{H}$ . To solve this issue, we introduce a privatized variant of (5),
+
+$$(m^\top \mathbf{H} m)_{\text{DP}}, (\mathbf{G}^\top m)_{\text{DP}} := \operatorname{argmin}_{a,b} \sum_i \left| \tilde{L}(w - \eta_i m_{\text{DP}}) - \left( \tilde{L}(w) - b\eta_i + a \frac{\eta_i^2}{2} \right) \right|^2 \quad (6)$$
+
+which not only replaces  $m$  with the DP gradient  $m_{\text{DP}}$  but also privatizes the loss by  $\tilde{L}(w - \eta_i m_{\text{DP}})$  as in (7). The resulting learning rate is  $\eta_{\text{GEN-DP}} = \frac{(\mathbf{G}^\top m)_{\text{DP}}}{(m^\top \mathbf{H} m)_{\text{DP}}}$ , which is DP since every quantity in (6) is DP and because of the post-processing property. We now discuss the specifics of the loss value privatization  $\tilde{L}(w - \eta_i m) \in \mathbb{R}$ . In Table 1, we emphasize that the loss privatization is distinctively different from the gradient privatization because the loss is scalar, whereas the gradient is high-dimensional.
+
+Table 1: Difference between the privatization of loss and gradient.
+
+| Aspects              | Loss Privatization                            | Gradient Privatization              |
+|----------------------|-----------------------------------------------|-------------------------------------|
+| Dimension            | 1                                             | $d$                                 |
+| Clipping Norm        | L2 or L1                                      | L2                                  |
+| Noise Magnitude      | $\sqrt{\frac{2}{\pi}} \frac{\sigma_l R_l}{B}$ | $\sqrt{d} \frac{\sigma_g R_g}{B}$   |
+| Key to Convergence   | Clipping Bias                                 | Noise Magnitude                     |
+| Per-sample Operation | Clipping ( $R_l \approx L$ )                  | Normalization ( $R_g \approx 0^+$ ) |
+
+From the perspective of per-sample clipping, the gradient is ubiquitously clipped on L2 norm, because  $\|g_i\|_2 \ll \|g_i\|_1$  in large neural networks, and consequently a Gaussian noise is added to privatize the gradient. In contrast, we can apply L2 or L1 norm for the loss clipping, and add Gaussian (by default) or Laplacian noise to the loss, respectively.
+
+From the perspective of noising, the expected noise magnitude for loss privatization is  $\mathbb{E}|z_l| \frac{\sigma_l R_l}{B} = \sqrt{\frac{2}{\pi}} \frac{\sigma_l R_l}{B}$ , where  $z_l \sim N(0, 1)$  is the noise on loss, and that for gradient privatization is  $\mathbb{E}\|z_g\| \frac{\sigma_g R_g}{B} \approx \sqrt{d} \frac{\sigma_g R_g}{B}$  where the gradient noise vector  $z_g \sim N(0, \mathbf{I}_d)$  by the law of large numbers. On the one hand, the gradient noise  $z_g$  is large and requires small  $R_g$  to suppress the noise magnitude, as many works have use very small  $R$  (Li et al., 2021; De et al., 2022). This leads to the automatic clipping in Bu et al. (2023b) when the gradient clipping effectively becomes the gradient normalization as  $R_g \rightarrow 0^+$ . In fact, each per-sample gradient (as a vector) has a magnitude and a direction, and the normalization neglects some if not all magnitude information about the per-sample gradients. On the other hand, we must not use a small  $R_l$  for the loss clipping because the per-sample loss (as a scalar) only has the magnitude information. We will show by Theorem 1 that the choice of threshold  $R_l$  creates a bias-variance tradeoff between the clipping and the noising for the loss privatization:
+
+$$\tilde{L} = \frac{1}{B} \left[ \sum_i \min\left(\frac{R_l}{L_i}, 1\right) L_i + \sigma_l R_l \cdot N(0, 1) \right] \quad (7)$$
+
+{4}------------------------------------------------
+
+![Figure 1: HyFreeDP overview diagram. The diagram shows a training loop where a model is updated using a batch of data. The process involves: 1. Sampling a batch (R_g, B, T, N). 2. Computing the mean (m_t) and standard deviation (sigma_g) of the batch. 3. Solving the equation for loss noise (sigma_t). 4. Computing the clipping threshold (sigma = GetSigma(epsilon, delta, B, T, N)). 5. Applying the clipping threshold to the loss (L_t). 6. Adding noise to the loss (W_t +/- eta * G_DP). 7. Sampling and forwarding the loss. 8. Auto-updating hyperparameters (eta) based on the loss curve. The diagram also includes a legend for hyperparameters: DP-related (R_g, B, T, N, epsilon, delta, K), Non-DP and Data-independent (sigma_g, sigma_t), and Data-dependent (sigma).](690fce4fb5c9cbb8beb560cb2a3fcbeb_img.jpg)
+
+Figure 1: HyFreeDP overview diagram. The diagram shows a training loop where a model is updated using a batch of data. The process involves: 1. Sampling a batch (R\_g, B, T, N). 2. Computing the mean (m\_t) and standard deviation (sigma\_g) of the batch. 3. Solving the equation for loss noise (sigma\_t). 4. Computing the clipping threshold (sigma = GetSigma(epsilon, delta, B, T, N)). 5. Applying the clipping threshold to the loss (L\_t). 6. Adding noise to the loss (W\_t +/- eta \* G\_DP). 7. Sampling and forwarding the loss. 8. Auto-updating hyperparameters (eta) based on the loss curve. The diagram also includes a legend for hyperparameters: DP-related (R\_g, B, T, N, epsilon, delta, K), Non-DP and Data-independent (sigma\_g, sigma\_t), and Data-dependent (sigma).
+
+Figure 1: HyFreeDP overview with three types of hyper-parameters in the DP training. HyFreeDP saves tuning efforts via automatically tuning hyper-parameters in red text, and sets other parameters as default constants. We showcase with 5 points in curve fitting.
+
+We note (7) is a private mean estimation that has been heavily studied in previous works (Biswas et al., 2020; Kamath et al., 2020), though many use an asymptotic threshold like  $R_t + O(\log B)$ , whereas Theorem 1 is more suited for our application in practice.
+
+### 3.2 BIAS-VARIANCE TRADE-OFF IN LOSS PRIVATIZATION
+
+**Theorem 1.** *The per-sample clipping bias of (7) is*
+
+$$\left| \mathbb{E}(\tilde{L}) - \frac{\sum_i L_i}{B} \right| = \left| \frac{1}{B} \sum_i \min\left(\frac{R_t}{L_i}, 1\right) L_i - \frac{1}{B} \sum_i L_i \right| = \left| \frac{1}{B} \sum_i (L_i - R_t) \mathbb{I}(L_i > R_t) \right|$$
+
+which is monotonically decreasing in  $R_t$ , and converges to  $|\mathbb{E}(L_i | L_i > R_t) - R_t| \cdot \mathbb{P}(L_i > R_t)$  as  $B \rightarrow \infty$ . In contrast, the noise variance is  $\text{Var}(\tilde{L}) = (\sigma_t R_t / B)^2$  which is increasing in  $R_t$ .
+
+In words, a large  $R_t$  reduces the clipping bias but magnifies the noise, and vice versa for a small  $R_t$ . We propose to use  $R_t \approx L$  so that the clipping bias is close to zero (i.e.  $\tilde{L}$  is approximately unbiased), and the loss noise shown in Table 1 is reasonably small for large batch size.
+
+To put this into perspective, we give the explicit form of clipping bias when  $L_i$  follows a Gaussian distribution in Corollary 1.
+
+**Corollary 1.** *Suppose  $L_i \sim N(\mu, \xi^2)$ , then the asymptotic clipping bias in Theorem 1 is*
+
+$$|\mathbb{E}(L_i | L_i > R_t) - R_t| \cdot \mathbb{P}(L_i > R_t) = \xi[\phi(\alpha) - \alpha(1 - \Phi(\alpha))], \quad (8)$$
+
+where  $\alpha = \frac{R_t - \mu}{\xi}$ ,  $\phi$  is the probability density function and  $\Phi$  is the cumulative distribution function of standard normal distribution. The term (8) is strictly decreasing in  $\alpha$  as well as  $R_t$  (see Figure 7).
+
+## 4 ALGORITHM
+
+### 4.1 HYPERPARAMETER-FREE DP OPTIMIZATION
+
+We present our algorithm in Algorithm 1, which is DP as guaranteed in Theorem 2, almost as efficient as the standard non-DP optimization by Section 4.4, and highly accurate and fast in convergence as demonstrated in Section 5. Importantly, we have split the hyperparameters into three classes, as shown in Figure 1:
+
+- **DP-related** hyperparameters that do not depend on the tasks, such as the gradient noise  $\sigma_g$ , the loss noise  $\sigma_t$ , and the update interval  $K$ , can be set as default constants. For example, we fix  $R_g \rightarrow 0^+$  and re-scale the learning rate by  $1/R_g$  according to automatic clipping and set  $K = 5$ .
+- Training hyperparameters that are robust to different models and datasets, which we view as **data-independent**, need-not-to-search, and not violating DP, such as the batch size  $B$  and the number of iterations  $T$ . We also fix other hyperparameters not explicitly displayed
+
+{5}------------------------------------------------
+
+in Algorithm 1, e.g. throughout this paper, we fix the momentum coefficients and weight decay  $(\beta_1, \beta_2, \text{weight\_decay}) = (0.9, 0.999, 0.01)$ , which is the default in Pytorch AdamW.
+
+- Training hyperparameters that are **data-dependent**, which requires dynamical searching under DP, such as  $R_t$  and  $\eta$ . For these hyperparameters, Algorithm 1 adopts multiple *auto-regressive* designs, i.e. the variables to use in the  $t$ -th iteration is based on the  $(t-1)$ -th iteration, which has already been privatized. These auto-regressive designs allow new variables to preserve DP by the post-processing property of DP<sup>1</sup>.
+
+To be specific, we have used  $\tilde{L}_{t-1}^{(0)}$  as the loss clipping threshold  $R_t$  for the next iteration in Line 7, because loss values remain similar values within a few iterations; In practice, we set a more conservative loss clipping threshold  $R_t = \sum_{i=1}^t \tilde{L}_{i-1}^{(k)}$  to avoid the clipping bias. We have used the previous  $\eta$  to construct next-loss in Line 6, which in turn will determine the new  $\eta$  by Line 9.
+
+#### --- Algorithm 1 Hyperparameter-free Optimization with Differential Privacy ---
+
+- 1: **INPUT:** initial  $\eta=1e-4$ , initial  $R_t = 1$
+  - 2: Forward pass to compute per-sample losses  $L_{t,i}^{(0)} = L(w_t, x_i)$
+  - 3: Compute the mini-batch loss  $L_t^{(0)} = \frac{1}{B} \sum_i L_{t,i}^{(0)}$
+  - 4: Back-propagate from  $L_t^{(0)}$  to compute  $m_{\text{DP}}$  in (2) with automatic clipping
+  - 5: Post-process  $m_{\text{DP}}$  by any optimizer  $G_{\text{DP}} := G(m)$  in (3)
+  - 6: **if**  $t\%K == 0$  (e.g.  $K = 10$ ) **then**
+  - 7:   Forward pass to get per-sample losses  $L_{t,i}^{(\pm 1)} = L(w_t \pm \eta G_{\text{DP}}, x_i)$
+  - 8:   Privatize losses  $\tilde{L}_t^{(k)}$  by (7) with  $R_t = \tilde{L}_{t-1}^{(0)}$  for  $k \in \{-1, 0, +1\}$
+  - 9:   Fit the quadratic function in (6) from  $\{-\eta, 0, \eta\}$  to  $\{\tilde{L}_t^{(-1)}, \tilde{L}_t^{(0)}, \tilde{L}_t^{(+1)}\}$
+  - 10:   Extract coefficients of the fitted quadratic function  $(m^\top H m)_{\text{DP}}, (G^\top m)_{\text{DP}}$
+  - 11:   Update  $\eta$  with  $\eta_{\text{GEN-DP}} = \frac{(G^\top m)_{\text{DP}}}{(m^\top H m)_{\text{DP}}} \approx \text{argmin}_\eta \tilde{L}(w_t - \eta G_{\text{DP}})$
+  - 12: **end if**
+  - 13: Update  $w_{t+1} = w_t - \eta G_{\text{DP}}$
+- 
+
+![Figure 2: Impact of loss value clipping and perturbation on curve fitting along different training iterations on CIFAR100. The figure consists of four subplots showing 'loss value' vs 'learning rate update' at iterations 10, 20, 40, and 50. Each plot compares 'Curve fitting' (solid line) with 'w/o clipping and noise' (dashed line) and 'w/ clipping and noise' (shaded area). The 'w/o clipping and noise' curve is a smooth parabola, while the 'w/ clipping and noise' curve is more jagged and has a wider uncertainty region. The x-axis ranges from -0.02 to 0.02, and the y-axis ranges from 0.4 to 1.6. The current w_t is at x=0.](e1dda754c2c88a8ad0b968aea4fc0786_img.jpg)
+
+Figure 2: Impact of loss value clipping and perturbation on curve fitting along different training iterations on CIFAR100. The figure consists of four subplots showing 'loss value' vs 'learning rate update' at iterations 10, 20, 40, and 50. Each plot compares 'Curve fitting' (solid line) with 'w/o clipping and noise' (dashed line) and 'w/ clipping and noise' (shaded area). The 'w/o clipping and noise' curve is a smooth parabola, while the 'w/ clipping and noise' curve is more jagged and has a wider uncertainty region. The x-axis ranges from -0.02 to 0.02, and the y-axis ranges from 0.4 to 1.6. The current w\_t is at x=0.
+
+Figure 2: Impact of loss value clipping and perturbation on curve fitting along different training iterations on CIFAR100 with ViT-Small fully fine-tuning, with zero in x-axis denotes the current  $w_t$ . We use 5 points for the ease of illustration and use 3 points in Algorithm 1 and experiments.
+
+### 4.2 PRIVACY GUARANTEE
+
+**Theorem 2.** *Algorithm 1 is  $(\epsilon_{\text{ours}}, \delta)$ -DP, where  $\epsilon_{\text{ours}}$  depends on the batch size  $B$ , the number of iterations  $T$ , the noises  $(\sigma_g, \sigma_l)$ , and the update interval  $K$ . In contrast, vanilla DP-SGD is  $(\epsilon_{\text{vanilla}}, \delta)$ -DP, where  $\epsilon_{\text{vanilla}}$  depends on  $B, T, N, \sigma$ . Furthermore, we have  $\epsilon_{\text{ours}}(B, T, N, \sigma_g, \sigma_l, K) > \epsilon_{\text{vanilla}}(B, T, N, \sigma)$  if  $\sigma_g = \sigma$ .*
+
+We omit the concrete formulae of  $\epsilon$  because it depends on the choice of privacy accountants. For example, if we use  $\mu$ -GDP as an asymptotic estimation, then we show in Appendix B that
+
+$$\epsilon_{\text{vanilla}} = \sqrt{\left(\frac{B}{N}\right)^2 T(e^{1/\sigma^2} - 1)}, \epsilon_{\text{ours}} = \sqrt{\mu_{\text{vanilla}}^2 + \left(\frac{B}{N}\right)^2 \frac{3T}{K}(e^{1/\sigma^2} - 1)} \quad (9)$$
+
+---
+
+<sup>1</sup>The post-processing of DP ensures that if  $X$  is  $(\epsilon, \delta)$ -DP then  $g(X)$  is also  $(\epsilon, \delta)$ -DP for any function  $g$ .
+
+{6}------------------------------------------------
+
+which can translate into  $(\epsilon, \delta)$ -DP by Equation (6) in Bu et al. (2020). Note in our experiments, we use the improved RDP as the privacy accountant.
+
+Theorem 2 and (9) show that given the same  $(B, T, \sigma)$ , our Algorithm 1 uses more privacy budget because we additionally privatize the loss, whereas the vanilla DP-SGD does not protect the hyper-parameter tuning. To maintain the same privacy budget as vanilla DP-SGD, we use  $\approx 99\%$  budget for the gradient privatization and  $\approx 1\%$  budget for the loss privatization. Therefore, we need  $\approx 1\%$  larger gradient noise  $\sigma_g = \gamma\sigma$  and then select  $\sigma_l$  based on
+
+$$\epsilon_{\text{ours}}(B, T, N, \gamma\sigma, \sigma_l, K) = \epsilon_{\text{vanilla}}(B, T, N, \sigma), \text{ where we can use } \gamma \leq 1.01. \quad (10)$$
+
+### 4.3 END-TO-END NOISE DETERMINATION
+
+We use `autodp` library<sup>2</sup> to compute  $\sigma_l$  based on  $\sigma_g$  in (10). We give more details of our implementation in Appendix C. We visualize both noises in Figure 3 with RDP accounting and Gaussian and mechanisms for loss privatization, dashed line indicates the case when  $\sigma_g$  and  $\sigma_l$  are set equally. More examples for different mechanisms or different accounting are shown in Appendix. Note that we only add a little more gradient noise, hence  $\sigma_g$  introduces negligible accuracy drop to Algorithm 1, as empirically shown in Section 5. Additionally, we demonstrate in Figure 2 that  $\sigma_l$  has negligible interference with the precision of estimating  $\eta_{\text{GEN}}$ .
+
+### 4.4 EFFICIENCY OF ALGORITHM
+
+We illustrate that Algorithm 1 can be almost as efficient as the standard non-DP optimization, in terms of training time and memory cost. We identify three orthogonal components that are absent from non-DP optimization: **(1) Gradient privatization.** DP optimization (including vanilla DP-SGD) always requires per-sample gradient clipping. Due to the high dimension of gradients, this could incur high cost in memory and time if implemented inefficiently. We directly leverage the recent advances like ghost clipping and book-keeping (BK) which have allowed DP optimization to be almost as efficient as non-DP optimization, up to 256 GPUs and 100B parameters. **(2) Loss privatization.** The cost of loss privatization alone is  $O(B)$  and thus negligible, compared to the forward passes and back-propagation which are  $O(Bd)$ . **(3) Learning rate computation.** The cost of computing  $\eta_{\text{GEN-DP}}$  in (6) mainly comes from the additional forward passes<sup>3</sup> for  $L_{t,i}^{(\pm 1)}$ . Given that the back-propagation approximately costs  $2\times$  the training time of forward pass, the optimizer without GeN learning rate (non-DP or DP) roughly uses 3 units of time at each iteration. In contrast, Algorithm 1 uses  $3 + 2/K \approx 3.2$  units if we set  $K = 10$  with  $< 7\%$  overhead. We emphasize that the actual overhead to training time is even lower, because the training also includes non-optimization operations such as data loading and inter-GPU communication. In short, the efficiency gap between Algorithm 1 and non-DP optimization is negligible in practice.
+
+![Figure 3: Gradient and loss noise. A line graph titled 'RDP Composition (Gauss and Gauss)' showing noise scale for gradient and loss on the y-axis (logarithmic scale from 2e+07 to 1e+10) versus update interval K on the x-axis (linear scale from 2 to 14). Four curves are shown: 1) sigma_l with y=1.05 (blue dashed line with circles), which decreases from ~1e+10 to ~1e+8. 2) sigma_l with y=1.01 (orange dashed line with circles), which decreases from ~1e+10 to ~3e+8. 3) sigma_l = sigma_g (grey dashed line), which is a horizontal line at ~1e+7. 4) sigma_g with y=1.01 (yellow dashed line with circles), which is a horizontal line at ~1e+7. The legend indicates that the yellow line represents sigma_g with y=1.01, which is the baseline noise level.](023b142f90e1253702ac88b18380d3ec_img.jpg)
+
+Figure 3: Gradient and loss noise. A line graph titled 'RDP Composition (Gauss and Gauss)' showing noise scale for gradient and loss on the y-axis (logarithmic scale from 2e+07 to 1e+10) versus update interval K on the x-axis (linear scale from 2 to 14). Four curves are shown: 1) sigma\_l with y=1.05 (blue dashed line with circles), which decreases from ~1e+10 to ~1e+8. 2) sigma\_l with y=1.01 (orange dashed line with circles), which decreases from ~1e+10 to ~3e+8. 3) sigma\_l = sigma\_g (grey dashed line), which is a horizontal line at ~1e+7. 4) sigma\_g with y=1.01 (yellow dashed line with circles), which is a horizontal line at ~1e+7. The legend indicates that the yellow line represents sigma\_g with y=1.01, which is the baseline noise level.
+
+Figure 3: Gradient and loss noise.
+
+## 5 EXPERIMENTS
+
+To comprehensively evaluate the effectiveness of the proposed method, we conduct experiments on both computer vision tasks and natural language tasks, across different model architectures (Vit (Yuan et al., 2021), GPT2 (Radford et al., 2019) and LLaMa2-7B (Touvron et al., 2023)) and fine-tuning paradigms (Full, BitFit (Zaken et al., 2022) and LoRA (Hu et al., 2021)). BitFit only tunes the bias terms of a pre-trained model, while LoRA only tunes the injected low-rank matrices, both keeping all other parameters frozen. We use the privacy budget  $\epsilon = \{1, 3, 8\}$  with  $\delta \ll N^{-1.1}$  for training dataset with  $N$  samples<sup>4</sup> and also perform non-DP baseline ( $\epsilon = \infty$ ).
+
+<sup>2</sup><https://github.com/yuxiangw/autodp>
+
+<sup>3</sup>The number of  $\{\eta_i\}$  in (6) is at least two since there are two unknown variables. More  $\eta_i$  may stabilize the algorithm, at cost of more forward passes, longer training time, and using more privacy budget.
+
+<sup>4</sup><https://github.com/lxuechen/private-transformers>
+
+{7}------------------------------------------------
+
+Table 2: Performance comparison of HyFreeDP with other baselines. We use cosine learning rate decay for NonDP-GS w/ LS in the BitFit fine-tuning. Detailed results are provided in the Appendix.
+
+| Fully Fine-Tune  |                | ViT-Small |          |       |       |         | ViT-Base |          |       |       |         |
+|------------------|----------------|-----------|----------|-------|-------|---------|----------|----------|-------|-------|---------|
+| Privacy budget   | Method         | CIFAR10   | CIFAR100 | SVHN  | GTSRB | Food101 | CIFAR10  | CIFAR100 | SVHN  | GTSRB | Food101 |
+| $\epsilon = 1$   | NonDP-GS       | 96.49     | 79.70    | 89.86 | 67.00 | 70.38   | 95.20    | 67.18    | 89.10 | 81.11 | 58.80   |
+|                  | D-adaptation   | 21.17     | 09.15    | 1.86  | 1.11  | 19.15   | 0.83     | 18.56    | 4.72  | 1.48  | 1.48    |
+|                  | Prodigy        | 27.54     | 0.80     | 15.27 | 1.86  | 1.19    | 19.15    | 0.83     | 18.56 | 4.72  | 1.43    |
+|                  | DP-hyper       | 92.98     | 74.63    | 34.58 | 28.23 | 19.06   | 94.86    | 6.59     | 79.94 | 77.85 | 57.02   |
+|                  | HyFreeDP       | 96.36     | 78.17    | 91.15 | 74.68 | 67.98   | 95.76    | 67.17    | 88.24 | 79.00 | 58.16   |
+| $\epsilon = 3$   | NonDP-GS       | 96.86     | 83.69    | 91.00 | 83.08 | 74.58   | 95.84    | 79.03    | 91.74 | 91.03 | 66.87   |
+|                  | D-adaptation   | 40.99     | 0.94     | 17.22 | 2.65  | 1.37    | 30.29    | 1.07     | 19.77 | 5.68  | 1.68    |
+|                  | Prodigy        | 77.18     | 0.95     | 18.11 | 2.68  | 1.47    | 30.29    | 1.07     | 19.77 | 5.68  | 1.65    |
+|                  | DP-hyper       | 95.10     | 78.82    | 48.82 | 42.02 | 36.21   | 95.75    | 19.92    | 87.82 | 90.25 | 66.09   |
+|                  | HyFreeDP       | 96.89     | 81.62    | 92.21 | 89.92 | 75.24   | 97.29    | 80.34    | 91.71 | 91.16 | 73.46   |
+| NonDP            | NonDP-GS       | 98.23     | 89.41    | 95.58 | 98.66 | 85.19   | 98.88    | 92.40    | 96.87 | 98.41 | 89.61   |
+|                  | D-adaptation   | 54.29     | 86.35    | 97.09 | 97.38 | 74.75   | 63.37    | 88.41    | 97.02 | 98.65 | 78.35   |
+|                  | Prodigy        | 97.85     | 89.21    | 96.87 | 98.31 | 87.49   | 98.59    | 91.01    | 97.14 | 98.77 | 89.47   |
+|                  | HyFreeDP       | 98.32     | 90.84    | 96.86 | 99.00 | 86.38   | 98.83    | 92.58    | 96.75 | 97.37 | 88.73   |
+| BitFit Fine-Tune |                | ViT-Small |          |       |       |         | ViT-Base |          |       |       |         |
+| Privacy budget   | Method         | CIFAR10   | CIFAR100 | SVHN  | GTSRB | Food101 | CIFAR10  | CIFAR100 | SVHN  | GTSRB | Food101 |
+| $\epsilon = 1$   | NonDP-GS       | 96.74     | 84.22    | 90.18 | 86.20 | 77.39   | 97.34    | 84.97    | 90.91 | 87.15 | 76.61   |
+|                  | NonDP-GS w/ LS | 97.40     | 81.36    | 67.95 | 48.64 | 74.55   | 97.90    | 81.87    | 79.86 | 55.66 | 73.76   |
+|                  | Prodigy        | 96.36     | 82.23    | 90.30 | 86.85 | 76.36   | 97.13    | 84.87    | 91.08 | 81.54 | 78.72   |
+|                  | HyFreeDP       | 96.30     | 83.84    | 90.49 | 88.08 | 79.27   | 97.42    | 84.01    | 92.21 | 81.83 | 79.25   |
+| $\epsilon = 3$   | NonDP-GS       | 97.13     | 85.95    | 91.42 | 91.50 | 80.37   | 97.73    | 87.00    | 92.20 | 91.46 | 80.06   |
+|                  | NonDP-GS w/ LS | 97.61     | 84.87    | 78.91 | 60.13 | 78.08   | 98.05    | 85.48    | 86.22 | 69.03 | 78.71   |
+|                  | Prodigy        | 95.72     | 83.63    | 91.90 | 91.64 | 79.20   | 96.96    | 86.26    | 92.13 | 90.27 | 81.98   |
+|                  | HyFreeDP       | 97.09     | 86.07    | 91.64 | 92.38 | 84.55   | 97.65    | 87.04    | 92.37 | 90.67 | 84.53   |
+| NonDP            | NonDP-GS       | 97.91     | 89.39    | 91.88 | 95.20 | 86.29   | 98.56    | 91.59    | 94.42 | 92.87 | 88.37   |
+|                  | NonDP-GS w/ LS | 97.89     | 89.40    | 91.98 | 90.31 | 86.27   | 98.56    | 91.61    | 94.43 | 92.90 | 88.39   |
+|                  | Prodigy        | 97.88     | 87.85    | 95.19 | 95.34 | 86.56   | 98.41    | 90.70    | 96.02 | 95.02 | 88.60   |
+|                  | HyFreeDP       | 97.97     | 89.86    | 93.60 | 95.19 | 87.24   | 98.43    | 91.69    | 95.48 | 95.23 | 89.06   |
+
+As the first hyperparameter-free method for differentially private optimization, we compare HyFreeDP with the following baselines: 1) **NonDP-GS**: We manually perform grid search over a predefined range of learning rates, selecting the best without accumulating privacy budget across runs. This serves as the performance upper bound since tuning is non-DP. We also experiment with a manually tuned learning rate scheduler, noted as NonDP-GS w/ LS. We search the learning rate over the range  $[5e-5, 1e-4, 5e-4, 1e-3, 5e-3]$  based on previous works (Bu et al., 2023a) to cover suitable  $\eta$  for various DP levels. 2) **DP-hyper** (Liu & Talwar, 2019; Wang et al., 2023; Papernot & Steinke, 2021): We simulate with a narrow range around the optimal  $\eta$ , spending 85% of the privacy budget for DP training with the searched  $\eta$ . 3) **D-Adaptation** (Defazio & Mishchenko, 2023) and **Prodigy** (Mishchenko & Defazio, 2024): Both are state-of-the-art learning rate tuning algorithms in non-DP optimization. We adopt their optimizers with recommended hyperparameters, alongside DP-specific clipping and perturbation. 4) **HyFreeDP**: We initialize  $R_i = 1$  and  $\eta = 1e-4$  by default, allowing automatic updates in training.
+
+### 5.1 IMAGE CLASSIFICATION TASKS
+
+**Experimental setups.** As the main result shown in Table 2, we compare HyFreeDP to other baselines by experiments on CIFAR10, CIFAR100, SVHN, GTSRB and Food101 for models of ViT-Small and ViT-Base.
+
+**Evaluation results.** HyFreeDP almost outperforms all end-to-end DP baselines. While non-DP automatic learning rate schedulers (D-adaptation and Prodigy) sometimes match grid-searched constants, they perform poorly in DP training, especially with tighter privacy budgets and when the number of trainable parameters is large, confirming our analysis in Section 2.3. Although DP-hyper surpasses these schedulers—likely due to our intentionally narrow search range—finding suitable ranges remains challenging as training dynamics vary by dataset and privacy budget. Even in this optimistic setting, DP-hyper underperforms due to increased gradient noise. In contrast, HyFreeDP achieves consistent performance across various  $\epsilon$  values and datasets without manual learning rate tuning, thanks to our gradient noise control and efficient learning rate estimation with minimal loss value perturbation.
+
+HyFreeDP achieves comparable or superior performance to NonDP-GS baseline without manual learning rate tuning in BitFit experiments. NonDP-GS w/ LS and Prodigy show improved stability compared to full fine-tuning, suggesting the sensitivity to training paradigms and trainable model size. In Figure 4, we illustrate training dynamics ( $R_i$ ,  $\eta$ , loss, test accuracy) across meth-
+
+{8}------------------------------------------------
+
+![Figure 4: Automatic learning of clipping threshold, learning rate, training loss, and testing accuracy for SVHN (top) and GTSRB (bottom). The figure consists of six subplots arranged in a 2x3 grid. The top row shows SVHN results and the bottom row shows GTSRB results. Each row contains plots for Loss Clip Threshold, Learning Rate, Train Loss, and Test Accuracy over 50 steps. The legend for all plots includes: NonDP-GS, NonDP-GS (w/ L51), Ours (K=1), Ours (K=5), and Ours (K=10). In all cases, the 'Ours' methods (HyFreeDP) achieve higher test accuracy and lower training loss compared to the NonDP-GS baseline, with the 'Ours (K=1)' method generally performing best.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 4: Automatic learning of clipping threshold, learning rate, training loss, and testing accuracy for SVHN (top) and GTSRB (bottom). The figure consists of six subplots arranged in a 2x3 grid. The top row shows SVHN results and the bottom row shows GTSRB results. Each row contains plots for Loss Clip Threshold, Learning Rate, Train Loss, and Test Accuracy over 50 steps. The legend for all plots includes: NonDP-GS, NonDP-GS (w/ L51), Ours (K=1), Ours (K=5), and Ours (K=10). In all cases, the 'Ours' methods (HyFreeDP) achieve higher test accuracy and lower training loss compared to the NonDP-GS baseline, with the 'Ours (K=1)' method generally performing best.
+
+Figure 4: Automatic learning of clipping threshold, learning rate, training loss, and testing accuracy for SVHN (top) and GTSRB (bottom). HyFreeDP schedules  $R_l$  and  $\eta$  during training, approaching the manually tuned baseline with end-to-end guarantees, and is robust to varying intervals  $K$ .
+
+ods. HyFreeDP automatically finds optimal learning rate schedules, with clipping thresholds peaking early and decreasing gradually, enabling more accurate rate estimation as training progresses. While updating with  $K = 1$  yields optimal convergence, HyFreeDP remains robust to less frequent updates (e.g.,  $K = 5$ ), balancing tuning cost and convergence speed.
+
+### 5.2 NATURAL LANGUAGE GENERATION TASKS
+
+**Experimental setups.** We conduct experiments on E2E dataset with a table to text task on GPT-2 model, and also evaluate the language generation task with PubMed dataset by fine-tuning LLaMa2-7B model with LoRA (Hu et al., 2021) for demonstrating the scalability and generality of HyFreeDP. We follow the experimental setups based on previous works (Bu et al., 2024a) and use the dataset provided by Yu et al. (2022; 2023) which contains over 75,000 abstracts of medical papers that were published after the cut-off date of LLaMa2. Based on the non-DP experience, LoRA typically requires a magnitude greater learning rate than full fine-tuning<sup>5</sup>, thus we scale up our default initial learning by  $\times 10$ . We tune the best learning rate for LLaMa2-7B with LoRA fine-tuning on 4,000 samples of PubMed for NonDP-GS when training on the full dataset.
+
+Table 3: Performance comparison on GPT-2 for E2E dataset with different privacy budgets. Best end-to-end DP results are bolded, and results surpassing the manually tuned baseline are underlined.
+
+| Full Fine-Tune |              | $\epsilon = 3$ |              |              |              |              | $\epsilon = 8$ |              |              |              |              |
+|----------------|--------------|----------------|--------------|--------------|--------------|--------------|----------------|--------------|--------------|--------------|--------------|
+| Model          | Method       | BLEU           | CIDEr        | METEOR       | NIST         | ROUGE_L      | BLEU           | CIDEr        | METEOR       | NIST         | ROUGE_L      |
+| GPT-2          | NonDP-GS     | 0.583          | 1.566        | 0.367        | 5.656        | 0.653        | 0.612          | 1.764        | 0.385        | 6.772        | 0.664        |
+|                | D-Adaptation | 0.000          | 0.000        | 0.003        | 0.082        | 0.016        | 0.000          | 0.000        | 0.000        | 0.000        | 0.000        |
+|                | Prodigy      | 0.082          | 0.000        | 0.157        | 1.307        | 0.239        | 0.012          | 0.000        | 0.003        | 0.000        | 0.003        |
+|                | HyFreeDP     | <b>0.585</b>   | <b>1.564</b> | <b>0.365</b> | <b>5.736</b> | <b>0.636</b> | <b>0.612</b>   | <b>1.768</b> | <b>0.378</b> | <b>6.702</b> | <b>0.655</b> |
+
+**Evaluation results.** As shown in Table 3, we observe that even when the privacy budget is not small (e.g.,  $\epsilon = 8$ ), non-DP automatic learning rate scheduler does not perform well. We find that HyFreeDP consistently obtains a comparable performance as the NonDP-GS baseline without extra tuning. In Figure 5, we observe that HyFreeDP automatically discovers a learning rate schedule that achieves better generalization performance compared to the early-stopped NonDP-GS. The automatically determined learning rate ( $\eta$ ) reveals a consistent pattern across model scales: an
+
+![Figure 5: Training dynamics of Llama2-7B on PubMed. The figure contains two subplots. The left plot shows Learning Rate over 400 steps, where the 'Ours' method (blue line) starts at a high learning rate and gradually decreases, while the 'NonDP-GS' method (orange line) remains relatively flat. The right plot shows Train Loss over 400 steps, where the 'Ours' method (blue line) shows a more consistent decrease in loss compared to the 'NonDP-GS' method (orange line), which plateaus earlier.](9d8d3d909d7fdccb631c519df2b86e61_img.jpg)
+
+Figure 5: Training dynamics of Llama2-7B on PubMed. The figure contains two subplots. The left plot shows Learning Rate over 400 steps, where the 'Ours' method (blue line) starts at a high learning rate and gradually decreases, while the 'NonDP-GS' method (orange line) remains relatively flat. The right plot shows Train Loss over 400 steps, where the 'Ours' method (blue line) shows a more consistent decrease in loss compared to the 'NonDP-GS' method (orange line), which plateaus earlier.
+
+Figure 5: Training dynamics of Llama2-7B on PubMed
+
+<sup>5</sup>See this reference as an example. Note that LoRA may use a similar learning rate if it is set proportional to rank (Biderman et al., 2024).
+
+{9}------------------------------------------------
+
+“increase-then-decrease” trajectory that holds true from smaller models (Vit-Small) to larger models (LLaMa2-7B).
+
+Table 4: Comparison of model performance in minutes with and without HyFreeDP across various datasets. The coefficients represent the ratio relative to the w/o auto configuration.
+
+| Models               | Dataset     | K=1                        | K=5                        | K=10                       | w/o HyFreeDP               |
+|----------------------|-------------|----------------------------|----------------------------|----------------------------|----------------------------|
+| Llama2-7B (LoRA-FT)  | PubMed (4k) | 409.750 ( $\times 2.040$ ) | 244.333 ( $\times 1.217$ ) | 222.583 ( $\times 1.108$ ) | 200.833 ( $\times 1.000$ ) |
+| GPT2                 | E2E         | 163.333 ( $\times 1.888$ ) | 97.167 ( $\times 1.123$ )  | 94.983 ( $\times 1.098$ )  | 86.500 ( $\times 1.000$ )  |
+| Vit-base             | CIFAR100    | 152.617 ( $\times 1.370$ ) | 118.483 ( $\times 1.063$ ) | 113.317 ( $\times 1.017$ ) | 111.433 ( $\times 1.000$ ) |
+| Vit-base (BitFit-FT) | CIFAR100    | 113.450 ( $\times 1.654$ ) | 74.733 ( $\times 1.089$ )  | 73.817 ( $\times 1.076$ )  | 68.600 ( $\times 1.000$ )  |
+| Vit-small            | SVHN        | 102.000 ( $\times 1.255$ ) | 84.500 ( $\times 1.040$ )  | 82.800 ( $\times 1.019$ )  | 81.250 ( $\times 1.000$ )  |
+
+### 5.3 EFFICIENCY COMPARISON
+
+Based on Section 4.4, we compare the training efficiency of HyFreeDP with a single run of DP training using the same non-DP and data-independent hyperparameters, as shown in Table 4. For LLaMa2-7B, we sample 4,000 records from PubMed and train for 3 epochs on a single A100 (80GB). For smaller datasets and models, we use previous setups on Titan RTX (24GB). HyFreeDP introduces less than  $\times 2$  overhead compared to a single run of DP training, even with frequent updates at  $K = 1$ . Smaller models or those using LoRA or BitFit have lower additional costs, especially with  $K = 1$ , and the gap narrows as  $K$  increases, approaching a cost factor of  $1\times$ .
+
+## 6 DISCUSSION AND CONCLUSION
+
+In conclusion, we tackle the challenge of hyperparameter tuning in differential privacy (DP) by introducing a hyperparameter-free DP training method that privately and automatically updates the learning rate. Combined with automatic clipping, our approach reduces tuning efforts and ensures end-to-end DP during training. This bridges the gap between hyperparameter-free methods in non-DP settings and DP optimization, opening promising avenues for future research.
+
+## ACKNOWLEDGMENTS
+
+R.L. is partially supported by National Institutes of Health grant (R01LM013712), National Science Foundation grants (CNS-2124104 and CNS-2125530). We sincerely thank Prof. Li Xiong for her invaluable support and guidance throughout this work. We also appreciate the insightful comments and constructive feedback from the reviewers and the area chair.
+
+## REFERENCES
+
+- Martin Abadi, Andy Chu, Ian Goodfellow, H Brendan McMahan, Ilya Mironov, Kunal Talwar, and Li Zhang. Deep learning with differential privacy. In *Proceedings of the 2016 ACM SIGSAC conference on computer and communications security*, pp. 308–318, 2016.
+- Galen Andrew, Om Thakkar, Brendan McMahan, and Swaroop Ramaswamy. Differentially private learning with adaptive clipping. *Advances in Neural Information Processing Systems*, 34:17455–17466, 2021.
+- Dan Biderman, Jacob Portes, Jose Javier Gonzalez Ortiz, Mansheej Paul, Philip Greengard, Connor Jennings, Daniel King, Sam Havens, Vitaliy Chiley, Jonathan Frankle, et al. Lora learns less and forgets less. *Transactions on Machine Learning Research*, 2024.
+- Sourav Biswas, Yihe Dong, Gautam Kamath, and JU COINPRESS. Practical private mean and covariance estimation. *Preprint. Available at*, 2020.
+- Zhiqi Bu and Shiyun Xu. Gradient descent with generalized newton’s method. In *The Thirteenth International Conference on Learning Representations*, 2024.
+- Zhiqi Bu, Jinshuo Dong, Qi Long, and Weijie J Su. Deep learning with gaussian differential privacy. *Harvard data science review*, 2020(23), 2020.
+
+ Rest of paper (reference and Appendix) is removed.

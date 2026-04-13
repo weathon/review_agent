@@ -1,0 +1,493 @@
+
+
+{0}------------------------------------------------
+
+# FAIRDD: FAIR DATASET DISTILLATION VIA SYNCHRONIZED MATCHING
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Condensing large datasets into smaller synthetic counterparts has demonstrated its promise for image classification. However, previous research has overlooked a crucial concern in image recognition: ensuring that models trained on condensed datasets are unbiased towards protected attributes (PA), such as gender and race. Our investigation reveals that dataset distillation (DD) fails to alleviate the unfairness towards minority groups within original datasets. Moreover, this bias typically worsens in the condensed datasets due to their smaller size. To bridge the research gap, we propose a novel fair dataset distillation (FDD) framework, namely FairDD, which can be seamlessly applied to diverse matching-based DD approaches, requiring no modifications to their original architectures. The key innovation of FairDD lies in **synchronously** matching synthetic datasets to PA-wise groups of original datasets, rather than indiscriminate alignment to the whole distributions in vanilla DDs, dominated by majority groups. This **synchronized** matching allows synthetic datasets to avoid collapsing into majority groups and bootstrap their balanced generation to all PA groups. Consequently, FairDD could effectively regularize vanilla DDs to favor biased generation toward minority groups while maintaining the accuracy of target attributes. Theoretical analyses and extensive experimental evaluations demonstrate that FairDD significantly improves fairness compared to vanilla DD methods, without sacrificing classification accuracy. Its consistent superiority across diverse DDs, spanning Distribution and Gradient Matching, establishes it as a versatile FDD approach.
+
+## 1 INTRODUCTION
+
+Deep learning has witnessed remarkable success in computer vision, particularly with recent breakthroughs in vision models (Oquab et al., 2023; Kirillov et al., 2023; Radford et al., 2021; Li et al., 2022; Zhou et al., 2023). Their vision backbones, such as ResNet (He et al., 2015) and ViT (Dosovitskiy et al., 2020), are data-hungry models that require extensive amounts of data for optimization. Dataset Distillation (DD) (Wang et al., 2018; Zhao & Bilen, 2021; 2023; Cazenavette et al., 2022; Wang et al., 2022; Lee et al., 2022b; Cui et al., 2022; Loo et al., 2023; Guo et al., 2023; He & Zhou, 2024; Zhao et al., 2024) provides a promising solution to alleviate this data requirement by condensing the original large dataset into more informative and smaller counterparts (Mehrabi et al., 2021; Chung et al., 2023). Despite its appeal, existing DD researches focus on ensuring that models trained on condensed datasets perform comparable accuracy to those trained on the original dataset in terms of target attributes (TA) (Cui et al., 2024; Lu et al., 2024; Vahidian et al., 2024). However, they have overlooked enabling the fairness of trained models with respect to protected attributes (PA).
+
+Unfairness typically arises from imbalanced sample distributions among PA in the empirical training datasets. When the original datasets suffer from the PA imbalance, the corresponding datasets condensed by vanilla DDs inherit and amplify this bias in Fig. 1(a). Since vanilla DDs tend to cover TA distribution for image classification, and as a result, it naturally leads to more synthetic samples located in majority groups compared to minority groups w.r.t. PA, as shown in Fig. 1(b). In this case, these condensed datasets retain the imbalance between protected attributes, thereby rendering the model trained on them unfair. Moreover, the reduced size of the condensed datasets typically amplifies the bias present in the original datasets, especially when there is a significant gap in size between the original and condensed datasets, such as image per class (IPC) 1000 vs. 10. Therefore, it is worthwhile to broaden the scope of DD to encompass both TA accuracy and PA fairness. Recent
+
+{1}------------------------------------------------
+
+054  
+055  
+056  
+057  
+058  
+059  
+060  
+061  
+062  
+063  
+064  
+065  
+066  
+067  
+068  
+069  
+070  
+071  
+072  
+073  
+074  
+075  
+076  
+077  
+078  
+079  
+080  
+081  
+082  
+083  
+084  
+085  
+086  
+087  
+088  
+089  
+090  
+091  
+092  
+093  
+094  
+095  
+096  
+097  
+098  
+099  
+100  
+101  
+102  
+103  
+104  
+105  
+106  
+107
+
+![Figure 1: Condensed datasets fail to mitigate and amplify the bias present in original datasets. (a) Bar chart showing Fairness at IPC=50 for Colored-MNIST, CIFAR10-5, and CelebA datasets across different distillation methods. (b) Grid of condensed C-MNIST (FG) samples using DM. (c) Grid of condensed datasets using FairDD+DM.](e05232e09f8d0a603eef5812f7313d4b_img.jpg)
+
+(a) Fairness comparison on original and distilled datasets using different DDs.
+
+| Dataset       | Whole dataset | DM  | DM+FairDD | IDC | IDC+FairDD |
+|---------------|---------------|-----|-----------|-----|------------|
+| Colored-MNIST | ~100          | ~10 | ~10       | ~10 | ~10        |
+| CIFAR10-5     | ~45           | ~15 | ~15       | ~15 | ~15        |
+| CelebA        | ~25           | ~10 | ~10       | ~10 | ~10        |
+
+(b) Condensed datasets on C-MNIST (FG) using DM.
+
+(c) Condensed datasets using FairDD+DM.
+
+Figure 1: Condensed datasets fail to mitigate and amplify the bias present in original datasets. (a) Bar chart showing Fairness at IPC=50 for Colored-MNIST, CIFAR10-5, and CelebA datasets across different distillation methods. (b) Grid of condensed C-MNIST (FG) samples using DM. (c) Grid of condensed datasets using FairDD+DM.
+
+Figure 1: Condensed datasets fail to mitigate and amplify the bias present in original datasets. (a) depicts the bias against minority groups of the model trained on condensed datasets, showing that vanilla DDs exacerbate the unfairness (IPC=50). However, incorporating FairDD into vanilla DDs could effectively mitigate these biases. (b) and (c) distill C-MNIST (FG) (IPC=10), where each class contains 10 colors and individual colors dominate different categories as PA. (b) shows that each class (row) is biased to the majority color in the condensed dataset via vanilla DDs. (c) preserves PA of minority groups and mitigates color imbalance in the condensed dataset via DM+FairDD.
+
+works attempt to address the class/TA-level long-tailed phenomenon Zhao et al. (2024) and spurious correlations (Cui et al., 2024) to improve the classification performance (Vahidian et al., 2024; Wang et al., 2024), but the exploration on Fair Dataset Distillation (FDD) is still blank.
+
+To the best of our knowledge, we are the first to propose a novel FDD framework, FairDD, which enables PA fairness in the model trained on the condensed datasets, regardless of PA imbalance in the original data. However, simultaneously maintaining TA accuracy and improving PA fairness is challenging, as the algorithm must properly balance emphasis across all groups, i.e., majority groups primarily for TA distributional coverage and minority groups primarily for PA bias mitigation.
+
+FairDD tackles this challenge by (1) partitioning the empirical training distribution into different groups according to PA and decomposing the single alignment target of vanilla DDs into PA-wise sub-targets. (2) synchronously matching synthetic samples to these PA groups, which equally bootstraps synthetic datasets to each PA group without involving the specific group size. In doing so, we reformulated the optimization objectives of vanilla DDs into fairDD-style versions. This allows FairDD to mitigate the effect of the imbalanced PA to the generation of  $\mathcal{S}$  and to prevent  $\mathcal{S}$  from collapsing into the majority group. Meanwhile, FairDD could also achieve the comprehensive coverage of the entire distribution for TA accuracy as shown in Fig. 1(c). In addition, FairDD requires no modification to existing DDs or additional modules. We provide a theoretical guarantee that FairDD could improve PA fairness while maintaining TA accuracy.
+
+Extensive experiments demonstrate that our proposed framework effectively mitigates the unfairness in datasets of highly diverse bias. FairDD substantially improves model fairness on condensed datasets compared to various vanilla DDs. FairDD demonstrates its versatility across diverse DD paradigms, including Distribution Matching (DM) and Gradient Matching (GM). Note that we do not apply FairDD to Trajectory Matching (TM) as doing so would require extra model trajectories trained on minority groups, in which the corresponding models would suffer from overfitting due to their limited samples. Our paper makes the following main contributions:
+
+- To the best of our knowledge, our research is the first attempt to incorporate fairness issues into DD explicitly. We reveal that vanilla DDs fail to mitigate the bias in original datasets and may exacerbate it due to the limited synthetic samples, leading to severe PA bias in the model trained by the resulting condensed dataset.
+- We introduce a novel FDD framework called FairDD, which proposes **synchronized** matching to align synthetic samples to all PA groups partitioned from the original data distribution. This allows the generated synthetic samples to be agnostic to PA imbalance of original datasets and maintain the overall distributional coverage of TA.
+- FairDD requires no alterations to the original architectures of vanilla DDs, in which it only needs to revise the vanilla optimization objectives as a **group-level** formulation. We also provide theoretical analyses to guarantee the fairness and accuracy of synthetic samples.
+
+{2}------------------------------------------------
+
+- Extensive empirical experiments demonstrate that FairDD mitigates the unfairness of vanilla DDs by a large margin. The consistent superiority across diverse DDs, including DM and GM, illustrates that FairDD is a generalist for FDD.
+
+## 2 PRELIMINARIES
+
+**Dataset Distillation.** Given a vast dataset  $\mathcal{T} = \{(x_i, y_i)\}_{i=1}^N$ , the goal of DD is to condense the original dataset  $\mathcal{T}$  into a smaller dataset  $\mathcal{S} = \{(x_i, y_i)\}_{i=1}^M$  via distillation algorithm  $\text{Alg}$  with a neural network, parameterized by  $\theta$ . Randomly initialized classification network  $g_\psi$  should maintain the same empirical risk whether it is trained on  $\mathcal{S}$  or  $\mathcal{T}$ .
+
+$$\mathcal{S}^* = \arg \min_{\mathcal{S}} \text{Alg}(\mathcal{S}, \mathcal{T}, \theta), \quad (1)$$
+
+$$\mathbb{E}_{\psi \sim \Psi}[\ell(g_\psi; \mathcal{S})] \simeq \mathbb{E}_{\psi \sim \Psi}[\ell(g_\psi; \mathcal{T})], \quad (2)$$
+
+where  $\Psi$  and  $\ell(\cdot)$  represent the parameter space and loss function, respectively. The pioneering work (Wang et al., 2018) formulates  $\text{Alg}$  as a bi-level optimization problem. However, such an optimization process is time-consuming and unsTable. Recent works circumvent it and propose surrogate matching objectives to achieve comparable and even better performance. This research line is collectively referred to as the DMF, and our paper primarily studies one-stage GM (Zhao et al., 2020; Zhao & Bilen, 2021) and DM (Zhao & Bilen, 2023; Wang et al., 2022; Zhao & Bilen, 2022). We leave two-stage trajectory-matching (TM) for future exploration.
+
+**Visual Fairness** Visual fairness is an important field to mitigate discrimination against minority groups. Group fairness requires no statistical disparity to different groups in terms of PA, such as race and gender. This means that an ideal fair model should make independent predictions between TA and PA. One of the common fairness criteria is equalized odds (EO), which computes the prediction accuracy of PA conditioned on TA, to evaluate the level of conditional independence between PA and TA. We use two types of difference of equalized odds  $\text{DEO}_M$  and  $\text{DEO}_A$  from the worst and averaged levels. Formally, given the PA set  $\mathcal{A} = \{a_1, a_2, \dots, a_p\}$ ,  $\text{DEO}_M$  and  $\text{DEO}_A$  (Jung et al., 2021) can be formulated mathematically as follows:
+
+$$\text{DEO}_M = \max_{y \in \mathcal{Y}} \max_{a_i, a_j \in \mathcal{A} \& a_i \neq a_j} |P(\hat{Y} = y | Y = y, A = a_i) - P(\hat{Y} = y | Y = y, A = a_j)|,$$
+
+$$\text{DEO}_A = \text{mean}_{y \in \mathcal{Y}} \max_{a_i, a_j \in \mathcal{A} \& a_i \neq a_j} |P(\hat{Y} = y | Y = y, A = a_i) - P(\hat{Y} = y | Y = y, A = a_j)|.$$
+
+## 3 A CLOSE LOOK AT DATASET DISTILLATION FROM FAIRNESS
+
+**A unified perspective for Data Match Framework.** The essence of the DMF lies in choosing the target signs of original samples that effectively represent their characteristics for image recognition, and then aligning these signals as a proxy task to optimize the condensed dataset. The target signal  $\phi(x; \theta)$  is typically the key information from feature extraction or optimization process using a randomly initialized network parameterized by  $\theta$ . For example, GM aligns the gradient information produced by  $\mathcal{T}$  with that of the condensed  $\mathcal{S}$ . Instead, DM matches the embedding distributions of  $\mathcal{T}$  and  $\mathcal{S}$ . As for these approaches in DMF, we can unify the optimization objective as  $\mathcal{L}(\mathcal{S}; \theta, \mathcal{T})$ :
+
+$$\mathcal{L}(\mathcal{S}; \theta, \mathcal{T}) := \sum_{y \in \mathcal{Y}} \mathcal{D}(\mathbb{E}[\phi_{\mathcal{T} \sim \mathcal{T}_y}(x; \theta)], \mathbb{E}[\phi_{\mathcal{S} \sim \mathcal{S}_y}(x; \theta)]), \quad (3)$$
+
+where  $\mathbb{E}[\phi_{\mathcal{T} \sim \mathcal{T}_y}(x; \theta)] \in \mathbb{R}^C$  and  $\mathbb{E}[\phi_{\mathcal{S} \sim \mathcal{S}_y}(x; \theta)] \in \mathbb{R}^C$  are represented expectation vectors of the target signs on  $\mathcal{T}$  and  $\mathcal{S}$ , respectively.  $\mathcal{D}(\cdot, \cdot)$  is a distance function. In DMF, MSE is adopted in DM and DREAM, and MAE is used in IDC. Also, cosine distance is involved in DC.
+
+**Why does vanilla DD fail to mitigate PA imbalance?** Given the PA set  $\mathcal{A}$  in  $\mathcal{T}$ , let us define the class-level sample ratio  $\mathcal{R}_y = \{r_y^{a_1}, r_y^{a_2}, \dots, r_y^{a_p}\}$ , where  $r_y^{a_i} = |\mathcal{T}_y^{a_i}|/|\mathcal{T}_y|$ , and  $|\cdot|$  represents the cardinal number of a set. Current DD paradigms focus on preserving TA representativeness for image recognition. Here, we decompose the whole expectation into the expectation of PA-wise groups, i.e.,  $\mathbb{E}[\phi_{\mathcal{T} \sim \mathcal{T}_y}(x; \theta)] = \sum_{a_i \in \mathcal{A}} r_y^{a_i} \mathbb{E}[\phi_{\mathcal{T} \sim \mathcal{T}_y^{a_i}}(x; \theta)]$ , and thus Eq. 3 can be rewritten as follows:
+
+$$\mathcal{L}(\mathcal{S}; \theta, \mathcal{T}) := \sum_{y \in \mathcal{Y}} \mathcal{D}(\sum_{a_i \in \mathcal{A}} r_y^{a_i} \mathbb{E}[\phi_{\mathcal{T} \sim \mathcal{T}_y^{a_i}}(x; \theta)], \mathbb{E}[\phi_{\mathcal{S} \sim \mathcal{S}_y}(x; \theta)]). \quad (4)$$
+
+From Eq. 4, the optimization objective of class  $y$  is weighted by the sample ratio  $r_y^{a_i}$  from different groups. When  $\mathcal{T}$  suffers from PA imbalance, e.g.,  $r_y^{a_i} \gg \sum_{i \neq j} r_y^{a_j}$ , the majority group indexed by  $i$  contributes more to the alignment compared to minority groups, as present in Fig. 2(a). In
+
+{3}------------------------------------------------
+
+other words,  $\mathcal{S}$  tends to produce more samples belonging to group  $i$  for the total loss minimization. Therefore, the objective of vanilla DDs suffers from the PA imbalance within  $\mathcal{T}$ .
+
+Next, we further study how the resulting  $\mathcal{S}$  is affected by sample ratio  $r_y^{a_i}$  of different groups. To this end, we assume that the optimization process could reach the optimal solution for each class, and as a result, the final resulting  $\mathcal{S}$  satisfies the condition that the derivative of the objective function with respect to  $\mathbb{E}[\phi_{x \sim \mathcal{S}_y}(x; \theta)]$  equals 0. Formally, we have the following mathematical equation:
+
+$$\frac{\partial \mathcal{D}(\mathcal{S}_y; \theta, \mathcal{T}_y)}{\partial \mathbb{E}[\phi_{x \sim \mathcal{S}_y}(x; \theta)]} = 0 \implies \frac{\partial \mathcal{D}(\sum_{a_i \in \mathcal{A}} r_y^{a_i} \mathbb{E}[\phi_{x \sim \mathcal{T}_y^{a_i}}(x; \theta)], \mathbb{E}[\phi_{x \sim \mathcal{S}_y}(x; \theta)])}{\partial \mathbb{E}[\phi_{x \sim \mathcal{S}_y}(x; \theta)]} = 0 \quad (5)$$
+
+Now, let's delve into the specific distance metrics used in vanilla DDs, where the most commonly used metrics are MAE, MSE, and cosine distance. We respectively analyze that the optimal point of  $\mathbb{E}[\phi_{x \sim \mathcal{S}_y}(x; \theta)]$  could reach under each of these metrics.
+
+$$\frac{\partial \mathcal{L}(\mathcal{S}_y; \theta, \mathcal{T}_y)}{\partial \mathbb{E}[\phi_{x \sim \mathcal{S}_y}(x; \theta)]} = 0 \implies \mathbb{E}[\phi_{x \sim \mathcal{S}_y}(x; \theta)] = \begin{cases} \sum_{a_i \in \mathcal{A}} r_y^{a_i} \mathbb{E}[\phi_{x \sim \mathcal{T}_y^{a_i}}(x; \theta)], & \text{For MAE} \\ \sum_{a_i \in \mathcal{A}} r_y^{a_i} \mathbb{E}[\phi_{x \sim \mathcal{T}_y^{a_i}}(x; \theta)], & \text{For MSE} \\ \lambda \sum_{a_i \in \mathcal{A}} r_y^{a_i} \mathbb{E}[\phi_{x \sim \mathcal{T}_y^{a_i}}(x; \theta)], & \text{For cosine distance} \end{cases} \quad (6)$$
+
+Where  $\lambda$  is a scalar, equaling  $\frac{\|\mathbb{E}[\phi_{x \sim \mathcal{S}_y}(x; \theta)]\|_2}{\|\sum_{a_i \in \mathcal{A}} r_y^{a_i} \mathbb{E}[\phi_{x \sim \mathcal{T}_y^{a_i}}(x; \theta)]\|_2}$ . Eq. 6 presents that the expectation of
+
+synthetic samples  $\mathbb{E}[\phi_{x \sim \mathcal{S}_y}(x; \theta)]$  ultimately converges to an average on expectations of all PA groups, weighted by their respective sample ratios  $r_y^{a_i}$ . This indicates that vanilla DDs naturally favor majority groups, causing  $\mathcal{S}$  to shift towards them and inherit their biases.
+
+Therefore, when original datasets suffer from PA imbalance, e.g.,  $r_y^{a_j} \gg \sum_{i \neq j} r_y^{a_i}$ , the unfairness of the synthetic dataset stems from two different aspects: 1) **The majority group renders synthetic samples to locate its region from Eq. 6.** 2) According to Eq. 4, the large sample quantities of the majority group contribute more to the total loss. As a result, **minority groups experience higher loss during testing, which limits the model to represent them accurately.** These factors prompt us to reduce the impact of PA imbalance on the generation of  $\mathcal{S}$ .
+
+## 4 FAIRDD
+
+### 4.1 OVERVIEW
+
+In this paper, we propose a novel FDD framework that achieves both PA fairness and TA accuracy for the model trained on its generation  $\mathcal{S}$ , regardless of whether the original datasets exhibit PA fairness. As illustrated in Fig. 2(b), FairDD first partitions the dataset into different groups w.r.t. PA and then introduces an effective **synchronized** matching to equally align  $\mathcal{S}$  with each group within  $\mathcal{T}$ . Compared to vanilla DDs, which simply pull the synthetic dataset toward the whole dataset center that is biased toward the majority group in the synthetic dataset, FairDD proposes a **group-level synchronized alignment**, in which each group attracts the synthetic data toward itself, thus forcing it to move farther from other groups. This "pull-and-push" process prevents the generation from collapsing into majority groups (fairness) and ensures class-level distributional coverage (accuracy).
+
+### 4.2 METHODS
+
+As mentioned in Sec. 3, vanilla DDs fail to mitigate PA imbalance and even amplify the discrimination. The relation behind the failure is that the majority group dominates the generation direction of  $\mathcal{S}$  and leads to the resulting  $\mathcal{S}$  inheriting the PA imbalance, i.e., preference to fitting to the majority group. To avoid the synthetic samples collapsing into the majority group, we decompose the single target (dominated by the majority group) into PA-wise sub-targets, and simultaneously align  $\mathcal{S}$  with these sub-targets, without incorporating the specific sample ratio of each group into the optimization objective. In this way, we obtain the unified objective function of FairDD:
+
+$$\mathcal{L}_{\text{FairDD}}(\mathcal{S}; \theta, \mathcal{T}) := \sum_{y \in \mathcal{Y}} \sum_{a_i \in \mathcal{A}} \mathcal{D}(\mathbb{E}[\phi_{x \sim \mathcal{T}_y^{a_i}}(x; \theta)], \mathbb{E}[\phi_{x \sim \mathcal{S}_y}(x; \theta)]). \quad (7)$$
+
+The reformulation forms **synchronized** matching, where different sub-targets attempt to pull  $\mathcal{S}$  into their corresponding PA regions. Each PA group holds equal importance in generating  $\mathcal{S}$ , ultimately converging to a balanced (fair) status. Subsequently, we present a theoretical analysis illustrating how FairDD effectively mitigates PA imbalance and guarantees coverage across the entire TA distribution.
+
+{4}------------------------------------------------
+
+![Figure 2: Comparison between (a) vanilla DDs and (b) FairDD. The diagram shows two pipelines for generating a biased dataset S from an original dataset T. In (a) vanilla DDs, the pipeline starts with Target attributes: digital number and Protect attributes: color imbalance. It uses a Randomly initialize S, then a Backbone of diverse DDs of DMF, and finally a Biased dataset S. The process involves Class-wise signal distribution in T, Pair Vanilla match, Distributional undercoverage & Bias inheritance (amplification), and Class-wise signal space s(z; theta) in S. In (b) FairDD, the pipeline starts with Target attributes: digital number and Protect attributes: color imbalance. It uses a Randomly initialize S, then a Backbone of diverse DDs of DMF, and finally an Unbiased dataset S. The process involves Class-wise signal distribution in T, Inclusive-aspect synchronized match, Class-wise signal distribution in S, and Distributional coverage & Bias mitigation, leading to Class-wise signal space s(z; theta) in S.](690fce4fb5c9cbb8beb560cb2a3fcbeb_img.jpg)
+
+Figure 2: Comparison between (a) vanilla DDs and (b) FairDD. The diagram shows two pipelines for generating a biased dataset S from an original dataset T. In (a) vanilla DDs, the pipeline starts with Target attributes: digital number and Protect attributes: color imbalance. It uses a Randomly initialize S, then a Backbone of diverse DDs of DMF, and finally a Biased dataset S. The process involves Class-wise signal distribution in T, Pair Vanilla match, Distributional undercoverage & Bias inheritance (amplification), and Class-wise signal space s(z; theta) in S. In (b) FairDD, the pipeline starts with Target attributes: digital number and Protect attributes: color imbalance. It uses a Randomly initialize S, then a Backbone of diverse DDs of DMF, and finally an Unbiased dataset S. The process involves Class-wise signal distribution in T, Inclusive-aspect synchronized match, Class-wise signal distribution in S, and Distributional coverage & Bias mitigation, leading to Class-wise signal space s(z; theta) in S.
+
+Figure 2: Comparison between (a) vanilla DDs and (b) FairDD. Taking C-MNIST (FG) for example (IPC = 10), vanilla DDs directly align  $\mathcal{S}$  (random initialization) with the whole distribution regardless of majority or minority groups. This causes  $\mathcal{S}$  to suffer from distributional coverage and inherit (even amplify) the bias of  $\mathcal{T}$ . Instead, FairDD first groups target signals of  $\mathcal{T}$  and then proposes to align  $\mathcal{S}$  (random initialization) with respective group centers. With this **synchronized** matching,  $\mathcal{S}$  is simultaneously pulled by all group centers in a batch. This prevents the condensed dataset  $\mathcal{S}$  from being biased towards the majority group, allowing it to better cover the distribution of the original dataset  $\mathcal{T}$ . We can observe that each class in the resulting  $\mathcal{S}$  incorporates multiple colors from the minority color groups and mitigates the bias of  $\mathcal{T}$ , originally dominated by majority colors.
+
+**Theorem 4.1.** For any PA set  $\mathcal{A}$ , network parameters  $\theta$ , and target signs  $\phi(\cdot)$ ,  $\mathcal{L}_{FairDD}(\mathcal{S}; \theta, \mathcal{T})$  could mitigate the influence of PA imbalance of original datasets on generating synthetic samples. Especially when  $\mathcal{D}(\cdot)$  is MAE or MSE, **synchronized** matching ensures that the signal expectation of  $\mathcal{S}$  is situated at the center of the expectation across all PA groups within  $\mathcal{T}$
+
+*Proof.* We assume that  $\mathbb{E}[\phi_{x \sim \mathcal{S}_y}(x; \theta)]$  could reach the optimal solution for each class. Consequently, we have  $\partial \mathcal{L}_{FairDD}(\mathcal{S}_y; \theta, \mathcal{T}_y) / \partial \mathbb{E}[\phi_{x \sim \mathcal{S}_y}(x; \theta)] = 0$ , and derive the respective optimal solution:
+
+$$\frac{\partial \mathcal{L}_{FairDD}(\mathcal{S}_y; \theta, \mathcal{T}_y)}{\partial \mathbb{E}[\phi_{x \sim \mathcal{S}_y}(x; \theta)]} = 0 \implies \mathbb{E}[\phi_{x \sim \mathcal{S}_y}(x; \theta)] = \begin{cases} \frac{1}{|\mathcal{A}|} \sum_{a_i \in \mathcal{A}} \mathbb{E}[\phi_{x \sim \mathcal{T}_y^a}(x; \theta)], & \text{For MAE} \\ \frac{1}{|\mathcal{A}|} \sum_{a_i \in \mathcal{A}} \mathbb{E}[\phi_{x \sim \mathcal{T}_y^a}(x; \theta)], & \text{For MSE} \\ \frac{\lambda}{|\mathcal{A}|} \sum_{a_i \in \mathcal{A}} \mathbb{E}[\phi_{x \sim \mathcal{T}_y^a}(x; \theta)], & \text{For cosine distance} \end{cases} \quad (8)$$
+
+According to Eq. 8, the resulting  $\mathbb{E}[\phi_{x \sim \mathcal{S}_y}(x; \theta)]$  are independent on the sample ratio  $\mathcal{R}_y$ , indicating the corresponding  $\mathcal{S}$  unaffected by  $\mathcal{R}_y$ . As a result, the condensed  $\mathcal{S}$  will not be dominated by majority groups that happened in vanilla DDs. All PA centers contribute equally to the generation of  $\mathcal{S}$ , which succeeds in mitigating the PA imbalance of  $\mathcal{T}$ . Especially when  $\mathcal{D}(\cdot)$  is MAE or MSE, the expectation of target signs of  $\mathcal{S}$  is equal to the arithmetic mean of centers of all PA groups. This shows that  $\mathcal{S}$  generated by FairDD is not biased towards any groups.
+
+Although we mitigate the bias inheritance in vanilla DDs by **synchronously** aligning  $\mathcal{S}$  to fine-grained PA-wise groups, it is also crucial to investigate whether  $\mathcal{L}_{FairDD}(\mathcal{S}; \theta, \mathcal{T})$  (**synchronized** matching) ensures that the resulting  $\mathcal{S}$  achieves comprehensive distributional coverage for  $\mathcal{T}$ . As mentioned above,  $\mathcal{L}(\mathcal{S}; \theta, \mathcal{T})$  matches  $\mathcal{S}$  and  $\mathcal{T}$  in a global view to fully cover  $\mathcal{T}$ 's distribution. Below, we provide a theoretical guarantee that  $\mathcal{L}_{FairDD}(\mathcal{S}; \theta, \mathcal{T})$  could provide the same or even more comprehensive coverage compared to  $\mathcal{L}(\mathcal{S}; \theta, \mathcal{T})$  when  $\mathcal{D}(\cdot, \cdot)$  is a convex distance function, which is commonly used in diverse DDs<sup>1</sup>.
+
+<sup>1</sup>Empirical experiments show FairDD also can cover the TA distributions when  $\mathcal{D}(\cdot, \cdot)$  is not convex.
+
+{5}------------------------------------------------
+
+**Theorem 4.2.** For any PA set  $\mathcal{A}$  and target signs  $\phi_\theta(\cdot)$ ,  $\mathcal{L}_{FairDD}(\mathcal{S}; \theta, \mathcal{T})$  is the upper bound of vanilla unified objective  $\mathcal{L}(\mathcal{S}; \theta, \mathcal{T})$ , i.e.,  $\mathcal{L}_{FairDD}(\mathcal{S}; \theta, \mathcal{T}) \geq \mathcal{L}(\mathcal{S}; \theta, \mathcal{T})$ , when  $\mathcal{D}(\cdot, \cdot)$  is convex. Optimizing  $\mathcal{L}_{FairDD}(\mathcal{S}; \theta, \mathcal{T})$  can guarantee the comprehensive distribution coverage for  $\mathcal{T}$ . Proof.
+
+$$\begin{aligned}
+\mathcal{L}(\mathcal{S}; \theta, \mathcal{T}) &= \sum_{y \in \mathcal{Y}} \mathcal{D}(\mathbb{E}[\phi_{x \sim \mathcal{T}_y}(x; \theta)], \mathbb{E}[\phi_{x \sim \mathcal{S}_y}(x; \theta)]) \\
+&= \sum_{y \in \mathcal{Y}} \mathcal{D}(\sum_{a_i \in \mathcal{A}} r_y^{a_i} \mathbb{E}[\phi_{x \sim \mathcal{T}_y^{a_i}}(x; \theta)], \mathbb{E}[\phi_{x \sim \mathcal{S}_y}(x; \theta)]) \\
+&\leq \sum_{y \in \mathcal{Y}} \sum_{a_i \in \mathcal{A}} r_y^{a_i} \mathcal{D}(\mathbb{E}[\phi_{x \sim \mathcal{T}_y^{a_i}}(x; \theta)], \mathbb{E}[\phi_{x \sim \mathcal{S}_y}(x; \theta)]) \\
+\end{aligned} \tag{9}$$
+
+$$\begin{aligned}
+&\leq \sum_{y \in \mathcal{Y}} \sum_{a_i \in \mathcal{A}} \mathcal{D}(\mathbb{E}[\phi_{x \sim \mathcal{T}_y^{a_i}}(x; \theta)], \mathbb{E}[\phi_{x \sim \mathcal{S}_y}(x; \theta)]) \\
+&= \mathcal{L}_{FairDD}(\mathcal{S}; \theta, \mathcal{T})
+\end{aligned} \tag{10}$$
+
+Eq. 9 is obtained according to the Jensen Inequality, and Eq. 10 is given since group ratios are smaller than one.  $\mathcal{L}_{FairDD}(\mathcal{S}; \theta, \mathcal{T})$  serves as the upper bound of  $\mathcal{L}(\mathcal{S}; \theta, \mathcal{T})$ , meaning that minimizing  $\mathcal{L}_{FairDD}(\mathcal{S}; \theta, \mathcal{T})$  ensures the minimization of  $\mathcal{L}(\mathcal{S}; \theta, \mathcal{T})$ . Hence, optimizing  $\mathcal{S}$  with FairDD can guarantee the distributional coverage, at least as comprehensive as  $\mathcal{L}(\mathcal{S}; \theta, \mathcal{T})$  tailored for accuracy.
+
+## 5 EXPERIMENT
+
+### 5.1 EXPERIMENT SETUP
+
+**Datasets** Comprehensive experiments have been conducted on publicly available datasets of diverse biases, including foreground bias (FG), background bias (BG), BG & FG bias, and real-world bias. C-MNIST (FG) is a variant of MNIST (LeCun et al., 2010) used to evaluate model fairness, where the handwriting numbers in each class are painted with ten different colors. To correlate the TA (digital number) and PA (color) within the training dataset, each training class is predominantly associated with one color according to the same biased ratio (BR), while the remaining samples are evenly painted with the other nine colors. BR is the ratio of the majority group samples to the total samples across all groups. For the test dataset, we evenly paint the numbers for each class with ten colors to test the model bias trained on  $\mathcal{S}$ . C-MNIST (BG) adopts the same operation on the background and keeps the foreground unchanged. Colored-FMNIST (FG) is the modified version of Fashion-MNIST, originally aiming to classify object semantics. Like C-MNIST (FG), we color the objects for the training and test datasets. Colored-FMNIST (BG) paints the background similarly to C-MNIST (BG). CIFAR10-S (BG & FG) introduces a PA by applying grayscale or not to CIFAR10 samples. Following Wang et al. (2020), we grayscale a portion of the training images, correlating TA and PA among different classes. For fairness evaluation, we duplicate the test images, apply grayscale to the copies, and add them to the test dataset. We also test FairDD on the real-world facial dataset CelebA, a widely used fairness dataset. We follow the common practice of treating attractive attribute as TA and gender as PA (evaluations on other attributes refer to Appendix B).
+
+**Baselines & Evaluation metrics** FairDD is a general fairness framework applicable to diverse DDs in DMF. We apply FairDD to diverse DMF approaches including DM method DM (Zhao & Bilen, 2023) and GM methods DC (Zhao et al., 2020), IDC (DC version) (Kim et al., 2022), and DREAM (DC version) (Liu et al., 2023). To provide an overall evaluation for model bias toward PA, we use  $\text{DEO}_M(\downarrow) \in [0, 100]$  and  $\text{DEO}_A(\downarrow) \in [0, 100]$  to measure the worst and average fairness levels. Also, we report accuracy( $\uparrow$ ) to assess the model’s prediction of TA. We also provide a comparison with MIT in Appendix L. Sometimes, we will abuse DM+FairDD and FairDD for clarification.
+
+**Implementation details** We default to BR of 0.9 for all synthetic original datasets to induce significant PA skew. In Table 24, we conduct the ablation study on BR. All baselines are reproduced using official implementations. FairDD doesn’t introduce extra hyperparameters or learnable parameters. Experiments are conducted on PyTorch 2.0.0 with a single NVIDIA RTX 3090 24GB GPU.
+
+### 5.2 MAIN RESULTS
+
+We use distilled datasets  $\mathcal{S}$  from different DDs to train and evaluate ConvNet with the same parameters, and then report the corresponding fairness and accuracy. *Random* refers to sampling defined IPC from the original dataset to create smaller datasets. Besides, *Whole* means we train the model using the entire training dataset without distillation or sampling.
+
+{6}------------------------------------------------
+
+Table 1: Fairness comparison on diverse IPCs. The best results are highlighted in **bold**.
+
+| Methods<br>Dataset | IPC | Random                            | DM                                | DM+FairDD                         | DC                                | DC+FairDD                         | IPC                               | IPC+FairDD                        | DREAM                             | #FairDD                           | Whole       |
+|--------------------|-----|-----------------------------------|-----------------------------------|-----------------------------------|-----------------------------------|-----------------------------------|-----------------------------------|-----------------------------------|-----------------------------------|-----------------------------------|-------------|
+|                    |     | DEO <sub>M</sub> DEO <sub>A</sub> | DEO <sub>M</sub> DEO <sub>A</sub> | DEO <sub>M</sub> DEO <sub>A</sub> | DEO <sub>M</sub> DEO <sub>A</sub> | DEO <sub>M</sub> DEO <sub>A</sub> | DEO <sub>M</sub> DEO <sub>A</sub> | DEO <sub>M</sub> DEO <sub>A</sub> | DEO <sub>M</sub> DEO <sub>A</sub> | DEO <sub>M</sub> DEO <sub>A</sub> |             |
+| C-MNIST<br>(FG)    | 10  | 100.0 98.72                       | 100.0 99.96                       | <b>17.04 7.95</b>                 | 99.85 65.61                       | <b>26.75 11.96</b>                | 100.0 91.45                       | <b>12.24 6.64</b>                 | 98.99 78.71                       | <b>11.88 7.21</b>                 | 10.10 5.89  |
+|                    | 50  | 100.0 99.58                       | 100.0 91.68                       | <b>10.05 5.46</b>                 | 46.99 20.55                       | <b>18.42 8.86</b>                 | 65.34 34.91                       | <b>9.18 5.94</b>                  | 52.03 26.63                       | <b>16.37 7.50</b>                 |             |
+|                    | 100 | 100.0 88.64                       | 99.36 66.38                       | <b>8.17 4.86</b>                  | 45.27 17.45                       | <b>22.32 9.49</b>                 | 64.36 35.82                       | <b>11.88 6.21</b>                 | 69.30 33.30                       | <b>11.88 6.88</b>                 |             |
+| C-MNIST<br>(BG)    | 10  | 100.0 99.11                       | 100.0 99.97                       | <b>13.42 6.77</b>                 | 100.0 73.60                       | <b>20.66 9.94</b>                 | 100.0 88.30                       | <b>18.61 7.50</b>                 | 100.0 52.06                       | <b>15.31 6.83</b>                 | 9.70 5.78   |
+|                    | 50  | 100.0 94.61                       | 100.0 96.46                       | <b>24.92 13.74</b>                | 99.33 67.02                       | <b>46.67 21.48</b>                | 100.0 81.93                       | <b>40.00 17.37</b>                | 99.67 83.27                       | <b>47.67 22.33</b>                |             |
+|                    | 100 | 100.0 89.07                       | 100.0 52.23                       | <b>6.60 4.31</b>                  | 62.63 20.87                       | <b>32.58 10.40</b>                | 63.24 27.79                       | <b>12.24 6.32</b>                 | 44.88 22.86                       | <b>16.33 7.80</b>                 |             |
+| C-FMNIST<br>(FG)   | 10  | 100.0 99.18                       | 100.0 99.05                       | <b>26.87 16.38</b>                | 99.40 78.96                       | <b>46.80 24.01</b>                | 100.0 97.27                       | <b>32.33 16.80</b>                | 100.0 95.17                       | <b>42.00 20.87</b>                | 79.20 41.72 |
+|                    | 50  | 100.0 99.77                       | 100.0 96.46                       | <b>24.92 13.74</b>                | 99.33 67.02                       | <b>46.67 21.48</b>                | 100.0 81.93                       | <b>40.00 17.37</b>                | 99.67 83.27                       | <b>47.67 22.33</b>                |             |
+|                    | 100 | 100.0 94.85                       | 100.0 85.11                       | <b>23.83 12.75</b>                | 99.58 66.45                       | <b>56.68 23.07</b>                | 100.0 79.10                       | <b>48.33 17.43</b>                | 97.33 70.10                       | <b>74.00 40.40</b>                |             |
+| C-FMNIST<br>(BG)   | 10  | 100.0 99.40                       | 100.0 99.68                       | <b>33.05 19.72</b>                | 100.0 92.91                       | <b>61.75 34.88</b>                | 100.0 99.40                       | <b>42.00 23.80</b>                | 100.0 94.70                       | <b>36.00 23.50</b>                | 91.40 51.68 |
+|                    | 50  | 100.0 98.52                       | 100.0 99.71                       | <b>24.50 14.47</b>                | 100.0 75.41                       | <b>44.60 25.25</b>                | 100.0 95.60                       | <b>78.00 34.50</b>                | 100.0 88.40                       | <b>34.00 23.70</b>                |             |
+|                    | 100 | 100.0 96.05                       | 100.0 93.88                       | <b>21.95 13.33</b>                | 99.70 73.38                       | <b>52.75 23.48</b>                | 100.0 90.70                       | <b>77.00 36.00</b>                | 100.0 93.90                       | <b>40.00 23.20</b>                |             |
+| CIFAR10-S          | 10  | 25.04 8.29                        | 59.20 39.31                       | <b>31.75 8.73</b>                 | 42.23 27.35                       | <b>22.08 8.22</b>                 | 80.70 48.38                       | <b>19.90 5.28</b>                 | 51.80 31.43                       | <b>20.80 7.77</b>                 | 49.72 33.17 |
+|                    | 50  | 57.11 28.89                       | 75.13 55.70                       | <b>18.28 7.35</b>                 | 71.46 45.81                       | <b>34.39 11.21</b>                | 92.00 60.56                       | <b>29.00 9.10</b>                 | 56.80 36.19                       | <b>14.70 6.53</b>                 |             |
+|                    | 100 | 66.49 43.16                       | 73.81 53.10                       | <b>14.77 5.89</b>                 | 68.69 48.64                       | <b>32.70 11.26</b>                | 92.70 60.93                       | <b>62.80 25.18</b>                | 82.30 48.12                       | <b>12.10 6.06</b>                 |             |
+| CelebA             | 10  | 10.48 9.20                        | 30.01 28.85                       | <b>9.37 5.71</b>                  | 15.48 14.16                       | <b>6.64 5.29</b>                  | 34.85 34.48                       | <b>8.36 4.49</b>                  | 40.75 36.70                       | <b>9.20 5.36</b>                  | 24.85 24.16 |
+|                    | 50  | 22.83 14.33                       | 44.30 44.08                       | <b>9.87 5.71</b>                  | 21.72 19.74                       | <b>12.92 7.15</b>                 | 43.57 38.53                       | <b>23.62 14.00</b>                | 43.57 38.53                       | <b>23.62 14.00</b>                |             |
+|                    | 100 | 18.67 18.01                       | 42.63 41.12                       | <b>10.93 6.65</b>                 | 29.00 27.52                       | <b>18.16 17.04</b>                | 50.99 42.66                       | <b>28.27 17.63</b>                | 52.51 39.34                       | <b>24.87 15.36</b>                |             |
+
+![Figure 3: Visualization comparison on S at IPC = 10 for diverse datasets. The figure shows a 2x5 grid of image samples. The first row displays foreground digital colors (0-9) for five datasets: (a) C-MNIST (FG), (b) C-MNIST (BG), (c) C-FMNIST (FG), (d) C-FMNIST (BG), and (e) CIFAR10-S. The second row displays background object colors (0-9) for the same five datasets. Each sample is labeled with its corresponding dataset and FairDD configuration (e.g., DM, FairDD+DM).](c1c7af7ea36be0323047962df57d75b0_img.jpg)
+
+Figure 3: Visualization comparison on S at IPC = 10 for diverse datasets. The figure shows a 2x5 grid of image samples. The first row displays foreground digital colors (0-9) for five datasets: (a) C-MNIST (FG), (b) C-MNIST (BG), (c) C-FMNIST (FG), (d) C-FMNIST (BG), and (e) CIFAR10-S. The second row displays background object colors (0-9) for the same five datasets. Each sample is labeled with its corresponding dataset and FairDD configuration (e.g., DM, FairDD+DM).
+
+(a) C-MNIST (FG). (b) C-MNIST (BG). (c) C-FMNIST (FG). (d) C-FMNIST (BG). (e) CIFAR10-S.
+
+Figure 3: Visualization comparison on  $\mathcal{S}$  at IPC = 10 for diverse datasets. FairDD successfully mitigates the bias from original datasets in (a) (foreground digital color), (b) background color, (c) foreground object color, (d) background color, and (e) foreground and background grayscale.
+
+**FairDD significantly improves the fairness of vanilla DD approaches** We provide comprehensive fairness comparisons across various DD paradigms, including DM and DC. As illustrated in Table 21, vanilla DDs fail to mitigate the bias present in the original datasets and even exacerbate unfairness towards biased groups. In C-MNIST (FG), the distilled datasets from DM suffer from severe unfairness at IPC=10 compared to *Whole*, with DEO<sub>M</sub> and DEO<sub>A</sub> reaching 100.0 and 99.96 vs. 10.10 and 5.89. In some cases, *Random* presents better fairness than vanilla DDs, particularly when dealing with complex objects like CelebA. This suggests that while vanilla DDs effectively condense information into smaller samples, their inductive bias, which favors the majority group, worsens the fairness to the minority group. However, when FairDD is applied to vanilla DDs, there is a significant improvement in fairness performance, with DEO<sub>M</sub> dropping substantially from 100.0 to 17.04, and DEO<sub>A</sub> decreasing from 99.96 to 7.95 in C-MNIST (FG). This indicates that FairDD’s **synchronized** matching ensures the equal treatment of each group, effectively mitigating the bias that vanilla DDs exacerbate. FairDD further reduces the bias originally present in the original datasets. For example, DC + FairDD outperforms *Whole* in C-FMNIST (FG) and CIFAR10-S, as well as in the real-world dataset CelebA, achieving the overall improvement on DEO<sub>M</sub> and DEO<sub>A</sub> metrics. Similar performance gains are also observed in other baselines. These results underscore the effectiveness and versatility of FairDD. We provide the visualization comparison of resulting  $\mathcal{S}$  in Fig. 3.
+
+**FairDD maintains the comparable and even higher accuracy than vanilla DD approaches** A fairness framework must maintain TA accuracy in addition to improving fairness across PA groups. We report the TA accuracy of FairDD in comparison to other baselines in Table 22. Compared to
+
+{7}------------------------------------------------
+
+Table 2: Accuracy comparison on diverse IPCs.
+
+| Methods       | IPC | Random Acc | DM Acc | +FairDD Acc  | DC Acc       | +FairDD Acc  | IDC Acc | +FairDD Acc  | DREAME Acc | +FairDD Acc  | Whole Acc |
+|---------------|-----|------------|--------|--------------|--------------|--------------|---------|--------------|------------|--------------|-----------|
+| C-MNIST (FG)  | 10  | 30.75      | 25.01  | <b>94.61</b> | 71.41        | <b>90.62</b> | 53.06   | <b>95.67</b> | 75.04      | <b>94.94</b> | 97.71     |
+|               | 50  | 47.38      | 56.84  | <b>96.58</b> | 80.54        | <b>92.68</b> | 88.55   | <b>96.77</b> | 91.02      | <b>94.59</b> |           |
+|               | 100 | 67.41      | 78.04  | <b>96.79</b> | 91.64        | <b>93.23</b> | 90.39   | <b>97.11</b> | 88.87      | <b>95.16</b> |           |
+| C-MNIST (BG)  | 10  | 27.95      | 23.40  | <b>94.88</b> | 65.91        | <b>90.84</b> | 62.09   | <b>94.84</b> | 79.81      | <b>93.54</b> | 97.80     |
+|               | 50  | 45.52      | 47.74  | <b>96.86</b> | 88.53        | <b>92.20</b> | 86.14   | <b>95.29</b> | 89.24      | <b>93.20</b> |           |
+|               | 100 | 64.87      | 79.87  | <b>97.33</b> | 90.20        | <b>92.73</b> | 89.66   | <b>95.84</b> | 90.70      | <b>94.06</b> |           |
+| C-FMNIST (FG) | 10  | 32.80      | 33.35  | <b>77.09</b> | <b>60.77</b> | <b>76.01</b> | 44.08   | <b>79.66</b> | 49.72      | <b>77.24</b> | 82.94     |
+|               | 50  | 46.42      | 49.94  | <b>82.11</b> | 69.08        | <b>75.83</b> | 64.45   | <b>80.80</b> | 65.69      | <b>78.79</b> |           |
+|               | 100 | 55.31      | 57.99  | <b>83.25</b> | 68.84        | <b>74.91</b> | 66.37   | <b>80.28</b> | 68.25      | <b>78.51</b> |           |
+| C-FMNIST (BG) | 10  | 24.96      | 22.26  | <b>71.10</b> | <b>47.32</b> | <b>68.51</b> | 37.59   | <b>72.67</b> | 45.30      | <b>71.56</b> | 77.97     |
+|               | 50  | 34.92      | 36.27  | <b>79.07</b> | 60.58        | <b>75.80</b> | 46.20   | <b>73.72</b> | 53.62      | <b>72.80</b> |           |
+|               | 100 | 44.87      | 49.30  | <b>80.63</b> | 62.70        | <b>71.76</b> | 48.61   | <b>73.18</b> | 53.32      | <b>73.00</b> |           |
+| CIFAR10-S     | 10  | 23.60      | 37.88  | <b>45.17</b> | 37.88        | <b>41.82</b> | 48.30   | <b>56.40</b> | 55.09      | <b>58.40</b> | 69.78     |
+|               | 50  | 36.46      | 45.02  | <b>58.84</b> | 41.28        | <b>49.26</b> | 47.26   | <b>57.84</b> | 57.59      | <b>61.85</b> |           |
+|               | 100 | 39.34      | 48.11  | <b>61.33</b> | 42.73        | <b>51.74</b> | 47.27   | <b>56.98</b> | 57.14      | <b>62.70</b> |           |
+| CelebA        | 10  | 54.51      | 61.19  | <b>64.37</b> | 57.19        | <b>57.63</b> | 61.49   | <b>63.54</b> | 64.38      | <b>66.26</b> | 74.09     |
+|               | 50  | 55.99      | 64.61  | <b>68.50</b> | 60.16        | <b>59.89</b> | 60.75   | <b>66.89</b> | 64.62      | <b>68.26</b> |           |
+|               | 100 | 60.62      | 65.13  | <b>68.84</b> | 62.53        | <b>61.89</b> | 64.04   | <b>67.24</b> | 62.58      | <b>64.12</b> |           |
+
+Table 3: Cross-arch. comparison.
+
+| Method        | Cross Arch. | DM               |       | DM+FairDD        |                                 |
+|---------------|-------------|------------------|-------|------------------|---------------------------------|
+|               |             | DEO <sub>D</sub> | Acc.  | DEO <sub>D</sub> | Acc.                            |
+| C-MNIST (FG)  | ConvNet     | 10.00            | 91.68 | 56.84            | <b>10.05</b> 5.46 <b>96.58</b>  |
+|               | AlexNet     | 10.00            | 98.82 | 44.02            | <b>10.35</b> 6.16 <b>96.12</b>  |
+|               | VGG11       | 90.70            | 70.73 | 75.22            | <b>9.55</b> 5.39 <b>96.80</b>   |
+|               | ResNet18    | 10.00            | 96.00 | 52.05            | <b>8.40</b> 4.63 <b>97.13</b>   |
+|               | Mean        | 39.93            | 89.31 | 57.33            | <b>9.59</b> 5.41 <b>96.66</b>   |
+| C-FMNIST (BG) | ConvNet     | 10.00            | 99.71 | 36.27            | <b>24.50</b> 14.47 <b>79.07</b> |
+|               | AlexNet     | 10.00            | 99.75 | 22.72            | <b>20.60</b> 14.11 <b>76.14</b> |
+|               | VGG11       | 10.00            | 97.77 | 43.11            | <b>21.60</b> 14.36 <b>78.57</b> |
+|               | ResNet18    | 10.00            | 99.78 | 23.37            | <b>22.50</b> 14.96 <b>75.21</b> |
+|               | Mean        | 10.00            | 99.25 | 31.37            | <b>22.30</b> 14.73 <b>77.25</b> |
+| CIFAR10-S     | ConvNet     | 75.13            | 55.70 | 45.02            | <b>18.28</b> 7.35 <b>58.84</b>  |
+|               | AlexNet     | 70.30            | 52.57 | 36.09            | <b>15.84</b> 5.12 <b>49.16</b>  |
+|               | VGG11       | 61.48            | 44.05 | 43.25            | <b>11.51</b> 4.16 <b>52.65</b>  |
+|               | ResNet18    | 76.23            | 54.35 | 38.03            | <b>16.44</b> 5.14 <b>50.93</b>  |
+|               | Mean        | 72.04            | 51.67 | 40.59            | <b>15.27</b> 5.44 <b>52.90</b>  |
+| CelebA        | ConvNet     | 40.26            | 38.81 | 64.61            | <b>14.08</b> 9.87 <b>68.50</b>  |
+|               | AlexNet     | 32.51            | 31.62 | 63.10            | <b>9.38</b> 5.75 <b>64.24</b>   |
+|               | VGG11       | 26.03            | 24.63 | 61.57            | <b>9.95</b> 6.32 <b>62.85</b>   |
+|               | ResNet18    | 25.69            | 24.93 | 60.32            | <b>6.72</b> 4.29 <b>61.80</b>   |
+|               | Mean        | 31.10            | 30.25 | 62.40            | <b>9.78</b> 6.58 <b>64.15</b>   |
+
+**Random**, training the model by vanilla DDs yields better performance. This shows that vanilla DDs capture the informative patterns of majority groups, improving their TA accuracy. However, by focusing on dominant patterns in majority groups, they neglect the important patterns in minority groups within the training datasets. Thus, their representation coverage is limited. In contrast, FairDD proposes **synchronized** matching to push the  $S$  to cover each group, and as a result, the generated  $S$  retains key patterns of all groups and achieves comprehensive coverage. For example, DM obtains 25.01 at IPC = 10 on C-MNIST (FG), and its accuracy boosts to 94.61 when applying FairDD. In real-world CelebA, FairDD obtains comparable performance for DC and presents superiority over vanilla DDs. These demonstrate that FairDD could mitigate the bias without compromising accuracy.
+
+**Generalization to diverse architectures** Here, we investigate the cross-model generalization of FairDD, where ConvNet is used to condense datasets, and we evaluate  $S$  on other architectures, including AlexNet, VGG11, and ResNet18. We compare DM and FairDD across four datasets at IPC = 50, evaluating performance against BG, FG, BG & FG, and real-world biases. As shown in Table 23, among these architectures, FairDD achieves DEO<sub>M</sub> of 10.05, 10.35, 9.55, and 8.40 on C-MNIST (FG), DEO<sub>D</sub> of 14.47, 14.11, 14.36, and 14.96 on C-FMNIST (BG), and accuracy of 58.84, 49.16, 52.65, and 50.93 on CIFAR10-S. These steady results suggest that  $S$  generated by FairDD are not restricted to the model used for distillation but generalize well across diverse architectures. Additionally, with the model capacity increasing, the model generally tends to be more fair to all groups. However, the accuracy sometimes decreases, such as when it drops from 58.84 (ConvNet) to 50.93 (ResNet18) in CIFAR10-S and from 68.50 (ConvNet) to 61.80 (ResNet18) in CelebA. We assume that while increased attention from larger models can lead to accuracy gains for minority groups, it may limit the representations for majority groups at certain levels. The accuracy gains for minority groups may be smaller than the accuracy losses for majority groups, particularly in larger models that have limited potential improvement in recognizing minority groups. As a result, overall accuracy may decrease despite fairness improvement.
+
+### 5.3 RESULT ANALYSIS
+
+#### Visualization analysis on representation coverage
+
+We investigate whether the FairDD effectively covers the whole distribution of original datasets. For this purpose, we first feed the original training set into the randomly initialized network used in the distillation, to extract the corresponding features. Subsequently, we use the same network to extract features of distilled dataset  $S$  from DM and FairDD. As shown in Fig. 4(a), the synthetic samples in vanilla DDs almost locate the majority group for optimizing the original alignment objective. In this case, vanilla DDs neglect to condense the key
+
+![Figure 4: Feature coverage comparison on TA between DM and DM+FairDD. (a) The S distribution of generated by DM. (b) The S distribution of generated by FairDD. Both plots show a 2D scatter plot of features. Plot (a) shows a dense cluster of points (majority group) and a few scattered points (minority groups). Plot (b) shows a more diverse distribution of points, with the minority groups being more represented.](2396add2849eccefcbcfbe1c7142a253_img.jpg)
+
+Figure 4: Feature coverage comparison on TA between DM and DM+FairDD. (a) The S distribution of generated by DM. (b) The S distribution of generated by FairDD. Both plots show a 2D scatter plot of features. Plot (a) shows a dense cluster of points (majority group) and a few scattered points (minority groups). Plot (b) shows a more diverse distribution of points, with the minority groups being more represented.
+
+(a) The  $S$  distribution of generated by DM. (b) The  $S$  distribution of generated by FairDD.
+
+Figure 4: Feature coverage comparison on TA between DM and DM+FairDD. The training and synthetic dataset features are extracted by  $\phi_\theta$ . We visualize one class and make the remaining classes transparent for presentation. The  $S$  generated by DM and FairDD are marked by stars in (a) and (b).
+
+{8}------------------------------------------------
+
+432  
+433  
+434  
+435  
+436  
+437  
+438  
+439  
+440  
+441  
+442  
+443  
+444  
+445  
+446  
+447  
+448  
+449  
+450  
+451  
+452  
+453  
+454  
+455  
+456  
+457  
+458  
+459  
+460  
+461  
+462  
+463  
+464  
+465  
+466  
+467  
+468  
+469  
+470  
+471  
+472  
+473  
+474  
+475  
+476  
+477  
+478  
+479  
+480  
+481  
+482  
+483  
+484  
+485
+
+![Figure 5: T-SNE visualization comparison on PA and TA between DM and DM+FairDD. The figure consists of four subplots: (a) PA t-SNE of DM, (b) PA t-SNE of FairDD, (c) TA t-SNE of DM, and (d) TA t-SNE of FairDD. Each subplot shows a scatter plot of points colored by their distinct PA groups. In (a) and (b), DM shows distinctiveness towards different PA, while DM+FairDD eliminates the recognition of PA. In (c) and (d), DM+FairDD optimizes the model to produce compact TA representations, but DM fails to cluster TA from the same class.](91be14371a97fb5ce9eeb29ae18d07c3_img.jpg)
+
+Figure 5: T-SNE visualization comparison on PA and TA between DM and DM+FairDD. The figure consists of four subplots: (a) PA t-SNE of DM, (b) PA t-SNE of FairDD, (c) TA t-SNE of DM, and (d) TA t-SNE of FairDD. Each subplot shows a scatter plot of points colored by their distinct PA groups. In (a) and (b), DM shows distinctiveness towards different PA, while DM+FairDD eliminates the recognition of PA. In (c) and (d), DM+FairDD optimizes the model to produce compact TA representations, but DM fails to cluster TA from the same class.
+
+Figure 5: T-SNE visualization comparison on PA and TA between DM and DM+FairDD. Each color represents distinct PA groups in (a) and (b). (c) and (d) use different colors to represent different PA. In (a), DM shows obvious distinctiveness towards different PA, whereas in (b), DM+FairDD eliminates the recognition of PA. As illustrated in (c) and (d), DM+FairDD optimizes the model to produce compact TA representations, but DM fails to cluster TA from the same class.
+
+Table 4: Ablation on BR at IPC = 50.
+
+| Methods<br>Dataset | BR   | DM               |                  | DM+FairDD |                  |                  |              |
+|--------------------|------|------------------|------------------|-----------|------------------|------------------|--------------|
+|                    |      | DEO <sub>M</sub> | DEO <sub>A</sub> | Acc.      | DEO <sub>M</sub> | DEO <sub>A</sub> | Acc.         |
+| C-MNIST<br>(FG)    | 0.85 | 99.54            | 70.13            | 76.24     | <b>10.13</b>     | <b>5.20</b>      | <b>96.62</b> |
+|                    | 0.90 | 100.0            | 91.68            | 56.84     | <b>10.05</b>     | <b>5.46</b>      | <b>96.58</b> |
+| C-FMNIST<br>(BG)   | 0.85 | 100.0            | 95.54            | 46.14     | <b>23.75</b>     | <b>13.85</b>     | <b>79.61</b> |
+|                    | 0.90 | 100.0            | 99.71            | 36.27     | <b>24.50</b>     | <b>14.47</b>     | <b>79.07</b> |
+| CIFAR10-S          | 0.85 | 100.0            | 99.79            | 26.30     | <b>29.15</b>     | <b>17.72</b>     | <b>78.46</b> |
+|                    | 0.90 | 100.0            | 99.79            | 26.30     | <b>29.15</b>     | <b>17.72</b>     | <b>78.46</b> |
+
+Table 5: Ablation on initialization at IPC = 50.
+
+| Methods<br>Dataset | Init.  | DM               |                  | DM+FairDD |                  |                  |              |
+|--------------------|--------|------------------|------------------|-----------|------------------|------------------|--------------|
+|                    |        | DEO <sub>M</sub> | DEO <sub>A</sub> | Acc.      | DEO <sub>M</sub> | DEO <sub>A</sub> | Acc.         |
+| C-MNIST<br>(FG)    | Random | 100.0            | 91.68            | 56.84     | <b>10.05</b>     | <b>5.46</b>      | <b>96.58</b> |
+|                    | Noise  | 100.0            | 99.64            | 41.45     | <b>9.33</b>      | <b>5.28</b>      | <b>96.06</b> |
+| C-FMNIST<br>(BG)   | Random | 100.0            | 99.06            | 39.97     | <b>9.03</b>      | <b>5.33</b>      | <b>96.27</b> |
+|                    | Noise  | 100.0            | 99.71            | 36.27     | <b>24.50</b>     | <b>14.47</b>     | <b>79.07</b> |
+| CIFAR10-S          | Random | 100.0            | 99.67            | 22.92     | <b>23.00</b>     | <b>14.40</b>     | <b>78.84</b> |
+|                    | Noise  | 100.0            | 99.68            | 26.38     | <b>21.45</b>     | <b>14.34</b>     | <b>79.19</b> |
+
+patterns of minority groups. This leads to the information loss of minority groups in  $\mathcal{S}$ . FairDD achieves overall coverage for both majority and minority groups in Fig. 4(b). This is because FairDD introduces *synchronized* matching to reformulate the distillation objective for aligning the PA-wise groups rather than being dominated by the majority group like vanilla DDs. In doing so, FairDD avoids  $\mathcal{S}$  collapsing into the majority group and retains informative patterns from all groups.
+
+**Visualization analysis on fairness and accuracy** To intuitively present the effectiveness of FairDD, we train  $g_{\theta}$ , using  $\mathcal{S}$  of C-MNIST (FG) distilled by DM and FairDD, and then extract the features from the test dataset. Different colors paint these resulting features according to PA and TA, respectively. As shown in Figs. 5(a) and 5(b), features with the same PA tend to form a cluster, indicating that the model trained on DM is sensitive to PA and thus failing to guarantee fairness among all PA. In contrast with DM, the feature distributions in Fig. 5(b) exhibit nearly complete overlaps across all PA. It shows that the model trained on FairDD is agnostic to PA and does not exhibit bias towards these PA. Besides the PA fairness, we also study the feature distribution from the TA perspective. Fig. 5(c) shows that features belonging to one TA scatter and fail to provide compact representations for one class. The failure of DM can be attributed to model bias toward PA. Combined with Fig. 5(a), it can be observed that PA has a stronger influence on the feature distribution compared to TA. As a result, PA-wise representations are tightly clustered, but representations from the same TA are divided into PA-wise parts. In contrast, FairDD proposes *synchronized* matching effectively mitigates this by treating each PA group equally within one TA. The equal treatment allows different PA groups within the same TA to cluster more easily, leading to more compact representations that benefit capturing class semantics in Fig. 5(d). These results highlight the superiority of FairDD in improving PA fairness and TA accuracy. We also provide visualization analysis on  $\mathcal{S}$  generation in Appendix M. Additional computation overhead is provided in Appendix C.
+
+### 5.4 ABLATION STUDY
+
+**Ablation on biased ratio of original datasets** BR reflects the extent of unfairness in the original datasets and indicates the level of PA skew that the distillation process of  $\mathcal{S}$  will encounter. We investigate the impact of BR values on fairness performance by setting BR to  $\{0.85, 0.90, 0.95\}$  on C-MNIST (FG), C-FMNIST (BG), and CIFAR10-S. The results at IPC = 50 in Table 24 show that DM is sensitive to the BR of original datasets, with its DEO<sub>M</sub> decreasing from 70.13 to 100.0 as BR increases from 0.85 to 0.95. A similar trend is observed in other datasets. Compared to DM, FairDD maintains consistent fairness and accuracy levels across different biases. This is attributed to the *synchronized* matching, which explicitly aligns each PA-wise subtarget, reducing sensitivity to group-specific sample numbers. This shows FairDD’s robustness to PA skew in the original datasets.
+
+{9}------------------------------------------------
+
+486 **Ablation on initialization of synthetic images** The initialization of  $\mathcal{S}$  determines the prior in-  
+487 formation obtained by DDs. We examine the effect of different initialization using three strategies:  
+488 *random*: randomly drawing samples from the original datasets to initialize  $\mathcal{S}$ ; *Noise*: using noise  
+489 obeying the standard normal distribution for initialization; and *hybrid*: selecting each initialization  
+490 sample with equal probability to follow either the *random* or *Noise* strategy. In Table 25, the  $\text{DEO}_M$   
+491 and  $\text{DEO}_A$  metrics of DM have largely fluctuate under these initialization strategies. This suggests  
+492 that DM fails to incorporate sufficient distilled information into  $\mathcal{S}$ , making it overly dependent on  
+493 the prior information of  $\mathcal{S}$ . In contrast, FairDD achieves robust performance in both fairness and  
+494 accuracy, indicating that the informative patterns during distillation dominate the generation of  $\mathcal{S}$ .
+
+## 495 6 RELATED WORK
+
+496 **Dataset distillation** Dataset distillation has been broadly applied to many important fields (Lee  
+497 et al., 2023; He et al., 2024; Feng et al., 2023; Chen et al., 2023). The first work (Wang et al.,  
+498 2018) attempts to formulate dataset distillation as a bi-level optimization problem. However, the two  
+499 folds of the optimization process are time-consuming. Neural tangent kernel (Jacot et al., 2018) are  
+500 utilized to obtain the close form of the inner loop (Nguyen et al., 2021; Loo et al., 2022; Zhou et al.,  
+501 2022). Some works propose surrogate objectives to achieve comparable even better performance,  
+502 including matching-based methods like GM (Zhao et al., 2020; Zhao & Bilen, 2021; Lee et al.,  
+503 2022a), DM (Zhao & Bilen, 2023; Wang et al., 2022; Zhao & Bilen, 2022), TM (Cazenavette  
+504 et al., 2022; Cui et al., 2022), soft label learning (Bohdal et al., 2020; Sucholotsky & Schonlau,  
+505 2021) and factorization (Kim et al., 2022; Deng & Russakovsky, 2022; Liu et al., 2022; Lee et al.,  
+506 2022a). Cui et al. (2024) and Zhao et al. (2024) focus on reducing the bias to improve the classification  
+507 performance (Vahidian et al., 2024; Wang et al., 2024). In summary, current DD approaches only  
+508 pursue classification accuracy that models trained on synthetic datasets, while they neglect fairness  
+509 concerning PA. Therefore, we propose FairDD to improve fairness without sacrificing TA accuracy.
+
+510 **Visual fairness** With the advancement of computer vision, fair predictions without discrimination  
+511 towards minority groups have become a crucial topic (Caton & Haas, 2024). According to the stage  
+512 of bias mitigation, the research field of fairness algorithm (Bellamy et al., 2019) can be classified into  
+513 three branches: Pre-processing (Creager et al., 2019; Louizos et al., 2015; Quadrianto et al., 2019;  
+514 Sattigeri et al., 2019), In-processing (Agarwal et al., 2018; Jiang & Nachum, 2020; Zafar et al., 2017;  
+515 Zhang et al., 2018; Jung et al., 2021; Wang et al., 2020; Jung et al., 2022; Zemel et al., 2013), and  
+516 Post-processing (Alghamdi et al., 2020; Hardt et al., 2016). Our research falls within Pre-processing  
+517 branch. Pre-processing aims to generate a fair version of datasets for downstream tasks. Several  
+518 related works frame this issue as a data-to-data translation problem, utilizing generative models to  
+519 produce fairer datasets concerning protected groups (Sattigeri et al., 2019; Quadrianto et al., 2019).  
+520 However, unlike the traditional fairness approach that primarily focuses on reducing bias in original  
+521 datasets (Subramanian et al. (2021); Tarzanagh et al. (2023); Vogel et al. (2020); Rangwani et al.  
+522 (2022), our work aims to integrate fairness into DD. Our objective is to mitigate the bias of original  
+523 datasets while simultaneously condensing them into smaller and more informative counterparts.
+
+## 524 7 CONCLUSION
+
+525 This paper reveals for the first time that vanilla DDs fail to mitigate the bias of original datasets and  
+526 even exacerbate the bias. To address the problem, we propose a unified fair dataset distillation frame-  
+527 work called FairDD, broadly applicable to various DDs in DMF. FairDD requires no modifications  
+528 to the architectures of vanilla DDs and introduces an easy-to-implement yet effective attribute-wise  
+529 matching. This method mitigates the dominance of the majority group and ensures that synthetic  
+530 datasets equally incorporate representative patterns with all protected attributes from both majority  
+531 groups and minority groups. By doing so, FairDD guarantees the fairness of synthetic datasets while  
+532 maintaining their representativeness for image recognition. We provide extensive theoretical analysis  
+533 and empirical results to demonstrate the superiority of FairDD.
+
+534 **Limitation** Since FairDD relies on PA's prior information to conduct attribute-wise matching, it is  
+535 valuable to explore the scenario where PA is unavailable (Liu et al. (2021)). A potential solution is to  
+536 generate pseudo-labels to guide FairDD through self-supervised learning or unsupervised learning.
+
+537 **Board impact** This paper aims to improve data efficiency and enhance model fairness in modern  
+538 machine learning, fully compliant with legal regulations. Since training a fair model from scripts  
+539 with extensive data is time-consuming, our work in providing a fair condensed dataset for effective  
+540 model training can have significant societal impacts. We hope our research raises attention to achieve  
+541 both fairness and accuracy for dataset distillation in academia and industry.
+
+ Rest of paper (reference and Appendix) is removed.

@@ -1,0 +1,313 @@
+
+
+{0}------------------------------------------------
+
+# REPETITION IMPROVES LANGUAGE MODEL EMBEDDINGS
+
+Jacob Mitchell Springer   Suhas Kotha   Daniel Fried   Graham Neubig  
+Aditi Raghunathan  
+Carnegie Mellon University
+
+## ABSTRACT
+
+Bidirectional models are considered essential for strong text embeddings. Recent approaches to adapt autoregressive language models (LMs) into strong text embedding models have largely had the requirement to modify the LM architecture to be bidirectional. We challenge this premise by introducing “echo embeddings” which converts autoregressive LMs into high quality text embedding models *without* changing the architecture or requiring fine-tuning. By repeating the input and extracting embeddings from the repeated tokens—which have access to all original tokens—echo embeddings improve over classical LM embeddings by over 5% in zero-shot settings. Our zero-shot embeddings nearly match those obtained by bidirectionally-converted LMs that undergo additional masked-language modeling training. Echo embeddings are also compatible with supervised fine-tuning, matching or outperforming bidirectionally-converted LMs in an apples-to-apples comparison, even with an identical compute budget during training and inference. Overall, repetition is a simple and effective strategy to circumvent the need for bidirectional attention in embedding models, paving the way towards a unified architecture for all NLP tasks.
+
+## 1 INTRODUCTION
+
+Neural text embeddings have a crucial role in modern approaches to information retrieval (IR), semantic similarity estimation, classification, and clustering (Ni et al., 2021b; Mueenighoff et al., 2022). For example, document retrieval often leverages low-dimensional embeddings for efficient lookup: when queries and documents are encoded as vectors where semantic relationships are described by similarity in some metric space, a query lookup can be reduced to an approximate nearest-neighbor search in embedding space (Johnson et al., 2019; Vanderkam et al., 2013).
+
+Until recently, the dominant pretrained language model paradigm for neural embeddings have been masked language models with bidirectional attention (Ni et al., 2021a; Raffel et al., 2020; Izacard et al., 2021; Wang et al., 2022; Jiang et al., 2022; Su et al., 2022; Xiao et al., 2023a; Li et al., 2023). Very recent literature has made progress generating high quality embeddings from autoregressive language models. However, these approaches either require large-scale synthetic data (Wang et al., 2023) or for the architecture of the base model to be “cast” to have bidirectional attention (BehnamGhader et al., 2024; Mueenighoff et al., 2024). The requirement to change the architecture prevents the extraction of high quality embeddings without additional training. Further, this requirement is an obstacle to the development of truly unified models that can generate text and produce embeddings simultaneously without changing the architecture between encoding text for embeddings and generating tokens.
+
+![Figure 1: Overview of echo embeddings. The diagram is split into two horizontal panels. The top panel, labeled 'classical embeddings', shows a sequence of six colored boxes (green, green, blue, blue, purple, purple). A curved arrow points from the first green box to the second green box, and another from the second green box to the third blue box, illustrating that autoregressive embeddings do not encode context from later tokens. A dashed arrow with an 'X' points from the text 'Repetition enables embeddings to encode context from later tokens' to this panel. The bottom panel, labeled 'echo embeddings', shows the same sequence of six colored boxes, but with a long curved arrow pointing from the first green box all the way to the last purple box, illustrating that repetition enables embeddings to encode context from later tokens.](768b8ab0d55761b205087c079df1e6e6_img.jpg)
+
+Figure 1: Overview of echo embeddings. The diagram is split into two horizontal panels. The top panel, labeled 'classical embeddings', shows a sequence of six colored boxes (green, green, blue, blue, purple, purple). A curved arrow points from the first green box to the second green box, and another from the second green box to the third blue box, illustrating that autoregressive embeddings do not encode context from later tokens. A dashed arrow with an 'X' points from the text 'Repetition enables embeddings to encode context from later tokens' to this panel. The bottom panel, labeled 'echo embeddings', shows the same sequence of six colored boxes, but with a long curved arrow pointing from the first green box all the way to the last purple box, illustrating that repetition enables embeddings to encode context from later tokens.
+
+Figure 1: Overview of echo embeddings.
+
+{1}------------------------------------------------
+
+Is bidirectional attention crucial for high quality embeddings? Intuitively, autoregressive models fail to capture information across the entire input due to the causal attention mask. We show this concretely in a toy setup in Section 3. In this work, we present a surprisingly effective way to overcome this limitation *without* requiring bidirectional attention or fine-tuning.
+
+Our method, “echo embeddings” is simple: we prompt the model with the input *twice* and extract embeddings from the second occurrence of the input. Even with causal attention, the embeddings of the second occurrence can access the entire input in the first occurrence. The second key ingredient is to prompt the language model to repeat the input (or, for example, to fix, rephrase, or otherwise reconstruct the input). This simple change enables the model to extract bidirectional information. As a result, echo embeddings offer strong performance in the entirely zero-shot setting—without any additional fine-tuning.
+
+In comparison with the classical method of extracting embeddings, the zero-shot performance of echo embeddings is around 5% higher. This nearly matches the performance of the recent more expensive method of casting to bidirectional attention followed with an additional unsupervised MLM training (BehnamGhader et al., 2024). Even in comparison to the strong zero-shot baseline of PromptEOL (Jiang et al., 2023b)—a method in which the model is prompted to summarize the input in a single token—echo embeddings outperform by a significant margin, and is less sensitive to the exact choice of prompt. We emphasize that echo embeddings are simple, cheap, and flexible.
+
+The current best embeddings still require additional fine-tuning with a supervised objective. We find that echo embeddings slightly outperform the classical approach to extracting embeddings, even when the architecture is cast to be bidirectional, and even when echo embeddings is given an identical compute budget. We speculate that these gains are because echo embeddings better preserve and leverage large-scale pretraining because there are no architectural changes. This is in contrast to the bidirectional relaxation approach, which requires the model to adjust its weights to perform well with bidirectional attention.
+
+Echo embeddings come with a lot of benefits: simple to apply, works zero-shot without additional training, allows a unified model to be used for various tasks, and offers (slightly) better performance than casting to bidirectional attention offers. One apparent drawback is that repetition doubles the compute cost. To account for this, in all our experiments, we report “compute matched” results for both inference time and training time (when applicable). While the gains are now slightly smaller, we see that echo embeddings still perform well. In total, we believe that the echo embedding approach, by virtue of its simplicity and effectiveness, is an important step in bridging the gap between traditionally bidirectional embedding models and the current predominant paradigm of autoregressive language models.
+
+## 2 PRELIMINARIES
+
+Our goal is to extract text embeddings that map a sentence  $x$  to a vector  $\phi(x) \in \mathbb{R}^d$  such that the semantic similarity between sentences is captured as similarity between their embeddings. In practice, we use the cosine similarity between embeddings as a similarity metric (detailed in Appendix C).
+
+**Embeddings from language models.** We are primarily interested in the embeddings extracted from *autoregressive* language models, which typically have causal attention masking and are trained on a next-token objective. For brevity, we drop the term “autoregressive” in the following.
+
+As is standard, we extract embeddings from the activations of the final hidden layer. Each input token  $x_j$  at position  $j$  is associated with a *contextualized token embedding* which is the hidden layer representation  $\phi_j(x)$ . We can pool the embeddings across all the tokens in different ways. In this work, we focus on two common strategies which have been considered by prior work (Reimers & Gurevych, 2019; Muennighoff, 2022; Zhang et al., 2023a; Wang et al., 2023).
+
+**Pooling.** A *mean token embedding* over a set of indices  $A$ , refers to the mean contextualized token embeddings at indices in  $A$ :  $\phi_A(x) := \frac{1}{|A|} \sum_{t \in A} \phi_t(x)$ . A *last-token embedding* refers to the contextualized token embedding of the last token in the input sequence, written  $\phi_{-1}(x)$ .
+
+{2}------------------------------------------------
+
+![Figure 2: Performance and similarity analysis of Echo embeddings. Panel A shows accuracy on the full toy dataset. Panel B shows accuracy split by structure (S1, S2). Panel C shows the distribution of cosine similarities for Echo embeddings.](d9d706121d1c4ba9ad2c793746382361_img.jpg)
+
+Figure 2 consists of three panels. Panel A is a bar chart titled 'All toy data (S1+S2)' showing Accuracy (0.0 to 1.0) for 'Class. Mean' (~0.6), 'Class. Last' (~0.55), and 'Echo' (~0.95). Panel B is a bar chart showing Accuracy for 'Class.+Last', 'Class.+Mean', and 'Echo' split by structures S1 and S2. For S1, 'Class.+Last' is ~0.3, 'Class.+Mean' is ~0.95, and 'Echo' is ~1.0. For S2, 'Class.+Last' is ~1.0, 'Class.+Mean' is ~0.5, and 'Echo' is ~1.0. Panel C is a histogram titled 'Structure 2' showing Density (0 to 10) vs. Sim (cosine similarity) (0.70 to 1.00). It compares 'Sim(q, s<sup>-</sup>)' (blue) and 'Sim(q, s<sup>+</sup>)' (red). The red distribution is shifted to the right, indicating higher similarity for positive pairs.
+
+Figure 2: Performance and similarity analysis of Echo embeddings. Panel A shows accuracy on the full toy dataset. Panel B shows accuracy split by structure (S1, S2). Panel C shows the distribution of cosine similarities for Echo embeddings.
+
+Figure 2: **A.** Accuracy of classical embeddings (mean and last-token pooling) and echo embeddings on the entire toy dataset. **B.** Accuracies of classical and echo embeddings split by the different structures of the data (S1 and S2, see text). **C.** We take the echo embeddings of only the first parts  $A$  of query  $q = [A, B]$  and sentences  $s^-, s^+$  and plot the distribution of cosine similarities, showing that echo embeddings encode later information in earlier tokens.
+
+**Classical embeddings.** Traditionally, embeddings are computed by simply passing the sentence to the model and extracting some pooling (e.g. mean or last-token) of the contextualized embeddings corresponding to the input sentence. We will refer to embeddings created in this way as “*classical embeddings*”. Additionally, one might first prompt the language model with an explanation of the task of interest followed by the sentence (Su et al., 2022).
+
+## 3 ECHO EMBEDDINGS FROM LLMs
+
+In this section, we describe our general methodology to extract high quality embeddings from autoregressive language models without bidirectional attention. We start with a simple synthetic dataset that demonstrates why causal attention might inhibit embeddings from capturing information reliably across the entire context (Section 3.1). We then present our proposed method of Echo Embeddings in Section 3.2, and test that our simple and intuitive approach in fact addresses the failure mode identified in the synthetic setup *without* introducing bidirectional attention.
+
+### 3.1 FAILURE OF CLASSICAL EMBEDDINGS WITH CAUSAL ATTENTION
+
+High-quality embeddings should effectively capture various text structures, including where similarity between inputs is strongly affected by either the early parts or the later parts of the inputs. We create a dataset with two “opposite” structures (S1 and S2) and show the classical embeddings with causal attention cannot capture both simultaneously.
+
+The dataset we construct consists of a query  $q$  and a similar sentence  $s^+$  and a dissimilar sentence  $s^-$ . We measure the performance of embedding  $\phi(\cdot)$  by computing the fraction where  $\text{Sim}(q, s^+) > \text{Sim}(q, s^-)$ . Each query and sentence is a concatenation of two strings, allowing us to vary whether early (or later) parts are similar (or discriminatory). Notationally,  $A, A^+, B, B^+$  are semantically similar, while  $A, A^-, B, B^-$  semantically dissimilar. We query GPT-4 to generate these various realistic but synthetic strings (see Section C).
+
+**S1 (Early discriminatory; late redundant).** For a query  $q = [A, B]$ , in this structure, the early tokens provide information to discriminate between  $s^+, s^-$  while the later tokens are all similar. In other words,  $s^+ : [A^+, B^+]$  and  $s^- : [A^-, B]$ , where the discriminatory parts are bolded for convenience.
+
+**S2 (Early redundant; late discriminatory).** Analogously, we consider a second “opposite” structure where the early tokens are all similar but the later tokens can discriminate between  $s^+, s^-$ . For query  $q = [A, B]$ , we have  $s^+ : [A^+, B^+]$  and  $s^- : [A, B^-]$ , where the discriminatory parts are bolded for convenience.
+
+We show the results of zero-shot classical embeddings extracted from Mistral-7B-Instruct-v0.1 in Figure 2 (A) on a dataset that has a mixture of both structures. We see that **neither mean nor last token pooling allows classical embeddings to achieve better-than-random performance.**
+
+{3}------------------------------------------------
+
+To get some insight into the failure, we plot the performance on each substructure separately in Figure 2 (B). **Last-token pooling disproportionately weights the later parts** of the sentence thereby missing discriminatory information in the early tokens in S1. In general, last-token pooling does not work well in a zero-shot manner on real data as well, as we see in the next section.
+
+Mean-token pooling is better suited to the zero-shot setting and can allow us to extract information from all parts of the input. This works well in structure S1. However, the causal attention produces a different issue: the contextualized embedding at position  $k$ ,  $\phi_k(x)$  *cannot* encode information about the later tokens  $x_{k+1}, x_{k+2}, \dots$ . This causes **mean-token embeddings to exaggerate early token similarity and dilute discriminatory information in the later parts because of causal attention**. This effect is especially exacerbated when the early tokens are similar, as in S2. In total, classical embeddings fail when the dataset contains inputs of both instances—where the discriminatory information could be in the early or later tokens. We show that this failure mode of classical embeddings can be overcome in a completely zero-shot manner using a simple method which we describe next.
+
+### 3.2 ECHO EMBEDDINGS: A GENERAL FRAMEWORK
+
+We saw in Section 3.1 that while mean-token pooling aggregates information across all tokens, the contextualized representations of early tokens are suboptimal because they cannot attend to the later tokens due to the causal attention. Replacing the causal with bidirectional attention is a natural solution, and common intuition seems to be that this is necessary. We propose a new general embedding framework—echo embeddings—that captures contextualized information from all tokens in the input with only causal attention:
+
+**Echo embeddings method:** Prompt the language model to act as an autoencoder, e.g., by asking the model to {repeat, rephrase, fix, etc.} the input; feed the sentence  $x$  to the language model *twice*; pool the contextualized embeddings of the *second* occurrence of  $x$ .
+
+Ex: “Rewrite the sentence:  $x$ ; rewritten sentence:  $x$ ”; embeddings are pooled from the bolded  $x$ .
+
+The second occurrence can attend to everything, and hence extracting contextualized representations from the second occurrence *could* capture information from the entire input. Furthermore, in order to encourage the second occurrence to actually “encode” information about the first, we instruct the language model to perform a generic task that requires using this information, e.g., “rewrite” or “repeat”. The exact prompt, template, or task used to extract embeddings can be varied to suit the model and downstream task. We find empirically that the performance of echo embeddings are not particularly sensitive to the exact phrasing of the prompt (Section 4.2). We provide a list of example prompts in Appendix C.
+
+While echo embeddings is simple and intuitive, does it actually effectively capture bidirectional information?
+
+We apply echo embeddings with mean-token pooling on the synthetic dataset introduced in Section 3, and present the results in Figure 2. Echo embeddings with mean-token pooling works significantly better than classical embeddings and **works well on both structures in the data—whether the discriminatory information is in the early or later tokens**.
+
+In particular, let us focus on structure S2 where the discriminatory information appears in the later tokens. Echo embeddings with mean-token pooling work well, while classical embeddings did not because the early tokens could not attend to the later ones. This implies that echo embeddings can successfully address this failure and **the representations of early tokens can capture information “bidirectionally” about the entire input without changing causal to bidirectional attention**. To test this further, we measure whether echo embeddings can meaningfully distinguish  $s^+$  and  $s^-$  using just the information in the  $A$  portions despite the discriminatory information solely appearing in the later  $B$ —parts. Recall that echo embeddings extract embeddings from the second occurrence. We plot the cosine similarities  $\text{Sim}(q, s^+)$  and  $\text{Sim}(q, s^-)$  in Figure 2 (C). We find that  $\text{Sim}(q, s^+)$  is typically larger than  $\text{Sim}(q, s^-)$ . Since we are only pooling the echo embeddings of the  $A$  portion, any distinction between  $s^+, s^-$  must come from the echo embeddings of  $A$  capturing information from the later parts of the sentence.
+
+{4}------------------------------------------------
+
+Table 1: *Main results in the zero-shot setting*: Apples-to-apples comparison of zero-shot echo and classical embeddings with mean pooling, and other baselines on MTEB (56 datasets). For the autoregressive embeddings in this table, we extract embeddings from the Mistral-7B-Instruct-v0.1 model. Bolding only zero-shot models.
+
+| Categories $\rightarrow$                | Clas.        | Clus.        | P. Cls.      | Rera.        | Retr.        | STS          | Su.          | Average      |
+|-----------------------------------------|--------------|--------------|--------------|--------------|--------------|--------------|--------------|--------------|
+| # of datasets                           | 12           | 11           | 3            | 4            | 15           | 10           | 1            | 56           |
+| Echo (Ours)                             | 72.01        | 33.80        | <b>72.41</b> | 47.56        | 20.82        | <b>73.74</b> | 30.70        | 48.64        |
+| Echo (compute matched)                  | 71.63        | 33.51        | 72.31        | 47.43        | <b>22.85</b> | 73.64        | <b>31.02</b> | <b>49.02</b> |
+| Classical                               | 64.87        | <b>34.14</b> | 57.71        | 43.60        | 18.26        | 57.07        | 27.02        | 42.38        |
+| PromptEOL                               | <b>73.84</b> | 27.53        | 55.47        | <b>48.44</b> | 13.18        | 67.14        | 28.33        | 43.69        |
+| BERT                                    | 61.47        | 29.48        | 56.33        | 43.44        | 10.44        | 52.98        | 29.82        | 37.87        |
+| RoBERTa                                 | 62.63        | 29.05        | 56.95        | 41.92        | 8.62         | 55.24        | 28.64        | 37.86        |
+| LLM2Vec ( <i>requires fine tuning</i> ) | 72.51        | 40.06        | 70.95        | 50.43        | 19.74        | 71.90        | 27.84        | 49.43        |
+
+**Summary.** We construct a synthetic dataset that showcases a failure mode in extracting embeddings from causal language models in the classical manner. While ours is a simplistic construction, we demonstrate that the failure mode we outline does occur on real data as well in Appendix C and could explain the poor performance of classical embeddings in practice. However, echo embeddings, where we repeat the input and take embeddings from the second occurrence, can successfully address this failure mode. We now test echo embeddings on a variety of real-world settings.
+
+## 4 EXPERIMENTS
+
+In this section, we describe how we implement and evaluate echo embeddings on real data.
+
+### 4.1 MASSIVE TEXT EMBEDDING BENCHMARK
+
+**MTEB & MTEB-MINI.** Our main evaluation dataset is the English-language subset of the Massive Text Embedding Benchmark (MTEB) (Muennighoff et al., 2022). MTEB is a collection of 56 datasets that are grouped into different embedding tasks: classification, clustering, pair classification, reranking, retrieval, sentence similarity (STS), and summarization, with the goal of evaluating embeddings broadly. However, as the name suggests, MTEB is *massive*, and requires multiple days to evaluate a 7B-parameter model on 8 A100 GPUs. Thus, we adopt a smaller 28-dataset subset of MTEB that spans all categories except summarization, which we call *MTEB-MINI*. We provide a detailed description of MTEB and MTEB-MINI in Appendix A.1.
+
+### 4.2 EVALUATION OF ZERO-SHOT EMBEDDINGS
+
+We begin with the zero-shot setting, where embeddings are extracted from a pre-trained model without additional training. Our goal is to show that without any additional training, echo embeddings outperform prior entirely-zero-shot methods, and can perform similarly to unsupervised approaches (which require additional fine-tuning with unsupervised data), such as LLM2Vec-unsupervised (BehnamGhader et al., 2024). While supervised fine-tuning is often used to improve embedders, zero-shot embeddings have the advantage that no further (potentially expensive) training is required.
+
+**Constructing zero-shot echo embeddings.** Following the echo embeddings method described in Section 3, to construct echo embeddings we need to pick a prompt, a pooling strategy, and a language model. We evaluate the impact of these choices on the performance of the embeddings on the Massive Text Embedding Benchmark (MTEB) (Muennighoff et al., 2022).
+
+*Choosing a prompt:* As specified in Section 3, we must prompt the language model to act as an autoencoder. Sclar et al. (2023) argues that on many tasks, the exact formatting and wording of the prompt can strongly influence performance. Thus, we investigate: *does the choice of prompt affect embeddings quality?* As we shall discuss later, we find that, **the choice of prompt does not substantially affect the performance of echo embeddings** (Section 4.3). This implies that prompt
+
+{5}------------------------------------------------
+
+Table 2: *Role of scale and base model in the zero-shot setting*: Average MTEB score (56 datasets) for LLaMA-7B-2-Instruct and S-LLaMA-1.3B.
+
+| Model        | Echo         | Classical | PromptEOL |
+|--------------|--------------|-----------|-----------|
+| S-LLaMA-1.3B | <b>40.45</b> | 34.31     | 37.50     |
+| LLaMA-7B     | <b>45.84</b> | 40.29     | 42.84     |
+
+tuning is unnecessary, and *any* reasonable prompt will perform well. For our main results, we adopt the prompt “Rewrite the following paragraph:  $S$ . The rewritten paragraph:  $S'$ ” for echo embeddings and “Write a paragraph:  $S'$ ” for classical embeddings.
+
+**Choosing a pooling strategy:** We evaluate both mean and last-token pooling for both classical and echo embeddings 4. Consistent with our toy-data analysis in Section 3, we find that mean token pooling is required for good embeddings and thus use this for all further zero-shot experiments (Table 4).
+
+**Choosing a language model:** We evaluate the performance of echo embeddings on three language models: Mistral-7B-Instruct-v0.1 (Jiang et al., 2023a), LLaMA-2-7B-Instruct (Touvron et al., 2023a), and S-LLaMA-1.3B (Xia et al., 2023) (sometimes abbreviated). We select the instruction-finetuned model for each of them. Refer to Appendix A.2 for additional information on the base models.
+
+**Compute-matching echo embeddings.** Naively, echo embeddings would require twice the compute of classical embeddings. To account for this, we also consider compute-matched echo embeddings in which we halve the length of the input.
+
+**Alternative approaches to constructing embeddings from autoregressive models.** In addition to our results, we compare to two recently proposed methods to convert autoregressive models into embedders without supervised fine-tuning: PromptEOL (zero-shot) and the unsupervised variant of LLM2Vec (requires additional fine-tuning). PromptEOL prompts the model to summarize the input in a single token, and extracts embeddings from the predicted token (Jiang et al., 2023b) (see Appendix D for additional details). The unsupervised variant of LLM2Vec (LLM2Vec-unsupervised) incorporates an additional masked-language-modeling fine-tuning step. Importantly, LLM2Vec is *not* zero-shot because it involves this extra fine-tuning step.
+
+### 4.3 ZERO-SHOT RESULTS
+
+**Echo embeddings yield strong embeddings, and without additional compute.** We present the main zero-shot results in which we evaluate echo embeddings on MTEB in Table 1. We find that echo embeddings successfully converts causal language models into strong encoders. For Mistral-7B-Instruct, we find, surprisingly, that compute-matched echo embeddings, achieves slightly *higher* performance than full-compute echo embeddings. The difference is small enough that it is unclear to what degree we would observe this improvement in other settings, but suggests that echo embeddings can be adapted to outperform classical embeddings without any additional compute. We extend this analysis of compute in Section 4.6. We also evaluate echo embeddings over multiple models and scales in Table 2 and find consistent results.
+
+Table 3: *Casting to bidirectional attention*: We evaluate MTEB-MINI (28 datasets) and compare classical with causal attention (Cl.+Uni) and with bidirectional attention (Cl.+Bi).
+
+| Model        | Echo         | Cl.+Uni | Cl.+Bi |
+|--------------|--------------|---------|--------|
+| LLaMA-2-7B   | <b>56.99</b> | 47.27   | 43.03  |
+| S-LLaMA-1.3B | <b>49.55</b> | 40.14   | 35.77  |
+| Mistral-7B   | <b>59.78</b> | 49.03   | 58.24  |
+
+Table 4: *Role of pooling in the zero-shot setting*: Average MTEB Score (56 datasets) for mean and last token pooling.
+
+|           | Mean         | Last-token |
+|-----------|--------------|------------|
+| Echo      | <b>48.64</b> | 31.55      |
+| Classical | <b>42.38</b> | 31.94      |
+
+![Box plot showing the variance of zero-shot performance across different prompts and formats on MTEB-MINI (28 datasets). The y-axis is 'Score (MTEB-mini)' ranging from 0.0 to 0.6. The x-axis categories are 'Classical', 'Echo', and 'PromptEOL'. 'Classical' has a tight box around 0.45. 'Echo' has a slightly higher median around 0.5. 'PromptEOL' has a lower median around 0.4 and a larger spread.](6a412ce0ee3ac6bd290d214edd54c1da_img.jpg)
+
+Box plot showing the variance of zero-shot performance across different prompts and formats on MTEB-MINI (28 datasets). The y-axis is 'Score (MTEB-mini)' ranging from 0.0 to 0.6. The x-axis categories are 'Classical', 'Echo', and 'PromptEOL'. 'Classical' has a tight box around 0.45. 'Echo' has a slightly higher median around 0.5. 'PromptEOL' has a lower median around 0.4 and a larger spread.
+
+Figure 3: *Role of prompt in the zero-shot setting*: Variance of zero-shot performance across different prompts and formats on MTEB-MINI (28 datasets). Refer to Appendix D for details on the exact prompts and formats.
+
+{6}------------------------------------------------
+
+Table 5: *Main fine-tuning results:* We report MTEB scores for echo embeddings with full compute and compute-matched and classical embeddings with a causal and with a casted bidirectional architecture. For echo embeddings, we use Mistral-7B as the backbone model, and last-token pooling. For the compute matched echo embeddings, FT+IT refers to both fine-tuning and inference-time compute matching.
+
+| Categories →<br># of datasets   | Clas.<br>12  | Clus.<br>11  | P. Cls.<br>3 | Rera.<br>4   | Retr.<br>15  | STS<br>10    | Su.<br>1     | Average<br>56 |
+|---------------------------------|--------------|--------------|--------------|--------------|--------------|--------------|--------------|---------------|
+| Echo (ours)                     | <b>77.43</b> | <b>46.32</b> | 87.34        | <b>58.14</b> | <b>55.52</b> | 82.56        | 30.73        | <b>64.68</b>  |
+| Echo (FT+IT compute matched)    | 77.39        | 46.27        | 87.49        | 58.08        | 55.07        | <b>83.18</b> | 30.73        | 64.66         |
+| Classical                       | 76.57        | 45.78        | 86.37        | 56.71        | 54.87        | 82.03        | <b>31.02</b> | 63.98         |
+| Classical + bidirectional attn. | 76.70        | 45.94        | <b>88.15</b> | 57.23        | 54.96        | 82.42        | 29.32        | 64.23         |
+
+**Comparison to PromptEOL.** We find that echo embeddings outperform PromptEOL on average across the tested MTEB datasets by 5%. In addition to this improvement, echo embeddings are additionally much less sensitive to the exact wording and formatting of the prompt (Figure 3).
+
+**Comparison to prior encoder models.** We evaluate the zero-shot MTEB performance of existing bidirectional (encoder) models, BERT-large and RoBERTa-large, which are often used as the backbone of fine-tuned embedders. We find that echo embeddings outperform both BERT-large and RoBERTa-large in the zero-shot setting. We suspect that the performance improvement is due to Mistral-7B being significantly more powerful than BERT and RoBERTa. This highlights the importance of our method: by using echo embeddings, we can leverage the full power of autoregressive language models, which are generally dominant over bidirectional models on other NLP tasks.
+
+**Comparison to LLM2Vec.** We find that *entirely zero-shot* echo embeddings can perform similarly to LLM2Vec-unsupervised, despite the fact that LLM2Vec-unsupervised is *not* a zero-shot method, and requires additional fine-tuning on top of the pre-trained base model. Echo embeddings thus offers a simple alternative to LLM2Vec that does not require additional training.
+
+**Relaxing to bidirectional attention.** We find that changing the attention mask from causal to bidirectional often substantially underperforms the causal architecture, but not for Mistral-7B (Table 3). Regardless, echo embeddings consistently outperforms this baseline. A priori, we might expect that, without further fine-tuning, such a modification to the architecture would harm performance, as we would expect that the model has not been trained to accommodate the additional attention. For LLaMA-2-7B and S-LLaMA-1.3B, this is the case. However, for Mistral-7B, casting to bidirectional attention does not harm performance and instead yields performance similar to echo embeddings. We suspect that this may arise from non-standard pre-training methodology, as discussed by BehnamGhader et al. (2024).
+
+**Ablations.** We perform multiple ablations to evaluate the role of each component:
+
+1. We test the role of pooling strategy in Table 4. Consistent with our analysis in Section 3, we find that mean pooling outperforms last-token pooling by a wide margin for both echo and classical embeddings. This suggests that mean pooling is required for echo embeddings in the zero-shot setting.
+2. We evaluate the role of the exact wording and formatting of the prompt in Figure 3. We find that the performance of echo embeddings has low variance with respect to the exact choice of prompt. This implies that echo embeddings does not require prompt tuning to perform well. Further, we find that *all* tested echo embeddings prompts outperform every tested classical embeddings prompt.
+
+### 4.4 EVALUATION OF FINE-TUNED EMBEDDINGS
+
+Echo embeddings also perform well in the fine-tuning setting. We will show that echo embeddings can outperform classical embeddings, even when the attention is converted to be bidirectional. Further, echo embeddings can match the performance of other methods that require much more complicated fine-tuning methodology, with identical fine-tuning and inference-time compute, and without modifying the architecture.
+
+{7}------------------------------------------------
+
+Table 6: *Role of base model in the fine-tuning setting.* We compare echo and classical embeddings for S-LLaMA-1.3B. FT+IT refers to the setting in which echo embeddings are compute-matched at train and inference time.
+
+| Methods                      | MTEB Score   |
+|------------------------------|--------------|
+| Echo                         | <b>62.01</b> |
+| Echo (FT+IT compute matched) | 61.65        |
+| Classical                    | 61.26        |
+
+Table 7: *Comparisons to recent baselines:* MTEB score for models trained on similar data. Echo embeddings matches the performance of models trained on similar data, but without requiring bidirectional attention. FT+IT refers to the setting in which echo embeddings are compute-matched at train and inference time.
+
+| Method                       | MTEB Score |
+|------------------------------|------------|
+| Echo (FT+IT compute matched) | 64.66      |
+| LLM2Vec-supervised           | 64.80      |
+| GritLM-7B (public data)      | 64.70      |
+
+**Constructing fine-tuned echo embeddings.** To construct fine-tuned embeddings, we must again choose a prompt, a pooling strategy, and a language model. In addition, we need to choose a contrastive learning objective and a collection of training datasets.
+
+*Choosing a prompt:* We adopt a minimal prompt that differs for queries and documents. Prior work has shown that the addition of an instruction can improve the quality of the embeddings (Wang et al., 2023), and thus we include an instruction in the prompt. The prompts are:
+
+|                         |                      |                            |                         |
+|-------------------------|----------------------|----------------------------|-------------------------|
+| <i>Echo (queries)</i>   | <i>Echo (docs)</i>   | <i>Classical (queries)</i> | <i>Classical (docs)</i> |
+| Instruct: {instruction} | Document: $S$        | Instruct: {instruction}    | Document: $S$           |
+| Query: $S$              | Document again: $S'$ | Query: $S$                 |                         |
+| Query again: $S'$       |                      |                            |                         |
+
+We provide a list of the instructions in Appendix F.
+
+*Choosing a pooling strategy:* We evaluate both mean and last-token pooling for both classical and echo embeddings. In practice, we find that last-token pooling performs slightly better than mean pooling in this setting (see Section 4.5).
+
+*Choosing a language model:* We train and evaluate the performance of echo embeddings on Mistral-7B-Instruct-v0.1 and S-LLaMA-1.3B (Jiang et al., 2023a; Xia et al., 2023). We choose Mistral-7B as the best-performing model in the zero-shot setting, and S-LLaMA-1.3B to test the broad applicability of our method across model class and scale.
+
+*Training datasets and optimization:* We train on a collection of publicly available datasets that are standard training datasets in the embedding literature. We list and describe each of the datasets in Appendix F. To fine-tune the model, we optimize the SimCSE loss with in-batch and mined hard negatives. Since this is standard, we defer discussion of this to Appendix F. Each batch is constructed by sampling a dataset from our set of training dataset, and then collecting examples from only this dataset. We use GradCache to train with a large batch size (2048) with limited GPU memory (Gao et al., 2021a). We train with LoRA instead of full finetuning, with  $r = 16$  and  $\alpha = 16$ . We choose  $\tau = 1/50$  and a learning rate of  $8 \times 10^{-4}$ .
+
+*Compute-matching echo embeddings.* Echo embeddings require twice the compute of classical embeddings. Similar to the zero-shot setting, we reduce the inference-time cost of echo embeddings by **halving the length of the input**. However, in the training setting, we additionally must match the train compute. We opt to **train for half as many steps** as classical embeddings, as this is the most straightforward way to match the compute. The compute-matched echo embeddings in Table 5 refer to the setting where we match compute for both training and inference.
+
+**Classical embeddings with bidirectional attention.** In addition to our comparison to classical embeddings with causal attention, we train a model for which we replace the causal attention with bidirectional attention.
+
+### 4.5 FINE-TUNING RESULTS
+
+**Echo embeddings yield high quality embeddings in the fine-tuning setting.** We present the main fine-tuning results in Table 5. Similar to the zero-shot setting, compute-matched echo embeddings
+
+{8}------------------------------------------------
+
+outperform classical embeddings with both architectures: causal and bidirectional. When additional compute is available, echo embeddings improve performance further. This suggests that the fundamental gap between classical and echo embeddings that we identified in Section 3 persists even after fine-tuning. We find consistent results when evaluating across model classes and scales (Table 6).
+
+**Comparison to LLM2Vec.** We compare to the supervised variant of LLM2Vec. The LLM2Vec method relaxes the attention of the base autoregressive model to bidirectional and requires two fine-tuning stages: (1) fine-tuning with an unsupervised masked-language-modeling objective (2) supervised fine-tuning for embeddings. Despite the complexity of the LLM2Vec method and additional fine-tuning, echo embeddings nonetheless approximately matches the performance with identical fine-tuning and inference-time compute (Table 7). Echo embeddings thus offers itself as a much simpler method that does not require modifying the architecture nor additional fine-tuning stages, with nearly identical performance.
+
+**Comparison to GritLM.** We also compare to GritLM (Muenninghoff et al., 2024) in Table 7. This approach, which simultaneously trains an embedder and a generative model, finds the bidirectional attention relaxation to be crucial. We find that compute-matched echo embeddings perform similarly the variant of GritLM that has been trained on similar data as ours (public data), even though echo embeddings use a causal architecture.
+
+**The role of pooling.** We investigate the role of pooling in Appendix F. In the fine-tuning setting, the choice of pooling strategy has a much weaker effect than in the zero-shot setting. Consistent with prior work (Wang et al., 2023; Zhang et al., 2023a), we find that last-token pooling, with the addition of a trainable end-of-sentence token embedding, slightly outperforms mean pooling.
+
+### 4.6 ADDRESSING THE INFERENCE-TIME COST OF ECHO EMBEDDINGS
+
+![Figure 5: Fine-tuning setting: MTBEMini score vs Budget (tokens). The graph shows that Echo embeddings outperform Classical+Bi embeddings across all budgets, with the gap widening as the budget increases.](0f3e3ea50bcceb86f6c524ab2b6f3e7a_img.jpg)
+
+| Budget (tokens) | Echo MTBEMini score | Classical+Bi MTBEMini score |
+|-----------------|---------------------|-----------------------------|
+| 64              | 70.5                | 71.2                        |
+| 128             | 71.8                | 71.8                        |
+| 256             | 72.8                | 71.8                        |
+| 512             | 73.2                | 71.8                        |
+
+Figure 5: Fine-tuning setting: MTBEMini score vs Budget (tokens). The graph shows that Echo embeddings outperform Classical+Bi embeddings across all budgets, with the gap widening as the budget increases.
+
+Figure 5: *Fine-tuning setting*: MTBEMini score of fine-tuned echo embeddings and classical embeddings with bidirectional attention with fixed compute (token) budget. We use the trained Mistral-7B models from Table 5. The standard token budget for MTBEMini is 512.
+
+![Figure 4: Zero-shot setting: MTBEMini score vs Budget (tokens). The graph shows that Echo embeddings outperform Classical+Bi embeddings across all budgets, with the gap widening as the budget increases.](0d5fdb87a392819c7d2e3b6230912a0b_img.jpg)
+
+| Budget (tokens) | Echo MTBEMini score | Classical MTBEMini score | Classical+Bi MTBEMini score |
+|-----------------|---------------------|--------------------------|-----------------------------|
+| 64              | 56.5                | 48.5                     | 56.5                        |
+| 128             | 58.5                | 49.0                     | 58.5                        |
+| 256             | 59.5                | 49.0                     | 59.5                        |
+| 512             | 60.0                | 49.0                     | 60.0                        |
+
+Figure 4: Zero-shot setting: MTBEMini score vs Budget (tokens). The graph shows that Echo embeddings outperform Classical+Bi embeddings across all budgets, with the gap widening as the budget increases.
+
+Figure 4: *Zero-shot setting*: MTBEMini score of zero-shot echo embeddings and classical embeddings with bidirectional attention with fixed compute (token) budget. We use the zero-shot Mistral 7B from Table 1. The standard token budget for MTBEMini is 512.
+
+One potential drawback of echo embeddings is the computational cost of the method at both training and inference time. Naively, echo embeddings requires approximately twice the compute of classical embeddings, as the input is repeated. We have so far seen that in an entirely compute-matched training and inference time setting, echo embeddings outperforms classical embeddings (Table 5). In this section, we expand this analysis to consider how echo embeddings perform under different inference-time compute budgets. We explore the role of training under different budgets in Appendix F.
+
+### 4.7 THE ROLE OF COMPUTE
+
+**The role of inference-time compute in the zero-shot setting.** In Section 4.2, we demonstrated that by halving the number of input tokens that are encoded by echo embeddings, thus matching compute with the classical approach to embeddings, we achieve stronger performance than classical embeddings. Here, we investigate the role of compute in further detail by plotting the performance of echo embeddings as a function of the total number of tokens encoded
+
+(Figure 4). We find that when the budget is greater than approximately 64 tokens, echo embeddings outperforms Mistral-7B classical embeddings with bidirectional attention. For very small computational budgets (fewer than 64 tokens), we find that Mistral-7B classical embeddings with bidirectional
+
+{9}------------------------------------------------
+
+tional outperform echo embeddings. Since the standard budget for MTEB is 512 tokens, echo embeddings likely offer stronger performance in most settings. Over all compute budgets, echo embeddings outperform causal attention classical embeddings.
+
+**The role of inference-time compute in the fine-tuning setting.** The fine-tuning setting exhibits a similar trend: for very small computational budgets, echo embeddings perform worse than classical embeddings, but as the budget increases echo embeddings outperform classical embeddings (Figure 5). In the fine-tuning setting, echo embeddings outperform classical embeddings for budgets greater than 128 tokens, which is still much smaller than the standard MTEB budget (512 tokens).
+
+## 5 RELATED WORK
+
+**Sentence embeddings.** Dense low-dimensional vectors representing textual semantics has been widely studied and applied. Early approaches involved computing embeddings for individual words (Hinton, 1984; Rumelhart et al., 1986; Elman, 1990; Mikolov et al., 2013; Pennington et al., 2014). Later work aims to compute dense vectors representing the semantics of entire sequences by combining or composing word vectors (Le & Mikolov, 2014; Iyyer et al., 2015; Kiros et al., 2015; Socher et al., 2011; Tai et al., 2015; Wang et al., 2016; Wieting et al., 2015). Khattab & Zaharia (2020) propose to use late interaction between document and query vectors to improve retrieval performance. Reimers & Gurevych (2019) propose S-BERT which takes a pretrained BERT (Devlin et al., 2018) and trains with a triplet loss. More recent approaches typically adopt this approach to different pretrained models (Raffel et al., 2020; Ni et al., 2021b; Raffel et al., 2020) and contrastive objectives (Oord et al., 2018; Gao et al., 2021b). Other papers propose including prompts to improve task-specific embedding performance (Jiang et al., 2022; Su et al., 2022). Some work combines multiple of these training objectives and approaches (Xiao et al., 2023a; Li et al., 2023). Most recent sentence embeddings research has focused on improving finetuning. Reimers & Gurevych (2019) demonstrates that without finetuning, BERT has low-quality embeddings. To our knowledge, Jiang et al. (2023b) is the only paper that constructs zero-shot embeddings for autoregressive language models.
+
+**Next-token language modeling for embeddings.** A series of papers aim to construct high quality embeddings from autoregressive large language models. Most closely related, BehnamGhader et al. (2024) proposed LLM2Vec which adds an additional unsupervised training step on a masked-language-modeling objective. Multiple papers apply the fine-tuning approach of S-BERT to language models but using a trained GPT (Radford et al., 2018) as the backbone architecture (Muenighoff, 2022; Zhang et al., 2023a). Ma et al. (2023) adopts this approach but for LLaMA-2 (Touvron et al., 2023b). Jiang et al. (2023b) extracts embeddings by asking a language model to summarize the input sentence. Wang et al. (2023) improves embeddings by adding synthetic training data and trains on Mistral (Jiang et al., 2023a). Muenighoff et al. (2024) adds an additional objective to maintain generation performance, but requires bidirectional attention. Li & Li (2023b) modifies the architecture of a causal language model to be bidirectional.
+
+**Language modeling with bidirectional information.** Xu et al. (2023) finds that repetition can improve the performance of autoregressive language models for reasoning tasks. Arora et al. (2024) finds that repetition can be useful to improve recall for recurrent architectures.
+
+## 6 CONCLUSION
+
+We have demonstrated that the common assumption that bidirectional architectures are crucial for high quality embedding models is false. Our method, echo embeddings, prompts an autoregressive model to act as an autoencoder, which enables the model to encode bidirectional information. Our results highlight the importance of bidirectional information—we find that the inability to encode bidirectional information leads to the failure of classical-style embeddings in autoregressive models. Further, our method demonstrates that by carefully choosing the task that the language model is prompted to perform *at inference time* is a promising approach for improving embeddings. We hope that our work will inspire future research towards understanding how inference-time changes can impact embeddings.
+
+ Rest of paper (reference and Appendix) is removed.

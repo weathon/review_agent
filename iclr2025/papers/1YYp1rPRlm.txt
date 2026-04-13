@@ -1,0 +1,295 @@
+
+
+{0}------------------------------------------------
+
+# DIFFERENTIALLY PRIVATE DEEP MODEL-BASED REINFORCEMENT LEARNING
+
+###### Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+We address private deep offline reinforcement learning (RL), where the goal is to train a policy on standard control tasks that is differentially private (DP) with respect to individual trajectories in the dataset. To achieve this, we introduce PRIMORL, a model-based RL algorithm with formal differential privacy guarantees. PRIMORL first learns an ensemble of trajectory-level DP models of the environment from offline data. It then optimizes a policy on the penalized private model, without any further interaction with the system or access to the dataset. In addition to offering strong theoretical foundations, we demonstrate empirically that PRIMORL enables the training of private RL agents on offline continuous control tasks with deep function approximations, whereas current methods are limited to simpler tabular and linear Markov Decision Processes (MDPs). We furthermore outline the trade-offs involved in achieving privacy in this setting.
+
+## 1 INTRODUCTION
+
+Despite Reinforcement Learning’s (RL) notable advancements in various tasks, there have been many obstacles to its adoption for the control of real systems in the industry. In particular, online interaction with the system may be impractical or hazardous in real-world scenarios. Offline RL (Levine et al., 2020) refers to the set of methods enabling the training of control agents from static datasets. While this paradigm shows promise for real-world applications, its deployment is not without concerns. Many studies have warned of the risk of privacy leakage when deploying machine learning models, as these models can memorize part of the training data. For instance, Rigaki & Garcia (2020) review the proliferation of sophisticated privacy attacks. Of the various attack types, membership inference attacks (MIAs) (Shokri et al., 2017) stand out as the most prevalent. In these attacks, the adversary, with access to a black-box model trainer, attempts to predict whether a specific data point was part of the model’s training data. Unfortunately, RL is no exception to these threats. In recent work, Gomrokchi et al. (2023) exploit the temporal correlation of RL samples to perform powerful membership inference attacks using convolutional neural classifiers. More precisely, they demonstrate that given access to the output policy, an adversary can learn to infer the presence of a specific trajectory — which is the result of a sequence of interactions between a user and the system — in the training dataset with great accuracy. The threat of powerful MIAs is particularly concerning in reinforcement learning, where a trajectory can unveil sensitive user information. For instance, when using RL to train autonomous vehicles (Kiran et al., 2022), we need to collect a large number of trips that may disclose locations and driving habits. Similarly, a browsing journey collected to train a personalized recommendation engine may contain sensitive information about the user’s behavior (Zheng et al., 2018). In healthcare, RL’s potential for personalized treatment recommendation (Liu et al., 2022) underscores the need to safeguard patients’ treatment and health history.
+
+A large body of work has focused on protecting against privacy leakages in machine learning. Differential Privacy (DP), which allows learning models without exposing sensitive information about any particular user in the training dataset, has emerged as the gold standard. While successfully applied in various domains, such as neural network training (Abadi et al., 2016) and multi-armed bandits (Tossou & Dimitrakakis, 2016), extending differential privacy to reinforcement learning poses challenges. In particular, the many ways of collecting data and the correlated nature of training samples resulting from online interactions make it difficult to come up with a universal and meaningful DP definition in this setting, despite several attempts such as local and joint DP. In addition to its practical significance, the offline RL setting arguably offers a more natural framework for privacy
+
+{1}------------------------------------------------
+
+054 compared to the classic online setting. An offline RL method can indeed be seen as a black-box  
+055 randomized algorithm  $h$  taking in as input a fixed dataset  $\mathcal{D}$ , partitioned in trajectories, and outputting  
+056 a policy  $\tilde{\pi}$ . An adversary with access to  $\tilde{\pi}$  may successfully learn to infer the membership of a specific  
+057 trajectory in  $\mathcal{D}$ , which can, as emphasized before, reveal sensitive user information. Hence, similarly  
+058 to Qiao & Wang (2023a), we use the following informal DP definition for offline RL, which we refer  
+059 to as *trajectory-level differential privacy* (TDP): adding or removing a single trajectory from the input  
+060 dataset of an offline RL algorithm must not impact significantly the distribution of the output policy.
+
+061 While reinforcement learning encounters the same privacy challenges as other areas of machine  
+062 learning, no existing work has proposed a private RL method that matches the versatility, scalability,  
+063 and empirical effectiveness of DP-SGD (Abadi et al., 2016) for supervised learning. Indeed, existing  
+064 research largely remains theoretical and demonstrates limited practical applicability. In the online  
+065 setting, numerous private algorithms have been developed (e.g., Vietri et al. (2020), Garcelon et al.  
+066 (2021), Qiao & Wang (2023b)) but their scope remains restricted to tabular and linear Markov  
+067 Decision Processes (MDPs) with finite horizon. Qiao & Wang (2023a) have proposed the first private  
+068 algorithms for offline RL, building on value iteration methods, but they present similar limitations.  
+069 These approaches cannot intrinsically scale to the problems typically encountered in deep RL, leaving  
+070 a huge gap between the current private RL literature and real-world applications. This work addresses  
+071 this gap by introducing the first deep RL method with provable privacy guarantees. In contrast to  
+072 previous work, our method is applicable to general MDPs with continuous state and action spaces  
+073 and deals with the classic  $\gamma$ -discounted setting, paving the way for enhanced applications of private  
+074 RL in complex, risk-sensitive scenarios.
+
+075 **Contributions.** While the current differentially private RL literature is mainly theoretical and has  
+076 limited practical relevance, this work is the first attempt to tackle deep RL problems with differential  
+077 privacy guarantees. Specifically, we address the offline setting under the well-founded concept  
+078 of trajectory-level privacy, and introduce a model-based approach named PRIMORL. Protecting  
+079 entire trajectories, rather than individual examples, precludes the use of vanilla optimizers such  
+080 as DP-SGD. Additionally, the standard approach of using bootstrap ensembles to handle model  
+081 uncertainty presents an extra challenge in the private setting, as the ensemble size directly impacts  
+082 the privacy budget. A key contribution of this work is therefore the introduction of a training method  
+083 for model ensembles that ensures differential privacy at the trajectory level and effectively controls  
+084 the privacy budget. We also provide a theoretical analysis of how private training influences model  
+085 reliability. We then perform policy optimization under the resulting pessimistic private model and  
+086 prove the formal privacy guarantees of the resulting policy. We show empirically that PRIMORL can  
+087 train private policies with competitive privacy-performance trade-offs on standard continuous control  
+088 benchmarks, demonstrating the potential of our approach.
+
+###### 089 2 RELATED WORK
+
+091 Offline RL (Levine et al., 2020; Prudencio et al., 2022) focuses on training agents without further  
+092 interactions with the system, making it essential in scenarios where data collection is impractical  
+093 (Singh et al., 2022; Liu et al., 2020; Kiran et al., 2022). Model-based RL (Moerland et al., 2023)  
+094 can further reduce costs or safety risks by using a learned environment model to simulate beyond  
+095 the collected data and improve sample efficiency (Chua et al., 2018). Argenson & Dulac-Arnold  
+096 (2021) demonstrate that model-based offline planning, where the model is trained on a static dataset,  
+097 performs well in robotic tasks. However, offline RL faces challenges like *distribution shift* (Fujimoto  
+098 et al., 2019), where the limited coverage of the dataset can lead to inaccuracies in unexplored state-  
+099 action regions, affecting performance. Methods like MOPO (Yu et al., 2020), MOREL (Kidambi  
+100 et al., 2020), and COUNT-MORL (Kim & Oh, 2023) address this by penalizing rewards based on  
+101 model uncertainty, achieving strong results on offline benchmarks. Still, key design choices in offline  
+102 MBRL require further exploration, as highlighted by Lu et al. (2022).
+
+103 On the other hand, Differential Privacy (DP), established by Dwork (2006), has become the standard  
+104 for privacy protection. Recent research has focused on improving the privacy-utility trade-off, with  
+105 relaxations of DP and advanced composition tools enabling tighter privacy analyses (Dwork et al.,  
+106 2010; Dwork & Rothblum, 2016; Bun & Steinke, 2016; Mironov, 2017a). Notably, DP-SGD (Abadi  
+107 et al., 2016) has facilitated the development of private deep learning algorithms, despite ongoing  
+practical challenges (Ponomareva et al., 2023). Concurrently, sophisticated attack strategies have
+
+{2}------------------------------------------------
+
+underscored the necessity for robust DP algorithms (Rigaki & Garcia, 2020). Recent studies have shown that reinforcement learning (RL) is also vulnerable to privacy threats (Pan et al., 2019; Prakash et al., 2022; Gomrokchi et al., 2023). As RL is increasingly applied in personalized services (den Hengst et al., 2020), the need for privacy-preserving training techniques is critical. Although DP has been successfully extended to multi-armed bandits (Tossou & Dimitrakakis, 2016; Basu et al., 2019), existing RL algorithms (e.g., Vietri et al. (2020), Zhou (2022), Qiao & Wang (2023b)) with formal DP guarantees mainly apply to episodic tabular or linear MDPs and lack empirical validation beyond basic simulations. Moreover, private offline RL remains underexplored. Only Qiao & Wang (2023a) have proposed DP offline algorithms, which, while theoretically strong, are also restricted to finite-horizon tabular and linear MDPs. Consequently, no existing work has introduced DP methods that can handle deep RL environments in the infinite-horizon discounted setting, a critical step toward deploying private RL algorithms in real-world applications. With this work, we aim to fill this gap by proposing a differentially private, deep model-based RL method for the offline setting.
+
+## 3 PRELIMINARIES
+
+### 3.1 OFFLINE MODEL-BASED REINFORCEMENT LEARNING
+
+We consider an infinite-horizon discounted MDP, that is a tuple  $\mathcal{M} = (\mathcal{S}, \mathcal{A}, P, r, \gamma, \rho_0)$  where  $\mathcal{S}$  and  $\mathcal{A}$  are respectively the state and action spaces,  $P : \mathcal{S} \times \mathcal{A} \rightarrow \Delta(\mathcal{S})$  the transition dynamics (where  $\Delta(\mathcal{X})$  denotes the space of probability distributions over  $\mathcal{X}$ ),  $r : \mathcal{S} \times \mathcal{A} \rightarrow [0, 1]$  the reward function,  $\gamma \in [0, 1)$  a discount factor and  $\rho_0 \in \Delta(\mathcal{S})$  the initial state distribution. The dynamics satisfy the Markov property, i.e., the next state  $s'$  only depends on current state and action. The goal is to learn a policy  $\pi : \mathcal{S} \rightarrow \Delta(\mathcal{A})$  maximizing the expected discounted return  $\eta_{\mathcal{M}}(\pi) := \mathbb{E}_{\tau \sim \pi, \mathcal{M}}[R(\tau)]$ , where  $R(\tau) = \sum_{t=0}^{\infty} \gamma^t r_t$ . The expectation is taken w.r.t. the trajectories  $\tau = ((s_t, a_t, r_t))_{t \geq 0}$  generated by  $\pi$  in the MDP  $\mathcal{M}$ , i.e.,  $s_0 \sim \rho_0$ ,  $s_{t+1} \sim P(\cdot | s_t, a_t)$  and  $a_t \sim \pi(\cdot | s_t)$ .
+
+In offline RL, we assume access to a dataset of  $K$  trajectories  $\mathcal{D}_K = (\tau_k)_{k=1}^K$ , where each  $\tau_k = (s_t^{(k)}, a_t^{(k)}, r_t^{(k)})_{t \geq 0}$  has been collected with an unknown behavioral policy  $\pi^B$ .  $\tau_k$  can be seen as the result of the interaction of a user  $u_k$  with the environment. The objective is then to learn a policy  $\hat{\pi}$  from  $\mathcal{D}_K$  (without any further interaction with the environment) which performs as best as possible in  $\mathcal{M}$ . To achieve this goal, we consider a model-based approach. In this context, we learn estimates of both the transition dynamics and the reward function, denoted  $\hat{P}$  and  $\hat{r}$  respectively, from the offline dataset  $\mathcal{D}_K$ . This results in an estimate of the MDP  $\hat{\mathcal{M}} = (\mathcal{S}, \mathcal{A}, \hat{P}, \hat{r}, \gamma, \rho_0)$ . We can then use the model  $\hat{\mathcal{M}}$  as a simulator of the environment to learn a policy  $\hat{\pi}_{\hat{\mathcal{M}}}$ , without further access to the dataset or interactions with the real environment modeled by  $\mathcal{M}$ . Note that if the policy  $\hat{\pi}_{\hat{\mathcal{M}}}$  is trained to maximize the expected discounted return in the MDP model  $\hat{\mathcal{M}}$ , i.e.,  $\hat{\pi}_{\hat{\mathcal{M}}} \in \operatorname{argmax}_{\pi} \eta_{\hat{\mathcal{M}}}(\pi)$ , we eventually want to evaluate the policy in the true environment  $\mathcal{M}$ , that is using  $\eta_{\mathcal{M}}$ .
+
+### 3.2 DIFFERENTIAL PRIVACY
+
+When learning patterns from a dataset, differential privacy (Dwork, 2006) protects against the leakage of sensitive information in the data by ensuring that the output of the algorithm does not change significantly when adding or removing a data point, as formally stated in Definition 3.1.
+
+**Definition 3.1.**  $(\epsilon, \delta)$ -differential privacy. Given  $\epsilon > 0$ ,  $\delta \in [0, 1)$ , a mechanism  $h$  (i.e., a randomized function of the data) is  $(\epsilon, \delta)$ -DP if for any pair of datasets  $D, D'$  that differ in at most one element (referred to as *neighboring datasets*, and denoted  $d(D, D') = 1$ ), and any subset  $\mathcal{E}$  in  $h$ 's range:
+
+$$\mathbb{P}(h(D) \in \mathcal{E}) \leq e^{\epsilon} \cdot \mathbb{P}(h(D') \in \mathcal{E}) + \delta.$$
+
+In particular,  $\epsilon$  controls the strength of the privacy guarantees, decreasing as  $\epsilon$  grows. To achieve  $(\epsilon, \delta)$ -DP, the standard approach is to add a zero-mean random noise to the output of the (non-private) function  $f$ , whose magnitude  $\sigma$  scales with  $\Delta_{\epsilon}(f)/\epsilon$ , where  $\Delta_{\epsilon}(f) := \max_{d(D, D')=1} \|f(D) - f(D')\|_{\epsilon}$  is the sensitivity of  $f$ . One of the most used DP mechanisms is the *Gaussian mechanism*, which provably guarantees  $(\epsilon, \delta)$ -DP for  $\epsilon, \delta \in (0, 1)$  by adding random noise from a Gaussian distribution with magnitude  $\sigma = \epsilon^{-1} \sqrt{2 \log(1.25/\delta)} \cdot \Delta_2(f)$ . From such simple mechanisms, we can derive
+
+{3}------------------------------------------------
+
+![Figure 1: PRIMORL architecture diagram. The process starts with 'Data collection' from a globe icon, leading to a stack of datasets labeled $\mathcal{D}_K$. These datasets are fed into a 'TDP Model Ensemble Training' block (labeled 1), which outputs a 'Private Model' $\hat{M}^{DP}$. This model is then used in 'Private Model-Based Policy Optimization' (labeled 2), which outputs the final 'Private Policy' $\hat{\pi}^{DP}$. A dashed blue box labeled 'PRIMORL' encloses the training and optimization steps.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 1: PRIMORL architecture diagram. The process starts with 'Data collection' from a globe icon, leading to a stack of datasets labeled \$\mathcal{D}\_K\$. These datasets are fed into a 'TDP Model Ensemble Training' block (labeled 1), which outputs a 'Private Model' \$\hat{M}^{DP}\$. This model is then used in 'Private Model-Based Policy Optimization' (labeled 2), which outputs the final 'Private Policy' \$\hat{\pi}^{DP}\$. A dashed blue box labeled 'PRIMORL' encloses the training and optimization steps.
+
+Figure 1: PRIMORL with its two main components: ① private model training; ② MBPO.
+
+complex DP algorithms using the *sequential* and *parallel composition* properties of DP, as well as its *immunity to post-processing* (i.e., if  $h$  is  $(\epsilon, \delta)$ -DP and  $g$  is data-independent,  $g \circ h$  remains  $(\epsilon, \delta)$ -DP).
+
+The Gaussian mechanism is central to DP-SGD (Abadi et al., 2016), a learning algorithm that modifies classic SGD to ensure (approximate) differential privacy. By adding Gaussian noise to the gradients and bounding their norm by a constant  $C$ , DP-SGD enables private neural network training (Ponomareva et al., 2023). To track the total privacy budget  $\epsilon_{tot}$  spent by DP-SGD, Abadi et al. (2016) developed the *moments accounting* method that provides a  $(O(q\epsilon\sqrt{T}), \delta)$ -DP guarantee, where  $q$  is the sampling ratio,  $T$  is the number of iterations, and  $\epsilon$  is the privacy parameter. DP-SGD relies strongly on privacy amplification by sub-sampling (Balle et al., 2018). Studies have also analyzed error bounds for DP-SGD under various loss assumptions (Bassily et al., 2014; Kang et al., 2023).
+
+## 4 DIFFERENTIALLY PRIVATE MODEL-BASED OFFLINE REINFORCEMENT LEARNING
+
+We now describe our model-based approach for learning differentially private RL agents from offline data, which we call PRIMORL (for Private Model-Based Offline RL). After defining trajectory-level differential privacy (TDP) in offline RL (Section 4.1), we address the learning of a private model from offline data (Section 4.2). Finally, we demonstrate how we optimize a policy under the private model (Section 4.3). Exploiting the *post-processing* property of DP, we show that ensuring model privacy alone is enough to achieve a private policy. Figure 1 provides a high-level description of PRIMORL.
+
+### 4.1 TRAJECTORY-LEVEL PRIVACY IN OFFLINE REINFORCEMENT LEARNING
+
+In supervised learning, differential privacy is typically applied at the *example-level*, under the assumption that the examples in the dataset are independent. If this assumption is already questionable in the supervised setting, it certainly does not hold in RL where the transitions  $(s_t, a_t, r_t)$  are obviously correlated. Several works, for instance Liu et al. (2016), have demonstrated that data correlation degrades privacy guarantees in the traditional *per-example* setting. It thus appears that protecting individual transitions is insufficient in RL, calling instead for data protection at the *trajectory level*.
+
+We introduce the following formal definition for trajectory-level differential privacy (TDP) in offline RL which protects whole trajectories. It states that the learned policy is roughly the same for two offline datasets  $D, D'$  where  $D'$  is obtained by adding or removing one full trajectory from  $D$ . It can be seen as a reformulation of the definition used in Qiao & Wang (2023a), which is the first work to tackle differential privacy in this setting.
+
+**Definition 4.1.**  $(\epsilon, \delta)$ -TDP. Let  $h$  be an offline RL algorithm, that takes as input an offline dataset and outputs a policy. Given  $\epsilon > 0$  and  $\delta \in (0, 1)$ ,  $h$  is  $(\epsilon, \delta)$ -TDP if for any trajectory-neighboring datasets  $\mathcal{D}_K, \mathcal{D}_{K \setminus \{k\}}$ , and any subset of policies  $\Pi$ :
+
+$$\mathbb{P}(h(\mathcal{D}_K) \in \Pi) \leq e^\epsilon \cdot \mathbb{P}(h(\mathcal{D}_{K \setminus \{k\}}) \in \Pi) + \delta.$$
+
+{4}------------------------------------------------
+
+### 4.2 MODEL LEARNING WITH DIFFERENTIAL PRIVACY
+
+Following previous work (Yu et al., 2020; Kidambi et al., 2020), we jointly model the transition dynamics  $\hat{P}$  and reward  $\hat{r}$  with a Gaussian distribution  $\hat{M}$  conditioned on the current state and action. Its mean and covariance are parameterized with neural networks  $\theta = (\phi, \psi)$ :
+
+$$\hat{M}_\theta (\Delta_t^{t+1}(s), r_t | s_t, a_t) = \mathcal{N}(\mu_\phi(s_t, a_t), \Sigma_\psi(s_t, a_t)) .$$
+
+To carry out uncertainty estimation (see Section 4.3), we train an ensemble of  $N$  models  $\hat{M}_{\theta_i}$ ,  $i \in [1, N]$ , all sharing the same architecture. The core aspect of PRIMORL, as illustrated in Figure 1, is therefore to learn a trajectory-level DP dynamics model ensemble.
+
+This poses two major challenges. First, the traditional approach to privatize neural networks, DP-SGD, is designed for example-level privacy and is unsuitable for guaranteeing TDP. Moreover, since the training of all the models in the ensemble consumes the same dataset  $\mathcal{D}_K$ , we must deal with the dependence of the privacy budget on the ensemble size  $N$ . A key contribution of our work, developed in Section 4.2.1, is thus to introduce a training method that 1) guarantees privacy at the trajectory level and 2) efficiently manages the privacy budget across an ensemble of models.
+
+#### 4.2.1 TRAJECTORY-LEVEL DP TRAINING FOR MODEL ENSEMBLES
+
+As DP-SGD ensures per-example privacy by clipping each per-example gradient, limiting the contribution of each data point to the final model, the key to achieving trajectory-level privacy is to compute and clip per-trajectory updates. Therefore, our training method partitions the dataset by trajectories, i.e.,  $\mathcal{D}_K = \bigcup_{k=1}^K \{\tau_k\}$ , computes independent updates from each trajectory’s data, and bounds the  $L_2$ -norm of each update before aggregation. This idea has been developed in McMahan et al. (2017) to achieve user-level privacy when training recurrent language models. Building on prior training algorithms from federated learning, they introduce DP-FEDAVG, which leverages privacy amplification by sub-sampling to achieve competitive privacy-utility trade-offs in language modeling. To address the unique privacy challenges of our task, we build on this approach and adapt it to ensembles of dynamics models. We present the resulting training procedure in Algorithm 1.
+
+The core idea behind TDP MODEL ENSEMBLE TRAINING is to draw, at each iteration  $t$ , a random subset  $\mathcal{U}_t$  of the  $K$  trajectories (line 2) using Poisson sampling. Each trajectory is drawn with probability  $q$ , resulting in an expected  $qK$  trajectories being selected per step. The sampling ratio  $q$  plays a critical role in determining the strength of privacy guarantees. Specifically, a smaller  $q$  reduces the likelihood of any given trajectory being included in an update, thereby limiting its influence on the final model — this forms the basis of privacy amplification by sub-sampling. However, in the offline RL setting, where trajectory data is highly correlated,  $q$  must remain large enough to ensure that the model update incorporates a sufficiently diverse set of trajectories. Interestingly, while the theoretical analysis of common private deep learning methods like DP-SGD relies on Poisson sampling, most implementations actually use fixed-size batches with shuffling in practice, in order to overcome the computational challenges due to batches of varying size. This can lead to significant underestimation of the actual privacy leakage, as pointed out in Chua et al. (2018). Our implementation, however, does indeed use Poisson sampling, allowing us to compute correct theoretical privacy guarantees.
+
+For each trajectory  $\tau_k \in \mathcal{U}_t$ , the clipped gradients  $\{\Delta_{i,k}^{\text{clipped}}(t)\}$  are then computed from  $\tau_k$ ’s data only (line 3 to 7). During this step, we perform multiple local updates on the same trajectory’s data, leveraging larger global updates without incurring more privacy leakage. This is made possible because the global model is updated with clipped gradients only. We later introduce ensemble-adapted clipping strategies to control the privacy budget over model ensembles, ensuring that the sensitivity of the ensemble gradient  $\Delta_K^{\text{clipped}}(t) = \left( \Delta_{i,k}^{\text{clipped}}(t) \right)_{i=1}^N$  is bounded by  $C$ . We then compute an unbiased estimator of the subset gradient average whose sensitivity is bounded by  $C/qK$  (line 8). We can then apply the Gaussian mechanism with magnitude  $\sigma = zC/qK$ , where  $z$  controls the strength of the privacy guarantee  $\epsilon$ , and update the ensemble model  $\theta(t) = (\theta_i(t))_{i=1}^N$  with noisy gradient (line 9):
+
+$$\theta(t+1) \leftarrow \theta(t) + \Delta^{\text{avg}}(t) + \mathcal{N}(0_{Nd}, \sigma^2 I_{Nd}) .$$
+
+{5}------------------------------------------------
+
+##### **Algorithm 1** TDP MODEL ENSEMBLE TRAINING
+
+- 
+- 1: **for** each iteration  $t \in [0, T - 1]$  **do**
+  - 2:    $\mathcal{U}_t \leftarrow$  (sample with replacement trajectories from  $\mathcal{D}_K$  with prob.  $q$ )
+  - 3:   **for** each trajectory  $\tau_k \in \mathcal{U}_t$  **do**
+  - 4:     Clone current models  $\{\theta_t^{\text{start}}\}_{i=1}^N \leftarrow \{\theta_i(t)\}_{i=1}^N$
+  - 5:      $\{\theta_{i,k}\}_{i=1}^N \leftarrow \text{ENSCLIPGD} \left( \tau_k, \{\theta_t^{\text{start}}\}_{i=1}^N; C, \text{local epochs } E, \text{batch size } B \right)$
+  - 6:      $\Delta_{i,k}^{\text{clipped}}(t) \leftarrow \theta_{i,k} - \theta_i^{\text{start}}, \quad i = 1, \dots, N$
+  - 7:   **end for**
+  - 8:    $\Delta_i^{\text{avg}}(t) = \frac{\sum_{k \in \mathcal{U}_t} \Delta_{i,k}^{\text{clipped}}(t)}{qK}, \quad i = 1, \dots, N$
+  - 9:    $\theta(t + 1) \leftarrow \theta(t) + \Delta^{\text{avg}}(t) + \mathcal{N} \left( 0_{Nd}, \left( \frac{zC}{qK} \right)^2 I_{Nd} \right)$
+  - 10: **end for**
+- 
+
+#### 4.2.2 PRIVACY GUARANTEES FOR THE MODEL
+
+We can now derive formal privacy guarantees for a model trained using Algorithm 1. A key challenge in our setting arises from training an ensemble of  $N$  models for uncertainty estimation, all using the same dataset  $\mathcal{D}_K$ . Treating each model independently, with separate clipping and noise addition, would be inefficient and significantly increase the privacy budget by composition. This could be mitigated by limiting the ensemble size, but at the cost of performance, as shown in Lu et al. (2022).
+
+To address this challenge, we process all the gradients of the model ensemble simultaneously and distribute the global clipping norm  $C$  across all models, on the same principle as the per-layer clipping used in McMahan et al. (2017). Denoting  $\Delta_{i,\ell}$  the gradient of layer  $\ell$  for model  $i$ , we propose and experiment with two ensemble clipping strategies: **Flat Ensemble Clipping**, which clips the whole model gradient  $\Delta_i = (\Delta_{i,\ell})_{\ell=1}^L$  with  $C_i = C/\sqrt{N}$ ; and **Per Layer Ensemble Clipping**, which clips per-layer gradients  $\Delta_{i,\ell}$  with  $C_{i,\ell} = C/\sqrt{N \times L}$ , so that  $C = \sqrt{\sum_{i=1}^N C_i^2} = \sqrt{\sum_{i=1}^N \sum_{\ell=1}^L C_{i,\ell}^2}$ .
+
+For both strategies, we verify that  $\Delta_k^{\text{clipped}} = \left( \Delta_{i,k}^{\text{clipped}} \right)_{i=1}^K$  has sensitivity bounded by  $C$  (see Theorem 4.2’s proof in appendix), and that the contribution of a given trajectory to the *model ensemble* is appropriately limited. Ensemble clipping eliminates the linear dependence of the privacy budget on the number of models. However, it does not entirely remove the negative impact of increasing  $N$ . Indeed, for a given noise level, a larger  $N$  requires a smaller clipping threshold  $C_i$  or  $C_{i,\ell}$ , which can degrade model convergence by losing too much information from the original gradient. Nevertheless, the clipping threshold scales with the square root of  $N$ , mitigating the impact to some extent.
+
+We now formally derive the privacy guarantees for an ensemble of models trained with Algorithm 1. Mapping users in federating learning to trajectories in offline RL, we can directly adapt Theorem 1 from McMahan et al. (2018) to state that, with the sensitivity of clipped gradients  $\Delta_{i,k}^{\text{clipped}}$  effectively bounded by  $C$ , the moments accounting method from Abadi et al. (2016) computes correctly the privacy loss of Algorithm 1 at trajectory-level for the noise multiplier  $z = \sigma/C$  with  $\mathbb{C} = C/qK$ . We can therefore use the moments accountant to compute, given  $\delta \in (0, 1)$ ,  $z > 0$ ,  $q \in (0, 1)$  and  $T \in \mathbb{N}$ , the total privacy budget  $\epsilon$  spent by Algorithm 1, and obtain  $(\epsilon, \delta)$ -TDP guarantees for our dynamics model, as stated in Theorem 4.2 (full proof in appendix).
+
+**Theorem 4.2.**  $(\epsilon, \delta)$ -TDP guarantees for dynamics model. *Given  $\delta \in (0, 1)$ , noise multiplier  $z$ , sampling ratio  $q$  and number of training iterations  $T$ , let  $\epsilon := \epsilon^{\text{MA}}(z, q, T, \delta)$  be the privacy budget computed by the moments accounting method from (Abadi et al. (2016), more details in Section H.6). The dynamics model output by Algorithm 1 is  $(\epsilon, \delta)$ -TDP.*
+
+### 4.3 POLICY OPTIMIZATION UNDER A PRIVATE MODEL
+
+Now that we learned a private model  $\hat{M}$  from offline data, we use it as a simulator of the environment to learn a private policy  $\hat{\pi}$  with a model-based policy optimization approach. The use of a private model and the privacy constraints on the end policy introduce additional challenges compared to the non-private case, as demonstrated in Section 4.3.1. We study solutions to mitigate the detrimental
+
+{6}------------------------------------------------
+
+effects of private training on policy performance in Section 4.3.2, before deriving formal privacy guarantees for a policy learned under a private model in Section 4.3.3.
+
+#### 4.3.1 IMPACT OF PRIVACY ON POLICY OPTIMIZATION
+
+It is first essential to examine the complexities of policy optimization in model-based offline RL and assess whether they are amplified in the private setting. A major challenge in model-based offline RL is to handle the discrepancy between the true and the learned dynamics when optimizing the policy. Indeed, model inaccuracies cause errors in policy evaluation that may be exploited, resulting in poor performance in the real environment. According to the Simulation Lemma (Kearns & Singh, 2002; Xu et al., 2020), the value evaluation error of a policy  $\pi$  in model-based RL can be decomposed into a *model error* term and a *policy distribution shift* term. Formally, denoting  $\rho_{\pi}^B$  the state-action discounted occupancy measure of the data-collection policy  $\pi^B$  under the true MDP, if the model error is bounded as  $\mathbb{E}_{(s,a) \sim \rho_{\pi}^B} [D_{KL}(P(\cdot|s,a) || \hat{P}(\cdot|s,a))] \leq \varepsilon_m$  and the distribution shift is bounded as  $\max_s D_{KL}(\pi(\cdot|s) || \pi^B(\cdot|s)) \leq \varepsilon_{\pi}$ , then the value evaluation error of  $\pi$  is bounded as:
+
+$$|\hat{V}^{\pi} - V^{\pi}| \leq \frac{\sqrt{2}\gamma}{(1-\gamma)^2} \sqrt{\varepsilon_m} + \frac{2\sqrt{2}}{(1-\gamma)^2} \sqrt{\varepsilon_{\pi}}, \quad (1)$$
+
+where  $\hat{V}^{\pi}$  and  $V^{\pi}$  denote the value of  $\pi$  under the learned and the true dynamics, respectively. Controlling this quantity for an arbitrary  $\pi$  is crucial in our setting, as it ensures that the learned MDP is a reasonable simulator of the true environment. Moreover, (1) directly implies a bound on the sub-optimality gap, since  $|V^* - V^{\hat{\pi}}| \leq 2 \sup_{\pi} |\hat{V}^{\pi} - V^{\pi}|$ . Under some assumptions regarding the model loss function, Proposition 4.3 states the model error term in terms of the size  $N_D$  of the dataset.
+
+**Proposition 4.3.** Value evaluation error in non-private offline MBRL. *Let the model loss function be  $L$ -Lipschitz and  $\Delta$ -strongly convex, and assumptions from the simulation lemma hold. There is a stochastic convex optimization algorithm for learning the model and a constant  $M$  such that, with probability at least  $1 - \alpha$ , and for sufficiently large  $N_D$ , the value evaluation error of  $\pi$  is bounded as:*
+
+$$|\hat{V}^{\pi} - V^{\pi}| \leq \frac{\sqrt{2}\gamma}{(1-\gamma)^2} \cdot M \cdot \frac{L \log^{1/2}(N_D/\alpha)}{\sqrt{\Delta N_D}} + \frac{2\sqrt{2}\gamma}{(1-\gamma)^2} \sqrt{\varepsilon_{\pi}}.$$
+
+When we learn the model with differential privacy, we disrupt model convergence because of gradient clipping and noise. This likely results in a less accurate dynamics model (although it may help prevent overfitting in some cases) and increased value evaluation error. Intuitively, DP training impacts model error in (1) as a direct result of gradient perturbations: Bassily et al. (2014), in particular, shows that noisy gradient descent (GD) has increased excess risk compared to non-private GD. In the simpler case where the model is trained with a vanilla DP noisy GD algorithm, Proposition 4.4 states the value evaluation error under the private model.
+
+**Proposition 4.4.** Value evaluation error in private offline MBRL. *Let assumptions from Proposition 4.3 hold. If the model is learned with  $(\varepsilon, \delta)$ -DP gradient descent, then, with probability at least  $1 - \alpha$ , there is a constant  $M'$  such that for large enough  $N_D$ , the value evaluation error of  $\pi$ :*
+
+$$|\hat{V}_{DP}^{\pi} - V^{\pi}| \leq \frac{\sqrt{2}\gamma}{(1-\gamma)^2} \cdot M' \cdot \frac{L d^{1/4} \log(N_D/\delta) \cdot \text{poly} \log(1/\alpha)}{\sqrt{\Delta N_D \varepsilon \alpha}} + \frac{2\sqrt{2}\gamma}{(1-\gamma)^2} \sqrt{\varepsilon_{\pi}},$$
+
+where  $\hat{V}_{DP}^{\pi}$  is the value of  $\pi$  under the privately learned dynamics. Comparing the value evaluation errors in Propositions 4.3 and 4.4 (both proven in appendix), we observe how DP training may degrade performance in MBRL. The private bound has an explicit dependence on the problem dimension  $d$  which is not present in the non-private bound, and the  $\sqrt{\varepsilon}$  factor in the denominator shows that the error will degrade with strong privacy guarantees. On the other hand, the distribution shift term does not depend on the learned dynamics and is therefore not affected by private training.
+
+#### 4.3.2 MITIGATING PRIVATE MODEL UNCERTAINTY
+
+In Section 4.3.1, we showed that private model training impacts the reliability of our model for evaluating policies due to an increased dynamics error, which can lead to misjudging the quality of a
+
+{7}------------------------------------------------
+
+policy in the true environment. In the non-private case, this is typically handled by penalizing the reward with a measure of the uncertainty of the model, denoted  $u : \mathcal{S} \times \mathcal{A} \rightarrow \mathbb{R}_+$ . Therefore, if the model is believed to be unreliable at a given state-action pair  $(s, a)$  (i.e., large  $u(s, a)$ ), the possibly over-estimated reward will be corrected as:
+
+$$\tilde{r}(s, a) = \hat{r}(s, a) - \lambda \cdot u(s, a), \quad (2)$$
+
+where  $\lambda$  is an hyperparameter. The policy is then optimized under the resulting pessimistic MDP  $\tilde{\mathcal{M}} = (\mathcal{S}, \mathcal{A}, \tilde{P}, \tilde{r}, \gamma, \rho_0)$ . MOPO (Yu et al., 2020), MOREL (Kidambi et al., 2020) and more recently COUNT-MORL (Kim & Oh, 2023) achieve impressive results on traditional offline RL benchmarks with this approach, using different heuristics to estimate model uncertainty.
+
+As suggested by the simulation lemma, the valuation error can depend on both model error and distribution shift. However, we demonstrated that private training affects only model error. Interestingly, Lu et al. (2022), which studies design choices in offline model-based RL and the properties of various uncertainty estimators, finds that the uncertainty measures proposed in the literature are more strongly correlated with model error than with distribution shift. Based on this, we believe that existing uncertainty measures are well-suited to mitigate the diminished reliability of the model under private training, as they will effectively capture the increased error. In particular, we consider the maximum aleatoric uncertainty  $u_{\text{MA}}(s, a) = \max_{i \in [1, N]} \|\Sigma_{\psi_i}(s, a)\|_F$  (Yu et al., 2020) and the maximum pairwise difference  $u_{\text{MPD}}(s, a) = \max_{i, j \in [1, N]} \|\mu_{\phi_i}(s, a) - \mu_{\phi_j}(s, a)\|_2$  (Kidambi et al., 2020). We compare both estimators (see Table 10 in the appendix) and find that neither is consistently superior. However, we observe that the choice of estimator can affect performance on a specific task. In addition, it seems reasonable to moderately increase the reward penalty  $\lambda$  compared to the non-private case to take into account the greater uncertainty.
+
+#### 4.3.3 PRIVATE POLICY OPTIMIZATION
+
+Given a choice of uncertainty estimator  $u \in \{u_{\text{MA}}, u_{\text{MPD}}\}$ , we now consider optimizing the policy within the pessimistic private MDP  $\tilde{\mathcal{M}} = (\mathcal{S}, \mathcal{A}, \tilde{P}, \tilde{r}_u, \gamma, \rho_0)$ , with  $\tilde{r}_u = \hat{r}(s, a) - \lambda \cdot u(s, a)$ . We use Soft Actor-Critic (SAC, Haarnoja et al. (2018))<sup>1</sup>, a classic off-policy algorithm with entropy regularization, to learn the policy from  $\tilde{\mathcal{M}}$ , in line with existing approaches in the offline MBRL literature. Offline model-based methods typically mix real offline data from  $\mathcal{D}_K$  with model data during policy learning (in MOPO, for instance, each batch contains 5% of real data). Here, however, we learn the policy exclusively from model data to avoid incurring privacy loss beyond what is needed to train the model, and thus control the privacy guarantees. Algorithm 4 in appendix provides a pseudo-code for SAC policy optimization in the pessimistic private MDP. Using the post-processing property of DP, we can now state in Theorem 4.5 that, given the  $(\epsilon, \delta)$ -TDP model  $\tilde{\mathcal{M}} = (\tilde{P}, \tilde{r})$  learned as described in Section 4.2, the policy learned with Algorithm 4 under  $\tilde{\mathcal{M}}$  is also  $(\epsilon, \delta)$ -TDP. The full proof of this theorem is provided in appendix.
+
+**Theorem 4.5.**  $(\epsilon, \delta)$ -TDP guarantees for PRIMORL. *Given an  $(\epsilon, \delta)$ -TDP model  $(\hat{P}, \hat{r})$  learned with Algorithm 1, the policy obtained with private policy optimization (Algorithm 4) within the pessimistic model  $(\tilde{P}, \tilde{r} - \lambda u)$  is  $(\epsilon, \delta)$ -TDP.*
+
+## 5 EXPERIMENTS
+
+We empirically assess PRIMORL in three continuous control tasks: CARTPOLE-BALANCE and CARTPOLE-SWINGUP from the DeepMind Control Suite (Tassa et al., 2018) as well as PENDULUM from OpenAI’s Gym (Brockman et al., 2016). We also conduct experiments on HALFCHEETAH (Wawrzynski, 2009), which we present in appendix (Section J). For simplicity, we refer to CARTPOLE-BALANCE and CARTPOLE-SWINGUP as BALANCE and SWINGUP.
+
+### 5.1 EXPERIMENTAL SETTING
+
+Following common practice, we evaluate the offline policies by running them in the real environment. We aim to assess the policy’s performance degradation when varying the privacy level, as DP training
+
+<sup>1</sup>This could be any model-based policy optimization or planning algorithm that does not use offline data.
+
+{8}------------------------------------------------
+
+![Figure 2: Learning curves on PENDULUM (left), BALANCE (middle) and SWINGUP (right). Each plot shows Episodic Return (y-axis) vs. Epoch (x-axis) for four algorithms: MOPO (blue line with circles), PRIMORL No Privacy (purple line with circles), PRIMORL Low (green line with circles), and PRIMORL High (red line with circles). Shaded regions represent 95% confidence intervals. In all three environments, MOPO and PRIMORL No Privacy achieve higher returns faster than the privacy-preserving variants. PRIMORL High generally achieves the lowest return, while PRIMORL Low and PRIMORL No Privacy show similar performance.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 2: Learning curves on PENDULUM (left), BALANCE (middle) and SWINGUP (right). Each plot shows Episodic Return (y-axis) vs. Epoch (x-axis) for four algorithms: MOPO (blue line with circles), PRIMORL No Privacy (purple line with circles), PRIMORL Low (green line with circles), and PRIMORL High (red line with circles). Shaded regions represent 95% confidence intervals. In all three environments, MOPO and PRIMORL No Privacy achieve higher returns faster than the privacy-preserving variants. PRIMORL High generally achieves the lowest return, while PRIMORL Low and PRIMORL No Privacy show similar performance.
+
+Figure 2: Learning curves on PENDULUM (left), BALANCE (middle) and SWINGUP (right).
+
+may negatively affect it. We consider MOPO as our non-private baseline. For PRIMORL, we consider different configurations outlined in Table 3. The NO PRIVACY variant, without noise ( $z = 0$ ), isolates the impact of trajectory-level model training on performance. The two private variants ( $\epsilon < \infty$ ) PRIMORL Low and PRIMORL High correspond to different noise multipliers. We discuss the choice of privacy parameters, as well as training hyperparameters and implementation details in appendix (Section H).
+
+As the existing SWINGUP offline benchmark from Gülçehre et al. (2020) is very small ( $K = 40$ ), and DP training of ML models typically requires significantly more data compared to non-private training (see, for instance, Ponomareva et al. (2023), and our discussion in appendix, Section L), we build our own dataset with 30k trajectories (i.e., 30M steps). We follow the same approach for BALANCE and PENDULUM for which we are not aware of any existing offline benchmark. Data collection, detailed in appendix (Section D), follows the philosophy of standard benchmarks like D4RL (Fu et al., 2020).
+
+### 5.2 MAIN RESULTS
+
+We present results on BALANCE, SWINGUP and PENDULUM for PRIMORL and baselines in Table 1 and Figure 2. Both report policy performance in the real MDP as the mean episodic return over 10 episodes per SAC training epoch. Average performance and 95% confidence intervals are computed by re-training the model and the policy from scratch on at least 5 random seeds to assess the stability of the full training process. We also report the corresponding theoretical upper bound on  $\epsilon$ , as computed from the hyperparameters  $z, q, T$  and  $\delta$  using the moments accountant  $\epsilon^{\text{MA}}(z, q, T, \delta)$  (see Table 2 and discussion in Section H.6 for further explanations regarding the moments accountant).
+
+These results show a well-expected trade-off: performance tends to degrade with stronger privacy guarantees (i.e., smaller  $\epsilon$ ’s), as the model training gets perturbed with higher levels of noise. Moreover, private model training makes the policy performance less stable over several runs, which is also expected since differential privacy adds another source of randomness during training. We notice that noise is not the sole factor that negatively impacts performance, as suggested by the gap between MOPO and PRIMORL NO PRIVACY: gradient clipping and trajectory-level training also contribute to performance degradation. In some cases, a small amount of DP noise might actually be beneficial, acting as a kind of regularization, as in SWINGUP and PENDULUM. Moreover, experiments on HALFCHEETAH (Section J) show that PRIMORL performs worse in higher-dimensional tasks. This could be expected based on the theoretical analysis led in Section 4.3.1, as DP training adds a dependence on the dimension  $d$  of the task in the valuation gap. Despite this trade-off, private agents trained with PRIMORL remain competitive with MOPO for  $\epsilon$  in the  $10^1$  to  $10^2$  range. For PENDULUM, we plot policy performance against  $\epsilon$  in Figure 3, and observe even no performance degradation until  $\epsilon$  reaches the 1 to 10 range. Although algorithms from Qiao & Wang (2023a) are not suited for direct comparison on the same tasks, we argue that our empirical results are significantly stronger. Indeed, converting  $p$ -zero-concentrated DP guarantees into standard  $(\epsilon, \delta)$ -DP guarantees for clarity and fair comparison, we observe that PRIMORL achieves comparable privacy-performance trade-offs, but on much more complex environments (more details in appendix, Section F).
+
+While the privacy budgets  $\epsilon$  from Table 1 do not correspond to strong theoretical privacy guarantees, we must consider the worst-case nature of the differential privacy definition, along with its very strong assumptions on the adversary side. In offline RL especially, the definition of DP assumes the adversary only has to discriminate between two precise neighboring datasets  $D$  and  $D' = D \cup \{\tau\}$  as well as the release of all gradients, whereas in practice the adversary faces the much harder task of reconstructing a high-dimensional trajectory based on the output policy and limited side information
+
+{9}------------------------------------------------
+
+Table 1: Results for PENDULUM, BALANCE and SWINGUP.
+
+|                  | PENDULUM   |                                    | CARTPOLE-BALANCE |                                    | CARTPOLE-SWINGUP |                                    |
+|------------------|------------|------------------------------------|------------------|------------------------------------|------------------|------------------------------------|
+| METHOD           | $\epsilon$ | RETURN                             | $\epsilon$       | RETURN                             | $\epsilon$       | RETURN                             |
+| MOFO             | $\infty$   | $795.9 \pm 6.5$                    | $\infty$         | $976.3 \pm 26.8$                   | $\infty$         | $804.9 \pm 89.6$                   |
+| PRIMORL NO PRIV. | $\infty$   | $810.4 \pm 27.5$ ( <b>101.8%</b> ) | $\infty$         | $947.5 \pm 68.3$ ( <b>97.1%</b> )  | $\infty$         | $774.1 \pm 81.7$ ( <b>96.17%</b> ) |
+| PRIMORL LOW      | 22.3       | $817.4 \pm 21.7$ ( <b>102.7%</b> ) | 85.0             | $815.8 \pm 97.2$ ( <b>83.6%</b> )  | 94.2             | $772.4 \pm 73.9$ ( <b>95.96%</b> ) |
+| PRIMORL HIGH     | 5.1        | $778.9 \pm 53.5$ ( <b>97.9%</b> )  | 8.2              | $758.2 \pm 187.2$ ( <b>77.7%</b> ) | 17.0             | $698.5 \pm 57.5$ ( <b>86.75%</b> ) |
+
+|          |      | $z$  | $T$             | $q$       | $\delta$  | $\epsilon$  |
+|----------|------|------|-----------------|-----------|-----------|-------------|
+| PENDULUM | LOW  | 0.35 | $7 \cdot 10^3$  | $10^{-3}$ | $10^{-5}$ | 22.3        |
+|          | HIGH | 0.52 | $7 \cdot 10^3$  | $10^{-3}$ | $10^{-5}$ | <b>5.1</b>  |
+| BALANCE  | LOW  | 0.25 | $7 \cdot 10^3$  | $10^{-3}$ | $10^{-5}$ | 85.0        |
+|          | HIGH | 0.45 | $7 \cdot 10^3$  | $10^{-3}$ | $10^{-5}$ | <b>8.2</b>  |
+| SWINGUP  | LOW  | 0.25 | $10 \cdot 10^3$ | $10^{-3}$ | $10^{-5}$ | 94.2        |
+|          | HIGH | 0.38 | $10 \cdot 10^3$ | $10^{-3}$ | $10^{-5}$ | <b>17.0</b> |
+
+Table 2: Hyperparameters and computation of the theoretical privacy budget  $\epsilon := \epsilon^{\text{MA}}(z, q, T, \delta)$ ![Figure 3: Policy performance on PENDULUM as a function of epsilon. The graph shows Episodic Return on the y-axis (ranging from 0 to 1000) against Privacy Budget epsilon on the x-axis (logarithmic scale from 10^0 to 10^2). The performance starts at approximately 800 for epsilon = 10^0, peaks at around 900 for epsilon = 10^1, and then slightly declines to about 850 for epsilon = 10^2. Vertical error bars are shown for each data point.](8ee3b76dd49f31624d287885bc2c81ee_img.jpg)
+
+Figure 3: Policy performance on PENDULUM as a function of epsilon. The graph shows Episodic Return on the y-axis (ranging from 0 to 1000) against Privacy Budget epsilon on the x-axis (logarithmic scale from 10^0 to 10^2). The performance starts at approximately 800 for epsilon = 10^0, peaks at around 900 for epsilon = 10^1, and then slightly declines to about 850 for epsilon = 10^2. Vertical error bars are shown for each data point.
+
+Figure 3: Policy performance on PENDULUM as a function of  $\epsilon$ 
+
+only. Therefore, backed by recent work on empirical privacy auditing (e.g., Carlini et al. (2019); Ponomareva et al. (2022)), we argue that such  $\epsilon$ 's can provide adequate privacy protection in practical offline RL applications. According to Ponomareva et al. (2023),  $\epsilon \lesssim 10$  is actually a realistic and widely used goal in private deep learning applications. We discuss this matter more in depth in appendix (Section G). We also point out that achieving a strong privacy-utility trade-off in offline RL requires access to datasets with a very large number of trajectories and that current benchmarks, with datasets of only dozens to thousands of trajectories, are insufficient for studying privacy effectively. In contrast, other fields often use datasets containing millions of users (between  $10^9$  to  $10^{10}$  users in McMahan et al. (2018)) to ensure robust privacy guarantees, which would be very costly to study in offline RL. In appendix (Section L), we provide evidence that increasing dataset size improves the privacy-performance trade-off, demonstrating even greater potential for PRIMORL.
+
+## 6 DISCUSSION
+
+While existing DP RL methods are limited to tabular and linear finite-horizon MDPs, we are the first to address deep offline RL with privacy guarantees in the infinite-horizon discounted setting, and propose a model-based approach named PRIMORL. We empirically show that PRIMORL is capable of learning trajectory-level private, neural-based policies in standard control tasks with only limited performance cost, achieving a new standard in differentially private RL. Although the reported privacy budgets are typically considered too large to stand as formal DP guarantees, we argue based on recent studies on practical DP that they can offer satisfying privacy protection in practice, especially considering the worst-case nature of DP which can yield too pessimistic privacy budgets. Empirical evaluation of the robustness of our algorithm against privacy attacks, for which a rigorous and standardized benchmark has to be developed, will thus be an important research direction for future work. We further point out that our approach has the potential for achieving greater privacy-utility trade-offs given access to large enough offline datasets, hence calling for new benchmarks in the increasingly important field of private offline RL.
+
+With the aim of shifting the paradigm in how private RL is approached — from predominantly theoretical research to practical algorithms — this work sets the stage for future efforts to scale to higher-dimensional problems. We identify several promising research avenues. First, we may consider limiting the number of real trajectories used during training to leverage privacy amplification through sub-sampling, for example, by using data augmentation techniques. As our theoretical analysis highlights the impact of dimensionality on private model error, another promising direction is learning compact representations of high-dimensional inputs and performing planning directly in the latent space, as explored by Jiang et al. (2023). We leave these avenues for future work. Overall, we believe our work represents a significant step toward the much-needed deployment of private RL methods in practical applications.
+
+ Rest of paper (reference and Appendix) is removed.

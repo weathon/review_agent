@@ -1,0 +1,295 @@
+
+
+{0}------------------------------------------------
+
+# SCALING TRANSFORMERS FOR LOW-BITRATE HIGH-QUALITY SPEECH CODING
+
+Julian D. Parker\* Anton Smirnov Jordi Pons CJ Carr Zack Zukowski  
+ Zach Evans Xubo Liu\*  
+ Stability AI  
+ {julian.parker, xubo.liu}@stability.ai
+
+## ABSTRACT
+
+The tokenization of speech with neural audio codec models is a vital part of modern AI pipelines for the generation or understanding of speech, alone or in a multimodal context. Traditionally such tokenization models have concentrated on low parameter-count architectures using only components with strong inductive biases. In this work we show that by scaling a transformer architecture with large parameter count to this problem, and applying a flexible Finite Scalar Quantization (FSQ) based bottleneck, it is possible to reach state-of-the-art speech quality at extremely low bit-rates of 400 or 700 bits-per-second. The trained models strongly out-perform existing baselines in both objective and subjective tests.
+
+## 1 INTRODUCTION
+
+Compressed coding of audio and speech data in digital format has been an active area of research since the 1970s, and reached particular prominence in the late 1990s with the emergence of mp3 (Painter & Spanias, 2000). Research into improving the sound quality and compression ratio of such codecs (mainly using signal processing techniques) has continued (Valin et al., 2016). The main purpose of these codecs is to improve the efficiency of transmission and storage of what is traditionally a data-intensive medium.
+
+In recent times, the research community began to apply the techniques of machine learning to the audio coding problem (Zeghidour et al., 2021). These models are referred to as *neural audio codecs* (NACs). Initially the goal of these models was similar to traditional audio codecs, which aim to maximize compression and audio quality at low computational cost. However, a paradigm shift occurred with the proposal of powerful generative models utilizing the token sequences produced by these codecs (Borsos et al., 2023a; Wang et al., 2023; Borsos et al., 2023b). With the arrival of these models and the plethora of new use-cases they encompass, the design goals of NACs have shifted to be less concerned with computational complexity, and more concerned with pushing compression (especially in the temporal dimension) to the maximum level possible.
+
+Our goal is to design a speech codec model in the spirit of this paradigm shift, whose primary purpose is to be used in combination with modern generative architectures for generation or understanding of speech signals. We make the observation that in a typical modern generative pipeline for speech there may be models totalling billions of parameters, a tiny fraction of which is usually dedicated to the codec model. There is therefore some headroom to increase the size of this component without overly impacting overall computational burden. This opens up scaling of the codec model size as a route to higher quality audio and higher compression levels.
+
+Neural audio codec models have largely been based on convolutional or recurrent architectures, which can be challenging to scale to larger model sizes without placing restrictions on the architecture. Even with such restrictions, the largest successful purely convolutional networks are generally below 1B parameters (Woo et al., 2023). Transformers (Vaswani, 2017) have shown the ability to scale to billions of parameters in many domains (Hoffmann et al., 2022), but have not been fully utilized in a codec context yet. Recent work has also deployed transformer blocks in the bottleneck of a convolutional codec, showing improvements in compression ratio (Défossez et al., 2024).
+
+---
+
+\*Equal contribution
+
+{1}------------------------------------------------
+
+However, transformers have not so far been deployed as the main component of a codec model. One major contribution of this work is to design a new codec architecture that is predominantly transformer-based, and scale such an architecture into the 1B parameter range.
+
+The majority of current codecs utilize a Residual Vector Quantizer (RVQ) (Zeghidour et al., 2021) in some form. This is effective in maximizing the expressivity of the bottleneck for a given bit-rate, but presents a number of challenges for generative modeling. One challenge is that it produces many parallel hierarchical streams of tokens. The causal relationship between the streams introduces a variety of complications that must be accounted for during training and inference (Borsos et al., 2023a; Copet et al., 2023; Défossez et al., 2024). An additional challenge is that VQs and RVQs can suffer from poor or inconsistent codebook utilization, making the process of learning the token distribution more difficult and prone to bias. In this work we address some of the issues of VQ and RVQ by instead adopting a quantization scheme derived from Finite Scalar Quantization (FSQ) (Mentzer et al., 2023), and a novel post-hoc method decomposing FSQ into low-order residuals.
+
+We demonstrate how these contributions enable the training of a waveform codec model that achieves high compression for speech, with ultra-low bitrates of 400 bps and 700 bps, while still preserving good audio quality.
+
+Code and models will be released at: [github.com/Stability-AI/stable-codes](https://github.com/Stability-AI/stable-codes).
+
+## 2 RELATED WORK
+
+### 2.1 NEURAL AUDIO CODECS
+
+The dominant paradigm for training NACs has so far been based on the VQ-VAE structure, consisting of a classic autoencoder-like structure of encoder and decoder model with an information bottleneck placed in between them in the form of a quantizer. Soundstream (Zeghidour et al., 2021) was the first example of such a model aimed at handling varying bit-rates and types of audio with a single model. Soundstream introduced an adversarial loss in addition to reconstruction loss, and residual vector quantization (RVQ) for use in the bottleneck. EnCodec (Défossez et al., 2022) proposed a number of improvements to this formulation and achieved higher audio quality. SpeechTokenizer (Zhang et al., 2023b), building on Encodec, introduces the use of semantic tokens in the first channel of discrete RVQ codecs, bridging the gap between text tokens and acoustic tokens for speech coding.
+
+DAC (also known as improved RVQGAN) (Kumar et al., 2023) investigated several design choices in this type of NAC, including the introduction of periodic inductive biases and improvements in codebook utilization. This approach achieved notable performance, compressing 44.1 kHz audio into discrete codes at an 8 kbps bitrate. While DAC delivers high-quality reconstruction at this compression level, its bitrate remains relatively high for generative audio modeling, requiring over 700 tokens per second for 44.1 kHz audio due to the large number of residual tokens.
+
+### 2.2 LOW BITE-RATE SPEECH CODING
+
+Recently, there has been growing interest (Li et al., 2024; Liu et al., 2024a; Défossez et al., 2024) in optimizing bitrate efficiency in NACs while maintaining high reconstruction quality. Such low-bitrate, high-fidelity codecs are particularly crucial for improving efficiency and reducing latency in generative audio modeling. However, achieving extremely low bitrates (such as below 1 kbps for 16 kHz audio) remains challenging due to the complexities involved in accurately compressing high-frequency components in the audio waveform.
+
+SingleCodec (Li et al., 2024) addressed neural speech coding by proposing an enhanced VQ-VAE combined with bidirectional LSTM for mel-spectrogram compression, achieving a notably low bandwidth of 304 bps for 24 kHz speech mel-spectrogram coding, followed by BigVGAN (Lee et al., 2022) as a vocoder for waveform reconstruction. Inspired by recent advances in generative models, SemantiCodec (Liu et al., 2024a) offers a different approach by leveraging a latent diffusion model to generate latent features from a pre-trained mel-spectrogram VAE (which also requires a vocoder for waveform reconstruction). The diffusion model is conditioned on k-means clustered audio tokens derived from a pre-trained AudioMAE encoder. SemantiCodec supports low bitrates
+
+{2}------------------------------------------------
+
+ranging from 0.31 kbps to 1.43 kbps for 16 kHz speech mel-spectrogram coding, offering a promising solution for maintaining high reconstruction quality at extremely low bitrates.
+
+Mimi (Défossez et al., 2024) is a recent end-to-end waveform codec for speech based on SoundStream and Encodec. Mimi introduces transformer layers around the RVQ bottleneck between the convolutional encoder and decoder. By scaling its training data to 7 million hours, Mimi has achieved impressive performance in neural speech coding, operating at 1.1 kbps with a 12.5 kHz latent for 24 kHz speech in a causal way, utilizing 8 tokens per latent frame (100 tokens per second).
+
+### 2.3 GENERATIVE MODELS FOR AUDIO AND SPEECH
+
+Autoregressive models can operate directly on quantized audio waveforms, but can be slow during inference (Oord et al., 2016). Recent models, such as VALL-E (Wang et al., 2023), AudioLM (Borsos et al., 2023a), MusicGen (Copet et al., 2023), and VQ-VAE-based approaches for sound synthesis (Liu et al., 2021), improve efficiency by instead modeling quantized latent sequences. Non-autoregressive models (Oord et al., 2018) and adversarial audio synthesis (Donahue et al., 2018) were developed to overcome the inefficiencies of autoregressive models. Recent non-autoregressive models such as VampNet (Garcia et al., 2023), SoundStorm (Borsos et al., 2023b), or StemGen (Parker et al., 2024) are based on masked token modeling (Chang et al., 2022). End-to-end diffusion modeling can also be computationally demanding (Rouard & Hadjeres, 2021; Pascual et al., 2023). Recent efficiency improvements rely on latent diffusion models (Liu et al., 2023; 2024b; Yuan et al., 2024; Evans et al., 2024a;b;c; Yang et al., 2024), which often rely on VAEs for latent encoding. The recent growth of multi-modal and speech-first generative models such as SpeechGPT (Zhang et al., 2023a), LLaMA3 (Dubey et al., 2024) and Moshi (Défossez et al., 2024) is also heavily reliant on tokenized representations of speech and audio. As such, learning quantized or continuous latent spaces with codecs is crucial for advancing audio and speech generation.
+
+## 3 ARCHITECTURE
+
+The architecture of the codec is shown in overview form in Fig. 1. We will discuss the design of the encoder and decoder sections with FSQ-based bottleneck separately.
+
+### 3.1 ENCODER AND DECODER
+
+Our encoder and decoder structures are designed to look very similar to a standard transformer architecture. Both consist of multiple blocks, each operating at a specific temporal resolution. These sections consist of a strided 1d dense convolution layer (for downsampling in the encoder) or its transposed equivalent (for upsampling in the decoder) and a chain of relatively standard transformer blocks. The only difference between the encoder and decoder architecture is that the downsampling or upsampling layer is placed in a different location—in the encoder at the start of the block, and in the decoder at the end of the block. This maintains symmetry of the architecture. The stacked transformer blocks consist of a self-attention section and a feedforward section, with pre-norm placement of layer norm blocks. The layer norm blocks are configured with a higher than standard  $\epsilon$  as discussed in Appendix B.1. In addition, the self-attention utilizes QK-norm. The feedforward block consists of a reverse bottleneck with a gated MLP, utilizing the SiLU activation function. Both attention blocks and feedforward blocks are followed by LayerScale (Touvron et al., 2021), to further stabilize training. The self-attention uses a sliding window to restrict receptive field and aid generalization of the architecture to arbitrary length sequences. The self-attention mechanism incorporates Rotary Positional Embeddings (RoPE) (Su et al., 2024) and operates without a causal attention mask. However, a causal variant suited for streaming purposes is possible with relatively minor modifications, as described in Appendix A.4. We further examine the model’s receptive field, causality, and latency in Appendix B.2.
+
+In contrast to convolutional architectures, we want the majority of temporal downsampling or upsampling of the signal to occur at the input or output to the architecture. This is to avoid feeding very small dimension embeddings to the transformer blocks, and also to limit sequence length. Only minimal further resampling happens within the architecture using the strided convolutions and transposed convolutions in each encoder or decoder block. To achieve this we can use any filter-bank representation of the input signal which conforms to perfect reconstruction criteria. The
+
+{3}------------------------------------------------
+
+![Figure 1: Architecture of the proposed model. The diagram illustrates the flow from an input audio signal through various processing stages. At the top, a dashed box contains two loss functions, L_pre/L_fine and L_disc, which receive inputs from the Patch and Unpatch blocks. The main signal path starts with an audio waveform entering a 'Patch' block, followed by an 'Encoder' block. The 'Encoder' block is detailed in a sub-diagram: it consists of a 'Conv' layer, a sequence of blocks E_0, E_1, ..., E_n, and another 'Conv' layer. Below the encoder is a 'FSQ' (Finite Scalar Quantization) block. The 'Decoder' block follows, which is structurally identical to the encoder but uses a 'Strided Conv' at its input and ends with a 'Conv' layer. The decoder's output goes to an 'Unpatch' block, which produces the final reconstructed audio signal. Below the decoder is another sub-diagram showing the internal structure of the encoder/decoder blocks: it starts with a 'Conv' layer, followed by a 'Strided Conv' (or 'Conv' in the decoder), then a sequence of blocks T_0, T_1, T_2, ..., T_m. Each T_i block contains a 'Layer Norm', 'Self Attn', a residual connection, another 'Layer Norm', and a 'Gated MLP' with another residual connection.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 1: Architecture of the proposed model. The diagram illustrates the flow from an input audio signal through various processing stages. At the top, a dashed box contains two loss functions, L\_pre/L\_fine and L\_disc, which receive inputs from the Patch and Unpatch blocks. The main signal path starts with an audio waveform entering a 'Patch' block, followed by an 'Encoder' block. The 'Encoder' block is detailed in a sub-diagram: it consists of a 'Conv' layer, a sequence of blocks E\_0, E\_1, ..., E\_n, and another 'Conv' layer. Below the encoder is a 'FSQ' (Finite Scalar Quantization) block. The 'Decoder' block follows, which is structurally identical to the encoder but uses a 'Strided Conv' at its input and ends with a 'Conv' layer. The decoder's output goes to an 'Unpatch' block, which produces the final reconstructed audio signal. Below the decoder is another sub-diagram showing the internal structure of the encoder/decoder blocks: it starts with a 'Conv' layer, followed by a 'Strided Conv' (or 'Conv' in the decoder), then a sequence of blocks T\_0, T\_1, T\_2, ..., T\_m. Each T\_i block contains a 'Layer Norm', 'Self Attn', a residual connection, another 'Layer Norm', and a 'Gated MLP' with another residual connection.
+
+Figure 1: Architecture of the proposed model. Detail is shown for the encoder block and sub-blocks. The decoder block is configured identically to the encoder block, with the exception of the strided convolution, which is replaced with its transposed equivalent and moved to the end of the  $T_m$  blocks.
+
+details of this choice are discussed in Appendix B.4. Following the conclusions of this analysis and taking inspiration from Vision Transformer (ViT) architectures (Dosovitskiy et al., 2021), we utilize sequence-wise patching of the signal before passing to the encoder.
+
+Additionally we utilize dense 1d convolutional blocks at the inputs and outputs of the encoder and decoder structure. These blocks map between the embedding dimension used within the transformer (which is uniform) and the required dimension for the input/output patches and the latent representation used in the bottleneck. All convolutional layers use a weight-normalized parameterization.
+
+We call the resulting architecture a Transformer Audio AutoEncoder (TAAE).
+
+A major distinction between TAAE and traditional CNN-based codecs is the extensive use of transformer layers in TAAE, which results in a larger model size compared to CNN-based codecs Zeghidour et al. (2021); Défossez et al. (2022); Kumar et al. (2023). CNN-based models leverage convolutional operations, which offer a strong inductive bias and high parameter efficiency. In contrast, the TAAE uses a transformer-based architecture, providing enhanced scalability, albeit with reduced parameter efficiency. An explanation of these differences and discussion comparing convolution and attention mechanisms can be found in the App B.3.
+
+### 3.2 DISCRETE BOTTLENECK
+
+In order to mitigate the inherent problems of VQ and RVQ quantization, we employ a modified version of Finite Scalar Quantization (FSQ) (Mentzer et al., 2023). Instead of a learnable codebook of embeddings connected to particular tokens as in VQ/RVQ, FSQ derives a token sequence by projecting the latent representation to a low-dimensional space, then scalar quantizing each dimension of this space in regular intervals. Each combination of quantized levels can then be mapped to a unique integer value, producing the tokenization. FSQ is known to exhibit almost full codebook utilisation even with very large codebook sizes (e.g.,  $2^{18}$ ) (Mentzer et al., 2023).
+
+We make some modifications to the FSQ algorithm to preserve symmetry of the quantized latents around the origin for any number of levels. Our formulation for the scalar quantizer function  $Q_L$  for a given fixed number of levels  $L$ , applied to some scalar  $x$  is given by:
+
+$$Q_L(x) = \frac{2}{L-1} \lfloor (L-1) \frac{\tanh x + 1}{2} + \frac{1}{2} \rfloor - 1 \quad (1)$$
+
+{4}------------------------------------------------
+
+This scalar quantization function is applied (potentially with different  $L$  per dimension), to the elements of a latent vector  $\mathbf{z}$  to produce the quantized latent.
+
+To train with this scalar quantizer, we use a hybrid approach. Some percentage of the time we emulate the effect of quantization by adding uniform noise (Brendel et al., 2024), giving an approximate quantization function:
+
+$$Q_L(x) \approx \tanh x + \frac{\mathcal{U}\{-1, 1\}}{L-1} \quad (2)$$
+
+which contains no explicit quantization. We also utilize use straight-through gradient estimation. We find that randomly mixing these two approaches along with unmodified latents produces better performance compared to utilizing only one or the other. This random mixing is achieved by starting with the unmodified latents, then replacing elements according to a random mask derived from a Bernoulli distribution with a parameter of 0.5. This procedure is performed twice, once for elements with the straight-through approximation and once with the noise-based approximation. During training we also randomly select uniformly between a pre-selected set of quantization level numbers  $L$ . This is similar to the quantizer-dropout process used in training RVQ-based bottlenecks, and allows us to trade-off quality and codebook size at inference time.
+
+#### 3.2.1 POST-TRAINING BOTTLENECK MODIFICATION
+
+The formulation of FSQ used here has many post-training possibilities for adjusting the reconstruction quality against the number and range of the discrete tokens. Firstly, the regularization provided by training the FSQ bottleneck with uniform noise allows the number of levels for each dimension of the FSQ to be modified after training. As long as the number of levels is greater than or equal to the smallest seen during training, the error produced by the quantization is within the bounds previously seen and therefore is still valid.
+
+By default FSQ produces one token per time-step. In general this is advantageous for our purposes. However, if the use-case requires it, we can decompose this single token post-hoc into multiple tokens using either a parallel partitioning of the dimensions, or (for particular choices of quantization-level number) into a hierarchical residual set of tokens ala RVQ. Parallel partitioning introduces a bi-directional causal relationship between tokens which is unexplored in the generative modeling context, and therefore for this work we concentrate on the hierarchical residual decomposition.
+
+Residual FSQ can be applied post-hoc to a bottleneck trained with a single quantizer but requires some restrictions. Namely, is required to only use numbers of levels conforming to  $L = 2^n + 1, n \in \mathbb{Z}^+$ . This sequence of levels can be derived by starting from levels at  $\{-1, 0, 1\}$  ( $L = 3$ ), and continually subdividing the intervals between levels exactly at the half way point. These level configurations are shown up to  $n = 3$  in Tab. 1. We denote the set containing the positions corresponding to a particular number of levels  $L$ , as  $\ell_L$ . We can clearly see by examination that each larger set is a superset of the previous sets i.e  $\ell_{2n+1} \supset \ell_{2n-1+1}$ , and also that we can construct any particular set of levels using the Minkowski sum of smaller  $\ell_3$  sets, progressively halved e.g  $\ell_3 + \frac{\ell_3}{2} \supset \ell_5$ ,  $\ell_3 + \frac{\ell_3}{2} + \frac{\ell_3}{4} \supset \ell_9$  (albeit with extraneous new values outside the original range). A similar analysis holds for other level numbers conforming to the restriction given above, with the scalings consequently changed. We can utilize this property to do post-hoc residual quantization, using the standard formulation of a residual quantizer for a given latent  $\mathbf{z}$ :
+
+$$\begin{aligned} \hat{\mathbf{z}} &= \sum_{k=0}^K q_k, \\ \mathbf{q}_0 &= \kappa_0(\mathbf{z}), \\ \mathbf{q}_k &= \kappa_k(\mathbf{z} - \sum_{i=0}^{k-1} \mathbf{q}_i) \end{aligned} \quad (3)$$
+
+where  $q_k$  denote the quantizer outputs, and  $\kappa_k$  denote the quantizer functions themselves, which we define in terms of our scalar quantizer function using levels  $L = 2^n + 1, n \in \mathbb{Z}^+$ ,  $Q_{2n+1}$  as:
+
+$$\kappa_k(\mathbf{z}) = \frac{Q_{2n+1}((2n)^k \mathbf{z})}{(2n)^k} \quad (4)$$
+
+{5}------------------------------------------------
+
+Using this formulation, we have the guarantee that the quantized latent  $\tilde{\mathbf{z}}$  belongs to the set of quantized levels seen during training, despite not having been trained using a residual formulation. A downside of this approach is that some rare combinations of tokens result in latents outside the bounds of those seen originally. This can be guarded against by clipping the output of the quantizer in the interval  $[-1, 1]$ .
+
+As quantization noise training (Brendel et al., 2024) is used, it is also possible to remove the quantization entirely and use the latent as a continuous embedding, by retaining only the tanh section of the quantization function in which case the autoencoder operates as if it has a tanh bottleneck of the same latent dimension as the FSQ bottleneck.
+
+| Quantized Positions |                                                     |
+|---------------------|-----------------------------------------------------|
+| $\ell_3$            | $\{-1, 0, 1\}$                                      |
+| $\ell_5$            | $\{-1, -0.5, 0, 0.5, 1\}$                           |
+| $\ell_9$            | $\{-1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1\}$ |
+
+Table 1: FSQ quantization points for level numbers conforming to  $L = 2^n + 1$ ,  $n \in \mathbb{Z}^+$ , up to  $n = 3$ .
+
+#### 3.2.2 CALCULATING FSQ BITS-PER-SECOND
+
+Using the post-hoc modification strategies described in Sec. 3.2.1, it is possible to achieve varying bits-per-second rates even for the same level of resolution.
+
+We calculate bits-per-second (bps) for a decomposition with  $n$  residual levels as:
+
+$$\text{bps} = f_r \sum_{i=0}^n \lceil \log_2(k_i) \rceil \quad (5)$$
+
+where  $f_r$  is the number of frames per second of the codec (i.e. its latent rate) and the  $k_i$  are the codebook sizes for each stage of the residual decomposition. We obtain these codebook sizes as:
+
+$$k = L^d \quad (6)$$
+
+where  $L$  is the number of FSQ levels for the residual stage and  $d$  is the FSQ dim.
+
+For example, if we have an FSQ bottleneck with  $L = 17$ ,  $d = 6$ , and a frame rate of 25Hz during training, this results in an effective bps of  $25 \times \lceil \log_2(17^6) \rceil = 625$ . If we partition this codebook into a residual formulation of 2 stages with 5 levels, we have an effective bps of  $25 \times 2 \times \lceil \log_2(5^6) \rceil = 700$  but with a much more manageable codebook size for generative modelling. The same calculation of bitrate can be used for RVQ, using the chosen codebook size for each residual level.
+
+### 3.3 DISCRIMINATOR
+
+We employ a discriminator inspired by that used in Encodec (Défossez et al., 2022), consisting of multiple complex STFTs at different resolutions, followed by a combination of 1d and 2d convolutions. We make three major changes compared to previous versions of this discriminator: we scale parameter count by increasing the number of channels, we address systemic biases in the discriminator by adopting unevenly spaced STFT resolutions, and we address a late-training bias towards the noise-floor of the signal by scaling the magnitude of the complex STFTs before they are processed by the convolutional networks. The last two of these changes are motivated by analyzing the sensitivity of the discriminator to different regions of the input, and are justified in Appendix B.5.
+
+### 3.4 TRAINING OBJECTIVES
+
+Training the model is conducted in two stages with slightly different loss configurations - which we refer to as *pretraining* and *finetuning*. In each stage, the loss is a composite between several reconstruction losses and an adversarial loss derived from the discriminator network, which is trained in parallel. The main difference between pretraining and finetuning stages is in which reconstruction losses are used.
+
+Similar to Défossez et al. (2024), we simplify the adversarial loss by removing the direct adversarial classifier loss term and using only a normalized feature-matching L1 loss on the  $M$  per-layer features
+
+{6}------------------------------------------------
+
+of the multi-discriminator network containing  $N$  individual discriminators, given by:
+
+$$L_{\text{disc}}(\mathbf{x}, \hat{\mathbf{x}}) = \frac{1}{MN} \sum_{m=1}^M \sum_{n=1}^N \frac{\|D_n^m(\mathbf{x}) - D_n^m(\hat{\mathbf{x}})\|_1}{\text{mean}(\|D_n^m(\mathbf{x})\|_1)}, \quad (7)$$
+
+where  $D_n^m$  is the output of the  $m$ -th layer of the  $n$ -th individual discriminator,  $\mathbf{x}$  is the target signal and  $\hat{\mathbf{x}}$  is the reconstructed signal. This can be interpreted as a reconstruction loss using more semantically focused projections of the signal, which additionally adapt throughout the training as the discriminator improves. The discriminator is trained as usual as a binary classifier for real and fake examples utilizing a hinge loss.
+
+During the pretraining stage, we include a traditional L1 reconstruction loss and L1 STFT loss to boost convergence. This loss is weighted by a coefficient that decays exponentially per-step. This ensures that the reconstruction loss does not influence the training after an initial period defined by the exponential decay factor. The overall loss during pretraining is given by:
+
+$$L_{\text{pre}}(\mathbf{x}, \hat{\mathbf{x}}) = L_{\text{disc}}(\mathbf{x}, \hat{\mathbf{x}}) + \gamma^k L_1(\mathbf{x}, \hat{\mathbf{x}}) + \gamma^k L_1(|\mathbf{X}|, |\hat{\mathbf{X}}|) \quad (8)$$
+
+where  $\gamma$  is an exponential decay coefficient,  $k$  is the training step and  $\mathbf{X}, \hat{\mathbf{X}}$  are the bins of the STFT of the target and reconstructed signals respectively.
+
+During the finetuning stage, we add a perceptual loss based on a pre-trained WavLM-Large(Chen et al., 2022) model. This perceptual loss is calculated similarly to discriminator feature-matching loss given in Eq. 7, by calculating L1 loss on the layer features of the target and reconstructed examples and normalizing by the mean magnitude of the target feature across the batch:
+
+$$L_{\text{perc}}(\mathbf{x}, \hat{\mathbf{x}}) = \frac{1}{M} \sum_{m=1}^M \frac{\|C^m(\mathbf{x}) - C^m(\hat{\mathbf{x}})\|_1}{\text{mean}(\|C^m(\mathbf{x})\|_1)}, \quad (9)$$
+
+where  $C_m$  is the  $m$ -th layer of the model. We utilize all individual layer features supplied by the model. The overall loss during finetuning is given by:
+
+$$L_{\text{fine}}(\mathbf{x}, \hat{\mathbf{x}}) = L_{\text{disc}}(\mathbf{x}, \hat{\mathbf{x}}) + L_{\text{perc}}(\mathbf{x}, \hat{\mathbf{x}}) \quad (10)$$
+
+We found this finetuning stage to be essential in producing intelligible speech, as well as improving objective metrics, as shown in the ablation studies presented in Appendix A.1.
+
+## 4 EXPERIMENTS
+
+### 4.1 DATA
+
+For training speech codec models, we use the Librilight dataset (60k hours) and the English portion of the Multilingual LibriSpeech (MLS) dataset (45k hours). Both datasets contain 16 kHz original speech data, amounting to a total of approximately 105k hours of training data. For evaluation, we utilize the test-clean subset of LibriSpeech for speech data, selecting audio clips with durations ranging from 5 to 10 seconds to create a test set of 900 clean speech samples at 16 kHz.
+
+### 4.2 MODEL AND TRAINING DETAILS
+
+The codec model is configured with a patch size of 320 samples at the input. There are two encoder blocks. One directly follows the patching, and contains 8 transformer blocks. This is followed by a further encoder block performing 2x downsampling, which contains 20 transformer blocks. The embedding dimension of the transformer blocks is 1024, whilst the reverse bottleneck of the feedforward layer is 4x larger. The head dimension of the self-attention block is 128. Layer norms are configured with  $\epsilon = 1 \times 10^{-2}$ , and the sliding attention window is of size 128. The decoder is configured to be symmetrical with the encoder. The resulting model has approximately 950M parameters. The bottleneck is 6 dimensional and trained with 17, 9 and 5 levels for every dimension, randomly chosen. The ensemble discriminator is configured as described in Appendix B.5, with each discriminator having a channel count of 256. We use FlashAttention (Dao et al., 2022) to ensure computational efficiency. The model is trained with FP16 mixed precision.
+
+{7}------------------------------------------------
+
+The AdamW optimizer is used for both the autoencoder and discriminator, both with a learning rate of 0.0008. The autoencoder additionally uses weight decay with a coefficient of 0.01. Data is randomly chunked into segments of 5.12 seconds for training. 16 H100 GPUs are utilized, with an effective batch size of 128. Pretraining is conducted for 500k steps, with a decay coefficient of  $\gamma = 0.9999$  applied to the reconstruction losses. The STFT loss utilizes 2048 bins, a hop size of 512 and a Hanning window. The finetuning stage is conducted for a further 150k steps using the WavLM-Large perceptual reconstruction loss in addition to the adversarial feature-matching loss. In both stages, all loss terms are weighted equally.
+
+### 4.3 OBJECTIVE AND SUBJECTIVE METRICS
+
+A set of objective metrics are used to assess perceptual quality, compression levels, reconstruction fidelity and semantic performance. These metrics are described in Appendix D.
+
+We further conduct a subjective test with 24 participants that rate a total of 25 reconstructions from the same dataset used for objective metrics. We follow the precedent of previous works (Zhang et al., 2023b; Défossez et al., 2022) and employ the MUSHRRA (Schoeffler et al., 2018) format without hidden anchor. Listeners compare multiple versions of an example at once, including a labeled reference and a hidden reference and are asked the question “*Please evaluate the quality proximity between an audio sample and its reference. Please listen carefully to the reference audio and then rate the quality of each test audio clip compared to the reference. Use the scale where 0 indicates no resemblance to the reference, and 100 means perfectly the same as the reference.*”. Participants were gathered online by openly by sharing a link to the test in a number of public forums. To limit the length of the subjective test, we only select a subset of the baselines for inclusion. These are chosen based on overall performance on objective metrics vs bits-per-second. The demographic breakdown of the participants is shown in Appendix E.
+
+### 4.4 BASELINES
+
+We compare our results against the 16 kHz models DAC, SpeechTokenizer, and SemantiCodec, as well as the 24 kHz models Encodec and Mimi. For DAC, which produces speech tokens at 50 Hz, we use the first two or four levels of RVQ to achieve bitrates of 1 kbps and 2 kbps, respectively. SpeechTokenizer operates with the same token rate as DAC, and we retain the first two or three levels of EVQ to obtain bitrates of 1 kbps and 1.5 kbps. For SemantiCodec, we select the variant with a codebook size of 16, 384 and evaluate it at token rates of 25 and 50 per second, corresponding to bitrates of 340 bps and 680 bps. Encodec is evaluated at 1.5 kbps and 3 kbps. For Mimi, we use all 8 RVQ levels for a bitrate of 1.1 kbps, and the first 4 levels to achieve 550 bps. For the 24 kHz models Encodec and Mimi, we first upsample the test audio to 24 kHz for reconstruction and then downsample it back to 16 kHz for evaluation.
+
+The baseline models differ in design goals and applications: DAC, Encodec, and SemantiCodec support diverse audio domains (multilingual speech, music, general audio); Mimi focuses on streaming efficiency; and SpeechTokenizer is English speech-specific. Parameter counts also vary widely. While our work focuses on speech coding with training and evaluation on English datasets, the aim is to demonstrate the feasibility of a transformer-based speech codec and its scalability to larger parameter counts. The comparison between these models is framed within this context, as they represent recently published audio codecs with strong performance in speech coding. Differences in streamability, training data, and model size are detailed in Tab. 12.
+
+### 4.5 MAIN RESULTS
+
+We evaluate two variations of our model, with different post-hoc configurations of the FSQ bottleneck. One variant utilizes a single token per step, utilizing 6 levels for each of the 6 dimensions. This leads to an effective codebook size of  $6^6 = 46656$ . The other variant uses the residual decomposition described in Sec. 3.2.1 to use two residual tokens per step, each with an effective codebook size of  $5^6 = 15625$ . The procedure for calculating the quoted bits-per-second is described in Sec. 3.2.2. We additionally show objective results of the model with the quantizer removed from the bottleneck, giving an indication of the performance of the model if used with a diffusion model.
+
+{8}------------------------------------------------
+
+| Model               | BPS   | TPF | TPS | SISDR↑ | Mel↓ | STFT↓ | PESQ↑ | STOI↑ | MOSNet↑ |
+|---------------------|-------|-----|-----|--------|------|-------|-------|-------|---------|
+| DAC                 | 1000  | 2   | 100 | −6.51  | 1.49 | 1.76  | 1.64  | 0.75  | 2.77    |
+|                     | 2000  | 4   | 200 | −0.37  | 1.07 | 1.41  | 2.29  | 0.85  | 2.95    |
+| Encodec             | 1500  | 2   | 150 | −0.22  | 1.14 | 1.49  | 2.36  | 0.85  | 2.87    |
+|                     | 3000  | 4   | 300 | 2.77   | 0.95 | 1.33  | 2.84  | 0.90  | 2.98    |
+| SpeechTokenizer     | 1000  | 2   | 100 | −3.30  | 1.06 | 1.37  | 2.41  | 0.85  | 2.94    |
+|                     | 1500  | 3   | 150 | −1.33  | 0.91 | 1.25  | 2.70  | 0.88  | 3.10    |
+| SemantiCodec        | 337.5 | 2   | 25  | −      | 1.20 | 1.53  | 2.21  | 0.79  | 3.24    |
+|                     | 675   | 50  | 50  | −      | 0.98 | 1.32  | 2.65  | 0.86  | 3.29    |
+| Mimi                | 550   | 4   | 50  | −4.45  | 1.19 | 1.55  | 2.48  | 0.85  | 3.11    |
+|                     | 1100  | 8   | 100 | 2.20   | 0.94 | 1.31  | 3.01  | 0.90  | 3.24    |
+| TAAE<br>+ no quant. | 400   | 1   | 25  | 3.18   | 0.97 | 1.35  | 2.96  | 0.90  | 3.36    |
+|                     | 700   | 2   | 50  | 4.73   | 0.86 | 1.26  | 3.09  | 0.92  | 3.36    |
+|                     | −     | −   | −   | 5.08   | 0.85 | 1.25  | 3.12  | 0.92  | 3.36    |
+
+Table 2: Evaluation results for objective metrics on speech codec models. We do not report SI-SDR results for SemantiCodec, as it is a generative model that lacks precise temporal alignment.
+
+Results of the evaluation with the proposed objective metrics are given in Tab. 2. The two variants of our proposed structure show increased performance against the baselines in all objective metrics, whilst also being amongst the lowest in terms of bits per second and tokens per second. The residual variant of our proposed model shows higher performance by these metrics compared to the single-token and lower bits-per-second variant, but not by a large margin. The variant with FSQ bottleneck removed, and hence continuous latents, shows modestly boosted performance.
+
+The results of the MUSHRA subjective test, shown in Fig. 2 indicate that TAAE obtains state-of-the-art results outperforming, by a significant margin, recently published speech codecs. Importantly, the proposed model obtains results that are close to the ground truth. Comparing these evaluation results with the baseline model sizes shown in Tab. 12 indicates the potential of scaling transformer-based codec architectures to achieve new benchmarks in terms of speech quality and compression. Our audio examples are online for listening<sup>1</sup>.
+
+![Figure 2: Results of MUSHRA test. A line graph titled 'MUSHRA Scores by bits-per-second' showing scores for various models across different bitrates. The x-axis is 'bps' from 200 to 1600. The y-axis is 'Score' from 0 to 100. A dashed green line at the top represents 'Ground Truth' (approx. 90). TAAE (red triangles) starts at ~85 at 400 bps and reaches ~90 at 800 bps. Mimi (pink squares) starts at ~55 at 400 bps and reaches ~80 at 1000 bps. SemantiCodec (blue circles) starts at ~55 at 400 bps and reaches ~60 at 800 bps. SpeechTokenizer (purple squares) starts at ~55 at 400 bps and reaches ~70 at 1400 bps.](925f55ce69802b9d3b00546382663ee2_img.jpg)
+
+| Model           | bps      | Score |
+|-----------------|----------|-------|
+| Ground Truth    | 200-1600 | ~90   |
+| TAAE            | 400      | ~85   |
+| TAAE            | 800      | ~90   |
+| Mimi            | 400      | ~55   |
+| Mimi            | 800      | ~60   |
+| Mimi            | 1000     | ~80   |
+| SemantiCodec    | 400      | ~55   |
+| SemantiCodec    | 800      | ~60   |
+| SpeechTokenizer | 400      | ~55   |
+| SpeechTokenizer | 1400     | ~70   |
+
+Figure 2: Results of MUSHRA test. A line graph titled 'MUSHRA Scores by bits-per-second' showing scores for various models across different bitrates. The x-axis is 'bps' from 200 to 1600. The y-axis is 'Score' from 0 to 100. A dashed green line at the top represents 'Ground Truth' (approx. 90). TAAE (red triangles) starts at ~85 at 400 bps and reaches ~90 at 800 bps. Mimi (pink squares) starts at ~55 at 400 bps and reaches ~80 at 1000 bps. SemantiCodec (blue circles) starts at ~55 at 400 bps and reaches ~60 at 800 bps. SpeechTokenizer (purple squares) starts at ~55 at 400 bps and reaches ~70 at 1400 bps.
+
+Figure 2: Results of MUSHRA test.
+
+### 4.6 ADDITIONAL RESULTS
+
+To evaluate the impact of model size, we conducted scaling experiments with TAAE architectures containing approximately 250M, 500M, and 1B parameters. The results confirm that the proposed structure scales effectively with parameter count, as detailed in Appendix A.2.
+
+We also explored higher compression rates by modifying the encoder/decoder for  $2\times$  additional up/downsampling (latent rate 12.5 Hz) and increasing the FSQ bottleneck dimension to  $d = 8$ . While this model achieves lower bitrates (e.g., 200 bps), it underperforms the main model and converges more slowly, as discussed in Appendix A.3.
+
+In Appendix A.4, we describe and evaluate a causal version of the TAAE model. This variant shows minimal degradation compared to the non-causal version and outperforms the streaming codec Mimi in objective metrics, despite being trained with significantly fewer steps and data hours.
+
+Additionally, we evaluated our proposed TAAE model across various settings beyond its original intended use case. In App. A.5, we assess the model performance on a range of languages, demonstrating its ability to generalize effectively to unseen languages, with results that are better or comparable to models trained on multiple languages. In App. A.6, we validate the model’s generalization to utterances of varying lengths, including those longer or shorter than seen during training. We also compare our model with a HuBERT-based codec, analyzing key differences in design and performance, as discussed in Appendix A.7.
+
+<sup>1</sup><https://stability-ai.github.io/stable-codes-demo/>
+
+{9}------------------------------------------------
+
+Finally, we analyze the codebook utilization of TAAE, showing nearly optimal efficiency in its usage. A detailed comparison of codebook utilization and entropy-encoded bitrates across baselines is provided in Appendix A.8. A comparison of real-time factors between TAAE and the baselines is provided in Appendix A.9. This shows that despite the much larger parameter count, TAAE is competitive with baselines in terms of inference performance.
+
+## 5 LIMITATIONS
+
+The presented model has a number of limitations compared to baselines, primarily related to the training dataset rather than the architecture. We use only a modest amount of English-only speech data, 100k hours. The data is also at 16 kHz sampling rate, whereas 24 kHz or higher might be desirable in many applications. The dataset is predominantly made of audiobook recordings, so we might also expect the model to have difficulties with speech that is from a very different setting (e.g. overlapping speakers) or contains a significant amount of environmental sound. The limitations of the architecture are primarily related to parameter count and computational efficiency. The main presented model has a large parameter count which means that it may require greater computational resources than presented baselines, albeit mitigated by the availability of efficient transformer implementations. Future work should explore scaling up to a much larger and more diverse dataset at a higher sampling rate.
+
+## 6 CONCLUSIONS
+
+In this work we proposed a new scalable architecture for neural coding of speech waveforms, based on transformer-based encoder and decoder models and a flexible discrete bottleneck using Finite Scalar Quantization (FSQ). We described a number of techniques for altering or decomposing the tokens produced by this discrete bottleneck in order to fit the needs of various use-cases. We trained this architecture on a dataset of 16 kHz speech. We conducted objective and subjective evaluations of this model, showing state-of-the-art speech coding performance as well as generalization to unseen languages. The model can be adapted to streaming use-cases with little performance degradation, and is competitive with existing codec models in terms of inference speed, despite utilizing a much larger parameter count.
+
+## ACKNOWLEDGMENTS
+
+The authors would like to acknowledge the unpublished work of Dario Sucid on training-time residual FSQ formulations, shared in online discussions. We’d also like to acknowledge Shahbuland Matiana, with whom we had early discussions about transformer-based autoencoders, and Boris Kuznetsov with whom we had discussions about the use of noise in scalar quantizers.
+
+## REFERENCES
+
+- Asger Heidemann Andersen, Jan Mark de Haan, Zheng-Hua Tan, and Jesper Jensen. A non-intrusive short-time objective intelligibility measure. In *IEEE Int. Conf. on Acoustics, Speech and Signal Processing (ICASSP)*, pp. 5085–5089, 2017.
+- Zalán Borsos, Raphaël Marinier, Damien Vincent, Eugene Kharitonov, Olivier Pietquin, Matt Sharifi, Dominik Roblek, Olivier Teboul, David Grangier, Marco Tagliasacchi, et al. AudioLM: a language modeling approach to audio generation. *IEEE/ACM Transactions on Audio, Speech, and Language Processing*, 2023a.
+- Zalán Borsos, Matt Sharifi, Damien Vincent, Eugene Kharitonov, Neil Zeghidour, and Marco Tagliasacchi. SoundStorm: Efficient parallel audio generation. *arXiv:2305.09636*, 2023b.
+- Andreas Brendel, Nicola Pia, Kishan Gupta, Lyonel Behringer, Guillaume Fuchs, and Markus Multrus. Neural speech coding for real-time communications using constant bitrate scalar quantization. *IEEE Journal of Selected Topics in Signal Processing*, 2024.
+- Huiwen Chang, Han Zhang, Lu Jiang, Ce Liu, and William T Freeman. MaskGIT: Masked generative image transformer. In *Proc. of the IEEE/CVF Conf. on Computer Vision and Pattern Recognition (CVPR)*, pp. 11315–11325, 2022.
+
+ Rest of paper (reference and Appendix) is removed.

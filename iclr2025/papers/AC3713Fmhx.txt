@@ -1,0 +1,359 @@
+
+
+{0}------------------------------------------------
+
+# AUGKD: INGENIOUS AUGMENTATIONS EMPOWER KNOWLEDGE DISTILLATION FOR IMAGE SUPER-RESOLUTION
+
+**Yun Zhang\***
+
+The Hong Kong University of Science and Technology
+
+**Wei Li\*, Simiao Li, Hanbing Chen, Zhijun Tu**
+
+Huawei Noah’s Ark Lab
+
+**Bingyi Jing**
+
+Southern University of Science and Technology
+
+**Shaohui Lin**
+
+East China Normal University
+
+**Jie Hu<sup>†</sup>**
+
+Huawei Noah’s Ark Lab
+
+**Wenjiia Wang<sup>†</sup>**
+
+The Hong Kong University of Science and Technology (Guangzhou)
+
+## ABSTRACT
+
+Knowledge distillation (KD) compresses deep neural networks by transferring task-related knowledge from cumbersome pre-trained teacher models to more compact student models. However, vanilla KD for image super-resolution (SR) networks yields only limited improvements due to the inherent nature of SR tasks, where the outputs of teacher models are noisy approximations of high-quality label images. In this work, we show that the potential of vanilla KD has been underestimated and demonstrate that the ingenious application of data augmentation methods can close the gap between it and more complex, well-designed methods. Unlike conventional training processes typically applying image augmentations simultaneously to both low-quality inputs and high-quality labels, we propose AugKD utilizing unpaired data augmentations to 1) generate auxiliary distillation samples and 2) impose label consistency regularization. Comprehensive experiments show that the AugKD significantly outperforms existing state-of-the-art KD methods across a range of SR tasks.
+
+## 1 INTRODUCTION
+
+SR is an essential yet challenging task in computer vision (CV) that focuses on reconstructing high-resolution (HR) image from its low-resolution (LR) counterpart (Lim et al., 2017; Zhang et al., 2018). In recent years, the convolutional neural networks (CNNs) and Transformers (Liang et al., 2021; Yang et al., 2020; Wang et al., 2022b; Zamir et al., 2022) have achieved significant success in SR. However, despite the impressive performance of deep learning-based SR models, their practical deployment is often constrained by the high computational and memory requirements (Zhang et al., 2021c). As a result, there has been an increasing focus on developing SR model compression techniques to enable their use in real-world applications, especially for resource-constrained devices.
+
+KD is an effective technique for reducing computational costs and memory requirements during model deployment, while also enhancing the performance of student models. It works by transferring the “dark knowledge” from a well-performing but computationally heavy teacher model to a more lightweight student model (Gao et al., 2019; Hui et al., 2019; Zhang et al., 2021b). Compared to other model compression techniques, such as quantization (Gupta et al., 2015; Hubara et al., 2016; Ignatov et al., 2021; Wu et al., 2016), pruning (Anwar et al., 2017; Wang et al., 2021b; Liu et al., 2019), and neural architecture search (NAS) (Wu et al., 2019; Howard et al., 2019; Guo et al., 2020), KD has garnered significant attention due to its outstanding performance and wide applicability.
+
+\*Co-first author.
+
+<sup>†</sup>Corresponding author. hujie23@huawei.com, wenjiawang@hkust-gz.edu.cn
+
+{1}------------------------------------------------
+
+![Figure 1: Framework of the AugKD method. The diagram is split into two main parts. The left part, 'Auxiliary Distillation Samples', shows two examples of image augmentation: 'Zoom Out' and 'Zoom In'. For 'Zoom Out', a high-resolution image $I_{LR}^{(i)}$ is zoomed out to create a lower-resolution version $I_{LR_{Zoom}}^{(i)}$, with a corresponding label $I_{HR}^{(i)}$. For 'Zoom In', a low-resolution image $I_{HR}^{(i)}$ is zoomed in to create a higher-resolution version $I_{HR_{Zoom}}^{(i)}$, with a corresponding label $I_{LR}^{(i)}$. The right part, 'Label Consistency Regularization', shows a 'Teacher Model' $\mathcal{T}(x; \theta^T)$ and a 'Student Model' $\mathcal{S}(x; \theta^S)$. The teacher model takes an input $x$ and produces outputs $T_{SR_L}^{(i)}$ and $T_{SR_H}^{(i)}$. The student model takes augmented inputs $x^{(i)}$ (from 'Data Aug') and $x^{(i)}$ (from 'Inv Data Aug') and produces outputs $S_{SR_L}^{(i)}$ and $S_{SR_H}^{(i)}$. A loss function $\mathcal{L}_{cons}$ is calculated between the teacher's outputs and the student's outputs. Below the student model, there is a box labeled 'Invertible Data Augmentations' containing three small images, with the text $\frac{x}{x}$ indicating the inverse operation.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 1: Framework of the AugKD method. The diagram is split into two main parts. The left part, 'Auxiliary Distillation Samples', shows two examples of image augmentation: 'Zoom Out' and 'Zoom In'. For 'Zoom Out', a high-resolution image \$I\_{LR}^{(i)}\$ is zoomed out to create a lower-resolution version \$I\_{LR\_{Zoom}}^{(i)}\$, with a corresponding label \$I\_{HR}^{(i)}\$. For 'Zoom In', a low-resolution image \$I\_{HR}^{(i)}\$ is zoomed in to create a higher-resolution version \$I\_{HR\_{Zoom}}^{(i)}\$, with a corresponding label \$I\_{LR}^{(i)}\$. The right part, 'Label Consistency Regularization', shows a 'Teacher Model' \$\mathcal{T}(x; \theta^T)\$ and a 'Student Model' \$\mathcal{S}(x; \theta^S)\$. The teacher model takes an input \$x\$ and produces outputs \$T\_{SR\_L}^{(i)}\$ and \$T\_{SR\_H}^{(i)}\$. The student model takes augmented inputs \$x^{(i)}\$ (from 'Data Aug') and \$x^{(i)}\$ (from 'Inv Data Aug') and produces outputs \$S\_{SR\_L}^{(i)}\$ and \$S\_{SR\_H}^{(i)}\$. A loss function \$\mathcal{L}\_{cons}\$ is calculated between the teacher's outputs and the student's outputs. Below the student model, there is a box labeled 'Invertible Data Augmentations' containing three small images, with the text \$\frac{x}{x}\$ indicating the inverse operation.
+
+Figure 1: Framework of the AugKD method. Facilitates the transfer of knowledge through the auxiliary distillation samples and label consistency regularization.
+
+The effectiveness of KD has been well-established in natural language processing (NLP) (Gou et al., 2021; Sanh et al., 2019) and conventional high-level CV tasks, such as classification, detection, and segmentation (Hinton et al., 2015; Park et al., 2019; Tung & Mori, 2019). However, its application to SR tasks remains relatively underexplored (He et al., 2020; Wang et al., 2021c; Zhang et al., 2021b; Lee et al., 2020). The use of standard response-based KD methods (Hinton et al., 2015) or those optimized for high-level CV tasks (Romero et al., 2014; Yim et al., 2017; Zagoruyko & Komodakis, 2016) typically results in only marginal improvements and may even have negative effects when applied to distilling SR networks, as observed by He et al. (2020) and confirmed by our experiments in section 4. Previous KD methods specifically designed for SR are mostly feature-based, where the student model is forced to mimic the intermediate features of the teacher model directly (He et al., 2020) or through a pre-trained perceptual feature extractor like VGG (Yao et al., 2022a; Wang et al., 2021c). However, these feature-based approaches have limited applicability. In practice, the architecture of teacher models is often inaccessible due to commercial, privacy, or safety restrictions, making feature-based methods impractical for some real-world applications.
+
+For the knowledge distillation of super-resolution models, most of previous explanations for the mechanism of KD no longer hold due to the unique task characteristics. Since the teacher model’s output, as a noisy approximation to the ground-truth (GT) high-quality image, contains barely extra information exceeding GT, the “dark knowledge” of teacher are hardly transferred to student model through KD. Distinct to exist feature-based methods, we propose AugKD, an alternative approach to enhance the knowledge distillation via the data augmentations. It shifts the paradigm from developing various knowledge types (Gou et al., 2021) to more task-adapted training data mining and construction with effective utilization of pre-trained teacher. Specifically, the AugKD consists of two major modules: *auxiliary distillation sample generation* and *label consistency regularization*. The auxiliary training examples are built from (LR, HR) pairs by zoom-in and zoom-out augmentations. Then teacher model is able to guide the student model with these image samples. It frees the teacher model from merely echoing the GT labels inaccurately. Moreover, we realize the label consistency regularization into the KD for SR by defining several *invertible data augmentation* operations. The student model is forced to yield the same output as the teacher model, given the augmented inputs. The regularization makes the student model exposed to a diverse range of inputs, substantially improving performance (Oliver et al., 2018; Jeong et al., 2019; Englesson & Azizpour, 2021). The AugKD is logits-based and independent of network architectures. It shows great universality among a diverse array of SR model families and SR tasks. In summary, our main contributions are three-fold:
+
+- We analyze the mechanisms of KD for SR, and propose AugKD adapted to the unique task properties. It facilitates the student model’s learning by auxiliary training samples.
+- We leverage the label consistency regularization into KD for SR by specifying several invertible data augmentations. It improves the model’s generalizability.
+- The proposed AugKD, applies broadly to multiple teacher-student configurations, promising a cutting-edge KD approach for SR.
+
+{2}------------------------------------------------
+
+![Figure 2: Two line graphs showing PSNR (dB) vs. training approaches for DIV2K and Urban100 datasets. The left graph is for DIV2K training set and the right is for Urban100. Both show PSNR(S,T), PSNR(S,GT), and PSNR(T,GT) for DataFreeKD, Scratch, KD, FAKD, CSD, and AugKD methods.](d9d706121d1c4ba9ad2c793746382361_img.jpg)
+
+Figure 2 consists of two line graphs. The left graph is titled 'DIV2K Training Set' and the right graph is titled 'Urban100'. Both graphs plot PSNR (dB) on the y-axis against different training approaches on the x-axis: DataFreeKD, Scratch, KD, FAKD, CSD, and AugKD. Three data series are shown in each graph: PSNR(S,T) (red line with triangle markers), PSNR(S,GT) (green line with circle markers), and PSNR(T,GT) (grey line with diamond markers). The PSNR(S,T) series shows a general upward trend, while PSNR(S,GT) and PSNR(T,GT) remain relatively flat.
+
+| Dataset  | Method     | PSNR(S,T) | PSNR(S,GT) | PSNR(T,GT) |
+|----------|------------|-----------|------------|------------|
+| DIV2K    | DataFreeKD | 40.91     | 30.29      | 31.12      |
+|          | Scratch    | 41.73     | 30.45      | 31.12      |
+|          | KD         | 42.30     | 30.47      | 31.12      |
+|          | FAKD       | 41.62     | 30.41      | 31.12      |
+|          | CSD        | 42.68     | 30.50      | 31.12      |
+|          | AugKD      | 43.60     | 30.57      | 31.12      |
+| Urban100 | DataFreeKD | 33.00     | 25.83      | 27.00      |
+|          | Scratch    | 34.52     | 26.21      | 27.00      |
+|          | KD         | 34.63     | 26.21      | 27.00      |
+|          | FAKD       | 34.52     | 26.18      | 27.00      |
+|          | CSD        | 37.08     | 26.34      | 27.00      |
+|          | AugKD      | 38.20     | 26.45      | 27.00      |
+
+Figure 2: Two line graphs showing PSNR (dB) vs. training approaches for DIV2K and Urban100 datasets. The left graph is for DIV2K training set and the right is for Urban100. Both show PSNR(S,T), PSNR(S,GT), and PSNR(T,GT) for DataFreeKD, Scratch, KD, FAKD, CSD, and AugKD methods.
+
+Figure 2: Similarity between the student and teacher  $\times 4$  EDSR models under different training approaches (x-axis).  $\text{PSNR}(S, T)$  represents the average PSNR between the student and teacher outputs, with higher values indicating greater similarity.  $\text{PSNR}(S, GT)$  shows the average PSNR between the student output and ground-truth HR image, with higher values indicating better fitting (left: training set) or generalization (right: testing set).
+
+## 2 RELATED WORKS
+
+### 2.1 IMAGE SUPER-RESOLUTION
+
+Deep neural networks (DNNs) have achieved impressive success in image SR. Dong et al. (2014) introduced a CNN SR model with only three convolutional layers first. Subsequently, residual learning was incorporated into the VDSR model (Kim et al., 2016), which expanded the network to 20 convolutional layers. Lim et al. (2017) proposed EDSR, which utilized simplified residual blocks (He et al., 2016), and Zhang et al. (2018) introduced the even deeper RCAN network. These methods, among others, have set state-of-the-art performance benchmarks by increasing network depth and width. More recently, Transformers have gained significant attention in the field of image restoration. The SwinIR model (Liang et al., 2021) applies the Swin Transformer architecture for deep feature extraction. The Restormer model (Zamir et al., 2022) proposed a hierarchical multi-scale structure, introducing a more efficient Transformer blocks that alters the attention mechanisms and the feed-forward network. While CNNs and Transformers models demonstrate extraordinary effect in SR, they are often associated with high memory and computational costs.
+
+### 2.2 KNOWLEDGE DISTILLATION
+
+**KD for high-level CV.** Knowledge distillation is widely recognized as an effective model compression method that can significantly reduce the computation overload and improve student’s capability (Hinton et al., 2015; Yim et al., 2017; Gou et al., 2021). The response-based KD methods are simple yet effective where the student models directly imitate the predictions or logits of the teacher model (Hinton et al., 2015; Zhao et al., 2022; Chen et al., 2017). The proposed AugKD method falls into this category since only the final outputs of models are aligned. Besides the output of the networks, the intermediate features can also be used to improve the student model, by matching feature maps directly, after dimension standardization (Zagoruyko & Komodakis, 2016) or extra modules (He et al., 2018; Passban et al., 2021; Guo et al., 2021). The relations between layers or samples can be used for KD, such as correlation (Yim et al., 2017; You et al., 2017), mutual information (Passalis et al., 2020), or pairwise or triple-wise geometric relations (Park et al., 2019).
+
+**KD for super resolution.** Lately, there has been an increasing number of efforts made on the KD for super-resolution networks. He et al. (2020) proposed the FAKD to align the dimensions of models’ feature maps by spatial affinity matrix to train the student model. Lee et al. (2020) employed an encoder to extract the compact features from HR images to initialize the generator network and thereby perform feature distillation. Wang et al. (2021c) proposed a channel-sharing self-distillation method with perceptual contrastive losses. To train SR network under the privacy and data transmission limitations, Zhang et al. (2021b) employed a generator to support data-free KD. MTKDSR (Yao et al., 2022b) employed two teacher models with different SR objectives (PSNR, perceptual) to guide the student model simultaneously. CrossKD (Fang et al., 2023) divides the teacher and student networks into two segments that are interchanged and connected to perform
+
+{3}------------------------------------------------
+
+![Figure 3: Comparison between the logits-KD, Data Free KD, and AugKD. (a) Response-based Knowledge Distillation: A training set is used to sample features from a student model S and a teacher model T. The student model's output is compared with the teacher model's output using a response-based loss. (b) Data-Free Knowledge Distillation: Random noise is generated and passed through a generator to produce a synthetic image. This synthetic image is then passed through a student model S and a teacher model T. The student model's output is compared with the teacher model's output using a response-based loss. (c) Data Augmentation empowered KD for SR: A training set is used to generate auxiliary distillation samples. These samples are then passed through a student model S and a teacher model T. The student model's output is compared with the teacher model's output using a response-based loss. A legend at the bottom indicates: orange triangle for trainable, blue circle for weight frozen, red circle for frozen out, green circle for frozen in, yellow rectangle for L1 Loss, blue rectangle for data aug, and purple rectangle for inv data aug.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 3: Comparison between the logits-KD, Data Free KD, and AugKD. (a) Response-based Knowledge Distillation: A training set is used to sample features from a student model S and a teacher model T. The student model's output is compared with the teacher model's output using a response-based loss. (b) Data-Free Knowledge Distillation: Random noise is generated and passed through a generator to produce a synthetic image. This synthetic image is then passed through a student model S and a teacher model T. The student model's output is compared with the teacher model's output using a response-based loss. (c) Data Augmentation empowered KD for SR: A training set is used to generate auxiliary distillation samples. These samples are then passed through a student model S and a teacher model T. The student model's output is compared with the teacher model's output using a response-based loss. A legend at the bottom indicates: orange triangle for trainable, blue circle for weight frozen, red circle for frozen out, green circle for frozen in, yellow rectangle for L1 Loss, blue rectangle for data aug, and purple rectangle for inv data aug.
+
+Figure 3: Comparison between the logits-KD, Data Free KD, and AugKD. The first two fail to enable the function of teacher model.
+
+forward propagation. The common limitation of these methods is that they are only applicable to CNN-based models and have certain requirements on the teacher-student structure.
+
+## 3 METHODOLOGY
+
+### 3.1 NOTATIONS AND PRELIMINARIES
+
+Let  $\mathcal{T}(x; \theta^t)$  and  $\mathcal{S}(x; \theta^s)$  be a teacher and a student SR model with parameters  $\theta^t$  and  $\theta^s$  for the super-resolution of input  $x$ , respectively. Given an input LR image  $I_{LR}^{(i)} \in \mathbb{R}^{H \times W \times 3}$ , the output SR images of the two networks are denoted by  $I_{SR}^{T(i)} = \mathcal{T}(I_{LR}^{(i)}; \theta^t) \in \mathbb{R}^{s_c H \times s_c W \times 3}$  and  $I_{SR}^{S(i)} = \mathcal{S}(I_{LR}^{(i)}; \theta^s) \in \mathbb{R}^{s_c H \times s_c W \times 3}$ , where  $H \times W$  is the input size and  $s_c \in \mathbb{Z}^+$  is the scaling factor. The L1-norm reconstruction loss is computed as:
+
+$$\mathcal{L}_{rec} = \|I_{SR}^{S(i)} - I_{HR}^{(i)}\|_1, \quad (1)$$
+
+where  $I_{HR}^{(i)}$  is the ground-truth HR label. And the vanilla response-based KD loss is given by
+
+$$\mathcal{L}_{kd} = \|I_{SR}^{S(i)} - I_{SR}^{T(i)}\|_1, \quad (2)$$
+
+which is computed directly by the output of teacher and student models.
+
+### 3.2 MOTIVATION
+
+Since the introduction of knowledge distillation by Hinton et al. (2015), numerous studies have analyzed and discussed the mechanisms through which teacher supervision enhances the performance of student models (Tang et al., 2020; Stanton et al., 2021; Wang et al., 2021a; Zhang et al., 2022; Harutyunyan et al., 2023). It is widely accepted that in response-based KD, the “dark knowledge” from the teacher model encompasses the inter-class and inter-example relational information found in the output logits, which is not present in the ground-truth labels.
+
+However, there is barely such a benefit in SR tasks that reconstruct image pixels. Since the outputs of the SR network  $I_{SR}^{T(i)}$  are noisy and inaccurate approximations of the ground-truth distribution of high-resolution image  $I_{HR}^{(i)}$ , as shown in Figure 3 (a). Directly aligning the model outputs hardly transfers knowledge and may even mislead the student model. The guide capability of the teacher model is shaded by  $I_{HR}^{(i)}$ , resulting in limited KD effects. To verify this hypothesis, we train an EDSR network of scale  $\times 4$  using different training methods (data-free KD, supervised training without distillation, Logits-KD, FAKD, CSD and the proposed AugKD). To make the models comparable, the data-free KD uses the LR of the training set and discards HR, assuming that there is an oracle image generator  $G$ . Then we compute the PSNR metrics between the outputs of teacher and student models, on the training and testing sets, respectively. It reflects the similarities between networks, and the extent to which the student model is impacted by the teacher model. The results shown in Figure 2 indicate that the existing KD approaches make the student model performs more like teacher only to a small extent, since the the improvements of  $\text{PSNR}(S, T)$  over training without KD are limited. Therefore, the PSNR referring to GT,  $\text{PSNR}(S, GT)$ , are also low on both training and testing sets.
+
+{4}------------------------------------------------
+
+![Figure 4: Comparison of label consistency regularization. (a) Label consistency regularization: An original image and an augmented image (Flip+Color+Translation) are input to a Model. The Model produces two sets of Predictions. A loss function L is applied between the two predictions. (b) Label consistency regularization in KD for SR: An original image and an augmented image (Invert+Color+Flip) are input to a Frozen Teacher Model T(x; theta^t) and a Student Model S(x; theta^s). The Teacher Model produces Outputs T_SR^(i)(x; theta^t). The Student Model produces Outputs S_SR^(i)(x; theta^s). A loss function L_augkd is applied between the Teacher's outputs and the Student's outputs, which are then used for data augmentation.](690fce4fb5c9cbb8beb560cb2a3fcbeb_img.jpg)
+
+Figure 4: Comparison of label consistency regularization. (a) Label consistency regularization: An original image and an augmented image (Flip+Color+Translation) are input to a Model. The Model produces two sets of Predictions. A loss function L is applied between the two predictions. (b) Label consistency regularization in KD for SR: An original image and an augmented image (Invert+Color+Flip) are input to a Frozen Teacher Model T(x; theta^t) and a Student Model S(x; theta^s). The Teacher Model produces Outputs T\_SR^(i)(x; theta^t). The Student Model produces Outputs S\_SR^(i)(x; theta^s). A loss function L\_augkd is applied between the Teacher's outputs and the Student's outputs, which are then used for data augmentation.
+
+Figure 4: Comparison of the label consistency regularization in high-level CV and KD for SR. The augmentations should be invertible to make the models' output comparable.
+
+This issue cannot be addressed by simple data augmentation that reuses the training image pairs to produce augmented LR and HR with pairwise rotations or flips, i.e.  $(I_{LR}, I_{HR}) \Rightarrow (I_{LR}^{aug}, I_{HR}^{aug})$ . The “recycled” data are inadequate to enable the function of teacher model. The data-free knowledge distillation methods (Zhang et al., 2021b) stay out of this problem due to the discard of HR references from the training data. The supervision signals solely come from the teacher model, as illustrated in Figure 3 (b). Although teacher model’s knowledge are transferred to student model (it’s only supervised by the teacher model’s output), it’s impractical to discard the labels from training data especially when they are available. Besides, the teacher model may yield noisier output on the generated training images.
+
+Above findings motivate us to build a more task-adapted KD framework by mining information from the training data. Specifically, we construct auxiliary training inputs through data augmentations to function the KD. These data are closely related with the training set to prevent distributional bias. And we introduce the label consistency regularization through invertible data augmentations.
+
+### 3.3 AUXILIARY DISTILLATION SAMPLES
+
+Since the teacher model’s knowledge is shaded by the ground-truth HR labels, we perform knowledge distillation by extra LR images rather than the raw training data. To make the generation process efficient and the generated images distributed closely with the original, the auxiliary training samples are obtained from original LR, HR pairs, as demonstrated in Figure 1. Two image zooming operations are employed: The zoom-in  $\mathcal{Z}$  operation is facilitated by randomly cropping patches from  $I_{HR}^{(i)}$ . The cropped patches have the same size as the LR image  $I_{LR}^{(i)}$  for the convenience of batch processing. Conversely, the zoom-out  $\mathcal{Z}$  operation is carried out by down-sampling the LR image in the same manner of degradation as  $I_{LR}^{(i)}$ . The two obtained auxiliary LR images are denoted as  $I_{LR_{\circ}}^{(i)} \in \mathbb{R}^{H/s_c \times W/s_c \times 3}$  and  $I_{LR_{zi}}^{(i)} \in \mathbb{R}^{H \times W \times 3}$ .
+
+For a pair of original training examples  $(I_{LR}^{(i)}, I_{HR}^{(i)})$ , the output of the zoom-out operation is unique, but the zoom-in operation on  $I_{HR}^{(i)}$  could result in various outcomes according to the strategy of patch selection. Beyond random cropping, regions can also be selected based on their reconstruction difficulty or texture complexity. It’s observed in our experiments that adapted selection would incur a higher computational cost with marginal performance gains.
+
+After generating auxiliary distillation samples, the teacher model provides corresponding SR images for the zoom-in and zoom-out LR inputs to supervise the student model. Since there is only the teacher model’s supervision for these training samples, teacher’s distribution information are unshaded from GT and able to impact the student model. AugKD provides a more refined and data-centric approach to KD, reflecting its benefits in effective data utilization and superior performance in SR tasks. The overall loss is constructed by adding an extra loss term that is computed on the auxiliary distillation samples to the reconstruction loss (Equation (1)) and conventional KD loss (Equation (2)),
+
+$$\mathcal{L}_{augkd} = \|T_{SR_{\circ}}^{S(i)} - T_{SR_{\circ}}^{T(i)}\|_1 + \|T_{SR_{zi}}^{S(i)} - T_{SR_{zi}}^{T(i)}\|_1, \quad (3)$$
+
+where  $T_{SR_{\circ}}^{S(i)} = \mathcal{S}(I_{LR_{\circ}}^{(i)}; \theta^s)$ ,  $T_{SR_{\circ}}^{T(i)} = \mathcal{T}(I_{LR_{\circ}}^{(i)}; \theta^t)$  and the other terms are computed similarly. If zoom-out is performed, we compute the reconstruction loss between  $T_{SR_{\circ}}^{S(i)}$  and  $I_{LR}^{(i)}$  also. To sum up,
+
+$$\mathcal{L} = \mathcal{L}_{rec} + \lambda_{kd} \mathcal{L}_{kd} + \lambda_{augkd} \mathcal{L}_{augkd}, \quad (4)$$
+
+{5}------------------------------------------------
+
+Table 1: SR model specifications and statistics ( $\times 4$  scale). The FLOPs and frames per second (FPS) are computed with a  $3 \times 256 \times 256$  input image on single V100 GPU of 64GB VRAM. The block denotes the number of residual blocks for EDSR and RCAN (in each residual group) or Swin transformer blocks for SwinIR models.
+
+| Model  | Role    | Network |       |       | FLOPs (G) | #Params | FPS    |
+|--------|---------|---------|-------|-------|-----------|---------|--------|
+|        |         | Channel | Block | Group |           |         |        |
+| EDSR   | Teacher | 256     | 32    | -     | 3293.35   | 43.09 M | 3.233  |
+|        | Student | 64      | 32    | -     | 207.28    | 2.70 M  | 33.958 |
+| RCAN   | Teacher | 64      | 20    | 10    | 1044.03   | 15.59 M | 6.162  |
+|        | Student | 64      | 6     | 10    | 366.98    | 5.17 M  | 12.337 |
+| SwinIR | Teacher | 180     | 6     | -     | 861.27    | 11.90 M | 0.459  |
+|        | Student | 60      | 4     | -     | 121.48    | 1.24 M  | 0.874  |
+
+where  $\lambda_{kd}$  and  $\lambda_{augkd}$  are the loss weights.
+
+### 3.4 LABEL CONSISTENCY REGULARIZATION
+
+Consistency regularization is commonly used in semi-supervised and self-supervised learning. As illustrated in Figure 4 (a), it encourages the prediction of the network to be consistent over perturbed training examples, leading to robustness against corrupted data in test time (Oliver et al., 2018; Englesson & Azizpour, 2021; Jeong et al., 2019). The model is trained to identify the crucial semantic information related to specific tasks from the input images, despite the possible noise and perturbations. The regularization is based on various image augmentation techniques, like rotation, shearing, cutout, and translation.
+
+KD encourages the student model to produce the same predictions as the teacher model. Such characteristic should hold even their inputs are differently augmented, as the task-related semantic information remains unchanged and the input perturbations should not significantly distinguish between the outputs of the teacher and student models. To realize label consistency regularization, we apply data augmentations on the input of student model while keeping the teacher model’s input unperturbed. This approach allows the student to learn invariant representations across diverse transformations. Meanwhile, the student is guided by a more powerful teacher model, whose supervision are from non-perturbed inputs that inherently provide superior quality compared to those from augmented inputs. Thereby the auxiliary distillation samples and the teacher model are fully leveraged. Taking the zoom-in LR sample as an example, the consistency regularization can be represented as:
+
+$$\mathcal{L} = \|\mathcal{S}(\mathcal{F}(I_{HR_{zi}}; \theta^s) - \mathcal{T}(I_{HR_{zi}}; \theta^t))\|_1,$$
+
+where  $\mathcal{F}(\cdot)$  denotes the perturbation function.
+
+However, as super resolution is a pixel-level image-to-image CV task that is weakly relevant to semantic information of image subject, any tweak on the input can alter the model’s output. For KD, the student model’s output would consequently be incomparable with the teacher model’s. Therefore, we need to perform inverse augmentation, namely  $\mathcal{F}^{-1}(\cdot)$ , on the output of the student model. The label consistency regularization becomes:
+
+$$\mathcal{L} = \|\mathcal{F}^{-1}(\mathcal{S}(\mathcal{F}(I_{HR_{zi}}; \theta^s)) - \mathcal{T}(I_{HR_{zi}}; \theta^t))\|_1.$$
+
+The selected augmentations should be invertible and relevant to the SR task for maintaining the crucial pixel-level details after augmentation. It requires that for any input image  $I$ ,  $\mathcal{F}^{-1}(\mathcal{F}(I)) = I$ . Hence, a number of popular image augmentations, such as blurring, cutout, brightness adjustment, and cropping, are not applicable as they do not meet this prerequisite. Instead, we employ two geometric transformations, horizontal/vertical flip and  $90^\circ/180^\circ/270^\circ$  rotations, along with the *color inversion* transformation that subtracts each pixel intensity value of the input image from 255 (or 1 if normalized):  $\mathcal{F}(I) = 255 - I$ . The color inversion is invertible and maintains the relative magnitude among pixel values. It also prompts the student models to be more sensitive to essential structural features such as lines and edges. Right bottom of Figure 1 illustrates the three types of invertible data augmentations employed to realize label consistency.
+
+{6}------------------------------------------------
+
+Table 2: Quantitative comparison (average PSNR/SSIM) between AugKD and other distillation methods for **EDSR** of three SR scales. The best and second-best performances are highlighted in **bold** and underlined, respectively. An asterisk indicates that the results in a row are from reproduction.
+
+| Scale | Method       | Set5                | Set14               | BSD100              | Urban100            |
+|-------|--------------|---------------------|---------------------|---------------------|---------------------|
+|       |              | PSNR/SSIM           | PSNR/SSIM           | PSNR/SSIM           | PSNR/SSIM           |
+| ×2    | Scratch      | 38.00/0.9605        | 33.57/0.9171        | 32.17/0.8996        | 31.96/0.9268        |
+|       | KD           | 38.04/0.9606        | 33.58/0.9172        | 32.19/0.8998        | 31.98/0.9269        |
+|       | FitNet       | 37.59/0.9589        | 33.09/0.9136        | 31.79/0.8953        | 30.46/0.9111        |
+|       | AT           | 37.96/0.9603        | 33.48/0.9167        | 32.12/0.8990        | 31.71/0.9241        |
+|       | RKD          | 38.03/0.9606        | 33.57/0.9173        | 32.18/0.8998        | 31.96/0.9270        |
+|       | FAKD*        | 37.99/0.9606        | 33.60/0.9173        | 32.19/0.8998        | 32.04/0.9275        |
+|       | CSD*         | <u>38.06/0.9607</u> | <u>33.65/0.9179</u> | <u>32.22/0.9004</u> | <u>32.26/0.9300</u> |
+|       | <b>AugKD</b> | <b>38.15/0.9610</b> | <b>33.80/0.9195</b> | <b>32.27/0.9007</b> | <b>32.53/0.9320</b> |
+| ×3    | Scratch      | 34.39/0.9270        | 30.32/0.8417        | 29.08/0.8046        | 27.99/0.8489        |
+|       | KD           | 34.43/0.9273        | 30.34/0.8422        | 29.10/0.8050        | 28.00/0.8491        |
+|       | FitNet       | 33.35/0.9178        | 29.71/0.8323        | 28.62/0.7949        | 26.61/0.8167        |
+|       | AT           | 34.29/0.9262        | 30.26/0.8406        | 29.03/0.8035        | 27.76/0.8443        |
+|       | RKD          | 34.43/0.9274        | 30.33/0.8423        | 29.09/0.8051        | 27.96/0.8493        |
+|       | FAKD*        | 34.39/0.9272        | 30.34/0.8426        | 29.10/0.8052        | 28.07/0.8511        |
+|       | CSD*         | <u>34.45/0.9275</u> | <u>30.32/0.8430</u> | <u>29.11/0.8061</u> | <u>28.21/0.8549</u> |
+|       | <b>AugKD</b> | <b>34.59/0.9287</b> | <b>30.47/0.8448</b> | <b>29.20/0.8073</b> | <b>28.44/0.8578</b> |
+| ×4    | Scratch      | 32.29/0.8965        | 28.68/0.7840        | 27.64/0.7380        | 26.21/0.7893        |
+|       | KD           | 32.30/0.8965        | 28.70/0.7842        | 27.64/0.7382        | 26.21/0.7897        |
+|       | FitNet       | 31.65/0.8873        | 28.33/0.7768        | 27.38/0.7309        | 25.40/0.7637        |
+|       | AT           | 32.22/0.8952        | 28.63/0.7825        | 27.59/0.7365        | 25.97/0.7825        |
+|       | RKD          | 32.30/0.8965        | 28.69/0.7842        | 27.64/0.7383        | 26.20/0.7899        |
+|       | FAKD*        | 32.27/0.8960        | 28.65/0.7836        | 27.62/0.7379        | 26.18/0.7895        |
+|       | CSD          | <u>32.34/0.8974</u> | <u>28.72/0.7856</u> | <u>27.68/0.7396</u> | <u>26.34/0.7948</u> |
+|       | <b>AugKD</b> | <b>32.47/0.8981</b> | <b>28.80/0.7866</b> | <b>27.71/0.7403</b> | <b>26.45/0.7963</b> |
+
+## 4 EXPERIMENTS
+
+### 4.1 EXPERIMENT SETUPS
+
+**Backbones and Baselines.** We use EDSR (Lim et al., 2017), RCAN (Zhang et al., 2018), and SwinIR (Liang et al., 2021) as backbone models to evaluate AugKD and compare it with existing KD methods. The specifications of the teacher and student networks, along with statistics such as FLOPs, number of parameters, and inference speed (FPS), are shown in Table 1. We compare AugKD with the following baseline methods: training from scratch, response-based KD (Hinton et al., 2015), FitNet (Romero et al., 2014), AT (Zagoruyko & Komodakis, 2016), RKD (Park et al., 2019), FAKD (He et al., 2020), CSD (Wang et al., 2021c), and CrossKD (Fang et al., 2023). While FitNet, AT, and RKD were originally designed for high-level CV tasks, they are also applicable to SR models. However, CSD, being a self-distillation method, is not suitable for distilling RCAN (depth compression) and SwinIR (transformer-based) models. Performance is evaluated using peak signal-to-noise ratio (PSNR) and structural similarity index (SSIM) on the Y channel of the YCbCr color space. Detailed training settings are provided in Appendix A.1.
+
+### 4.2 RESULTS AND COMPARISON
+
+**Comparison with Baseline Methods.** The quantitative results (PSNR / SSIM) for training EDSR, RCAN, and SwinIR networks are presented in Table 2, 3, and 10 respectively, for ×2, ×3, and ×4 scales. The following conclusions can be drawn from these results: (1) Existing KD methods have limited benefits and some even result in student models worse than those trained without KD. For instance, EDSR models trained with FAKD sometimes underperform the ones trained from scratch. It showcases that the “dark knowledge” cannot be directly simply transferred to the student SR model. (2) The KD methods initially designed for high-level CV tasks (FitNet, AT, RKD), while applicable, hardly improve the SR models over training from scratch. It’s caused by the intrinsic difference
+
+{7}------------------------------------------------
+
+Table 3: Quantitative comparison between AugKD and other distillation methods for **RCAN**. The best and second-best performances are highlighted in **bold** and underlined, respectively.
+
+| Scale | Method       | Set5                | Set14               | BSD100              | Urban100            |
+|-------|--------------|---------------------|---------------------|---------------------|---------------------|
+|       |              | PSNR/SSIM           | PSNR/SSIM           | PSNR/SSIM           | PSNR/SSIM           |
+| ×2    | Scratch      | 38.13/0.9610        | 33.78/0.9194        | 32.26/0.9007        | 32.63/0.9327        |
+|       | KD           | 38.18/0.9611        | 33.83/0.9197        | 32.29/0.9010        | 32.67/0.9329        |
+|       | FitNet       | 37.97/0.9602        | 33.57/0.9174        | 32.19/0.8999        | 32.06/0.9279        |
+|       | AT           | 38.13/0.9610        | 33.70/0.9187        | 32.25/0.9005        | 32.48/0.9313        |
+|       | RKD          | <u>38.18/0.9612</u> | 33.78/0.9191        | 32.29/0.9011        | <u>32.70/0.9330</u> |
+|       | FAKD*        | <u>38.17/0.9612</u> | <u>33.83/0.9199</u> | <u>32.29/0.9011</u> | <u>32.65/0.9330</u> |
+|       | CrossKD      | <u>38.18/0.9612</u> | <u>33.81/0.9194</u> | <u>32.30/0.9011</u> | <u>32.66/0.9332</u> |
+|       | <b>AugKD</b> | <b>38.23/0.9614</b> | <b>33.90/0.9201</b> | <b>32.33/0.9016</b> | <b>32.87/0.9349</b> |
+| ×3    | Scratch      | 34.61/0.9288        | 30.45/0.8444        | 29.18/0.8074        | 28.59/0.8610        |
+|       | KD           | 34.61/0.9291        | 30.47/0.8447        | <u>29.21/0.8080</u> | <u>28.62/0.8612</u> |
+|       | FitNet       | 34.21/0.9248        | 30.20/0.8399        | 29.05/0.8044        | 27.89/0.8472        |
+|       | AT           | 34.55/0.9287        | 30.43/0.8438        | 29.17/0.8070        | 28.43/0.8577        |
+|       | RKD          | <u>34.67/0.9292</u> | 30.48/0.8451        | <u>29.21/0.8080</u> | <u>28.60/0.8610</u> |
+|       | FAKD*        | <u>34.63/0.9290</u> | <u>30.51/0.8453</u> | <u>29.21/0.8079</u> | <u>28.62/0.8612</u> |
+|       | CrossKD      | <u>34.65/0.9290</u> | <u>30.50/0.8449</u> | <u>29.21/0.8079</u> | <u>28.60/0.8610</u> |
+|       | <b>AugKD</b> | <b>34.74/0.9296</b> | <b>30.54/0.8458</b> | <b>29.25/0.8088</b> | <b>28.79/0.8646</b> |
+| ×4    | Scratch      | 32.31/0.8966        | 28.69/0.7842        | 27.64/0.7384        | 26.37/0.7949        |
+|       | KD           | 32.45/0.8980        | 28.76/0.7860        | <u>27.67/0.7400</u> | <u>26.49/0.7980</u> |
+|       | FitNet       | 31.99/0.8899        | 28.50/0.7789        | 27.55/0.7353        | 25.90/0.7791        |
+|       | AT           | 32.31/0.8967        | 28.69/0.7839        | <u>27.64/0.7385</u> | <u>26.29/0.7927</u> |
+|       | RKD          | <u>32.39/0.8974</u> | <u>28.74/0.7856</u> | <u>27.67/0.7399</u> | <u>26.47/0.7981</u> |
+|       | FAKD*        | <u>32.46/0.8980</u> | <u>28.77/0.7860</u> | <u>27.68/0.7400</u> | <u>26.50/0.7980</u> |
+|       | CrossKD      | <u>32.46/0.8984</u> | <u>28.79/0.7863</u> | <u>27.69/0.7405</u> | <u>26.52/0.7992</u> |
+|       | <b>AugKD</b> | <b>32.56/0.8990</b> | <b>28.83/0.7870</b> | <b>27.72/0.7410</b> | <b>26.62/0.8020</b> |
+
+between SR and other CV tasks. (3) The proposed AugKD method consistently outperforms the existing KD methods in all experimental settings by a large margin. For example, compared with the response-based KD method, the average PSNR improvements for the three types of networks on the Urban100 test set over three SR scales are 0.43 dB, 0.31 dB, 0.31 dB, respectively. Most existed KD methods are inapplicable to the transformer architecture network, but AugKD, as a response-based KD method, is able to compress the SwinIR model while exhibiting great performance.
+
+**AugKD facilitates the student model to mimic the teacher model.** In Figure 2, we compare the effect of different KD methods by comparing the similarity of students’ output and teacher’s on the training and Urban100 testing sets, to evaluate how well the student learns to mimic the teacher model. It shows that AugKD makes the student not only effectively fit the teacher model on the training set but also imitate it on the test sets so that it can generalize better.
+
+Table 4: The results of heterogeneous distillation using AugKD on the ×4 scale RCAN model.
+
+| Teacher   | BSD100       | Urban100     |
+|-----------|--------------|--------------|
+|           | PSNR/SSIM    | PSNR/SSIM    |
+| (Scratch) | 27.64/0.7384 | 26.37/0.7949 |
+| EDSR      | 27.71/0.7406 | 26.59/0.8014 |
+| SwinIR    | 27.72/0.7408 | 26.59/0.8007 |
+
+Table 5: NIQE scores on several real-world SR testing datasets. The lower, the better. Visual comparisons are provided in the appendix.
+
+| Method  | #Params | RealSR | DRealSR | OST300 |
+|---------|---------|--------|---------|--------|
+| Scratch | 11.9M   | 4.771  | 4.847   | 2.932  |
+| Scratch |         | 5.810  | 5.757   | 3.788  |
+| KD      | 1.24M   | 5.425  | 5.408   | 3.652  |
+| AugKD   |         | 5.398  | 5.378   | 3.494  |
+
+**Experiment Results on Heterogeneous Settings.** We extend the experiments to heterogeneous settings where the teacher and student models have different network architectures, as presented in Table 4. Conventional feature-based KD or self-distillation methods are inapplicable to the cross-architecture setting, while AugKD can still effectively improve the student models. For instance,
+
+{8}------------------------------------------------
+
+![Figure 5: A grid of 12 images showing x4 super-resolution (SR) examples for four datasets: img004, img019, img089, and img096 from Urban100. Each row corresponds to a dataset. Each row contains: a small crop of the original image, followed by SR results from HRFSNR, Scratch, KD, FAKD, CSD, and AugKD methods. Below each SR result is its PSNR (dB) value. Red boxes highlight specific regions of interest in the original images and the SR results.](d4e9f8f6bf5d7853ecae9c9633900af1_img.jpg)
+
+Figure 5: A grid of 12 images showing x4 super-resolution (SR) examples for four datasets: img004, img019, img089, and img096 from Urban100. Each row corresponds to a dataset. Each row contains: a small crop of the original image, followed by SR results from HRFSNR, Scratch, KD, FAKD, CSD, and AugKD methods. Below each SR result is its PSNR (dB) value. Red boxes highlight specific regions of interest in the original images and the SR results.
+
+Figure 5: The  $\times 4$  SR examples of EDSR models on img004, img019, img089 and img096 from Urban100. PSNRs (dB) of the cropped regions are annotated below each image.
+
+compared to the RCAN model trained from scratch, utilizing AugKD with an EDSR or SwinIR teacher model yields an increase in PSNR by 0.22dB at  $\times 4$  scale on Urban100 test set.
+
+**Visual Comparison.** In Figure 5, we compare the visual quality of output images of the  $\times 4$  EDSR model trained by AugKD and other methods. To underscore the differences in detailed pattern and texture reconstruction, we took relatively small cropped portions and computed local PSNR metrics. Generally, a higher PSNR aligns with superior visual effect. For the reconstruction of textures (e.g. lines, edges, and complex patterns), the model trained with AugKD yields outputs that are both sharper and more similar to HR, indicating the superiority of AugKD.
+
+#### Experiment Results on Real-world SR task.
+
+To evaluate the performance of AugKD in real-world SR, we continue training the PSNR-oriented student SwinIR models at  $\times 4$  scale using the BSRGAN degradation model (Zhang et al., 2021a; Liang et al., 2021) on the DF2K dataset. The models are tested on three benchmark datasets: RealSR (Cai et al., 2019), DRealSR (Wei et al., 2020), and OST300 (Wang et al., 2018). The non-reference image quality assessment (NIQE) scores (Mittal et al., 2012) are presented in Table 5. The model trained with AugKD achieves lower NIQE scores and produces output images with more visually pleasing results, as shown in the supplementary material.
+
+### 4.3 ABLATION ANALYSIS
+
+**Impact of auxiliary distillation samples and label consistency regularization.** Table 6 shows the effect of the presented two modules, using EDSR baseline model (#Channel=64, #Block=16) distilled by our student model (#Channel=64, #Block=32). Further, Table 7 ablates the zoom-in  $\mathcal{P}$  and zoom-out  $\mathcal{P}$  operations. The result shows that adopting auxiliary distillation samples and label consistency regularization could lead to significant performance improvement upon logits-KD, whether used separately or together. For example, simply introduce the auxiliary images by zoom-in draws 0.31dB PSNR increment on Urban100 test set, and adding zoom-out and label consistency regularization yields an additional 0.16dB improvement.
+
+**Integrate AugKD into other model compression methods.** We integrate AugKD with a SOTA SR network quantization method, Distribution-Aware Quantization (DAQ) (Hong et al., 2022), and use the full-precision model to supervise the quantized ones. Figure 6 shows the PSNR of quantized  $\times 4$  scale EDSR baseline models trained with and without KD, and the full results are provided in supplementary. It shows that vanilla Logits-KD has barely effects on the quantization, while AugKD could improve the quantized model by a large margin. We also integrate AugKD with the FAKD
+
+{9}------------------------------------------------
+
+Table 6: Ablation study of auxiliary distillation samples and label consistency regularization.
+
+| Auxiliary samples | Label consistency | Urban100 PSNR/SSIM |
+|-------------------|-------------------|--------------------|
+| ✗                 | ✗                 | 24.87 / 0.7431     |
+| ✓                 | ✗                 | 25.20 / 0.7558     |
+| ✓                 | ✓                 | 25.34 / 0.7609     |
+
+Table 7: Ablation study of the zoom in and zoom out operations.
+
+| Zoom In | Zoom Out | Urban100 PSNR / SSIM |
+|---------|----------|----------------------|
+| ✗       | ✗        | 24.87 / 0.7431       |
+| ✓       | ✗        | 25.18 / 0.7551       |
+| ✗       | ✓        | 25.18 / 0.7552       |
+| ✓       | ✓        | 25.20 / 0.7558       |
+
+method in Table 8. The resulting models outperform the ones trained by FAKD greatly. The results indicate that AugKD can be effectively aggregated with other model compression techniques.
+
+![Bar chart showing PSNR of quantized baseline EDSR models on Urban100. The x-axis represents Quantization Precision (w202, w844, w32632) and the y-axis represents PSNR (dB). For each precision, three bars are shown: DAQ (yellow), DAQ with KD (green), and DAQ with AugKD (blue). The PSNR values are: w202 (DAQ: 24.63, DAQ with KD: 24.61, DAQ with AugKD: 24.73), w844 (DAQ: 24.72, DAQ with KD: 24.72, DAQ with AugKD: 24.85), and w32632 (DAQ: 25.13).](33228b4227fa57e1477b27b9e07483e6_img.jpg)
+
+Bar chart showing PSNR of quantized baseline EDSR models on Urban100. The x-axis represents Quantization Precision (w202, w844, w32632) and the y-axis represents PSNR (dB). For each precision, three bars are shown: DAQ (yellow), DAQ with KD (green), and DAQ with AugKD (blue). The PSNR values are: w202 (DAQ: 24.63, DAQ with KD: 24.61, DAQ with AugKD: 24.73), w844 (DAQ: 24.72, DAQ with KD: 24.72, DAQ with AugKD: 24.85), and w32632 (DAQ: 25.13).
+
+Figure 6: PSNR of quantized baseline EDSR model trained with and without KD.
+
+Table 8: Experiment results of combining AugKD and FAKD.
+
+| Model | Method     | Urban100       |
+|-------|------------|----------------|
+|       |            | PSNR / SSIM    |
+| EDSR  | Logits KD  | 26.21 / 0.7897 |
+|       | FAKD       | 26.18 / 0.7895 |
+|       | FAKD+AugKD | 26.30 / 0.7930 |
+|       | AugKD      | 26.45 / 0.7966 |
+
+Table 9: Comparison with data expansion. DF2K denotes DIV2K+Flickr2K.
+
+| Training set | #Images | Training steps    | Method  | BSD100              | Urban100            |
+|--------------|---------|-------------------|---------|---------------------|---------------------|
+|              |         |                   |         | PSNR/SSIM           | PSNR/SSIM           |
+| DIV2K        | 800     | $2.5 \times 10^5$ | Scratch | 27.57/0.7356        | 25.94/0.7809        |
+|              |         |                   | AugKD   | <b>27.68/0.7390</b> | <b>26.32/0.7927</b> |
+| DF2K         | 3450    | $5 \times 10^5$   | Scratch | 27.62/0.7372        | 26.15/0.7872        |
+|              |         |                   | KD      | 27.67/0.7390        | 26.31/0.7925        |
+
+**Comparison with data expansion** The proposed AugKD generates auxiliary distillation samples by simple data augmentations. Comparing with using a parametric generator or introducing additional training image data sources, it’s more efficient and able to keep the training data have similar inputs. Table 9 compares AugKD with training or distilling with expanded data. We train the  $\times 4$  scale EDSR models on a much larger dataset (DF2K: DIV2K+Flickr2K (Timofte et al., 2017) with 3450 images). The number of iterations is doubled for the larger training set since the previous configuration ( $2.5 \times 10^5$ ) is insufficient for the models to converge. Except that the  $\times 4$  SR networks are not initialized with the  $\times 2$  ones in this comparison, the other settings of the training recipe are the same. AugKD is superior to training with more input data in terms of both efficiency and performance.
+
+## 5 CONCLUSION
+
+In this work, we investigated the issues existing in KD for SR networks. Motivated by the findings, we present AugKD, a simple yet significant KD framework for SR, which outperforms existing methods and is applicable to a wide array of network architecture and SR tasks. Central to our approach is the auxiliary distillation samples generated by zooming augmentations, which facilitates the knowledge transfer from teacher to student model. Besides, we realize label consistency regularization in KD for SR, which further bolsters the student model’s generalization capabilities. Extensive experiments are conducted across various SR tasks, benchmark datasets and diverse network backbones, consistently showing the out-performance of AugKD and endorsing its robust and effective.
+
+ Rest of paper (reference and Appendix) is removed.

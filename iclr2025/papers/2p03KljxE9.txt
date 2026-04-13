@@ -1,0 +1,314 @@
+
+
+{0}------------------------------------------------
+
+# LANGUAGE-ASSISTED FEATURE TRANSFORMATION FOR ANOMALY DETECTION
+
+EungGu Yun<sup>†</sup>
+
+SAIGE
+
+Seoul, South Korea
+
+Heonjin Ha<sup>‡</sup>
+
+LG Uplus
+
+Seoul, South Korea
+
+Yeongwoo Nam<sup>‡</sup>
+
+Alsemy Inc.
+
+Seoul, South Korea
+
+Bryan Dongik Lee<sup>‡</sup>
+
+Independent
+
+Seoul, South Korea
+
+## ABSTRACT
+
+This paper introduces LAFT, a novel feature transformation method designed to incorporate user knowledge and preferences into anomaly detection using natural language. Accurately modeling the boundary of normality is crucial for distinguishing abnormal data, but this is often challenging due to limited data or the presence of nuisance attributes. While unsupervised methods that rely solely on data without user guidance are common, they may fail to detect anomalies of specific interest. To address this limitation, we propose **Language-Assisted Feature Transformation (LAFT)**, which leverages the shared image-text embedding space of vision-language models to transform visual features according to user-defined requirements. Combined with anomaly detection methods, LAFT effectively aligns visual features with user preferences, allowing anomalies of interest to be detected. Extensive experiments on both toy and real-world datasets validate the effectiveness of our method.
+
+## 1 INTRODUCTION
+
+Anomaly detection (AD) is the task of distinguishing abnormal data that deviates from the norm. In most scenarios where anomaly detection is applied, normal data is relatively easy to obtain, while abnormal data is scarce or sometimes impossible to obtain in advance. Thus, typical anomaly detection methods rely on normal data provided by users to learn what constitutes normal. However, when the training data is biased or does not cover the diverse variations, modeling the boundary of normality becomes a significant challenge (Lee & Wang, 2020; Cohen et al., 2023). In practical applications, models may need to prioritize or disregard certain attributes of the data. For instance, when inspecting products in images, a user might focus solely on the product’s shape, ignoring attributes like color or lighting conditions. Moreover, distinguishing anomalies becomes more difficult when attributes are entangled, as seen in the Waterbirds dataset, where the background and bird features are entangled (Sagawa et al., 2019).
+
+To address this issue, various methods have been proposed that use data augmentation or generation techniques to improve the learning of decision boundaries (Zavrtanik et al., 2021; Li et al., 2021; Du et al., 2021). These approaches aim to produce more diverse samples, covering a broader range of the underlying data distribution than what is available. Additionally, some approaches focus on enabling models to learn task-specific feature representations (Chen et al., 2020a;b; Caron et al., 2020), applying them to anomaly detection to better capture feature-level normality (Hyun et al., 2023). However, a limitation of these methods is that they may struggle to generalize to completely unseen data or fail to align with the user’s intent in defining normality.
+
+In some scenarios, users may have prior knowledge or specific preferences about the data that they want to integrate into the anomaly detection process. Typically, this is achieved through indirect methods, such as manually applying random color augmentation to ignore certain object colors. Controlling the boundary of normality remains relatively unexplored, and existing approaches often require unrealistic conditions, such as access to anomaly samples or labels (Cohen et al., 2023). To overcome this limitation, we propose leveraging vision-language models to directly integrate user knowledge and preferences into the anomaly detection framework through natural language. By
+
+<sup>†</sup>Corresponding author: eg.yun@saige.ai
+
+<sup>‡</sup>This work was primarily conducted while the authors were at SAIGE.
+
+{1}------------------------------------------------
+
+![Figure 1: High-level motivation of our method. The diagram is split into two parts: (left) Typical AD and (right) LAFT AD. In the 'Typical AD' part, training images (Normal and Anomaly) are processed by a 'Typical AD' block to produce test images (Normal and Anomaly). In the 'LAFT AD' part, training images are processed by a 'LAFT AD' block, which is influenced by a 'Criteria: shape' input, to produce test images (Normal and Anomaly).](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 1: High-level motivation of our method. The diagram is split into two parts: (left) Typical AD and (right) LAFT AD. In the 'Typical AD' part, training images (Normal and Anomaly) are processed by a 'Typical AD' block to produce test images (Normal and Anomaly). In the 'LAFT AD' part, training images are processed by a 'LAFT AD' block, which is influenced by a 'Criteria: shape' input, to produce test images (Normal and Anomaly).
+
+**Figure 1:** High-level motivation of our method: (left) typical image anomaly detection methods treat all test data that differs from the training data as anomalies, while (right) our method, LAFT AD, incorporates user preferences into the anomaly detection.
+
+using language, users can more explicitly express their desired concepts, providing greater control over the definition of normality.
+
+Recent studies have shown the effectiveness of training vision models with large amounts of unlabeled Internet data (Radford et al., 2021; Jia et al., 2021; Desai et al., 2023). By using image-text pairs from the web for pre-training, these models use natural language descriptions to improve the quality of image representations. Through large-scale training, they can correlate visual concepts in images with textual descriptions, aligning image and text features in a shared embedding space. Researchers have applied these models to industrial anomaly detection (Jeong et al., 2023; Cao et al., 2023b; Chen et al., 2023; Zhu & Pang, 2024) and general image out-of-distribution tasks using zero-shot text prompts (Ming et al., 2022; Miyai et al., 2023). A key benefit is the ability to incorporate human knowledge through text prompts, allowing zero-shot use without requiring additional training images. However, defining the complex normality of an image solely through natural language remains a challenge, and many methods face structural limitations in utilizing available training images. Therefore, we aim to develop a method where normality is primarily defined by image features, similar to other image anomaly detection approaches, with language serving only to refine the boundaries of normality.
+
+In this paper, we present Language-Assisted Feature Transformation (LAFT), a method that allows users to control the transformation of image features using natural language without requiring additional training. LAFT leverages the vision-language model CLIP (Radford et al., 2021), using its shared embedding space to link visual and textual features. This connection enables the transformation of visual features based solely on language inputs. We hypothesize that visual concept subspaces exist within this shared embedding space, and introduce the notion of a “concept axis” to represent these subspaces. By computing pairwise differences between textual features, we derive concept difference vectors that define the concept axes. Projecting visual features onto or orthogonal to these axes allows for selective emphasis or suppression of specific image attributes.
+
+Our method offers a training-free approach by using language, whereas most feature transformation methods require extensive training on data. This property presents two key advantages: it is agnostic to downstream tasks and performs well even in settings where data is scarce. By combining LAFT with proper anomaly detection methods, we can apply LAFT to anomaly detection tasks. Our approach differs from most work using CLIP for anomaly detection in that it relies primarily on image features to define normality, with language playing a supporting role. By using language, users can provide their understanding of normality, allowing greater flexibility in incorporating domain knowledge. Furthermore, by defining the boundaries of normality using image features, the model can accurately distinguish between normal and abnormal images.
+
+We summarize our contributions as follows:
+
+1. We propose Language-Assisted Feature Transformation (LAFT), a novel method that uses natural language to transform image features to fit the given task requirements by leveraging the image-text aligned embedding space of CLIP.
+2. We introduce LAFT AD, an anomaly detection method that combines LAFT with a  $k$ -nearest neighbor ( $k\text{NN}$ ) classifier, enabling users to selectively focus on or ignore specific image attributes based on their guidance for semantic anomaly detection tasks.
+3. We present WinCLIP+LAFT, an extension of WinCLIP that integrates LAFT to improve performance in industrial anomaly detection tasks.
+4. We demonstrate the effectiveness of our method on Colored MNIST and extensively evaluate its performance on real-world datasets, including Waterbirds, CelebA, MV Tec AD, and VisA.
+
+{2}------------------------------------------------
+
+## 2 RELATED WORK
+
+**Image anomaly detection with vision-language model** Since the advent of CLIP (Radford et al., 2021), numerous studies in image anomaly detection have attempted to exploit the generalization capability of this vision-language model. To align visual and textual features for effective out-of-distribution detection, Ming et al. (2022) proposed a scoring method called MCM, with Miyai et al. (2023) later presenting an improved version, GL-MCM. Addressing the limitations of zero-shot, Ming & Li (2023) tried to further enhance performance by using parameter-efficient fine-tuning in downstream tasks. Fort et al. (2021) aimed to improve the model’s understanding of normality by providing the CLIP text encoder with candidate anomaly labels. In addition, Esmaeilpour et al. (2022) introduced a framework for training a label generator based on the CLIP image encoder to generate possible anomaly labels. For industrial anomaly detection, Jeong et al. (2023) introduced WinCLIP, a zero-/few-shot anomaly detection model that efficiently extracts and aggregates features at multiple levels, aligning them with textual information. Similarly, Chen et al. (2023) proposed APRIL-GAN, and Zhu & Pang (2024) developed InCTRL, both of which adapt CLIP image features using additional adapter layers to better align them for anomaly detection, although these approaches require additional pre-training of the adapter layers.
+
+**Adjusting the normality boundary** Few studies have specifically addressed the challenge of adjusting the normality boundary in anomaly detection. Cohen et al. (2023) introduced Red PANDA, an anomaly detection method that disentangles relevant attributes in images while ignoring nuisance factors. However, achieving this disentangled feature representation requires labeled data for each nuisance attribute. Reiss et al. (2023) emphasized that overly expressive feature representations can ultimately degrade performance, highlighting a trade-off between sufficient representation and over-expressiveness in anomaly detection. Hendrycks et al. (2018) introduced outlier exposure, an approach that uses auxiliary data to help models generalize more effectively to unseen anomalies.
+
+**Extracting task-specific features** Several strategies have been developed to enhance the adaptability and robustness of features extracted from backbone models. Some studies focus on fine-tuning pre-trained feature extraction backbones or generating task-specific features through feature transformations. Ruff et al. (2018) introduced a method that transforms normal data into a hypersphere representation for anomaly detection, and Reiss et al. (2021) proposed an early stopping strategy to prevent feature collapse. Chen et al. (2020a;b) utilized contrastive pre-training to facilitate feature agreement, and Caron et al. (2020) employed prototype vectors for contrastive training of similar features. Following this line of research, Hyun et al. (2023); Reiss & Hoshen (2023); Tack et al. (2020) extended contrastive learning approaches for anomaly detection. Zhao et al. (2023) suggested using the backbone of vision-language pre-trained diffusion models and training a text adapter to extract task-specific features with text prompts for downstream tasks.
+
+## 3 PRELIMINARIES
+
+In our scenario, a training set, represented as  $\mathcal{D}_{\text{train}}$ , consists of normal samples only, and a test set  $\mathcal{D}_{\text{test}}$  consists of both normal and anomalous samples. For a two-stage anomaly detection model consisting of a feature extractor  $f$  and an anomaly classifier  $g$ , the feature extractor  $f$  maps the input image  $x$  to a feature  $v = f(x)$ , and the anomaly classifier  $g$  maps the feature  $v$  to an anomaly score  $s = g(v)$ . Then, the anomaly score  $s_i$  is used to determine the prediction of the anomaly label  $\hat{y}_i$ .
+
+The attributes of an image  $x$  extracted by the feature extractor are denoted as  $a = \{a^1, \dots, a^m\}$ , and the anomaly label is denoted as  $y$ . Each attribute  $a^j$  ( $j = 1, \dots, m$ ) denotes any characteristics within the feature extracted from the image, such as the shape of the object, the color, or the background. The  $m$  attributes can be divided into relevant attributes  $a^{\text{rel}} = \{a^j\}_{1 \leq j \leq n}$  and irrelevant (nuisance) attributes  $a^{\text{irr}} = \{a^j\}_{n < j \leq m}$  for desired anomaly detection tasks. For example, when detecting anomalies in the shape of objects, the shape is relevant, while the color is irrelevant. To properly detect anomalies, the prediction of the model should be invariant to the irrelevant attributes.
+
+There are two ways to achieve this invariance:
+
+1. Provide enough data that covers the possible values for each  $a^j$ , so that the classifier  $g$  can properly ignore irrelevant attributes  $a^{\text{irr}}$  in the feature  $v$ . This is the most desirable solution, and many data augmentation and generation methods have been proposed. However, it is often impossible to collect or hard to generate such data.
+
+{3}------------------------------------------------
+
+![Figure 2: Overview of the LAFT method. The diagram shows three main components: Concept values, LAFT, and LAFT AD. Concept values are derived from text prompts (e.g., 'an image of a circle, triangle, square') and processed by a CLIP Text Encoder to create concept prototypes. These are used to compute pairwise differences and apply PCA to create a concept subspace. LAFT takes train and test images, processes them through a CLIP Image Encoder to get image features, and then projects them into the concept subspace. LAFT AD uses a classifier to distinguish between 'Normal' and 'Anomaly' based on the transformed features. The 'Normal' set contains images of circles, triangles, and squares, while the 'Anomaly' set contains images of a square, triangle, and pentagon.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 2: Overview of the LAFT method. The diagram shows three main components: Concept values, LAFT, and LAFT AD. Concept values are derived from text prompts (e.g., 'an image of a circle, triangle, square') and processed by a CLIP Text Encoder to create concept prototypes. These are used to compute pairwise differences and apply PCA to create a concept subspace. LAFT takes train and test images, processes them through a CLIP Image Encoder to get image features, and then projects them into the concept subspace. LAFT AD uses a classifier to distinguish between 'Normal' and 'Anomaly' based on the transformed features. The 'Normal' set contains images of circles, triangles, and squares, while the 'Anomaly' set contains images of a square, triangle, and pentagon.
+
+**Figure 2:** Overview of our method, LAFT, a transformation module, and LAFT AD, combining LAFT with a  $k\text{NN}$  classifier. Our approach uses CLIP’s text and image encoders without any additional training. The key idea is to use text prompts containing concept values to construct a concept subspace for the target attribute. This process involves computing pairwise differences of concept prototypes and extracting robust concept axes via PCA. Once the concept subspaces are created, the shared embedding space can be used to transform image features suitable for anomaly detection.
+
+- Make the feature extractor  $f$  only extract the relevant attributes  $a^{\text{rel}}$  and do not include the irrelevant attributes  $a^{\text{irr}}$  in the feature  $v$ . Fine-tuning the feature extractor or adding a transformation  $T$  to the feature extractor is a common way to achieve this. But it is often hard to design such training procedures to achieve the invariance.
+
+Our goal is to design a transformation  $T$  that transforms the feature  $v$  into a new feature  $v' = T(v)$  that the anomaly classifier  $g$  can use to detect anomalies without being affected by the irrelevant attributes  $a^{\text{irr}}$  using only the user’s natural language without any additional training data or labels.
+
+This can be achieved by two approaches:
+
+- Guide** Make a transformation  $T_{\text{guide}}$  that includes only the relevant attributes  $a^j \in a^{\text{rel}}$ . Some attributes in  $a^{\text{rel}}$  may be correlated, so the transformed feature may not include all relevant attributes.
+- Ignore** Make a transformation  $T_{\text{ignore}}$  that excludes all irrelevant attributes  $\forall a^j \in a^{\text{irr}}$ . In many cases this is harder to achieve than the above approach, because the transformation should be able to remove all irrelevant attributes.
+
+That is, we want our transformation  $T$  to represent the relevant attributes in a manner unaffected by the irrelevant attributes:
+
+$$p(a^{n+1}, \dots, a^m) = p(a^{n+1}, \dots, a^m | T(v)). \quad (1)$$
+
+We also want the transformed feature  $v'$  to be informative, containing enough information about relevant attributes. Here,  $I(\cdot)$  represents the mutual information between the two arguments:
+
+$$I((a^1, \dots, a^n); v) \sim I((a^1, \dots, a^n); T(v)). \quad (2)$$
+
+In practice, invariance can be measured by the accuracy of predicting the anomaly label  $\hat{y}$  from the transformed feature  $T(v)$ . But we can assess the informativeness by measuring the accuracy of predicting the relevant attribute utilized to define anomalies. Empirical evaluations of these measures for various datasets are provided in the [Experiments](#). With such a representation, anomalies can later be evaluated independently, devoid of any bias caused by the irrelevant attribute we aim to disregard.
+
+CLIP (Radford et al., 2021) embeds the features in a unit sphere subspace in Euclidean space  $\mathbb{R}^n$ . An embedding vector of an image is correlated to the text embedding describing the image. This means that we can construct the transform with the CLIP text encoder. We assume that all relevant and irrelevant features can be encoded with the text description, so that natural language assists in the manipulation of the vector in the CLIP shared embedding space.
+
+{4}------------------------------------------------
+
+## 4 METHOD
+
+Anomaly detection often faces data scarcity, especially for abnormal data, making it difficult for models to define the normality boundary. In this situation, users may have prior knowledge or preferences about what should be considered normal. Therefore, we aim to design:
+
+- A method that can be used when the user has knowledge of normality and wants to control it. Typical anomaly detection methods consider all test data different from the training data as anomalies, but we want our method to be used only with a language.
+- A method that effectively handles anomalies that are challenging to express solely in natural language. Other methods using vision-language models require normality to be expressed entirely in language prompts for guidance, which limits the ability to capture complex normality. We want our method to utilize image features to define normality.
+
+Note that our method is not intended to be used in situations where the user has no knowledge or preferences, or to automatically identify relevant attributes.
+
+Our method uses CLIP’s text and image encoders without additional training. The core idea is to construct a *concept subspace* for target attributes using text prompts containing *concept values*. After constructing the subspace, it transforms image features by projecting them onto the subspace, taking advantage of CLIP’s shared embedding space. This involves computing pairwise differences between textual features containing *concept prototypes* to extract robust concept axes. In this section, we provide a detailed explanation of our method, as illustrated in Figure 2.
+
+### 4.1 TEXT PROMPT
+
+To guide the model in focusing on or ignoring specific attributes of an image, it is essential to provide it with appropriate textual prompts. Following Ming et al. (2022), we assume that the text contains *concept prototypes* representing the attributes. Thus, we provide the method with a list of prompts composed of templates and values, as commonly done in CLIP-based methods (Radford et al., 2021; Ming et al., 2022; Jeong et al., 2023). The key difference in our approach is that we use the actual values of the desired attribute (e.g., “circle,” “square”) rather than the attribute name itself (e.g., “shape”). For instance, to capture the concept of hair color, we can construct the prompt as:
+
+- “a photo of a person with *brown hair*”
+- “a portrait of a man with *black hair*”
+- “an image of a *blond child*”
+
+By using the actual values of the desired attribute in the prompts, we aim for the method to capture the difference between the concept prototypes of the attribute. Providing values for this attribute that are not present in the training set, but are likely to appear during testing, helps construct a more comprehensive subspace for that concept. As with other language-based methods, multiple types of templates can be provided to mitigate the bias introduced by any single template. We examine the effect of various sets of concept values in the *Ablation Study*, with the prompts used in our experiments detailed in the *Appendix*.
+
+### 4.2 FIND CONCEPT SUBSPACE
+
+Mikolov (2013) showed that simple arithmetic operations between text embeddings can capture meaningful relationships (e.g.,  $\text{vec}(\text{biggest}) - \text{vec}(\text{big}) \approx \text{vec}(\text{smallest}) - \text{vec}(\text{small})$ ). This finding showed that text embeddings not only represent texts in a vector space, but also encode the underlying relationships between them. Moreover, they observed that high-dimensional vectors, when trained on large datasets, are capable of capturing subtle semantic relationships. Similarly, CLIP’s text embeddings support arithmetic operations to compute differences between concept prototypes, allowing for the comparison of these concepts in the embedding space.
+
+Building on this approach, the method constructs a subspace of the concept within CLIP’s embedding space. Specifically, it identifies the axes of this subspace that capture the variance between concept prototypes, as represented by difference between the prompts. For prompts  $t_i$  and  $t_j$ , where  $1 \leq i < j \leq n$ , we compute the pairwise differences of the text features:
+
+$$\Delta v_{ij} := E_{\text{text}}(t_i) - E_{\text{text}}(t_j) \quad (3)$$
+
+{5}------------------------------------------------
+
+![Figure 3: Projection of image features from CLIP's image encoder (left) and transformed image features using LAFT (right). The left plot shows CLIP features with axes 1 and 2, where points are colored by attribute (5/red, 3/green, 5/red, 5/green). The right plot shows LAFT transformed features with axes Number and Color, where the points are more aligned with the intended attributes.](c54b3ca7603d65d4589151bc3a49d054_img.jpg)
+
+Figure 3: Projection of image features from CLIP's image encoder (left) and transformed image features using LAFT (right). The left plot shows CLIP features with axes 1 and 2, where points are colored by attribute (5/red, 3/green, 5/red, 5/green). The right plot shows LAFT transformed features with axes Number and Color, where the points are more aligned with the intended attributes.
+
+**Figure 3:** Projection of image features from CLIP’s image encoder (**left**) and transformed image features using LAFT (**right**). Without guidance, the image features may not align with the intended attributes. After applying LAFT, the features become more aligned with the desired attributes.
+
+where  $n$  represents the number of prompts, and  $E_{\text{tex}}$  denotes CLIP’s text encoder. But directly using these vectors is not preferable because the prompts may contain template noise (Zhou et al., 2022). To address this, we apply PCA to extract the principal axes from these vectors:
+
+$$\{c_k\}_{1 \leq k \leq d} := \text{PCA}(\{\Delta v_{ij}\}_{1 \leq i < j \leq n, d}) \quad (4)$$
+
+where  $d$  is the number of components, and  $\{c_k\}$  represents the  $d$  principal axes, collectively referred to as the **concept axes**. Throughout this paper, we typically select  $d$  between 8 and 32 when guiding an attribute, and between 32 and 384 when ignoring an attribute. As discussed in the [Pre-liminaries](#), ignoring attributes is generally more challenging than guiding them, so a larger number of components is used. For the impact of  $d$ , please refer to the [Ablation Study](#).
+
+### 4.3 FEATURE TRANSFORMATION WITH PROJECTION
+
+For each image feature  $v_i = f(x_i)$  encoded by CLIP’s image encoder, we project the features onto the concept subspace:
+
+$$v'_i = T_{\text{guide}}(v_i) := \sum_{k=1}^d \frac{\langle v_i, c_k \rangle}{\langle c_k, c_k \rangle} c_k, \quad (5)$$
+
+where  $\langle \cdot, \cdot \rangle$  denotes the inner product. This projection retains only the relevant attributes of the image feature, as irrelevant attributes are nearly orthogonal to the concept axes. Conversely, we can remove the irrelevant attributes using orthogonal projection. Let  $\bar{c}_k$  represent the concept axes associated with the irrelevant attributes. Then we can project orthogonally onto the concept subspace as follows:
+
+$$\bar{v}'_i = T_{\text{ignore}}(v_i) := v_i - \sum_{k=1}^d \frac{\langle v_i, \bar{c}_k \rangle}{\langle \bar{c}_k, \bar{c}_k \rangle} \bar{c}_k, \quad (6)$$
+
+which manually cancels out the vectors of irrelevant attributes. This completes the description of the feature transformation method, LAFT.
+
+### 4.4 ANOMALY SCORING
+
+Many anomaly detection methods employ  $k$ -nearest-neighbors ( $k\text{NN}$ ) for anomaly scoring (Cohen & Hoshen, 2020; Roth et al., 2022). This approach is effective because normal data tends to be densely concentrated, while anomalous data is typically sparsely distributed in the feature space. In our method, LAFT AD, we also use  $k\text{NN}$  to estimate the density of normal data around each test sample, assuming that the features have been processed by LAFT for *semantic anomaly detection*.
+
+We start by extracting features for each normal sample:  $v'_i = T(f(x_i))$ ,  $\forall x_i \in \mathcal{D}_{\text{train}}$ . Next, for each test sample, we infer its feature:  $v'_j = T(f(x_j))$ ,  $\forall x_j \in \mathcal{D}_{\text{test}}$ . Finally, we score each test sample based on its  $k\text{NN}$  distance from the normal data:
+
+$$s_j = g(v'_j) := \frac{1}{k} \sum_{v'_i \in N_k(v'_j)} S_{\text{cos}}(v'_j, v'_i), \quad (7)$$
+
+where  $N_k(v'_j)$  denotes the  $k$  nearest features to  $v'_j$  in the normal data, and  $S_{\text{cos}}(\cdot, \cdot)$  represents cosine similarity. We use  $k = 30$  for  $k\text{NN}$  throughout the paper without optimization.
+
+However, this method may not be suitable for industrial anomaly detection tasks, where anomalies are often small and subtle. To address this, we extend WinCLIP (Jeong et al., 2023) to incorporate LAFT for anomaly scoring, which we refer to as WinCLIP+LAFT for *industrial anomaly detection*. A detailed explanation of this extension is provided in the [Experiment](#).
+
+{6}------------------------------------------------
+
+## 5 EXPERIMENTS
+
+**Datasets** To validate our approach, we used the colored version of MNIST (LeCun et al., 2010), Waterbirds (Sagawa et al., 2019), and CelebA (Liu et al., 2015) datasets for semantic anomaly detection (SAD). We defined normal and anomalous values for each dataset attribute and divided the training split into  $2^m$  subsets. For example, in the Colored MNIST dataset, we designated digits 0-4 as normal and 5-9 as anomalous, with the color red as normal and green and blue as anomalous. We then used one subset as the training set, considering it normal across all  $m$  attributes (e.g., digits 0-4 and the color red). This is similar to the setup commonly used in many studies for a single attribute (primarily based on class labels) (Ruff et al., 2020; Tack et al., 2020; Esmaeilpour et al., 2022; Cohen et al., 2023; Reiss & Hoshen, 2023; Cao et al., 2023a; Zhu & Pang, 2024). To further demonstrate the practicality of our method, we also used the MVTec AD (Bergmann et al., 2019) and VisA (Zou et al., 2022) datasets for industrial anomaly detection (IAD).
+
+**Baselines** For semantic anomaly datasets, we do not compare with typical image-only AD methods for two reasons: (1) they require attribute-specific processing (e.g., color augmentation) to incorporate user prior knowledge, which limits generalizability to other contexts, and (2) without guidance, these methods detect images that differ from the training set, resulting in high false positive rates in our settings. Instead, to simulate image-only AD methods, we compare with simple **kNN** and **LinearProbe** with additional training data, directly using image features from CLIP.
+
+**kNN** computes the distance between the test image features and the training image features for anomaly scoring. As discussed in the **Method**, many AD methods rely on **kNN**-based scoring, making it an important baseline. **kNN** using the same training subset as the other methods serves as a no-guidance version of **LAFT AD**, allowing us to directly evaluate **LAFT**’s effectiveness. And **kNN** using additional normal training subset depending on the target attribute represents an image-only method with attribute-specific image processing. Since applying image augmentation across all datasets and attributes is not straightforward (e.g., augmenting the background in Waterbirds), we assume that the additional data is well *augmented* images for the target attribute. To evaluate CLIP image encoder’s performance, we provide full training data including normal and anomalous images for **LinearProbe** to train a linear classifier to predict the class of the test image (Radford et al., 2021).
+
+We also evaluate CLIP-based zero-shot and few-shot AD methods. For zero-shot AD, we use Maximum Concept Matching (**MCM**: Ming et al., 2022), which requires only prompts for normal images to perform anomaly scoring, and Zero-shot outlier exposure (**ZOE**: Fort et al., 2021), which uses prompts for normal images and candidate prompts for anomalous images. And **CLIPN** (Wang et al., 2023) is a zero-shot method that uses pre-trained “no” prompts and “no” text encoder to make text features for anomalies. We also consider **WinCLIP** (Jeong et al., 2023), which supports both zero-/few-shot AD. The zero-shot version of **WinCLIP** is similar to **ZOE** in terms of anomaly scoring, and the few-shot version (**WinCLIP+**) requires a few normal images. Lastly, we consider **InCTRL** (Zhu & Pang, 2024), a few-shot AD method similar to **WinCLIP+**.
+
+**Prompts** We use the actual class names from the dataset for concept values, if available, and add other candidate labels to simulate unseen classes. For example, for the number attribute in the Colored MNIST dataset, we use ‘0’ to ‘20’ and ‘zero’ to ‘twenty’ as number attributes, even though the dataset only includes 0 to 9. We referenced the prompts provided by CLIP (Radford et al., 2021).
+
+For more details, please refer to the **Experimental Details**.
+
+### 5.1 SEMANTIC ANOMALY DETECTION
+
+We used the colored version of the MNIST dataset (LeCun et al., 2010), similar to Arjovsky et al. (2019), to demonstrate our concept in the simplest way. We created a dataset that divides each digit of the MNIST and colors each split with red, green, and blue. In this way, the image of a colored MNIST consists of two attributes: number and color. We mark the numbers 0 to 4 as normal and the numbers 5 to 9 as abnormal. In addition, we label red as normal and green and blue as abnormal colors. In this setting, the training set consists of 0 to 4 and red images. Then, we use five different seeds to split the training set for coloring each digit. Figure 3 shows a brief overview of our desired transformation using concept axes. If we choose an axis (number or color) to project the image features, we can simply use **kNN** to detect only the desired anomalies.
+
+{7}------------------------------------------------
+
+**Table 1:** Anomaly detection performance (%) on Colored MNIST and Waterbirds datasets. Standard deviations are computed over five different seeds, with results for deterministic cases omitted. The best values are shown in **bold**, and the second-best values are underlined.
+
+| Guidance                | Method         | Colored MNIST: Number |                   |                   | Waterbirds: Bird |             |             |
+|-------------------------|----------------|-----------------------|-------------------|-------------------|------------------|-------------|-------------|
+|                         |                | AUROC ↑               | AUPRC ↑           | FPR95 ↓           | AUROC ↑          | AUPRC ↑     | FPR95 ↓     |
+| <b>Baseline</b>         |                |                       |                   |                   |                  |             |             |
+| Subset of normal images | kNN            | 92.4 ± 0.2            | 91.8 ± 0.2        | 31.9 ± 0.6        | 82.3             | 91.2        | 48.1        |
+| + All normal images     | kNN            | 98.0 ± 0.0            | 97.1 ± 0.0        | 7.5 ± 0.2         | 83.0             | 91.5        | 44.7        |
+| + Anomalous images      | LinearProbe    | 99.8 ± 0.0            | 99.8 ± 0.0        | 0.5 ± 0.1         | 91.0 ± 0.0       | 96.7 ± 0.0  | 34.2 ± 0.0  |
+| <b>Guide</b>            |                |                       |                   |                   |                  |             |             |
+| Language                | MCM            | 62.9                  | 52.5              | 60.8              | 88.8             | 95.4        | 40.0        |
+|                         | ZOE            | 91.2                  | 92.4              | 47.3              | <u>92.2</u>      | <u>97.1</u> | 32.8        |
+|                         | CLIPN-C        | 73.0 ± 2.5            | 61.7 ± 3.0        | 51.0 ± 0.9        | 71.2 ± 2.8       | 86.5 ± 1.1  | 100.0 ± 0.0 |
+|                         | CLIPN-A        | 73.2 ± 2.2            | 61.6 ± 2.7        | 50.0 ± 0.6        | 82.3 ± 0.8       | 91.9 ± 0.3  | 55.6 ± 1.2  |
+|                         | WinCLIP        | 91.1                  | 92.4              | 48.0              | <u>92.2</u>      | 97.0        | <u>32.6</u> |
+| Image + Language        | WinCLIP+       | 92.6 ± 1.3            | 91.3 ± 2.0        | 38.8 ± 1.5        | 91.8 ± 0.2       | 96.9 ± 0.1  | 33.4 ± 1.5  |
+|                         | InCTRL         | 94.0 ± 1.3            | 92.4 ± 2.6        | 25.5 ± 4.1        | 83.6 ± 1.0       | 92.0 ± 0.7  | 63.5 ± 3.1  |
+|                         | LAFT AD (Ours) | <b>98.5 ± 0.0</b>     | <b>98.4 ± 0.0</b> | <b>6.9 ± 0.1</b>  | <b>95.6</b>      | <b>98.4</b> | <b>20.6</b> |
+| <b>Ignore</b>           |                |                       |                   |                   |                  |             |             |
+| Image + Language        | LAFT AD (Ours) | <u>97.4 ± 0.1</u>     | <u>96.9 ± 0.2</u> | <u>10.4 ± 0.4</u> | 84.8             | 92.2        | 38.6        |
+
+**Table 2:** Anomaly detection performance (%) on CelebA dataset. Standard deviations are computed over five different seeds, with results for deterministic cases omitted. The best values are shown in **bold**, and the second-best values are underlined.
+
+| Guidance                | Method         | Hair color  |             |             | Eyeglasses        |             |                   |
+|-------------------------|----------------|-------------|-------------|-------------|-------------------|-------------|-------------------|
+|                         |                | AUROC ↑     | AUPRC ↑     | FPR95 ↓     | AUROC ↑           | AUPRC ↑     | FPR95 ↓           |
+| <b>Baseline</b>         |                |             |             |             |                   |             |                   |
+| Subset of normal images | kNN            | 83.3        | 96.6        | 62.4        | 83.0              | 21.6        | 47.7              |
+| + All normal images     | kNN            | 83.4        | 96.6        | 62.4        | 85.3              | 22.0        | 43.2              |
+| + Anomalous images      | LinearProbe    | 98.2 ± 0.0  | 99.7 ± 0.0  | 9.6 ± 0.0   | 99.7 ± 0.0        | 98.4 ± 0.0  | 0.1 ± 0.0         |
+| <b>Guide</b>            |                |             |             |             |                   |             |                   |
+| Language                | MCM            | 84.5        | 97.2        | 68.4        | 5.7               | 3.3         | 100.0             |
+|                         | ZOE            | <u>93.9</u> | <u>99.0</u> | <u>35.7</u> | 82.6              | 31.5        | 67.3              |
+|                         | CLIPN-C        | 82.8 ± 1.7  | 96.8 ± 0.4  | 72.0 ± 2.4  | 1.4 ± 0.1         | 3.7 ± 0.0   | 100.0 ± 0.0       |
+|                         | CLIPN-A        | 84.7 ± 1.2  | 97.2 ± 0.3  | 70.2 ± 2.1  | 1.2 ± 0.1         | 3.4 ± 0.0   | 100.0 ± 0.0       |
+|                         | WinCLIP        | 93.7        | 98.9        | 37.7        | 83.6              | <u>34.6</u> | 66.2              |
+| Image + Language        | WinCLIP+       | 92.8 ± 0.3  | 98.8 ± 0.1  | 41.2 ± 1.4  | 85.0 ± 2.4        | 26.8 ± 3.0  | 47.8 ± 6.9        |
+|                         | InCTRL         | 85.7 ± 0.9  | 96.9 ± 0.3  | 67.8 ± 1.6  | <u>87.8 ± 1.6</u> | 30.4 ± 2.9  | <u>29.6 ± 4.4</u> |
+|                         | LAFT AD (Ours) | <b>95.0</b> | <b>99.2</b> | <b>29.8</b> | <b>98.1</b>       | <b>80.7</b> | <b>5.9</b>        |
+
+Table 1 presents the main results on Colored MNIST dataset with the target attribute being the number. The table is divided into three groups: *baseline*, *guide* (<sub>Lang., Img., Lang.</sub>), and *ignore*, as discussed in the Preliminaries. The *baseline* group serves as a reference point for performance that relies solely on images, as mentioned earlier. Its performance varies depending on the amount of image data available to the model. The *guide* group consists of methods that can be instructed to focus on a target attribute, where models are given prompts related to the attribute corresponding to the label (e.g., number prompts for number anomalies). Specifically, methods in the *guide* (<sub>Lang.</sub>) group rely solely on language, while those in the *guide* (<sub>Img. + Lang.</sub>) group use both image and language to define normality. However, except for our method, language guidance in these methods is used only to calculate image-text similarity and is not applied to image-image similarity. The *ignore* group represents a method that disregards attributes other than the target, where models are provided prompts of irrelevant attributes (e.g., color prompts for number anomalies). Ignoring irrelevant attributes is a unique feature of our method, but it is generally a more challenging task.
+
+As shown in the table, guided methods (*guide* (<sub>Img. + Lang.</sub>)) generally outperform non-guided baselines (kNN with a subset of normal images), with our method achieving the best overall performance. The performance of guided methods that use only language (*guide* (<sub>Lang.</sub>)) is lower than that of the baseline methods because they are provided with inaccurate prompts for anomalous images (e.g., ‘13’). This problem, highlighted in Ming et al. (2022), shows that methods relying on image-text
+
+{8}------------------------------------------------
+
+**Table 3:** Anomaly detection AUROC (%) on MVTec AD and VisA datasets in few-shot settings. We use five different sets of reference samples from the training set.  $K$  denotes the number of reference samples. The best values are shown in **bold**, and the second-best values are underlined.
+
+| Method          | MVTec AD    |                                  |                                  |                                  |                                  | VisA        |                                  |                                  |                                  |                                  |
+|-----------------|-------------|----------------------------------|----------------------------------|----------------------------------|----------------------------------|-------------|----------------------------------|----------------------------------|----------------------------------|----------------------------------|
+|                 | $K = 0$     | $K = 1$                          | $K = 2$                          | $K = 4$                          | $K = 8$                          | $K = 0$     | $K = 1$                          | $K = 2$                          | $K = 4$                          | $K = 8$                          |
+| InCTRL          | —           | $91.3 \pm 2.7$                   | $93.2 \pm 1.8$                   | $93.6 \pm 1.6$                   | $93.8 \pm 1.3$                   | —           | $85.0 \pm 4.3$                   | <u><math>86.7 \pm 2.7</math></u> | <u><math>88.4 \pm 2.0</math></u> | <u><math>89.4 \pm 1.7</math></u> |
+| WinCLIP+        | 90.4        | $93.5 \pm 1.6$                   | $95.2 \pm 0.7$                   | $95.6 \pm 0.5$                   | $95.7 \pm 0.9$                   | 75.5        | $83.4 \pm 2.8$                   | $85.6 \pm 1.8$                   | $86.8 \pm 1.9$                   | $88.2 \pm 1.2$                   |
+| + LAFT-G (Ours) | <b>92.6</b> | <u><math>94.7 \pm 1.4</math></u> | <b><math>96.1 \pm 0.5</math></b> | <u><math>96.2 \pm 0.3</math></u> | <u><math>96.4 \pm 0.4</math></u> | <u>80.0</u> | <u><math>85.0 \pm 1.3</math></u> | $86.1 \pm 1.3$                   | $87.0 \pm 1.5$                   | $88.2 \pm 1.1$                   |
+| + LAFT-C (Ours) | <u>92.5</u> | <b><math>94.8 \pm 1.4</math></b> | <u><math>96.0 \pm 0.5</math></u> | <b><math>96.3 \pm 0.4</math></b> | <b><math>96.5 \pm 0.5</math></b> | <b>80.6</b> | <b><math>85.7 \pm 1.4</math></b> | <b><math>87.0 \pm 1.1</math></b> | <b><math>87.4 \pm 1.4</math></b> | <b><math>88.3 \pm 1.0</math></b> |
+
+similarity in CLIP are highly sensitive to inaccurate prompts. WinCLIP performs similarly to ZOE because multi-scale features do not benefit semantic anomaly detection. While WinCLIP+ performs better than WinCLIP by using reference images, its performance is still below ours.
+
+The Waterbirds dataset is widely used in studies of spurious correlations and disentangling representations. It consists of two primary attributes: bird type (waterbird / landbird) and background (water / land). Naturally, the training set has a very strong correlation between birds and backgrounds, whereas the test set has an equal ratio of birds to backgrounds. We specify waterbirds and water backgrounds as the normal training set. Table 1 summarizes the results, where the target attribute is the bird type. The trends observed in the Colored MNIST experiment are largely consistent, demonstrating the applicability of our method to real-world datasets. The key difference is that ignoring one attribute (background) does not directly improve performance on the other attribute (bird).
+
+To verify that our method works in multi-attribute datasets, we use the CelebA dataset, which contains over 200K celebrity images with 40 attribute labels. For the normal training set, we select two attributes: Hair color and Eyeglasses. The results are displayed in Table 2, where the target attributes are Hair color and Eyeglasses. The trends are consistent with the previous experiments, demonstrating the effectiveness of our method.
+
+The performance of CLIPN and InCTRL was inconsistent across different datasets and target attributes, suggesting that their generalization ability is lower than that of CLIP, likely due to the presence of modules trained on specific datasets. In contrast, our method uses pre-trained CLIP without any additional training, making it more generalizable. Additionally, our method effectively guides one attribute while ignoring the others, as discussed further in the [Additional Experiments](#).
+
+### 5.2 INDUSTRIAL ANOMALY DETECTION
+
+To demonstrate the practical applicability of our method beyond semantic anomaly detection, we evaluated its performance on the widely used MVTec AD (Bergmann et al., 2019) and VisA (Zou et al., 2022) datasets in few-shot settings. However, anomalies in industrial anomaly detection datasets often consist of small defects that are difficult to distinguish using only image-level representations. Instead of using LAFT AD, which is designed for semantic anomaly detection tasks, we propose WinCLIP+LAFT, a model that applies LAFT to WinCLIP to extract multi-scale features using CLIP. We apply LAFT to WinCLIP’s window, image, and text embeddings, all of which reside in CLIP’s shared embedding space, allowing seamless integration.
+
+Typically, some zero-shot or few-shot methods based on CLIP rely on training additional adapter layers to transform CLIP’s image features for anomaly detection tasks. For example, InCTRL pre-trains feature adapters on specific datasets (such as MVTec AD) to effectively compute the similarity before applying them to different datasets. In contrast, our method uses prompts to transform image features while preserving CLIP’s core features, allowing us to extract features suitable for anomaly detection tasks without the need for additional training of the adapter layer.
+
+For the proof of concept, we used prompts similar to those in WinCLIP for **LAFT General** (LAFT-G) and more category-specific prompts for **LAFT Category** (LAFT-C). For LAFT General, we constructed prompts using only state words and category names, without providing additional knowledge based on the category of the inspection image as in WinCLIP. However, in order to identify a more precise concept subspace, we used more text templates and general state words such as ‘malformed { }’. For LAFT Category, we used prompts that include category-specific knowledge (e.g. anomaly class names), such as ‘bottle with large breakage’ for the bottle category.
+
+{9}------------------------------------------------
+
+**Table 4:** Anomaly detection performance (%) on the Colored MNIST and Waterbirds datasets with various prompts. Standard deviations are computed over five different seeds. The best values are shown in **bold**, and the second-best values are underlined.
+
+| Prompt                 | Concept values |             |          | Colored MNIST: Number            |                                  |                                  | Waterbirds: Bird |                  |                    |
+|------------------------|----------------|-------------|----------|----------------------------------|----------------------------------|----------------------------------|------------------|------------------|--------------------|
+|                        | Seen           | Unseen      | Aux.     | AUROC $\uparrow$                 | AUPRC $\uparrow$                 | FPR95 $\downarrow$               | AUROC $\uparrow$ | AUPRC $\uparrow$ | FPR95 $\downarrow$ |
+| <b>Guide</b>           |                |             |          |                                  |                                  |                                  |                  |                  |                    |
+| Only normals           | $\circ$        | $\times$    | $\times$ | $96.2 \pm 0.2$                   | $95.7 \pm 0.2$                   | $16.6 \pm 0.2$                   | 94.3             | 97.8             | 22.6               |
+| Partial anomalies      | $\circ$        | $\triangle$ | $\times$ | $98.4 \pm 0.0$                   | $98.3 \pm 0.0$                   | $8.2 \pm 0.1$                    | 95.5             | 98.3             | <b>18.7</b>        |
+| Exact anomalies        | $\circ$        | $\circ$     | $\times$ | <b><math>98.8 \pm 0.1</math></b> | <b><math>98.8 \pm 0.1</math></b> | <b><math>6.2 \pm 0.1</math></b>  | <b>95.9</b>      | <b>98.6</b>      | <u>19.6</u>        |
+| All candidates         | $\circ$        | $\circ$     | $\circ$  | <u><math>98.5 \pm 0.0</math></u> | <u><math>98.4 \pm 0.0</math></u> | <u><math>6.9 \pm 0.1</math></u>  | <u>95.6</u>      | <u>98.4</u>      | 20.6               |
+| <b>Ignore</b>          |                |             |          |                                  |                                  |                                  |                  |                  |                    |
+| Only seen normals      | $\circ$        | $\times$    | $\times$ | $94.5 \pm 0.2$                   | $94.1 \pm 0.4$                   | $25.0 \pm 0.5$                   | 84.8             | <b>92.4</b>      | 40.6               |
+| Partial unseen normals | $\circ$        | $\triangle$ | $\times$ | $95.9 \pm 0.2$                   | $95.1 \pm 0.3$                   | $16.7 \pm 0.4$                   | <b>85.1</b>      | <b>92.4</b>      | <u>38.1</u>        |
+| Exact normals          | $\circ$        | $\circ$     | $\times$ | <u><math>97.2 \pm 0.1</math></u> | <u><math>96.5 \pm 0.3</math></u> | <u><math>11.6 \pm 0.3</math></u> | <u>85.0</u>      | <u>92.2</u>      | <b>37.3</b>        |
+| All candidates         | $\circ$        | $\circ$     | $\circ$  | <b><math>97.4 \pm 0.1</math></b> | <b><math>96.9 \pm 0.2</math></b> | <b><math>10.4 \pm 0.4</math></b> | 84.8             | <u>92.2</u>      | 38.6               |
+
+The results are presented in Table 3, which summarizes the average performance across all categories. As shown in the results, WinCLIP+LAFT consistently outperforms WinCLIP in both zero-shot and few-shot scenarios. Furthermore, our method achieves superior or comparable performance to InCTRL, a pre-trained model for industrial anomaly detection, without requiring additional training. See the Full Results for detailed results on each category.
+
+### 5.3 ABLATION STUDY ON PROMPT QUALITY
+
+An important consideration when using LAFT is how to provide the user’s prior knowledge. In anomaly detection, we generally have a good understanding of the current training data, but the unseen test data remains unknown. Therefore, we investigated how the performance of LAFT changes depending on the quality of the concept values provided, as shown in Table 4. In the table, *Seen* refers to the concept values for the current training data, *Unseen* refers to the concept values for the unseen test data, and *Aux.* denotes concept values that are not present in the dataset.
+
+For example, in Colored MNIST, if the guiding attribute is the number, *Seen* represents the values 0-4, *Unseen* corresponds to 5-9, and *Aux.* refers to values like 10-20. Similarly, if the ignored attribute is color, *Seen* includes red, *Unseen* covers green and blue, and *Aux.* includes colors such as yellow and purple. The symbol  $\circ$  indicates that all concept values are used, while  $\triangle$  indicates that only half of the concept values are utilized.
+
+The results show that the performance of LAFT is robust to the quality of the concept values when at least partial concept values are provided. Furthermore, the performance is not significantly affected when the completely included concept values are provided. Also, providing concept values that are not included at all does not significantly affect the performance. These characteristics show that LAFT can be effectively used in anomaly detection where only limited information is known.
+
+## 6 CONCLUSION
+
+In this paper, we introduce Language-Assisted Feature Transformation (LAFT), a novel feature transformation method designed to integrate user knowledge and preferences into the anomaly detection framework via natural language, without the need for additional data or training. By utilizing the shared embedding space of the vision-language model, LAFT can align visual features with user-provided texts to guide or ignore specific attributes in the image. We also presented LAFT AD, an anomaly detection method that integrates LAFT with a *k*NN classifier, and WinCLIP+LAFT, an extension of WinCLIP that incorporates LAFT for industrial anomaly detection. This combination allows users to adjust the normality boundary of the model by providing texts to detect desired anomalies. Through experiments on synthetic and real-world datasets, we demonstrate the effectiveness of our proposed method.
+
+ Rest of paper (reference and Appendix) is removed.

@@ -1,0 +1,334 @@
+
+
+{0}------------------------------------------------
+
+# VN-EGNN: E(3)- AND SE(3)-EQUIVARIANT GRAPH NEURAL NETWORKS WITH VIRTUAL NODES ENHANCE PROTEIN BINDING SITE IDENTIFICATION
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Being able to identify regions within or around proteins, to which ligands can potentially bind, is an essential step in developing new drugs. Binding site identification methods can now profit from the availability of large amounts of 3D structures in protein structure databases or from AlphaFold predictions. Current binding site identification methods heavily rely on graph neural networks (GNNs), usually designed to output E(3)-equivariant predictions. Such methods turned out to be very beneficial for physics-related tasks like binding energy or motion trajectory prediction. However, the performance of GNNs at binding site identification is still limited potentially due to a lack of expressiveness capable of modeling higher-order geometric entities, such as binding pockets. In this work, we extend E( $n$ )-equivariant graph neural networks (EGNNs) by adding virtual nodes and applying an extended message passing scheme. The virtual nodes in these graphs are dedicated entities to learn representations of binding sites, which leads to improved predictive performance. In our experiments, we show that our proposed method, VN-EGNN, sets a new state-of-the-art at locating binding site centers on COACH420, HOLO4K and PDBbind2020.
+
+## 1 INTRODUCTION
+
+**Binding site identification remains a central computational problem in drug discovery.** With the advent of AlphaFold (Jumper et al., 2021; Abramson et al., 2024), millions of 3D structures of proteins have been unlocked for further investigation by the scientific community (Tunyasuvunakool et al., 2021; Cheng et al., 2023). The 3D structure of a protein can provide crucial information about its function, and drug discovery is one of the most important fields that profits from these 3D structures (Ren et al., 2023; Sadybekov and Katritch, 2023). It has been envisioned that the availability of 3D structures will allow to purposefully design drugs that alter protein function in a desired way. However, to enable structure-based drug design, further computational approaches, such as *docking* or *binding site identification* methods, have to be employed (Lengauer and Rarey, 1996; Cheng et al., 2007; Halgren, 2009). While docking approaches predict the location of a specific small molecule, called a *ligand*, within a protein’s active site upon binding, binding site identification aims at finding regions on the protein likely to form a binding pocket and interact with unknown ligands (Schmidtké and Barril, 2010). Note that docking and binding site identification are fundamentally different tasks in structure-based drug design: for the vast majority of proteins no ligand is known, and binding site identification methods can provide valuable information for understanding protein function, guiding rational drug design or identifying a protein as a potential drug target. For both approaches, deep learning methods, and specifically geometric deep learning have brought significant advances (Gainza et al., 2020; Sverrisson et al., 2021; Méndez-Lucio et al., 2021; Ganea et al., 2022; Stärk et al., 2022; Lu et al., 2022; Corso et al., 2023).
+
+**Methods for binding site identification.** The identification of binding sites relies on the successful combination of physical, chemical and geometric information. Initially, machine learning methods for binding site prediction were based on carefully designed input features due to their tabular processing structure. For instance, FPocket (Le Guilloux et al., 2009) relies on Voronoi tessellation and alpha spheres (Liang et al., 1998) and additionally takes an electronegativity criterion into account. P2Rank, a random-forest-based method, makes use of the protein surface (Krivák and Hoksza, 2018). With
+
+{1}------------------------------------------------
+
+![Figure 1: Overview of binding site identification methods. The diagram is divided into three main sections. Top Left: '3D CNN - Segmentation' shows a 3D grid with a pocket center marked. Below it, 'EGNN - Segmentation' shows a graph with nodes and a pocket center. Right: 'VN-EGNN (Segmentation and Virtual Node Positioning)' shows three steps (Step 1, Step 2, Step 3) of message passing. Nodes are labeled h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13. Messages are labeled m_i^{(l)(n)} and m_i^{(l)(n')}. A legend at the bottom defines symbols: X for Predicted binding pocket center, purple circle for Physical node (positive class), purple triangle for Virtual node, green circle for Physical node (negative class), green rectangle for Node embedding, and X for True binding pocket center.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 1: Overview of binding site identification methods. The diagram is divided into three main sections. Top Left: '3D CNN - Segmentation' shows a 3D grid with a pocket center marked. Below it, 'EGNN - Segmentation' shows a graph with nodes and a pocket center. Right: 'VN-EGNN (Segmentation and Virtual Node Positioning)' shows three steps (Step 1, Step 2, Step 3) of message passing. Nodes are labeled h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13. Messages are labeled m\_i^{(l)(n)} and m\_i^{(l)(n')}. A legend at the bottom defines symbols: X for Predicted binding pocket center, purple circle for Physical node (positive class), purple triangle for Virtual node, green circle for Physical node (negative class), green rectangle for Node embedding, and X for True binding pocket center.
+
+Figure 1: Overview of binding site identification methods. **Top Left:** Traditional methods, based on segmentation of a voxel grid, in which the pocket center is calculated as the geometric center of the positively labeled voxels. **Bottom Left:** Geometric Deep Learning approaches, such as EGNN, in which the pocket center is calculated as the geometric center of the positively labeled nodes. **Right:** VN-EGNN approach (ours): the predicted binding site center is the position of the virtual node after  $L$  message passing layers.
+
+the advent of end-to-end deep learning and especially with the breakthrough of convolutional (Lecun et al., 1998) and graph neural networks (GNNs) (Scarselli et al., 2009; Defferrard et al., 2016; Kipf and Welling, 2017; Gilmer et al., 2017; Satorras et al., 2021), the construction of input features can be learned which helped to advance predictive quality. For instance, DeepSite (Jiménez et al., 2017) is a voxel-based 3D convolutional neural network for binding site prediction. Convolutional operations on the 3D space are, however, computationally very demanding and so quickly other approaches to tackle binding site identification were developed, e.g., DeepSurf (Mylonas et al., 2021) or PointSite (Yan et al., 2022). DeepSurf operates on surface-based representations and places several voxelized grids on the protein’s surface, while PointSite is based on a form of sparse convolutions to reduce the computational overhead and keep sparse regions in the 3D space sparse. Typical convolutional networks, however, do not perform well at binding site identification, likely because of the irregularity of protein structures and due to the fact that proteins may be arbitrarily rotated and shifted in space (Zhang et al., 2023b). Thus, geometric deep learning approaches, most notably (graph-based) group-equivariant architectures, such as EquiPocket (Zhang et al., 2023b), which are equivariant to the group of Euclidean transformations in 3D space ( $E(3)$ ), are powerful methods for binding site identification.
+
+**$E(3)$ -equivariant graph neural networks.** We use graph neural networks (GNNs) that are robust to transformations of the Euclidean group, i.e., rotations, reflections, and translations, as well as to permutations. From a technical point of view, equivariance of a function  $f$  to certain transformations means that for any transformation parameter  $g$  and all inputs  $x$  we have  $f(T_g(x)) = S_g(f(x))$ , where  $T_g$  and  $S_g$  denote transformations on the input and output domain of  $f$ , respectively (see App. D for further information). Equivariant operators applied to molecular graphs allow to preserve the geometric structure of the molecule. We build on  $E(n)$ -equivariant GNNs (EGNNs) of Satorras et al. (2021) applied to three dimensional space and the problem of binding site identification. In contrast to methods such as MACE (Batatia et al., 2022), Nequip (Batzner et al., 2022), or SEGN (Brandstetter et al., 2021), EGNNs operate on scalar features, e.g., distances, and use scale operations for coordinate updates. Thus, EGNNs operate efficiently (Villarr et al., 2021) without resorting to compute-expensive higher order features, and, most importantly, allow for efficient coordinate update of virtual nodes.
+
+**Limitations of GNNs and a mitigation strategy.** Graph neural networks can suffer from limited expressiveness (Morris et al., 2019; Xu et al., 2019), oversmoothing (Li et al., 2018; Rusch et al., 2023), or oversquashing (Alon and Yahav, 2021; Topping et al., 2022), which can lead to unfavorable learning dynamics or weak predictive performance. To improve the learning dynamics of GNNs, several works have introduced virtual nodes, sometimes called super-nodes or supersource-nodes,
+
+{2}------------------------------------------------
+
+that are introduced into a message passing scheme and connected to all other nodes. In a benchmark setting, Hu et al. (2020) and Rosenbluth et al. (2024) showed that adding virtual nodes tends to increase the predictive performance. Hwang et al. (2022) provide a theoretical analysis of the benefits of virtual nodes in terms of expressiveness, demonstrate the increased expressiveness of GNNs with virtual nodes and also hint at the fact that such nodes can decrease oversmoothing. Alon and Yahav (2021) mention that virtual nodes might be used as a technique to overcome oversquashing effects. Cai et al. (2023) and Cai (2023) show that an MPNN with one virtual node, connected to all nodes, can approximate a Transformer layer. Low rank global attention (Puny et al., 2020) can be seen as an virtual node, which improves expressiveness. Practically, virtual nodes have already been suggested in the original work by Gilmer et al. (2017), and they were even mentioned earlier in Scarselli et al. (2009) and used in application areas such as drug discovery (Li et al., 2017; Pham et al., 2017; Ishiguro et al., 2019). Joshi et al. (2023) investigated the expressive power of EGNNs in greater detail and argue that these networks can suffer from oversquashing. In order to alleviate the oversquashing problem of EGNNs for binding site identification, we suggest to extend EGNNs with virtual nodes and introduce an adapted message passing scheme. We refer to this method as Virtual-Node Equivariant GNN (VN-EGNN). A related method (MEAN) to ours, which is in the context of EGNNs and which uses global nodes, that are connected to many other graph nodes (i.e., all within components), was suggested by Kong et al. (2023) for conditional antibody design. MEAN (applied to components) can potentially be considered to be the first EGNN-like architecture using virtual nodes.
+
+**EGNNs with virtual nodes for binding site identification.** In accordance with previous approaches, we consider binding site identification as a segmentation task. While other methods are, e.g., based on voxel grids, our method is based on EGNNs with virtual nodes, where all atoms or residues of the protein (the physical entities) are represented by physical, i.e., non-virtual, nodes in the graph (see Fig. 1, left). The objective is to correctly classify whether a node is within a certain radius of a region to which potential ligands can bind. Therefore, binding site identification can be considered as a node-level binary classification task and thus a semantic segmentation task. For this task, the ground truth is whether an atom was within a certain radius to experimentally observed protein binding ligands. In addition to node features, EGNNs act on coordinate features associated with each node, and both feature types are updated during message passing. While it appears straightforward to associate physical nodes with the protein’s atoms, it is a-priori unclear if the coordinate embeddings of virtual nodes are useful for the task at hand. In an initial experiment, we trained VN-EGNN to learn a semantic segmentation task using multiple virtual nodes to which we assigned random coordinates. In an analysis of the results, we could empirically observe that coordinates of the virtual nodes converged towards the actual physical binding positions of ligands on the protein (see App. H.1 for further details and Fig. 1, right, for a visualization). The results of this initial experiment gave rise to the assumption that virtual nodes enable VN-EGNNs to form useful neural representations of binding sites and especially allow the prediction of locations of binding site centers. This, however, further implies that the binding site center itself may be a useful optimization target to train VN-EGNNs. Thus, we extended our objective from only predicting whether physical nodes are close to binding regions, to also directly taking the distance between observed and predicted binding site centers into account. With this multi-modal objective, the coordinate embeddings of virtual nodes are trained to predict the locations of binding site centers. The remaining features of the virtual nodes are considered to form an abstract neural representation of a protein binding site.
+
+**Contributions.** In this work, we aim at improving binding site identification through geometric deep learning methods. Here, we follow the approach of using EGNNs (Satorras et al., 2021; Zhang et al., 2023b) for identifying binding pockets. Although EGNNs are prime candidates for this task, traditional EGNNs exhibit poor performance at binding site identification (Zhang et al., 2023b), which might be due to a) their lack of dedicated nodes that can learn representations of binding sites, and b) oversquashing effects which hamper learning (Alon and Yahav, 2021; Topping et al., 2022; Joshi et al., 2023). We aim to alleviate both problems by using EGNNs with virtual nodes. In this work, we contribute the following:
+
+- We propose to adapt E(3)-equivariant GNNs towards the identification of binding sites of proteins.
+- We demonstrate that the virtual nodes in the message passing scheme learn useful representations and accurate locations of binding pockets.
+
+{3}------------------------------------------------
+
+- We assess the performance of other methods, baselines and our method on benchmarking datasets.
+
+## 2 E(3)-EQUIVARIANT GRAPH NEURAL NETWORKS WITH VIRTUAL NODES
+
+### 2.1 NOTATIONAL PRELIMINARIES
+
+We give an overview on variable and symbol notation in App. B, and a more detailed description and discussion on how we represent proteins and binding sites in Apps. C.1 and C.2, respectively. To quickly summarize, the coordinates of the  $i$ -th *physical node*, e.g., the location of an atom of a protein, are denoted as  $\mathbf{x}_i \in \mathbb{R}^3$ , and its other node features as  $\mathbf{h}_i \in \mathbb{R}^D$ .  $l$  added as an index to symbols will indicate neural network layers, but might be omitted for simplicity sometimes if it is clear from the context. We will consider *virtual nodes* and the  $k$ -th virtual node coordinates will be denoted as  $\mathbf{z}_k$ , while the other virtual node features will be denoted as  $\mathbf{v}_k$ . We use upper-case bold letters to denote the matrices collecting the coordinates and features of the  $N$  physical and the  $K$  virtual nodes, respectively:  $\mathbf{H}^l := (h_1^l, \dots, h_N^l)$ ,  $\mathbf{X}^l := (x_1^l, \dots, x_N^l)$ ,  $\mathbf{V}^l := (v_1^l, \dots, v_K^l)$ ,  $\mathbf{Z}^l := (z_1^l, \dots, z_K^l)$ .
+
+We denote the graph, which VN-EGNN works upon as  $\mathcal{G}$  and  $\mathbf{A}$  as the associated adjacency matrix.  $\mathcal{N}(i)$  indicates neighbouring nodes to node  $i$  within  $\mathcal{G}$  and edge features between nodes  $i$  and  $j$  as  $a_{ij}$  (for two non-virtual nodes) and  $d_{ij}$  (between physical and virtual nodes). At training time, we have access to node-level labels  $y_i \in \{0, 1\}$  and a set of  $M$  center coordinates  $\{\mathbf{y}_m\}_{m=1}^M$  with  $\mathbf{y}_m \in \mathbb{R}^3$ , which the model should predict. We denote predicted node-level labels by  $\hat{y}_i \in [0, 1]$  and the set of  $K$  predicted center coordinates from the model by  $\{\hat{\mathbf{y}}_k\}_{k=1}^K$  with  $\hat{\mathbf{y}}_k \in \mathbb{R}^3$ .
+
+### 2.2 EGNNS AND THEIR APPLICATION TO BINDING SITE IDENTIFICATION
+
+EGNNs are straightforward to apply to proteins, when they are represented by a neighborhood graph  $\mathcal{P}$ , in which each node represents an atom and edges between two atoms represent spatially close atoms (distance between the atoms in the protein is below some threshold). To apply EGNNs, we first set  $\mathcal{G} = \mathcal{P}$ . For binding pocket identification, one could predict node labels  $y_i$ , which indicate whether the atom belongs to a binding pocket or not.
+
+The physical nodes represent atoms and their initial coordinate features are set to the location of the atoms  $\mathbf{x}_i^0$ , and the initial node features  $\mathbf{h}_i^0$  to, e.g., the atom or residue type. Then, we apply the layer-wise message passing scheme  $(\mathbf{X}^{l+1}, \mathbf{H}^{l+1}) = \text{EGNN}(\mathbf{X}^l, \mathbf{H}^l, \mathbf{A})$  (Eqs. (1) to (4)) as given by Satorras et al. (2021):
+
+$$\mathbf{m}_{ij} = \phi_e(\mathbf{h}_i^l, \mathbf{h}_j^l, \|\mathbf{x}_i^l - \mathbf{x}_j^l\|^2, a_{ij}) \quad (1)$$
+
+$$\mathbf{m}_i = \sum_{j \in \mathcal{N}(i)} \mathbf{m}_{ij} \quad (2)$$
+
+$$\mathbf{x}_i^{l+1} = \mathbf{x}_i^l + \frac{1}{|\mathcal{N}(i)|} \sum_{j \in \mathcal{N}(i)} \frac{\mathbf{x}_i^l - \mathbf{x}_j^l}{\|\mathbf{x}_i^l - \mathbf{x}_j^l\|} \phi_x(\mathbf{m}_{ij}) \quad (3)$$
+
+$$\mathbf{h}_i^{l+1} = \phi_h(\mathbf{h}_i^l, \mathbf{m}_i), \quad (4)$$
+
+where  $\phi_e$ ,  $\phi_x$  and  $\phi_h$  denote multilayer-perceptrons (MLPs). To identify binding pockets, we can extract predictions  $\hat{y}_i$  for each atom  $i$  by a read-out function applied to the output of the last message passing step  $L$ , i.e.,  $\hat{y}_i = \sigma(\mathbf{w}^\top \mathbf{h}_i^L)$  with an activation function  $\sigma$  and parameters  $\mathbf{w}$ . Our model does not incorporate edge features, symbolized by  $a_{ij}$ . Hence, we will exclude these from the subsequent EGNN formulations and their related derivations.
+
+### 2.3 VN-EGNN: EXTENSION OF EGNN WITH VIRTUAL NODES
+
+We now extend  $\mathcal{G}$  (which is set to the protein neighborhood graph  $\mathcal{P}$  for the task of protein binding site identification) with a set of  $K$  virtual nodes, which exhibit edges to all other nodes, which will allow us to learn representations of hidden geometric entities, such as binding sites, and simultaneously ameliorate oversquashing. To be able to process this extended graph, we modify EGNNs by locating the virtual nodes at coordinates  $\mathbf{Z} = (\mathbf{z}_1, \dots, \mathbf{z}_K) \in \mathbb{R}^3$  and associating
+
+{4}------------------------------------------------
+
+them with a set of properties  $\mathbf{V} = (v_1, \dots, v_K) \in \mathbb{R}^D$ . The new message passing scheme  $(\mathbf{X}^{l+1}, \mathbf{H}^{l+1}, \mathbf{Z}^{l+1}, \mathbf{V}^{l+1}) = \text{VN-EGNN}(\mathbf{X}^l, \mathbf{H}^l, \mathbf{Z}^l, \mathbf{V}^l)$  of a single VN-EGNN layer consists of three phases (Eqs. (7) to (10), Eqs. (11) to (14), and, Eqs. (15) to (18)), in which the feature and coordinate embeddings of the physical nodes are updated twice:
+
+$$\mathbf{h}_i^l \rightarrow \mathbf{h}_i^{l+1/2} \rightarrow \mathbf{h}_i^{l+1}, \quad \mathbf{x}_i^l \rightarrow \mathbf{x}_i^{l+1/2} \rightarrow \mathbf{x}_i^{l+1} \quad \forall i \quad (5)$$
+
+while virtual node embeddings are only updated once per message passing layer
+
+$$\mathbf{v}_k^l \rightarrow \mathbf{v}_k^{l+1}, \quad \mathbf{z}_k^l \rightarrow \mathbf{z}_k^{l+1} \quad \forall k. \quad (6)$$
+
+**Message passing phase I between physical nodes** (analogous to EGNN):
+
+$$\mathbf{m}_{ij}^{(aa)} = \phi_{e(aa)}(\mathbf{h}_i^l, \mathbf{h}_j^l, \|\mathbf{x}_i^l - \mathbf{x}_j^l\|) \quad (7)$$
+
+$$\mathbf{m}_i^{(aa)} = \sum_{j \in \mathcal{N}(i)} \mathbf{m}_{ij}^{(aa)} \quad (8)$$
+
+$$\mathbf{x}_i^{l+1/2} = \mathbf{x}_i^l + \frac{1}{|\mathcal{N}(i)|} \sum_{j \in \mathcal{N}(i)} \frac{\mathbf{x}_i^l - \mathbf{x}_j^l}{\|\mathbf{x}_i^l - \mathbf{x}_j^l\|} \phi_{x^{aa}}(\mathbf{m}_{ij}^{(aa)}) \quad (9)$$
+
+$$\mathbf{h}_i^{l+1/2} = \mathbf{h}_i^l + \phi_{h(aa)}(\mathbf{h}_i^l, \mathbf{m}_i^{(aa)}). \quad (10)$$
+
+**Message passing phase II from physical nodes to virtual nodes:**
+
+$$\mathbf{m}_{ij}^{(av)} = \phi_{e(av)}(\mathbf{v}_i^l, \mathbf{h}_j^{l+1/2}, \|\mathbf{z}_i^l - \mathbf{x}_j^{l+1/2}\|) \quad (11)$$
+
+$$\mathbf{m}_i^{(av)} = \frac{1}{N} \sum_{j=1}^N \mathbf{m}_{ij}^{(av)} \quad (12)$$
+
+$$\mathbf{z}_i^{l+1} = \mathbf{z}_i^l + \frac{1}{N} \sum_{j=1}^N \frac{\mathbf{z}_i^l - \mathbf{x}_j^{l+1/2}}{\|\mathbf{z}_i^l - \mathbf{x}_j^{l+1/2}\|} \phi_{x^{av}}(\mathbf{m}_{ij}^{(av)}) \quad (13)$$
+
+$$\mathbf{v}_i^{l+1} = \mathbf{v}_i^l + \phi_{h(av)}(\mathbf{v}_i^l, \mathbf{m}_i^{(av)}) \quad (14)$$
+
+**Message passing phase III from virtual nodes to physical nodes:**
+
+$$\mathbf{m}_{ij}^{(va)} = \phi_{e(va)}(\mathbf{h}_i^{l+1/2}, \mathbf{v}_j^{l+1}, \|\mathbf{x}_i^{l+1/2} - \mathbf{z}_j^{l+1}\|) \quad (15)$$
+
+$$\mathbf{m}_i^{(va)} = \sum_{j=1}^K \mathbf{m}_{ij}^{(va)} \quad (16)$$
+
+$$\mathbf{x}_i^{l+1} = \mathbf{x}_i^{l+1/2} + \frac{1}{K} \sum_{j=1}^K \frac{\mathbf{x}_i^{l+1/2} - \mathbf{z}_j^{l+1}}{\|\mathbf{x}_i^{l+1/2} - \mathbf{z}_j^{l+1}\|} \phi_{x^{va}}(\mathbf{m}_{ij}^{(va)}) \quad (17)$$
+
+$$\mathbf{h}_i^{l+1} = \mathbf{h}_i^{l+1/2} + \phi_{h(va)}(\mathbf{h}_i^{l+1/2}, \mathbf{m}_i^{(va)}) \quad (18)$$
+
+Here,  $\phi_{e(aa)}, \dots, \phi_{h(va)}$  are again MLPs. The MLPs  $\phi_l$  are layer-specific, i.e.  $\phi^l$  and currently do not consider edge features. To keep the notation uncluttered, we skipped the layer index  $l$  for the MLPs in the formulae above. We call this message passing scheme *heterogeneous* because the different types of messages are generated in subsequent phases.
+
+### 2.4 INITIALIZATION OF VIRTUAL NODES IN VN-EGNN.
+
+It is possible to equivariantly initialize virtual nodes. To do so, we can initialize the coordinates of the virtual nodes  $\mathbf{z}_k^0$  at the center of mass, concretely the average coordinates of the physical nodes (Zhang et al., 2024; Kaba et al., 2023), while the initial features  $\mathbf{v}_k^0$  are learned feature vectors that are pairwise distinct. These choices lead to maintenance of the equivariance properties, but guarantee
+
+{5}------------------------------------------------
+
+that the virtual nodes are updated differently during message passing. Note, that the center of mass is not necessarily a very meaningful value for binding site identification, although it ensures invariant binding site predictions. In practice, this might therefore restrict the architecture quite a lot. In line with new developments such as Abramson et al. (2024), we relaxed the initialization procedure to specifically exploit our prior knowledge, that ligands might tend to bind to surface areas of proteins.
+
+In detail, the relaxed initialization procedure distributes the  $K$  virtual nodes evenly across a sphere using a Fibonacci grid (Swinbank and James Purser, 2006), of which the radius is defined as the distance between the protein center and its most distant atom. The virtual node properties  $v_k^0$  are initialized by averaging over the initial features  $h_i^0$ . This procedure is simple and efficient.
+
+**Data augmentation** To prevent virtual nodes from starting at identical locations during different epochs of training, we randomly rotate the sphere with the initial locations of virtual nodes.
+
+### 2.5 PROPERTIES OF VN-EGNN
+
+The following proposition shows, that analogously to EGNNs, VN-EGNNs are equivariant with respect to roto-translations and reflections by construction.
+
+**Proposition 1.** *Equivariant graph neural networks with virtual nodes as defined in Eqs. (7) to (18) are equivariant with respect to roto-translations and reflections of the input and virtual node coordinates.*
+
+*Proof.* See App. E.  $\square$
+
+**Virtual nodes ameliorate oversquashing by bounding the maximal shortest-path distance between nodes and required message passing steps.** Several works (Alon and Yahav, 2021; Topping et al., 2022; Di Giovanni et al., 2023) have investigated the relation between oversquashing and characteristics of the MPNN layers and the adjacency matrix. According to Topping et al. (2022) oversquashing is defined as  $\frac{\partial h_i^{r+1}}{\partial h_j^0}$ , which is the effect that one node with index  $j$  has on a node with index  $i$  during learning, where the nodes are at a shortest-path distance of  $r + 1$ . Critically, this quantity can be bounded by the model parameters of the involved MLPs and the topology of the graph (Di Giovanni et al., 2023), concretely the normalized adjacency matrix. We use Topping et al. (2022, Lemma 1), which states that  $\left| \frac{\partial h_i^{r+1}}{\partial h_j^0} \right| \leq (\alpha\beta)^{r+1} (\hat{A}^{r+1})_{ij}$  where  $\alpha$  and  $\beta$  are bounds on the element-wise gradients of the MLPs of the message passing network,  $h_i^{r+1}$  is one component of the node representation of node  $i$  in message passing layer  $r + 1$ . The quantity  $r + 1$  is both the number of message passing layers and the shortest-path distance between nodes  $i$  and  $j$  in the graph, and  $\hat{A}$  is the normalized adjacency matrix, for which the diagonal values of the original matrix are set to 1. The normalized adjacency matrix  $\hat{A}$  is a symmetric positive matrix that has a leading eigenvalue at 1 (Perron, 1907; Frobenius, 1912), such that all eigenvalues of all other eigenvectors of  $\hat{A}$  decay exponentially with  $r$ . Depending on the weights and activation functions of the MLPs,  $|\alpha\beta|^{r+1}$  either grows or vanishes exponentially with  $r$ , which might lead to either exploding or vanishing gradients, respectively. Thus, learning can only be stabilized via keeping  $r$  stable, which virtual nodes that are connected to all other nodes can provide since they bound both the maximal path distance and the necessary number of message passing steps by  $r + 1 = 2$ .
+
+**Expressiveness of VN-EGNN.** The expressive power of GNNs is linked to their ability to distinguish non-isomorphic graphs. While a minimum of  $k$  layers of an EGNN is required to distinguish two  $k$ -hop distinct graphs, one layer of VN-EGNN is presumed to be sufficient, as can be shown by the application of the Geometric Weisfeiler-Leman test, which serves as an upper bound on the expressiveness of EGNNs. Experimental findings on  $k$ -chain geometric graphs support this proposition and demonstrate the increased expressive power of VN-EGNN compared to EGNNs without virtual nodes. For further details and an empirical study see App. K.
+
+### 2.6 ADJUSTMENTS OF VN-EGNN FOR BINDING SITE IDENTIFICATION.
+
+**SE(3) equivariance through feature encoding.** We break the equivariance property for mirroring through feature encoding. Since each node has an initial feature that codes for the amino acid, either one-hot encoding or ESM embeddings (Lin et al., 2023), we naturally encode L- and D-amino
+
+{6}------------------------------------------------
+
+acids differently, which leads to different initial features of the initial nodes after mirroring, and consequently breaks E(3) symmetry to SE(3).
+
+### 2.7 TRAINING VN-EGNNs
+
+**Objective.** Previous methods, which consider binding site identification as a node-level prediction task (see Section 2.2) with  $\hat{y}_n = \sigma(\mathbf{w}^\top \mathbf{h}_n^L)$ , use a type of *segmentation loss*. The segmentation loss can either be the cross-entropy loss CE:
+
+$$\mathcal{L}_{\text{segm}} = \frac{1}{N} \sum_{n=1}^N \text{CE}(y_n, \hat{y}_n)$$
+
+or the Dice loss, that is based on the continuous Dice coefficient (Shamir et al., 2019), with  $\epsilon = 1$ :
+
+$$\mathcal{L}_{\text{dice}} := 1 - \frac{2 \sum_{n=1}^N y_n \hat{y}_n + \epsilon}{\sum_{n=1}^N y_n + \sum_{n=1}^N \hat{y}_n + \epsilon}.$$
+
+The introduction of virtual nodes with coordinates allows to directly tackle the more challenging problem of predicting binding site center points and extracting predictions for these points as outputs of the last EGNN layer. For each protein in the training set, we know the geometric centers of its annotated binding sites, which we denote as  $\{\mathbf{y}_1, \dots, \mathbf{y}_M\}$ . The read-out  $\hat{\mathbf{y}}_k$  for each virtual node  $\tilde{\mathbf{y}}_k := \mathbf{z}_k^L$  ( $1 \leq k \leq K$ ) corresponds to its coordinate embedding  $\mathbf{z}_k^L$  in the last layer  $L$ . Each known binding site center should be detected by at least one virtual node, via its read-out, which leads to the following objective
+
+$$\mathcal{L}_{\text{bsc}} = \frac{1}{M} \sum_{m=1}^M \min_{k \in 1, \dots, K} \|\mathbf{y}_m - \hat{\mathbf{y}}_k\|^2. \quad (19)$$
+
+The full objective of VN-EGNN for binding site identification is
+
+$$\mathcal{L} = \mathcal{L}_{\text{bsc}} + \mathcal{L}_{\text{dice}},$$
+
+in which the two terms could also be balanced against each other through a hyperparameter, which we found was not necessary.
+
+**Self-confidence module.** We employ a self-confidence module (Jumper et al., 2021; Zhang et al., 2023a), to assess the quality of predicted binding sites, by equipping each prediction with a confidence score. This allows a ranking of the predictions, similar to Krivák and Hoksza (2018). The confidence value, indicated by  $\hat{c}_k$ , is computed through  $\hat{c}_k = \psi(\mathbf{v}_k)$ , with  $\psi$  implemented as an MLP. During training, the target values for the confidence prediction are generated on-the-fly from the predicted positions  $\hat{\mathbf{y}}_k$  and the closest known pocket center  $\mathbf{y}_m$ , in analogy with confidence scores for object detection methods in computer vision.
+
+The confidence label for the  $k$ -th virtual node is obtained by (Zhang et al., 2023a):
+
+$$c_k = \begin{cases} 1 - \frac{1}{2\gamma} \cdot \|\mathbf{y}_m - \hat{\mathbf{y}}_k\| & \text{if } \|\mathbf{y}_m - \hat{\mathbf{y}}_k\| \leq \gamma, \\ c_0 & \text{otherwise} \end{cases}, \quad (20)$$
+
+with  $c_0 = 0.001$ . To align with the commonly accepted threshold value of 4Å for the DCC/DCA success rates, we choose  $\gamma = 4$ . The loss on the confidence score is a mean squared error loss:
+
+$$\mathcal{L}_{\text{confidence}} = \frac{1}{K} \sum_{k=1}^K (c_k - \hat{c}_k)^2. \quad (21)$$
+
+## 3 EXPERIMENTS
+
+### 3.1 DATA
+
+We use the benchmarking setting of Zhang et al. (2023b) to perform experiments on four datasets for binding site identification: scPDB (Desaphy et al., 2015), PDBbind (Wang et al., 2004), COACH420 and HOLO4K. For details, see App. G.1.
+
+{7}------------------------------------------------
+
+Table 1: Performance at binding site identification in terms of DCC and DCA success rates.<sup>a</sup> The first column provides the method, the second the number of parameters of the model, the fourth and the fifth column the performance on the COACH420 dataset, the sixth and seventh column the performance on the HOLO4K dataset, and the remaining columns the performance on PDBind2020. The best performing method(s) per column are marked bold. The second best in italics.
+
+| Methods                                                      | Param<br>(M) | COACH420            |                     | HOLO4K <sup>a</sup> |                     | PDBind2020          |                     |
+|--------------------------------------------------------------|--------------|---------------------|---------------------|---------------------|---------------------|---------------------|---------------------|
+|                                                              |              | DCC <sup>†</sup>    | DCA <sup>†</sup>    | DCC <sup>†</sup>    | DCA <sup>†</sup>    | DCC <sup>†</sup>    | DCA <sup>†</sup>    |
+| Ppocket (Le Guilloux et al., 2009) <sup>b</sup>              | \            | 0.228               | 0.444               | 0.192               | 0.457               | 0.253               | 0.371               |
+| P2Rank (Krivák and Hoksza, 2018) <sup>c</sup>                | \            | <i>0.464</i>        | <i>0.728</i>        | <i>0.474</i>        | <b>0.787</b>        | <i>0.653</i>        | <b>0.826</b>        |
+| DeepSite (Jiménez et al., 2017) <sup>b</sup>                 | 1.00         | \                   | \                   | \                   | 0.456               | \                   | \                   |
+| Kalasanty (Stepniewska-Dziubinska et al., 2020) <sup>b</sup> | 70.64        | 0.335               | 0.636               | 0.244               | 0.515               | 0.416               | 0.625               |
+| DeepSurf (Mylonas et al., 2021) <sup>b</sup>                 | 33.06        | 0.386               | 0.658               | 0.289               | 0.635               | 0.510               | 0.708               |
+| DeepPocket (Aggarwal et al., 2022b) <sup>c</sup>             | \            | 0.399               | 0.645               | 0.456               | 0.734               | 0.644               | 0.813               |
+| GAT (Veličković et al., 2018) <sup>b</sup>                   | <b>0.03</b>  | <b>0.039(0.005)</b> | <b>0.130(0.009)</b> | <b>0.036(0.003)</b> | <b>0.110(0.010)</b> | <b>0.032(0.001)</b> | <b>0.088(0.011)</b> |
+| GCN (Kipf and Welling, 2017) <sup>b</sup>                    | 0.06         | 0.049(0.001)        | 0.139(0.010)        | 0.044(0.003)        | 0.174(0.003)        | 0.018(0.001)        | 0.070(0.002)        |
+| GAT + GCN <sup>b</sup>                                       | 0.08         | 0.036(0.009)        | 0.131(0.021)        | 0.042(0.003)        | 0.152(0.020)        | 0.022(0.008)        | 0.074(0.007)        |
+| GCN2 (Chen et al., 2020) <sup>b</sup>                        | 0.11         | 0.042(0.098)        | 0.131(0.017)        | 0.051(0.004)        | 0.163(0.008)        | 0.023(0.007)        | 0.089(0.013)        |
+| SchNet (Schütt et al., 2017) <sup>b</sup>                    | 0.49         | 0.168(0.019)        | 0.444(0.020)        | 0.192(0.005)        | 0.501(0.004)        | 0.263(0.003)        | 0.457(0.004)        |
+| EGNN (Satorras et al., 2021) <sup>b</sup>                    | 0.41         | 0.156(0.017)        | 0.361(0.020)        | 0.127(0.005)        | 0.406(0.004)        | 0.143(0.007)        | 0.302(0.006)        |
+| EquiPocket (Zhang et al., 2023b) <sup>b</sup>                | 1.70         | 0.423(0.014)        | 0.656(0.007)        | 0.337(0.006)        | 0.662(0.007)        | 0.545(0.010)        | 0.721(0.004)        |
+| VN-EGNN (ours)                                               | 1.20         | <b>0.605(0.009)</b> | <b>0.750(0.008)</b> | <b>0.532(0.021)</b> | 0.659(0.026)        | <b>0.669(0.015)</b> | 0.820(0.010)        |
+
+<sup>a</sup> The standard deviation across training re-runs is indicated in parentheses.
+
+<sup>b</sup> Results from Zhang et al. (2023b).
+
+<sup>c</sup> Uses different training set and, thus, limited comparability.
+
+<sup>†</sup> This dataset represents a strong domain shift from the training data for all methods (except for P2Rank). Details on the domain shift in App. J.
+
+Table 2: Ablation study. The main components of the VN-EGNN architecture are ablated and tested for their performance on the benchmarking datasets. The first column reports the variant of the ablated method, the second column whether the method contains virtual nodes (VN), the third column whether the method applies heterogeneous message passing, and the fourth column whether ESM embeddings were used. The remaining columns are analogous to Table 1.
+
+| Methods                                      | VN | heterog.<br>MP | ESM | COACH420            |                     | HOLO4K              |                     | PDBind2020          |                     |
+|----------------------------------------------|----|----------------|-----|---------------------|---------------------|---------------------|---------------------|---------------------|---------------------|
+|                                              |    |                |     | DCC <sup>†</sup>    | DCA <sup>†</sup>    | DCC <sup>†</sup>    | DCA <sup>†</sup>    | DCC <sup>†</sup>    | DCA <sup>†</sup>    |
+| EGNN+VN (Satorras et al., 2021) <sup>b</sup> | ✓  | ✗              | ✗   | 0.156(0.017)        | 0.361(0.020)        | 0.127(0.005)        | 0.406(0.004)        | 0.143(0.007)        | 0.302(0.006)        |
+| VN-EGNN (VN only)                            | ✓  | ✗              | ✗   | 0.497(0.014)        | 0.700(0.013)        | 0.414(0.023)        | 0.648(0.024)        | 0.502(0.029)        | 0.717(0.025)        |
+| VN-EGNN (residue emb.)                       | ✓  | ✓              | ✗   | 0.503(0.022)        | 0.684(0.016)        | 0.438(0.019)        | 0.605(0.013)        | 0.551(0.017)        | 0.751(0.009)        |
+| VN-EGNN (homog.)                             | ✓  | ✓              | ✓   | 0.575(0.008)        | 0.708(0.009)        | 0.479(0.012)        | 0.595(0.010)        | 0.649(0.010)        | 0.805(0.006)        |
+| VN-EGNN (full)                               | ✓  | ✓              | ✓   | <b>0.605(0.009)</b> | <b>0.750(0.008)</b> | <b>0.532(0.021)</b> | <b>0.659(0.026)</b> | <b>0.669(0.015)</b> | <b>0.820(0.010)</b> |
+
+<sup>a</sup> The standard deviation across training re-runs is indicated in parentheses.
+
+<sup>b</sup> Results from Zhang et al. (2023b).
+
+### 3.2 EVALUATION
+
+**Methods compared.** We compare the following binding site identification methods from different categories: *Geometry-based*: Ppocket (Le Guilloux et al., 2009) and P2Rank (Krivák and Hoksza, 2018). *CNN-based*: DeepSite (Jiménez et al., 2017), Kalasanty (Stepniewska-Dziubinska et al., 2020), and DeepSurf (Mylonas et al., 2021). *Topological graph-based*: GAT (Veličković et al., 2018), GCN (Kipf and Welling, 2017), and GCN2 (Chen et al., 2020). *Spatial graph-based*: SchNet (Schütt et al., 2017), EGNN (Satorras et al., 2021), EquiPocket (Zhang et al., 2023b), and our proposed VN-EGNN.
+
+**Evaluation metrics.** We used the *DCC/DCA success rate*, which are well-established metrics for binding site identification (see e.g., Chen et al., 2011). *DCC* is defined as the distance between the predicted and known binding site centers, whereas *DCA* is defined as the shortest distance between the predicted center and any atom of the ligand. Following Stepniewska-Dziubinska et al. (2020) and Zhang et al. (2023b), predictions within a certain threshold of DCC and DCA, are considered as successful, which is commonly referred to as DCC/DCA success rate. Adhering to these works, we maintained a threshold of 4Å throughout our experiments (for other thresholds, see Fig. 2). In line with Chen et al. (2011); Zhang et al. (2023b); Stepniewska-Dziubinska et al. (2020) for each protein only *M* predicted binding sites with the highest self-confidence scores  $\hat{c}_k$  are considered, where *M* is the number of known binding sites of the protein. Subsequently, each predicted binding site was aligned with the closest real binding site and DCC/DCA success rate was calculated.
+
+### 3.3 IMPLEMENTATION DETAILS.
+
+We used an AdamW (Loshchilov and Hutter, 2019) optimizer for 1500 epochs, selecting the best checkpoint based on the validation dataset. We used 5 VN-EGNN layers, where each layer consists of the three-step message passing scheme described in Section 2.3, and the feature and message size was set to 100, in all layers. Due to the possibility of different virtual nodes converging to identical
+
+{8}------------------------------------------------
+
+432  
+433  
+434  
+435  
+436  
+437  
+438  
+439  
+440  
+441  
+442  
+443  
+444  
+445  
+446  
+447  
+448  
+449  
+450  
+451  
+452  
+453  
+454  
+455  
+456  
+457  
+458  
+459  
+460  
+461  
+462  
+463  
+464  
+465  
+466  
+467  
+468  
+469  
+470  
+471  
+472  
+473  
+474  
+475  
+476  
+477  
+478  
+479  
+480  
+481  
+482  
+483  
+484  
+485
+
+![Figure 2: Left: A 3D molecular model of a protein-ligand complex. The protein is shown as a teal ribbon structure. A ligand is shown as a purple stick model. Yellow spheres represent virtual nodes, with some having arrows indicating position changes. Numbers 0.03, 0.05, and 0.83 are shown near some nodes. Right: A line graph showing Success rate (%) on the y-axis (0.0 to 1.0) versus DCC (Å) on the x-axis (0 to 50). Three curves are shown: COACH420 (blue), HOLO4K (red), and PDBbind2020 (black). A vertical dashed red line is at 5 Å.](91be14371a97fb5ce9eeb29ae18d07c3_img.jpg)
+
+Figure 2: Left: A 3D molecular model of a protein-ligand complex. The protein is shown as a teal ribbon structure. A ligand is shown as a purple stick model. Yellow spheres represent virtual nodes, with some having arrows indicating position changes. Numbers 0.03, 0.05, and 0.83 are shown near some nodes. Right: A line graph showing Success rate (%) on the y-axis (0.0 to 1.0) versus DCC (Å) on the x-axis (0 to 50). Three curves are shown: COACH420 (blue), HOLO4K (red), and PDBbind2020 (black). A vertical dashed red line is at 5 Å.
+
+Figure 2: **Left:** Model prediction showing initial positions of the virtual nodes (yellow spheres), ground truth ligand (violet), annotated binding site (violet protein regions), and node position changes (arrows). Violet spheres show clustered virtual node predictions with self-confidence scores. For better visualization, only a subset of initial node positions is shown. (PDB: 1MXI-A) **Right:** DCC success rates at varying thresholds for the distance between predicted and known binding pocket centers in Å.
+
+locations, we employed the Mean Shift Algorithm (Comaniciu and Meer, 2002) at inference time, to cluster virtual nodes that are in close spatial proximity. By averaging their self-confidence scores and positions, we treated these clustered nodes as a single instance. Because of the large complexes in HOLO4K, we ran VN-EGNN for each chain and merged the predicted pocket centers. For the initial residue node features we used pre-trained ESM-2 (Lin et al., 2023) protein embeddings following Corso et al. (2023); Pei et al. (2023). For virtual nodes, we derived their features by averaging the residue node features across the entire protein. We used the position of the  $\alpha$ -carbons as residue node locations. Virtual nodes are connected to all residue nodes, but not to each other. A linear layer was used to map these initial features to the required dimensions  $(h_n^0, v_k^0)$  of the model. Layer normalization and Dropout (Srivastava et al., 2014) was applied in each message passing layer. SiLU Hendrycks and Gimpel (2016) activation was used across all layers. Analogous to Pei et al. (2023) we applied normalization (divided by 5) and unnormalization (multiplied by 5) on the coordinates and used the Huber loss (Huber, 1964) for the coordinates, which empirically proved to be slightly more effective. The learning rate was set to  $10^{-3}$ , after 100 epochs we reduced the learning rate by factor of  $10^{-1}$  if the model did not improve for 10 epochs. For training we used 4x NVIDIA A100 40GB GPUs with a batch size of 64 on each GPU. The training time was about 8 hours. Hyperparameters were selected based on a validation dataset which consisted of a 10%-split of the training data (see Table G1).
+
+### 3.4 RESULTS
+
+Our experimental results demonstrate that our method, VN-EGNN, surpasses all prior approaches in terms of the DCC metric on COACH420, PDBbind2020 and even on the challenging HOLO4K dataset, see Table 1. On COACH420, VN-EGNN exhibits the best DCA score and on PDBbind it yields the same DCA score as P2Rank. Note that there is limited comparability with P2rank since this method uses a different training set that might be closer to HOLO4K. HOLO4K contains many complexes of symmetric proteins (see App. G.2), which should be considered as a strong domain shift to the training data and thus pose a problem for all methods, except P2rank. For a more detailed discussion and a visual analysis, we refer to App. J. Visualizations of the predictions of our model are shown in Fig. 2 and Fig. 11. We evaluate predictions of our model with respect to the Dice Loss and to IoU in App. H.3. Memory utilization is shown in Fig. M1 (see App. M).
+
+### 3.5 ABLATION STUDY
+
+Our proposed method comprises three main components as compared to typical other methods: (a) virtual nodes, (b) heterogenous message passing, and (c) pre-trained protein embeddings as node representations. We ablate these three components in a set of experiments (see Table 2). (a) *Removing virtual nodes.* We compared our model to a standard EGNN framework to determine the added value
+
+{9}------------------------------------------------
+
+of virtual nodes. In this study, we analysed how a standard EGNN performs compared to our method. Table 2, shows that the standard EGNN architecture did not perform well. (b) *Homogeneous message passing*. Our approach to message passing, which is applied in a sequential manner, was contrasted with the traditional method where updates across nodes occur in parallel or homogeneously. This evaluation was further enriched by employing identical MLPs for both graph and virtual nodes across all layers, providing a direct comparison of the impact of our message passing strategy. (c) *Atom type embeddings*. We evaluated the impact of the type of embeddings, as outlined in Section 2.2. Table 2 illustrates that, regardless of the initial embeddings used, our model surpasses all preceding approaches, except P2Rank, in achieving higher DCC success rate across the COACH420 and PDBbind2020 datasets. This was accomplished by adopting a one-hot encoding scheme solely for the amino acid types, complemented by an additional category for the virtual nodes.
+
+We provide additional insights on the usage of a different number of virtual nodes and a different number of layers in App. L.
+
+## 4 DISCUSSION AND CONCLUSIONS.
+
+**Main findings.** We have introduced a novel method that extends EGNNs (Satorras et al., 2021) with virtual nodes and a heterogeneous message passing scheme. These new assets improve the learning dynamics by ameliorating the oversquashing problem and enable the learning of representations of hidden geometric entities. Concretely, we have developed this method for binding site identification, for which our experiments show that VN-EGNN exhibits high predictive performance in terms of DCC and DCA and sets a new state-of-the-art on COACH420, HOLO4K and PDBbind2020. We attribute our improvement to the direct prediction of binding site centers, rather than inferring them from the geometric center of segmented areas, a common practice in previous methods. Relying on segmentation can lead to inaccuracies, especially if a single erroneous prediction impacts the calculated center. Overall, VN-EGNN yields highly accurate predictions of binding site centers.
+
+**Comparison with previous work.** In contrast to previous methods (Mylonas et al., 2021; Zhang et al., 2023b), which primarily utilized surface information, based on Sanner et al. (1996); Eisenhaber et al. (1995), or methods that operated on atom-level information (Jiménez et al., 2017; Stepiewska-Dziubinska et al., 2020; Aggarwal et al., 2022b), our approach exclusively relies on residue-level information, specifically using  $\alpha$ -carbons as physical nodes. This strategy significantly enhances computational efficiency during both training and inference due to the reduced size of the input graphs. Our results support the finding by Jumper et al. (2021), that residue-level information inherently includes all relevant side-chain conformations.
+
+**Limitations.** Our method is currently limited to predicting binding pockets of proteins similar to those in PDB. We expect that VN-EGNNs can also be applied to other physical or geometric problems with hidden geometric entities, such as particle flows, however, their performance in these fields remains to be shown. We have developed VN-EGNN with having the application of binding site identification in mind. Usually in this field, there is a very limited number of training data points and therefore methods taking more prior knowledge into account (e.g., in the design of the network architecture, etc.) could prove beneficial over methods not relying much on this knowledge. With more data points available for training the advantage to take prior knowledge into account may however diminish. Note that our method is not a docking method and thus cannot be used to dock ligands to protein structure. However, our predicted binding sites can be used as proposal regions for other methods, which could lead to improved performance and efficiency for docking methods.
+
+## REFERENCES
+
+- Abramson, J., Adler, J., Dunger, J., Evans, R., Green, T., Pritzel, A., Ronneberger, O., Willmore, L., Ballard, A. J., Bambrick, J., Bodenstein, S. W., Evans, D. A., Hung, C.-C., O’Neill, M., Reiman, D., Tunyasuvunakool, K., Wu, Z., Žemgulytė, A., Arvaniti, E., Beattie, C., Bertolli, O., Bridgland, A., Cherepanov, A., Congreve, M., Cowen-Rivers, A. I., Cowie, A., Figurnov, M., Fuchs, F. B., Gladman, H., Jain, R., Khan, Y. A., Low, C. M. R., Perlin, K., Potapenko, A., Savy, P., Singh, S., Stecula, A., Thillaisundaram, A., Tong, C., Yakneen, S., Zhong, E. D., Zielinski, M., Židek, A., Bapst, V., Kohli, P., Jaderberg, M., Hassabis, D., and Jumper, J. M. (2024). Accurate structure prediction of biomolecular interactions with AlphaFold 3. *Nature*, 630(8016):493–500.
+
+ Rest of paper (reference and Appendix) is removed.

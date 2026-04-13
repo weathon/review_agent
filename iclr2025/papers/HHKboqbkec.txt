@@ -1,0 +1,438 @@
+
+
+{0}------------------------------------------------
+
+# SCALING MULTIMODAL THEORY-OF-MIND WITH WEAK-TO-STRONG BAYESIAN REASONING
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Theory-of-Mind (ToM) enables individuals to the mental states of the others, such as thoughts, beliefs, and desires. To replicate this cognitive ability in machines, especially under complex multimodal environments, recent advances combine Bayesian-based state inference with deep learning models to estimate mental states, where the Bayesian model handles state transitions and a language model (LM) estimates the likelihood of intermediate states. However, while post-training an LM to specialise in ToM tasks improves performance, the computational cost increases as the LM scales, limiting the model size to 7 billion parameters. Despite this post-training process, smaller LMs still struggle with the physical and mental modelling demands of ToM due to their limited world knowledge and reasoning capacity. To address this, we propose a scalable solution that leverages the strengths of larger LMs (up to 70 and 405 billion parameters, respectively), including their vast world knowledge and atomic-level reasoning capabilities, without increasing post-training resource requirements. Our method transfers ToM-specific behaviours from a post-trained small LM to guide the latent reasoning of a larger LM during test time. This *weak-to-strong* control mechanism enables the larger LM to improve Bayesian likelihood estimation at each inference step, harnessing its reasoning power in ToM scenarios while reducing the need for additional training resources. Extensive experiments demonstrate the significant effectiveness of our scaled approach. It is better at inferring human mental states in complex and interactive environments, outperforming the state-of-the-art solution by  $\sim 4.6\%$  across multiple tasks on the multimodal ToM benchmark and unseen scenarios.
+
+## 1 INTRODUCTION
+
+A key aspect of human social cognition is Theory-of-Mind (ToM)—the ability to comprehend and attribute mental states such as beliefs, desires, and intentions to ourselves and others. This capacity allows individuals to recognize that others may have perspectives and motivations distinct from their own, forming the foundation of social understanding and interaction (Dennett, 1988; Gopnik & Wellman, 2012). Building on this concept, a critical challenge lies in enabling artificial intelligence (AI) to acquire human-level ToM capabilities. Equipping AI systems with such abilities could significantly enhance their potential for human-like interactions and unlock broader capacities for commonsense and context-aware reasoning (Lake et al., 2017; Wu et al., 2021; Ma et al., 2023).
+
+Among the ongoing efforts to advance ToM abilities in machines, two broadly classed strategies are the highly structured Bayesian approaches and the less structured end-to-end approaches, respectively: (i) Bayesian ToM models use cognitively structured probabilistic frameworks to represent causal relationships between the mind and the world, enabling inverse inference of mental states from sparse behavioral observations (Baker et al., 2017; Jara-Ettinger, 2019; Shu et al., 2021). These models are highly interpretable and support key ToM functions like explanation and inductive learning, excelling in well-defined domains with precise predictions and few-shot generalization (Shum et al., 2019; Zhi-Xuan et al., 2022). However, they require extensive inductive constraints (e.g., abstractions, priors, and causal relationships) provided by experts, **limiting their scalability to complex and unconstrained practical environments**. (ii) End-to-end models of ToM involve training deep models directly on ToM data (Rabinowitz et al., 2018; Shu et al., 2021; Sclar et al., 2022). These models, such as ToMnet (Rabinowitz et al., 2018), autonomously learn complex patterns and relationships from data without explicitly concepts like agents, beliefs, and goals. However, because these models
+
+{1}------------------------------------------------
+
+do not explicitly encode principles of physics or theories of psychology, they lack transparency and may draw conclusions that violate physical laws, logical coherence, or commonsense reasoning. Additionally, their data-driven nature makes them **less reliable in, and adaptable to, dynamic or novel environments**, particularly where data is sparse or unrepresentative (Sap et al., 2022; Zhi-Xuan et al., 2022; Ullman, 2023; Strachan et al., 2024).
+
+The recent interdisciplinary milestone, BIPALM (Bayesian inverse planning accelerated by language model), merges the strengths of Bayesian ToM models and deep learning to facilitate robust reasoning in complex multimodal scenarios (Jin et al., 2024). It uses a Bayesian ToM model to predict agents’ mental states in multimodal scenarios, with a language model (LM) estimating the probabilities of these Bayesian intermediate states based on multimodal inputs. For accurate Bayesian ToM inference, the LM undergoes an additional post-training process tailored to the target multimodal contexts. However, this reliance on post-training significantly increases computational demands and limits the scalability of likelihood models, restricting the size of LMs to around seven billion parameters. ToM intricately intertwines **open-domain world knowledge and implicit reasoning** to ground human mental states within their corresponding physical environments. As environments and their associated queries evolve, reliance on smaller post-trained LMs introduces a critical trade-off: while smaller LMs excel in adapting to specific ToM tasks within particular environments, larger LMs are indispensable for harnessing broader world knowledge and advanced reasoning capabilities. **This inherent tension poses a significant challenge, requiring us to improve the scalability of Bayesian ToM methods in handling dynamically evolving, multimodal ToM scenarios**
+
+**Motivated by the scalability challenge of current Bayesian ToM methods**, we propose a scalable Bayesian inference solution that generalises to complex and dynamic environments (Tab.5 in App.A compares our technical contributions with other solutions). Our approach introduces a **weak-to-strong control mechanism** where post-trained smaller LMs specialise in ToM-specific tasks by capturing likelihood inference patterns during Bayesian ToM reasoning. These ToM behaviours are then transferred to larger LMs during test time, aligning the larger models’ reasoning trajectories with the structured requirements of Bayesian inverse planning. In this framework, the larger LM acts as the **primary policy model**, leveraging its extensive world knowledge and reasoning capabilities. Importantly, the reasoning trajectory of the larger LM is structured by the Bayesian framework, ensuring consistency, robustness, and interpretability. This design avoids additional post-training costs for larger LMs while enabling scalable use of large models up to **70B or 405B** parameters.
+
+In particular, we focus on the pattern shifts observed in smaller LMs before and after ToM post-training, treating these shifts as **ToM behaviours** that guide larger LMs. This ToM-behaviour transfer ensures that larger LMs, redirected as **aligned policy models**, follow reasoning trajectories primarily inferred by the Bayesian framework. The experiments demonstrate that this weak-to-strong control mechanism significantly enhances the generalizability of Bayesian inference, achieving a  $\sim 4.6\%$  improvement in accuracy over state-of-the-art methods, even in dynamic and unseen environments.
+
+## 2 METHODOLOGY: SCALED BAYESIAN REASONING ON MULTIMODAL ToM
+
+Our scaled Bayesian reasoning infers an agent’s mental state based on video and text inputs. While the extension of Bayesian methods to deep models can reverse engineer human ToM reasoning in multiple domains, it also includes LMs for multimodal inputs: (1) building unified representations about a scene, a person’s actions, and the mental state hypotheses from multimodal inputs, and (2) post-training an LM to conduct contextual inverse symbolic planning, based on unified symbolic representations (Jin et al., 2024). Then, as shown in Fig.1, the LM used in our scaled Bayesian reasoning is from 7B up to 405B parameters at test-time compute, avoiding additional post-training.
+
+### 2.1 DATA REPRESENTATION
+
+Instead of single-modality input, this study integrates both visual and textual data into a unified symbolic representation, enabling a more comprehensive understanding of the context and human behaviour: (i) One visual perception module converts visual data into symbolic representations by using the method from Blukis et al. (2022) to generate a voxel map and construct a scene graph for each video frame. (ii) For text parsing, textual information is extracted into symbolic representations of the initial state and subsequent actions. The parser processes the text by breaking it down into
+
+{2}------------------------------------------------
+
+![Figure 1: (left) Bayesian Inverse Inference diagram showing a Latent Behavior Change Δ being inferred from a sequence of states and actions (S^0, b^0, g^0) to (S^T, b^T, g^T) using a Large Language Model. The goal is to find Δ such that P(a) > P(b). (right) Weak to Strong diagram showing the process of post-training a small LM, extracting the latent behavior change Δ, and then applying it to a large LM. Bar charts show the likelihood of 'Pear in the basket' for both models, with the large LM's likelihood being adjusted by Δ.](1b7d539e02a202c2cf2d97698b911447_img.jpg)
+
+Figure 1: (left) Bayesian Inverse Inference diagram showing a Latent Behavior Change Δ being inferred from a sequence of states and actions (S^0, b^0, g^0) to (S^T, b^T, g^T) using a Large Language Model. The goal is to find Δ such that P(a) > P(b). (right) Weak to Strong diagram showing the process of post-training a small LM, extracting the latent behavior change Δ, and then applying it to a large LM. Bar charts show the likelihood of 'Pear in the basket' for both models, with the large LM's likelihood being adjusted by Δ.
+
+Figure 1: (left) The large LM operates as a scaled **policy model** to estimate the likelihood of an agent’s actions in dynamic environments, based on multimodal symbolic inputs (video and description). (right) The latent reasoning of the large LM is guided by the ToM behaviours from post-trained small LMs, which acts as a weak-to-strong control. Overall, Bayesian inverse planning compares hypotheses about the agent’s goal and belief, using the large LM as a policy model to infer ToM.
+
+97 components: the state of the environment, the actions taken by humans, and the question. It translates  
+98 these into natural language descriptions, such as “*the pear is inside the basket*” for the environment’s  
+99 state, “*walks toward the kitchen*” for action commands, and two potential goals like “*to retrieve*  
+100 *the pear*” and beliefs such as “*the pear is inside the basket*” or “*the pear is not inside the basket*.”  
+101 (iii) finally, in unifying multimodal information, the fusion step aligns and integrates input stream  
+102 information by converting scene graphs from video into predicates that describe spatial relationships  
+103 and object statuses, analogous to text-derived predicates. We create a symbolic representation of the  
+104 initial state by combining predicates from both video and text, aligning and updating state predicates  
+105 with new video frame information at each time step, and constructing a symbolic state and action  
+106 sequence. This process begins from the initial state, with actions parsed from the text aligned with  
+107 video-detected actions and divided into intervals corresponding to each action. See App.B.2 for more  
+108 details on data preprocessing.
+
+### 2.2 INFERRING HUMAN MENTAL STATES
+
+110 To infer human mental states, we generate and evaluate hypotheses about human intentions by  
+111 employing **Bayesian inverse planning**. These hypotheses are assessed through action likelihoods,  
+112 which directly inform the posterior probabilities of different mental state explanations. To compute  
+113 these crucial likelihoods, an LM is controlled by our weak-to-strong mechanism to serve as the policy  
+114 model. This approach harnesses the world knowledge and reasoning capabilities of large LLMs while  
+115 aligning their behaviour patterns to ToM tasks without extensive computational requirements.
+
+116 **Behaviour modelling: a Markov decision process formulation** The behaviour of an agent can be  
+117 formulated as a forward generative model based on a Partially Observable Markov Decision Process  
+118 (POMDP), defined by the tuple  $\langle S, A, T, G, R, \Omega, O, \gamma \rangle$  (Kaelbling et al., 1998; Jin et al., 2024).  
+119 Here,  $s^t \in S$  and  $a^t \in A$  represent the state and action at time  $t$ , respectively.  $T(s^t|s, a)$  denotes  
+120 the state transition probabilities. The goal  $g \in G$  determines the reward  $r^t = R(s^t, a^t, g)$ . The  
+121 agent’s observation  $o^t \in \Omega$  is obtained via the observation function  $o^t = O(s^t)$ . The discount factor  
+122 is  $\gamma \in (0, 1]$ . Crucially, the agent’s belief,  $b(s)$ , is a probability distribution over the state. This  
+123 belief is dynamically updated during belief evolution  $P(b^\tau | b^{\tau-1}, s^\tau)$ , where  $b(s)$  is factorized into  
+124 probabilities over the possible locations of individual objects.
+
+125 **Inverse inference: from observed behaviours to the mental states** While the POMDP formulates  
+126 a forward model of agent behaviour, the heart of this Bayesian approach is to **invert** this process –  
+127 inferring the agent’s goals and beliefs from observed behaviours, i.e., actions (Baker et al., 2017).  
+128 Assuming deterministic state transitions for simplicity, we jointly infer the agent’s goal and belief  
+129 based on observed states and actions. The posterior probability of an agent’s goal  $g$  and belief  $b^\tau$   
+130 given a sequence of observed states  $s^{1:t}$  and actions  $a^{1:t-1}$  is expressed as:
+
+$$P(g, b^t | s^{1:t}, a^{1:t-1}) \propto \prod_{\tau=1}^t \pi(a^\tau | g, b^\tau) P(b^\tau | b^{\tau-1}, s^\tau) P(b^0) P(g), \quad (1)$$
+
+131 where  $\pi(a^\tau | g, b^\tau)$  represents the agent’s policy, which captures the probability of taking action  
+132  $a^\tau$  given a goal  $g$  and belief  $b^\tau$ . This reflects the agent’s decision-making process, influenced  
+133 by its goals and the current state of its beliefs. Belief evolution is modeled as  $P(b^\tau | b^{\tau-1}, s^\tau) =$
+
+{3}------------------------------------------------
+
+134  $\frac{P(s^\tau|b^{\tau-1})P(b^{\tau-1})}{P(s^\tau)}$ , where  $P(s^\tau|b^{\tau-1})$  is the likelihood of observing  $s^\tau$  given the prior belief  $b^{\tau-1}$ ,  
+135 and  $P(b^{\tau-1})$  represents the prior belief at the previous step. This belief evolution describes how  
+136 the belief  $b^\tau$  evolves from the prior belief  $b^{\tau-1}$  after observing a new state  $s^\tau$ , and it follows  
+137 Bayesian principles, ensuring that new evidence incrementally refines the agent's understanding of  
+138 its environment. For example, if an object is observed inside a container at time  $\tau$ , the corresponding  
+139 belief about the object's location is updated accordingly. **In practice**,  $\pi(a^\tau|g, b^\tau)$  and  $P(b^\tau|b^{\tau-1}, s^\tau)$   
+140 can be approximated using likelihood generated by a language model.  $P(b^0)$  is set as a uniform  
+141 distribution to reflect equal uncertainty about all possible object locations at the start, while  $P(g)$   
+142 encodes prior knowledge about the likelihood of different goals.
+
+143 To compare different hypotheses about the agent's goals and beliefs, we evaluate their relative log-  
+144 likelihoods from a given set of hypotheses, separating the contributions from the current time step and  
+145 the accumulated effect of prior steps. Consider two hypotheses,  $H_1 = \langle g_1, b_1^t \rangle$  and  $H_2 = \langle g_2, b_2^t \rangle$ ,  
+146 representing different goal-belief pairs. Their relative log-likelihoods are compared as:
+
+$$\log \frac{P(g_1, b_1^t | s^{1:t}, a^{1:t})}{P(g_2, b_2^t | s^{1:t}, a^{1:t})} = \underbrace{\log \frac{\pi(a^t | g_1, b_1^t)}{\pi(a^t | g_2, b_2^t)}}_{\text{Current step comparison}} + \underbrace{\log \frac{P(b_1^t | b^{t-1}, s^t)}{P(b_2^t | b^{t-1}, s^t)} + \sum_{\tau=1}^{t-1} \log \frac{\pi(a^\tau | g_1, \hat{b}^\tau)}{\pi(a^\tau | g_2, \hat{b}^\tau)}}_{\text{Prior steps comparison}}. \quad (2)$$
+
+147 The first term compares log-likelihoods of actions and belief updates at the current step, reflecting how  
+148 each hypothesis explains the agent's latest behavior. The second term sums log-likelihoods from prior  
+149 steps, ensuring the entire action history informs the hypothesis evaluation. **In practice**, the belief  
+150  $b^\tau$  is *not explicitly* updated as a posterior distribution  $P(b^\tau | b^{\tau-1}, s^\tau)$ . Instead, it is symbolically  
+151 approximated as a structured hypothesis (e.g., possible object locations) that represents the agent's  
+152 understanding of the environment at each step. By comparing action likelihoods  $\pi(a^\tau | g, s^\tau, \hat{b}^\tau)$   
+153 across hypotheses, beliefs are implicitly evaluated and updated.
+
+154 **Weak-to-strong controlled large policy model** When augmenting likelihood estimation with the  
+155 guided large LM's broad generalization capabilities, we scale up the LM used only for test-time  
+156 computing and avoid the direct post-training on large LM. The true policy  $\pi(a^\tau | g, b^\tau)$  is estimated  
+157 through a language model ( $\pi$ )-estimated probability  $\tilde{\pi}(a^t | s^t, g, \hat{b}^t)$ :
+
+$$\pi(a^\tau | g, b^\tau) = \tilde{\pi}(a^t | s^t, g, \hat{b}^t) + \varepsilon, \quad (3)$$
+
+158 where  $\varepsilon$  represents the inherent approximation error. When applied to the Bayesian inverse planning  
+159 framework equation 1, the posterior probability is expressed as:
+
+$$P(g, b^t | s^{1:t}, a^{1:t-1}) \propto \prod_{\tau=1}^t [\tilde{\pi}(a^\tau | s^\tau, g, \hat{b}^\tau) + \varepsilon] \cdot P(b^\tau | b^{\tau-1}, s^\tau) \cdot P(b^0)P(g). \quad (4)$$
+
+160 It integrates the approximation into Bayesian reasoning, considering  $s_i, b_i, g_i, a_i$  updates over time.
+
+161 **POST-TRAINING STAGE: ToM OPTIMIZATION** To allow direct use of the LM-estimated probability,  
+162 we aim to reduce  $\varepsilon$  via a post-training stage to align LM's pretrained capability to current target  
+163 situations. The initial phase of reducing  $\varepsilon$  involves refining a scenario-specific post-training policy  
+164  $\pi^\varepsilon$  on an action-policy experience pool. This pool  $\mathcal{D}$  is defined as:  $\mathcal{D} = \{(s_i, b_i, g_i, a_i)\}_{i=1}^N$ , where  
+165  $s_i, b_i, g_i, a_i$ , and  $N$  denote sequences of states, beliefs, goals, actions, the number of data points  
+166 sourced from multimodal situations. The objective function guiding post-training is:
+
+$$\mathcal{L}(\pi^\varepsilon) = - \sum_{i=1}^N \log \pi^\varepsilon(a_i | s_i, b_i, g_i). \quad (5)$$
+
+167 Here,  $\pi^\varepsilon$  learns the human ToM behaviour patterns effectively, allowing the language model policy  
+168 to adeptly learn and respond to complex ToM environments. Due to computational constraints, this  
+169 post-training process is typically applied to smaller models.
+
+170 **INFERENCE STAGE: LARGE POLICY MODEL WITH BEHAVIORAL GUIDANCE** During test inference,  
+171 we leverage the behaviour acquired by the post-trained smaller LM to guide the reasoning of a larger,
+
+{4}------------------------------------------------
+
+more capable LM. This approach dynamically adjusts the output of the large LM based on the shift observed between a post-trained small LM  $\pi^\mathcal{E}$  and a naive small LM  $\pi^\mathcal{N}$ . At each inference step  $t$ , the overall policy distribution for the redirected large model is given by:
+
+$$\bar{\pi}(a^t | s^t, g, \hat{b}^t) = \frac{1}{Z} \pi^\mathcal{E}(a^t | s^t, g, \hat{b}^t) \frac{\pi^\mathcal{E}(a^t | s^t, g, \hat{b}^t)}{\pi^\mathcal{N}(a^t | s^t, g, \hat{b}^t)}, \quad (6)$$
+
+where  $\pi^\mathcal{E}(a^t | s^t, g, \hat{b}^t)$  represents the policy distribution from the naive large LM. The post-training effect to policy function is *approximated* through the ratio  $\frac{\pi^\mathcal{E}(a^t | s^t, g, \hat{b}^t)}{\pi^\mathcal{N}(a^t | s^t, g, \hat{b}^t)}$ , offering an on-the-fly redirecting mechanism. The normalization factor is calculated by  $Z = \sum_{a^t} \pi^\mathcal{E}(a^t | s^t, g, \hat{b}^t) \frac{\pi^\mathcal{E}(a^t | s^t, g, \hat{b}^t)}{\pi^\mathcal{N}(a^t | s^t, g, \hat{b}^t)}$ . It ensures that the resulting probabilities remain a valid distribution, reflecting both the post-training adjustments and the foundational likelihood from the larger model. Our overall method facilitates ToM behaviour transfer from the post-trained small LM ( $\pi^\mathcal{E}$ ) to the larger LM ( $\pi^\mathcal{L}$ ), scaling the capabilities of the policy model in Bayesian inference at test-time. **The Theorem 1 and its proof in the appendix C are provided for theoretical support.**
+
+## 3 EXPERIMENTS
+
+We examine the **scaling benefits** of this Bayesian weak-to-strong reasoning in multimodal ToM tasks. For the *strong* component, we scale up the large LMs to 70B and 405B parameters. In contrast, for the *weak* component, we reduce the size of the small LMs from 8B to 4B parameters. First, the results reveal a positive correlation between model size and ToM capabilities, especially when the larger models are guided by the post-trained behaviours of the smaller models. Interestingly, these post-trained behaviours are also effectively captured by smaller LMs. We also illustrate how the large LMs are progressively redirected to the answer space during the Bayesian process.
+
+### 3.1 SETUP
+
+**Datasets** (i) *For post-training*, we use MMToM sampled from an apartment environment simulator, Virtual Home (Puig et al., 2018), using the procedural methods described by Jin et al. (2024). The dataset comprises 1,000 procedurally synthesized videos within a realistic household simulator, each annotated with ground-truth labels for states, goals, beliefs, and actions. These precise annotations are used to train our conditional prediction model for action  $a_i$  given state  $s_i$ , belief  $b_i$ , and goal  $g_i$ :  $P(a_i | s_i, b_i, g_i)$ . By leveraging this synthetic dataset, the inverse symbolic planner—comprising a large base LM guided by a smaller, post-trained LM—acquires robust exposure to diverse scenarios. (ii) *For evaluation*, we use the MMToM-QA (Jin et al., 2024), an evaluation benchmark aimed at evaluating ToM reasoning over multimodal situations. The dataset consists of 134 videos, each showing a person searching for household objects, with an average of 1,462 frames per video representing approximately 36 human actions. These videos are accompanied by 600 questions (detailed in appendix §D.1), evenly divided between the categories of belief inference (with 1.1, 1.2, and 1.3 subtasks) and goal inference (with 2.1, 2.2, 2.3, and 2.4 subtasks). Each question is paired with a video clip and a detailed textual description. The questions are designed to assess the ability of models to infer goals and beliefs jointly, providing a richer assessment of multimodal ToM capabilities. It supports three setups, including multimodal, text-only, and video-only inputs.
+
+**Baselines** We include three types of baselines in our evaluation to benchmark our model’s performance on the MMToM-QA dataset. *For text-only evaluation*, we compare performance in the text-only subset of MMToM-QA using various large language models (LLMs), including GPT-4 (OpenAI, 2023a), GPT-3.5, GPT-J-6B (Wang & Komatsuzaki, 2021), and Llama-2-7B (Touvron et al., 2023). Advanced prompting methods, such as SimToM (Wilf et al., 2024) and SymbolicToM (Sclar et al., 2023), which enhance GPT-4’s reasoning capabilities, provide additional baselines (e.g., SimToM with GPT-4 and SymbolicToM with GPT-4). *For multimodal evaluation*, we include GPT-4V (OpenAI, 2023a), InstrucBLIP (Dai et al., 2023), Video-Llama-2 (Zhang et al., 2023), and LLaVA (Liu et al., 2023), BIPALM (Jin et al., 2024). These methods employ sampled frames from each video to evaluate their proficiency in multimodal ToM reasoning. *For human*, 180 participants answer 120 randomly sampled questions, covering all question types, as reported by Jin et al. (2024).
+
+{5}------------------------------------------------
+
+Table 1: Comparisons between humans and models across task types from 1.1 to 2.4 are provided. The best results for each modal setting are highlighted in **bold**. The second best results in multimodality are underlined. Rows of ours are highlighted in color.
+
+| method | belief inference |  |  |  | goal inference |  |  |  | all |
+|-|-|-|-|-|-|-|-|-|-|
+|  | 1.1 | 1.2 | 1.3 | avg. | 2.1 | 2.2 | 2.3 | 2.4 |  |
+| <i>Human</i> | 96.0 | 95.8 | 81.3 | 91.0 | 85.8 | 76.7 | 65.0 | 68.3 | 82.5 |
+| text only | GPT-4 | 97.0 | 12.0 | 77.0 | 62.0 | 48.0 | 42.7 | 2.7 | 48.0 |
+|  | GPT-3.5 | 81.0 | 11.0 | 39.0 | 43.7 | 46.7 | 16.0 | 21.3 | 48.0 |
+|  | GPT-J-6B | 56.0 | 53.0 | 38.0 | 49.0 | 52.0 | 50.7 | <b>50.7</b> | 56.0 |
+|  | Llama-2-7B | 64.0 | 55.0 | 50.0 | 56.3 | 49.3 | 48.0 | 41.3 | 50.3 |
+|  | SimToM w/ GPT-4 | 96.0 | 15.0 | 82.0 | 64.3 | 61.3 | 44.0 | 2.7 | 54.7 |
+|  | SymbolicToM w/ GPT-4 | <b>100</b> | 61.0 | 74.0 | 78.3 | 73.3 | 66.7 | 0.0 | 50.7 |
+|  | BIPALM w/ GPT-J-6B | 88.0 | <b>69.0</b> | 88.0 | 81.7 | <b>77.3</b> | <b>68.0</b> | 30.7 | <b>70.7</b> |
+|  | BIPALM w/ Llama-2-7B | 89.0 | 68.0 | <b>90.0</b> | <b>82.3</b> | 54.7 | 66.7 | <b>50.7</b> | 62.7 |
+|  |  |  |  |  |  |  |  |  | 58.7 |
+|  |  |  |  |  |  |  |  |  | 70.5 |
+| video only | <i>Human</i> | 69.1 | 64.3 | 86.4 | 73.3 | 58.5 | 60.0 | 76.7 | 63.3 |
+|  | InstructBLIP-13B | 56.0 | 50.0 | 42.0 | 49.3 | 56.0 | 45.3 | 54.7 | 53.3 |
+|  | Video-Llama-2-13B | 24.0 | 32.0 | 67.0 | 41.0 | 50.7 | 45.3 | <b>56.0</b> | 52.0 |
+|  | LLaVA-7B | 33.0 | 15.0 | 69.0 | 39.0 | 44.0 | 24.0 | <b>56.0</b> | 57.3 |
+|  | GPT-4V | 64.0 | 34.0 | 39.0 | 45.7 | 54.7 | 26.7 | 48.0 | 56.0 |
+|  | BIPALM w/ GPT-J-6B | 63.0 | 57.0 | <b>72.0</b> | <b>64.0</b> | 45.3 | <b>62.7</b> | <b>50.7</b> | 55.3 |
+|  | BIPALM w/ Llama-2-7B | <b>69.0</b> | <b>63.0</b> | 60.0 | <b>64.0</b> | <b>62.7</b> | 54.7 | <b>53.3</b> | <b>62.7</b> |
+| multimodal | <i>Human</i> | 95.8 | 96.7 | 100 | 97.5 | 90.0 | 91.7 | 83.3 | 88.9 |
+|  | InstructBLIP-13B | 62.0 | 52.0 | 32.0 | 48.7 | 46.7 | 29.3 | 42.7 | 60.0 |
+|  | Video-Llama-2-13B | 36.0 | 38.0 | 52.0 | 42.0 | 36.0 | 41.3 | 30.7 | 45.3 |
+|  | LLaVA-7B | 46.0 | 14.0 | 69.0 | 43.0 | 65.3 | 22.7 | 40.0 | 48.0 |
+|  | GPT-4V | <b>94.0</b> | 13.0 | 59.0 | 55.3 | 56.0 | 26.7 | 4.0 | 52.0 |
+|  | BIPALM w/ GPT-J-6B | 90.0 | <u>69.0</u> | <u>86.0</u> | <u>81.7</u> | <u>68.0</u> | <u>78.7</u> | 56.0 | 73.3 |
+|  | BIPALM w/ Llama-2-7B | 88.0 | 68.0 | 85.0 | 80.3 | 62.7 | 77.3 | <b>72.0</b> | <b>80.0</b> |
+|  | <b>Ours (w/ Llama-3.1-405B)</b> | <u>92.0</u> | <b>76.0</b> | <b>93.0</b> | <b>87.0</b> | <b>73.3</b> | <b>80.0</b> | <u>76.0</u> | <u>78.7</u> |
+|  |  |  |  |  |  |  |  |  | <b>77.0</b> |
+|  |  |  |  |  |  |  |  |  | <b>81.3</b> |
+
+219 **Post-training** We post-train Llama (Touvron et al., 2023; Dubey et al., 2024) as a policy model  
+220 in our Bayesian framework with LoRA (Hu et al., 2022), as outlined in Tab.6. Following the setup  
+221 recommended by Jin et al. (2024), we use a learning rate of 1e-3 over 3 epochs. LoRA is configured  
+222 with a rank of 16 and an alpha value of 32 for the 7B and 8B LMs. For 70B, we use a lower rank of 8  
+223 and an alpha of 16. They are carefully tuned to optimize performance across varying LM sizes.
+
+###### 224 3.2 MAIN RESULTS
+
+225 Tab.1 uses human performance as the gold standard. Humans clearly outperform all models (with  
+226 93.0% accuracy) when provided with multimodal input. This result highlights the **critical role**  
+227 **of integrating both visual and textual modalities** in achieving an immersive and context-aware  
+228 perception of the ToM situation. Accordingly, our ToM method also incorporates multimodal inputs.  
+229 In *belief inference*, which is strongly linked to world knowledge, models like GPT-4 and GPT-3.5  
+230 perform exceptionally well, particularly on task 1.1, where GPT-4 achieves an accuracy of 94%. This  
+231 result underscores the importance of large-scale models in capturing and applying vast amounts of  
+232 pretrained world knowledge. However, despite their impressive performance in belief inference, these  
+233 models do not perform as effectively on *goal inference*, where *adaptation to specific ToM contexts*  
+234 *and dynamic environments is crucial*. This highlights the need for models to be better aligned  
+235 with the specific requirements of ToM scenarios. Models with smaller scales, such as those with  
+236 6B, 7B, and 13B parameters, face inherent capability limitations, which restrict their performance on  
+237 belief inference tasks, particularly when compared to larger models like GPT-4 on task 1.1. However,  
+238 these smaller models, such as BIPALM w/ GPT-J-6B and Llama-2-7B, benefit from post-training  
+239 specifically designed for ToM scenarios. This allows them to perform better on goal inference  
+240 tasks, where understanding and adapting to scenario-specific environmental dynamics is essential.  
+241 **Despite their size constraints, these models demonstrate the value of targeted post-training in**  
+242 **compensating for the lack of large-scale pretrained knowledge**. Our approach goes beyond seesaw  
+243 effects in prior methods and has both strengths: while its strong component leverages the extensive  
+244 world knowledge embedded in large pretrained models, also its weak component incorporates post-
+
+{6}------------------------------------------------
+
+Table 2: Scaling-up performance on strong component (large LMs) in weak-to-strong control.
+
+| LM | config | belief inference |  |  | goal inference |  |  |  | all |  |
+|-|-|-|-|-|-|-|-|-|-|-|
+|  |  | 1.1 | 1.2 | 1.3 | avg. | 2.1 | 2.2 | 2.3 | 2.4 |  |
+| Llama-2 | 7B-zero-shot | 44.00 | 37.00 | 84.00 | 55.00 | 64.00 | 65.33 | 62.67 | 64.00 | 60.14 |
+|  | 7B-post-trained | 80.00 | 60.00 | 89.00 | 76.33 | 74.67 | 60.00 | <b>78.67</b> | 66.67 | 72.71 |
+|  | 70B-zero-shot | 64.00 | 47.00 | <b>93.00</b> | 68.00 | 56.00 | 72.00 | 25.33 | 70.67 | 61.14 |
+|  | 70B-post-trained | <b>90.00</b> | <b>70.00</b> | 87.00 | <u>82.33</u> | <b>78.67</b> | <b>76.00</b> | 61.33 | <u>72.00</u> | <u>76.43</u> |
+|  | <b>70B-ours</b> | 89.00 | <b>70.00</b> | <b>90.00</b> | <b>83.00</b> | 73.33 | <u>74.67</u> | <b>76.00</b> | <b>73.33</b> | <b>78.05</b> |
+| Llama-3 | 8B-zero-shot | 88.00 | <u>72.00</u> | 91.00 | <u>83.67</u> | 65.33 | 57.33 | 13.33 | 53.33 | 62.90 |
+|  | 8B-post-trained | <b>92.00</b> | <u>72.00</u> | 83.00 | <u>82.33</u> | <b>77.33</b> | <u>73.33</u> | <u>72.00</u> | 70.67 | 73.33 |
+|  | 70B-zero-shot | 69.00 | 67.00 | <b>95.00</b> | 77.00 | 42.67 | <u>70.67</u> | 16.00 | 52.00 | 58.90 |
+|  | 70B-post-trained | 91.00 | 70.00 | 89.00 | 83.33 | 73.33 | <b>74.67</b> | 44.00 | 69.33 | 73.05 |
+|  | <b>70B-ours</b> | <u>91.00</u> | <b>75.00</b> | <u>92.00</u> | <b>86.00</b> | 68.00 | <u>72.00</u> | <b>74.67</b> | <b>78.67</b> | <b>78.76</b> |
+| Llama-3.1 | 8B-zero-shot | 88.00 | 72.00 | 91.00 | <u>83.67</u> | 65.33 | 62.67 | 22.67 | 54.67 | 65.19 |
+|  | 8B-post-trained | 90.00 | 71.00 | 93.00 | <u>84.67</u> | 69.33 | 72.00 | 62.67 | 72.00 | 75.71 |
+|  | 70B-zero-shot | 85.00 | 63.00 | 93.00 | 80.33 | 72.00 | 76.00 | 16.00 | 61.33 | 66.62 |
+|  | 70B-post-trained | 91.00 | 69.00 | <b>95.00</b> | 85.00 | 69.33 | 80.00 | 29.33 | 69.33 | 71.86 |
+|  | 405B-zero-shot | 86.00 | 70.00 | 90.00 | 82.00 | 73.33 | 78.67 | 21.33 | 66.67 | 69.43 |
+|  | <b>70B-ours</b> | 90.00 | <u>74.00</u> | <u>93.00</u> | <u>85.67</u> | <b>74.67</b> | <u>77.33</u> | <u>70.67</u> | <u>76.00</u> | <u>79.38</u> |
+|  | <b>405B-ours</b> | <b>92.00</b> | <b>76.00</b> | <b>93.00</b> | <b>87.00</b> | <u>73.33</u> | <b>80.00</b> | <b>76.00</b> | <b>78.67</b> | <b>81.29</b> |
+
+245 training to the ToM contexts and environmental dynamics required. This dual advantage allows  
+246 a balanced performance across both task types (belief & goal inference), with an overall **81.3%**  
+247 **accuracy on multimodal tasks and exhibits a 4.6% improvement over the existing best baseline.**
+
+###### 248 3.3 STRONGER LARGE LMS ENHANCE LIKELIHOOD ESTIMATION IN BAYESIAN INFERENCE
+
+249 In the Bayesian framework, we explore the role of LMs in likelihood estimation and examine how  
+250 their scale and post-training affect performance across various ToM tasks. According to Tab.2, (i)  
+251 **our results demonstrate a positive correlation between LM size and ToM task performance.**  
+252 For instance, in the zero-shot setting of Llama-3.1, the 405B model achieves an accuracy of 69.43%,  
+253 outperforming both the 8B model (65.19%) and the 70B model (66.62%). Notably, the performance  
+254 of the 405B model approaches that of the post-trained Llama2-7B. Furthermore, the improvement  
+255 from 70B to 405B suggests that the benefits of scaling have not yet reached saturation, indicating  
+256 potential for further gains with larger models. (ii) **Post-training significantly enhances LMs’**  
+257 **performance on ToM tasks, even when Larger LMs already perform well in zero-shot scenarios.**  
+258 This effect is consistent across model sizes, from smaller models such as 7B/8B to larger models up to  
+259 70B, regardless of the specific version (Llama-2, Llama-3, or Llama-3.1). For belief inference tasks,  
+260 which are closely tied to world knowledge, post-training helps align the large models’ knowledge  
+261 more precisely with the input questions. For goal inference tasks, which are linked to environmental  
+262 dynamics, post-training refines the models’ atomic-level reasoning (i.e., predicting  $a$  based on  $s, b, g$ ),  
+263 resulting in greater improvements compared to belief inference. This suggests that post-training  
+264 provides a more substantial benefit for tasks that require dynamic reasoning. (iii) **Our weak-to-strong**  
+265 **control approach approximates the benefits of direct post-training in Bayesian inference.** When  
+266 comparing models such as Llama-2, Llama-3, and Llama-3.1, we find that direct post-training on the  
+267 70B model, even with adjusted hyperparameters from the 8B model (e.g., reducing the alpha value  
+268 from 32 to 16), does not produce results as robust as our method. We attribute this to the difficulty of  
+269 finding optimal hyperparameters for larger models, which require more extensive tuning. In contrast,  
+270 our weak-to-strong control, which uses a well-trained smaller LM to guide the larger LMs, allows for  
+271 more consistent improvements without the need for extensive hyperparameter trials.
+
+###### 272 3.4 DOWNSIZED SMALL LMS KEEP EFFECTIVENESS IN WEAK-TO-STRONG CONTROL
+
+273 In the Bayesian framework, prior experiments show that post-trained behaviours from small LMs can  
+274 effectively guide the pretrained capabilities of larger LMs during test time. To further study the role  
+275 of post-training to weak-to-strong control, Tab.3 investigates whether post-trained behaviours can be  
+276 learned effectively with reduced computational resources, while the pretrained capabilities of larger  
+277 LMs are still available. Specifically, we examine whether *downsized* smaller LMs can effectively
+
+{7}------------------------------------------------
+
+Table 3: Scaling-down effect on weak part (small LMs) in weak-to-strong controlled Bayesian reasoning. All models are based on Llama3.1. Rows of our method are highlighted in color.
+
+| LM | config | belief inference |  |  |  | goal inference |  |  |  |  | all |
+|-|-|-|-|-|-|-|-|-|-|-|-|
+|  |  | 1.1 | 1.2 | 1.3 | avg. | 2.1 | 2.2 | 2.3 | 2.4 | avg. |  |
+| 8B | zero-shot | 88.00 | 72.00 | 91.00 | 83.67 | 65.33 | 62.67 | 22.67 | 54.67 | 51.33 | 65.19 |
+|  | post-trained | 90.00 | 71.00 | 93.00 | 84.67 | 69.33 | 72.00 | 62.67 | 72.00 | 69.00 | 75.71 |
+|  | <b>8B <math>\leftrightarrow</math> 70B</b> | <b>90.00</b> | <b>74.00</b> | <b>93.00</b> | <b>85.67</b> | <b>74.67</b> | <b>77.33</b> | <b>70.67</b> | <b>76.00</b> | <b>74.67</b> | <b>79.38</b> |
+| 4B<br>wid. | zero-shot | 79.00 | 69.00 | 89.00 | 79.00 | 60.00 | 69.33 | 24.00 | 52.00 | 51.33 | 63.19 |
+|  | post-trained | 90.00 | 72.00 | 87.00 | 83.00 | 70.67 | 72.00 | 68.00 | <b>78.67</b> | 72.33 | 76.90 |
+|  | <b>4B-width <math>\leftrightarrow</math> 70B</b> | <b>90.00</b> | <b>71.00</b> | <b>90.00</b> | <b>83.67</b> | <b>74.67</b> | <b>74.67</b> | <b>76.00</b> | 73.33 | <b>74.67</b> | <b>78.52</b> |
+| 4B<br>dep. | zero-shot | 91.00 | <b>74.00</b> | 88.00 | 84.33 | 69.33 | <b>77.33</b> | 20.00 | 66.67 | 58.33 | 69.48 |
+|  | post-trained | 91.00 | 71.00 | 90.00 | 84.00 | 65.33 | 65.33 | 76.00 | <b>69.33</b> | 69.00 | 75.43 |
+|  | <b>4B-depth <math>\leftrightarrow</math> 70B</b> | <b>91.00</b> | 72.00 | <b>91.00</b> | <b>84.67</b> | <b>72.00</b> | 74.67 | <b>84.00</b> | 64.00 | <b>73.67</b> | <b>78.38</b> |
+
+Table 4: Transfer performance of the Bayesian method with different scaling settings (zero-shot, direct post-training, and our weak-to-strong control) from the apartment scenario to various unseen environments. All models are based on Llama3.1. Results are average accuracy of *belief inference|goal inference|overall* for each scenario. Detailed unseen scenarios and results are in §D.8&D.9.
+
+|  | solution | apartment ( <i>seen</i> ) | Andersen tales | ancient Egyptian | outer space | wild west | medieval castle |
+|-|-|-|-|-|-|-|-|
+| Raw | 70B-zero-shot | 80.3/56.3/66.6 | 83.6/60.6/70.2 | 83.6/60.6/69.3 | 84.0/58.0/69.1 | 82.6/57.6/68.3 | 82.6/57.6/68.3 |
+|  | 70B-post-trained | 85.0/62.0/71.8 | 84.6/66.3/74.1 | 84.6/66.3/75.3 | 83.0/66.0/73.2 | 81.0/65.0/71.8 | 81.0/65.0/71.8 |
+| Ours | <b>4B-wide <math>\leftrightarrow</math> 70B</b> | <b>83.6/74.6/78.5</b> | <b>84.0/75.3/79.0</b> | <b>83.0/75.3/79.1</b> | <b>82.6/75.3/78.4</b> | <b>84.0/74.6/78.6</b> | <b>84.6/73.0/78.0</b> |
+|  | <b>4B-depth <math>\leftrightarrow</math> 70B</b> | <b>84.6/73.6/78.3</b> | <b>85.0/71.3/77.1</b> | <b>85.3/71.3/77.9</b> | <b>81.6/71.0/75.5</b> | <b>83.3/71.3/76.4</b> | <b>83.3/64.0/72.2</b> |
+|  | <b>8B <math>\leftrightarrow</math> 70B</b> | <b>85.6/74.6/79.3</b> | <b>82.6/76.0/78.8</b> | <b>83.6/76.0/77.7</b> | <b>84.0/75.0/78.8</b> | <b>83.3/74.0/78.0</b> | <b>83.6/75.0/78.7</b> |
+|  | <b>8B <math>\leftrightarrow</math> 405B</b> | <b>87.0/77.0/81.3</b> | <b>85.8/76.0/80.2</b> | <b>86.0/76.3/80.4</b> | <b>87.2/75.5/80.5</b> | <b>85.3/76.0/79.9</b> | <b>85.6/75.2/79.7</b> |
+
+278 capture these post-trained behaviours and guide the pre-trained capabilities of larger LMs without  
+279 compromising performance. We use 8B LMs as baselines in normal size, and we also downsize  
+280 them to two 4B variants: Llama-3.1-Minitron-4B-Width, which reduces the hidden size of each  
+281 layer; and Llama-3.1-Minitron-4B-Depth, which cuts the number of layer (Sreenivas et al., 2024).  
+282 Despite their smaller size, they maintained comparable accuracy in weak-to-strong control. While  
+283 the 4B-Width LM underperformed the 4B-Depth LM in zero-shot scenarios, its post-training results  
+284 surpass the 4B-Depth, especially when controlling the 70B large LM, demonstrating its superior  
+285 transferability. These results highlight two key points: (i) downsizing the weak component can  
+286 still effectively guide larger LMs without a significant loss in accuracy, and (ii) reducing model  
+287 width, rather than depth, tends to be more generalizable, as deeper models demonstrate better  
+288 transferability—aligning with learning principles of the width-depth trade-offs in small-scale studies  
+289 (Telgarsky, 2016; Lu et al., 2017; Raghu et al., 2017).
+
+###### 290 3.5 TRANSFERABILITY OF SCALED BAYESIAN INFERENCE
+
+291 Although the small LMs are post-trained on the *apartment*, our overall framework is expected to  
+292 be stable and generalizable across various unseen scenarios since it has the structured Bayesian  
+293 framework and redirected larger LMs. To evaluate the transferability, Tab.4 compares our method  
+294 with baseline models in five previously unseen scenarios: *Andersen fairy tales*, *ancient Egyptian*,  
+295 *outer space*, *wild west*, and *medieval castle*. These diverse settings assess the generalisability of  
+296 our approach beyond the post-training scenario. When scaling the strong component (i.e., the large  
+297 controlled LMs) from 70B to 405B across these new scenarios, there are continuous improvements  
+298 in ToM understanding. **This demonstrates that the increased capacity of our scaled solution**  
+299 **enhances the transferability of ToM reasoning across multiple dynamic and unseen environ-**  
+300 **ments.** Furthermore, when the weak controller component is reduced from 8B to 4B, performance  
+301 remains stable, ranging between 78.0% and 79.15%. This result is comparable to the 79.05% accuracy  
+302 achieved in the original apartment scenario and also remains close to the performance of the 8B  
+303 LMs. This consistency suggests that downsizing the weak component does not significantly affect  
+304 performance, even in new and diverse test environments. **These results indicate that our approach**  
+305 **has strong potential for continually downsizing smaller LMs as controllers since they also are**  
+306 **capable of capturing the post-trained behaviours.** It allows saved resources to be potentially  
+307 allocated to stronger controlled LMs, while still keeping stable to scenarios unseen previously.
+
+{8}------------------------------------------------
+
+### 3.6 WEAK-TO-STRONG CONTROL REDIRECTS LARGE LM’S LATENT REASONING
+
+To quantify the influence of the weak controller during Bayesian inference, we analyze the changes in likelihood estimates before and after applying weak-to-strong control at each Bayesian step. As shown in Fig. 2, we sample ten test cases from five datasets and average the results. It illustrates the progressively increasing magnitude of likelihood changes as Bayesian inference progresses: (i) At the beginning of Bayesian inference, when the large LM is close to a general initial state, the likelihood changes are minimal. This is because the general state aligns closely with pretrained world knowledge, requiring little correction from ToM-specific behaviours; (ii) As the model approaches a more specialized final hypothesis, the likelihood estimates are increasingly redirected. This occurs because the specialized scenarios demand ToM-specific behaviours, which the post-trained small LMs are fine-tuned to capture. The post-trained small LMs are specifically fine-tuned to the ToM context, enabling them to model human actions, goals, beliefs, and environmental states across various ToM scenarios. **Overall, this analysis finds that the weak component progressively redirects the latent reasoning of larger models, guiding them toward more accurate ToM predictions among diverse scenarios throughout the Bayesian inference process.**
+
+![Figure 2: Line graph showing likelihood change across 9 Bayesian steps for five datasets: andersen fairy tales, ancient egyptian, outer space, wild west, and medieval castle. The y-axis is 'likelihood change' (0-6) and the x-axis is 'Bayesian state' (1-9). The 'medieval castle' dataset shows the highest peak at step 7, while 'wild west' shows a steady increase.](bedcca5cdf168e3508ef511d94ec514c_img.jpg)
+
+Figure 2: Line graph showing likelihood change across 9 Bayesian steps for five datasets: andersen fairy tales, ancient egyptian, outer space, wild west, and medieval castle. The y-axis is 'likelihood change' (0-6) and the x-axis is 'Bayesian state' (1-9). The 'medieval castle' dataset shows the highest peak at step 7, while 'wild west' shows a steady increase.
+
+Figure 2: Likelihood change during Bayesian inference under weak-to-strong control. Results are averaged over ten sampled cases across five different unseen scenarios.
+
+### 3.7 POST-TRAINING ALIGNS LARGE LM’S LIKELIHOOD ESTIMATION AT THE CONCEPT LEVEL
+
+Previous experiments demonstrated that post-training on small LMs can progressively guide the behaviour of large LMs throughout Bayesian inference. Now, we further focus on how post-trained small LMs influence large LMs’ likelihood estimation at the concept level. Fig. 3 shows the execution of ten inference trials with a temperature of 0.7. The scenario involves the agent James interacting with objects in an apartment, aiming to retrieve a bottle of wine. The initial state  $s_i$  is *pear in the basket, no wine*, the belief  $b_i$  is *wine in the cabinet*, the goal  $g_i$  is *obtain a bottle of wine*, and the action  $a_i$  is *open basket, walk to cabinet*. The baseline small LM assigns lower likelihoods to fine-grained item-level concepts (e.g., wine, wine glass). After post-training,
+
+![Figure 3: Three bar charts showing likelihood estimation across Rooms, Furnitures, and Items for three models: base small LM, post-trained small LM, and base large LM. The y-axis is likelihood (0.00-1.25). The x-axis lists various concepts. The 'post-trained small LM' consistently shows higher likelihoods for fine-grained items like 'wine' and 'wine glass' compared to the 'base large LM'.](e8ff6e66c77a8e96203c9f8db8f0986f_img.jpg)
+
+Figure 3: Three bar charts showing likelihood estimation across Rooms, Furnitures, and Items for three models: base small LM, post-trained small LM, and base large LM. The y-axis is likelihood (0.00-1.25). The x-axis lists various concepts. The 'post-trained small LM' consistently shows higher likelihoods for fine-grained items like 'wine' and 'wine glass' compared to the 'base large LM'.
+
+Figure 3: Likelihood estimation across different levels of concept granularity (rooms, furniture, and items) for base small LM, post-trained small LM, and base large LM. The Bayesian framework uses an LM as the **policy model** to infer actions conditioned on states, beliefs, and goals, where actions often refer to fine-grained item-level concepts (e.g., wine, wine glass). It highlights the trend of how each model allocates likelihood across these concept levels. The ToM scenario of this case is detailed at §D.7.
+
+{9}------------------------------------------------
+
+364 the small LM significantly shifts its focus toward item-level concepts, aligning its predictions more  
+ 365 closely with the action space. This adjustment increases the likelihood assigned to critical items like  
+ 366 wine and wine glass, which are necessary for accurately predicting the agent’s goal. Consequently,  
+ 367 post-training enables the small LM to better capture fine-grained details of the agent’s behaviour,  
+ 368 improving ToM predictions. In contrast, the large LM distributes its likelihood more evenly across  
+ 369 all levels, from rooms to items, reflecting a broad understanding of the environment. While this  
+ 370 approach captures general spatial awareness—identifying key areas like the kitchen and furniture like  
+ 371 the cabinet—it lacks the sharp focus on fine-grained details, such as wine and wine glass, which are  
+ 372 crucial for this task. As a result, the large LM may struggle with tasks that require precise, item-level  
+ 373 predictions. Overall, post-training helps the small LM focus on item-level concepts, making it more  
+ 374 effective for this task. While the large LM captures a broader understanding of the environment,  
+ 375 it benefits from post-trained behaviours that redirect its likelihood estimation toward fine-grained,  
+ 376 item-level predictions. **This finding reflects the role of post-trained small LMs in guiding large**  
+ 377 **LMs’ concepts toward more precise ToM reasoning.**
+
+###### 378 4 RELATED WORK
+
+379 **Modelling human mental states** There are many studies on understanding human behaviour by  
+ 380 classifying and predicting physical motion patterns (Aggarwal & Ryoo, 2011; Caba Heilbron et al.,  
+ 381 2015; Choi & Savarese, 2013; Shu et al., 2015). Beyond physical behaviour, some studies focus  
+ 382 specifically on modeling human mental states, i.e. ToM. ToM models have followed two broad  
+ 383 approaches: Bayesian methods and end-to-end deep learning. Bayesian ToM models (Baker et al.,  
+ 384 2017; Jara-Etinger, 2019; Shu et al., 2021) rely on structured probabilistic frameworks to infer  
+ 385 mental states from sparse observations of human behaviour. On the other hand, end-to-end models  
+ 386 such as ToMnet (Rabinowitz et al., 2018; Shu et al., 2021; Sclar et al., 2022) have been trained  
+ 387 directly on ToM tasks, learning relationships between data patterns without explicit causal models of  
+ 388 mental states (Sap et al., 2022; Zhi-Xuan et al., 2022; Ullman, 2023). More recently, neurosymbolic  
+ 389 reasoning systems use the neural models for feature extraction, while also incorporating probabilistic  
+ 390 models for structured reasoning (Wong et al., 2023; Ying et al., 2024; 2023). They face challenges in  
+ 391 dynamic and multimodal environments, where both physical and mental state reasoning are required.  
+ 392 Different from prior studies, our work operates in more complex and dynamic multimodal ToM  
+ 393 environments, where physical actions and mental state reasoning are intertwined.
+
+394 **Post-training LLMs for downstream tasks** Post-training can project the pre-trained capabilities  
+ 395 of LMs into downstream tasks such as dialogue generation (Ouyang et al., 2022), human value  
+ 396 alignment (Bai et al., 2022), and multimodal tasks (OpenAI, 2023b; Liu et al., 2023). Previous  
+ 397 approaches have also used reweighting techniques to adjust the output predictions of fine-tuned  
+ 398 LLMs, interpolating the effects of fine-tuning with pre-trained knowledge to achieve human-centered  
+ 399 and trustworthy text generation (Liu et al., 2021; Mitchell et al., 2024; Liu et al., 2024). More  
+ 400 recently, LLMs are post-trained as large action/policy models for decision-making in embodied  
+ 401 agents, allowing them to interact with and explore environments (Kim et al., 2024; Szot et al., 2024;  
+ 402 Li et al., 2024). Our study differs by framing LMs as **policy models** in the context of Bayesian inverse  
+ 403 inference, specifically to model human mental states. We address the limitations of existing ToM  
+ 404 methods by scaling large policy models at test time using a likelihood redirection strategy, reasoning  
+ 405 more accurately in complex ToM scenarios. See App.A.1 for additional discussions.
+
+###### 406 5 DISCUSSION AND CONCLUSION
+
+407 This study investigates scalable Bayesian inference in complex and dynamic ToM environments.  
+ 408 Existing methods based on normal-sized LMs often fail to provide sufficient reasoning capabilities  
+ 409 and world knowledge, particularly when used as likelihood estimators in diverse challenging ToM  
+ 410 scenarios. To overcome these limitations, we propose a method that abstracts and transfers the  
+ 411 post-trained behavioral patterns of smaller LMs. This approach allows the extensive world knowledge  
+ 412 of large LMs to be progressively redirected towards ToM reasoning tasks. The weak-to-strong control  
+ 413 mechanism enables scalable reasoning by using small, post-trained LMs to guide large LMs at test  
+ 414 time. This approach avoids additional post-training resources for large models, yet allows effective  
+ 415 test-time scaling of Bayesian ToM reasoning even in dynamic and complex scenarios.
+
+ Rest of paper (reference and Appendix) is removed.

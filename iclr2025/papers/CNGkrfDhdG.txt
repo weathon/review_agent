@@ -1,0 +1,404 @@
+
+
+{0}------------------------------------------------
+
+# INTEGRATING RELATION DEPENDENCIES AND TEXTUAL SEMANTICS FOR COHERENT LOGICAL REASONING OVER TEMPORAL KNOWLEDGE GRAPHS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Temporal knowledge graphs (TKGs) reflect the evolution patterns of facts, which can be summarized as logical rules and applied to forecast future facts. However, existing logical reasoning methods on TKGs face two limitations: 1) A lack of efficient strategies for extracting logical paths. 2) Insufficient utilization of structural and textual information. To bridge these gaps, we propose CoLR, a two-stage framework that mines relation dependencies and textual semantics for Coherent Logical Reasoning over TKGs. In the first stage, we construct a temporal relation structure graph (TRSG) composed of relations and cohesion weights between them. Besides, we define a novel time-fusion search graph (TFSG) along with TRSG to facilitate efficient and reliable temporal path searching. In the second stage, the textual content and timestamp sequences from these paths undergo encoding via a pre-trained language model and a time sequence encoder to accurately capture potential logical rules. Additionally, for quadruplets missing paths, historical edges sampled based on relation cohesion are used as supplements. Given the limitations of existing benchmark datasets in evaluating accuracy, generalization, and robustness, we construct three new datasets tailored to transductive, inductive, and few-shot scenarios, respectively. These datasets, combined with four widely-used real-world datasets, are employed to evaluate our model comprehensively. Experimental results demonstrate that our approach significantly outperforms existing methods across all three scenarios. Our code is available at <https://anonymous.4open.science/r/CoLR-0839>.
+
+## 1 INTRODUCTION
+
+Temporal Knowledge Graphs (TKGs) are a pivotal method for representing the dynamic facts of the real world. Due to their high application value in personalized recommendations (Wang et al., 2022) and conversational systems Shang et al. (2022), they have attracted widespread research attention. Reasoning tasks on TKGs encompass not only filling missing links within historical subgraphs (interpolation reasoning) but also predicting future interactions among entities by analyzing historical patterns (extrapolation reasoning). However, to achieve extrapolation reasoning, inductive capabilities are significant, as new entities emerge over time. As shown in Figure 1, once *Donald Trump* assumes the presidency, he is regarded as a new entity. Therefore, more fundamental connections between facts should be uncovered, such as the logical correlations between relations.
+
+Recently, several TKG Reasoning (TKGR) methods have been proposed, where multi-hop logical reasoning methods learn logical rules from the historical multi-hop relation paths Liu et al. (2022); Niu & Li (2023); Xiong et al. (2023); Mei et al. (2024). During the reasoning process, these methods predict target entities by applying these rules to give confidence scores to each candidate. Assuming the stability of these logical rules, such methods can effectively generalize to inductive scenarios, with the logical rules offering interpretability for the reasoning process. For example, *Imran Khan* in Figure 1(a) can be found as logical correlation between relations *Express intent to meet or negotiate* and *Make a visit* has been learned in Figure 1(b)
+
+The core of multi-hop logical reasoning lies in finding reliable multi-hop paths and their scoring strategies. Traditional symbolic methods Omran et al. (2019); Liu et al. (2022) perform extensive
+
+{1}------------------------------------------------
+
+![Figure 1: Inductive inference over TKGs. (a) Training Graph: A temporal knowledge graph showing entities Colombia, Barack Obama, Milliyet, and South Africa connected by relations 'Make a visit' (2015-12-29), 'Express intent to meet or negotiate' (2015-12-23), 'Threaten' (2015-12-21), and 'Make statement' (2015-12-26). (b) Inductive Inference: The same graph with new predicted relations (dashed lines) connecting India to Barack Obama ('Make a visit' 2018-09-28), Donald Trump to China ('Make statement' 2015-12-26), Imran Khan to China ('Make a visit' 2018-10-09), and Imran Khan to China ('Express intent to meet or negotiate' 2018-09-28).](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 1: Inductive inference over TKGs. (a) Training Graph: A temporal knowledge graph showing entities Colombia, Barack Obama, Milliyet, and South Africa connected by relations 'Make a visit' (2015-12-29), 'Express intent to meet or negotiate' (2015-12-23), 'Threaten' (2015-12-21), and 'Make statement' (2015-12-26). (b) Inductive Inference: The same graph with new predicted relations (dashed lines) connecting India to Barack Obama ('Make a visit' 2018-09-28), Donald Trump to China ('Make statement' 2015-12-26), Imran Khan to China ('Make a visit' 2018-10-09), and Imran Khan to China ('Express intent to meet or negotiate' 2018-09-28).
+
+Figure 1: Inductive inference over TKGs: training with historical data and inferring the future facts involving new entities, where the quadruplets to be predicted are connected by dashed lines.
+
+random walks to sample relation paths and assess rule confidence with global frequency information. However, this process may incur substantial computational overhead and potentially overlook low-frequency rules. Recent methods Xiong et al. (2023); Mei et al. (2024) simplify the rule learning process by encoding relation paths and evaluating confidence based on the semantic similarity between paths. Nonetheless, the majority of paths between the subject and object are predominantly irrelevant noise paths, which may potentially interfere with inference. Moreover, existing methods exhibit significant limitations when confronted with quadruplets lacking direct connectivity between subject and object entities. **Furthermore, these methods insufficiently utilize the rich structural and textual information in temporal graphs. Symbolic methods leverage the frequency information of relations, while neural methods focus on graph structural information. Both overlook the positive role of the structural dependencies between relations and textual semantics in logical reasoning.**
+
+To address these challenges, we propose a novel **Coherent Logical Reasoning** method, named CoLR, which is a two-stage portable framework designed to handle inductive scenarios. In the first stage, we introduce a temporal relation structure graph (TRSG), where nodes represent relations, and weighted edges reflect the cohesion between relations. The main idea comes from the concept of sentence cohesion in linguistics Halliday & Hasan (1976), where words in a coherent sentence should have semantic associations. Similarly, effective relation paths should also demonstrate close connections between their elements. We design a time-fusion search graph (TFSG) and develop a novel search algorithm to guide path selection along with cohesion weights between relations, thus efficiently extracting reliable paths. If no connected path exists, we sample historical edges based on relation cohesion and temporal dependency as information supplements. In the second stage, we extract textual sequences and timestamp sequences of paths, and introduce a pre-trained language model (PLM) and time sequence encoder for temporal and logical semantic encoding. The textual semantics embedded in textual descriptions helps reveal the logical correlations between relations, such as "Express intent to meet or negotiate" and "make a visit" in Figure 1. During the reasoning process, we combine the embeddings of text and timestamps and evaluate the confidence of quadruplets based on semantic similarity.
+
+The proposed CoLR framework demonstrates significant transferability to previous logical reasoning methods, effectively optimizing their learning efficiency and reasoning performance. Notably, we introduce a novel confidence evaluation function for discrete logical reasoning methods, predicated on the concept of cohesion. This innovative approach circumvents the substantial redundant computations inherent in conventional methods while maintaining accuracy.
+
+To comprehensively evaluate the efficacy of our methodology, we construct three novel datasets that address the deficiencies in existing benchmarks, particularly in assessing accuracy, generalization, and robustness. We conduct extensive experimentation across seven distinct datasets, encompassing three pivotal experimental paradigms: transductive, inductive, and few-shot learning scenarios. Experimental results show that our proposed method consistently achieves state-of-the-art (SOTA) results under the three settings. Comprehensive ablation experiments and case studies verify the effectiveness of the components we proposed in capturing the logical correlations between relations and enhancing performance.
+
+## 2 RELATED WORK
+
+**Representation-based methods for TKGR.** Temporal Knowledge Graph Embedding (TKGE) is a classic representation-based method for TKGR tasks. These methods project the TKG into
+
+{2}------------------------------------------------
+
+various complex embedding spaces, such as quaternion and hyperbolic manifold spaces, to learn vector representations of entities, relations, and timestamps. They have achieved significant success in interpolation settings, exemplified by methods like TTransE Leblay & Chekol (2018), TA-DisMult García-Durán et al. (2018), TNTCompEx Lacroix et al. (2020), BoxE Aboud et al. (2020), TeLM Xu et al. (2021), HGE Pan et al. (2024). However, due to a lack of scalability, these methods struggle to adapt to extrapolation reasoning. Recent studies have utilized RGCN Schlichtkrull et al. (2018) to aggregate entity representations across historical snapshots and evolve these representations over time using RNNs to address future time predictions. Despite their advancements, these methods still heavily rely on entity representations, which makes them less suitable for inductive scenario He et al. (2021); Jin et al. (2020b); Li et al. (2021; 2022b;a); Liang et al. (2023); Zhang et al. (2023a;b); Li et al. (2024). Additionally, the black-box nature of complex neural networks makes their predictive outcomes difficult to interpret intuitively.
+
+**Rule-based methods for TKGR.** Rule-based methods learn first-order logical rules from the graph and apply these rules to infer missing links. These methods also achieve stable predictions in inductive scenarios, as demonstrated by AMIE+ Galárraga et al. (2015), DRUM Sadeghian et al. (2019) and RNNLogic Qu et al. (2021). In TKGs, timestamps mark the sequence of events, making the logical associations within them easier to uncover. Therefore, symbolic methods like StreamLearnerOman et al. (2019), TLogic Liu et al. (2022) and LCGE Niu & Li (2023) attempt to sample historical multi-hop paths and extract reliable temporal logic rules from them. These rules, which do not change with time or entities, are naturally suited for inductive prediction of future events and provide interpretable reasoning. However, these methods require extensive random walks and corresponding rule evaluations, leading to high computational costs. Recent approaches have introduced GRUs to encode paths specific to query quadruplets and assess the credibility of rules based on semantic similarity, thus simplifying rule learning and speeding up the reasoning process. This strategy, which integrates neural methods, allows for more flexible and comprehensive learning of logical rules, achieving superior performance in TKGR tasks. However, these methods Mei et al. (2022); Xiong et al. (2023); Mei et al. (2024) still struggle with the absence of connected paths from subject to object. Moreover, they overlook the positive influence of the logical semantics embedded in textual information on the learning of logical rules.
+
+## 3 PRELIMINARIES
+
+**Temporal Knowledge Graph(TKG).** A TKG  $\mathcal{G}$  is a complex structure used to record known facts, where  $\mathcal{G} \subseteq \mathcal{E} \times \mathcal{R} \times \mathcal{E} \times \mathcal{T}$ ,  $\mathcal{E}$  represents the set of entities,  $\mathcal{R}$  represents the set of relations, and  $\mathcal{T}$  is the set of timestamps. At a specific point in time, all facts make up a temporal subgraph  $\mathcal{G}_i = \{(s_{ij}, r_{ij}, o_{ij}, t_i)\}$ , where  $s_{ij}, o_{ij} \in \mathcal{E}$  represent the subject and object of the  $j$ th event in the subgraph, respectively,  $r_{ij} \in \mathcal{R}$  represents the relation, and  $t_i \in \mathcal{T}$  is the  $i$ -th timestamp. The entire TKG can be divided along timestamps into a series of consecutive temporal subgraphs:  $\mathcal{G} = \{\mathcal{G}_i\}_{1 \leq i \leq |\mathcal{T}|}$ . To enhance the connectivity of the graph, each relation  $r \in \mathcal{R}$  is supplemented with an inverse relation  $r^-$ , and the corresponding inverse edges are denoted as  $(o, r^-, s, t)$ .
+
+**Link Forecasting.** Link forecasting is one of the core tasks of TKGR. This task involves a historical graph  $\mathcal{G}$  containing known facts, with the maximum timestamp  $\hat{t}$ , and aims to predict future possible links. Specifically, for a query quadruplet in the form  $(s, r_q, ?, t_q)$ , where  $t_q > \hat{t}$ , an ordered list of candidate entities needs to be generated. During the training process, the goal is to increase the score of the quadruplets comprising the correct candidate entities and decrease the score of those with incorrect candidates. For cases where the subject is being predicted, the query quadruplet is formalized as  $(o, r_q^-, ?, t_q)$ .
+
+**Temporal Logical Rule.** A first-order logical rule is composed of a rule head and several binary rule body atoms connected in sequence, and can be formalized in a TKG as a first-order temporal logical rule of length  $l$ :
+
+$$\Upsilon_l : P_{l+1}(x, y, t_{l+1}) \leftarrow P_1(x, z_1, t_1) \wedge P_2(z_1, z_2, t_2), \dots, \wedge P_l(z_{l-1}, y, t_l), \quad (1)$$
+
+where  $x$  represents the subject entity,  $y$  represents the object entity, and  $z_i$  can be any entity in the graph. Each  $P_i$  represents a predicate, typically instantiated as a relation.  $t_1, t_2, \dots, t_{l+1}$  denote the timestamps for each atom and must satisfy a non-decreasing constraint:  $t_1 \leq t_2 \leq \dots \leq t_l < t_{l+1}$ .
+
+The left side of  $\Upsilon_l$  is the rule head  $H_\Upsilon$ , and the right side is the rule body  $B_\Upsilon$ . If  $B_\Upsilon$  is true and satisfies the temporal constraints, then its  $H_\Upsilon$  is inferred to be true. In a TKG, if  $B_\Upsilon$  can be grounded,
+
+{3}------------------------------------------------
+
+![Figure 2: (a) Knowledge Graph with nodes e1-e4 and relations r1-r3. (b) RSG of (a) showing a graph with nodes r1-r3 and a cohesion matrix R_coh. (c) Temporal Knowledge Graph with nodes e1-e3 and relations r1-r3. (d) TRSG of (c) showing a graph with nodes r1-r3 and a temporal cohesion matrix R_coh^1.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+162  
+163  
+164  
+165  
+166  
+167  
+168  
+169  
+170  
+171  
+172
+
+(a) Knowledge Graph
+
+(b) RSG of (a)
+
+(c) Temporal Knowledge Graph
+
+(d) TRSG of (c)
+
+Figure 2: (a) Knowledge Graph with nodes e1-e4 and relations r1-r3. (b) RSG of (a) showing a graph with nodes r1-r3 and a cohesion matrix R\_coh. (c) Temporal Knowledge Graph with nodes e1-e3 and relations r1-r3. (d) TRSG of (c) showing a graph with nodes r1-r3 and a temporal cohesion matrix R\_coh^1.
+
+173  
+174  
+175
+
+Figure 2: A simple example of an RSG and a TRSG, where yellow nodes and green nodes represent entities and relations, respectively. The inverse and self-loop edges are omitted for brevity.
+
+176  
+177  
+178
+
+meaning all variables can be replaced with entities, relations, and timestamps from the TKG, it is considered to be true. The grounded  $B_T$  represents a multi-hop temporal path within the TKG, accordingly,  $H_T$  can be grounded as a quadruplet.
+
+## 4 CONSTRUCTING TEMPORAL RELATION STRUCTURE GRAPH
+
+### 4.1 RELATION STRUCTURE GRAPH
+
+185  
+186
+
+To capture the structural dependencies between relations, we define the positional patterns of relations as follows:
+
+187  
+188
+
+**Definition 1.** Given a directed knowledge graph  $\mathcal{G}$ , a node  $e$ , and its connected edge set  $\mathcal{F}$ , the positional pattern between any two relations  $r_1$  and  $r_2$  in  $\mathcal{F}$  ( $r_1 = r_2$  is possible) is:
+
+- 189  
+190  
+191  
+192  
+193
+- (i) *Coherent*:  $e$  serves as the subject for  $r_1$  and the object for  $r_2$ , or as the object for  $r_1$  and the subject for  $r_2$ ;
+ - (ii) *Homologous*:  $e$  serves as the subject for both  $r_1$  and  $r_2$ ;
+ - (iii) *Converging*:  $e$  serves as the object for both  $r_1$  and  $r_2$ .
+
+194  
+195  
+196  
+197  
+198  
+199  
+200  
+201
+
+If two relations are always connected to the same entity and exhibit the same positional pattern, then there is a definite structural dependency between them. We define structural dependencies based on positional patterns as *cohesion*, *homology*, and *convergence*. Some recent research endeavors Lee et al. (2023); Chen et al. (2021) have explored the optimization of graph neural networks by leveraging the homogeneity and homology between relations. Our approach, however, diverges significantly from these efforts. As a logical reasoning method, our primary focus is on the principle of cohesion. We estimate cohesion weights by calculating the frequency of two relations occurring in the coherent positional pattern.
+
+202  
+203  
+204  
+205  
+206  
+207  
+208  
+209
+
+For a static knowledge graph  $\mathcal{G} = (\mathcal{E}, \mathcal{R}, \mathcal{F})$ , we define two entity-relation matrices  $\mathbf{E}_s \in \mathbb{R}^{|\mathcal{E}| \times 2|\mathcal{R}|}$  and  $\mathbf{E}_o \in \mathbb{R}^{|\mathcal{E}| \times 2|\mathcal{R}|}$ , where the subscripts "s" and "o" represent subject and object, respectively.  $\mathbf{E}_s[i, j]$  denotes the element at the  $i$ -th row and  $j$ -th column, recording the number of times the entity  $e_i$  in the graph is connected as a subject to the relation  $r_j$  (including the inverse relation). Similarly,  $\mathbf{E}_o[i, j]$  records the number of times  $e_i$  is connected as an object to the relation  $r_j$ . Considering the variance in interaction frequencies of entities within the graph, we introduce a degree diagonal matrix for entities to compute the frequency of each entity's interaction with relations, given by  $\tilde{\mathbf{E}}_s = \mathbf{D}_\sigma^{-1} \mathbf{E}_s$ , and  $\tilde{\mathbf{E}}_o = \mathbf{D}_\sigma^{-1} \mathbf{E}_o$ . Subsequently, a cohesion matrix is defined as:  $\tilde{\mathbf{R}}_{coh} = \tilde{\mathbf{E}}_s^T \tilde{\mathbf{E}}_s$ .
+
+210  
+211  
+212  
+213  
+214  
+215
+
+A coherent relation structure graph (RSG) can be constructed through  $\tilde{\mathbf{R}}_{coh}$ . As shown in Figure 2(a),  $\tilde{\mathbf{R}}_{coh}[i, j]$  represents the weight of the edge between nodes  $i$  and  $j$  in the graph. In multi-hop logical reasoning, a multi-hop relation path should be coherent, thus the RSG can quickly assess the confidence of a rule based on cohesion between relations. However, the method for constructing RSG in static graphs cannot be directly applied to TKGs. Because TKGs consist of multiple subgraph sequences, the structural dependencies between relations exist not only within the same subgraph but also across different subgraphs.
+
+{4}------------------------------------------------
+
+![Figure 3: Overview of CoLR framework. The diagram illustrates four stages: 1. Temporal knowledge graph (TKG) with nodes s, o, t1, t2, t3, t4 and edges e1, e2, e3, e4. 2. Temporal relation structure graph (a) and Time-fusion search graph (b). 3. Query quadruplet (s, o, t1, t2) and Temporal paths. 4. Time Sequence Encoder and Pre-trained Language Model (PLM) processing the quadruplet and paths to produce a score.](690fce4fb5c9cbb8beb560cb2a3fcbeb_img.jpg)
+
+Figure 3: Overview of CoLR framework. The diagram illustrates four stages: 1. Temporal knowledge graph (TKG) with nodes s, o, t1, t2, t3, t4 and edges e1, e2, e3, e4. 2. Temporal relation structure graph (a) and Time-fusion search graph (b). 3. Query quadruplet (s, o, t1, t2) and Temporal paths. 4. Time Sequence Encoder and Pre-trained Language Model (PLM) processing the quadruplet and paths to produce a score.
+
+Figure 3: Overview of CoLR framework. The green and purple lines represent the relations and the cohesion weights between them, respectively.
+
+### 4.2 TEMPORAL RELATION STRUCTURE GRAPH
+
+In a TKG, the closer the time, the stronger the association between facts. Thus for link forecasting tasks, reasoning is often based on the most recent facts Liu et al. (2022); Li et al. (2022a); Mei et al. (2022). To align with the reasoning phase, we define a time window  $\omega$  and focus on the relation dependencies within  $\omega$  subgraphs. Theorem 1 demonstrates the calculation method for the coherent matrix with  $\omega$  time windows  $\mathbf{R}_{coh}^\omega$ .
+
+**Theorem 1.** Let  $\mathcal{G} = \{\mathcal{G}_i\}_{1 \leq i \leq |\mathcal{T}|}$  be a TKG,  $\mathbf{E}_s^i$  be the subject-relation matrix of the  $i$ -th subgraph  $\mathcal{G}_i$ ,  $\mathbf{E}_o^i$  be the corresponding object-relation matrix,  $0 < \omega \leq |\mathcal{T}|$  be a time window. A cohesion relation structure matrix  $\mathbf{R}_{coh}^\omega$  without normalization can be calculated as follows:
+
+$$\mathbf{R}_{coh}^\omega = \sum_{j=\omega}^{|\mathcal{T}|} \left( \sum_{i=j-\omega+1}^j \mathbf{E}_o^{i,T} \right) \mathbf{E}_s^j + \sum_{j=1}^{\omega-1} \left( \sum_{i=1}^j \mathbf{E}_o^{i,T} \right) \mathbf{E}_s^j. \quad (2)$$
+
+We illustrate formulation (2) with the following simple example. For a detailed proof, refer to Appendix B.1.
+
+**Example 1.** Assume  $\mathcal{G} = \{\mathcal{G}_1, \mathcal{G}_2, \mathcal{G}_3\}$ ,  $\omega = 2$ , the coherent matrix can be calculated by
+
+$$\begin{aligned} \mathbf{R}_{coh}^2 &= (\mathbf{E}_o^{1,T} + \mathbf{E}_o^{2,T}) \mathbf{E}_s^2 + (\mathbf{E}_o^{2,T} + \mathbf{E}_o^{3,T}) \mathbf{E}_s^3 + \mathbf{E}_o^{3,T} \mathbf{E}_s^1 \\ &= \sum_{j=2}^3 \left( \sum_{i=j-1}^j \mathbf{E}_o^{i,T} \right) \mathbf{E}_s^j + \sum_{j=1}^1 \left( \sum_{i=1}^j \mathbf{E}_o^{i,T} \right) \mathbf{E}_s^j. \end{aligned}$$
+
+Following Section 4.1, we introduce degree matrices  $\mathbf{D}_s^i$  and  $\mathbf{D}_o^i$  to normalize the matrices of each subgraph  $\tilde{\mathbf{E}}_s^i = \mathbf{D}_s^i \mathbf{E}_s^i$  and  $\tilde{\mathbf{E}}_o^i = \mathbf{D}_o^i \mathbf{E}_o^i$ , and replace them in formulation (2) to obtain the matrix  $\tilde{\mathbf{R}}_{coh}^\omega$ . We normalize the matrix  $\tilde{\mathbf{R}}_{coh}^\omega$  to obtain the final temporal cohesion matrix:
+
+$$\hat{\mathbf{R}}_{coh}^\omega = \frac{\tilde{\mathbf{R}}_{coh}^\omega}{\|\tilde{\mathbf{R}}_{coh}^\omega\|_2 + \delta}, \quad (3)$$
+
+where  $\delta \in (0, 0.1)$  is a parameter introduced to prevent the denominator from being zero. Similar to Section 4.1, a TRSG can be constructed based on  $\hat{\mathbf{R}}_{coh}^\omega$ , as illustrated in Figure 2(b). We provide an analysis of the computational complexity of TRSG construction in Appendix A.3.
+
+## 5 COHERENT LOGICAL REASONING OVER TKGs
+
+### 5.1 TIME-FUSION PATH EXTRACTING
+
+As illustrated in Figure 3, in the first stage, our goal is to extract temporal logical paths corresponding to query quadruplets. To achieve this, we have designed a time-fusion algorithm. Specifically,
+
+{5}------------------------------------------------
+
+for a query quadruplet  $(s, r_q, o, t_q)$ , we retrieve the multi-hop neighbors of  $s$  and  $o$  from historical subgraphs and construct a time-fusion search graph (TFSF)  $\mathcal{G}_{tf}$  using their intersections, as illustrated in Figure 3(b). Each entity in  $\mathcal{G}_{tf}$  is annotated by a timestamp, denoted as  $e_i^t = [e_i, t]$ . Correspondingly, a  $l$ -hop path  $(e_1^t, r_1, e_2^t, \dots, e_{l-1}^t, r_l, e_l^{t+1})$  in  $\mathcal{G}_{tf}$  can be converted to a unique temporal path  $\{(e_1, r_1, e_2, t_1), \dots, (e_l, r_l, e_{l+1}, t_l)\}$ .
+
+The path searching starts from  $o^{t_j}$  until reaching  $s^{t_i}$ , where  $t_i \leq t_j$ . The selection of the next edge is jointly determined by the time interval and the relation cohesion. For current entity  $e_j^t$ , probability of next edge over time is given by
+
+$$P_{time} = \frac{\exp(t_n - t_j)}{\sum_{(e_i^t, r_i, e_j^t) \in \mathcal{N}_j} \exp(t_i - t_j)}, \quad (4)$$
+
+where  $\mathcal{N}_j$  is the neighbors of  $e_j^t$ ,  $t_n$  is the timestamp of next edge. Similarly, the probability of cohesion if given by
+
+$$P_{coh} = \frac{\exp(\hat{\mathbf{R}}_{coh}^w[r_j, r_n])}{\sum_{(e_i^t, r_i, e_j^t) \in \mathcal{N}_j} \exp(\hat{\mathbf{R}}_{coh}^w[r_j, r_i])}, \quad (5)$$
+
+where  $\hat{\mathbf{R}}_{coh}^w[r_j, r_i]$  represents the cohesion when  $r_j$  is next to  $r_i$  in a temporal path. We combine  $P_{time}$  and  $P_{coh}$  to get the score for the next edge of  $e_j^t$ :  $P_{next} = P_{time} + P_{coh}$ .
+
+A path with  $l$  hop  $(o^{t_j}, r_1, e_1^t, \dots, e_{l-1}^t, r_l, s^{t_i})$  is reversed to  $(s^{t_i}, r_l, e_{l-1}^t, \dots, e_1^t, r_1, o^{t_j})$ , forming a temporal path. To ensure the reliability of the extracted paths, we limit the path length to  $L$  and the number of paths to  $K$ . If no path is found, we employ path supplement strategy (PSS) to collect historical contextual descriptions for these quadruplets. Specifically, we utilize  $P_{next}$  to sample an edge from the historical neighbor edges of either  $s$  and  $o$  as a historical supplementary path. The sampled path offers crucial contextual descriptions for  $(s, r_q, o, t_q)$ , aiding in determining its significance. The detailed algorithm implementation are shown in Appendix A.1.
+
+### 5.2 JOINT ENCODING OF TIME AND TEXT SEQUENCE
+
+Given a temporal path  $\{(s, r_1, e_1, t_1), \dots, (e_{l-1}, r_l, o, t_l)\}$ , we separate the timestamps to obtain an entity-relation path  $(s, r_1, e_1, \dots, r_l, o)$  and a timestamp sequence  $(t_1, t_2, \dots, t_l)$ .
+
+**Text Sequence Encoding.** The text sequence encompasses a textual description of entities and relations in  $(s, r_1, e_1, \dots, r_l, o)$ . In contrast to previous approaches, we incorporate the entire path, not just the relation path, to generate text representations. We utilize ";" to delimit the text of each entity or relation, with "[SEP]" marking the end of a sentence. In the case of inverse relation  $r^-$ , we reverse the textual order of  $r$  to generate the corresponding text. Then we introduce a PLM to encode the text sequence:
+
+$$\mathbf{h}_{text} = \mathcal{M}(\Phi([\Gamma(s); \Gamma(r_1); \dots; \Gamma(r_l); \Gamma(o)])), \quad (6)$$
+
+where  $\Phi(\cdot)$  denotes any PLM encoder,  $\mathcal{M}$  is meanpooling operation,  $\Gamma(\cdot)$  represents the textual description of an entity or a relation.  $\mathbf{h}_{text} \in \mathbb{R}^d$  is the textual representation of the temporal path.
+
+**Time Sequence Encoding.** We compute the difference between each element in  $(t_1, t_2, \dots, t_l)$  and  $t_q$  to create a time sequence  $(t_q - t_1, t_q - t_2, \dots, t_q - t_l)$ . The time sequence reflects the temporal feature associated with logical rules. For instance, occurrences of "make a visit" and "have a visit" tend to coincide. When they are distant in time, they are likely to be logically unrelated. We leverage Time2Vec Kazemi et al. (2019) and GRU to encode the time sequence:
+
+$$\phi(t) = \sqrt{\frac{1}{d}} [\cos(\mathbf{w}_t + \mathbf{p}_1), \dots, \cos(\mathbf{w}_d t + \mathbf{p}_d)], \quad (7)$$
+
+$$\mathbf{h}_{time} = GRU([\phi(t_q - t_1), \phi(t_q - t_2), \dots, \phi(t_q - t_l)]),$$
+
+where  $\mathbf{w}_t, \mathbf{p}_i \in \mathbb{R}^d$  are learnable parameter vectors,  $\mathbf{h}_{time} \in \mathbb{R}^d$  is the temporal representation of the temporal path. Finally, a MLP is used to combine  $\mathbf{h}_{text}$  and  $\mathbf{h}_{time}$  to generate the final representation:  $\mathbf{h}_p = MLP([\mathbf{h}_{text}; \mathbf{h}_{time}])$ . The two-stage framework of CoLR ensures high scalability, which is discussed in detail in Appendix A.2.
+
+{6}------------------------------------------------
+
+### 5.3 TRAINING REGIME
+
+Consistent with prior research Mei et al. (2022); Su et al. (2023), we employ semantic similarity to evaluate the confidence of each temporal path. Then we score the query quadruplet with the highest confidence among all temporal paths, normalized as follows:
+
+$$score(q) = \max_{p_i \in \mathcal{P}} \{cosine(\mathbf{h}_q, \mathbf{h}_{p_i})\}, \quad (8)$$
+
+where  $cosine(\cdot, \cdot)$  is cosine similarity function,  $\mathbf{h}_{p_i}$  denotes the embedding of  $i$ -th path in extracted temporal paths set  $\mathcal{P}$ . To train our model, we treat the facts in the TKG as positive quadruplets and generate  $N$  corresponding negative quadruplets by replacing the subject or object. During training, we leverage cosine embedding loss to optimize our model, which is formulated as follows:
+
+$$\mathcal{L} = \begin{cases} 1 - score(q) & y = 1, \\ \max(0, score(q) - \gamma) & y = -1, \end{cases} \quad (9)$$
+
+where  $\gamma$  is the margin of confidence,  $y \in \{-1, 1\}$  denotes the label of a quadruplet.
+
+## 6 EXPERIMENTAL RESULTS
+
+### 6.1 EXPERIMENT SETUP
+
+**Dataset & Evaluation.** To validate the performance of our model in a transductive setting, we initially selected four public datasets for comparative experiments on link forecasting task. These datasets include ICEWS14 García-Durán et al. (2018), ICEWS18 García-Durán et al. (2018), ICEWS05-15 Jin et al. (2020a) and YAGO Mahdisoltani et al. (2015). However, traditional benchmark datasets lack a comprehensive evaluation of accuracy, generalization, and robustness, which according to transductive, inductive, and few-shot scenarios. Therefore, we design three datasets based on the ACLED (The Armed Conflict Location & Event Data Project)<sup>2</sup> and ICEWS: ACLED2023, ACLED-IND, and ICEWS14-FS. These datasets aim to address specific issues in existing transductive, inductive, and few-shot datasets:
+
+- **ACLED2023:** To address the potential issue of information leakage due to the outdated nature of existing datasets, where PLMs may learn from historical event texts, we compiled all events from 2023 available in the ACLED database to create ACLED2023. This mitigates the risk of information leakage since the release date of PLMs like ALBERT was in 2020, well before the events in ACLED2023 occurred.
+- **ACLED-IND:** Traditional approaches for partitioning inductive datasets typically segment the entity set such that  $(\mathcal{E}_{train} \cap \mathcal{E}_{valid} \cap \mathcal{E}_{test} = \emptyset)$ , while ensuring that  $(\mathcal{R}_{valid} \in \mathcal{R}_{train})$  and  $(\mathcal{R}_{test} \in \mathcal{R}_{train})$ . However, this can disrupt the temporal and topological features of TKGs. For instance, in the ICEWS14 dataset, *China* and *United States* are among the most frequently occurring entities. If they are categorized in the same set, it could result in many related facts being excluded from other sets, severely affecting the graph’s connectivity and the capture of temporal features. Therefore, we retrieved events from ACLED occurring in Asia between 2019-2022 for the training set, and events from 2023 in Europe and the Americas for the validation and test sets, respectively. This design ensures that  $(\mathcal{E}_{train} \cap \mathcal{E}_{valid} = \emptyset)$  and  $(\mathcal{E}_{train} \cap \mathcal{E}_{test} = \emptyset)$ , maintaining the structural integrity of the training  $[(\mathcal{G}_{train})]$ , validation  $[(\mathcal{G}_{valid})]$ , and test  $[(\mathcal{G}_{test})]$  graphs.
+- **ICEWS14-FS:** To address the lack of exploration in few-shot scenarios in existing benchmark datasets, we created the ICEWS14-FS dataset based on the ICEWS14 dataset by extracting 10% of events at each timestamp. This process is designed to test the performance of models in information-sparse environments.
+
+For a comprehensive evaluation of our CoLR, we utilized classic link prediction metrics, including MRR and Hits@k, to assess our framework’s performance across various tasks. Details on the definitions and calculation methods of these metrics can be found in Appendix C.1. Additionally, a comparison of the datasets is provided in Appendix C.3.
+
+<sup>2</sup><https://acleddata.com/>
+
+{7}------------------------------------------------
+
+Table 1: Comparison results for transductive and few-shot settings on ICEWS14, ICEWS18, ICEWS05-15, ACLED2023 and ICEWS14-FS.
+
+| Dataset | Metrics | TTransE | TA-DisMult | RE-GCN | TIRGN | CENET | HGLS | RPC | TLogic | ALRE-IR | ILR-LR | CoLR | + Improve(%) |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+| ICEWS14 | MRR | 12.86 | 26.22 | 37.78 | 44.04 | 41.30 | 40.06 | 44.55 <sup>†</sup> | 40.42 | <b>54.01<sup>†</sup></b> | 52.42 | <b>75.72</b> | 21.71 |
+|  | His@1 | 3.14 | 16.83 | 27.17 | 33.83 | 32.58 | 28.69 | 34.87 <sup>†</sup> | 32.11 | <b>44.79<sup>†</sup></b> | 38.23 | <b>66.12</b> | 23.33 |
+|  | His@3 | 15.72 | 29.72 | 42.50 | 48.95 | 45.70 | 49.89 <sup>†</sup> | 45.41 | <b>61.16<sup>†</sup></b> | 60.42 | <b>83.31</b> | 22.15 |  |
+|  | His@10 | 33.65 | 33.65 | 58.84 | 63.84 | 58.22 | 64.80 | 65.08 <sup>†</sup> | <b>56.09</b> | <b>71.79</b> | <b>80.43<sup>†</sup></b> | <b>91.49</b> | 11.06 |
+| ICEWS18 | MRR | 8.44 | 16.42 | 27.51 | 33.66 | 29.65 | 26.66 | 34.91 <sup>†</sup> | 28.41 | <b>38.41<sup>†</sup></b> | 35.94 | <b>68.74</b> | 30.33 |
+|  | His@1 | 1.85 | 8.60 | 17.82 | 23.19 | 19.98 | 16.14 | 24.34 <sup>†</sup> | 18.74 | <b>25.66<sup>†</sup></b> | 22.16 | <b>61.29</b> | 35.63 |
+|  | His@3 | 9.95 | 18.13 | 31.17 | 37.99 | 33.72 | 29.74 | 38.74 <sup>†</sup> | 32.71 | <b>43.72<sup>†</sup></b> | 42.05 | <b>76.57</b> | 32.84 |
+|  | His@10 | 22.38 | 32.51 | 46.55 | 54.22 | 48.23 | 48.25 | 55.89 <sup>†</sup> | 47.97 | <b>61.00</b> | <b>64.26<sup>†</sup></b> | <b>83.37</b> | 19.11 |
+| ICEWS05-15 | MRR | 16.53 | 27.51 | 38.27 | 50.04 | 47.13 | 43.26 | 51.14 <sup>†</sup> | 45.99 | <b>60.18<sup>†</sup></b> | 58.64 | <b>76.82</b> | 16.64 |
+|  | His@1 | 5.51 | 17.57 | 27.43 | 39.25 | 37.25 | 32.31 | 39.47 <sup>†</sup> | 34.49 | <b>48.97<sup>†</sup></b> | 46.72 | <b>70.57</b> | 21.60 |
+|  | His@3 | 20.77 | 31.46 | 43.06 | 56.13 | 54.16 | 48.68 | 57.11 <sup>†</sup> | 52.89 | <b>67.77<sup>†</sup></b> | 66.18 | <b>82.69</b> | 14.92 |
+|  | His@10 | 39.26 | 47.32 | 59.93 | 70.71 | 67.61 | 64.56 | 71.75 <sup>†</sup> | 67.39 | <b>77.50</b> | <b>80.39<sup>†</sup></b> | <b>90.47</b> | 10.08 |
+| YAGO | MRR | 32.57 | 54.92 | 82.30 | 87.95 | 61.83 | - | <b>88.87<sup>†</sup></b> | 83.61 | - | - | <b>94.23</b> | 5.36 |
+|  | His@1 | 27.94 | 48.15 | 78.83 | 84.54 | 48.02 | - | <b>85.10<sup>†</sup></b> | 83.82 | - | - | <b>93.40</b> | 8.30 |
+|  | His@3 | 43.39 | 59.61 | 84.27 | 91.37 | 57.92 | - | <b>92.47<sup>†</sup></b> | 84.51 | - | - | <b>94.48</b> | 1.91 |
+|  | His@10 | 53.37 | 66.71 | 88.58 | 92.92 | 80.06 | - | <b>94.04<sup>†</sup></b> | 83.85 | - | - | <b>95.43</b> | 1.39 |
+| ACLED2023 | MRR | 36.59 | 66.41 | 73.15 | 73.82 | 71.16 | <b>76.97<sup>†</sup></b> | - | 75.55 <sup>†</sup> | - | - | <b>83.34</b> | 6.27 |
+|  | His@1 | 19.73 | 51.09 | 63.39 | 63.59 | 62.11 | <b>66.48<sup>†</sup></b> | - | <b>67.65<sup>†</sup></b> | - | - | <b>74.76</b> | 7.11 |
+|  | His@3 | 47.96 | 80.67 | 80.72 | 82.00 | 77.89 | <b>85.58<sup>†</sup></b> | - | <b>81.79<sup>†</sup></b> | - | - | <b>90.24</b> | 4.66 |
+|  | His@10 | 67.20 | 88.81 | 90.38 | <b>91.32<sup>†</sup></b> | 91.18 | <b>87.00<sup>†</sup></b> | - | <b>89.13<sup>†</sup></b> | - | - | <b>97.62</b> | 6.30 |
+| ICEWS14-FS | MRR | 2.37 | 21.37 | 11.08 | 32.87 <sup>†</sup> | 30.57 | 30.87 | - | 22.92 <sup>†</sup> | - | - | <b>50.95</b> | 18.08 |
+|  | His@1 | 0.08 | 16.68 | 6.99 | 23.87 | <b>24.44<sup>†</sup></b> | 18.99 | - | 17.81 <sup>†</sup> | - | - | <b>40.68</b> | 16.24 |
+|  | His@3 | 0.21 | 23.37 | 12.52 | <b>36.68<sup>†</sup></b> | 33.21 | 34.04 | - | 25.95 <sup>†</sup> | - | - | <b>54.92</b> | 18.24 |
+|  | His@10 | 6.39 | 30.07 | 17.85 | 49.55 | 43.31 | <b>56.54<sup>†</sup></b> | - | 32.29 <sup>†</sup> | - | - | <b>72.78</b> | 16.27 |
+
+Note: The best results are highlighted in **bold**. The symbols \* and † denote the best results within representation-based and rule-based methods, respectively.
+
+**Baselines.** We compare CoLR with representation-based methods: TTransE Leblay & Chokol (2018), TA-DisMult García-Durán et al. (2018), RE-GCN Li et al. (2021), TIRGN Li et al. (2022a), CENETXu et al. (2023), HGLS Zhang et al. (2023a) and RPLiang et al. (2023), as well as rule-based methods: TLogic Liu et al. (2022), ALRE-IR Mei et al. (2022), and ILR-LR Mei et al. (2024). Except for CENET, the experimental results of all baselines on the existing benchmark datasets were taken from prior papers. Considering that CENET’s experimental setup differs from other baselines, we reproduced its results on the ICEWS and YAGO datasets under the time-filtering setting Li et al. (2022a); Liang et al. (2023) for a fair comparison. For the proposed datasets, we conducted experiments for each baseline using their parameter settings on ICEWS14 and reported the results. The implementation details of our CoLR are provided in Appendix C.2.
+
+### 6.2 MAIN RESULTS
+
+The experimental results presented in Tables 1 and Tables 2 provide a detailed comparative analysis of various machine learning models across transductive, few-shot, and inductive scenarios. For comprehensive comparison and analysis of inductive capabilities, please refer to Appendix C.4.
+
+**Transductive and Few-shot Analysis (Table 1)** As shown in Table 1, our CoLR significantly outperforms existing baseline models across all metrics on four transductive datasets, demonstrating its robust ability to integrate structured and temporal data effectively. For example, for ICEWS14, CoLR achieves 21.71% improvement over the next best result. Compared to the sub-optimal rule-based model ALRE-IR, CoLR shows improvements of 21.17%, 30.33%, and 16.64% in MRR across the three ICEWS datasets, respectively. These performance gains are attributed to the high-quality paths extracted and the designed multi-hop path encoder. Our method also surpasses both representation-based methods and discrete logical reasoning approaches in comprehensive performance, demonstrating that the introduction of path embeddings can significantly enhance reasoning capabilities. Particularly on the ICEWS18 dataset, where the density of events at single timestamps makes it challenging to capture structural features, temporal characteristics, and logical rules, other methods’ performance drops sharply. Our model maintains stable performance in this complex scenario by integrating structural information, logical correlations, textual semantics, and temporal features. Additionally, our model performs exceptionally well on the ACLED2023 dataset, indicating effective use of the encoding capabilities of PLM rather than solely relying on its prior knowledge.
+
+In the few-shot scenario, due to the lack of usable connected paths, traditional multi-hop logical reasoning methods like TLogic see a significant decline in reasoning performance on the ICEWS14-FS dataset. However, our CoLR excels with its MRR exceeding the next best model, TIRGN, by
+
+{8}------------------------------------------------
+
+Table 2: Inductive results of CoLR on four datasets.
+
+| Test | ICEWS14 |  |  | ICEWS18 |  |  | ICEWS05-15 |  |  | ACLED-IND |
+|-|-|-|-|-|-|-|-|-|-|-|
+| Train | ICEWS14 | ICEWS18 | ICEWS05-15 | ICEWS18 | ICEWS14 | ICEWS05-15 | ICEWS05-15 | ICEWS14 | ICEWS18 |  |
+| MRR | 75.72 | 74.42 | 72.96 | 68.74 | 61.59 | 61.24 | 76.82 | 78.69 | 77.96 | 83.63 |
+| Hits@1 | 66.12 | 64.37 | 64.37 | 61.29 | 54.08 | 53.58 | 70.57 | 73.42 | 71.52 | 80.71 |
+| Hits@3 | 83.31 | 81.88 | 78.90 | 76.57 | 68.07 | 67.57 | 82.69 | 82.80 | 83.76 | 84.88 |
+| Hits@10 | 91.49 | 90.09 | 86.52 | 83.37 | 77.30 | 76.58 | 90.47 | 91.30 | 91.78 | 88.81 |
+
+18.08%. This performance indicates that CoLR captures relevant historical paths and learns the historical structural information of nodes to adapt to few-shot scenarios, thereby achieving remarkable performance.
+
+**Inductive Analysis. (Table 2)** We train CoLR on one dataset and then test it on multiple others to demonstrate its cross-dataset application capabilities. The inductive results further highlight CoLR’s robustness, as it consistently performs well across different training and testing dataset combinations. For instance, when trained on ICEWS14 and tested on ICEWS05-15, it achieved an MRR of 78.69%; conversely, when trained on ICEWS05-15 and tested on ICEWS14, its MRR was 72.96%, showing only a slight performance variation. These outcomes illustrate CoLR’s ability to generalize beyond its immediate training conditions, demonstrating that our model can deeply capture and effectively utilize the logical rules within TKGs, maintaining high prediction quality across various datasets.
+
+### 6.3 ABLATION STUDY
+
+The experimental results presented in Table 3 showcase the effectiveness of various components within the CoLR model, illustrated through an ablation study conducted on the ICEWS14 dataset. We undertake a more comprehensive analysis of the proposed method in Appendix C.5 and Appendix C.6, encompassing scalability, parameter sensitivity, and explainability.
+
+**Temporal Relation Structure Graph Ablation (CoLR<sub>-TRSG</sub>).** Removing the TRSG component resulted in a decrease across all metrics (MRR, Hits@1, Hits@3, Hits@10) by 2.97% compared to the full CoLR model. This substantial drop highlights the TRSG’s crucial role in leveraging logical correlations and temporal cohesion to guide efficient pathfinding in TKGs.
+
+Table 3: Ablation Studies of CoLR under ICEWS14.
+
+| Model | ICEWS14 |  |  |  |
+|-|-|-|-|-|
+|  | MRR | Hits@1 | Hits@3 | Hits@10 |
+| CoLR <sub>-TRSG</sub> | 72.93 | 62.34 | 81.28 | 87.95 |
+| CoLR <sub>-TSE</sub> | 68.95 | 61.43 | 73.09 | 80.71 |
+| CoLR <sub>-PSS</sub> | 63.23 | 57.74 | 64.17 | 73.09 |
+| CoLR <sub>-RP</sub> | 71.29 | 64.63 | 72.36 | 79.26 |
+| CoLR | 75.72 | 66.12 | 83.31 | 91.49 |
+
+**Time Sequence Encoder Ablation (CoLR<sub>-TSE</sub>).** After replacing the TSE with the time-point encoder used in ALP-IR, performance significantly declined. This result confirms that traditional time-point encoders only model the temporal relations between historical paths and query tuples, without capturing temporal features. In contrast, our Time Sequence Encoder (TSE) can combine time sequences with logical rules in a more detailed manner, significantly enhancing the model’s prediction accuracy.
+
+**Path Supplement Strategy Ablation (CoLR<sub>-PSS</sub>).** During the path searching process, for missing paths, we solely use the textual sequences of the subject and object as representations of the historical paths, substituting the Path Supplement Strategy. The results for variant-PSS in the ablation study significantly decreased, demonstrating the positive effect of the Path Supplement Strategy in enhancing model performance.
+
+**Multi-hop Path Ablation (CoLR<sub>-RP</sub>).** After replacing the full multi-hop paths containing entities with paths containing only relations, the model’s performance on all metrics decreased by an average of 7.28%. This indicates that full path encoding can capture critical semantic knowledge and structural information that cannot be obtained through relation paths alone, thus enhancing the model’s ability to handle complex temporal reasoning.
+
+{9}------------------------------------------------
+
+486  
+487  
+488  
+489  
+490  
+491  
+492  
+493  
+494  
+495  
+496  
+497  
+498  
+499  
+500  
+501  
+502  
+503  
+504  
+505  
+506  
+507  
+508  
+509  
+510  
+511  
+512  
+513  
+514  
+515  
+516  
+517  
+518  
+519  
+520  
+521  
+522  
+523  
+524  
+525  
+526  
+527  
+528  
+529  
+530  
+531  
+532  
+533  
+534  
+535  
+536  
+537  
+538  
+539
+
+![Figure 4: Visualization of TRSG from ICEWS14, ICEWS18, ICEWS05-15 and ACLED2023 datasets. The figure consists of four scatter plots: (a) TRSG of ICEWS14, (b) TRSG of ICEWS0515, (c) TRSG of ICEWS18, and (d) TRSG of ACLED2023. Each plot shows edges between nodes over time, with a color bar indicating cohesion. Two distinct diagonal lines are visible in each plot, representing repetitive events.](7801d00a216dc4dc8a7d210dcb5fe3c5_img.jpg)
+
+Figure 4: Visualization of TRSG from ICEWS14, ICEWS18, ICEWS05-15 and ACLED2023 datasets. The figure consists of four scatter plots: (a) TRSG of ICEWS14, (b) TRSG of ICEWS0515, (c) TRSG of ICEWS18, and (d) TRSG of ACLED2023. Each plot shows edges between nodes over time, with a color bar indicating cohesion. Two distinct diagonal lines are visible in each plot, representing repetitive events.
+
+Figure 4: Visualization of TRSG from ICEWS14, ICEWS18, ICEWS05-15 and ACLED2023 datasets.
+
+### 6.4 VISUALIZATION OF TRSG
+
+We visualize the TRSG constructed from ICEWS14, ICEWS18, ICEWS05-15, and ACLED2023 to provide an intuitive analyze of their impact on temporal logical reasoning. As shown in Figure 4, we present the edges with strong cohesion in the TRSG ( $>0.2$  for ICEWS datasets and  $>0.1$  for ACLED2023) using scatter plots. It can be observed that there are two distinct diagonal lines in the four sub-figures of Figure 4, indicating that relations and their inverses typically exhibit strong cohesion in TKGs. In other words, there is a substantial amount of repetitive events in TKGs, supporting the basic assumption of previous works Li et al. (2022a); Mirtaheeri et al. (2023); Liang et al. (2023). Additionally, in the ICEWS datasets, there are certain relations that evidently exhibit cohesion with the majority of other relations. These relations often appear with high frequency in the dataset and serve as conjunctions in temporal logical paths. Notably, despite the different numbers of relations in the three ICEWS datasets, their cohesion distributions are strikingly similar. This substantiates that the TRSG we propose can effectively capture stable structure information of relations in the datasets and enhance the robustness of logical reasoning in inductive scenarios.
+
+## 7 CONCLUSIONS AND FUTURE WORK
+
+In this work, we propose a two-stage coherent logical reasoning framework, named CoLR, which integrates structural dependencies and text semantics of temporal paths to tackle the link forecasting task over TKGs. It searches for temporal logical paths in the first stage and encodes these paths using a PLM and a novel time sequence encoder in the second stage. To efficiently search for reliable paths, we construct TRSG based on cohesion between relations and design a temporal fusion search graph. To address path-missing issues, we implement a path supplement strategy that samples historical paths based on cohesion. Additionally, we introduced three new datasets to address the deficiencies of existing benchmarks in transductive, inductive, and few-shot scenarios. Experimental results demonstrate that CoLR comprehensively outperforms existing methods across six datasets. Since temporal paths consist of only 1 to 3 hop edges, the corresponding text sequences pose challenges for PLMs in capturing semantic dependencies. In future work, we plan to integrate LLMs to generate more detailed and precise texts to enhance the ability of PLMs to deeply understand the latent semantics of text sequences.
+
+ Rest of paper (reference and Appendix) is removed.

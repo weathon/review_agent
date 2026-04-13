@@ -1,0 +1,313 @@
+
+
+{0}------------------------------------------------
+
+# RMP-SAM: TOWARDS REAL-TIME MULTI-PURPOSE SEGMENT ANYTHING
+
+Shilin Xu<sup>1,4†</sup>, Haobo Yuan<sup>2,3†</sup>, Qingyu Shi<sup>1</sup>, Lu Qi<sup>3</sup>, Jingbo Wang<sup>4</sup>, Yibo Yang<sup>5</sup>, Yining Li<sup>4</sup>, Kai Chen<sup>4</sup>, Yunhai Tong<sup>1</sup>, Bernard Ghanem<sup>5</sup>, Xiangtai Li<sup>2,4‡</sup>, Ming-Hsuan Yang<sup>3,6</sup>
+
+<sup>1</sup>Peking University, <sup>2</sup>Nanyang Technology University, <sup>3</sup>UC, Merced
+
+<sup>4</sup>Shanghai AI Laboratory, <sup>5</sup>KAUST, <sup>6</sup>Google Research
+
+xushilin@stu.pku.edu.cn, xiangtai94@gmail.com
+
+## ABSTRACT
+
+Recent segmentation methods, which adopt large-scale data training and transformer architecture, aim to create one foundation model that can perform multiple tasks. However, most of these methods rely on heavy encoder and decoder frameworks, hindering their performance in real-time scenarios. To explore real-time segmentation, recent advancements primarily focus on semantic segmentation within specific environments, such as autonomous driving. However, they often overlook the generalization ability of these models across diverse scenarios. Therefore, to fill this gap, this work explores a novel real-time segmentation setting called real-time multi-purpose segmentation. It contains three fundamental sub-tasks: interactive segmentation, panoptic segmentation, and video instance segmentation. Unlike previous methods, which use a specific design for each task, we aim to use only a single end-to-end model to accomplish all these tasks in real-time. To meet real-time requirements and balance multi-task learning, we present a novel dynamic convolution-based method, Real-Time Multi-Purpose SAM (RMP-SAM). It contains an efficient encoder and an efficient decoupled adapter to perform prompt-driven decoding. Moreover, we further explore different training strategies and one new adapter design to boost co-training performance further. We benchmark several strong baselines by extending existing works to support our multi-purpose segmentation. Extensive experiments demonstrate that RMP-SAM is effective and generalizes well on proposed benchmarks and other specific semantic tasks. Our implementation of RMP-SAM achieves the optimal balance between accuracy and speed for these tasks. The code is released at <https://github.com/xushilin1/RMP-SAM>
+
+## 1 INTRODUCTION
+
+Recent advancements in computer vision, driven by transformer architectures (Dosovitskiy et al., 2021; Carion et al., 2020; Wang et al., 2023b), focus on creating a single large-scale model versatile enough to handle different tasks like detection and segmentation with a general-purpose design. Several studies utilizing the same architectures (Wang et al., 2023a; Yan et al., 2023; Jain et al., 2023) have shown superior performance across various tasks. Enjoying the benefit of the large-scale model capacity and training data, the general-purpose models demonstrate strong performance on versatility for specific applications (Kirillov et al., 2023; Jia et al., 2021). For image and video segmentation at the semantic level, numerous studies (Cheng et al., 2022; Zhang et al., 2021; Li et al., 2022d; 2023e; Jain et al., 2023) employing a universal design have surpassed previous models tailored for specific image and video segmentation tasks. The Segment Anything Model (SAM) (Kirillov et al., 2023) is a leading approach in interactive segmentation, offering a unified model for various interactions such as point, bounding box, mask, and text input.
+
+\*Work done during an internship at Shanghai AI Lab
+
+†Equal contribution
+
+‡Corresponding author
+
+{1}------------------------------------------------
+
+![Figure 1: Real-Time Multi-Purpose Segmentation. (a) Diagram showing RMP-SAM processing image, video, and visual prompt inputs for segmentation. (b) Performance plots for Panoptic Segmentation (PQ, mAP), Video Segmentation (mIoU), and Interactive Segmentation (box and point) comparing RMP-SAM with other methods.](49ad3a646d84bcfeac02bdf2b3792a3e_img.jpg)
+
+Figure 1 consists of two parts. Part (a) is a diagram titled 'Real-Time Multi-Purpose Segmentation' showing the RMP-SAM model. It takes three types of inputs: an image, a video, and a visual prompt (a person pointing at a screen). The model outputs three corresponding segmentation results: 'Image Segmentation' (FPS: >30), 'Video Segmentation', and 'Prompt Segmentation'. Part (b) contains four scatter plots comparing RMP-SAM (represented by a large yellow dot) with other methods (represented by smaller colored dots). The plots show performance metrics (PQ, mAP, mIoU, I-IoU) against FPS for different tasks: Panoptic Segmentation, Video Segmentation, and Interactive Segmentation (both box and point). In all cases, RMP-SAM achieves high performance with high FPS, indicating a good trade-off between accuracy and speed.
+
+Figure 1: Real-Time Multi-Purpose Segmentation. (a) Diagram showing RMP-SAM processing image, video, and visual prompt inputs for segmentation. (b) Performance plots for Panoptic Segmentation (PQ, mAP), Video Segmentation (mIoU), and Interactive Segmentation (box and point) comparing RMP-SAM with other methods.
+
+Figure 1: We present real-time multi-purpose segmentation to segment and recognize objects for image, video, and visual prompt inputs. In addition to benchmarking, we propose a simple yet effective baseline, named RMP-SAM, which achieves the best performance and speed trade-off among three different tasks. The larger dot indicates more parameters.
+
+However, most of these studies face challenges in achieving real-time performance on devices with limited computing resources due to their *heavy encoders* or *cascaded decoders*. Despite their high-performance capabilities and versatility, this limitation hinders the practical use of these advanced architectures in vision applications, such as editing tools on edge devices. In contrast, several studies (Zhao et al., 2018; Hu et al., 2023) focus on real-time segmentation using specific designs (e.g., efficient decoder fusion) but are often tailored to a specific application trained on a particular dataset (e.g., COCO) or restricted to similar tasks like video semantic segmentation. To our knowledge, no study investigates real-time, multi-purpose segmentation, where a single model can perform universal segmentation tasks, including image, video, and SAM-like interactive segmentation. For example, given a video input, we want to create a tool to perform various segmentation tasks on the device, including interactive segmentation with visual cues, labeling the masks, and tracking the masks.
+
+Inspired by the abovementioned challenges, we focus on real-time multi-purpose segmentation and efficiently investigate the novel issue of training versatile models. We pose a critical inquiry: Given the limited computational resources and model capacity, how can we develop an efficient, multi-purpose segmentation model? This entails creating a single model capable of segmenting, tracking, and classifying each pixel in real-time, similar to performing interactive segmentation similar to SAM. We present an illustration figure in Fig. 1(a).
+
+First, we explore this problem by benchmarking existing methods. Specifically, we use the COCO (Lin et al., 2014) and YouTube-VIS (Yang et al., 2019) for joint co-training, employing identical hyperparameters. Beyond the object queries used for image and video segmentation in prior research, our approach incorporates visual prompt queries for interactive segmentation. However, none of these works can achieve the best accuracy and speed trade-off on three tasks using one model. This is because: 1) No previous works explore joint co-training for segmentation for different purposes. Thus, extensive experiments are needed to gain a better understanding of meta-architecture. 2) Interactive and semantic-level segmentation needs better strategies to balance each other. 3) Under the real-time setting, several previous architectures (Yan et al., 2023; Li et al., 2022c) for multi-task learning may not be practical.
+
+To solve these issues, we present a real-time multi-purpose segment anything model (RMP-SAM). It contains an efficient encoder and shared decoder with multiple queries as inputs. Unlike previous works, we avoid cascaded transformers encoder layers and pixel-wise cross-attention decoder (Cheng et al., 2022). Instead, we propose a pooling-based dynamic convolution to replace per-pixel cross-attention to achieve better accuracy and speed trade-off. We represent all three tasks using queries with shared dynamic convolution operation. According to different outputs, we can divide the segmentation tasks into two types: one for class-agnostic masks (SAM-like) and the other for class-
+
+{2}------------------------------------------------
+
+Table 1: Real-Time Segmentation Settings. Our multi-purpose segmentation supports more tasks in one framework.
+
+| Property        | Image Seg | Video Seg | SAM-Like | SAM-2-Like | Ours: Real-Time Multi-Purpose Seg |
+|-----------------|-----------|-----------|----------|------------|-----------------------------------|
+| Image Masks     | ✓         | ✗         | ✓        | ✓          | ✓                                 |
+| Video Masks     | ✗         | ✓         | ✓        | ✓          | ✓                                 |
+| Interactive     | ✗         | ✗         | ✓        | ✓          | ✓                                 |
+| Semantic Labels | ✓         | ✓         | ✗        | ✗          | ✓                                 |
+| Multitasks      | ✗         | ✗         | ✗        | ✗          | ✓                                 |
+
+Table 2: Comparison of Segmentation Methods. Our proposed RMP-SAM supports various segmentation tasks and performs them in real-time.
+
+| Methods                          | SS | PS | VIS | Interactive | Multi-Task in One Model | Real Time |
+|----------------------------------|----|----|-----|-------------|-------------------------|-----------|
+| ICNet (Zhao et al., 2018)        | ✓  | ✗  | ✗   | ✗           | ✗                       | ✓         |
+| Bi-Seg (Yu et al., 2018)         | ✓  | ✗  | ✗   | ✗           | ✗                       | ✓         |
+| YOSO (Hu et al., 2023)           | ✓  | ✓  | ✗   | ✗           | ✗                       | ✓         |
+| Mobile-VIS (Zhang et al., 2024)  | ✗  | ✗  | ✓   | ✗           | ✗                       | ✓         |
+| SAM (Kirillov et al., 2023)      | ✗  | ✗  | ✗   | ✓           | ✗                       | ✗         |
+| Mask2Former (Cheng et al., 2022) | ✓  | ✓  | ✗   | ✗           | ✗                       | ✗         |
+| Video K-Net (Li et al., 2023d)   | ✗  | ✓  | ✓   | ✗           | ✗                       | ✗         |
+| OneFormer (Jain et al., 2023)    | ✓  | ✓  | ✗   | ✗           | ✓                       | ✗         |
+| RMP-SAM (Ours)                   | ✓  | ✓  | ✓   | ✓           | ✓                       | ✓         |
+
+specific masks (contains one mask and one class label). Two types have different goals and will conflict during the multi-task learning process. Thus, we further explore four different architectures in the case of various decoder designs. In particular, we find a single decoder with multiple queries for different tasks can achieve good enough results and best speed and accuracy trade-off. Moreover, we present an effective dual adapter design that better adapts shared knowledge of the same decoder. The dual adapter contains an asymmetric design to better transfer shared features. To the best of our knowledge, RMP-SAM is the *first* real-time multi-purpose segmentation model that can achieve the best speed and accuracy trade-off on four different tasks, as shown in Fig. 1(b). Moreover, due to the semantic level and interactive level segmentation ability, our model can create more new applications, such as interactive video segmentation. In addition, we also verify our model in the SAM-like setting by co-training with SAM-data, it also achieves comparable results. Extensive experiments show the effectiveness of our design. The main contributions of this work are:
+
+- We introduce real-time multi-purpose segmentation, a novel multi-task segmentation aiming to segment objects for real-time image, video, and interactive inputs.
+- We benchmark several real-time transformer-based segmentation approaches for the new settings.
+- We present a simple yet fast baseline named RMP-SAM. It contains a lightweight feature extractor, a unified decoder, and two asymmetric adapters.
+- Extensive experiments demonstrate that RMP-SAM achieves the best speed and accuracy trade-off in the proposed benchmark and regular real-time semantic and panoptic segmentation benchmarks. We also show scalability across datasets and application demos.
+
+## 2 REAL-TIME MULTI-PURPOSE SEGMENTATION
+
+**Problem Settings.** Our proposed real-time multi-purpose segmentation contains three visual inputs: image, video, and visual prompts (boxes and points). It predicts the corresponding masks, labels, and instance IDs for the content within the given input. Basically, we adopt the definition of panoptic segmentation Kirillov et al. (2019) for image inputs since it covers all concepts in the scene. For video inputs, we segment and track each foreground instance (video instance segmentation). Given visual prompts, we follow the SAM-like Zhang et al. (2023a); Zhou et al. (2023); Shu et al. (2023); Xiong et al. (2023) setting for interactive segmentation, performing class-agnostic segmentation according to the user’s inputs. Although recent advancements, such as SAM-2 (Ravi et al., 2024), have attempted to unify the interactive segmentation task for both image and video inputs, our framework emphasizes the importance of object semantics. It incorporates multi-task learning in a single shot. Combined with interactive segmentation and video segmentation, we can also achieve interactive
+
+{3}------------------------------------------------
+
+video segmentation as video object segmentation. As shown in Tab. 1 and Tab. 2, we compare previous segmentation methods with and indicate that our method unifies different segmentation tasks within a single framework. This approach enables more flexible usage across various segmentation tasks, particularly regarding input modalities and predictions.
+
+**Datasets.** For benchmarking, we use the well-known COCO dataset (Lin et al., 2014) for panoptic and interactive segmentation. During the training of interactive segmentation, the boxes derived from the ground truth, along with points randomly sampled from the masks, serve as visual prompts. For testing, we obtain the center point of the mask as a visual prompt. For video segmentation, we adopt the widely used YouTube-VIS 2019 dataset (Yang et al., 2019) for training. We *do not* use the SAM data for our benchmarking. There are several reasons: (1) SAM data is not as well annotated as the COCO dataset. (2) We only focus on object-level and scene-level segmentation, while SAM data contain more granularity. (3) SAM data has no semantics, while our goal is to predict semantic labels for real applications. To fairly compare with SAM-like models, we adopt the SAM-data training for specific setting, as shown in Sec. 4.1.
+
+## 3 PROPOSED METHOD
+
+First, we revise panoptic segmentation, video instance segmentation, and interactive segmentation under the unified formulation. When combined with a query-based segmentation model, object queries can represent all entities within the scene, encompassing image-level objects, video-level tracked objects, and prompt-based specific objects. For panoptic segmentation (Kirillov et al., 2019), given an input image  $I \in \mathbb{R}^{H \times W \times 3}$ , the objective is to generate a group of masks  $\{y_i\}_{i=1}^N = \{(m_i, c_i)\}_{i=1}^N$  where  $c_i$  denotes the class label of the binary mask  $m_i$  and  $N$  is the number of queries,  $H \times W$  indicates the spatial dimensions. For video instance segmentation (Yang et al., 2019), given a video clip input  $V \in \mathbb{R}^{T \times H \times W \times 3}$ , where  $T$  denotes the number of frames, the process aims to generate an instance mask  $\{y_i\}_{i=1}^N = \{(m_i, c_i, d_i)\}_{i=1}^N$ , where  $N$  represents the number of the tube masks  $m_i \in \{0, 1\}^{T \times H \times W}$ ,  $c_i$  indicates the class label of the tube  $m_i$ , and  $d_i$  identifies the instance ID for each instance. For SAM-like segmentation (Kirillov et al., 2023), both the image  $I$  and visual prompts  $P \in \mathbb{R}^{K \times 2}$  (point prompts are used here) are taken as inputs. These prompts, which include points and boxes, lead to the outputs of corresponding binary image masks  $\{y_i\}_{i=1}^K = \{m_i \in \{0, 1\}^{H \times W}\}_{i=1}^K$ , where  $K$  denotes the number of visual prompts. Each visual prompt is encoded into one object query, which naturally can be the input of the decoder.
+
+### 3.1 RMP-SAM ARCHITECTURE
+
+**Overall Architecture.** As shown in Fig. 2, our RMP-SAM is built upon a simple encoder and decoder architecture that can input images, videos, and visual prompts. Following SAM, we utilize the prompt encoder to convert visual prompts into queries. These visual prompts and object queries share the same decoder for the efficiency of computation and parameter size. However, the goals of the two types of queries are different: the former pays more attention to the local details of the visual prompts, while the latter considers the scene and temporal features. To better balance the results for interactive segmentation and image/video segmentation, we design a prompt adapter and an object adapter at the end of the decoder.
+
+**Lite Feature Extractor.** Due to computation cost limitations, we avoid using previous methods (Cheng et al., 2022; Li et al., 2024b) that involve large backbones and heavier encoders. As required by real-time constraint, we investigate lightweight backbones such as ResNet18 (He et al., 2016) and TopFormer (Zhang et al., 2022). We incorporate a feature pyramid network with deformable convolution to enhance representation alignment and fuse multi-scale features in real-time. When dealing with video input, we extract the spatial-temporal features. For simplicity, we use  $F_{img} \in \mathbb{R}^{\frac{H}{4} \times \frac{W}{4} \times d}$  for image inputs and  $F_{vid} \in \mathbb{R}^{T \times \frac{H}{4} \times \frac{W}{4} \times d}$  for video inputs.
+
+**Unified Dynamic Convolution Decoder.** The goal of the decoder is to refine the object query. However, many of these methods (Cheng et al., 2021b; 2022), are not feasible for real-time settings due to their reliance on heavily cascaded layers and pixel-wise cross-attention mechanisms. In contrast, our method uses a pooling-based dynamic convolution framework (Zhang et al., 2021; Li et al., 2022d) to enhance the efficiency of the decoder. Given object query  $Q \in \mathbb{R}^{N \times d}$  and prompt query  $P \in \mathbb{R}^{K \times d}$ , the masks  $M_i$  are obtained by dot product with  $F_{img}$  or  $F_{vid}$ . Here,  $i$  represents the decoder stage
+
+{4}------------------------------------------------
+
+![Figure 2: RMP-SAM overview. The diagram illustrates the architecture of the RMP-SAM model. It takes three visual inputs: Image or Video, Visual Prompts, and a Backbone (which processes the Image or Video). The Backbone outputs a Feature Map F. The Visual Prompts are processed by a Prompt Encoder to generate prompt queries. The Image or Video is processed by a Backbone and a Lite Neck to generate object queries. These queries are fed into a Three-Stage Decoder. The decoder consists of three stages, each containing a 'Prompt-base dynamic convolution' block. The output of the decoder is a set of refined queries. These refined queries are then processed by a 'Prompt Adapter' and an 'Object Adapter'. The Prompt Adapter outputs IoU and Mask, while the Object Adapter outputs Class. A detailed view of the 'Dynamic convolution' block is shown on the right, which includes 'add & norm', 'FFN', 'add & norm', 'self-attention', 'add & norm', and 'Dynamic convolution' layers. The legend indicates: Linear project (green line), Inner product (cross symbol), Prompt query P_i (yellow bar), and Object query Q_i (blue bar).](690fce4fb5c9cbb8beb560cb2a3fcbeb_img.jpg)
+
+Figure 2: RMP-SAM overview. The diagram illustrates the architecture of the RMP-SAM model. It takes three visual inputs: Image or Video, Visual Prompts, and a Backbone (which processes the Image or Video). The Backbone outputs a Feature Map F. The Visual Prompts are processed by a Prompt Encoder to generate prompt queries. The Image or Video is processed by a Backbone and a Lite Neck to generate object queries. These queries are fed into a Three-Stage Decoder. The decoder consists of three stages, each containing a 'Prompt-base dynamic convolution' block. The output of the decoder is a set of refined queries. These refined queries are then processed by a 'Prompt Adapter' and an 'Object Adapter'. The Prompt Adapter outputs IoU and Mask, while the Object Adapter outputs Class. A detailed view of the 'Dynamic convolution' block is shown on the right, which includes 'add & norm', 'FFN', 'add & norm', 'self-attention', 'add & norm', and 'Dynamic convolution' layers. The legend indicates: Linear project (green line), Inner product (cross symbol), Prompt query P\_i (yellow bar), and Object query Q\_i (blue bar).
+
+Figure 2: **RMP-SAM overview.** Our method contains three visual inputs: image, video, and visual prompts. Utilizing positional encoding, we generate prompt queries from these visual prompts. The learnable object queries, prompt queries, and the feature map  $F$  are directed to the multi-stage decoder. This process generates multi-stage predictions and refined queries. These refined queries engage in cross-attention with  $F$ , resulting in the final prediction.
+
+index,  $N$  is the total number of object queries, and  $K$  is the number of visual prompts. According to the inputs, the masks can be image masks for panoptic segmentation  $M_i^{pan} \in \mathbb{R}^{N \times \frac{H}{4} \times \frac{W}{4}}$  and interactive segmentation  $M_i^{iter} \in \mathbb{R}^{K \times \frac{H}{4} \times \frac{W}{4}}$  or tube masks  $M_i^{tube} \in \mathbb{R}^{N \times T \times \frac{H}{4} \times \frac{W}{4}}$ . Then, we can obtain the corresponding query features  $X_i^{pan} \in \mathbb{R}^{N \times d}$ ,  $X_i^{iter} \in \mathbb{R}^{K \times d}$ ,  $X_i^{tube} \in \mathbb{R}^{N \times d}$  via mask pooling:
+
+$$X_i^{pan} = \sum_u^W \sum_v^H M_{i-1}^{pan}(u, v) \cdot F_{img}(u, v). \quad (1)$$
+
+For video tasks, we group the spatial-temporal features as follows:
+
+$$X_i^{tube} = \sum_t^T \sum_u^W \sum_v^H M_{i-1}^{tube}(t, u, v) \cdot F_{vid}(t, u, v), \quad (2)$$
+
+where  $u, v$  are the indices of spatial location,  $t$  is index of input frame. Since the dynamic convolution performs similarly for each task, we use panoptic segmentation  $X_i^{pan}$  as an illustration. For interactive segmentation, we adopt the same equation (Equ. 1). In our implementation, the learned query is shared for both  $Q_i^{pan}$  and  $Q_i^{tube}$ .
+
+In particular, we adopt the design of previous methods (Zhang et al., 2021; Sun et al., 2021; Li et al., 2022c) to refine input queries  $\hat{Q}_i^{pan}$  with features  $X_i^{pan}$  which are grouped from their masks,
+
+$$\hat{Q}_i^{pan} = \text{DynamicConv}(X_i^{pan}, Q_{i-1}^{pan}), \quad (3)$$
+
+where the dynamic convolution uses the query features  $X_i^{pan}$  to generate parameters to weight input queries  $Q_{i-1}^{pan}$ . Specifically, DynamicConv uses input query features  $X_i^{pan}$  to generate gating parameters via a multilayer perceptron (MLP) and multiply back to the original query input  $Q_{i-1}^{pan}$ . We adopt the same design (Zhang et al., 2021; Sun et al., 2021) by learning gating functions to update the refined queries. The DynamicConv operation is based on:
+
+$$\hat{Q}_i^{pan} = \text{Gate}_x(X_i^{pan})X_{i-1}^{pan} + \text{Gate}_q(X_i^{pan})Q_{i-1}^{pan}, \quad (4)$$
+
+where Gate is implemented with a fully connected layer followed by Layer Norm and a sigmoid layer. We adopt two different gate functions, including  $\text{Gate}_x$  and  $\text{Gate}_q$ . The former is to weigh the query features, while the latter is to weigh corresponding queries. Next, we adopt one self-attention layer with feed-forward layers (Vaswani et al., 2017; Wang et al., 2021) to learn the correspondence among each query and update them accordingly. This operation leads to the full correlation among queries, shown as follows:
+
+$$Q_i = \text{FFN}(\text{MHSA}(\hat{Q}_i) + \hat{Q}_i), \quad (5)$$
+
+where MHSA means Multi Head Self Attention, FFN is the Feed Forward Network commonly used in the current version of Transformers (Carion et al., 2020; Dosovitskiy et al., 2021). We adopt several feed-forward layers on  $Q_i^{pan}$  for mask classification and directly output the class scores. Then, we
+
+{5}------------------------------------------------
+
+perform the inner product between the learned queries  $Q_i^{pan}$ , and image features  $F_{vid}$  and  $F_{img}$ . The only difference for the video segmentation task is that we predict the tube mask rather than only a single image mask. The entire process (Equ. 1, Equ. 2, Equ. 3 and Equ. 5) is repeated three times in total.
+
+Moreover, we also explore various decoupled designs, as shown in Fig. 3. In particular, as previous works suggest, we also explore decoupled decoders and their corresponding adapters. Via our detailed experiments, we do not find extra gains in the cases of decoupled decoders that introduce more computation and parameter costs. Please refer to Sec. 4.2 for the detailed decoder design.
+
+**Light-Weight Decoupled Adapter.** After the shared decoder, we also add two lightweight adapters,  $A_{obj}$  and  $A_{prompt}$  to adapt the shared decoder’s knowledge better. In particular, we use the asymmetric design.  $A_{obj}$  uses the same dynamic convolution design to refine the object query further, while  $A_{prompt}$  uses pixel-wise cross-attention design. Our key insights are: (1) The interaction between the whole scene feature and object queries is necessary for panoptic and video segmentation but not for interactive segmentation. The visual prompts provide strong positional information, and they pay more attention to local details features. (2) Despite the decoder being shared, the details are still missing for interactive segmentation due to the pooling effect in Equ. 1, where we even find inferior results after adopting a pooling-based adapter. More detailed adapter design can be found in Sec. 4.2.
+
+### 3.2 TRAINING, INFERENCE, AND EXTENSION
+
+**Joint Image and Video Segmentation Co-training.** Our goal is to train all segmentation tasks only once jointly. All training targets are one entity label and mask for all three cases. The entity can be thing, stuff, class-agnostic masks, and corresponding labels. Note that the instance masks with the same ID  $d$  form the tube masks. During training, we apply Hungarian matching between the predicted and ground-truth entity masks to assign object queries to video/image entities and then supervise their predicted masks and classification. To unify label taxonomies across datasets, we replace the learnable classifier with CLIP text embeddings following ViLD (Gu et al., 2021).
+
+Following previous works (Cheng et al., 2022; Li et al., 2023e), the final loss function is given as  $L = \lambda_{cls} L_{m\_cls} + \lambda_{ce} L_{m\_ce} + \lambda_{dice} L_{m\_dice}$ . Here,  $L_{m\_cls}$  is the Cross-Entropy (CE) loss for mask classification, and  $L_{m\_ce}$  and  $L_{m\_dice}$  are mask Cross-Entropy (CE) loss and Dice loss (Milletari et al., 2016; Wang et al., 2020) for segmentation, respectively. By default, we set  $\lambda_{cls} = 2, \lambda_{ce} = 5, \lambda_{dice} = 5$ .
+
+**Inference.** We follow the same inference procedure of Mask2Former (Cheng et al., 2022) for image segmentation. In panoptic segmentation, we merge the prediction of things and stuff according to the sorted scores. For video instance segmentation, we use query matching rather than introducing extra tracking components to generate instance ID, following previous work (Li et al., 2022d; Huang et al., 2022; Li et al., 2023e). We adopt a near-online method for inference. We follow the original SAM (Kirillov et al., 2023) for interactive segmentation tasks by providing box and point prompts and obtaining the binary masks. All the parameters are *shared* across three different tasks.
+
+**Extension and Application.** Since our model can perform various segmentation tasks, Our method can be extended to more datasets and tasks, including semantic segmentation on ADE20k (Zhou et al., 2017) or video panoptic segmentation on VIPSeg (Miao et al., 2022). Moreover, our method can support prompt-driven video object segmentation by combining interactive segmentation with a video instance segmentation framework. We put the details of the extension and application for RMP-SAM in the appendix (Sec. 7.1).
+
+## 4 EXPERIMENTS
+
+**Datasets.** Our benchmark uses COCO (Lin et al., 2014) and YouTube-VIS 2019 (Yang et al., 2019) datasets for benchmarking. COCO-SAM is constructed using ground truth boxes and points randomly sampled from ground truth masks as visual prompt inputs. In addition, to verify the effectiveness and generality of RMP-SAM, we also use other datasets, including ADE-20K (Zhou et al., 2017) and VIP-Seg dataset (Miao et al., 2022) in Sec. 4.1.
+
+**Evaluation Metrics and Devices.** For image segmentation, we adopt panoptic quality (PQ), which can be further decomposed into the segmentation quality (SQ) and the recognition quality (RQ). For
+
+{6}------------------------------------------------
+
+Table 3: Real-Time Multi-Purpose Segmentation benchmark. Our proposed RMP-SAM achieves the best accuracy and speed trade-off on three tasks.
+
+| Method               | Backbone  | COCO-Panoptic |             |                    | COCO-SAM    | YouTube-VIS 2019 | FLOPs       | Parameters    | FPS          |             |
+|----------------------|-----------|---------------|-------------|--------------------|-------------|------------------|-------------|---------------|--------------|-------------|
+|                      |           | PQ            | SQ          | PQ <sub>inst</sub> | mIoU        | mAP              |             |               |              |             |
+| Mask2Former          | R18       | 35.6          | 77.5        | 39.0               | 30.3        | 54.7             | 89.8G       | 18.6M         | 31.2         |             |
+| MaskFormer           | R18       | 31.0          | 76.0        | 33.2               | 27.7        | 55.4             | 34.1        | 79.7G         | 18.5M        | 38.0        |
+| kMaX-DeepLab         | R18       | 27.8          | 71.0        | 30.3               | 24.1        | 16.9             | 23.1        | 87.1G         | 18.7M        | 15.0        |
+| YOSO                 | R18       | 31.6          | 76.8        | 36.4               | 24.4        | 45.7             | 31.4        | 57.3G         | 18.7M        | 41.0        |
+| <b>RMP-SAM(Ours)</b> | R18       | <b>39.9</b>   | <b>78.6</b> | <b>43.3</b>        | <b>34.8</b> | <b>52.7</b>      | <b>38.7</b> | <b>60.5G</b>  | <b>22.8M</b> | <b>40.3</b> |
+| Mask2Former          | R50       | 42.9          | 79.8        | 47.6               | 35.6        | 58.0             | 42.1        | 153G          | 45.2M        | 26.6        |
+| MaskFormer           | R50       | 37.4          | 77.3        | 41.2               | 31.8        | 58.8             | 40.0        | 143.0G        | 45.2M        | 34.3        |
+| kMaX-DeepLab         | R50       | 36.9          | 75.7        | 42.7               | 28.4        | 20.1             | 26.4        | 280.0G        | 51.4M        | 14.9        |
+| YOSO                 | R50       | 37.3          | 76.9        | 42.7               | 29.2        | 49.2             | 40.7        | 119.0G        | 45.1M        | 36.3        |
+| <b>RMP-SAM(Ours)</b> | R50       | <b>46.9</b>   | <b>80.8</b> | <b>51.6</b>        | <b>39.8</b> | <b>57.9</b>      | <b>46.2</b> | <b>123.0G</b> | <b>47.2M</b> | <b>35.1</b> |
+| MaskFormer           | TopFormer | 31.6          | 75.9        | 33.5               | 28.6        | 56.1             | 38.2        | 60.0G         | 12.8M        | 29.9        |
+| YOSO                 | TopFormer | 31.0          | 75.9        | 33.0               | 26.9        | 45.1             | 27.9        | 36.8G         | 12.9M        | 31.1        |
+| <b>RMP-SAM(Ours)</b> | TopFormer | <b>34.6</b>   | <b>77.0</b> | <b>37.8</b>        | <b>29.8</b> | <b>53.3</b>      | <b>41.7</b> | <b>40.1G</b>  | <b>15.0M</b> | <b>30.7</b> |
+
+the VIS task, we use mAP as our primary metric. We further report the semantic segmentation results (mIoU) and video panoptic segmentation results (STQ (Weber et al., 2021) and VPQ (Kim et al., 2020)). Speed testing is conducted fairly on one A100 GPU for all models.
+
+**Re-implemented Baselines.** Since no previous works explore joint co-training for image, video, and interactive segmentation in one model. We re-implement several representative baselines using the same codebase, including non-real-time models (Mask2Former (Cheng et al., 2022), kMaX-DeepLab (Yu et al., 2022)) for reference. We benchmark multiple different methods, including different backbones and decoders.
+
+**Implementation Details.** We implement our models and all other baselines in PyTorch (Paszke et al., 2019). We use the distributed training framework with 16 A100 GPUs. Each mini-batch has two images per GPU, and each batch contains one data type. In particular, we adopt pseudo video training on COCO by moving image masks with random directions. All the models are trained with 12 epochs. For data augmentation, we adopt large-scale jitter as previous works (Cheng et al., 2022) to build strong baselines. For all models, we adopt the same training steps and optimizers. Refer to the appendix (Sec. 7.1) for more details.
+
+### 4.1 MAIN RESULTS
+
+**Our Benchmark Results.** We list our benchmark results in Tab. 3. We benchmark recent state-of-the-art methods using the same training and test settings. From the table, our proposed RMP-SAM achieves the best speed and accuracy trade-off on all three visual segmentation tasks under the various backbones. Mask2Former (Cheng et al., 2022) achieves similar or partially stronger results than our method. However, their speed is still limited, and they are 7-8 FPS slower than our methods. YOSO (Hu et al., 2023) runs as fast as our method. However, the performance gap is still significant. Thus, our proposed RMP-SAM is a simple yet effective baseline for real-time and Multi-Purpose settings.
+
+**Compare with SAM-like Methods.** Tab. 4 provides a detailed comparison between our models and previous SAM-like models. We report the results of mask AP of the COCO validation set, the parameter count, and FLOPs of each model. We first generate bounding boxes for each image using Mask R-CNN with ResNet50. Then, we send these bounding boxes to SAM-like models as box prompts. Our method is co-trained using SAM data and demonstrates even better results than most previous efficient SAM-like methods. It has strength in computational efficiency, with an additional function for video instance segmentation and panoptic segmentation.
+
+**Comparison with Specific Design Models on VIP-Seg.** In Tab. 5(a), we verify the effectiveness of RMP-SAM on a more challenging video segmentation task, video panoptic segmentation (VPS) on the VIP-Seg dataset. Compared with recent works (Li et al., 2023e; Miao et al., 2022), RMP-SAM also archives the best speed and accuracy trade-off, despite RMP-SAM is not specifically designed for VPS.
+
+**Comparison with Specific Design Models on ADE-20k.** In Tab. 5(b), we further transfer RMP-SAM on ADE-20k datasets. Since our method is a real-time model, we only list several representative works for reference. Our method still achieves stronger results than recent work (Hu et al., 2023).
+
+{7}------------------------------------------------
+
+Table 4: Comparison with SAM-like methods on COCO instance segmentation dataset. We first generate bounding boxes using Faster R-CNN, which are used as visual prompts for segmentation. We report the results of mask AP of the COCO validation set, the parameters, and the FLOPs.
+
+| Method                            | mAP  | #Param. | FLOPs(G) | PS | VIS | Interactive |
+|-----------------------------------|------|---------|----------|----|-----|-------------|
+| SAM-H (Kirillov et al., 2023)     | 35.6 | 641M    | 3000     | ✗  | ✗   | ✗           |
+| TinySAM (Shu et al., 2023)        | 32.5 | 10M     | 42       | ✗  | ✗   | ✗           |
+| MobileSAM (Zhang et al., 2023a)   | 32.1 | 10M     | 42       | ✗  | ✗   | ✗           |
+| EdgeSAM (Zhou et al., 2023)       | 31.9 | 10M     | 22       | ✗  | ✗   | ✗           |
+| EfficientSAM (Xiong et al., 2023) | 32.4 | 10M     | -        | ✗  | ✗   | ✗           |
+| FastSAM (Zhao et al., 2023)       | 34.3 | 68M     | 344      | ✗  | ✗   | ✗           |
+| RMP-SAM                           | 33.2 | 47M     | 35       | ✓  | ✓   | ✓           |
+
+![Figure 3: Meta-architecture exploration. (a) Simple shared decoder design. (b) Decoupled decoder design with two heads. (c) Shared decoder with decoupled adapter. (d) Decoupled decoder with the decoupled adapters. The diagram shows four architectures: (a) shows a shared decoder with two heads (Mask and Class) receiving object and prompt queries. (b) shows a decoupled decoder with two separate decoders for mask and class. (c) shows a shared decoder with decoupled adapters for mask and class. (d) shows a decoupled decoder with decoupled adapters for mask and class.](d0abac95583b52a3b35f74a215567334_img.jpg)
+
+Figure 3: Meta-architecture exploration. (a) Simple shared decoder design. (b) Decoupled decoder design with two heads. (c) Shared decoder with decoupled adapter. (d) Decoupled decoder with the decoupled adapters. The diagram shows four architectures: (a) shows a shared decoder with two heads (Mask and Class) receiving object and prompt queries. (b) shows a decoupled decoder with two separate decoders for mask and class. (c) shows a shared decoder with decoupled adapters for mask and class. (d) shows a decoupled decoder with decoupled adapters for mask and class.
+
+Figure 3: Meta-architecture exploration. (a), Simple shared decoder design. (b), Decoupled decoder design with two heads. (c), Shared decoder with decoupled adapter. (d), Decoupled decoder with the decoupled adapters. Best viewed in color and zoom in.
+
+Table 5: Compared with specifically designed segmentation models.
+
+(a) Comparison with video segmentation method on (b) Comparison with panoptic segmentation method on VIP-Seg validation set. ADE-20k validation set.
+
+| Method       | backbone | VPQ  | STQ  | FPS |
+|--------------|----------|------|------|-----|
+| Clip-PanoFCN | R50      | 22.9 | 31.5 | 8   |
+| Video K-Net  | R50      | 26.1 | 33.1 | 10  |
+| Tube-Link    | STDCv1   | 30.6 | 32.0 | 14  |
+| Tube-Link    | STDCv2   | 31.4 | 32.8 | 12  |
+| Ours         | R18      | 32.5 | 33.7 | 30  |
+
+| Method       | backbone | PQ   | Parameters | FLOPs |
+|--------------|----------|------|------------|-------|
+| PanSegFormer | R50      | 36.4 | 51M        | 214G  |
+| MaskFormer   | R50      | 34.7 | 45.2M      | 181G  |
+| Mask2Former  | R50      | 39.7 | 45.2M      | 226G  |
+| YOSO         | R50      | 38.0 | 45.1M      | 176G  |
+| RMP-SAM      | R50      | 38.3 | 47.2M      | 179G  |
+
+### 4.2 ABLATION STUDY AND VISUAL ANALYSIS
+
+**Ablation on Meta-Architecture Design.** In Tab. 6(a), we further explore the meta-architecture design, as shown in Fig. 3. We use R50 as the backbone and keep the adapter unchanged. The table shows that a shared decoder architecture achieves the best parameter and performance trade-off. These findings may conflict with recent multi-task work (Li et al., 2022c) since the decoupled decoders may have more capacity. We argue that since our feature extractors are weaker than those works and the representation power is far from the heavier backbone such as Swin (Liu et al., 2021) or ViT-large (Dosovitskiy et al., 2021), adding more capacity in the decoder may not boost the final performance.
+
+**Effectiveness of Joint Co-training.** We further explore the impact of each dataset in Tab. 6(b). We find joint co-training with image and video data leads to better performance for video instance segmentation but reduces the performance of panoptic segmentation. Adding COCO-SAM training leads to a few performance drops. This is because the learning targets are different for object queries and prompt queries.
+
+**Ablation on Shared Decoder Design.** Tab. 6(c) shows using simple pooling-based dynamic convolution performs well under real-time settings, where we adopt ResNet18 as the backbone and keep the adapter unchanged. In particular, there is no difference in panoptic segmentation results and a slight gap for interactive segmentation. However, per-pixel cross-attention introduces extra computation costs.
+
+**Ablation on Adapter Design.** Then, we explore the adapter design in Tab. 6(d). In particular, we use a pre-trained model without adapters for initialization to see the effect of different adapters.
+
+{8}------------------------------------------------
+
+![Figure 4: Visualization results of YouTube-VIS 2019 and COCO datasets. The figure is a grid of images. The top two rows show five frames of inputs for video instance segmentation, with the same instances highlighted in the same color across frames. The third row shows interactive segmentation results with a single-point prompt (green color). The last row shows the panoptic segmentation results. The columns are labeled 'Frame 1', 'Frame 2', 'Frame 3', 'Frame 4', and 'Frame 5'.](d4e9f8f6bf5d7853ecae9c9633900af1_img.jpg)
+
+Figure 4: Visualization results of YouTube-VIS 2019 and COCO datasets. The figure is a grid of images. The top two rows show five frames of inputs for video instance segmentation, with the same instances highlighted in the same color across frames. The third row shows interactive segmentation results with a single-point prompt (green color). The last row shows the panoptic segmentation results. The columns are labeled 'Frame 1', 'Frame 2', 'Frame 3', 'Frame 4', and 'Frame 5'.
+
+Figure 4: The visualization results of YouTube-VIS 2019 and COCO datasets. The first two rows visualize five frames of inputs. The same instances are in the same color. The third row shows the interactive segmentation results with a single-point prompt (green color). The last row shows the panoptic segmentation results.
+
+Table 6: Ablation study on RMP-SAM’s component design.
+
+(a) Ablation on meta-architecture.
+
+| Setting    | COCO-Panoptic | COCO-SAM | Parameters |
+|------------|---------------|----------|------------|
+| Fig. 3 (a) | 43.8          | 54.2     | 46.3M      |
+| Fig. 3 (b) | 44.0          | 55.2     | 53.6M      |
+| Fig. 3 (c) | 44.6          | 56.7     | 47.3M      |
+| Fig. 3 (d) | 45.2          | 56.2     | 54.6M      |
+
+(b) Ablation on joint co-training. a: COCO-Panoptic. b: YT-VIS 2019. c: COCO-SAM.
+
+| Setting   | COCO-Panoptic | YT-VIS 2019 | COCO-SAM |
+|-----------|---------------|-------------|----------|
+| a         | 36.6          | -           | -        |
+| b         | -             | 21.5        | -        |
+| a + b     | 36.2          | 36.0        | 50.7     |
+| a + b + c | 35.7          | 35.3        | 50.9     |
+
+(c) Ablation on shared decoder design. DC: dynamic convolution. DCG: dynamic convolution with gating.
+
+| Settings                  | COCO-Panoptic | COCO-SAM |
+|---------------------------|---------------|----------|
+| Per-Pixel Cross-Attention | 45.0          | 55.3     |
+| Pooling + DC              | 43.8          | 55.7     |
+| Pooling + DCG             | 44.6          | 56.7     |
+
+(d) Ablation on adapter design. CA: cross-attention. DC: dynamic convolution.
+
+| A <sub>obj</sub> | A <sub>prompt</sub> | COCO-Panoptic | COCO-SAM |
+|------------------|---------------------|---------------|----------|
+| -                | -                   | 44.2          | 53.2     |
+| CA               | CA                  | 42.6          | 54.3     |
+| DC               | DC                  | 44.7          | 52.1     |
+| DC               | CA                  | 44.6          | 56.7     |
+| CA               | DC                  | 44.5          | 56.2     |
+
+In particular, we find that using asymmetric adapters works well for balanced results for object queries and prompt queries since the goals of the two queries are different. The former needs the spatio-temporal and scene-level context, while the latter only cares about the region context with the input position as the guidance. Our adapter can also work with other architecture, as shown in the appendix (Sec. 7.2).
+
+**Result Visualization.** In Fig. 4, we give the three different visualization results on the YouTube-VIS 2019 and COCO datasets. We generate these visualization results using only a single model thanks to the joint co-training strategy. The first three rows in Fig. 4 show the video instance segmentation. The fourth row shows the interactive segmentation results with a single-point prompt (shown in green color), and the last row shows the results of panoptic segmentation.
+
+## 5 RELATED WORK
+
+**Universal Segmentation.** Prior research has focused on designing segmentation models tailored for specific tasks. Recent developments in this field (Dosovitskiy et al., 2021; Liu et al., 2021; Carion et al., 2020; Zhang et al., 2021; Cheng et al., 2022; Yu et al., 2022; Li et al., 2021b; 2023c; Gu et al., 2023; Yuan et al., 2022; Li et al., 2022c; 2023d; 2024b; Yuan et al., 2024; Yang et al., 2021b;
+
+{9}------------------------------------------------
+
+2024) have shifted towards employing mask classification architectures, coupled with an end-to-end set prediction objective, to facilitate universal segmentation. This approach has outperformed specialized models (Chen et al., 2019; Kirillov et al., 2019; He et al., 2017; Li et al., 2021a; Huang et al., 2019; Yuan et al., 2020; Zhao et al., 2017; Chen et al., 2018; Li et al., 2022b; 2020a; Chen et al., 2017) across various segmentation tasks, including those involving images, videos, and point clouds (Kim et al., 2022; Li et al., 2022d; 2023c; Cheng et al., 2021a; Xu et al., 2022). Specifically, Mask2Former (Cheng et al., 2022) uses a masked-attention mechanism and surpasses the performance of prior specific image segmentation models. Similarly, Tube-Link (Li et al., 2023e) outperforms earlier models (Li et al., 2022d;b; Liu et al., 2020; Shin et al., 2023; Goel et al., 2021) tailored for specific video segmentation tasks. Semantic-SAM (Li et al., 2023a), built on Mask-DINO (Li et al., 2023b), employs a hybrid query design to facilitate panoptic and interactive segmentation within a single framework. However, despite the strong performance of these works, their complexity, stemming from the heavier encoder or the cascaded decoder designs, poses significant challenges for integration into actual products. Slow processing speeds and substantial parameter overhead primarily hinder these.
+
+**Efficient Model Design.** This research direction primarily concentrates on the development of efficient CNNs (Howard et al., 2017; Sandler et al., 2018; Howard et al., 2019; Iandola et al., 2016; Zhang et al., 2018; Ma et al., 2018; Han et al., 2020), transformers (Maaz et al., 2022; Pan et al., 2022; Mehta & Rastegari, 2022), and hybrid architectures (Zhang et al., 2023b; Ma et al., 2022; Chen et al., 2022b; Li et al., 2022a; Zhou et al., 2022), aimed at advancing visual representation learning. Most research investigates backbone design within the constraints of real-time processing and parameter efficiency. These studies are orthogonal to our work, which primarily explores the impact of data, task, and decoder design. Additionally, our work employs efficient models as encoders and presents detailed benchmarks and analyses of the encoder’s effects.
+
+**Efficient Segmentation.** Previous studies (Zhao et al., 2018; Li et al., 2020b; Yu et al., 2018; Hu et al., 2023; Hong et al., 2021; Wan et al., 2023; Yu et al., 2021; Mehta et al., 2018) on efficient segmentation have predominantly concentrated on closed-set and specific domains. In particular, a significant portion of this research (Li et al., 2020b; Hu et al., 2023; Mehta et al., 2019) is dedicated to driving scenarios. Recently, various studies (Zhang et al., 2022; Wan et al., 2023; Zhou et al., 2023) have developed efficient segmentation techniques that facilitate model execution on mobile devices. Mobile SAM (Zhang et al., 2023a) introduces a streamlined encoder distillation method. Fast SAM (Zhao et al., 2023) employs a single-stage instance segmentation framework that directly decodes class-agnostic masks. Recently, multiple studies have been conducted on efficient panoptic segmentation (Sun et al., 2023; Hu et al., 2023; Mohan & Valada, 2021) and rapid video instance segmentation (Yang et al., 2021a; Zhang et al., 2024). However, these real-time segmentation methods are limited to specific tasks. We contend that a multi-purpose model capable of real-time performance would have wide-ranging applications in editing, tracking, and segmentation functionalities within various products.
+
+**Interactive Segmentation.** Interactive segmentation (Kirillov et al., 2023; Chen et al., 2022a; Sofiuk et al., 2022; Lin et al., 2020; 2022) distinguishes objects by actively incorporating user inputs. Recently, SAM (Kirillov et al., 2023) has shown remarkable segmentation outcomes by leveraging multiple user interaction inputs and training on SA-1B data. Inspired by SAM, several studies (Zhang et al., 2023a; Zhou et al., 2023) have concentrated on employing a lighter image encoder to adapt SAM for real-time scenarios.
+
+## 6 CONCLUSION
+
+In this work, we explore a new challenging setting, real-time multi-purpose segmentation, to explore multi-task segmentation in one efficient model. To achieve this, we first benchmark existing image segmentation approaches by extending their query for video and interactive segmentation. However, no work can achieve the best speed and accuracy trade-off on all three sub-tasks. To solve this problem, we introduce RMP-SAM, a real-time segmentation model. It has a simple shared decoder with two key designs: shared dynamic convolution and asymmetric adapters. These designs lead to the best trade-off between speed and accuracy on three segmentation tasks. The proposed RMP-SAM model is versatile and effective for various tasks, including image segmentation, video segmentation, and iterative segmentation. To our knowledge, no real-time model can achieve this goal. The proposed benchmark and RMP-SAM baseline can facilitate future research in this new setting.
+
+ Rest of paper (reference and Appendix) is removed.

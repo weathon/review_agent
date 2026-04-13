@@ -1,0 +1,276 @@
+
+
+{0}------------------------------------------------
+
+# GRIDMIX: EXPLORING SPATIAL MODULATION FOR NEURAL FIELDS IN PDE MODELING
+
+Honghui Wang, Shiji Song & Gao Huang\*
+
+Department of Automation, BNRist, Tsinghua University, Beijing, China,
+
+wanghh20@mails.tsinghua.edu.cn, {shijis, gaohuang}@tsinghua.edu.cn
+
+## ABSTRACT
+
+Significant advancements have been achieved in PDE modeling using neural fields. Despite their effectiveness, existing methods rely on global modulation, limiting their ability to reconstruct local details. While spatial modulation with vanilla grid-based representations offers a promising alternative, it struggles with inadequate global information modeling and overfitting to the training spatial domain. To address these challenges, we propose GridMix, a novel approach that models spatial modulation as a mixture of grid-based representations. GridMix effectively explores global structures while preserving locality for fine-grained modulation. Furthermore, we introduce spatial domain augmentation to enhance the robustness of the modulated neural fields against spatial domain variations. With all these innovations, our comprehensive approach culminates in MARBLE, a framework that significantly advancing the capabilities of neural fields in PDE modeling. The effectiveness of MARBLE is extensively validated on diverse benchmarks encompassing dynamics modeling and geometric prediction. The code will be available on <https://github.com/LeapLabTHU/GridMix>.
+
+## 1 INTRODUCTION
+
+In recent years, deep learning has attracted considerable interest in its ability to solve partial differential equations (PDEs), providing data-driven approaches to approximate solutions across a broad spectrum of problems (Lu et al., 2021; Li et al., 2021; Brandstetter et al., 2022). One particularly innovative direction within this field is the use of neural fields, or implicit neural representations (INRs) (Park et al., 2019; Sitzmann et al., 2020), which offer continuous parameterizations of PDE solutions, enabling high-resolution modeling and flexible predictions across diverse geometries.
+
+Building upon this foundation, INR-based methods (Yin et al., 2022; Serrano et al., 2023) have demonstrated notable advancements in PDE modeling. These methods leverage INRs to encode solutions—expressed as functions of spatial coordinates—into a low-dimensional latent space via auto-decoding (Park et al., 2019). The solution operator is then approximated by learning how these latent representations evolve over time or in response to varying conditions. This framework effectively bridges the gap between complex spatial domains and the underlying PDEs, achieving impressive efficiency and accuracy in both steady-state and transient scenarios.
+
+Despite their potential, INR-based methods face limitations in accurately representing complex spatial variations in PDE solutions, often missing fine-grained local details. This issue stems from the use of global modulation (Perez et al., 2018), a technique that allows a base INR to represent different functions by altering its behavior conditioned on function-specific latent representations. Specifically, these latent representations are utilized to create function-specific modulation parameters that modify the hidden activations of INRs, thereby altering the output. As these parameters are typically shared across all spatial positions, the model’s ability to learn detailed local features and variations is hindered (Bauer et al., 2023). Additionally, INRs are susceptible to spectral bias (Rahaman et al., 2019), which can restrict their capability to learn high-frequency components of solutions.
+
+To address the limitations of global modulation, we propose extending it to spatial modulation, drawing inspiration from the success of grid-based representations in computer vision (Liu et al.,
+
+---
+
+\*Corresponding author
+
+{1}------------------------------------------------
+
+2020; Müller et al., 2022). Grid-based representations discretize continuous space into a regular grid, associating each grid point with a learnable vector that encodes local features. By applying this concept to PDE modeling, we can assign grid-based modulation parameters to each function, enabling a more fine-grained representation. However, while grid-based representations have proven effective in mitigating spectral bias in vision tasks under the assumption of a fixed and regular spatial domain, their straightforward adaptation to spatial modulation for PDE modeling presents new challenges. To be precise, although using independent modulation parameters at each location excels at capturing local information, it often compromises the ability to model global structures in sparse or irregular domains, resulting in poor reconstruction quality in unseen regions. This trade-off limits their generalization across varying spatial domains, which is crucial for robust PDE modeling.
+
+In this paper, we introduce *GridMix*, a novel spatial modulation technique that builds on the strengths of grid-based representations while tackling the aforementioned challenges. We achieve this by representing spatial modulation as a mixture of basis functions, where each is parameterized through grid-based representations. *GridMix* preserves the fine-grained locality of grid-based modulation, allowing for detailed exploitation of local information in function reconstruction. At the same time, it regularizes the modulation space to the linear span of a small set of learned grid basis functions, which are shared across function instances and facilitate the extraction of global structural information. This regularization effectively mitigates the risk of overfitting to specific spatial domains. Additionally, we introduce *Spatial Domain Augmentation*, which simulates domain variations during training to further enhance generalization to unseen regions. Together, these innovations form the *GridMix Augmented Coordinate-based Neural Fields (MARBLE)* for PDE modeling, significantly improving the learning capacity of previous approaches that relied on global modulation.
+
+Our contributions are summarized as follows:
+
+1. We introduce *GridMix* to mitigate the spatial domain over-fitting of spatial modulation.
+2. We present the *MARBLE* framework, which combines *GridMix* with spatial domain augmentation to boost the performance of existing INR-based methods for PDE modeling.
+3. We demonstrate the effectiveness and versatility of *MARBLE* with extensive experiments, including dynamics modeling and geometric prediction.
+
+## 2 RELATED WORK
+
+**Neural PDE Solvers.** Deep learning has rapidly advanced as a powerful tool for solving Partial Differential Equations (PDEs) across diverse fields, including fluid dynamics (Kochkov et al., 2021; Sun et al., 2023), solid mechanics (Samaniego et al., 2020; Nguyen-Thanh et al., 2020), and inverse problems (Lu et al., 2022; Molinaro et al., 2023). Neural Operators have emerged as a leading approach within this domain, modeling the solution operator between input and output function spaces (Lu et al., 2021; Li et al., 2021). Recent research has centered on addressing key challenges for Neural PDE solvers, such as handling intricate geometries and ensuring precise predictions. To tackle these issues, methods like *Geo-FNO* (Li et al., 2023b) and *MP-PDE* (Brandstetter et al., 2022) have been developed to handle irregular grids, while *Factorized-FNO* (Tran et al., 2023) refines FNO’s architecture and training strategy for improved performance.
+
+**Neural Fields,** also known as implicit neural representations (INRs), utilize neural networks (typically MLPs) to represent continuous signals based on spatial coordinates. These models have demonstrated exceptional performance in various vision tasks, including image representation (Sitzmann et al., 2020; Dupont et al., 2022), 3D shape modeling (Park et al., 2019; Tancik et al., 2020), and novel view synthesis (Mildenhall et al., 2021). In the realm of PDE solving, INRs have been integrated into physics-informed neural networks (PINNs) (Raissi et al., 2019; Wang et al., 2023; 2024) to approximate solutions. While effective, traditional PINNs require training a separate model for each unique set of initial and boundary conditions. To address this limitation, recent research has explored modulating the intermediate features of a base INRs using instance-specific latent codes, enabling the representation of a solution space (Yin et al., 2022; Serrano et al., 2023). These INR-based approaches are independent to spatial discretization and scale well to high-dimensional problems. However, INRs are susceptible to spectral bias (Rahaman et al., 2019), preferentially learning low-frequency components, which can hinder their representational capacity.
+
+{2}------------------------------------------------
+
+**Grid-based Representations** offer a compelling solution to the aforementioned limitation of INRs (Liu et al., 2020; Takikawa et al., 2021; Müller et al., 2022; Lee et al., 2024b). These approaches discretize the input domain into a fine-grained grid, assigning a learnable feature vector to each grid cell. When querying points within this space, local feature vectors are aggregated with interpolation and integrated into INRs, either as input (Müller et al., 2022) or within intermediate layers (Lee et al., 2024b). The inherent locality of grid-based representations enables INRs to effectively capture high-frequency signals. While existing grid-based methods excel at reconstructing fine details within fixed domains, their generalization to unseen regions is restricted, hindering their applicability to PDE solving. To address this challenge, we propose learning grid features as mixtures of basis representations, promoting domain generalization while preserving locality. A related approach, Factor Fields (Chen et al., 2023), decomposes signals into components like coefficient fields and basis functions. However, while Factor Fields operates in the signal space, our work applies a similar decomposition in the modulation space. Additionally, Factor Fields focuses on tasks outside the PDE domain, whereas our approach targets PDE-related challenges, emphasizing domain generalization of spatial modulations.
+
+## 3 METHOD
+
+We introduce MARBLE (GirdMix Augmented Coordinate-based Neural Fields) for PDE modeling. We begin with the problem formulation in Section 3.1. Next, we provide a preliminary overview of CORAL (Serrano et al., 2023), an INR-based method for solving PDEs, in Section 3.2. Finally, we describe the spatial modulation with MARBLE and the spatial domain augmentation in Section 3.3.
+
+### 3.1 PROBLEM DESCRIPTION
+
+We focus on PDE modeling tasks that involve approximating the operator  $\mathcal{G}^*$ , which maps functions from input space  $\mathcal{A} \subset L^2(\Omega, \mathbb{R}^{d_a})$  to output space  $\mathcal{U} \subset L^2(\Omega, \mathbb{R}^{d_u})$  according to the governing PDE. Here  $L^2(\Omega, \mathbb{R}^{d_x})$  denotes the infinite-dimensional space of square-integrable functions with domain  $\Omega$  and range in  $\mathbb{R}^{d_x}$ . Two such exemplary tasks are investigated: 1) **Dynamics Modeling**: Here, the objective is to capture the temporal evolution of a physical system over a forecasting horizon. This translates to modeling the transition from state  $u_t$  to state  $u_{t+\delta t}$ , where  $\delta t$  represents the time step. 2) **Geometric Prediction**: This task involves making predictions based solely on the geometric configuration of the system. In the context of geometric prediction task, each data sample is observed on a unique domain  $\mathcal{X}_i$ . Conversely, for modeling system dynamics, a single domain  $\mathcal{X}_r$  is employed for training the model across all examples, while a separate domain  $\mathcal{X}_{te}$  is used for evaluating the model’s performance during testing.  $\mathcal{X}_r$  and  $\mathcal{X}_{te}$  are subsets of a full domain  $\mathcal{X}_{full}$ .
+
+### 3.2 PRELIMINARY
+
+The **CORAL Framework** addresses PDE modeling tasks through a two-stage training. In the first stage, the *reconstruction* stage, CORAL uses two modulated INRs,  $f_{\theta_a, \phi_a}$  and  $f_{\theta_u, \phi_u}$ , to parametrize input and output functions, respectively. Each of these INRs serves as a base model that is modulated with function-specific parameters to reconstruct different functions. Specifically, INR parameters  $\theta_a$  and  $\theta_u$  are shared across all functions within their respective space, while the modulation parameters,  $\phi_a$  and  $\phi_u$ , are unique to each function. The modulation parameters are derived from low-dimensional latent codes  $z_a$  and  $z_u$  through hypernetworks  $h_a$  and  $h_u$ :  $\phi_a = h_a(z_a)$  and  $\phi_u = h_u(z_u)$ . After training, each function is represented by a compact latent code, with the reconstruction error indicating the quality of the representation. In the second stage, the *forecasting* stage, CORAL learns a mapping between latent codes  $z_a$  and  $z_u$ , using a processing network  $g_\psi$ .
+
+During inference, CORAL operates in three steps, as shown in Figure 1. First, the encoder  $e_a : \mathcal{A} \mapsto \mathbb{R}^{d_z}$  projects input  $a_i$  into latent space ( $z_a$ ) via auto-decoding (Park et al., 2019), as illustrated in Figure 1(b). Given a base INR  $f_{\theta_a, \phi_a}$ ,  $e_a$  encodes the function  $a_i$  by optimizing the latent code  $z_a$  to minimize the reconstruction error:
+
+$$\mathcal{L}_{\mathcal{X}_r}(f_{\theta_a, \phi_a}, a_i) = \mathbb{E}_{x \sim \mathcal{X}_r} \|f_{\theta_a, \phi_a}(x) - a_i(x)\|^2, \quad \text{where } \phi_a = h_a(z_a). \quad (1)$$
+
+Next, the model  $g_\psi : \mathbb{R}^{d_z} \mapsto \mathbb{R}^{d_z}$  transforms  $z_a$  into the output latent code  $z_u$ . Finally, the decoder  $\xi_u : \mathbb{R}^{d_z} \mapsto \mathcal{U}$  decodes the processed code back into the output function space through a single forward pass, as shown in Figure 1(c).
+
+{3}------------------------------------------------
+
+![Figure 1: INR-based framework for PDE modeling. (a) CORAL framework: Input Space A and Output Space U are processed through Modulated INR f_theta. Encoding maps A to a latent space Z, and Decoding maps Z back to U. A processing block g_phi is shown between encoding and decoding. (b) Encoding: Input x in X_tr is processed by f_theta to produce a_i(x). This is compared with a target a_i(x) to update z_a_i to minimize Eq. (1). (c) Decoding: Input x in X_te is processed by f_theta to produce u_i(x). This is compared with a target u_i(x) to update z_u_i. Legend: backward pass (red arrow), forward pass (black arrow).](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 1: INR-based framework for PDE modeling. (a) CORAL framework: Input Space A and Output Space U are processed through Modulated INR f\_theta. Encoding maps A to a latent space Z, and Decoding maps Z back to U. A processing block g\_phi is shown between encoding and decoding. (b) Encoding: Input x in X\_tr is processed by f\_theta to produce a\_i(x). This is compared with a target a\_i(x) to update z\_a\_i to minimize Eq. (1). (c) Decoding: Input x in X\_te is processed by f\_theta to produce u\_i(x). This is compared with a target u\_i(x) to update z\_u\_i. Legend: backward pass (red arrow), forward pass (black arrow).
+
+Figure 1: INR-based framework for PDE modeling.
+
+**Meta-Learned INRs.** Typically, the encoding process could require thousands steps of gradient descent. To reduce this fitting cost, CORAL adopts the Model-Agnostic Meta Learning (MAML) algorithm (Finn et al., 2017) to meta-learn the parameters  $\theta_a$  such that the encoding process can be done in a few gradient steps (Dupont et al., 2022). More specifically, a step of the MAML inner loop optimizes a latent code  $z_{a_i}$  to fit a randomly sampled function  $a_i$  as:
+
+$$z_{a_i}^{(0)} = 0; z_{a_i}^{(k+1)} = z_{a_i}^{(k)} - \alpha \nabla_{z_{a_i}^{(k)}} \mathcal{L}_{X_{tr}}(f_{\theta_a, \phi_{a_i}^{(k)}}(x), a_i), \text{ with } \phi_{a_i}^{(k)}(x) = h_a(z_{a_i}^{(k)}) \text{ for } 0 \leq k \leq K-1, \quad (2)$$
+
+where  $\alpha$  is the inner-loop learning rate and  $K$  the number of gradient steps. The outer loop then meta-learn the shared parameter  $\theta_a$  by
+
+$$\theta_a \leftarrow \theta_a - \beta \nabla_{\theta} \sum_{i=1}^N \mathcal{L}_{X_{tr}}(f_{\theta_a, \phi_{a_i}^{(K)}}(x), a_i), \quad (3)$$
+
+where  $\beta$  denotes the outer loop learning rate and  $N$  the number of samples.
+
+**Global Modulation in CORAL.** CORAL utilizes SIRENs (Sitzmann et al., 2020) as the backbone for its INRs. SIRENs are multilayer perceptrons with sine activations, which can be formalized as
+
+$$f_{\theta}(x) = W_L(\sigma_{L-1} \circ \sigma_{L-2} \circ \dots \circ \sigma_0(x)) + b_L, \text{ with } \sigma_i(\eta_i(x)) = \sin(\omega_0(W_i \eta_i(x) + b_i)), \quad (4)$$
+
+where  $\theta = (W_i, b_i)_{i=0}^L$  are network weights and biases,  $\omega_0$  is a positive scaling factor,  $\eta_0(x) = x$  and  $\eta_i(x)$  are activations of the  $i$ -th hidden layer given coordinate  $x$ . CORAL applies shift modulations (Perez et al., 2018) to SIRENs to represent individual function as
+
+$$f_{\theta, \phi}(x) = W_L(\sigma_{L-1} \circ \sigma_{L-2} \circ \dots \circ \sigma_0(x)) + b_L, \text{ with } \sigma_i(\eta_i(x)) = \sin(\omega_0(W_i \eta_i(x) + b_i + \phi_i)), \quad (5)$$
+
+where  $\phi = (\phi_i)_{i=1}^{L-1}$  represents modulation parameters at the  $i$ -th layer. Note that the global modulations  $\phi_i$  are shared across different spatial coordinates as shown in Figure 2(a). This property limits the capacity of modulated INRs to represent complex function space. As demonstrated in previous work (Bauer et al., 2023), this global modulation fails to capture local details because any changes in modulations will lead to global perturbations across the reconstructed function.
+
+### 3.3 SPATIAL MODULATION WITH GRIDMIX
+
+While the original modulation design only incorporates global information of individual function to adjust the behavior of the based INR, we propose an enhanced approach which leverages local information for fine-grained modulation, without compromising its ability to utilize global information.
+
+**Spatial Modulation Framework.** Building on prior work (Müller et al., 2022; Lee et al., 2024b) that highlights the effectiveness of grid-based representations in enhance the learning capacity of INRs, we extend the global modulation scheme to a spatial modulation approach (Figure 2(b)). We achieve this by introducing a single-channel grid-based representation  $\phi_i \in \mathbb{R}^{H \times W}$ , where  $H$  and
+
+{4}------------------------------------------------
+
+![Figure 2: Different modulation strategies. (a) Global Modulation: A blue tensor of size N x C is added to a green tensor of size N x C. (b) Spatial Modulation: A blue tensor of size N x C is added to a green tensor of size N x C, with a green arrow indicating spatial modulation parameters. (c) GridMix (Ours): A blue tensor of size N x C is added to a green tensor of size N x C, with a green arrow indicating spatial modulation parameters, and a dashed line indicating a mixture of grid-based representations.](690fce4fb5c9cbb8beb560cb2a3fcbeb_img.jpg)
+
+Figure 2: Different modulation strategies. (a) Global Modulation: A blue tensor of size N x C is added to a green tensor of size N x C. (b) Spatial Modulation: A blue tensor of size N x C is added to a green tensor of size N x C, with a green arrow indicating spatial modulation parameters. (c) GridMix (Ours): A blue tensor of size N x C is added to a green tensor of size N x C, with a green arrow indicating spatial modulation parameters, and a dashed line indicating a mixture of grid-based representations.
+
+Figure 2: Different modulation strategies. We visualize the hidden activations and modulation parameters as blue and green tensors, respectively. The hidden activations has dimensions  $N \times C$ , where  $N$  represents the number of query locations and  $C$  the number of channels. The green arrow indicates the dimension along which the modulation parameters are broadcast.
+
+$W$  are spatial resolution of the grid (considering a 2D domain as an example). To derive the position-dependent shift modulation scalar  $\phi_i(x)$  for a given spatial location  $x$  from this grid, we first identify the neighboring grid points surrounding this location (in 2D, this involves four points). We then compute  $\phi_i(x)$  by interpolating the values at these neighboring points, using bilinear interpolation in the 2D case. The spatial modulation reformulates Equation 5 as
+
+$$\sigma_i(\eta_i(x)) = \sin(\omega_0(W_i\eta_i(x) + b_i + \phi_i(x))). \quad (6)$$
+
+By assigning learnable parameters to each grid cell, this approach enables the model to effectively capture and adapt to spatially varying features.
+
+While the localized nature of spatial modulation enhances learning capacity, it also introduces limitations, particularly in capturing global information. The flexibility of grid-based modulation allows meta-learned INRs to minimize the reconstruction error  $\mathcal{L}_{\mathcal{X}_{tr}}(f_{\theta_a, \phi_{a_i}}, a_i)$  independently at each location  $x \in \mathcal{X}_{tr}$ . However, this localized focus can overlook broader contextual relationships essential for a comprehensive understanding of the data. As a result, the model may become overly specialized to the training domain  $\mathcal{X}_{tr}$ , leading to over-fitting. This over-fitting impairs the model’s ability to generalize effectively to new data in unseen test domains  $\mathcal{X}_{te}$ .
+
+To further illustrate this limitation, we compare the performance of INRs with global and local modulations under two settings: (1) the test function is observed on the training domain  $\mathcal{X}_{tr}$  and reconstructed on  $\mathcal{X}_{full}$ ; and (2) the function is observed on test domain  $\mathcal{X}_{te}$ . The results in Table 1 and Figure 3 clearly demonstrate that, although spatial modulation significantly reduces reconstruction error on  $\mathcal{X}_{tr}$ , it fails to capture the global information of test data, resulting in a large error on  $\mathcal{X}_{full}$ . Moreover, it performs poorly with data observed on unseen domain in  $\mathcal{X}_{te}$ . While this limitation is less critical in vision tasks, where a fixed and regular spatial domain is typically assumed, it becomes a significant concern in the context of PDE modeling, where generalization across varying spatial domains is a crucial metric.
+
+**GridMix.** To mitigate over-fitting associated with spatial modulation with respect to the training spatial domain, we introduce a mixture of grid-based representations for generating spatial modulations, as illustrated in Figure 2(c). We begin by defining a set of grid-based representations to serve as basis functions and construct the spatial modulations as a linear span of these basis functions. Specifically, the grid mixture in each hidden layer is given by:
+
+$$\phi_i(x) = \sum_{m=1}^M c_i^m \Phi_i^m(x), \quad \text{where } [c_1, c_2, \dots, c_{L-1}] = h(z) = W_h z + b_h. \quad (7)$$
+
+{5}------------------------------------------------
+
+![Figure 3: Comparison between INRs with global modulation (Top), spatial modulation with vanilla grid-based representation (Middle) and GridMix (Bottom). The figure consists of two sub-panels, (a) and (b). Each sub-panel is a 3x4 grid of heatmaps. The rows are labeled 'Global Modulation', 'Spatial Modulation', and 'GridMix'. The columns are labeled 'Ground Truth', 'Reconstruction', 'Error on $\mathcal{X}_{tr}$', and 'Error on $\mathcal{X}_e$'. Sub-panel (a) shows results for test data observed on $\mathcal{X}_{tr}$, and sub-panel (b) shows results for test data observed on $\mathcal{X}_e$. Color bars at the bottom of each column indicate the scale for the heatmaps.](c54b3ca7603d65d4589151bc3a49d054_img.jpg)
+
+Figure 3: Comparison between INRs with global modulation (Top), spatial modulation with vanilla grid-based representation (Middle) and GridMix (Bottom). The figure consists of two sub-panels, (a) and (b). Each sub-panel is a 3x4 grid of heatmaps. The rows are labeled 'Global Modulation', 'Spatial Modulation', and 'GridMix'. The columns are labeled 'Ground Truth', 'Reconstruction', 'Error on \$\mathcal{X}\_{tr}\$', and 'Error on \$\mathcal{X}\_e\$'. Sub-panel (a) shows results for test data observed on \$\mathcal{X}\_{tr}\$, and sub-panel (b) shows results for test data observed on \$\mathcal{X}\_e\$. Color bars at the bottom of each column indicate the scale for the heatmaps.
+
+Figure 3: Comparison between INRs with global modulation (Top), spatial modulation with vanilla grid-based representation (Middle) and GridMix (Bottom). Each model is trained with data observed on  $\mathcal{X}_{tr}$ . During inference, test data is observed on (a)  $\mathcal{X}_{tr}$ , or (b)  $\mathcal{X}_e$  and reconstructed on  $\mathcal{X}_{full}$ .
+
+Here  $(\Phi_i^m)_{m=1}^M$  denote  $M$  grid basis functions, and  $\mathbf{c}_i = (c_i^m)_{m=1}^M$  represent the mixture coefficients at the  $i$ -th layer. These mixture coefficients are efficiently determined from a low-dimensional embedding  $z$  via a linear hypernetwork  $h$ . The grid basis functions are shared across different function instances and are learned alongside the modulated INRs.
+
+This approach not only maintains the localized nature of grid-based modulation but also enables the capture of global information through the shared basis functions. The rationale behind using grid mixtures parallels the principles of spectral methods, where a problem is decomposed into simpler components that can efficiently capture both local and global features. Additionally, GridMix act as a form of regularization to the modulation space. For instance, in vanilla spatial modulation, each function is assigned  $H \times W$  parameters, resulting in a high-dimensional parameter space. In contrast, GridMix reduces this dimensionality to  $M$ , where  $M$  represents the number of shared basis functions used across all functions. This strategy effectively prevents the modulated INRs from over-fitting to the data distribution on a specific spatial domain, thereby improving the model’s ability to generalize across a diverse range of previously unseen domains (see Table 1 and Figure 3).
+
+**Channel-wise Modulations.** While GridMix effectively regularize the modulation space to prevent over-fitting, they can also limit the model’s representational capacity. To address this issue, we propose incorporating channel-wise modulations into GridMix. Although a single-channel approach often performs adequately with vanilla spatial modulation, it falls short within the more constrained framework of GridMix. Therefore, we extend single-channel grid basis functions  $\Phi_i^m \in \mathbb{R}^{H \times W}$  to multi-channel ones  $\Phi_i^m \in \mathbb{R}^{H \times W \times C}$ , where  $C$  is the number of channels. This extension allows for a spatially dependent modulation vector  $\phi_i(x)$ , which combines the benefits of GridMix with enhanced expressiveness. Despite this increase in representational capability, the compactness of the modulation space is preserved by sharing the mixture coefficients across all channels.
+
+**Spatial Domain Augmentation.** While our previous design improves generalization across spatial domains through modulation strategies, we now tackle the problem from a different perspective by refining the learning process itself. One inherent reason for the limited generalization is the lack of domain variation during training, as the training domain  $\mathcal{X}_{tr}$  remains fixed in Equations 2 and 3. To counter this, we propose data augmentation of spatial domains to simulate domain variations encountered during inference. To illustrate, for each run of inner and outer loops, we randomly sample a subset of training coordinates  $\mathcal{X}_{sub}$  from the fixed domain  $\mathcal{X}_{tr}$ , as described below:
+
+$$\text{Inner loop: } z_{a_i}^{(k+1)} = z_{a_i}^{(k)} - \alpha \nabla_{z_{a_i}^{(k)}} \mathcal{L}_{\mathcal{X}_{sub} \sim \mathcal{X}_{tr}}(f_{\theta_a, \phi_{a_i}^{(k)}}(a_i), a_i), \quad 0 \leq k \leq K-1; \quad (8)$$
+
+$$\text{Outer loop: } \theta_a \leftarrow \theta_a - \beta \nabla_{\theta} \sum_{i=1}^N \mathcal{L}_{\mathcal{X}_{sub} \sim \mathcal{X}_{tr}}(f_{\theta_a, \phi_{a_i}^{(k)}}(a_i), a_i). \quad (9)$$
+
+{6}------------------------------------------------
+
+By incorporating spatial domain augmentation, we enhance the robustness of modulated INRs with respect to the variation of spatial domain.
+
+## 4 EXPERIMENTS
+
+We assessed the flexibility of our model by applying it to two different tasks: forecasting the temporal dynamics of a physical system (see Section 4.1) and predicting the steady-state behavior based on domain geometry (see Section 4.2). Both tasks were conducted using the experimental setup described in the CORAL paper (Serrano et al., 2023), with additional details available in Appendix B. Moreover, a thorough ablation study of our method is presented in Section 4.3.
+
+### 4.1 DYNAMICS MODELING
+
+The objective of dynamics modeling is to forecast the temporal evolution of a physical system over a specified horizon. To accomplish this, we follow an autoregressive framework operating within a latent space. Formally, given a sequence of target functions  $(u_0, u_{\delta t}, \dots, u_{T\delta t})$ , where  $u_t$  represents the system state at time  $t$  and  $\delta t$  the time step, our aim is to predict the subsequent states  $u_{k\delta t}$  for  $k = 1, \dots, T$  based on the initial condition  $u_0$ . This is achieved by encoding  $u_0$  into a latent representation  $z_0 = e(u_0)$  and recursively generating subsequent latent codes  $z_{k\delta t}$  using an autoregressive processor  $g_\psi$ . Finally, the predicted latent states are decoded to obtain the corresponding estimated functions  $\hat{u}_{k\delta t} = \xi(z_{k\delta t})$ ,  $k = 1, \dots, T$ .
+
+**Architectures.** For this problem, we employ a single modulated INR  $f_{\theta, \phi}$  to represent the function space encompassing the physical quantity across diverse initial conditions and time instances. The modulated INR is trained by the meta-learning algorithm detailed in Section 3. For the autoregressive processor  $g_\psi$ , a Neural Ordinary Differential Equation (NODE) (Chen et al., 2018) is adopted, enabling flexible predictions at arbitrary time steps. Given an initial latent state  $z_t$ , the NODE solver recursively computes the latent code at desired time steps  $t + \tau$  according to the equation  $z_{t+\tau} = g_\psi(z_t, \tau) = z_t + \int_t^{t+\tau} \zeta_\psi(z_s) ds$ , where  $\zeta_\psi$  is a neural network parameterized by  $\psi$ . The integral term is approximated using a fourth-order Runge-Kutta scheme. Training of the NODE is formulated as the minimization problem:
+
+$$\arg \min_\psi \mathbb{E}_{u \sim \nu_u, t \sim \mathcal{U}[0, T]} \|g_\psi(e(u_0), t) - e(u_t)\|^2, \quad (10)$$
+
+where  $\nu_u$  denotes the distribution of physical quantity trajectories.
+
+**Datasets and Baselines.** We generate two datasets of fluid dynamics using the 2D Navier-Stokes equation (*Navier-Stokes*), which models a viscous, incompressible fluid on a regular domain, and the 3D spherical Shallow-Water equation (*Shallow-Water*), which describes the movements of the Earth’s atmosphere. These datasets consist of time-evolving vorticity fields (and height for *Shallow-Water*), derived from diverse initial conditions. More details can be found in Appendix A.1. Several state-of-the-art models were compared, encompassing two neural operator methods (DeepONet (Lu et al., 2021) and FNO (Li et al., 2021)), a mesh-based network (MP-PDE (Brandstetter et al., 2022)), and two coordinate-based approaches (DiNo (Yin et al., 2022) and CORAL (Serrano et al., 2023)). The baseline results for comparison are sourced from Serrano et al. (2023).
+
+**Evaluation Criteria.** To assess the model’s spatiotemporal generalization capabilities, two evaluation protocols are employed. • **Temporal Extrapolation:** Each trajectory is partitioned into two equal-length sub-trajectories of 20 timesteps: an in-time (*In-t*) and out-of-time (*Out-t*) segment. The model is trained to forecast up to the end of the *In-t* segment and evaluated on both horizons. This assesses the model’s ability to predict within and beyond the training regime. • **Spatial Subsampling:** From the original domain  $\mathcal{X}_{full}$ , with a resolution of  $64 \times 64$  for *Navier-Stokes* and  $64 \times 128$  for *Shallow-Water*, we randomly select  $\pi$  percent of points as the training grid  $\mathcal{X}_{tr}$ . A distinct grid  $\mathcal{X}_{te}$  with identical sparsity is created for testing. Both grids remain constant across different trajectories, allowing for evaluation of the model’s ability to generalize to unseen locations.
+
+**Results.** Table 2 comprehensively evaluate the temporal extrapolation capabilities of various machine learning models on the *Navier-Stokes* and *Shallow-Water* datasets under different grid densities (100%, 20%, and 5%). Our method consistently yields the best or near-best Mean Squared Error,
+
+{7}------------------------------------------------
+
+Table 2: **Dynamics Modeling** - Test results. Metrics in MSE. The best results are in **bold**, while the second-best results are underlined. The “lin. int.” abbreviates linear interpolation of irregular grid data onto a regular grid. The term “n.a.” indicates “not available”, as the *Shallow-Water* data is in a 2D spherical grid (latitude and longitude), making it incompatible with linear interpolation.
+
+| $\mathcal{X}_{tr} \downarrow \mathcal{X}_{te}$ | dataset $\rightarrow$ | <i>Navier-Stokes</i> |  | <i>Shallow-Water</i> |  |
+|-|-|-|-|-|-|
+|  |  | <i>In-t</i> | <i>Out-t</i> | <i>In-t</i> | <i>Out-t</i> |
+| $\pi = 100\%$<br>regular grid | DeepONet | 4.72e-2 $\pm$ 2.84e-2 | 9.58e-2 $\pm$ 1.83e-2 | 6.54e-3 $\pm$ 4.94e-4 | 8.93e-3 $\pm$ 9.42e-5 |
+|  | FNO | 5.68e-4 $\pm$ 7.62e-5 | 8.95e-3 $\pm$ 1.50e-3 | 3.20e-5 $\pm$ 2.51e-5 | <b>1.17e-4 <math>\pm</math> 3.01e-5</b> |
+|  | MP-PDE | 4.39e-4 $\pm$ 8.78e-5 | 4.46e-3 $\pm$ 1.28e-3 | 9.37e-5 $\pm$ 5.56e-6 | 1.53e-3 $\pm$ 2.62e-4 |
+|  | DINO | 1.27e-3 $\pm$ 2.22e-5 | 1.11e-2 $\pm$ 2.28e-3 | 4.48e-5 $\pm$ 2.74e-6 | 2.63e-3 $\pm$ 1.36e-4 |
+|  | CORAL | 1.86e-4 $\pm$ 1.44e-5 | 1.02e-3 $\pm$ 8.62e-5 | 3.44e-6 $\pm$ 4.01e-7 | 4.82e-4 $\pm$ 5.16e-5 |
+|  | MARBLE (Ours) | <b>3.52e-5 <math>\pm</math> 5.31e-6</b> | <b>5.04e-4 <math>\pm</math> 3.68e-5</b> | <b>8.21e-7 <math>\pm</math> 1.13e-8</b> | 1.42e-4 $\pm$ 7.07e-6 |
+| $\pi = 20\%$<br>irregular grid | DeepONet | 8.37e-1 $\pm$ 2.07e-2 | 7.80e-1 $\pm$ 2.36e-2 | 1.05e-2 $\pm$ 5.01e-4 | 1.09e-2 $\pm$ 6.16e-4 |
+|  | FNO + lin. int. | 3.97e-3 $\pm$ 8.03e-4 | 9.92e-3 $\pm$ 2.36e-3 | n.a. | n.a. |
+|  | MP-PDE | 3.98e-2 $\pm$ 1.69e-2 | 1.31e-1 $\pm$ 5.34e-2 | 5.28e-3 $\pm$ 5.25e-4 | 2.56e-2 $\pm$ 8.23e-3 |
+|  | DINO | 9.99e-4 $\pm$ 6.71e-3 | 8.27e-3 $\pm$ 5.61e-3 | 2.20e-3 $\pm$ 1.06e-4 | 4.94e-3 $\pm$ 1.92e-4 |
+|  | CORAL | 2.18e-3 $\pm$ 6.88e-4 | 6.67e-3 $\pm$ 2.01e-3 | 1.41e-3 $\pm$ 1.39e-4 | 2.11e-3 $\pm$ 5.58e-5 |
+|  | MARBLE (Ours) | <b>1.62e-4 <math>\pm</math> 2.42e-5</b> | <b>9.27e-4 <math>\pm</math> 1.44e-4</b> | <b>7.06e-4 <math>\pm</math> 4.60e-5</b> | <b>8.45e-4 <math>\pm</math> 3.01e-5</b> |
+| $\pi = 5\%$<br>irregular grid | DeepONet | 7.86e-1 $\pm$ 5.48e-2 | 7.48e-1 $\pm$ 2.76e-2 | 1.11e-2 $\pm$ 6.94e-4 | <u>1.12e-2 <math>\pm</math> 7.79e-4</u> |
+|  | FNO + lin. int. | 3.87e-2 $\pm$ 1.44e-2 | 5.19e-2 $\pm$ 1.10e-2 | n.a. | n.a. |
+|  | MP-PDE | 1.92e-1 $\pm$ 9.27e-2 | 4.73e-1 $\pm$ 2.17e-1 | 1.10e-2 $\pm$ 4.23e-3 | 4.94e-2 $\pm$ 2.36e-2 |
+|  | DINO | 8.65e-2 $\pm$ 1.16e-2 | 9.36e-2 $\pm$ 9.34e-3 | <b>1.22e-3 <math>\pm</math> 2.05e-4</b> | 1.52e-2 $\pm$ 3.74e-4 |
+|  | CORAL | <u>2.44e-2 <math>\pm</math> 1.96e-2</u> | <u>4.57e-2 <math>\pm</math> 1.78e-2</u> | 8.77e-3 $\pm$ 7.20e-4 | 1.29e-2 $\pm$ 1.92e-3 |
+|  | MARBLE (Ours) | <b>1.43e-3 <math>\pm</math> 5.66e-4</b> | <b>4.73e-3 <math>\pm</math> 1.33e-3</b> | <u>5.92e-3 <math>\pm</math> 3.32e-4</u> | <b>5.98e-3 <math>\pm</math> 3.51e-4</b> |
+
+substantially surpassing baseline performance in most scenarios. Specifically, at 100% grid density, our method underscores the efficacy of spatial modulation, achieving up to a 5.3x reduction in error for in-time predictions and a 3.4x reduction for out-of-time predictions compared to the global modulation baseline, CORAL. Additionally, our method generally outperforms FNO in most settings and matches its performance in the *Shallow-Water Out-t* scenario. Even under the more challenging 20% and 5% grid density settings, our approach retains its superiority, showcasing the effectiveness of GridMix and spatial domain augmentation in mitigating over-fitting to training domain. Notably, on the *Navier-Stokes* dataset, it delivers robust performance with up to a 94.1% reduction in *In-t* MSE and a 89.5% reduction in *Out-t* MSE compared to the best-performing baseline. These results highlight the strength of our method in handling dynamics modeling tasks, particularly under sparse and irregular grid, where it demonstrates both accuracy and resilience. Note that DINO outperforms our method in the *In-t* case of *Shallow-Water* ( $\pi = 5\%$ ) but underperforms in *Out-t*. We attribute this to DINO’s overly-optimized latent embeddings, which lead to over-fitting on training data.
+
+### 4.2 GEOMETRY-AWARE INFERENCE
+
+This section explores the inference of steady-state system behavior based on domain geometry. For a system with domain  $\Omega_i$ , its geometry is discretely represented as a point cloud or structured mesh  $\mathcal{X}_i \subset \Omega_i$ . This mesh is a deformation of a reference grid  $\mathcal{X}$  to fit the specific object shape, such as an airfoil. The problem is formulated as an operator learning task, where the input is the grid deformation defined on the reference grid  $\mathcal{X}$  and the output is the corresponding physical quantity  $u_i$  defined on  $\Omega_i$ . We aim to develop a model that can generalize to unseen geometries.
+
+**Architectures.** We utilize two modulated INRs to encode the grid transformations and physical quantities, respectively. A simple MLP is employed as the processor  $g_\psi$  to learn the mapping between the latent codes of these two function spaces.
+
+**Datasets and Baselines.** To evaluate the proposed method, three benchmark datasets introduced by Li et al. (2023a) are considered, including the Euler equation (*NACA-Euler*), Navier-Stokes equation (*Pipe*) and Hyper-elastic material (*Elasticity*). More details can be found in Appendix A.2. Our method is compared against three state-of-the-art models, Geo-FNO (Li et al., 2023b), Factorized-FNO (Tran et al., 2023) and CORAL (Serrano et al., 2023), as well as two regular-grid baselines, FNO (Li et al., 2021) and UNet (Ronneberger et al., 2015), which are applied to the data after interpolation. The baseline results for comparison are sourced from Serrano et al. (2023).
+
+{8}------------------------------------------------
+
+Table 3: **Geometry-aware inference** - Test results. Metrics in relative L2 error. The best results are shown in **bold**, while the second-best results are underlined.
+
+| Model | <i>NACA-Euler</i> | <i>Elasticity</i> | <i>Pipe</i> |
+|-|-|-|-|
+| FNO | $3.85\text{e-}2 \pm 3.15\text{e-}3$ | $4.95\text{e-}2 \pm 1.21\text{e-}3$ | $1.53\text{e-}2 \pm 8.19\text{e-}3$ |
+| UNet | $5.05\text{e-}2 \pm 1.25\text{e-}3$ | $5.34\text{e-}2 \pm 2.89\text{e-}4$ | $2.98\text{e-}2 \pm 1.08\text{e-}2$ |
+| Geo-FNO | $1.58\text{e-}2 \pm 1.77\text{e-}3$ | $3.41\text{e-}2 \pm 1.93\text{e-}2$ | <b><math>6.59\text{e-}3 \pm 4.67\text{e-}4</math></b> |
+| Factorized-FNO | $6.20\text{e-}3 \pm 3.00\text{e-}4$ | $1.96\text{e-}2 \pm 2.00\text{e-}2$ | <u><math>7.33\text{e-}3 \pm 4.66\text{e-}4</math></u> |
+| CORAL | $5.90\text{e-}3 \pm 1.00\text{e-}4$ | $1.67\text{e-}2 \pm 4.18\text{e-}4$ | $1.20\text{e-}2 \pm 8.74\text{e-}4$ |
+| MARBLE (Ours) | <b><math>5.79\text{e-}3 \pm 9.67\text{e-}5</math></b> | <b><math>1.12\text{e-}2 \pm 9.43\text{e-}5</math></b> | $1.03\text{e-}2 \pm 2.62\text{e-}4$ |
+
+**Results.** We present our results in Table 3. Notably, our method demonstrates consistent enhancement over the baseline method with global modulation across various geometry-aware inference tasks. For instance, MARBLE achieves the lowest error rate of  $1.12\text{e-}2$  on *Elasticity*, outperforming CORAL by 32.9%. Although it slightly underperforms compared to Geo-FNO and Factorized-FNO on *Pipe*, MARBLE still delivers an improvement of 14.2% over CORAL. These results highlight the effectiveness of GridMix in enhancing generalization to unseen geometries.
+
+### 4.3 ABLATION STUDY AND ANALYSIS
+
+**Effects of Spatial Domain Augmentation and GridMix.** By incrementally incorporating the proposed mechanisms into the baseline model, CORAL, we observed a consistent improvement in performance, as illustrated in Table 4a. The spatial domain augmentation notably enhances baseline performance on unseen domains  $\mathcal{X}_{tes}$ , demonstrating its effectiveness in mitigating over-fitting to the training domain. This approach also proves robust across varying sampling ratios (Table 4b). Building on this, the multi-channel GridMix further elevate the performance, with improvements of 60.7% and 51.0% for *In-t* and *Out-t*, respectively. These gains align with the regular grid setting, where error rates are reduced by 80.8% and 50.6%.
+
+Table 4: **MARBLE ablation experiments** on *Navier-Stokes*. We use the irregular grid setting with  $\pi = 20\%$  to assess (a) the effects of core components, including spatial domain augmentation (*SDA*) and multi-channel GridMix (*MCGM*). We also examine (b) the impact of *SDA*’s sampling ratio in this setting. Conversely, the regular grid setting is employed to analyze (c,d) GridMix design and (e) latent dimensions. The reported metric is MSE. Default settings are marked in gray.
+
+| (a) Core components. |  |  |  | (b) Sampling ratio. |  |  |
+|-|-|-|-|-|-|-|
+| <i>SDA</i> | <i>MCGM</i> | <i>In-t</i> | <i>Out-t</i> | ratio | <i>In-t</i> | <i>Out-t</i> |
+| $\times$ | $\times$ | $2.18\text{e-}3$ | $6.67\text{e-}3$ | 0.2 | $5.94\text{e-}4$ | $3.40\text{e-}3$ |
+| $\checkmark$ | $\times$ | $4.22\text{e-}4$ | $1.89\text{e-}3$ | 0.4 | <b><math>1.62\text{e-}4</math></b> | <b><math>9.27\text{e-}4</math></b> |
+| $\checkmark$ | $\checkmark$ | <b><math>1.62\text{e-}4</math></b> | <b><math>9.27\text{e-}4</math></b> | 0.6 | $1.67\text{e-}4$ | $1.27\text{e-}3$ |
+
+  
+
+| (c) Grid resolution. |  |  | (d) Grid basis functions. |  |  | (e) Latent dimension. |  |  |
+|-|-|-|-|-|-|-|-|-|
+| res | <i>In-t</i> | <i>Out-t</i> | num | <i>In-t</i> | <i>Out-t</i> | dim | <i>In-t</i> | <i>Out-t</i> |
+| 4 | $4.60\text{e-}5$ | $6.10\text{e-}4$ | 8 | $4.02\text{e-}5$ | $8.33\text{e-}4$ | 16 | $4.04\text{e-}5$ | $5.49\text{e-}4$ |
+| 8 | <u><math>3.52\text{e-}5</math></u> | <b><math>5.04\text{e-}4</math></b> | 16 | $3.93\text{e-}5$ | $5.36\text{e-}4$ | 32 | <b><math>3.52\text{e-}5</math></b> | <b><math>5.04\text{e-}4</math></b> |
+| 16 | <b><math>3.41\text{e-}5</math></b> | $5.78\text{e-}4$ | 32 | <b><math>3.52\text{e-}5</math></b> | <b><math>5.04\text{e-}4</math></b> | 64 | $4.70\text{e-}5$ | $6.19\text{e-}4$ |
+| 32 | $4.10\text{e-}5$ | $1.68\text{e-}3$ | 64 | $3.84\text{e-}5$ | $5.54\text{e-}4$ | 128 | $6.66\text{e-}5$ | $8.81\text{e-}4$ |
+
+**GridMix Design.** Table 4c and 4d explore the impact of grid resolution and the number of grid basis functions. Our findings indicate that the performance plateaus as resolution and basis numbers increase. We hypothesize that this saturation occurs because, although higher resolution and more basis functions offer greater flexibility in encoding the function space into the latent space, they also lead to increasingly complex latent trajectories that are more challenge to learn.
+
+**Latent Dimension.** We investigate the influence of latent code dimension in Table 4e. GridMix constrains the modulation’s degrees of freedom to the number of mixture coefficients, enabling the use of a smaller latent space dimension. As demonstrated in Table 4e, the optimal performance is achieved with a latent dimension of 32. This reduced dimension results in a more compact latent space and simpler latent trajectories for dynamics modeling.
+
+{9}------------------------------------------------
+
+![Figure 4: Visualization of predictions of MARBLE on Shallow-Water dataset with pi = 20%. The figure shows a grid of 8 columns and 3 rows of circular plots. The rows are labeled 'Reference', 'CORAL', and 'Ours' on the left. Above the columns, there are two time intervals: 'In-t' (from the first to the fourth column) and 'Out-t' (from the fifth to the eighth column), separated by a break symbol. Each plot shows a complex spatial pattern of fluid dynamics, with 'Ours' showing more accurate predictions compared to 'CORAL'.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 4: Visualization of predictions of MARBLE on Shallow-Water dataset with pi = 20%. The figure shows a grid of 8 columns and 3 rows of circular plots. The rows are labeled 'Reference', 'CORAL', and 'Ours' on the left. Above the columns, there are two time intervals: 'In-t' (from the first to the fourth column) and 'Out-t' (from the fifth to the eighth column), separated by a break symbol. Each plot shows a complex spatial pattern of fluid dynamics, with 'Ours' showing more accurate predictions compared to 'CORAL'.
+
+Figure 4: Visualization of predictions of MARBLE on *Shallow-Water* dataset with  $\pi = 20\%$ .
+
+**Comparison with Scaled Baselines.** To account for the additional learnable parameters introduced by grid mixtures, we compare MARBLE against scaled baselines. Specifically, we evaluate CORAL with a hidden dimension of 512 (CORAL-512), which has a comparable number of parameters to MARBLE, and CORAL with a hidden dimension of 768 (CORAL-768), which has approximately twice the number of parameters as MARBLE. As shown in Table 5, the increase in parameters reduces the reconstruction error, leading to a better fit of the data space. However, this does not necessarily translate to improved dynamics forecast performance. This finding aligns with earlier research by Serrano et al. (2023), as outlined in their Table 11. These results highlight the effectiveness of MARBLE in leveraging more parameters to enhance the performance of operator learning within the INR-based framework.
+
+Table 5: **Comparison with scaled baselines** - Experiments are conducted on *Navier-Stokes* ( $\pi = 20\%$ ) with spatial domain adaptation (SDA). *RecErr* denotes the test error on the reconstruction stage. Metrics in MSE.
+
+| Model | # Params | RecErr | In-t | Out-t |
+|-|-|-|-|-|
+| CORAL-128 + SDA | 83.1K | 4.50e-4 | 4.42e-4 | 1.89e-3 |
+| CORAL-512 + SDA | 725.5K | 1.69e-4 | 3.79e-4 | 1.95e-3 |
+| CORAL-768 + SDA | 1,481.5K | 1.44e-4 | 1.17e-3 | 5.83e-3 |
+| MARBLE (Ours) | 823.1K | <b>1.38e-4</b> | <b>1.62e-4</b> | <b>9.27e-4</b> |
+
+**Visualizations.** Figure 4 shows the predictions of MARBLE on the irregular grid setting with  $\pi = 20\%$  for the *Shallow-Water* dataset. We compare these results with CORAL, the best-performing baseline. Notably, MARBLE excels at modeling complex spatial variations in dynamics forecasting, particularly in the *Out-t* scenario. Additional visualizations can be found in Appendix C.
+
+## 5 DISCUSSION AND CONCLUSION
+
+This paper has presented MARBLE, a novel approach for PDE modeling that leverages the power of implicit neural representations with innovative spatial modulation techniques. Our method addresses the limitations of existing INR-based methods by introducing GridMix, a spatial modulation technique that balances the exploitation of global and local information. Additionally, we propose spatial domain augmentation to enhance generalization across varying spatial regions. Through extensive experiments, we have demonstrated the superior performance of MARBLE in various PDE modeling tasks, including dynamics modeling and geometric prediction.
+
+While MARBLE significantly enhances learning capacity, it's important to note that the complexity of GridMix may introduce additional computational overhead and memory requirements. A promising avenue for future research would be to explore efficient implementations of GridMix, potentially drawing inspiration from vector quantization and tensor factorization techniques commonly employed in grid-based representations (Takikawa et al., 2022; Chen et al., 2022). We also observe that MARBLE performs below GEO-FNO on the *Pipe* dataset, likely due to the limitations of the SIREN backbone, as noted by Serrano et al. (2023). While SIREN is effective for isotropic frequency distributions, it may struggle with data featuring strong directional anisotropy due to its sensitivity to frequency-related hyperparameters. Future work could explore enhanced INR designs (Cho et al., 2024) that better capture directional frequency variations.
+
+ Rest of paper (reference and Appendix) is removed.

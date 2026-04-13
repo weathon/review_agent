@@ -1,0 +1,613 @@
+
+
+{0}------------------------------------------------
+
+# --- MIXED-CURVATURE DECISION TREES AND RANDOM FORESTS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Decision trees (DTs) and their random forest (RF) extensions are workhorses of classification and regression in Euclidean spaces. However, algorithms for learning in non-Euclidean spaces are still limited. We extend DT and RF algorithms to product manifolds: Cartesian products of several hyperbolic, hyperspherical, or Euclidean components. Such manifolds handle heterogeneous curvature while still factorizing neatly into simpler components, making them compelling embedding spaces for complex datasets. Our novel angular reformulation of DTs respects the geometry of the product manifold, yielding splits that are geodesically convex, maximum-margin, and composable. In the special cases of single-component manifolds, our method simplifies to its Euclidean or hyperbolic counterparts, or introduces hyperspherical DT algorithms, depending on the curvature. We benchmark our method on various classification, regression, and link prediction tasks on synthetic data, graph embeddings, mixed-curvature variational autoencoder latent spaces, and empirical data. Compared to six other classifiers, product DTs and RFs ranked first on 21 of 22 single-manifold benchmarks and 18 of 35 product manifold benchmarks, and placed in the top 2 on 53 of 57 benchmarks overall. This highlights the value of product DTs and RFs as straightforward yet powerful new tools for data analysis in product manifolds.
+
+## 1 INTRODUCTION
+
+While much of machine learning focuses on Euclidean spaces, these can fail to capture the true structure of complex datasets. For example, hierarchical structures, which are common in taxonomy (e.g., phylogenetic trees) are better represented in hyperbolic space due to its exponential volume growth, which naturally mirrors tree-like data (Sonthalia & Gilbert, 2020). Similarly, cyclical structures, often encountered in time-series data with periodic patterns (e.g., seasonal trends, neuronal spiking dynamics), can benefit from spherical representations (Ding & Regev, 2021).
+
+However, many real-world datasets don’t conform to a single geometric structure. Any constant-curvature manifold—whether hyperbolic, spherical, or Euclidean—would struggle to represent all the nuances of such data simultaneously. Product manifolds, as proposed by Gu et al. (2018), offer a solution. By combining multiple constant-curvature component manifolds (spherical, Euclidean, and hyperbolic spaces) into a single product manifold, they can better capture the complexity of such mixed-structure data. This flexibility reduces distortion when modeling pairwise distances and enables a more accurate representation of the underlying data structure.
+
+Despite their advantages, product manifolds have seen limited adoption in machine learning, particularly for inference tasks like classification and regression. Existing work has primarily focused on applications in biology (McNeela et al., 2024) and knowledge graphs (Wang et al., 2021). However, tools for leveraging product manifold representations in downstream tasks remain scarce.
+
+In this paper, we introduce mixed-curvature decision trees (DTs) and random forests (RFs), expanding the toolkit for analyzing product manifold data. By enabling inference directly on product manifold coordinates, our approach is well-suited for datasets that combine hierarchical, cyclical, and other complex geometric patterns. This framework provides a principled way to learn from such structures, achieving more accurate results than competing models. These contributions offer new possibilities for applying product manifold representations in fields ranging from biological modeling to temporal-spatial analysis.
+
+{1}------------------------------------------------
+
+![Figure 1: An illustration of the product manifold DT in action. The diagram shows a torus P with sampled points X, y. A 'Known signature' P = S^1 x S^1 is shown. The torus is split into four decision regions based on angles theta_1 = 3pi/4, theta_1 = pi/2, theta_2 = pi/4, and theta_2 = pi/2. The splits are labeled 'Split X+' and 'Split X-'. The decision regions are colored purple and pink to reflect the classes.](68ac34ff111db52afaa786afcb8346c3_img.jpg)
+
+The diagram illustrates the product manifold Decision Tree (DT) process. On the left, a torus  $\mathcal{P}$  is shown with sampled points  $(X, y)$ . Below it, the 'Known signature'  $\mathcal{P} = \mathbb{S}^1 \times \mathbb{S}^1$  is represented by a torus with a green circle and a blue circle. The torus is then split into four decision regions based on angles  $\theta_1 = 3\pi/4$ ,  $\theta_1 = \pi/2$ ,  $\theta_2 = \pi/4$ , and  $\theta_2 = \pi/2$ . The splits are labeled 'Split X+' and 'Split X-'. The final decision regions on  $\mathcal{P}$  are shown on the right, colored purple and pink to reflect the classes.
+
+Figure 1: An illustration of the product manifold DT in action. The diagram shows a torus P with sampled points X, y. A 'Known signature' P = S^1 x S^1 is shown. The torus is split into four decision regions based on angles theta\_1 = 3pi/4, theta\_1 = pi/2, theta\_2 = pi/4, and theta\_2 = pi/2. The splits are labeled 'Split X+' and 'Split X-'. The decision regions are colored purple and pink to reflect the classes.
+
+Figure 1: An illustration of the product manifold DT in action. We consider a sample of labeled points  $(X, y)$  from one of the simplest possible product manifolds: the torus  $\mathcal{P} = \mathbb{S}^1 \times \mathbb{S}^1$ . Since we know the signature for  $\mathcal{P}$ , we can factorize  $X$  into coordinates on two circles. Our DT **splits** these factorized coordinates to a maximum depth of 2, partitioning  $\mathcal{P}$  into a total of  $2^2 = 4$  disjoint decision areas (colored **positive** or **negative** to reflect the classes).
+
+### Our contributions:
+
+1. We generalize DTs and RFs to *all* constant-curvature manifolds. Unlike existing methods, we represent data and splits as angles in two-dimensional subspaces. This guarantees splits are geodesically convex, maximum-margin, and composable. In the single-manifold case, this extends existing Euclidean and hyperbolic models or introduces *hyperspherical* DTs and RFs.
+2. We introduce novel DT and RF algorithms for product manifolds.
+3. We extend techniques for sampling distributions in non-Euclidean manifolds to describe mixtures of Gaussians in product manifolds.
+4. We show how problems like link prediction in graphs and signal analysis can be recast as inference problems on product manifolds.
+5. We demonstrate the effectiveness of our component- and product-manifold algorithms over competing algorithms on a suite of 57 diverse non-Euclidean benchmarks.
+
+### 1.1 RELATED WORK
+
+**Non-Euclidean representation learning.** Important background on manifolds in machine learning is given in Cayton (2005) and Bengio et al. (2014). Much of the work on product manifolds is indebted to early works on hyperbolic spaces, including Nickel & Kiela (2017); Chamberlain et al. (2017), and Ganea et al. (2018).
+
+**Machine learning in product manifolds.** Tabaghi et al. (2021) describe linear classifiers, including perceptron and support vector machines; Tabaghi et al. (2024) adapt principal component analysis; and Cho et al. (2023) generalize Transformer architectures to product manifolds.
+
+**Computationally tractable manifolds.** Besides product manifolds, other methods for representing data with heterogeneous curvature also exist: Borde & Kratsios (2023) is based on fractals, while Cruceru et al. (2020) is based on matrix manifolds.
+
+**Product manifold-derived features.** Tsagkrasoulis & Montana (2017) train RF classifiers on distance matrices from arbitrary manifolds, e.g. product manifolds. Sun et al. (2021) and Borde et al. (2023b) use product manifolds to compute rich similarity measures as features for classification. Giovanni et al. (2022) introduce a heterogeneous variant of product manifolds; Borde et al. (2024) combine quasi-metrics and partial orders in a product manifold for graph representations.
+
+{2}------------------------------------------------
+
+108  
+109  
+110  
+111  
+112  
+113  
+114  
+115  
+116  
+117  
+118  
+119  
+120  
+121  
+122  
+123  
+124  
+125  
+126  
+127  
+128  
+129  
+130  
+131  
+132  
+133  
+134  
+135  
+136  
+137  
+138  
+139  
+140  
+141  
+142  
+143  
+144  
+145  
+146  
+147  
+148  
+149  
+150  
+151  
+152  
+153  
+154  
+155  
+156  
+157  
+158  
+159  
+160  
+161
+
+![Figure 2: Decision boundaries in any constant-curvature manifold are found by 2-D projections into 2-dimensional subspaces. The figure shows three diagrams: S (Sphere), E (Euclidean), and H (Hyperbolic). Each diagram shows a 2D coordinate system with axes x0 and xd. A red line represents a split, and a shaded region represents a class region. In S, the split is a great circle and the region is a spherical cap. In E, the split is a straight line and the region is a half-plane. In H, the split is a geodesic and the region is a hyperbolic cap.](d9d706121d1c4ba9ad2c793746382361_img.jpg)
+
+Figure 2: Decision boundaries in any constant-curvature manifold are found by 2-D projections into 2-dimensional subspaces. The figure shows three diagrams: S (Sphere), E (Euclidean), and H (Hyperbolic). Each diagram shows a 2D coordinate system with axes x0 and xd. A red line represents a split, and a shaded region represents a class region. In S, the split is a great circle and the region is a spherical cap. In E, the split is a straight line and the region is a half-plane. In H, the split is a geodesic and the region is a hyperbolic cap.
+
+Figure 2: Decision boundaries in any constant-curvature manifold are found by 2-D projections into 2-dimensional subspaces. In this perspective, both data and splits are parameterized by an angle  $\theta$ . Each **split** divides the manifold into **positive-class regions** and **negative-class regions**.
+
+**Hyperbolic random forests.** Our method is inspired by recent work by Doorenbos et al. (2023) and Chlenski et al. (2024) extending RFs to hyperbolic space. In particular, our angular-split perspective synthesizes the ideas in Chlenski et al. (2024) and Tabaghi et al. (2021).
+
+**Applications of product manifolds.** Product manifolds are popular for embedding knowledge graphs (Wang et al. (2021); Li et al. (2024); Nguyen-Van et al. (2023)). In biology, they have been used to represent pathway graphs (McNeela et al., 2024), cryo-EM images (Zhang et al., 2021), and single-cell transcriptomic profiles (Tabaghi et al., 2021). Skopek et al. (2020) also embed image datasets into product manifolds.
+
+## 2 PRELIMINARIES
+
+We review relevant details of different Riemannian manifolds (Euclidean spaces, hyperspheres, hyperboloids, and product manifolds), along with key properties of the Euclidean and hyperbolic variants of DTs and RFs.
+
+### 2.1 RIEMANNIAN MANIFOLDS
+
+We will begin by reviewing key details of hyperspheres, hyperboloids, and Euclidean spaces. For more details, readers can consult Do Carmo (1992).
+
+Each space described is a Riemannian manifold, meaning that it is locally isomorphic to Euclidean space and equipped with a distance metric. The shortest paths between two points  $\mathbf{u}$  and  $\mathbf{v}$  on a manifold are called geodesics. As all three spaces we consider have constant Gaussian curvature, we define simple closed forms for geodesic distances in each of the following subsections in lieu of a more general discussion of geodesic distances in arbitrary Riemannian manifolds.
+
+Any constant-curvature manifold  $\mathcal{M}$  is parameterized by a dimensionality  $D$  and a curvature  $K$ . They can also all be considered embedded in an ambient space  $\mathbb{R}^{D+1}$ . Finally, for each point  $\mathbf{x} \in \mathcal{M}$ , the tangent plane at  $\mathbf{x}$ ,  $T_{\mathbf{x}}\mathcal{M}$ , is the space of all tangent vectors at  $\mathbf{x}$ :
+
+$$T_{\mathbf{x}}\mathcal{M} = \{\mathbf{x}' \in \mathcal{M} : \langle \mathbf{x}', \mathbf{x} \rangle_{\mathcal{M}} = 0\}. \quad (1)$$
+
+#### 2.1.1 EUCLIDEAN SPACE
+
+Euclidean spaces are naturally understood as  $\mathbb{R}^D$ , but we will use the notation  $\mathbb{E}^D = \mathbb{R}^D$  when treating Euclidean spaces as manifolds. In contrast, we will continue to use  $\mathbb{R}^D$  to refer to ambient spaces. Euclidean spaces use the familiar inner product (dot product), norm ( $\ell_2$  norm), and distance function (Euclidean distance):
+
+$$\langle \mathbf{u}, \mathbf{v} \rangle = u_0v_0 + u_1v_1 + \dots + u_{D-1}v_{D-1}, \quad (2)$$
+
+$$\|\mathbf{u}\| = \sqrt{\langle \mathbf{u}, \mathbf{u} \rangle}, \quad (3)$$
+
+$$\delta_{\mathbb{E}}(\mathbf{u}, \mathbf{v}) = \|\mathbf{u} - \mathbf{v}\|. \quad (4)$$
+
+{3}------------------------------------------------
+
+###### 162 2.1.2 HYPERSPHERICAL SPACE
+
+163  
+164 Hyperspheres can be viewed as surfaces *embedded* in a higher-dimensional, Euclidean ambient  
+165 space. Hyperspherical space uses the same inner products as Euclidean space. The hypersphere  
+166 is the set of points in the ambient space having a Euclidean norm equal to some radius **inversely**  
+167 **proportional to the curvature  $K > 0$ :**
+
+$$168 \quad S^{D,K} = \{\mathbf{x} \in \mathbb{R}^{D+1} : \|\mathbf{x}\| = 1/K\}. \quad (5)$$
+
+169  
+170 Because shortest paths between two points  $\mathbf{u}$  and  $\mathbf{v}$  in  $S^{D,K}$  through the ambient space leave the  
+171 surface of the manifold, we must define the hyperspherical distance function for the shortest path  
+172 entirely in  $S^{D,K}$  between  $\mathbf{u}$  and  $\mathbf{v}$ :
+
+$$173 \quad \delta_S(\mathbf{u}, \mathbf{v}) = \cos^{-1}(K^2 \langle \mathbf{u}, \mathbf{v} \rangle) / K. \quad (6)$$
+
+###### 174 2.1.3 HYPERBOLIC SPACE
+
+175  
+176  
+177 Hyperbolic space is characterized by constant negative metric curvature. This has several conse-  
+178 quences: for instance, the angles in any triangle sum to less than  $\pi$ , many lines through a point can  
+179 be parallel to any given line, and neighborhoods grow exponentially with radius.
+
+180  
+181 There are several equivalent models of hyperbolic space. For our purposes, we will describe the  
+182 hyperbolic space from the perspective of the hyperboloid model. First, we must define the ambient  
+183 Minkowski space. This is a vector space equipped with the Minkowski inner product:
+
+$$184 \quad \langle \mathbf{u}, \mathbf{v} \rangle_{\mathcal{L}} = -u_0 v_0 + u_1 v_1 + \dots + u_n v_n. \quad (7)$$
+
+185  
+186 Similar to the Euclidean case, we let  $\|\mathbf{u}\|_{\mathcal{L}} = \langle \mathbf{u}, \mathbf{u} \rangle_{\mathcal{L}}$  (we do not wish to take the square root of a  
+187 negative number). The hyperboloid of dimension  $D$  and curvature  $K < 0$ , written  $\mathbb{H}^{D,K}$ , is a set of  
+188 points with constant Minkowski norm:
+
+$$189 \quad \mathbb{H}^{D,K} = \{\mathbf{x} \in \mathbb{R}^D : \|\mathbf{x}\|_{\mathcal{L}} = -1/K^2, x_0 > 0\}, \quad (8)$$
+
+190  
+191 Finally, the hyperbolic distance function for geodesic distances between  $\mathbf{u}, \mathbf{v} \in \mathbb{H}^{D,K}$  is given by
+
+$$192 \quad \delta_{\mathbb{H}}(\mathbf{u}, \mathbf{v}) = -\cosh^{-1}(K^2 \langle \mathbf{u}, \mathbf{v} \rangle_{\mathcal{L}}) / K. \quad (9)$$
+
+###### 193 2.1.4 MIXED-CURVATURE PRODUCT MANIFOLDS
+
+194  
+195  
+196 We reiterate the definition of product manifolds from Gu et al. (2018). **A product manifold  $\mathcal{P}$  is the**  
+197 **Cartesian product of one or more spherical, Euclidean, and hyperbolic manifolds:**
+
+$$198 \quad \mathcal{P} = \mathbb{S}^{s_1, K_1} \times \mathbb{S}^{s_2, K_2} \times \dots \times \mathbb{S}^{s_n, K_n} \times \mathbb{H}^{h_1, K_1} \times \dots \times \mathbb{H}^{h_m, K_m} \times \mathbb{R}^d \quad (10)$$
+
+199  
+200 The total number of dimensions is  $\sum_i^n s_i + \sum_j^m h_j + d$ . Each individual manifold is called a  
+201 component manifold, and the decomposition of the product manifold into component manifolds  
+202 is called the signature. Informally, the signature can be considered a list of dimensionalities and  
+203 curvatures for each component manifold.
+
+204 Distances in  $\mathcal{P}$  decompose as the  $\ell_2$  norm of the distances in each of the component manifolds:
+
+$$205 \quad \delta_{\mathcal{P}}(\mathbf{u}, \mathbf{v}) = \sqrt{\sum_{\mathcal{M} \in \mathcal{P}} \delta_{\mathcal{M}}(\mathbf{u}_{\mathcal{M}}, \mathbf{v}_{\mathcal{M}})^2}, \quad (11)$$
+
+206  
+207  
+208 where  $\mathbf{u}_{\mathcal{M}}$  and  $\mathbf{v}_{\mathcal{M}}$  denotes the restriction of  $\mathbf{u}$  and  $\mathbf{v}$  to their components in  $\mathcal{M}$  and  $\delta_{\mathcal{M}}$  refers the  
+209 distance function appropriate to  $\mathcal{M}$ .
+
+210  
+211 For  $\mathbf{x} \in \mathcal{P}$ , the tangent plane at  $\mathbf{x}$ ,  $T_{\mathbf{x}}\mathcal{P}$ , is the concatenation (**denoted by the direct sum  $\oplus$** ) of all  
+212 component tangent planes:
+
+$$213 \quad T_{\mathbf{x}}\mathcal{P} = \bigoplus_{\mathcal{M} \in \mathcal{P}} T_{\mathbf{x}_{\mathcal{M}}}\mathcal{M}. \quad (12)$$
+
+214  
+215 We additionally define the origin of  $\mathcal{P}$ ,  $\mu_0$ , as the concatenation of the origins of each respective  
+manifold. The origin is  $(1/|K|, 0, \dots)$  for  $\mathbb{H}^{D,K}$  and  $S^{D,K}$ , and  $(0, 0, \dots)$  for  $\mathbb{E}^D$ .
+
+{4}------------------------------------------------
+
+### 2.2 DECISION TREES AND RANDOM FORESTS
+
+The Classification and Regression Trees (CART) (Breiman, 2017) algorithm fits a DT  $\mathcal{T}$  to a set of labeled data  $(\mathbf{X}, \mathbf{y})$ . Specifically, it greedily selects a split at each set to partition the dataset in such a way as to maximize the information gain,
+
+$$\text{IG}(\mathbf{y}) = C(\mathbf{y}) - \frac{|\mathbf{y}^+|}{|\mathbf{y}|} C(\mathbf{y}^+) - \frac{|\mathbf{y}^-|}{|\mathbf{y}|} C(\mathbf{y}^-). \quad (13)$$
+
+In this case,  $C(\cdot)$  is some sort of impurity function (we use Gini impurity for classification and variance for regression). Some splitting function  $S(\cdot)$  is used to partition the *labels*  $\mathbf{y}$  into two classes,  $\mathbf{y}^+$  and  $\mathbf{y}^-$ ; however,  $S(\cdot)$  also partitions the *input space* (corresponding to some  $\mathbf{X}$  that does not appear in Eq. 13) into decision regions. Classically,  $S(\cdot)$  is a thresholding function and thus breaks the input space into high-dimensional boxes given some dimension  $d$  and threshold  $\theta$ :
+
+$$S(\mathbf{x}) = \mathbb{I}\{x_d > \theta\}. \quad (14)$$
+
+This algorithm is applied recursively to each decision region until a stopping condition is met (e.g., maximum number of splits is reached). The result is a fitted DT,  $\mathcal{T}$ , which can be used for inference. During inference, an unseen point  $\mathbf{x}$  is passed through  $\mathcal{T}$  until it reaches a leaf node corresponding to some decision region. For classification, the point is then assigned the majority label inside that region; for regression, it is assigned the mean value inside that region.
+
+Finally, a RF is an ensemble of DTs, typically trained on a bootstrapped subsample of the points and features in  $\mathbf{X}$  (Breiman, 2001).
+
+#### 2.2.1 HYPERBOLIC DECISION TREE ALGORITHMS
+
+The hyperplane perspective on DTs is helpful background for understanding our method: mathematically, thresholding  $\mathbf{x}$  on a dimension is equivalent to taking its dot product with the normal vector of a separating hyperplane  $\mathbb{P}$ , even in hyperbolic space. Although this is easy to compute for classical thresholding boundaries, which are zero in all dimensions but  $d$ , this perspective principally admits *any hyperplane*  $\mathbb{P}$  as a valid decision boundary.
+
+Naturally, considerations around choosing an appropriate (and computationally efficient)  $\mathbb{P}$  abound. To this end, Chlenski et al. (2024) impose homogeneity and sparsity constraints on the hyperplanes they consider for hyperbolic DTs. In hyperbolic space, homogenous hyperplanes—hyperplanes that contain the origin of the ambient space—intersect  $\mathbb{H}^{D,K}$  at geodesic submanifolds: that is,  $\mathbb{P} \cap \mathbb{H}^{D,K}$  is closed under shortest paths *according to*  $\delta_{\mathbb{H}}$ . The sparsity constraint enforces that the normal vectors of  $\mathbb{P}$  must be nonzero only in two positions: the timelike coordinate  $x_0$  and some other  $x_d$ , which ensures that only  $\mathcal{O}(nd)$  candidate hyperplanes are considered per split, and each decision can be computed in  $\mathcal{O}(1)$  time using sparse dot products.
+
+## 3 MIXED-CURVATURE DECISION TREES
+
+For any DT, we must transform the input  $\mathbf{X}$  into a set of candidate hyperplanes. To this end, we reframe and generalize the hyperplane approach of hyperbolic DTs. First, we observe that homogenous hyperplanes are geodesically convex in *any constant-curvature manifold*; therefore, we can extend the hyperbolic DT approach to  $\mathbb{E}$  and  $\mathbb{S}$ . Second, we observe that fitting sparse, homogenous DTs is equivalent to thresholding on angles under 2-dimensional projections.
+
+We consider the set of all projections onto the basis  $\{x_0, x_d\}$ , which can be computed in  $\mathcal{O}(1)$  time per projection by coordinate selection. First, we compute the angles in each projection:<sup>1</sup>
+
+$$\theta(\mathbf{x}, d) = \tan^{-1}(x_0/x_d). \quad (15)$$
+
+Next, we use a modified splitting criterion to account for the geometry of angular splits:
+
+$$S(\mathbf{x}, d, \theta) = \mathbb{I}\{\theta(\mathbf{x}, d) \in [\theta, \theta + \pi)\}. \quad (16)$$
+
+<sup>1</sup>Note that, in our implementation, we use the PyTorch `atan2` function to ensure that we can recover the full range of angles in  $[0, 2\pi)$ . This is essential for properly specifying decision boundaries in  $\mathbb{S}$ .
+
+{5}------------------------------------------------
+
+Once the best angle is selected, we must compute angular midpoints to select  $\mathbb{P}$  that intersects  $\mathcal{M}$  at a point *geodesically equidistant* the two points to either side of it (Euclidean DTs do this by sampling averaging the threshold values). Angular midpoints for each component manifold are described in the following sections and summarized in Table 4 in the Appendix.
+
+With the angular features and manifold-informed midpoint modifications in place, the rest of the algorithm follows Section 2.2 unmodified.
+
+### 3.1 EUCLIDEAN DECISION TREES
+
+While the intersections of homogenous hyperplanes in  $\mathbb{R}^D$  with  $\mathbb{E}^D$  are (trivially) convex, these lack the expressiveness of an ambient-space formulation. Thus, we embed  $\mathbb{E}^D$  in  $\mathbb{R}^{D+1}$  by a trivial lift:
+
+$$\phi : \mathbb{E}^D \rightarrow \mathbb{R}^{D+1}, \phi(\mathbf{u}) = (1, \mathbf{u}). \quad (17)$$
+
+For two points  $\mathbf{u}, \mathbf{v} \in \mathbb{E}^D$ , the midpoint angles in  $\mathbb{E}^D$  can be described in terms of the coordinates of  $\mathbf{u}$  and  $\mathbf{v}$  or their respective projection angles  $(\theta_u, \theta_v)$  as
+
+$$m_{\mathbb{E}}(\mathbf{u}, \mathbf{v}) = \tan^{-1}(2/(u_d + v_d)) \quad (18)$$
+
+$$= \tan^{-1} \left( \frac{\tan^{-1}(\theta_u) \tan^{-1}(\theta_v)}{\tan^{-1}(\theta_u) + \tan^{-1}(\theta_v)} \right). \quad (19)$$
+
+While this presentation of Euclidean DTs is unconventional, it is completely equivalent to thresholding in the basis dimensions. See Appendix C for the proof.
+
+### 3.2 HYPERBOLIC DECISION TREES
+
+For two points  $\mathbf{u}, \mathbf{v} \in \mathbb{H}^{D,K}$ , we compute  $\theta_u$  and  $\theta_v$  according to Eq 15 and follow Chlenski et al. (2024) in computing the hyperbolic midpoint angle in  $\mathbb{H}^{D,K}$  as:
+
+$$V := \frac{\sin(2\theta_u - 2\theta_v)}{\sin(\theta_u + \theta_v) \sin(\theta_v - \theta_u)}, \quad (20)$$
+
+$$m_{\mathbb{H}}(\mathbf{u}, \mathbf{v}) = \begin{cases} \cot^{-1}(V - \sqrt{V^2 - 1}) & \text{if } \theta_u + \theta_v < \pi \\ \cot^{-1}(V + \sqrt{V^2 - 1}) & \text{otherwise.} \end{cases} \quad (21)$$
+
+### 3.3 HYPERSPHERICAL DECISION TREES
+
+The hyperspherical case is quite simple, except that unlike hyperbolic space and the “lifted” Euclidean space after applying Eq 17, we lack a natural choice of  $x_0$ . We adopt the convention of fixing the first dimension of the embedding space as  $x_0$ , which intuitively corresponds to fixing a “north pole” at the origin  $\mu_0 = (1/|K|, 0, \dots)$ .
+
+Angular midpoints are particularly well-behaved in hyperspherical manifolds: given  $\mathbf{u}, \mathbf{v} \in \mathbb{S}^{D,K}$ , the hyperspherical midpoint angle by finding  $\theta_u$  and  $\theta_v$  using Eq 15 and taking their mean:
+
+$$m_{\mathbb{S}}(\mathbf{u}, \mathbf{v}) = (\theta_u + \theta_v)/2. \quad (22)$$
+
+### 3.4 PRODUCT DECISION TREE ALGORITHM
+
+Intuitively, the transition from DTs in a single component manifold to a product manifold is that we now iterate over all preprocessed angles together, using the angular midpoint formula appropriate to each component. The complete pseudocode for this algorithm is in Appendix B.
+
+Allowing for a single DT to span all components—as opposed to, e.g., an ensemble of DTs, each operating in a single component—allows the model to independently allocate its splits across components according to their relevance to the task at hand. Recasting DT learning in terms of angular comparisons has three major advantages over finding planar decision boundaries directly:
+
+1. We can consider angles under *arbitrary* linear projections (not just projections onto basis dimensions) while maintaining  $\mathcal{O}(1)$  decision complexity. For instance, we can easily search over all  $\binom{D}{2}$  2-dimensional projections if we wish.
+
+{6}------------------------------------------------
+
+2. As there is no longer any need to enforce the constraints in Equations 5 and 8 at inference time, it becomes possible to subsample the features (precomputed angles) in RFs.
+3. Product manifolds can always represent additional features in a new Euclidean manifold. For instance, this can be useful for incorporating metadata into DT training.
+
+## 4 BENCHMARKS
+
+We carried out benchmarks to evaluate which model, given a labeled set of mixed-curvature embeddings, achieves the lowest validation error. While we produced embeddings using a range of datasets and embedding techniques, our results focus only on performance on downstream tasks. We describe our data generation/embedding methods in more detail in the Appendix.
+
+We summarize our benchmark results, with references to specific figures and tables, in Table 1. Our full results can be found in Table 5 in the Appendix.
+
+Table 1: Benchmarks summary. “#Top- $k$ ” columns count how often product DTs or RFs were among the top  $k$  predictors for a given set of benchmarks.
+
+| Manifold type | Task | Reference | #Top-1 | #Top-2 | Total |
+|-|-|-|-|-|-|
+| Single-curvature | Classification | Figure 3 | 10 (91%) | 11 (100%) | 11 |
+| Single-curvature | Regression | Figure 4 | 11 (100%) | 11 (100%) | 11 |
+| Product manifold | Classification | Table 2 | 11 (46%) | 22 (92%) | 24 |
+| Product manifold | Regression | Table 3 | 7 (64%) | 9 (82%) | 11 |
+| <b>Total</b> |  |  | 39 (68%) | 53 (93%) | 57 |
+
+### 4.1 EXPERIMENT DETAILS
+
+**Problem setup.** Given a dataset  $\mathbf{X}$ , a set of labels  $\mathbf{y}$ , and a product manifold  $\mathcal{P}$ , we evaluate a variety of classifiers on their ability to predict  $\mathbf{y}$  from  $\mathbf{X}$ . We apply an identical 80:20 train-test split to all of our data, train our models on the training set, and evaluate performance on the test set.
+
+**Results reporting.** We report 95% confidence intervals for micro-averaged  $F_1$  scores for classification and root mean squared error (RMSE) for regression benchmarks. Pairwise statistical significance is determined by the Wilcoxon signed-rank test comparing all same-type classifiers (i.e. trees to trees and forests to forests). We also apply a Bonferroni correction: starting with a critical value of .05, we divide by the total number of comparisons carried out *for a given signature*: since we compare 5 different models, our critical value becomes  $.05/10 = .005$ .
+
+### 4.2 DATASETS
+
+**Synthetic data.** We develop a novel method to sample mixtures of Gaussians in  $\mathcal{P}$  to generate classification and regression datasets. For classification, we generate 8 classes using 32 clusters. For regression, we generate a single scalar response variable using 32 clusters with randomly-generated intercepts. Our full method is described in Appendix Section A
+
+**Graph embeddings.** For classification and regression on graph datasets, we generate embeddings that approximate shortest-path distances in the graph using the method described in Gu et al. (2018). We select the optimal signature from the candidate set  $\{(\mathbb{H}^2)^2, \mathbb{H}^2\mathbb{E}^2, \mathbb{H}^2\mathbb{S}^2, \mathbb{S}^2\mathbb{E}^2, (\mathbb{S}^2)^2, \mathbb{H}^4, \mathbb{E}^4, \mathbb{S}^4\}$  by generating embeddings in each signature and selecting the signature with the lowest metric distortion. For link prediction, we embed all datasets in  $\mathcal{P} = (\mathbb{S}^2\mathbb{E}^2\mathbb{H}^2)$ , then create a binary classification dataset by associating each pair of nodes with a point in  $\mathcal{P}^2\mathbb{E}^1$ , where each pair of points is included and the last Euclidean dimension is the manifold distance  $\delta_{\mathcal{P}}(\mathbf{x}_i, \mathbf{x}_j)$ ; labels are simply whether there is an edge between nodes  $i$  and  $j$ . Full details on graph embeddings are described in Appendix Section E.2.
+
+**Mixed-curvature VAE latent space.** We follow Skopek et al. (2020) in training variational autoencoders (VAEs) whose latent space is  $\mathcal{P}$ . Once the VAE is trained, we use its encoder to generate
+
+{7}------------------------------------------------
+
+378  
+379  
+380  
+381  
+382  
+383  
+384  
+385  
+386  
+387  
+388  
+389  
+390  
+391  
+392  
+393  
+394  
+395  
+396  
+397  
+398  
+399  
+400  
+401  
+402  
+403  
+404  
+405  
+406  
+407  
+408  
+409  
+410  
+411  
+412  
+413  
+414  
+415  
+416  
+417  
+418  
+419  
+420  
+421  
+422  
+423  
+424  
+425  
+426  
+427  
+428  
+429  
+430  
+431
+
+![Figure 3: Classification benchmark comparison of DTs (top) and RFs (bottom). The plots show F1 Score vs Curvature for various models: Product, Ambient, Tangent, and k-NN. The Product model consistently achieves higher F1 scores than the others across different curvatures.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+The figure consists of two vertically stacked box plots. The top plot is titled "Classification benchmark: Synthetic (single  $K$ )" and "Decision Trees". The bottom plot is titled "Random Forests". Both plots have "F1 Score" on the y-axis (ranging from 0.2 to 0.8) and "Curvature" on the x-axis (values: -4, -2, -1, -0.5, -0.25, 0, 0.25, 0.5, 1, 2, 4). A legend on the right indicates four models: Product (blue), Ambient (orange), Tangent (green), and k-NN (red). In both plots, the Product model (blue) consistently shows higher F1 scores (around 0.4) compared to the other three models (Ambient, Tangent, and k-NN), which show lower scores (around 0.3). Asterisks (\*) above the Product model's boxes indicate statistical significance.
+
+Figure 3: Classification benchmark comparison of DTs (top) and RFs (bottom). The plots show F1 Score vs Curvature for various models: Product, Ambient, Tangent, and k-NN. The Product model consistently achieves higher F1 scores than the others across different curvatures.
+
+Figure 3: Classification benchmark comparison of DTs (top) and RFs (bottom). We report micro-averaged  $F_1$  scores on a synthetic data classification task involving mixtures of 8 Gaussians in manifolds of varying constant curvatures  $K$ . We compare DTs and RFs in the **product manifold**, **the ambient space**, and **the tangent plane**, along with  **$k$ -nearest neighbors** on distances in  $\mathcal{P}$ . Statistical significance (Bonferroni-corrected  $p < 0.05$ ) is marked with an asterisk (\*). **We omit product space perceptrons, which never achieved competitive results.**
+
+![Figure 4: Regression benchmarks (RMSE) for single-curvature manifolds. The plots show RMSE vs Curvature for various models: Product, Ambient, Tangent, and k-NN. The Product model consistently achieves lower RMSE than the others across different curvatures.](d864789b0d8384da1d22fd6a5d76bbdf_img.jpg)
+
+The figure consists of two vertically stacked box plots. The top plot is titled "Regression benchmark: Synthetic (single  $K$ )" and "Decision Trees". The bottom plot is titled "Random Forests". Both plots have "RMSE" on the y-axis (ranging from 0.2 to 0.4) and "Curvature" on the x-axis (values: -4, -2, -1, -0.5, -0.25, 0, 0.25, 0.5, 1, 2, 4). A legend on the right indicates four models: Product (blue), Ambient (orange), Tangent (green), and k-NN (red). In both plots, the Product model (blue) consistently shows lower RMSE values (around 0.2) compared to the other three models (Ambient, Tangent, and k-NN), which show higher RMSE values (around 0.25). Asterisks (\*) above the Product model's boxes indicate statistical significance.
+
+Figure 4: Regression benchmarks (RMSE) for single-curvature manifolds. The plots show RMSE vs Curvature for various models: Product, Ambient, Tangent, and k-NN. The Product model consistently achieves lower RMSE than the others across different curvatures.
+
+Figure 4: Regression benchmarks (RMSE) for single-curvature manifolds. We follow the conventions of Figure 3 and mark Bonferroni-corrected significance with an asterisk (\*).
+
+embeddings for our dataset and classify these embeddings. Full details on VAE training and downstream inference are described in Appendix Section E.3.
+
+**Empirical datasets.** Some datasets can be represented in a non-Euclidean geometry without generating embeddings: for instance, geospatial data lives in  $\mathbb{S}^2$ , while cyclic time series embed in  $\mathbb{S}^1$ . We describe our approach to generating embeddings for these empirical datasets in Appendix Section E.4.
+
+{8}------------------------------------------------
+
+432  
+433  
+434  
+435  
+436  
+437  
+438  
+439  
+440  
+441  
+442  
+443  
+444  
+445  
+446  
+447  
+448  
+449  
+450  
+451  
+452  
+453  
+454  
+455  
+456  
+457  
+458  
+459  
+460  
+461  
+462  
+463  
+464  
+465  
+466  
+467  
+468  
+469  
+470  
+471  
+472  
+473  
+474  
+475  
+476  
+477  
+478  
+479  
+480  
+481  
+482  
+483  
+484  
+485
+
+Table 2:  $F_1$  scores for all classification and link prediction (LP) benchmarks. Best predictors are shown in **bold**, while second-best predictors are underlined. For brevity, we omit columns for low-performing methods and merge DT and RF columns (e.g. “Ambient” means  $\max(\text{mean}(\text{Ambient DT}), \text{mean}(\text{Ambient RF}))$ .)
+
+|  | Dataset | Signature | $k\text{-NN}$ | Ambient | Product |
+|-|-|-|-|-|-|
+| Synthetic (multi- $K$ ) | Gaussian | $(S^2)^2$ | <b>35.7<math>\pm</math>.5</b> | 32.3 $\pm$ .5 | <u>33.1<math>\pm</math>.5</u> |
+|  |  | $E^4$ | <b>34.9<math>\pm</math>.5</b> | 30.0 $\pm$ .4 | <u>31.3<math>\pm</math>.4</u> |
+|  |  | $H^2E^2$ | <b>40.3<math>\pm</math>.4</b> | 34.7 $\pm$ .5 | <u>36.1<math>\pm</math>.5</u> |
+|  |  | $H^2S^2$ | <b>38.4<math>\pm</math>.5</b> | 33.3 $\pm$ .5 | <u>35.2<math>\pm</math>.5</u> |
+|  |  | $H^4$ | <b>47.5<math>\pm</math>.5</b> | 35.9 $\pm$ .4 | <u>40.0<math>\pm</math>.4</u> |
+|  |  | $S^2E^2$ | <b>35.8<math>\pm</math>.5</b> | 32.7 $\pm$ .5 | <u>33.5<math>\pm</math>.4</u> |
+|  |  | $S^4$ | <b>33.1<math>\pm</math>.4</b> | 27.6 $\pm$ .4 | <u>28.0<math>\pm</math>.5</u> |
+|  |  | $(H^2)^2$ | <b>41.5<math>\pm</math>.5</b> | 34.5 $\pm$ .5 | <u>37.0<math>\pm</math>.5</u> |
+| Graph embeddings | CiteSeer | $H^2S^2$ | <u>25.9<math>\pm</math>.5</u> | <b>26.1<math>\pm</math>.7</b> | 25.8 $\pm$ .6 |
+|  | Cora | $H^4$ | 20.7 $\pm$ .4 | <b>28.9<math>\pm</math>.5</b> | <u>28.9<math>\pm</math>.4</u> |
+|  | PolBlogs | $(S^2)^2$ | <b>93.5<math>\pm</math>.4</b> | <u>93.2<math>\pm</math>.5</u> | 92.9 $\pm$ .4 |
+|  | AdjNoun (LP) | $(S^2E^2H^2)^2E^1$ | 93.3 $\pm$ 1.1 | <b>93.7<math>\pm</math>1.1</b> | <u>93.7<math>\pm</math>1.1</u> |
+|  | Dolphins (LP) | $(S^2E^2H^2)^2E^1$ | <b>96.6<math>\pm</math>.3</b> | 92.3 $\pm$ .9 | <u>96.6<math>\pm</math>.3</u> |
+|  | Football (LP) | $(S^2E^2H^2)^2E^1$ | 79.8 $\pm$ 3.3 | <b>85.7<math>\pm</math>3.6</b> | <u>85.7<math>\pm</math>3.6</u> |
+|  | Karate Club (LP) | $(S^2E^2H^2)^2E^1$ | <b>95.1<math>\pm</math>1.5</b> | 88.6 $\pm$ 2.2 | <u>95.1<math>\pm</math>1.5</u> |
+|  | Les Mis (LP) | $(S^2E^2H^2)^2E^1$ | <b>95.7<math>\pm</math>.7</b> | 92.7 $\pm$ .9 | <u>95.6<math>\pm</math>.8</u> |
+|  | PolBooks (LP) | $(S^2E^2H^2)^2E^1$ | <b>95.8<math>\pm</math>.4</b> | 92.9 $\pm$ .6 | <u>95.8<math>\pm</math>.4</u> |
+| VAE | Blood | $S^2E^2(H^2)^3$ | 17.4 $\pm$ .5 | 19.3 $\pm$ .5 | <b>20.1<math>\pm</math>.5</b> |
+|  | CIFAR-100 | $(S^2)^4$ | 8.6 $\pm$ .4 | <u>11.5<math>\pm</math>.5</u> | <b>12.0<math>\pm</math>.3</b> |
+|  | Lymphoma | $(S^2)^2$ | 77.8 $\pm$ 1.4 | 81.7 $\pm$ 1.2 | <b>83.7<math>\pm</math>1.2</b> |
+|  | MNIST | $S^4E^2H^2$ | <b>41.9<math>\pm</math>3.7</b> | 35.7 $\pm$ 2.8 | <u>39.4<math>\pm</math>2.3</u> |
+| Other | Landmasses | $S^2$ | <b>91.4<math>\pm</math>.2</b> | 83.5 $\pm$ .3 | <u>84.2<math>\pm</math>.3</u> |
+|  | Neuron 33 | $(S^1)^5$ | 50.5 $\pm$ .5 | 76.2 $\pm$ .4 | <b>77.0<math>\pm</math>.4</b> |
+|  | Neuron 46 | $(S^1)^5$ | 50.2 $\pm$ .2 | <u>61.1<math>\pm</math>.3</u> | <b>61.2<math>\pm</math>.3</b> |
+
+Table 3: Regression results (RMSE) for all benchmarks. We follow the conventions of Table 2. CS PhDs is a graph embedding dataset, whereas Temperature and Traffic are empirical.
+
+|  | Dataset | Signature | $k\text{-Neighbors}$ | Ambient | Product |
+|-|-|-|-|-|-|
+| Synthetic (multi- $K$ ) |  | $(S^2)^2$ | .196 $\pm$ .002 | <b>.191<math>\pm</math>.002</b> | <b>.191<math>\pm</math>.002</b> |
+|  |  | $E^4$ | .194 $\pm$ .003 | <u>.191<math>\pm</math>.002</u> | <b>.190<math>\pm</math>.002</b> |
+|  |  | $H^2E^2$ | .196 $\pm$ .003 | <u>.194<math>\pm</math>.002</u> | <b>.193<math>\pm</math>.002</b> |
+|  |  | $H^2S^2$ | .197 $\pm$ .003 | <u>.194<math>\pm</math>.002</u> | <b>.193<math>\pm</math>.002</b> |
+|  |  | $H^4$ | <b>.175<math>\pm</math>.003</b> | .184 $\pm$ .003 | <u>.178<math>\pm</math>.003</u> |
+|  |  | $S^2E^2$ | .199 $\pm$ .003 | <b>.194<math>\pm</math>.002</b> | <b>.194<math>\pm</math>.002</b> |
+|  |  | $S^4$ | .194 $\pm$ .002 | <b>.188<math>\pm</math>.002</b> | <u>.189<math>\pm</math>.002</u> |
+|  |  | $(H^2)^2$ | .193 $\pm$ .003 | <u>.193<math>\pm</math>.002</u> | <b>.191<math>\pm</math>.002</b> |
+|  | CS PhDs | $H^4$ | .053 $\pm$ .005 | <u>.052<math>\pm</math>.005</u> | <b>.041<math>\pm</math>.004</b> |
+|  | Temperature | $S^2S^1$ | 7.198 $\pm$ .212 | <b>4.531<math>\pm</math>.187</b> | 7.130 $\pm$ .123 |
+|  | Traffic | $E^1(S^1)^4$ | <u>.510<math>\pm</math>.003</u> | <b>.505<math>\pm</math>.003</b> | .534 $\pm$ .003 |
+
+### 4.3 BASELINES
+
+We use Scikit-Learn (Pedregosa et al., 2011) DTs and RFs in both the ambient space  $\mathbb{R}^{D+1}$  and the tangent plane  $T_{\mu_0}\mathcal{P}$  as baselines. Ambient space models operate directly on ambient space coordinates. Tangent plane models project points from  $\mathcal{P}$  to  $T_{\mu_0}\mathcal{P}$  by applying the logarithmic map at  $\mu_0$  as a preprocessing step. We use Scikit-Learn  $k$ -nearest neighbor ( $k\text{-NN}$ ) classifiers and regressors with recomputed pairwise distance matrices according to  $\delta_{\mathcal{P}}$  (Eq. 11). Finally, we implemented the product space perceptron algorithm described in Tabaghi et al. (2021). For our own models, we set hyperparameters identically to Scikit-Learn DTs and RFs, except we consider all  $\binom{D}{2}$  projections—for a total of 3 features per 2-dimensional component manifold, just like ambient space methods use. Full details for each model can be found in Appendix E.1.
+
+{9}------------------------------------------------
+
+486  
+487  
+488  
+489  
+490  
+491  
+492  
+493  
+494  
+495  
+496  
+497  
+498  
+499  
+500  
+501  
+502  
+503  
+504  
+505  
+506  
+507  
+508  
+509  
+510  
+511  
+512  
+513  
+514  
+515  
+516  
+517  
+518  
+519  
+520  
+521  
+522  
+523  
+524  
+525  
+526  
+527  
+528  
+529  
+530  
+531  
+532  
+533  
+534  
+535  
+536  
+537  
+538  
+539
+
+![World map showing decision boundaries for Product Space RF model. The map is colored based on predicted probability of land, showing smooth, curved boundaries. World map showing decision boundaries for Euclidean RF model. The map shows more angular, block-like decision boundaries compared to the Product Space RF. World map showing decision boundaries for Tangent RF model. Similar to Euclidean RF, it shows angular decision boundaries. World map showing decision boundaries for k-Nearest Neighbors model. The map is highly fragmented with many small, irregular regions. Color bar legend for P(Land) ranging from 0.0 (dark purple) to 1.0 (yellow).](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+**Decision boundaries visualized: land vs water**
+
+Product Space RF
+
+Euclidean RF
+
+Tangent RF
+
+$k$ -Nearest Neighbors
+
+$P(\text{Land})$
+
+World map showing decision boundaries for Product Space RF model. The map is colored based on predicted probability of land, showing smooth, curved boundaries. World map showing decision boundaries for Euclidean RF model. The map shows more angular, block-like decision boundaries compared to the Product Space RF. World map showing decision boundaries for Tangent RF model. Similar to Euclidean RF, it shows angular decision boundaries. World map showing decision boundaries for k-Nearest Neighbors model. The map is highly fragmented with many small, irregular regions. Color bar legend for P(Land) ranging from 0.0 (dark purple) to 1.0 (yellow).
+
+Figure 5: We color a world map with each model’s predicted  $P(\text{Land})$  for the “Landmasses” dataset, a land vs. water classification benchmark in  $S^2$ . Each RF consists of 12 DTs with a max depth of 3. Note the artifacts learned by **Euclidean**, **tangent** RFs, and  **$k$ -NN** models.
+
+## 4.4 RESULTS
+
+For single-curvature synthetic datasets, our method was the best classifier in 10 out of 11 signatures (Figure 3) and the best regressor (Figure 4 for all signatures). In Tables 2 and 3, we demonstrate consistently good performance across a diverse range of benchmarks.
+
+Further experiments can be found in the Appendix: we provide ablations in F, detailed tables and latent space visualizations in G, comparisons to MLP and GNN models in I, runtime and computational complexity analysis in J, and interpretability experiments in K.
+
+## 5 CONCLUSION
+
+We present strong preliminary evidence favoring mixed-curvature DTs and RFs. In particular, we motivate and describe our entire algorithm and demonstrate its effectiveness across a highly diverse set of 57 benchmarks covering a variety of tasks and geometries.
+
+Product manifold DTs and RFs offer a valuable balance of expressiveness and simplicity, positioned between extremely legible but underpowered linear classifiers and powerful but uninterpretable neural networks operating in product manifolds. We believe that these qualities, combined with their demonstrated performance across our benchmark datasets, are compelling evidence of our method’s usefulness in a non-Euclidean data analysis toolkit.
+
+**Limitations.** While we view our work as downstream of signature selection and embedding generation, its value heavily depends on the availability of good product manifold embeddings. There are challenges in selecting appropriate signatures (Borde et al., 2023a), and product manifolds are not able to represent all patterns in data (Borde & Kratsios, 2023). Furthermore, it is computationally intensive to generate embeddings. There are also tradeoffs between DTs and RFs and other high-performing methods, especially graph neural networks when topologies are known. The complexity of working with non-Euclidean data could pose a potential barrier to adoption. Finally, the lack of a privileged basis (Elhage et al., 2023) in non-Euclidean embeddings makes the inductive bias of decision trees less well-motivated.
+
+**Future work.** It may be possible to exploit non-privileged basis dimensions using approaches such as rotation forests (Bagnall et al., 2020), random 2-D subspace angles, or oblique decision trees. A continuous unification, such as the  $\kappa$ -stereographic model described in (Skopek et al., 2020), may be more robust and elegant. Extensions to simplex geometry (Mishra et al., 2020) are also worth considering.
+
+ Rest of paper (reference and Appendix) is removed.

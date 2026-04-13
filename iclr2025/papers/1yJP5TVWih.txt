@@ -1,0 +1,277 @@
+
+
+{0}------------------------------------------------
+
+# LAMBDA-SKIP CONNECTIONS: THE ARCHITECTURAL COMPONENT THAT PREVENTS RANK COLLAPSE
+
+**Federico Arangath Joseph**  
+ETH Zurich  
+farangath@ethz.ch
+
+**Jerome Sieber**  
+ETH Zurich  
+jsieber@ethz.ch
+
+**Melanie N. Zeilinger**  
+ETH Zurich  
+mzeilinger@ethz.ch
+
+**Carmen Amo Alonso**  
+Stanford University  
+camoalon@stanford.edu
+
+## ABSTRACT
+
+Rank collapse, a phenomenon where embedding vectors in sequence models rapidly converge to a uniform token or equilibrium state, has recently gained attention in the deep learning literature. This phenomenon leads to reduced expressivity and potential training instabilities due to vanishing gradients. Empirical evidence suggests that architectural components like skip connections, LayerNorm, and MultiLayer Perceptrons (MLPs) play critical roles in mitigating rank collapse. While this issue is well-documented for transformers, alternative sequence models, such as State Space Models (SSMs), which have recently gained prominence, have not been thoroughly examined for similar vulnerabilities. This paper extends the theory of rank collapse from transformers to SSMs using a unifying framework that captures both architectures. We study how a parametrized version of the classic skip connection component, which we call *lambda-skip connections*, provides guarantees for rank collapse prevention. Through analytical results, we present a sufficient condition to guarantee prevention of rank collapse across all the aforementioned architectures. We also study the necessity of this condition via ablation studies and analytical examples. To our knowledge, this is the first study that provides a general guarantee to prevent rank collapse, and that investigates rank collapse in the context of SSMs, offering valuable understanding for both theoreticians and practitioners. Finally, we validate our findings with experiments demonstrating the crucial role of architectural components such as skip connections and gating mechanisms in preventing rank collapse.
+
+## 1 INTRODUCTION
+
+The phenomenon of rank collapse has been recently reported in the deep learning literature [Dong et al. \(2023\)](#); [Noci et al. \(2022\)](#); [Shi et al. \(2022\)](#); [He et al. \(2023\)](#); [Geshkovski et al. \(2024\)](#); [Wu et al. \(2024a;b\)](#). Rank collapse is a phenomenon by which embedding vectors exhibit a fast convergence rate into a *uniform token*, or equilibrium embedding vector. Various explanations why this phenomenon arises have been proposed: [Dong et al. \(2023\)](#) proposed a path decomposition argument and suggests that one of the reasons on why rank collapse happens is that the attention matrix is row stochastic. [Geshkovski et al. \(2024\)](#) instead proposes an analysis of rank collapse from a statistical physics perspective by treating transformers as mean-field interacting particle systems and observes that the resulting system converges to a metastable state corresponding to a Dirac delta measure. In practice, this convergence to a uniform token reduces model expressivity [Daneshmand et al. \(2020\)](#); [Dong et al. \(2023\)](#); [Noci et al. \(2022\)](#); [Wu et al. \(2024b\)](#) since a low rank in the output matrix means that the model is unable to capture complex relationships between tokens, also potentially causing vanishing gradients during training ([Noci et al., 2022](#)). Therefore, gaining a deeper understanding of this phenomenon—its origins, conditions for occurrence, and potential prevention strategies—is essential for designing models that are more robust, stable, and expressive.
+
+Rank collapse has primarily been studied in the transformer architecture [Vaswani et al. \(2023\)](#). In particular, it has been reported that the convergence rate to the equilibrium embedding vector of self-
+
+{1}------------------------------------------------
+
+attention Vaswani et al. (2023) (corresponding to a rank-1 matrix) is doubly exponential (Dong et al. (2023)). Both empirical observations and theoretical results support that the presence of skip connections (He et al. (2015)) as well as the LayerNorm component (Ba et al. (2016)) in the architecture mitigate the issue of rank collapse (Dong et al. (2023); Wu et al. (2024a)). In particular, Dong et al. (2023) shows that by adding skip connections, there exist an infinite amount of parametrizations of the network for which rank collapse does not happen. Wu et al. (2024a) instead argues that adding LayerNorm slows down rank collapse by showing that in this setting the upper bound on the rank collapse measure is higher than for networks without these components. This implies that, in order to have convergence to 0, stricter conditions on input sequence and attention weights are needed.
+
+Sequence models alternative to transformers have recently gained widespread attention. In particular, State Space Models (SSMs) such as S4 Gu et al. (2022b), S5 Smith et al. (2023), H3 Fu et al. (2023) and Mamba Dao and Gu (2024); Gu and Dao (2024) have been very prominent, where attention was replaced by SSM blocks, which operate in combination with other components such as Gating Mechanisms (Hochreiter and Schmidhuber (1997); Chung et al. (2014)), MLPs (Popescu et al. (2009) and skip connections (He et al. (2015)). Furthermore, comparisons between these architectures have been discussed in (Sieber et al., 2024; He and Kabic, 2023; Tiezzi et al., 2024), and a larger framework where both the transformer and SSMs are seen as different realizations of the same general model has recently been proposed (Ali et al. (2024), Dao and Gu (2024)). However, whether they suffer from similar weaknesses, and whether rank collapse happens more broadly in these architectures, is still an open question.
+
+In this work, we focus on the specific issue of rank collapse and explore how slight modifications in the architecture, referred to as  $\lambda$ -skip connections, can help to prevent it. Although parametrized versions of skip connections have been explored in the past (see e.g. He et al. (2016), Srivastava et al. (2015)), their impact in providing guarantees to prevent rank collapse has not been studied. Moreover, here we develop a general theory of rank collapse using the unifying framework for sequence models presented in Ali et al. (2024) and (Dao and Gu, 2024), comprising both transformers and SSM architectures. To the best of our knowledge, the rank collapse phenomenon in the SSM setting has not yet been studied and we are the first to provide a general lower bound for rank collapse which holds for both Transformers and SSMs. Additionally, we offer a mechanistic solution to prevent rank collapse by introducing a skip strength parameter, which comes with minimal computational overhead while enhancing the model’s expressivity and stability. Since rank collapse can be a very serious issue for practitioners, investigating broadly when rank collapse occurs and designing robust architectures that prevent rank collapse is of central interest not only to theorists but also to experimentalists. Our contributions can be outlined as follows:
+
+- We extend the theory on rank collapse originally developed for transformers to SSMs by using the recently proposed framework unifying these two architecture types (Ali et al., 2024; Dao and Gu, 2024).
+- We investigate how  $\lambda$ -skip connections influence rank collapse. In particular, we give sufficient conditions that guarantee that rank collapse does not occur in the finite layers setting. Our conditions apply to both transformers and SSMs. We also study the necessity of this condition via ablation analysis and analytical examples.
+- We provide experimental details in support of our theory, by showing how adding a parameter controlling the skip connection strength could be beneficial in preventing rank collapse.
+- We also empirically show the role of gating mechanisms in preventing rank collapse. To the best of our knowledge, we are the first to make this connection between gating mechanisms, which were originally constructed for improving memory capabilities of the models (Hochreiter and Schmidhuber, 1997), and rank collapse.
+
+## 2 RELATED WORKS
+
+**Rank Collapse.** Rank collapse is the phenomenon in which the rank of the output layer of the network collapses to 1 (Dong et al. (2023)). To mathematically capture this, measuring the rank is not ideal since for every finite amount of layers, the output matrix will always be full rank with probability 1. This led to the development of an alternative metric to measure rank collapse (Dong et al. (2023), which intuitively evaluates how “ill-conditioned” is the matrix of the output layer, i.e.,
+
+{2}------------------------------------------------
+
+how close it is to being rank 1. In [Dong et al. \(2023\)](#), this metric is defined by computing how far the columns of the matrix are from the mean of all columns. It was shown in e.g. [Dong et al. \(2023\)](#); [Wu et al. \(2024a\)](#) that this metric quickly decays to 0 as the depth of the model increases. Hence, rank collapse is an intrinsic issue of deep-learning models. Rank collapse has mainly been studied for transformers ([Vaswani et al. \(2023\)](#)), Graph Neural Networks ([Zhou et al. \(2021\)](#)) and ReLU networks ([Agarap \(2019\)](#)), but not SSMs. The work in [Daneshmand et al. \(2020\)](#) studied rank collapse in randomly initialized linear and ReLU networks and proved that Batch Normalization can be helpful to mitigate the phenomenon. In [Dong et al. \(2023\)](#) the authors show that in self-attention-only transformers, rank collapse occurs doubly exponentially, i.e. with rate  $O(a^{b^n})$  for some  $a, b \in \mathbb{R}$ . In the same paper, the authors propose for the first time that skip connections and MLPs ([Popescu et al. \(2009\)](#)) are helpful in preventing rank collapse from happening. Moreover, the work in [Noci et al. \(2022\)](#) shows that rank collapse is not only an issue during inference but also hinders training due to vanishing gradient problems at initialization. In [Wu et al. \(2024b\)](#) the authors show that rank collapse also happens in graph attention networks (in this setting the phenomenon is also known as oversmoothing), also causing the model to lose expressive power. Finally, the work in [Wu et al. \(2024a\)](#) studies the effect of LayerNorm on rank collapse in transformers, by proving that this component can help preventing or mitigating rank collapse.
+
+**Skip Connections.** Skip connections were first introduced in ResNets [He et al. \(2015\)](#) with the purpose of easing training and optimization in deep neural networks ([He et al. \(2016\)](#); [Veit et al. \(2016\)](#); [Balduzzi et al. \(2018\)](#)). More precisely, the introduction of skip connections addresses the vanishing gradient problem by decomposing back-propagation of gradients into multiple paths and thus allowing them to skip and bypass layers. As an alternative explanation, it was shown in [Li et al. \(2018\)](#) that adding skip connections also results in a loss function which is much smoother and hence it is harder for gradients to get stuck in local minima, facilitating the training procedure. In transformers and SSMs, the introduction of the skip connection followed the same motivation as for ResNets and other deep neural networks, i.e. to improve and facilitate optimization. The work in [Dong et al. \(2023\)](#) is the first to also connect the benefit of skip connections to avoiding rank collapse by studying the paths decomposition in transformers. Regarding modifications to the skip connection, [Bachlechner et al. \(2020\)](#) also considers a control parameter in residual networks. However, their approach differs in that it is used as a gating with the main network layer again with the purpose of stabilizing optimization, which allows for training of much deeper models. The work in [Srivastava et al. \(2015\)](#) proposes adding an extra feedforward layer to each residual layer. The output of each residual layer is then expressed as a convex combination of two terms: one gated by the residual connection and the other by the output of the primary network layer. The effect of these modifications on skip connection have not been analyzed. Lastly, [He et al. \(2016\)](#) studies the lambda-skip connection proposed here in terms of training efficiency and concludes that the standard choice of  $\lambda = 1$  is usually beneficial.
+
+**LayerNorm.** LayerNorm ([Ba et al. \(2016\)](#)) has become the standard choice of normalization layer for sequence models such as transformers ([Vaswani et al. \(2023\)](#)) and Mamba ([Dao and Gu \(2024\)](#)). In contrast to batch normalization ([Ioffe and Szegedy \(2015\)](#)), LayerNorm performs the shifting and the normalization token-wise and not sequence-wise. This is particularly beneficial as the embedding dimension is usually much smaller than the sequence dimension, resulting in a much cheaper computational overhead than BatchNorm. It has also been shown that LayerNorm is helpful to stabilize training ([Xiong et al. \(2020\)](#)) and to increase the expressivity of the attention layer ([Brodry et al. \(2023\)](#)). Related instead to rank collapse, the work in [Dong et al. \(2023\)](#) was the first to analyze a potential connection between rank collapse and LayerNorm. However, they conjecture that LayerNorm has no impact on rank collapse. Later on, the work in [Wu et al. \(2024a\)](#) refutes this claim, showing both empirically and theoretically that LayerNorm helps slow down rank collapse.
+
+## 3 PROBLEM SETUP
+
+### 3.1 SEQUENCE MODEL DEEP-LEARNING ARCHITECTURE
+
+Rank collapse is defined as the convergence – in the limit of infinite depth – of the output matrix of the network’s layers to a Rank-1 matrix. In this sense, rank collapse is intrinsic to deep-learning architectures. In what follows, we outline the different components on a *single-layer* of the architecture considered in this paper. We note that the presented architecture is general enough to capture both transformers and SSM-like architectures.
+
+{3}------------------------------------------------
+
+We start by introducing some notation. We index each layer of the architecture with  $k \in \{1, \dots, K\}$ . We denote  $X^{(k)} \in \mathbb{R}^{N \times d}$  and  $Y^{(k)} \in \mathbb{R}^{N \times d}$  to be the input and output of the  $k$ -th layer, respectively, where  $N$  is the sequence length. In this setting,  $Y^{(0)}$  is the input sequence to the model. Each layer  $k$  has the following components.
+
+**Main mechanism.** The main mechanism differs between attention in transformers, and a recurrent block in SSMs. However, as shown in Ali et al. (2024) and Dao and Gu (2024), both models can be seen as part of a general framework
+
+$$O^{(k)} = M^{(k)} V^{(k)}. \quad (1)$$
+
+In the case of attention,
+
+$$V^{(k)} = X^{(k)} W_V^{(k)} \in \mathbb{R}^{N \times d} \quad \text{and} \quad M^{(k)} = \text{softmax} \left( \frac{X^{(k)} W_Q^{(k)} (W_K^{(k)})^T (X^{(k)})^T}{\sqrt{d_{QK}}} \right) \in \mathbb{R}^{N \times N},$$
+
+with  $W_Q^{(k)} \in \mathbb{R}^{d \times d}$ ,  $W_K^{(k)} \in \mathbb{R}^{d \times d}$  and  $W_V^{(k)} \in \mathbb{R}^{d \times d}$  are the query, key and value matrices respectively.
+
+In the case of the recurrent block,  $V^{(k)} = X^{(k)}$ , and  $M^{(k)}$  is a lower triangular matrix with
+
+$$M_{ji}^{(k)} = C_j^{(k)} \left( \prod_{l=0}^{j-i-1} A_{j-l}^{(k)} \right) B_i^{(k)},$$
+
+where  $A_t^{(k)} \in \mathbb{R}^{dH \times dH}$ ,  $B_t^{(k)} \in \mathbb{R}^{dH \times 1}$ ,  $C_t^{(k)} \in \mathbb{R}^{1 \times dH}$ ,  $U_t^{(k)} \in \mathbb{R}^{1 \times 1}$  (usually it is indicated with  $D_t^{(k)}$ , but we decide to use a different notion to avoid confusion with LayerNorm). The first versions of the SSM blocks consisted of Linear Time Invariant (LTI) representations, i.e.,  $A_t^{(k)} = A^{(k)}$ ,  $B_t^{(k)} = B^{(k)}$ ,  $C_t^{(k)} = C^{(k)}$  and  $U_t^{(k)} = U^{(k)}$  for all time steps  $t$  (Gu et al., 2022b,a; Smith et al., 2023). Recently, in order to improve the expressivity and the performance of such models, selective State Space Models have been proposed (Gu and Dao, 2024; Dao and Gu, 2024). In these models, matrices  $A_t$ ,  $B_t$ , and  $C_t$  are input-dependent. We refer to Appendix A.1 for a detailed explanation of attention and the recurrent block.
+
+**Skip Connection.** The skip connection sums the unmodified input to the output of the self-attention layer:
+
+$$\tilde{Y}^{(k)} = X^{(k)} + O^{(k)}. \quad (2)$$
+
+Although it was originally proposed to stabilize training by avoiding vanishing gradients (He et al. (2015)), it was recently shown that it also has a role in modulating rank collapse (Dong et al. (2023)). In SSM architectures, skip connections are often preceded by gating mechanisms, i.e.,  $O^{(k)}$  in equation 2 is replaced by  $\tilde{O}^{(k)} = O^{(k)} \odot \sigma(W^{(k)} X^{(k)})$ .<sup>1</sup> However, we ignore these in the theoretical part of this paper for simplicity. In this work, we modify the skip connection by allowing it to have an additional parameter  $\lambda^{(k)} \in \mathbb{R}$ , that controls the strength of the skip connection, i.e.,
+
+**Definition 3.1.** Given a standard skip connection as per equation 2 and a parameter  $\lambda^{(k)} \in \mathbb{R}$ , a lambda-skip connection is defined as
+
+$$\tilde{Y}^{(k)} = \lambda^{(k)} X^{(k)} + O^{(k)}. \quad (3)$$
+
+In the theoretical section, we will consider  $\lambda^{(k)}$  to be fixed for all the layers for simplicity. However, in the experimental section, we will also consider models with learnable  $\lambda^{(k)}$ , i.e. it might vary across layers.
+
+**Layer Norm.** The LayerNorm (Ba et al., 2016) computation shifts and normalizes the output  $\tilde{Y}^{(k)}$  after the skip connection. Similar to the skip connection, the purpose of the LayerNorm is also to stabilize training. It was recently shown to also help to mitigate rank collapse (Wu et al., 2024a). Here, we consider a slightly simplified version of LayerNorm, similar to Wu et al. (2024a), where we only apply normalization and not shifting, namely:
+
+$$Y^{(k)} = D^{(k)} \tilde{Y}^{(k)}, \quad (4)$$
+
+where  $D^{(k)} = \text{diag}(d_1^{(k)}, d_2^{(k)}, \dots, d_N^{(k)}) \in \mathbb{R}^{N \times N}$  and  $d_i^{(k)} = \frac{1}{\|\tilde{Y}_{i,:}^{(k)}\|_2}$ .
+
+<sup>1</sup> $\sigma(\cdot)$  is a non-linearity, often SILU,  $W^{(k)}$  is a weight matrix and  $\odot$  is the Hadamard product.
+
+{4}------------------------------------------------
+
+**Other components.** After the above-mentioned computations, the input  $Y$  passes through an MLP (Popescu et al., 2009), which can intuitively be seen as a non-linear feature extractor or a kernel. MLPs might play a role in mitigating rank collapse since they increase the Lipschitz constant of the network (Dong et al., 2023). In particular, the Lipschitz constant of the MLP layer appears in the double exponential decay term of the upper bounds of the rank collapse measure. This is beneficial since it allows for a wider range of choices for the parametrization of other components while maintaining a high-enough upper bound. Since the role of the MLP layer on rank collapse is well-understood, in this work we focus on the effect that LayerNorm and skip connections have on rank collapse. We anticipate that the addition of MLP will further improve the bound, and hence the rank collapse avoidance conditions.
+
+### 3.2 PROBLEM STATEMENT
+
+In mathematical terms, the phenomenon of rank collapse means that the columns of the final output matrix are proportional to each other. The representational capacity of the model is severely hindered by this phenomenon: since the final representations of each token are proportional to each other, there is limited diversity of tokens to be chosen from. Given that the rank of the output layer will be full rank with probability one (since rank-deficient matrices are a zero measure subspace of the space of all matrices), a different metric was introduced in Dong et al. (2023); Wu et al. (2024a) to assess rank collapse:
+
+$$\mu(Y^{(k)}) = \|Y^{(k)} - \mathbf{1}\gamma_{Y^{(k)}}\|_F, \quad (5)$$
+
+where  $Y^{(k)} \in \mathbb{R}^{N \times d}$  is the output matrix resulting from the  $k$ -th layer,  $\gamma_{Y^{(k)}} := \frac{1}{N} \mathbf{1}^T Y^{(k)}$ , and  $\|\cdot\|_F$  is the Frobenius norm.
+
+In order to study the impact of the architecture on the phenomenon of rank collapse, we make use of the equations describing the architecture: equation 1, equation 3, and equation 4. Moreover, we note that the output of layer  $k-1$  is the input to layer  $k$ , i.e.  $X^{(k+1)} = Y^{(k)}$ . Combining these equations we obtain
+
+$$Y^{(k)} = D^{(k)}(M^{(k-1)}Y^{(k-1)}C_V^{(k-1)} + \lambda^{(k)}Y^{(k-1)}), \quad (6)$$
+
+where  $C_V^{(k)} = W_V^{(k)}$  for the attention block and  $C_V^{(k)} = I$  for the recurrent block.
+
+The goal of this paper is to show how the introduction of  $\lambda^{(k)}$  in the lambda-skip connection influences rank collapse. For this purpose, the main quantity of interest is  $\mu(Y^{(K)})$  i.e., the value of the token-similarity metric on the output of the last layer. We provide a mathematical analysis of this metric in terms of the different architectural components in the next section.
+
+## 4 LAMBDA-SKIP CONNECTION: NECESSARY AND SUFFICIENT TO PREVENT RANK COLLAPSE
+
+Here, we present the analysis resulting from studying rank collapse with lambda-skip connections. In Section 4.1, we analyze the scenario where we replace the regular skip connection by a lambda-skip connection and show that, together with LayerNorm, an appropriate choice of  $\lambda$  in equation 3 is sufficient to prevent rank collapse in the finite layers setting. For simplicity, here we consider a fixed value of  $\lambda$  for all the layers, i.e.  $\lambda^{(k)} = \lambda \forall k$ . Specifically, we provide the value of  $\lambda \in \mathbb{R}$  in the lambda-skip connection that guarantees the absence of rank collapse. This result holds for any arbitrary amount of layers and all the three architectures studied in the paper (transformers, LTI SSMs and selective SSMs). In Section 4.2, we study the necessity of this condition. First we show that in the ablated architecture without skip connection, rank collapse occurs exponentially, i.e.,  $\mu(Y^{(K)})$  converges to 0 exponentially. If, additionally, LayerNorm is also ablated, rank collapse occurs doubly exponentially. Second, we highlight via examples that the strength of the lambda-skip connection (parametrized through  $\lambda \in \mathbb{R}$ ) plays a crucial role in determining the effect of skip connections on rank collapse.
+
+### 4.1 LAMBDA-SKIP CONNECTION: SUFFICIENT TO PREVENT RANK COLLAPSE
+
+Here we show the role that the parameter  $\lambda \in \mathbb{R}$  plays in guaranteeing, under appropriate conditions, the prevention of rank collapse. To do this, we provide a  $\lambda$ -dependent lower bound for the rank
+
+{5}------------------------------------------------
+
+collapse metric  $\mu(Y^{(K)})$  in equation 5. We start by defining the following quantity:
+
+$$b := \frac{1}{a^K} \frac{2\lambda N d S C_M}{\lambda^2 - a(SC_M + |\lambda|)^2},$$
+
+with  $C_M := \sup_k \|M^{(k)}\|_F$ ,  $S := \sup_k \|C_V^{(k)}\|_F$ . We also define the collapse rate as:
+
+**Definition 4.1.** *The collapse rate,  $a > 0$ , is the rate at which the lower bound for the rank collapse metric  $\mu(Y^{(K)})^2$  decays with the number of layers, i.e  $\mu(Y^{(K)})^2 \geq a^K \mu(Y^{(0)})^2$ .*
+
+**Theorem 4.1** (Lower Bound on Rank Collapse). *Let the input sequence  $Y^{(0)}$  be such that  $\mu(Y^{(0)})^2 \geq b$ . If the skip connection strength  $\lambda$  is chosen to satisfy*
+
+$$\lambda^2 - a(SC_M + |\lambda|)^2 > 0, \quad (7)$$
+
+*then we can lower bound  $\mu(Y^{(K)})$  by  $\mu(Y^{(K)})^2 \geq a^K \mu(Y^{(0)})^2$  for all  $K \in \mathbb{N}$ .*
+
+*Proof.* The key part of the proof is to show the following relationship between the rank collapse measure at two consecutive layers:  $\mu(Y^{(k+1)})^2 \geq \frac{1}{(SC_M + |\lambda|)^2} (\lambda^2 \mu(Y^{(k)})^2 - 2\lambda N d C_M)$ , which is done by algebraic manipulation and upper bounds on  $\|Y^{(k+1)}\|_F$ . The claim follows by imposing the right-hand side above greater of equal to  $a\mu(Y^{(k)})^2$ , rearranging the terms and imposing the condition on  $\lambda$  to guarantee the feasibility of this. The full proof can be found in Appendix A.4.  $\square$
+
+We note that this result is very general, since it holds for any model that can be expressed in the form of equation 6, independent of its specific implementation or parametrization. Moreover, the presence of LayerNorm implies that the bound provided in equation 7 does not depend on the input even when the matrix  $M$  is input-dependent. This is because the input is normalized before being fed through  $M$ . Specifically,  $C_M$  is only dependent on the weights and on the sequence length <sup>2</sup>
+
+Theorem 4.1 also provides an important intuition for the choice of  $\lambda$ . In particular, we note that to guarantee prevention of rank collapse, the ideal choice is  $a = 1$ . However, this choice will be mediated by the values of  $C_M$  and  $S$  in the different architectures. In particular, it is easy to see that the only way to guarantee a solution to 7 is by having  $1 - a > 0$ , for which  $\lambda$  needs to satisfy  $|\lambda| > \frac{(a+\sqrt{a})SC_M}{1-a}$ .
+
+**Remark 4.1.** *In the case of Mamba,  $C_V = I$  and  $c = S = 1$ . This implies that the only possible choice for the collapse rate is  $a < 1$ . Although this does not guarantee  $\mu(Y^{(K)})^2 \geq \mu(Y^{(0)})^2$ , in practice  $a$  can be chosen to be very close to 1. For instance, one can set  $a = 0.9999$ . Given  $K = 64$  (standard number of layers in Mamba),  $a^K \approx 0.993$ . Hence, in practice, if we choose  $\lambda$  appropriately, this choice still prevents rank collapse (see e.g. Figure 2).*
+
+Finally, we conclude this section by briefly discussing how Theorem 4.1 can be generalized to the case where we let  $\lambda$  vary across different layers. The following small modification will be enough to make the result still hold in this setting: in order to still satisfy the condition  $\mu(Y^{(k)}) \geq a\mu(Y^{(k-1)})$ , we can simply adapt equation 7 to be  $\lambda_k^2 - a(S_k C_{M_k} + |\lambda_k|)^2 > 0$ , where  $S_k = \|C_V^{(k)}\|_F$  and  $C_{M_k} = \|M^{(k)}\|_F$ . Additionally, the flexibility to choose  $\lambda_k$  allows for different values of  $a$  to be used across layers. For instance, instead of setting a single  $a$  value for all layers, one can vary  $\lambda_k$  to meet different layer-specific conditions. In one layer,  $\lambda_k$  might satisfy the condition for a smaller value of  $a$ , while in a subsequent layer,  $\lambda_k$  satisfies the condition for a larger value of  $a$ .
+
+### 4.2 LAMBDA-SKIP CONNECTION: NECESSARY TO PREVENT RANK COLLAPSE?
+
+Next, we explore the role that the lambda-skip connection plays in terms of being necessary to prevent rank collapse. Although we do not provide a formal necessary condition, we explore this idea in two ways. First, we provide theoretical results on how rank collapse occurs when the (standard) skip connection is ablated. Then, we give two examples of how rank collapse may occur when the lambda-skip connection does not attain the bound in Theorem 4.1.
+
+<sup>2</sup>in transformers  $C_M = \sqrt{N}$ , in structured LTI SSMs  $C_M \geq \sup_k \|A^{(k)}\| \|B^{(k)}\| \|C^{(k)}\|_F$  and in selective SSMs  $C_M \geq \sup_k \|W_A^{(k)}\| \|W_C^{(k)}\|_F$  (since in Selective SSMs it is common practice to choose  $A_k^{(k)}$  with eigenvalues smaller than one).
+
+{6}------------------------------------------------
+
+#### 4.2.1 RANK COLLAPSE OCCURS WITHOUT SKIP CONNECTIONS
+
+Here we show how, for different architectures, rank collapse occurs in the absence of skip connections. Here we focus on transformers and selective SSMs. Additional results on LTI SSMs are presented in Appendix A.8.
+
+**Transformers.** We start by reporting for completeness the result in Wu et al. (2024a) for transformers architectures with Self-Attention and LayerNorm only.
+
+**Theorem 4.2** (Corollary 1, Wu et al. (2024a) (Informal)). *Under certain assumptions on the self-attention weights and the input sequence, there exist  $C > 0$ ,  $\epsilon > 0$  and  $r > 0$  such that  $N\epsilon < 1$  and*
+
+$$\mu(Y^{(K)}) \leq C(1 - \epsilon^{2r})^{\frac{K}{\epsilon}}, \quad \forall K \geq 0.$$
+
+*meaning that tokens converge to a common point on  $\mathbb{S}^{d-1}$  exponentially.*
+
+We refer to Appendix A.5 for a rigorous presentation of Theorem 4.2. The main takeaway from this result is that, under appropriate conditions on the architecture and the input sequence, removing skip connections and only using attention layers and LayerNorm can cause an exponentially fast convergence to a rank-1 matrix. This highlights the importance of skip connections to mitigate rank collapse. It is also interesting to compare the result in Theorem 4.2 to the setting of self-attention only transformers (without both LayerNorm and skip connections), reported in Dong et al. (2023). Under certain assumptions on the attention matrix and the input sequence, rank collapse occurs at a doubly exponential rate. We report the full result in Theorem A.3 and Corollary A.3.1 (where we adapted the Theorem to the rank collapse measure provided in the problem statement).
+
+**Selective SSMs.** According to Dao and Gu (2024), for selective SSMs where  $A_t = \alpha_t I$  (e.g., Mamba-2), the matrix  $M$  can be compactly written as  $M^{(k)} = \text{ISS}(\alpha) \odot \left( Y^{(k)} W_C W_B^\top Y^{(k)\top} \right)$ , where  $\text{ISS}(\alpha)$  is a lower-triangular 1-semiseparable matrix. Due to space limitations, we formally define  $\text{ISS}(\alpha)$  in Equation 12 in Appendix A.3. In what follows, we introduce the following assumption on selectivity:
+
+**Assumption 4.1.** *Only the matrices  $B_t = Y_t^{(k)} W_B$  and  $C_t = Y_t^{(k)} W_C$  are input-dependent, while  $A_t = A = \alpha I$  (with  $\alpha \leq 1$ ) is independent of the input.*
+
+This choice is done for ease of exposition. Although it may seem restrictive in theory, we show experimentally that eliminating skip connections can cause rank collapse for selective SSMs where  $A_t$  is input dependent as well, such as Mamba (see e.g. the plot corresponding to  $\lambda = 0$  in Figure 1). In the following derivation, we neglect gating mechanisms for the sake of the theoretical analysis—we will thoroughly analyze their effect on rank collapse in simulation (see e.g. Figure 3).
+
+**Theorem 4.3** (Rank Collapse for selective SSMs without skip connection). *Let  $\phi^{(k)} = \min_{i,j \in [N]} \langle Y_i^{(k)}, Y_j^{(k)} \rangle$ , where  $\langle \cdot, \cdot \rangle$  indicates the inner product. Under Assumption 4.1 and if  $\epsilon \leq \phi^{(0)} < 1$  for some  $\epsilon > 0 \in \mathbb{R}$ ,  $\lambda_{\min} > 0$ ,  $\sum_j M_{ij} \geq 1 \forall i$ , then it holds that:*
+
+$$\mu(Y^{(K)}) \leq \sqrt{N} \left( 1 - \epsilon^2 \lambda_{\min}^2 \alpha^{2N} \right)^K \quad \forall K \geq 0,$$
+
+*where  $\lambda_{\min}$  and  $\lambda_{\max}$  the minimum and maximum eigenvalues of  $\frac{W_B W_C^\top + W_C W_B^\top}{2}$ .*
+
+*Proof.* The proof adapts the derivation in Corollary 1 in Wu et al. (2024a) to selective SSMs. In particular, the key is to find a recursive relation between  $1 - \phi^{(k)}$  and  $1 - \phi^{(k+1)}$ . The full proof can be found in Appendix A.7.  $\square$
+
+In particular, when  $\lambda_{\min} \leq \frac{2}{\epsilon^2 \alpha^{2N}}$ , the model suffers from exponential rank collapse. Note that the above result holds for a model with layers having the same parametrization.
+
+In Appendix A.9 Theorem A.10, we show that if we instead have a selective SSM with ablated the skip connections and LayerNorms, then rank collapse can happen doubly exponentially under certain conditions, similarly to what we have in transformers architecture. In contrast with the LTI SSM case (Theorems A.7 and A.8), which exhibits an exponential decay, the matrix  $M^{(k)}$  depends quadratically on the input for selective SSMs:  $\|M^{(k)}\|_F \leq \sqrt{N} \|Y^{(k)}\|_F^2 \|W_{BC}\|_F$ , where  $W_{BC} = W_C W_B^\top$ . This dependency is what causes the doubly exponential behavior.
+
+{7}------------------------------------------------
+
+#### 4.2.2 RANK COLLAPSE CAN STILL OCCUR WITH SKIP CONNECTIONS UNDER SPECIFIC CHOICES OF $\lambda$ : EXAMPLES
+
+In the following, we show an analytical example of how, for Selective SSMs, rank collapse can still occur in the presence of lambda-skip connections for specific choice of  $\lambda$ . A similar example for Structured LTI SSMs can be found in Appendix A.10.
+
+**Selective SSMs.** Consider the system, which we will denote as [Sys-2],  $A_t = A = \alpha I$  (for simplicity, we consider  $\alpha$  not to be input dependent here),  $B = YW_B$  and  $C = YW_C$  input dependent (where  $y_t$  is the  $t$ -th row of  $Y$ ) with LayerNorm applied to the output of each layer. Once again, we let  $N = 2$  and  $d = 2$ . We have  $M = W_A \odot (YW_C W_B^\top Y^\top)$  where  $W_A = \begin{pmatrix} 1 & 0 \\ \alpha & 1 \end{pmatrix}$ . By
+
+choosing  $\alpha = 1$  and  $W_B = W_C = I$ , we get that  $M = \begin{pmatrix} 1 & 0 \\ y_1^\top & y_2 \end{pmatrix}$  since the input to the layer is normalized by LayerNorm.
+
+**Proposition 4.3.1.** *Given [Sys-2], if we then choose  $\lambda > -\frac{3}{2}$ ,  $M$  as above and  $Y^{(0)} = \begin{pmatrix} \frac{1}{\alpha_0} & 0 \\ \sqrt{\frac{\alpha_0^2}{\alpha_0^2 + \beta_0^2}} & \frac{\beta_0}{\sqrt{\alpha_0^2 + \beta_0^2}}} \end{pmatrix}$  for any  $\alpha_0, \beta_0$  with  $\alpha_0 > 0$ , then we have that  $\mu(Y^{(k)}) \rightarrow 0$ . On the other hand, if we choose  $\lambda < -\frac{3}{2}$  and  $M$  and  $Y^{(0)}$  as above, then rank collapse is avoided.*
+
+*Proof.* Again, the result follows by calculating  $Y^{(k)}$  inductively and by showing that the corresponding  $\mu(Y^{(k)})$  decays to 0 for  $\lambda > -\frac{3}{2}$  while this does not happen if  $\lambda < -\frac{3}{2}$ . We refer to Appendix A.11 for the full proof.  $\square$
+
+#### 4.2.3 TIGHTNESS OF LOWER BOUND IN THEOREM 4.1
+
+We conclude this section with a discussion of the tightness of the lower bound provided in Theorem 4.1. In particular, we explore whether there exist a system such that  $\mu(Y^{(k)})^2 = O(a^k \mu(Y^{(0)})^2)$  for a choice of  $\lambda$  that satisfies Equation 7. We show in Proposition 4.3.2 that such a system exists. Hence, without additional assumptions on the architecture or on the input sequence, it is not possible to provide a better guarantee for the lower bound of the rank collapse metric.
+
+**Proposition 4.3.2.** *There exist an architecture of the form of Equation 6 such that, when choosing  $\lambda$  to satisfy Equation 7, i.e.  $|\lambda| = \Omega(\frac{a}{1-a})$ , it holds that  $\mu(Y^{(k)})^2 = O(a^k \mu(Y^{(0)})^2)$ .*
+
+*Proof.* We again consider [Sys-2] from Proposition 4.3.1 with  $\alpha_0 = \beta_0 = \frac{1}{2}$ . From the proof of Proposition 4.3.1, we calculate the values of  $Y^{(k)}$  and  $\mu(Y^{(k)})$  for all layers  $k$ . Then, we calculate the value of  $a$  by simply considering the ratio of the rank collapse measure at two consecutive layers. Then, the result simply follows by upper bounding the value of  $a$  and comparing it with the desired bound. The full proof can be found in Appendix A.12.  $\square$
+
+## 5 EXPERIMENTS
+
+In this section, we aim to both explore the link between gating mechanisms and rank collapse and to empirically validate our theoretical findings. In Section 5.1, we empirically validate Theorem 4.1, demonstrating the importance of selecting the appropriate skip connection strength to mitigate rank collapse. In Section 5.2, we show that for the Mamba-2 architecture (Dao and Gu (2024)), gating mechanisms indeed play a crucial role in preventing rank collapse. Finally, we provide additional experiments on the S4 architecture (Gu et al., 2022b) in Appendix A.13.1.
+
+### 5.1 COMPARISON OF RANK COLLAPSE FOR MAMBA ARCHITECTURE WITH DIFFERENT VALUES OF $\lambda$
+
+We start by validating our main finding, i.e., that by controlling the value of  $\lambda$  in the skip connection, we can prevent rank collapse from happening. In order to do so, we consider a 2 billion parameters pre-trained Mamba-2 model available on HuggingFace and remove the gating mechanisms. Instead, we add an additive skip connection with varying  $\lambda$ . For simplicity, we keep the value of  $\lambda$  constant at every layer. Similar to Dong et al. (2023); Wu et al. (2024a), we sample 32 text excerpts from
+
+{8}------------------------------------------------
+
+Wikipedia using the Wikipedia API and tokenize them in sequences of at least 128 tokens using the BERT tokenizer [Devlin et al. \(2019\)](#). We then forward pass these inputs through the pre-trained model and evaluate the rank collapse measure  $\mu$  (normalized by the norm of the layer output) for each of the 64 layers for different values of  $\lambda$ , as shown in Figure 1. We observe that when  $|\lambda|$  is small, the model suffers from rank collapse. This happens even when  $\lambda = 1$ , which is usually the default design choice. After sufficiently increasing or decreasing  $\lambda$ , we note that we avoid rank collapse, consistent with our theoretical results, particularly Theorem 4.1. This suggests that rather than fixing the skip connection strength at  $\lambda = 1$  (as is standard), it may be beneficial to treat  $\lambda$  as a learnable parameter or hyperparameter to improve model stability. In Figure 2, we analyze
+
+![Figure 1: Normalized Rank Collapse Measure vs Layers Depth in Mamba 2. The plot shows the normalized rank collapse measure (y-axis, 0.0 to 1.4) across 64 layers (x-axis) for various skip connection strengths lambda (100, 20, 10, 1, 0.1, 0, -0.1, -1, -10, -20, -100). The curves show that for smaller |lambda|, the rank collapse measure is generally lower, indicating more rank collapse. Shaded areas represent one standard deviation from the mean.](91be14371a97fb5ce9eeb29ae18d07c3_img.jpg)
+
+Figure 1: Normalized Rank Collapse Measure vs Layers Depth in Mamba 2. The plot shows the normalized rank collapse measure (y-axis, 0.0 to 1.4) across 64 layers (x-axis) for various skip connection strengths lambda (100, 20, 10, 1, 0.1, 0, -0.1, -1, -10, -20, -100). The curves show that for smaller |lambda|, the rank collapse measure is generally lower, indicating more rank collapse. Shaded areas represent one standard deviation from the mean.
+
+Figure 1: (Normalized) Rank Collapse measure plotted for different values of the skip connection’s strength  $\lambda$ . Again, shaded areas represent one standard deviation from the mean calculated over the 32 examples.
+
+![Figure 2: Rank Collapse in last layer as a function of lambda. The plot shows the normalized rank collapse measure (y-axis, 0.0 to 1.0) for the last layer as a function of skip strength lambda (x-axis, -100 to 100). Two curves are shown: Albert (blue) and Mamba (orange). Both curves show a sharp drop in rank collapse measure at lambda = 0. For |lambda| > 0, the measure increases and stabilizes. Shaded areas represent one standard deviation from the mean.](891ff9b651838b7f59e9a1612a739e15_img.jpg)
+
+Figure 2: Rank Collapse in last layer as a function of lambda. The plot shows the normalized rank collapse measure (y-axis, 0.0 to 1.0) for the last layer as a function of skip strength lambda (x-axis, -100 to 100). Two curves are shown: Albert (blue) and Mamba (orange). Both curves show a sharp drop in rank collapse measure at lambda = 0. For |lambda| > 0, the measure increases and stabilizes. Shaded areas represent one standard deviation from the mean.
+
+Figure 2: (Normalized) Rank Collapse measure at the last layer plotted for different values of  $\lambda$  for both Albert and Mamba. Shaded areas represent one standard deviation from the mean calculated over the 32 examples.
+
+how the rank collapse measure at the last layer varies with different skip connection strengths for both the Albert’s architecture ([Lan et al. \(2020\)](#)) and Mamba-2, keeping the full architecture (also LayerNorm). In both cases, we note the importance of tuning and choosing the correct value of  $\lambda$  to avoid rank collapse. We see how a value of  $\lambda$  very close to 0, as we expected, is detrimental and causes a very low value of  $\mu$ , even in the presence of LayerNorm, which is consistent with our findings in Theorem 4.3. Additionally, we see that a negative  $\lambda$  leads to a higher  $\mu$ . Intuitively, the reason for this could be that a negative  $\lambda$  can be interpreted as negative feedback in the system, hence helping stabilizing it. Note that even if in both cases our condition on  $\lambda$  in Theorem 4.1 is too conservative, in practice much lower values of  $\lambda$  are good enough to prevent rank collapse. In Figure 2 we note that as  $|\lambda|$  increases, there is little variation in  $\mu$ . This can be explained using the lower bound proposed in Theorem 4.1. Specifically, as  $|\lambda| \rightarrow \infty$ , the parameter  $a \rightarrow 1$ . This implies that the rank collapse metric decreases much more slowly with the number of layers. In the limit, it does not decrease at all, remaining at or above the rank collapse measure at the input.
+
+We investigate whether using  $\lambda$  as a trainable parameter affects the learning performance. To this end, we train two transformer-based architectures and two SSM-based architectures on the image task of the long range arena (LRA) benchmark ([Tay et al., 2020](#)) and on a multi-query associative recall (MQAR) task ([Arora et al., 2023](#)). The accuracy of all four architectures on both tasks are reported in Table 1, and the details on the experimental setup are provided in Appendix A.14. From our observations, we conclude that learning  $\lambda$  does not affect the performance and even outperforms the models with fixed  $\lambda$  in some cases.
+
+| Task [%]           | Model         |                |                  |                |               |                |               |                |
+|--------------------|---------------|----------------|------------------|----------------|---------------|----------------|---------------|----------------|
+|                    | Transformer   |                | Lin. Transformer |                | Mamba         |                | Mamba-2       |                |
+|                    | $\lambda = 1$ | var. $\lambda$ | $\lambda = 1$    | var. $\lambda$ | $\lambda = 1$ | var. $\lambda$ | $\lambda = 1$ | var. $\lambda$ |
+| Image (LRA)        | 32.64         | 32.85          | 34.10            | 32.80          | 63.04         | 62.92          | 42.28         | 38.92          |
+| MQAR ( $L = 512$ ) | 99.6          | 98.9           | 1.6              | 1.55           | 81.5          | 85.3           | 97.3          | 99.1           |
+
+Table 1: Model performance in terms of test accuracy on the Image task of the LRA benchmark and the MQAR task  $\{L = 512, \text{KV-pairs} = 64\}$ .
+
+{9}------------------------------------------------
+
+### 5.2 COMPARISON OF RANK COLLAPSE FOR MAMBA ARCHITECTURE WITH AND WITHOUT GATING MECHANISMS AND LAYERNORM
+
+We also analyze the effect of gating mechanisms and LayerNorms in the Mamba architecture. Because gating mechanisms can be viewed as a multiplicative form of skip connections, we aim to empirically explore whether they, like skip connections, contribute to stability and prevent rank collapse. We repeat the same procedure as above, i.e., forward passing 32 excerpts from Wikipedia to the pre-trained model and calculating the rank collapse measure across all layers. We replicate this for all considered cases, namely gating plus LayerNorm, only gating, only LayerNorm, and neither gating nor LayerNorm.
+
+As shown in Figure 3, when removing the gating mechanism, we either observe the rank collapse measure approaching zero especially for later layers if the LayerNorm is present, or we observe an initial drop in the rank collapse measure followed by a dramatic increase if we remove the LayerNorm. This highlights the importance of having LayerNorm to keep the model stable, as was also observed in [Dao and Gu \(2024\)](#). Indeed, even when the model contains a gating mechanism, although we prevent rank collapse, removing LayerNorm leads to a sudden increase in the rank collapse measure, indicating instability. Interestingly, we find that gating mechanisms, originally designed to enhance memory capabilities, also play a crucial role in preventing rank collapse. To the best of our knowledge, this is the first time this connection has been made.
+
+![Figure 3: Normalized Rank Collapse Measure vs Layers Depth in Mamba 2. The graph plots the rank collapse measure (y-axis, 0.0 to 1.2) against the layer index (x-axis, 0 to 60). Four lines represent different configurations: Gating=True, LN=True (blue); Gating=True, LN=False (orange); Gating=False, LN=True (green); and Gating=False, LN=False (red). The blue line remains relatively stable around 1.0. The orange line shows a sharp spike around layer 25. The green line drops to near zero around layer 40 and then rises slightly. The red line drops to near zero around layer 20 and then rises sharply to over 1.0 around layer 30. Shaded areas represent one standard deviation.](6b32b7b928d34eeccb15c29cdf9d2cb3_img.jpg)
+
+Figure 3: Normalized Rank Collapse Measure vs Layers Depth in Mamba 2. The graph plots the rank collapse measure (y-axis, 0.0 to 1.2) against the layer index (x-axis, 0 to 60). Four lines represent different configurations: Gating=True, LN=True (blue); Gating=True, LN=False (orange); Gating=False, LN=True (green); and Gating=False, LN=False (red). The blue line remains relatively stable around 1.0. The orange line shows a sharp spike around layer 25. The green line drops to near zero around layer 40 and then rises slightly. The red line drops to near zero around layer 20 and then rises sharply to over 1.0 around layer 30. Shaded areas represent one standard deviation.
+
+**Figure 3:** (Normalized) Rank Collapse measure of the Mamba-2 model plotted as a function of layer depth. The shaded areas represent one standard deviation from the mean calculated over the 32 examples. Gating=True/False indicates we use a Mamba2 architecture with/without gating whereas LN=True/False indicate we use the architecture with/without LayerNorm
+
+## 6 CONCLUSION
+
+This paper studies the phenomenon of rank collapse across general sequence model architectures, using the unifying framework from [Ali et al. \(2024\)](#) and [Dao and Gu \(2024\)](#). Our main contribution is the introduction of a lambda-skip connection, which adds a regulatory term to the standard skip connection component to control its strength. We provide sufficient conditions for this parameter under which rank collapse does not occur. We do this via a lower bound on the rank collapse measure, which holds for transformers, LTI SSMs, selective SSMs and more generally, all architectures that can be written in the framework from [Ali et al. \(2024\)](#) and [Dao and Gu \(2024\)](#). We further study the necessity of the lambda-skip connection by showing that when this component is ablated, selective SSMs also experience rank collapse even in the presence of LayerNorm. Moreover, we show that similarly to Transformers, selective SSMs can also be affected by doubly exponential rank collapse when both skip connections and LayerNorm are ablated. We suggest that the primary cause of this doubly exponential rank collapse is the input dependence of the  $M^{(k)}$  matrix. We validate our theoretical analysis with simulation experiments and further analyze other components such as the Gating Mechanism, which we have found also play a role in rank collapse.
+
+**Limitations and Future Work.** A limitation of this work is the exclusion of gating mechanisms from the theoretical analysis. Since gating mechanisms help to mitigate the effect of rank collapse, we expect their inclusion in the derivations would result in tighter upper bounds on the rank collapse measure for Mamba. Furthermore, one other line worth exploring is to consider the effect on lower bounds of MLPs in addition to skip connections and LayerNorm. Deriving a tighter lower bound that matches the results in our experiments is also a very promising avenue of research. Additionally, Remark 4.1 offers intriguing insights from a control-theoretic perspective, as it suggests that the  $\lambda$  parameter can be interpreted as a control gain. We believe that further theoretical analysis of the stability and performance associated with  $\lambda$ -skip connections could lead to a more principled design of learning architectures. Finally, exploring alternative measures of rank collapse, like effective rank, and their correlation with our metric is a promising direction to expand on how our results generalize across metrics.
+
+ Rest of paper (reference and Appendix) is removed.

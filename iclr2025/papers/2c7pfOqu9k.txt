@@ -1,0 +1,341 @@
+
+
+{0}------------------------------------------------
+
+# DEFT: DECODING WITH FLASH TREE-ATTENTION FOR EFFICIENT TREE-STRUCTURED LLM INFERENCE
+
+Jinwei Yao<sup>1,4,\*</sup> Kaiqi Chen<sup>2,\*</sup> Kexun Zhang<sup>3</sup> Jiaxuan You<sup>4,†</sup>
+
+Binhang Yuan<sup>5</sup> Zeke Wang<sup>2,†</sup> Tao Lin<sup>1,†</sup>
+
+jinwei.yao1114@gmail.com; {chiaki\_cage, wangzeke}@zju.edu.cn;
+
+kexunz@andrew.cmu.edu; jiaxuan@illinois.edu;
+
+biyuan@ust.hk; lintao@westlake.edu.cn
+
+<sup>1</sup>Westlake University <sup>2</sup>Zhejiang University <sup>3</sup>Carnegie Mellon University
+
+<sup>4</sup>University of Illinois Urbana-Champaign <sup>5</sup>Hong Kong University of Science and Technology
+
+## ABSTRACT
+
+Large language models (LLMs) are increasingly employed for complex tasks that process multiple generation calls in a tree structure with shared prefixes of tokens, including few-shot prompting, multi-step reasoning, speculative decoding, etc. However, existing inference systems for tree-based applications are inefficient due to improper partitioning of queries and KV cache during attention calculation. This leads to two main issues: (1) a lack of memory access (IO) reuse for KV cache of shared prefixes, and (2) poor load balancing. As a result, there is redundant KV cache IO between GPU global memory and shared memory, along with low GPU utilization. To address these challenges, we propose DEFT<sup>1</sup> (Decoding with Flash Tree-Attention), a hardware-efficient attention algorithm with prefix-aware and load-balanced KV cache partitions. DEFT reduces the number of read/write operations of KV cache during attention calculation through *KV-Guided Grouping*, a method that avoids repeatedly loading KV cache of shared prefixes in attention computation. Additionally, we propose *Flattened Tree KV Splitting*, a mechanism that ensures even distribution of the KV cache across partitions with little computation redundancy, enhancing GPU utilization during attention computations. By reducing 73-99% KV cache IO and nearly 100% IO for partial results during attention calculation, DEFT achieves up to 2.23/3.59× speedup in the decoding/attention latency across three practical tree-based workloads compared to state-of-the-art attention algorithms. Our code is available at <https://github.com/LINs-lab/DeFT>.
+
+## 1 INTRODUCTION
+
+Large language models (LLMs) (Achiam et al., 2023; Touvron et al., 2023a;b) are extensively utilized across a range of tasks like chatbot (Roller et al., 2020), code generation (Mark et al., 2021), reasoning (Yao et al., 2023; Besta et al., 2023; Ning et al., 2023), etc. Traditionally, the interactions between LLMs and application users are sequential: the user sends a new prompt after completion result of the previous prompt is received. However, many applications are now designed to process sequences with an internal tree structure, including self-consistency (Wang et al., 2022), few-shot prompting (Mann et al., 2020), multi-step reasoning (Yao et al., 2023; Hao et al., 2023; Xie et al., 2024), and speculative decoding (Miao et al., 2023; Cai et al., 2024), etc, as shown in Figure 1. Usually, these applications produce substantially more tokens than traditional ones, to provide large space for tree search (Graves, 2012; Lu et al., 2022; Liu et al., 2023) or selection, as shown in Table 1. **We need a more efficient decoding algorithm in response to this interaction paradigm change from sequence-based decoding to tree-based decoding.**
+
+<sup>\*</sup>Equal contribution. Work done during Jinwei’s visit to Westlake University.
+
+<sup>†</sup>Corresponding author.
+
+<sup>1</sup>By default, DEFT refers to DEFT-Flatten, which has *Flattened Tree KV Splitting* before loading KV cache for attention calculation.
+
+{1}------------------------------------------------
+
+When requests have shared prefixes in a tree structure, existing inference systems (Hugging Face; NVIDIA; Kwon et al., 2023) designed for sequence-based decoding introduce redundancy by failing to be prefix-aware at one or more of the following three levels: (1) *computation*—for instance, the redundant recomputation of KV caches for shared prompts across requests in a batch (Hugging Face); (2) *memory storage*—for example, the redundant storage of KV caches for shared prefixes (Hugging Face; Kwon et al., 2023; NVIDIA); (3) *memory access (IO)*—such as repeatedly loading the KV cache of a shared system prompt during attention calculations (Hugging Face; Kwon et al., 2023; NVIDIA). Although some tree-based inference systems (Zheng et al., 2023; Gim et al., 2023; Cai et al., 2024; Miao et al., 2023) address the first two issues, they largely overlook the third and arguably the most crucial aspect: *memory access*, which is critical in the context of memory-bound LLM inference (Shazeer, 2019; Cai et al., 2024; Kim et al., 2023).
+
+Table 1: **Comparison of efficiency in sequence-based CoT (Wei et al., 2022) and tree-based ToT (Yao et al., 2023) decoding for a reasoning task.** The task is *sorting 128 numbers* from Besta et al. (2023). The total generated tokens of CoT is only 525 while 38,315 in ToT, resulting in inefficiency in end-to-end latency (second) and IO (TB). IO mainly consists of two parts as follows. (i) *KV cache*: IO-KV; (ii) *Partial results during attention calculation like  $QK^T$  and softmax*: IO-PA; Base-lines: (i) *Flash-Decoding* (Dao et al., 2023); (ii) *Tree Attention*: tree attention in Medusa (Cai et al., 2024).
+
+|                             | Latency                        | IO-KV | IO-PA |
+|-----------------------------|--------------------------------|-------|-------|
+| Flash-Decoding + CoT        | 21                             | 0.6   | 0     |
+| Flash-Decoding + ToT        | 429.65                         | 59.96 | 0     |
+| Tree Attention + ToT        | 380.87                         | 12.40 | 3.69  |
+| DeFT-Flatten(ours) + ToT    | <b>94.67</b>                   | 12.40 | 0     |
+| Speed up over best baseline | <b>4.02<math>\times</math></b> | -     | -     |
+
+![Figure 1: An illustration of Sequence-based decoding and Tree-based decoding. The diagram is divided into two main sections. The top section, 'Sequence-based decoding', shows two prompts, 'Prompt 1' and 'Prompt 2', each with a 'Generation' block. A legend indicates that 'shareable KV cache' is represented by a blue square, 'non-shareable prompt' by a green square, and 'non-shareable generation' by a yellow square. The bottom section, 'Tree-based decoding', illustrates four methods: 1) Self-consistency, where a prompt 'P' leads to two generations 'G1' and 'G2'; 2) Few-shot prompting, where a prompt 'P' leads to 'Few-shot examples' (P1, G1, P2, G2) and then to 'Search History' (P1,1, G1,1, P1,2, G1,2, P2,1, G2,1, P2,2, G2,2); 3) Multi-step reasoning (e.g. Tree-of-thoughts), where a 'Draft models /heads' block leads to a tree of tokens (t0, t1, t2, t3, t4) and then to 'Step 1(G1)', 'Step 2(G2)', and 'Step 3(G3)' with a 'Current Step' indicator; 4) Multi-mode/head coordination (e.g. Speculative decoding), which shows a similar tree structure with 'Step history' blocks.](164d1b48231be457522b31965610ea3b_img.jpg)
+
+Figure 1: An illustration of Sequence-based decoding and Tree-based decoding. The diagram is divided into two main sections. The top section, 'Sequence-based decoding', shows two prompts, 'Prompt 1' and 'Prompt 2', each with a 'Generation' block. A legend indicates that 'shareable KV cache' is represented by a blue square, 'non-shareable prompt' by a green square, and 'non-shareable generation' by a yellow square. The bottom section, 'Tree-based decoding', illustrates four methods: 1) Self-consistency, where a prompt 'P' leads to two generations 'G1' and 'G2'; 2) Few-shot prompting, where a prompt 'P' leads to 'Few-shot examples' (P1, G1, P2, G2) and then to 'Search History' (P1,1, G1,1, P1,2, G1,2, P2,1, G2,1, P2,2, G2,2); 3) Multi-step reasoning (e.g. Tree-of-thoughts), where a 'Draft models /heads' block leads to a tree of tokens (t0, t1, t2, t3, t4) and then to 'Step 1(G1)', 'Step 2(G2)', and 'Step 3(G3)' with a 'Current Step' indicator; 4) Multi-mode/head coordination (e.g. Speculative decoding), which shows a similar tree structure with 'Step history' blocks.
+
+Figure 1: An illustration of Sequence-based decoding and Tree-based decoding.
+
+and KV caches are grouped for attention calculation significantly impacts memory access. Existing approaches use a *Q-Guided Grouping* strategy, where each request/query is grouped with all corresponding KV caches. While this eliminates IO redundancy for queries, the prefix KV cache still gets loaded multiple times. To address **C1**, we propose *KV-Guided Grouping*: DeFT-Flatten groups the prefix’s KV cache with all shared queries, ensuring the prefix KV cache is only loaded once, significantly reducing redundant loading with negligible IO overhead for reloading queries. The IO overhead for queries (Q) is minimal compared to the KV cache, as the maximum query length
+
+To accelerate the tree-structured LLM inference, an important question is whether we can leverage the shared patterns in multi-cascaded prefixes to design a faster and more memory-efficient attention algorithm. This task is challenging due to two key issues as follows. **C1: How to ensure prefix-awareness in memory access of KV cache?** Current memory-efficient attention algorithms (Dao et al., 2022; 2023; Hong et al., 2023) are optimized for sequence-based decoding, which leads to a lack of prefix-awareness during memory access. As a result, shared prefixes in the KV cache are repeatedly loaded. **C2: How to split the tree-structured KV cache for load balancing and high GPU utilization?** For optimal GPU utilization, the current KV splitting strategy for sequence-based decoding—Flash-Decoding (Dao et al., 2023), which splits sequence KV into chunks—cannot be directly applied to tree-structured KV. Tree-structured KV caches also need to be effectively partitioned: however, if we naively split them by nodes, token lengths across different nodes can vary significantly (e.g., in speculative decoding (Cai et al., 2024), some nodes might only have 1 token while the root node could have thousands), making it difficult to maintain load balance and efficient computation.
+
+To address the above challenges, we propose DeFT-Flatten, a prefix-aware tree attention algorithm with a flattened tree KV splitting strategy, based on two key insights. • First, how queries
+
+{2}------------------------------------------------
+
+typically corresponds to the number of root-to-leaf paths in the tree, making the queries relatively short (e.g., dozens of tokens) compared to the KV cache length in each node (e.g., hundreds or thousands of tokens). • Second, since LLM inference is IO-bound, the attention overhead of each QKV group is primarily influenced by the IO of the KV cache. Therefore, it is crucial to ensure that the KV lengths of different QKV groups are nearly balanced. To address C2, we propose a *Flattened Tree KV Splitting*, which enables balanced partitions by dividing the flattened tree KV into even chunks, using bit causal masks to capture causal relationships between queries and KV cache.
+
+We summarize our contributions as follows:
+
+- We propose a hardware-efficient tree attention algorithm—DEFT-Flatten, which is IO-aware of shared prefixes’ KV cache and load-balanced in computation.
+- We implement DEFT-Flatten on OpenAI Triton (Tillet et al., 2019) to gain precise management over memory access and fuse all attention operations into a single GPU kernel.
+- We theoretically justify the superiority of DEFT-Flatten over the existing attention algorithms (Wolf et al., 2019; Dao et al., 2023; Cai et al., 2024; Miao et al., 2023) in terms of IO complexity.
+- We empirically verify its effectiveness on few-shot prompting, multi-step reasoning, and speculative-decoding tasks. DEFT-Flatten can achieve a decoding latency speedup of  $1.3\times$  for few-shot prompting,  $2.2\times$  for speculative decoding,  $1.1\times$  for multi-step reasoning, due to an up to  $3.59\times$  faster attention calculation, with the baseline implementations (Dao et al., 2023; Cai et al., 2024; Zheng et al., 2023).
+- We compare different tree split strategies—DEFT-Node, DEFT-Node-Chunk, and DEFT-Flatten in ablation studies (see section 4.4), showing the balanced partitioning of QKV groups matters.
+
+## 2 RELATED WORK
+
+**Tree-based Decoding.** Tree-based decoding, exemplified by beam search (Graves, 2012), has been pivotal in NLP, handling lexical and logical constraints (Anderson et al., 2017; Post & Vilar, 2018; Hokamp & Liu, 2017), mitigating gender bias (Lu et al., 2021), achieving communicative goals (Holtzmann et al., 2018), and improving alignment (Liu et al., 2023). Based on the structure feature of queries and KV cache, we can classify tree-based decoding into two patterns: (i) Tree-structured past KV with parallel queries—usually in multi-step reasoning (Yao et al., 2023; Besta et al., 2023; Ning et al., 2023), using search trees with parallel hypothesis generation and selection based on scoring functions, either score candidates per token (Dathathri et al., 2019; Lu et al., 2021; 2022) or per reasoning step (Welleck et al., 2022; Uesato et al., 2022; Xie et al., 2024). (ii) Past KV in sequence with tree-structured queries—usually in speculative decoding (Cai et al., 2024; Miao et al., 2023). Further details on these two patterns are discussed in Appendix A.2. Although tree-based search algorithms like A\* (Lu et al., 2022) and Monte-Carlo Tree Search (Liu et al., 2023) have been applied, the efficiency of tree-based decoding remains largely under-explored.
+
+**Memory-efficient Attention Algorithms.** Existing memory-efficient attention algorithms target sequence-based decoding. FlashAttention (Dao et al., 2022) improves self-attention computation in LLM training via tiling and kernel fusion, reducing IOs. Flash-Decoding (Dao et al., 2023) extends this, enhancing parallelism by dividing K and V and introducing global reduction to gather partial attention results, enabling efficient decoding for long sequences. Unfortunately, applying these memory-efficient algorithms to the tree-based decoding overlooks redundancy in IO of tree-structured KV cache, which is the focus of DEFT.
+
+**Tree Attention.** Integrated into LLM inference, tree attention reduces computation, storage, and kernel launching overheads (Miao et al., 2023). Tree-structured token candidates undergo parallel decoding, with SpecInfer (Miao et al., 2023) introducing a topology-aware causal masked tree attention algorithm, dynamically updating a causal mask to capture relationships among tokens. Medusa (Cai et al., 2024) uses a similar mechanism with a static causal mask, while other works (Zhao et al., 2023; Liu et al., 2024) adopt analogous approaches to enhance attention calculation efficiency. However, unlike DEFT, these existing works utilizing tree attention do not take memory access into consideration.
+
+**Storage Optimization of Tree-based Decoding.** LLM frameworks optimized for tree-based decoding (Kwon et al., 2023; Zheng et al., 2023) focus on memory storage efficiency. vLLM (Kwon et al., 2023) enhances GPU memory utilization, allowing sequences from the same parent to share KV cache storage. SGLang (Zheng et al., 2023) supports dynamic KV cache management during multi-round interactions with LLMs, improving memory efficiency.
+
+**Discussion on Concurrent Works.** Some concurrent works (Ye et al., 2024a; Juravsky et al., 2024; Athiwaratkun et al., 2024; Ye et al., 2024b; Zhu et al., 2024) also recognize the importance of IO
+
+{3}------------------------------------------------
+
+during LLM inference. However, these works have at least one of these flaws: i) they (Ye et al., 2024a; Juravsky et al., 2024; Athiwaratkun et al., 2024; Ye et al., 2024b; Zhu et al., 2024) cannot be easily extended to situations where the decoding tree has more than two levels—they target single-context batch sampling scenarios, a special case of general tree-based decoding with a system prompt as prefix and unique suffixes in the first depth; ii) they (Juravsky et al., 2024; Athiwaratkun et al., 2024) do not consider the inefficiency caused by the lengths of different nodes in the decoding tree. See the comparison of DEFT and concurrent works in Appendix A.3.
+
+## 3 DEFT
+
+In this section, we first introduce the background knowledge of LLM inference, upon which we outline the importance of QKV partitions for attention calculation. We then present the overview of DEFT algorithm and Attention Kernel design, with its system support. Finally, we propose efficient QKV partitioning method for DEFT, which not only reduces memory access of prefixes’ KV cache and partial results (e.g., Softmax), but also ensures balanced partitions during attention computation.
+
+### 3.1 PRELIMINARY
+
+**LLM inference and its bottleneck.** LLM inference involves two stages: (1) prefill and (2) decoding. During the prefill stage, a prompt is tokenized to initialize LLM. The output of the prefill stage becomes the input for the decoding stage. The decoding stage is auto-regressive, with each output token from the previous step serving as the input token for the next step. Due to the sequential process of auto-regressive decoding, LLM inference is memory-bound (Shazeer, 2019; Kim et al., 2023; Cai et al., 2024), wherein every forward pass requires transferring all model parameters and KV cache from slower but larger High-Bandwidth Memory (HBM) to the faster but much smaller shared memory of the GPU (Jia & Van Sandt, 2021)<sup>2</sup>. Another potential bottleneck is low GPU utilization (Dao et al., 2023), which happens when the parallelism (usually limited by the batch size) is much smaller than the number of streaming multiprocessors (SMs) on the GPU (108 for an A100), where the operation will only utilize a small portion of the GPU.
+
+**The execution pattern of attention algorithms on GPUs.** We can separate the execution of attention algorithms into two main phases: (1) QKV PREPARATION PHASE: group Query, Key, and Value (QKV) logically to partitions and map QKV groups to different streaming multiprocessors (SMs) of GPUs; (2) ATTENTION CALCULATION PHASE: load QKV partitions to different SMs’ shared memory and apply attention algorithms to each group for final attention results.
+
+**QKV partitions with segmented attention.** In sequence-based decoding, QKV partitioning is crucial when the parallelism (usually limited by the batch size (Dao et al., 2023)) is much smaller than the number of streaming multiprocessors (SMs) on the GPU (108 for an A100), where the operation will only utilize a small portion of the GPU. To enable high GPU utilization, Flash-Decoding (Dao et al., 2023) partitions the queries and KV cache then calculates the attention in parallel.
+
+Details are as follows: (1) QKV PREPARATION PHASE: for each query in the batch, split its sequential KV cache into chunks as different QKV partitions. (2) ATTENTION CALCULATION PHASE: it calculates segmented attention  $A_0$ ,  $A_1$ , and  $A_2$  over three segments, respectively, and then gets final attention by online Softmax merging (Dao et al., 2022; 2023) based on segmented attention from different QKV partitions. We elaborate on the procedure below.
+
+- Let’s say we have key tensor  $K \in \mathbb{R}^{l_{kv} \times d}$ , value tensor  $V \in \mathbb{R}^{l_{kv} \times d}$ , and query tensor  $Q \in \mathbb{R}^{l_q \times d}$ . Considering the general case  $K$  and  $V$  are partitioned across the sequence (row) dimension into three parts for parallel calculation, respectively:  $K = K_0 \parallel K_1 \parallel K_2$ , and  $V = V_0 \parallel V_1 \parallel V_2$ , with “ $\parallel$ ” denoting concatenation along the row axis.
+- We calculate the attention  $A_0$ ,  $A_1$ , and  $A_2$  over KV chunks in different streaming-multiprocessors (SMs) of GPU, where  $A_0 = \langle Q, K_0, V_0 \rangle$ ,  $A_1 = \langle Q, K_1, V_1 \rangle$ ,  $A_2 = \langle Q, K_2, V_2 \rangle$ , and  $\langle q, k, v \rangle = \text{Softmax}(qk^T/\sqrt{d})v$ .
+- We calculate LogSumExp (LSE) as a weight of merging  $A_0$ ,  $A_1$ , and  $A_2$ . We define  $\text{LSE}(q, k) = \log(\sum \exp(qk^T/\sqrt{d}))$ .
+- We have  $\langle Q, K, V \rangle = \text{SegAttn}(A_0, A_1, A_2)$ , which means segmented attention with Online Softmax (Dao et al., 2022):
+
+$$\text{SegAttn}(A_0, A_1, A_2) = \frac{A_0 e^{\text{LSE}(Q, K_0)} + A_1 e^{\text{LSE}(Q, K_1)} + A_2 e^{\text{LSE}(Q, K_2)}}{e^{\text{LSE}(Q, K_0)} + e^{\text{LSE}(Q, K_1)} + e^{\text{LSE}(Q, K_2)}}, \text{ where } e := \exp. \quad (1)$$
+
+<sup>2</sup>A100’s HBM has 1.5-2TB/s bandwidth and 40-80GB; its shared memory has 19TB/s bandwidth and 20MB.
+
+{4}------------------------------------------------
+
+![Figure 2: Overview of DEFT. The diagram illustrates the system architecture, starting with Notations (Load QKV group i to SM i, G_i to SM_i). It shows Input Metadata (in HBM) being processed into Tree KV and Tree Topo. The KV Cache is shown with Tree KV (K1, K2) and Tree Topo. The system is divided into two main phases: Phase 1: QKV Preparation (HBM(2 TB/s)) and Phase 2: Attention Calculation (Shared Memory(19 TB/s)). Phase 1 involves KV-Guided Grouping and Flattened Tree KV Splitting, resulting in QKV Groups (G0, G1, G2). Phase 2 involves the DeFT Attention Kernel, which includes Partial Attention, Global Reduction, and Final Attention, resulting in SM0, SM1, SM2, and A0, A1, A2.](690fce4fb5c9cbb8beb560cb2a3fcbeb_img.jpg)
+
+Figure 2: Overview of DEFT. The diagram illustrates the system architecture, starting with Notations (Load QKV group i to SM i, G\_i to SM\_i). It shows Input Metadata (in HBM) being processed into Tree KV and Tree Topo. The KV Cache is shown with Tree KV (K1, K2) and Tree Topo. The system is divided into two main phases: Phase 1: QKV Preparation (HBM(2 TB/s)) and Phase 2: Attention Calculation (Shared Memory(19 TB/s)). Phase 1 involves KV-Guided Grouping and Flattened Tree KV Splitting, resulting in QKV Groups (G0, G1, G2). Phase 2 involves the DeFT Attention Kernel, which includes Partial Attention, Global Reduction, and Final Attention, resulting in SM0, SM1, SM2, and A0, A1, A2.
+
+Figure 2: Overview of DEFT. *Input Metadata* is prepared in the system elaborated in Appendix A.1. In *QKV Preparation Phase* (see Section 3.3), the QKV will be grouped logically into partitions with IO-awareness of shared prefixes’ KV cache and load-balancing. These partitions will guide the loading of QKV on the *Attention Calculation Phase* (see Appendix A.4), where the attention calculation will be executed.
+
+### 3.2 OVERVIEW OF DEFT
+
+**The importance of QKV partitions.** For tree-based decoding, logically partitioning QKV is necessary for attention calculation with high parallelism. The branch number of tree-structured generation requests may be insufficient to fully utilize the GPU when the number of tokens in the tree-structured KV cache is large, due to memory capacity limitations. For example, a request for the reasoning task of sorting 128 numbers (Besta et al., 2023), involves around 40K tokens in a Llama2-7B model, whose KV cache occupies 20GB, which means an 80GB A100 can only process at most 4 requests with such token numbers.
+
+**Motivation of DEFT.** DEFT aims to address two potential bottlenecks (i.e., IO and GPU utilization) of LLM inference when dealing with tree-structured KV sequences. Let’s say we have a simple tree with two cascades, as shown in the left part of Figure 2: for two queries  $Q_a$  and  $Q_b$ , the corresponding keys satisfy  $K_a = K_0 \parallel K_1$  and  $K_b = K_0 \parallel K_2$ , respectively, and values obey the same rule. DEFT is designed to: (1) minimize IO by eliminating redundant memory access of the shared prefix’s KV cache ( $K_0$  and  $V_0$ ) for  $Q_a$  and  $Q_b$ ; (2) ensure balanced workloads for high GPU utilization, so that the overhead of computing each segmented attention  $A_i$  remains nearly identical. Since the global reduction in equation 1 requires all partial attention, if the overhead for computing  $A_i$  is significantly larger than  $A_j$ , the SM responsible for calculating  $A_j$  will experience prolonged idleness.
+
+**Technique overview of DEFT.** DEFT aims to be a hardware-efficient attention algorithm by reducing memory access and ensuring load-balancing for tree-based decoding. See details in Figure 2:
+
+- ① In the QKV PREPARATION PHASE, for prefix-aware and load-balanced QKV partitions, we introduce a *KV-Guided Grouping* strategy to reuse the KV cache IO of the shared prefixes, and a *Flattened Tree KV Splitting* for high GPU-utilization due to balanced and parallel attention calculation. See details in Section 3.3.
+- ② During the ATTENTION CALCULATION PHASE, we design the DEFT ATTENTION KERNEL<sup>3</sup> to load QKV splits in a memory efficient way, which is logically grouped by the QKV PREPARATION PHASE, then to perform the attention calculation. Key techniques are as follows, with details deferred in Appendix A.4: 1) Common *Kernel Fusion* and *Tiling* strategies avoid significant IO operations for partial results (i.e.,  $QK^T$  and Softmax), which Tree Attention-Medusa (Cai et al., 2024) lacks. 2) *Tree-Topology-Aware Global Reduction*, which extends the global reduction mechanism from Flash-Decoding (Dao et al., 2023). This approach efficiently computes the final attention for each query by aggregating partial attention results from QKV groups while considering the tree structure.
+
+**System frameworks of DEFT.** Apart from efficient DEFT ATTENTION KERNEL, our system for DEFT has two other advantages: 1) efficient memory management of the KV cache in a tree structure, and 2) flexible control of the tree decoding process with arbitrary user-defined functions to decide when and how to branch/prune. The details of key components and their coordinations in the system refer to Appendix A.1.
+
+### 3.3 PREFIX-AWARE AND BALANCED TREE-STRUCTURED KV CACHE PARTITIONS
+
+This section delves into the details of the QKV PREPARATION PHASE, which is a key design aspect of DEFT. The discussion of the ATTENTION CALCULATION PHASE is deferred to Appendix A.4.
+
+<sup>3</sup>GPUs utilize a vast array of threads to execute operations known as *kernels*
+
+{5}------------------------------------------------
+
+![Figure 3: Comparison of QKV partitioning strategies during the QKV Preparation Phase between DeFT-Node/Node-Chunk/Flatten and different attention algorithm baselines. The figure is divided into three parts: (a) Dataflow of a two-cascaded decoding tree and its different partition strategies for QKV preparation; (b) Q-Guided grouping vs. KV-Guided grouping; (c) Flattened Tree KV Splitting for load-balanced partitions.](191a4a245a7d36d03be9a990d0f758f5_img.jpg)
+
+**Notations**
+
+- DataProcess in Shared Memory
+- DataProcess in HBM
+- $SM_i$  SM  $i$  with its shared memory
+- $Q_i$  Query IO
+- $KV_i$  KV Cache IO
+- Dense Causal Mask (DCM) IO
+- 10 Bit Causal Mask (BCM) IO (64 bits)
+- $G_i$  QKV Group  $i$  with its IO
+
+**(a) Dataflow of a two-cascaded decoding tree and its different partition strategies for QKV preparation.**
+
+The diagram shows the flow from **Phase 1: QKV Preparation** to **Phase 2: Attention Calculation**. In Phase 1, **Decoding Tree Metadata** (Tree  $KV$ , Query  $Q$ ,  $KV_0$ ,  $KV_1$ ,  $KV_2$ ,  $\dots$ ,  $Q_0$ ) is used to prepare **DCM** (Dense Causal Mask) and **BCM** (Bit Causal Mask). In Phase 2, the **Vanilla Tree Attention** (Low parallelism) strategy is compared with **Q-Guided Grouping** and **KV-Guided Grouping** (Two partition strategies for high parallelism). The latter strategies use **IO-aware for?** to guide the grouping of **Query** and **KV** into groups  $G_0, G_1, \dots$ .
+
+**(b) Q-Guided grouping vs. KV-Guided grouping. KV splitting is for additional parallelism.**
+
+This part compares **Q-Guided Grouping: without KV IO awareness** (Flash-Attention, Flash-Decoding/Radix Attention) with **KV-Guided Grouping(ours): with KV IO awareness** (DeFT-Node, DeFT-Node-Chunk). The latter uses **Node KV Splitting** to further partition large nodes (e.g.,  $KV_0$ ) into chunks ( $KV_{00}, KV_{01}, \dots$ ) to improve load balancing.
+
+**(c) Flattened Tree KV Splitting for load-balanced partitions.**
+
+The **DeFT-Flatten** strategy is shown, which uses **Load-balanced QKV partitions**. It details three strategies: **1. Depth-first Flatten Tree KV**, **2. Evenly Blockwise KV**, and **3. Get Bitmask** (for  $KV_{01}$  example). The bitmask is used to mask out low-order bits (e.g.,  $0, 1, 1, 0$  for  $KV_{01}$ ), resulting in a **KV-guided** partition. The **KV-BCM** (Bit Causal Mask) is also shown for each partition.
+
+Figure 3: Comparison of QKV partitioning strategies during the QKV Preparation Phase between DeFT-Node/Node-Chunk/Flatten and different attention algorithm baselines. The figure is divided into three parts: (a) Dataflow of a two-cascaded decoding tree and its different partition strategies for QKV preparation; (b) Q-Guided grouping vs. KV-Guided grouping; (c) Flattened Tree KV Splitting for load-balanced partitions.
+
+Figure 3: Comparison of QKV partitioning strategies during the QKV Preparation Phase between DeFT-Node/Node-Chunk/Flatten and different attention algorithm baselines. Note that the partitioning is logically designed without incurring any data movement costs for QKV. The amount of IO between the GPU HBM and shared memory required by each group is highlighted in red rectangles. Part (a) illustrates the dataflow of a two-cascaded decoding tree example and three categories of QKV partitioning strategies: no partition(Vanilla Tree Attention), Q-Guided Grouping and KV-Guided Grouping. The partitioning strategy will guide the loading of QKV during the subsequent *Attention calculation phase*, where each QKV group  $G_i$  will be loaded into  $SM_i$  on the GPU. Part (b) shows the comparison of Q-Guided Grouping and KV-Guided Grouping, where the latter can be IO-aware of prefix KV cache  $KV_0$  and only load it once. DeFT-Node-Chunk is a weak load-balancing improvement of DeFT-Node by splitting large nodes (e.g.,  $KV_0$ ) to chunks. Part (c) illustrates the details (discussed in Remark 3.1) of Flattened Tree KV Splitting for load-balanced partitions, including Depth-first Flatten strategy, Evenly block-wise strategy, and Bit mask. For a summary of baselines and DeFT, see Table 2. See analysis of tree-attention baselines (Cai et al., 2024; Miao et al., 2023) in Remark 3.2.
+
+Let’s begin with a decoding example using the tree-structured KV cache shown in Figure 2. If we group the entire tree-structured KV cache and queries into  $G_0$  without any partitions, we can refer to the Vanilla Tree Attention method illustrated in the part (a) of Figure 3. This method calculates attention for all queries simultaneously in a single Streaming Multiprocessor (SM), with the aid of a dense causal mask (DCM).
+
+However, this approach is inefficient due to low GPU utilization, as discussed in Section 3.2. To address this inefficiency, effective partitioning of QKV is essential. This process involves two key considerations: (1) prefix awareness to minimize memory access to the KV cache and (2) load balancing to ensure even distribution of workloads across GPUs.
+
+**Q-Guided vs. KV-Guided Grouping.** Most existing memory-efficient attention algorithms (Dao et al., 2022; 2023; Zheng et al., 2023) adopt *Q-Guided Grouping* for QKV partitioning, where each query serves as the indicator for partitioning, grouping with its corresponding KV cache. However, this method is not prefix-aware, e.g., in Flash-Attention (as shown in Figure 3)  $KV_0$  is loaded twice, namely once for  $Q_a$  and again for  $Q_b$ .
+
+We resort to alternative *KV-Guided Grouping* approach: by grouping each node’s KV cache with all the queries that share it, the partitioning can be made prefix-aware, therefore reducing memory access to the KV cache. For example, DeFT-Node (shown in Figure 3) only loads the prefix KV
+
+{6}------------------------------------------------
+
+Table 2: **Comparison of QKV partitioning strategies for baselines (most of which are shown in Figure 3) and DeFT.** For IO redundancy, significant issues are highlighted in red, while negligible ones are in blue. “Q” refers to queries, and “KV” refers to the KV cache. “DCM” stands for Dense Causal Mask (a matrix), and “BCM” refers to Bit Causal Mask (a set of 64-bit integers). “PA” represents partial results during attention calculations, including  $QK^T$ , Softmax, etc. More  $\star$  symbols indicate better-balanced workloads for QKV partitions. Details on IO complexity can be found in Appendix A.5.
+
+| Attention Algorithm                  | Grouping Indicator | KV Split Granularity        | IO Redundancy     | Load-balancing Level |
+|--------------------------------------|--------------------|-----------------------------|-------------------|----------------------|
+| Flash-Attention (Dao et al., 2022)   | Q-guided           | -                           | <b>KV</b>         | $\star$              |
+| Flash-Decoding (Dao et al., 2023)    | Q-guided           | by block                    | <b>KV</b>         | $\star\star\star$    |
+| Radix Attention (Zheng et al., 2023) | Q-guided           | by block                    | <b>KV</b>         | $\star\star\star$    |
+| Tree Attention-S (Miao et al., 2023) | Q-guided           | by block                    | <b>KV and BCM</b> | $\star\star\star$    |
+| Tree Attention-M (Cai et al., 2024)  | entire tree        | by GEMM in PyTorch          | <b>DCM and PA</b> | $\star\star\star$    |
+| Vanilla Tree Attention               | entire tree        | no split                    | <b>DCM and PA</b> | $\star$              |
+| DeFT-Node                            | KV-guided          | by tree node                | <b>Q</b>          | $\star$              |
+| DeFT-Node-Chunk                      | KV-guided          | by tree node, then by block | <b>Q</b>          | $\star\star$         |
+| DeFT-Flatten                         | KV-guided          | by block                    | <b>Q and BCM</b>  | $\star\star\star$    |
+
+cache  $KV_0$  once for attention computation. The additional IO cost for queries is negligible since each query only contains a single token, while the KV cache may contain thousands of tokens.
+
+**Tree KV Splitting and Load-Balancing.** Thanks to *KV-Guided Grouping*, DeFT-Node is prefix-aware for KV cache IO. However, it introduces a potential bottleneck: unbalanced workloads across different SMs. For example, as seen in DeFT-Node of Figure 3,  $KV_0$  might contain 1,000 tokens, while  $KV_1$  only contains 2 tokens. If  $G_0$  and  $G_1$  are assigned to  $SM_0$  and  $SM_1$  respectively,  $SM_1$  completes computation much earlier and remains idle, leading to low SM utilization<sup>4</sup>.
+
+To address this, we need to balance the QKV partitions more evenly. A straightforward approach is to chunk  $K_0$ ,  $K_1$ , and  $K_2$  at the physical level, while maintaining node-wise partitioning at the logical level, as shown in DeFT-Node-Chunk from Figure 3. However, this load-balancing strategy is weak: it only breaks large nodes (e.g., prompts with around 1k tokens) into smaller KV chunks, and it does not handle cases with many small nodes (e.g., speculative decoding), which could slow down inference due to more rounds of GPU execution for additional QKV groups.
+
+As KV cache loading is the primary bottleneck for attention computation (Cai et al., 2024; Tang et al., 2024), it is important to achieve an even token length in each KV cache partition. Therefore, we propose DeFT-Flatten, elaborated in Remark 3.1.
+
+**Remark 3.1** (Techniques of Flattened Tree KV Splitting). *As shown in the part (c) of Figure 3, there are three key components:*
+
+- **Depth-first Flatten strategy.** *This approach minimizes redundant query IO and computation by leveraging the hierarchical relationship between parent and child KV nodes– for instance, queries for parent  $KV_0$  (e.g.,  $Q_a$  and  $Q_b$ ) include those for child  $KV_1$  (e.g.,  $Q_a$ ). Depth-first flattening instead of breadth-first, maximizes query overlap across KV cache from different nodes but allocated to the same chunk, reducing redundant computations like masked portions in  $QK^T$ .*
+- **Evenly block-wise strategy.** *It is the core of the splitting, where it ensures equal lengths of KV in each QKV group for balanced workloads of streaming multiprocessors (SMs) in GPUs.*
+- **Bit mask (Miao et al., 2023).** *It is a set of 64-bit integers used to record causal information of tokens in the tree. Therefore, its IO overhead (e.g., two 64-bit integers in  $KV-BCM_1$  on part (c) of Figure 3) is negligible compared to the dense causal mask (Cai et al., 2024).*
+
+**Remark 3.2** (Discussion on Tree Attention Algorithms). *Existing attention algorithms are designed for speculative decoding, where attention is calculated for the entire tree-structured queries. However, these methods are not memory-efficient. For partition details, see Figure 11 in Appendix A.5.*
+
+- **Tree Attention-Medusa (Cai et al., 2024).** *Based on Vanilla Tree Attention (shown on the left in Figure 3), this method uses PyTorch’s General Matrix Multiply (GEMM) to partition Q and KV tensors. It is memory-inefficient for two reasons: (1) it does not utilize Flash-Attention to reduce memory access during the computation of intermediate results (e.g., Softmax); (2) it introduces a dense causal mask, whose memory access is significant.*
+- **Tree Attention-SpecInfer (Miao et al., 2023).** *This algorithm employs Q-Guided Grouping based on Vanilla Tree Attention and partitions the KV sequence through Flash-Decoding. It is memory-inefficient in redundantly loading the entire tree-structured KV cache for each query.*
+
+<sup>4</sup>Considering a microbenchmark that DeFT-Node with 64 queries shares a prompt of 4k tokens, the SM utilization is below 5% for 82.35% time of attention computation, as shown in Table 14.
+
+{7}------------------------------------------------
+
+Table 3: **Comparison of baselines and DEFT.** Attention kernels of baselines are implemented to fit its memory management. Therefore, for a fair comparison with baselines, we implement DEFT-Node and DEFT-Flatten that fit both paged (Kwon et al., 2023)/unpaged memory management.
+
+| Method         | Flash-Decoding | Tree Attention-Medusa | Radix Attention(Zheng et al., 2023) | DEFT          |
+|----------------|----------------|-----------------------|-------------------------------------|---------------|
+| Memory         | unpaged        | unpaged               | paged                               | unpaged/paged |
+| Implementation | Triton         | PyTorch               | Triton                              | Triton        |
+
+Table 4: **Workloads generation.** ToT-BFS stands for Tree-of-Thoughts (Yao et al., 2023) using breadth-first search. APPS (Hendrycks et al., 2021) is a competitive programming problem dataset. Medusa (Cai et al., 2024) is a speculative decoding framework. “GoT” stands for Graph-of-Thoughts (Besta et al., 2023), which contains iteration records using GPT-3.5 for complex reasoning tasks within ToT-BFS. See more details in Table 13.
+
+| Task                 | Prompt Dataset | Decoding Tree Source | Decoding Tree Collection Method                            | Stopping Criteria              |
+|----------------------|----------------|----------------------|------------------------------------------------------------|--------------------------------|
+| Few-shot prompting   | APPS           | -                    | Pad the prompt to 4000 tokens                              | 400 iterations                 |
+| Multi-step reasoning | 4 tasks in GoT | ToT-BFS              | Reconstruct from interaction records with GPT 3.5 in GoT   | End of task(< 3500 iterations) |
+| Speculative decoding | APPS           | Medusa               | Record token tree shape and accepted token length per step | ~1000 steps(max length=6000)   |
+
+**IO complexity analysis.** We show DEFT-Flatten is better than existing attention algorithms in IO complexity, including Flash-Decoding (Dao et al., 2023), Tree Attention-Medusa (Cai et al., 2024), and Tree Attention-SpecInfer (Miao et al., 2023). See Appendix A.5.
+
+**Implementation details.** We implement the DEFT attention kernel by OpenAI Triton (Tillet et al., 2019), which enables us to control memory access from global memory to shared memory and attention calculations in a thread block granularity. DEFT-Node and DEFT-Flatten algorithms with two phases in a Python style can be found in Appendix A.8 and Appendix A.9, respectively.
+
+## 4 EXPERIMENTS
+
+In this section, to demonstrate the effectiveness of DEFT under different tree topologies, we comprehensively conduct experiments on three types of tree-based decoding tasks, including: (1) few-shot prompting (Mann et al., 2020): a typical case study of tree-structured interactions with two levels—a prefix and several suffixes; (2) multi-step reasoning (Yao et al., 2023; Xie et al., 2024; Hao et al., 2023): tasks characterized by tree-structured past KV with parallel queries; (3) speculative decoding (Cai et al., 2024; Miao et al., 2023): tasks involving past KV in sequence with tree-structured queries.
+
+### 4.1 EXPERIMENTAL SETUP
+
+**Baselines.** We evaluate the performance of DEFT in NVIDIA A100 (80GB) in Llama3-8B model (Touvron et al., 2023b) with the SOTA attention algorithms in sequence-based and tree-based decoding, as shown in Table 3. Note that we did not include the tree attention operator of SpecInfer (Miao et al., 2023) to our baselines as its kernel only supports at most 64 tokens in the token tree (the decoding tree except for the past sequence KV part), which is unsuitable for tree-based decoding with tree-structured KV (c.f. details in Appendix A.2).
+
+**Workloads generation.** To ensure fairness for workloads of different baselines, we reconstruct decoding trees from real multi-step reasoning and speculative decoding tasks, as shown in Table 4. For multi-step reasoning, we include these four tasks from Besta et al. (2023): (1) Sorting 128 numbers (*Sorting* in short), (2) Document merging (*Document* in short), (3) Keyword counting (*Keyword* in short), and (4) Set intersection (*Set* in short). The tree decoding process would be forced to branch and prune the tree in certain iterations to get the same shape of the decoding tree as the original decoding tree sources. See workload generation details and analysis in Appendix A.6.
+
+### 4.2 ANALYSIS OF MEMORY MANAGEMENT AND BOTTLENECK
+
+As shown in Table 3, the kernel implementations of different attention algorithms adapt to different memory management. To fairly compare their performance of wall-clock time speedup, we need to analyze the influence of memory management and the bottleneck of the system.
+
+**A trade-off between memory storage and memory operation.** In tree-based decoding, storing the KV cache for each branch is simple but lacks shared storage for the prefix’s KV cache. Given the limited GPU memory, not accounting for the tree structure in KV sharing reduces the number of tokens the tree can handle. Although storing KV caches by each tree node significantly improves storage efficiency, most attention kernels are designed for sequence-based decoding (Dao et al., 2022;
+
+{8}------------------------------------------------
+
+Table 5: **Comparison of DEFT-Flatten and baselines in average decoding latency (in seconds) for tree-based decoding.** Here,  $b$  represents the tree width, and  $t$  denotes the token tree size (i.e., the number of tree-structured queries). The fastest method is in **bold**, and the second fastest is underlined. *Radix Attention* is the best baseline in decoding latency.  $\star$  denotes out-of-memory (OOM) errors for the A100 80GB GPU. *Speedup Upper-bound (no attention)* refers to the maximum speedup we could achieve for *Radix Attention* if we exclude the attention computation and only run other components including MLP. For more details on attention speedup, see Table 16.
+
+| Memory  | Method                                        | Few-shot Prompting |               |               | Multi-Step Reasoning |               |               | Speculative Decoding |               |               |               |               |
+|---------|-----------------------------------------------|--------------------|---------------|---------------|----------------------|---------------|---------------|----------------------|---------------|---------------|---------------|---------------|
+|         |                                               | $b=20$             | $b=30$        | $b=50$        | Sorting              | Document      | Keyword       | Set                  | $t=32$        | $t=64$        | $t=128$       | $t=256$       |
+| Unpaged | Flash-Decoding                                | 78.96              | 131.19        | 191.09        | 429.65               | 241.20        | 32.75         | 16.76                | 574.50        | 1128.45       | $\star$       | $\star$       |
+|         | Tree Attention-Medusa                         | 52.58              | 103.90        | 144.07        | 380.87               | 236.86        | 33.52         | 50.10                | 263.40        | 483.35        | 924.97        | 1881.51       |
+| Paged   | <i>Radix Attention</i>                        | <u>12.37</u>       | <u>14.08</u>  | <u>16.54</u>  | <u>104.79</u>        | <u>69.61</u>  | <u>11.25</u>  | <u>17.03</u>         | <u>54.66</u>  | <u>69.75</u>  | <u>108.56</u> | <u>188.66</u> |
+|         | DEFT-Flatten                                  | <b>9.98</b>        | <b>10.99</b>  | <b>12.48</b>  | <b>94.67</b>         | <b>66.95</b>  | <b>10.90</b>  | <b>16.10</b>         | <b>42.23</b>  | <b>46.60</b>  | <b>56.96</b>  | <b>84.27</b>  |
+|         | <i>Attention Speedup over Radix Attention</i> | 1.73 $\times$      | 1.63 $\times$ | 1.70 $\times$ | 1.39 $\times$        | 1.15 $\times$ | 1.21 $\times$ | 1.34 $\times$        | 1.96 $\times$ | 2.41 $\times$ | 3.11 $\times$ | 3.59 $\times$ |
+|         | <i>Decoding Speedup over Radix Attention</i>  | 1.24 $\times$      | 1.28 $\times$ | 1.33 $\times$ | 1.10 $\times$        | 1.03 $\times$ | 1.03 $\times$ | 1.05 $\times$        | 1.29 $\times$ | 1.50 $\times$ | 1.91 $\times$ | 2.23 $\times$ |
+|         | <i>Speedup Upper-bound(no attention)</i>      | 1.71 $\times$      | 2.08 $\times$ | 2.51 $\times$ | 1.96 $\times$        | 1.82 $\times$ | 1.70 $\times$ | 1.76 $\times$        | 1.89 $\times$ | 2.89 $\times$ | 3.34 $\times$ | 4.36 $\times$ |
+
+Hong et al., 2023; Dao et al., 2023). To use these kernels, KV caches from different nodes must be concatenated into a single tensor, leading to substantial data movement costs (Kwon et al., 2023).
+
+**The benefits of paged memory for tree-based decoding.** For efficient KV cache memory management, paged memory (Kwon et al., 2023; Zheng et al., 2023) is the current mainstream technology. These KV cache tensors are stored in a non-contiguous, paged layout to provide token-level reuse. Besides higher storage efficiency, we note an additional benefit of paged memory management for tree-based decoding: non-contiguous storage in a memory pool is addressed by pointers, ensuring no need to materialize the tree-structured KV into a single tensor before executing the attention kernel. Instead, we only need to record the memory pool addresses of each token’s KV cache.
+
+**Bottlenecks and trade-offs.** We provide support for DEFT and baselines with KV cache in memory management (unpaged or paged) according to their designs. We visualize the latency breakdown for (1) KV cache management, (2) attention, and (3) other operations (including MLP calculation) in Figure 4. We observe that with unpaged KV cache management in tree-based decoding, the bottleneck (69.1-83.4%) is the data movement required to materialize the KV cache. However, when we use paged memory management, attention becomes the new bottleneck (51.1-58.3%), especially when the token tree is large.
+
+### 4.3 DECODING BEHAVIORS: LATENCY AND IOs.
+
+We evaluate DEFT’s performance on various tree-based decoding tasks by measuring decoding latency (Table 5), which demonstrates DEFT’s acceleration of tree attention and wall clock time. See attention latency (Table 16), IO (Table 17), and inference accuracy (Table 15) in Appendix A.7. Notably, **decoding latency** essentially represents the optimal end-to-end (e2e) latency, excluding other overheads such as prefill latency (which accounts for approximately 5-10% of e2e latency) and framework-induced overheads (roughly 10-15% of e2e latency), including tree search, branching, etc. We exclude these overheads because they are consistent across all baselines and to eliminate the influence of the framework. **For few-shot prompting tasks**, we used a prompt with 4k tokens and performed 400 decoding iterations, achieving a 1.33 $\times$  decoding speedup thanks to 1.70 $\times$  faster attention calculation and an approximately 90% reduction in IO.
+
+**For speculative decoding tasks**, DEFT-Flatten achieved up to a 2.23 $\times$  decoding speedup due to up to a 3.59 $\times$  attention speedup, as the entire token tree (all queries) can share IO of the long prefix.
+
+**For multi-step reasoning tasks.** While DEFT-Flatten improves attention speed by up to 1.36 $\times$ , the decoding acceleration is less pronounced due to two reasons: (1) The narrow tree width (10) restricts KV cache reuse, though increasing it to 50 in few-shot prompting significantly boosts decoding speed (1.2 $\times$ -1.5 $\times$  over 100 iterations, see Appendix A.7). (2) The small number of tokens in the tree keeps attention at 30% of decoding latency, compared to 50-80% in speculative decoding. A longer prompt length increases attention computation overhead, leading to greater speedup, as shown in Table 7.
+
+![Figure 4: Latency breakdown for speculative decoding with a token tree of 32 queries. The chart shows latency (ms) for Attention, KV Management, and Other components across different attention methods: Radix Attention, DEFT-Flatten, DEFT-TreeAttention, DEFT-Tree Attention (U), and Tree Attention-Medusa (U).](4495fbec19aac6861f1a0b35c4dc38bc_img.jpg)
+
+| Attention Method          | Attention | KV Management | Other |
+|---------------------------|-----------|---------------|-------|
+| Radix Attention           | ~40       | ~10           | ~5    |
+| DEFT-Flatten              | ~40       | ~10           | ~5    |
+| DEFT-TreeAttention        | ~40       | ~10           | ~5    |
+| DEFT-Tree Attention (U)   | ~40       | ~10           | ~5    |
+| Tree Attention-Medusa (U) | ~40       | ~140          | ~5    |
+
+Figure 4: Latency breakdown for speculative decoding with a token tree of 32 queries. The chart shows latency (ms) for Attention, KV Management, and Other components across different attention methods: Radix Attention, DEFT-Flatten, DEFT-TreeAttention, DEFT-Tree Attention (U), and Tree Attention-Medusa (U).
+
+Figure 4: **Latency breakdown for speculative decoding** with a token tree of 32 queries, whose tree topology is from Medusa (Cai et al., 2024). U means unpaged memory.
+
+{9}------------------------------------------------
+
+Table 6: [Different KV Splitting Strategies] Comparison of DEFT-Node, DEFT-Node-Chunk and DEFT-Flatten in average attention latency (second) with NVIDIA A100 (80GB) for Llama3-8B model(GQA). This table is supplementary to Table 16. The fastest method is in **bold**, and the second fastest is underlined. Radix Attention is the best baseline in decoding latency. See details of more baselines in Table 16.
+
+| Memory | Method          | Few-shot Prompting |             |             | Multi-Step Reasoning |              |             | Speculative Decoding |              |              |              |               |
+|--------|-----------------|--------------------|-------------|-------------|----------------------|--------------|-------------|----------------------|--------------|--------------|--------------|---------------|
+|        |                 | b=20               | b=30        | b=50        | Sorting              | Document     | Keyword     | Set                  | t=32         | t=64         | t=128        | t=256         |
+| Paged  | Radix Attention | <b>5.99</b>        | <b>7.30</b> | <b>9.96</b> | <b>39.37</b>         | <b>24.69</b> | <b>3.11</b> | <b>5.13</b>          | <b>25.73</b> | <b>40.47</b> | <b>76.10</b> | <b>145.43</b> |
+|        | DEFT-Node       | 10.59              | 10.62       | 10.85       | 42.96                | 33.29        | 6.16        | 9.58                 | 34.59        | 34.41        | 34.96        | <u>41.78</u>  |
+|        | DEFT-Node-Chunk | 8.52               | 9.69        | 13.45       | 49.63                | 36.37        | 4.77        | 7.40                 | <u>14.54</u> | <u>20.28</u> | <u>32.57</u> | 57.26         |
+|        | DEFT-Flatten    | <b>3.47</b>        | <b>4.07</b> | <b>5.87</b> | <b>28.41</b>         | <b>21.45</b> | <b>2.57</b> | <b>3.83</b>          | <b>13.15</b> | <b>16.79</b> | <b>24.46</b> | <b>40.56</b>  |
+
+Table 7: [Different Prompt Lengths] Comparison of DEFT-Flatten and Radix Attention in the efficiency of multi-step reasoning task **sorting**. The original prompt length is approximately 1K tokens, and we pad it to lengths of 5K, 8K, or 10K tokens.
+
+| Speedup   | Prompt length L |       |       |       |
+|-----------|-----------------|-------|-------|-------|
+|           | L=1k            | L=5k  | L=8k  | L=10k |
+| Attention | 1.39×           | 1.71× | 1.97× | 1.84× |
+| Decoding  | 1.09×           | 1.37× | 1.53× | 1.67× |
+
+Table 8: [Different Model Sizes] Comparison of decoding latency speedup and Attention/FFN latency ratio (in short as **A/F-LR**) between DEFT and Radix Attention for Codellama-34B and Codellama-7B models. Radix Attention is the best baseline in decoding latency.  $b$  represents the tree width, and  $t$  denotes the token tree size. For multi-step reasoning, we test the task **sorting** whose prompt length is about 1k tokens.
+
+| Metric                   | Model Size | Few-shot Prompting |         | Multi-Step Reasoning |         | Speculative Decoding |       |
+|--------------------------|------------|--------------------|---------|----------------------|---------|----------------------|-------|
+|                          |            | b=30               | Sorting | b=30                 | Sorting | t=64                 | t=64  |
+| Decoding Time Speedup    | 7B         | 1.34×              | 1.09×   | 1.09×                | 1.09×   | 1.85×                | 1.78× |
+|                          | 34B        | 1.23×              | 1.03×   | 1.03×                | 1.03×   | 1.78×                | 1.66× |
+| Radix Attention's A/F-LR | 7B         | 1.27               | 1.12    | 1.12                 | 1.12    | 2.12                 | 1.66  |
+|                          | 34B        | 0.80               | 0.48    | 0.48                 | 0.48    | 1.06                 | 0.66  |
+| DEFT-Flatten's A/F-LR    | 7B         | 0.68               | 0.89    | 0.89                 | 0.89    | 0.69                 | 0.69  |
+|                          | 34B        | 0.45               | 0.42    | 0.42                 | 0.42    | 0.49                 | 0.49  |
+
+### 4.4 ABLATION STUDY
+
+We evaluate the influence of different KV splitting strategies, model sizes, and prompt lengths in this subsection. See more ablations in Appendix A.6, including the influence of different GPUs (Table 19), chunk sizes during KV splitting (Figure 15), and model architectures (Table 20 and Table 21).
+
+**The impact of KV splitting strategy in DEFT.** We compared three KV splitting strategies with the baseline Radix Attention, as shown in Table 6. DEFT-Flatten consistently outperforms the others across all tree-structured settings. DEFT-Node-Chunk generally performs better than DEFT-Node because it splits large nodes into smaller chunks for more balanced computations, especially when  $b \leq 30$  and  $t \leq 64$ , as well as in reasoning tasks like Keyword and Set. However, it struggles with many small nodes (e.g., prompts with around 1k tokens), leading to slower inference due to more GPU execution rounds required for additional QKV groups (see  $t = 256$  for DEFT-Node-Chunk).
+
+**The influence of prompt length.** See Table 7. With a longer prompt, DEFT-Flatten shows a more pronounced speedup in the same model, since the attention overhead is proportional to the token count in the decoding tree, while the FFN overhead remains nearly constant for the same model. See Figure 16, Figure 17 and Figure 18 for more results.
+
+**The influence of model size.** See Table 8. With the larger model, Codellama-34B, DEFT-Flatten achieves slightly reduced but significant (up to  $1.78\times$ ) decoding speedup. The performance reduction is attributed to a lower A/F-LR, as the FFN overhead is greater due to larger hidden dimensions.
+
+## 5 CONCLUSION
+
+We propose DEFT-Flatten, a hardware-efficient attention algorithm optimized for tree-structured LLM inference. It effectively addresses memory access and GPU utilization bottlenecks by reusing shared prefixes' KV cache and evenly distributing workload across partitions. DEFT-Flatten's key strengths lie in its prefix-sharing awareness and load balancing, making it versatile for various tree-structured tasks. It also scales well with larger search spaces and multiple branches. Our results show that DEFT-Flatten achieves up to  $2.23\times/3.59\times$  speedup in decoding and attention latency, outperforming baselines in tasks such as few-shot prompting, multi-step reasoning, and speculative decoding. Our ablation studies highlight that: (1) balanced partitioning is critical, (2) DEFT-Flatten delivers significant speedups across various LLM models and GPU architectures, and (3) DEFT-Flatten provides even greater speedups with larger token sizes (e.g., longer prompts) and more branches in tree-structured requests.
+
+ Rest of paper (reference and Appendix) is removed.

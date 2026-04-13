@@ -1,0 +1,287 @@
+
+
+{0}------------------------------------------------
+
+# INTERFERENCE AMONG FIRST-PRICE PACING EQUILIBRIA: A BIAS AND VARIANCE ANALYSIS
+
+**Luofeng Liao** **Christian Kroer**
+
+Columbia University  
+{l13530, ck2945}@columbia.edu
+
+**Sergei Leonenkov**
+
+Ads Online Experimentation, Meta  
+leonenkov@meta.com
+
+**Okke Schrijvers** **Liang Shi** **Nicolas Stier-Moses** **Congshan Zhang**
+
+Central Applied Science, Meta  
+{okke, liangshi, nstier, cszhang}@meta.com
+
+## ABSTRACT
+
+A/B testing is widely used in the internet industry. For online marketplaces (such as advertising markets), standard approaches to A/B testing may lead to biased results when buyers have budget constraints, as budget consumption in one arm of the experiment impacts performance of the other arm. This is often addressed using a budget-split design. Yet such splitting may degrade statistical performance as budgets become too small in each arm. We propose a *parallel budget-controlled A/B testing* design where we use market segmentation to identify submarkets in the larger market, and we run parallel budget-split experiments in each submarket. We demonstrate the effectiveness of this approach on real experiments on advertising markets at Meta. Then, we formally study interference that derives from such experimental designs, using the first-price pacing equilibrium framework as our model of market equilibration. We propose a debiased surrogate that eliminates the first-order bias of FPPE, and derive a plug-in estimator for the surrogate and establish its asymptotic normality. We then provide an estimation procedure for submarket parallel budget-controlled A/B tests. Finally, we present numerical examples on semi-synthetic data, confirming that the debiasing technique achieves the desired coverage properties.
+
+## 1 INTRODUCTION
+
+Online A/B testing is widely used in the internet industry to inform decisions on new feature rollouts. For online marketplaces (such as advertising markets), standard approaches to A/B testing may lead to biased results when buyers operate under a budget constraint, as budget consumption in one arm of the experiment impacts performance of the other arm. To counteract this interference, one can use a budget-split design where the budget constraint operates on a per-arm basis and each arm receives an equal fraction of the budget, leading to “budget-controlled A/B testing,” see e.g. [Basse et al. \(2016\)](#); [Liu et al. \(2021\)](#).
+
+Despite clear advantages of budget-controlled A/B testing, companies are extremely constrained by the number of such experiments they can run. While it’s possible to create more budget splits, this will lower the budget per group substantially, which could lead to different equilibrium outcomes and may disproportionately affect smaller buyers. Additionally, a common approach to increase experimentation throughput is to run orthogonal experiments (with their own orthogonal randomization), but this would either suffer from the same interference as the vanilla A/B test setup, or also require further budget splits.
+
+In this paper, we propose a *parallel budget-controlled A/B test* design where we use market segmentation to identify submarkets in the larger market, and we run parallel experiments on each submarket. When the overall market can be divided into several relatively isolated submarkets, budget-controlled A/B tests can be conducted in parallel within these submarkets. However, this method also presents some challenges. First, submarkets are rarely completely isolated; certain items may
+
+{1}------------------------------------------------
+
+attract buyers from multiple submarkets, resulting in interference across submarkets when conducting tests in parallel. Second, submarkets differ in terms of buyer (and user) composition, which might cause the local treatment effect estimates to not be representative of the global treatment effect where all buyers are included in the market. The second challenge is relatively easy to address in practice by imposing balancing constraints in the clustering algorithm used to define submarkets, while the first challenge is more fundamentally important and requires deeper understanding.
+
+Before the theoretical exposition, we consider a comparison of results for paired experiments between a parallel budget-controlled A/B test setup, and that of a traditional budget-split design; where the latter is considered the gold standard. Sec. 1 on the left shows comparisons of 99 experiments where the point estimate and CIs are plotted on the vertical axis for the parallel design, and on the horizontal axis for the budget-split design. The most important feature is whether the two experiments agree between (negative, neutral, positive), as a change would result in a launch reversal. The two experiment designs agree in 75% of cases (at 90% confidence level, hence the optimal agreement is 81.5%), which increases to 79% after the introducing a guardrail metric, see Sec. 1 on the right. These results are quite satisfactory, but do point at the existence of remaining interference bias. In the remainder of this paper, correcting the interference bias is the main objective.
+
+### Contributions:
+
+1. We formally define market interference in first-price auction markets using the first price pacing equilibrium (FPPE) framework (Conitzer et al., 2022a) (Sec. 3)
+2. We propose a debiased surrogate that eliminates the first-order bias of FPPE, and derive a plug-in estimator for the surrogate and establish its asymptotic normality. (Sec. 4)
+3. We run semi-synthetic experiments, confirming that the debiasing technique achieves the desired coverage properties. (Sec 5).
+
+### 1.1 PARALLEL A/B TESTING IN PRACTICE
+
+In this section we describe the real-world problem of A/B testing with congestion that we wish to model, and our proposed solution of parallel A/B tests in carefully balanced submarkets. We start by describing the market environment. There is a set of  $n$  advertisers, and each advertiser  $i$  has a budget  $b_i$ . Whenever a user shows up on the platform an *impression opportunity* occurs, and an auction is conducted in order to determine which ad will be shown to the user. Each advertiser  $i$  has some stated value  $v_i(\theta)$  of being shown to a particular impression opportunity  $\theta$ . The advertiser submits a bid which is determined based on  $v_i(\theta)$ , as well as the expenditure of the advertiser so far. For example, in *multiplicative pacing* Balseiro et al. (2017); Conitzer et al. (2022b), the platform adaptively learns a *pacing multiplier*  $\beta_i \in [0, 1]$  such that the bid is formed as  $\beta_i v_i(\theta)$ . The budget-management system then adaptively controls  $\beta_i$  over time, in order to ensure the correct rate of budget expenditure on behalf of the advertiser. We consider first-price auctions, which is the predominant way display advertising is sold online.
+
+![Figure 1: Two scatter plots comparing 'Sub-market A/B Test' (y-axis) vs 'Standard A/B Test' (x-axis). The left plot shows all 99 datapoints, with red crosses indicating neutral treatment effects (value 1.0). The right plot shows the same data after removing datapoints that fail a guardrail metric, resulting in fewer points and fewer red crosses.](6d06e66b7a838f8c809884aeee597a5e_img.jpg)
+
+The figure consists of two side-by-side scatter plots. Both plots have 'Sub-market A/B Test' on the y-axis and 'Standard A/B Test' on the x-axis. A solid diagonal line represents the identity function (y=x), and a dashed horizontal line is at y=1.0. The left plot shows 99 data points, many of which are red crosses clustered around the identity line. The right plot shows the same data after applying a guardrail metric, with several points removed, particularly those that were red crosses or significantly deviated from the identity line.
+
+Figure 1: Two scatter plots comparing 'Sub-market A/B Test' (y-axis) vs 'Standard A/B Test' (x-axis). The left plot shows all 99 datapoints, with red crosses indicating neutral treatment effects (value 1.0). The right plot shows the same data after removing datapoints that fail a guardrail metric, resulting in fewer points and fewer red crosses.
+
+**Figure 1:** Parallel vs. standard budget-controlled A/B test, daily treatment effect. We denote neutral treatment effects with a value of 1.0. Red crosses indicate instances of sign inconsistencies. Left are all datapoints, on the right, datapoints that fail a guardrail metric are removed.
+
+{2}------------------------------------------------
+
+Now that we have discussed budget management, we describe the A/B testing problem. Suppose that a platform wants to run  $K$  A/B tests, which may affect, e.g., the valuations that advertisers have for impression slots, revenue, etc. We construct the market-segmented experimental setup as follows: We first define a bipartite graph between advertisers and users based on targeting criteria. Subsequently, we cluster the advertisers into  $K$  clusters, where the objective is to minimize the sum of weighted edges between clusters subject to traffic balancing constraints to make the resulting clusters as similar to the whole market as possible. The edge weight between a pair of advertisers is the number of impressions (or users) where they are both within the top- $k$  bids. The choice of  $k$  is a parameter that must be chosen based on experience with the specific application setting. If the clustering achieves a small objective function value, then each cluster is a mostly isolated submarket, in the sense that each user will mostly receive bids from advertisers in a single cluster. Then, we run an A/B test within each of the  $K$  submarkets. Every user is randomly assigned to either “A” or “B” in each submarket. The main challenge is that while submarkets are relatively isolated, there is remaining interference from users who are targeted by advertisers from different submarkets, leading to a slightly different equilibrium. Our main contribution is to define a framework for analyzing such interference, and giving an estimator that removes the bias from these users. We survey related works in App. D.
+
+## 2 REVIEW OF FPPE THEORY
+
+**Notation.** For a measurable space  $(\Theta, d\theta)$ , we let  $L^p$  (and  $L_+^p$ , resp.) denote the set of (nonnegative, resp.)  $L^p$  functions on  $\Theta$  w.r.t the base measure  $d\theta$  for any  $p \in [1, \infty]$  (including  $p = \infty$ ). Given  $x \in L^\infty$  and  $v \in L^1$ , we let  $\langle v, x \rangle = \int_\Theta v(\theta)x(\theta) d\theta$ . We treat all functions that agree on all but a measure-zero set as the same. For a sequence of random variables  $\{X_n\}$ , we say  $X_n = O_p(1)$  if for any  $\epsilon > 0$  there exists a finite  $M_\epsilon$  and a finite  $N_\epsilon$  such that  $\mathbb{P}(|X_n| > M_\epsilon) < \epsilon$  for all  $n \geq N_\epsilon$ . We say  $X_n = o_p(1)$  if  $X_n$  converges to zero in probability. For a subset  $\Theta' \subset \Theta$ , let  $1_{\Theta'}(\cdot) : \Theta \rightarrow \{0, 1\}$  be the indicator function of  $\Theta'$ . Convergence in distribution and probability is denoted by  $\xrightarrow{d}$  and  $\xrightarrow{p}$ . Given a vector  $a = [a_1, \dots, a_n]^\top$ , let  $\text{Diag}(a)$  denote the diagonal matrix with  $(i, i)$ -th entry being  $a_i$ ; sometimes we write  $\text{Diag}(a_i)$  when it is convenient to define each  $a_i$  inline. Let  $A^\dagger$  denote the Moore-Penrose inverse of the matrix  $A$ ,  $e_j$  the  $j$ -th unit vector, and  $[n] = \{1, \dots, n\}$ .
+
+![Figure 2: Left: Finite FPPE (left) and limit FPPE (right). In a finite FPPE, there are a finite number of items; in a limit FPPE, the item set is a continuum. Right: The interference model — Left (M_alpha): the observed market where interference is present among submarkets. Middle (M_alpha): the limit market with interference from bad item set. Right (M_0): the limit market with perfectly separated submarkets. We use data from the left panel to make inferences about the market in the right panel.](163688ca8da9787f5d48edd68d8cc75b_img.jpg)
+
+The diagram is divided into three main sections. The left section shows two bipartite graphs: the first has a finite set of blue nodes (buyers) and orange nodes (items), with edges labeled  $b_i, v_i$  and  $\theta^c$ ; the second has the same blue nodes and a continuous set of orange items represented by a density curve  $s(\cdot)$  over  $\Theta$ . The right section shows a flow from top to bottom: three boxes containing graphs with blue nodes and orange items, connected by green arrows. These lead to three boxes containing density plots over  $\Theta$ , labeled  $\Theta_1, \Theta_2, \Theta_3$ . A central vertical bar is labeled  $\Theta_{bad}$ . To the far right are three boxes containing density plots, representing the limit market structure.
+
+Figure 2: Left: Finite FPPE (left) and limit FPPE (right). In a finite FPPE, there are a finite number of items; in a limit FPPE, the item set is a continuum. Right: The interference model — Left (M\_alpha): the observed market where interference is present among submarkets. Middle (M\_alpha): the limit market with interference from bad item set. Right (M\_0): the limit market with perfectly separated submarkets. We use data from the left panel to make inferences about the market in the right panel.
+
+**Figure 2: Left:** Finite FPPE (left) and limit FPPE (right). In a finite FPPE, there are a finite number of items; in a limit FPPE, the item set is a continuum. **Right:** The interference model — Left ( $\mathcal{M}_\alpha$ ): the observed market where interference is present among submarkets. Middle ( $\mathcal{M}_\alpha$ ): the limit market with interference from bad item set. Right ( $\mathcal{M}_0$ ): the limit market with perfectly separated submarkets. We use data from the left panel to make inferences about the market in the right panel.
+
+**Limit FPPE.** We first introduce our notion of a limit market and two regularity conditions on the market, which models the underlying market structure that we sample from. We have  $n$  buyers and a possibly continuous set of items  $\Theta$  with an integrating measure  $d\theta$ . For example, one could take  $\Theta =$
+
+{3}------------------------------------------------
+
+$[0, 1]$  and  $d\theta =$  the Lebesgue measure on  $[0, 1]$ . Each buyer has a budget  $b_i$ ; let  $\mathbf{b} = (b_1, \dots, b_n)$ . The valuation for buyer  $i$  is a function  $v_i \in L_+^1$  such that buyer  $i$  has valuation  $v_i(\theta)$  for one unit of item  $\theta \in \Theta$ ; let  $\mathbf{v} : \Theta \rightarrow \mathbb{R}^n$ ,  $\mathbf{v}(\theta) = [v_1(\theta), \dots, v_n(\theta)]$ . We assume  $\bar{v} = \max_i \sup_{\theta} v_i(\theta) < \infty$ . The supplies of items are given by a function  $s \in L_+^\infty$ , i.e., item  $\theta \in \Theta$  has  $s(\theta)$  units of supply. Without loss of generality, we assume a unit total supply  $\int_{\Theta} s d\theta = 1$ . Given  $g : \Theta \rightarrow \mathbb{R}$ , we let  $\mathbb{E}[g] = \int g(\theta)s(\theta) d\theta$  and  $\text{Var}[g] = \mathbb{E}[g^2] - (\mathbb{E}[g])^2$ . Given  $t$  i.i.d. draws  $\{\theta^1, \dots, \theta^t\}$  from  $s$ , let  $P_t(g) = \frac{1}{t} \sum_{\tau=1}^t g(\theta^\tau)$ .
+
+Next we introduce the market equilibrium concept that is the foundation of our study. For that we leverage the *first-price pacing equilibrium* (FPPE) (Conitzer et al., 2022a). FPPE models equilibrium outcomes under budget-management systems employed in several practical settings. Each buyer is assigned a *pacing multiplier*  $\beta_i$ , which is used to control their budget expenditure. For each individual auction  $\theta$ , the buyer bids  $\beta_i v_i(\theta)$ , which can be seen as their adjusted valuation after factoring in their budget constraint (in practice, the valuation  $v_i(\theta)$  may not be the buyer’s true valuation, but instead their unscaled bid reported to the platform). The goal of the budget management system is to achieve an equilibrium, meaning that it must ensure that buyers spend their budget exactly by appropriately choosing  $\beta_i$ . If the budget cannot be fully spent, then no pacing must occur (i.e.,  $\beta_i = 1$ ). Below we formally define the pacing equilibrium concept in the continuous setting (see Fig 2, right), and give the finite version in the next section (Fig 2, left).
+
+**Definition 1** (Limit FPPE, Gao & Kroer (2022); Conitzer et al. (2022a)). *A limit FPPE, denoted as  $\text{FPPE}(\mathbf{b}, \mathbf{v}, s, \Theta)$ , is the unique tuple  $(\beta, p(\cdot)) \in [0, 1]^n \times L_+^1(\Theta)$  such that there exist an allocation  $x_i : \Theta \rightarrow [0, 1]$  for all  $i \in [n]$  such that,*
+
+1. (First-price) *Prices and allocations are determined by first price auctions: for all items  $\theta \in \Theta$ ,  $p(\theta) = \max_i \beta_i v_i(\theta)$ , and only the highest bidders obtain items: for all  $i$  and  $\theta$ ,  $x_i(\theta) > 0$  implies  $\beta_i v_i(\theta) = \max_k \beta_k v_k(\theta)$*
+2. (Feasibility, market clearing) *Budget are respected: for all  $i$ ,  $\int x_i(\theta)p(\theta)s(\theta) d\theta \leq b_i$ . There is no overselling: for all  $\theta$ ,  $\sum_{i=1}^n x_i(\theta) \leq 1$ . Items with nonzero price are fully allocated: for all  $\theta$ ,  $p(\theta) > 0$  implies  $\sum_{i=1}^n x_i(\theta) = 1$ .*
+3. (No unnecessary pacing) *For all  $i$ ,  $\int x_i(\theta)p(\theta)s(\theta) d\theta < b_i$  implies  $\beta_i = 1$ .*
+
+Let  $\beta^*$  and  $p^*$  be the equilibrium pacing multipliers and prices. Revenue in the limit FPPE is  $REV^* = \int p^*(\theta)s(\theta) d\theta$ . It measures the profitability of the auction platform. The leftover budgets for buyers are denoted by  $\delta_i^* = b_i - \int p^*(\theta)s(\theta)x_i^*(\theta) d\theta$ .
+
+The first two conditions simply describe the possible outcomes of a first-price auction system that uses pacing as the budget management strategy. The last condition, no unnecessary pacing, ensures that we only scale down a buyer’s bids in case their budget constraint is binding. FPPE has many nice properties, including that they are competitive equilibria and that they are revenue-maximizing among budget-feasible pacing multipliers (Conitzer et al., 2022a).
+
+In a pacing auction market  $\mathcal{M} = \text{FPPE}(\mathbf{b}, \mathbf{v}, s, \Theta)$  the following two regularity conditions are important for the study of its statistical properties.
+
+**Definition 2** (SMO). *We say the smoothness condition holds if the map  $\beta \mapsto \mathbb{E}_s[\max_i \beta_i v_i(\theta)]$  is twice continuously differentiable in a neighborhood of  $\beta^*$ .*
+
+**Definition 3** (SCS). *We say strict complementary slackness holds if, whenever a buyer is unpaced ( $\beta_i^* = 1$ ), then her leftover budget is strictly positive ( $\delta_i^* > 0$ ).*
+
+The condition SMO ensures that in the limit market, items that incur a tie are measure zero. The condition SCS rules out degenerate buyers that spend their budget exactly at  $\beta_i^*$ . See Liao & Kroer (2023) and Liao et al. (2023) for an extensive discussion about these conditions.
+
+**Finite FPPE.** Next we introduce the finite FPPE, which models the auction data we observe in practice. Let  $\gamma = (\theta^1, \dots, \theta^t)$  be a sequence of items. Assume each item has the same supply of  $\sigma \in \mathbb{R}_+$  units. A finite FPPE is a limit FPPE where the supply is a discrete measure supported on the observed items  $\gamma$ . Let  $v_i^\gamma = v_i(\theta^\gamma)$ .
+
+**Definition 4** (Finite FPPE, informal). *A finite FPPE,  $\widehat{\text{FPPE}}(\mathbf{b}, \mathbf{v}, \sigma, \gamma)$ , is a limit FPPE where the item set is the finite set of observed items  $\gamma$ . See App. C for the full definition.*
+
+{4}------------------------------------------------
+
+In [Liao & Kroer \(2023\)](#), it is shown that if  $\gamma$  consists of  $t$  i.i.d. draws from distribution  $s$ , and one takes  $\sigma = 1/t$ , then the pacing multiplier in  $\widehat{\text{FPPE}}(b, v, 1/t, \gamma)$  converge to the pacing multiplier in  $\text{FPPE}(b, v, s, \Theta)$  in probability. Also, note that the FPPE  $\text{FPPE}(tb, v, 1, \gamma)$  converges to the same limit FPPE  $\text{FPPE}(b, v, s, \Theta)$  because the pacing multipliers of a finite FPPE do not change when budgets and supplies are multiplied by the same scalar.
+
+**The Eisenberg-Gale Program.** Both the limit FPPE and the finite FPPE have convex program characterizations ([Chen et al., 2007](#); [Conitzer et al., 2022a](#); [Gao & Kroer, 2022](#)). We define the dual Eisenberg-Gale (EG) objective for a single item  $\theta$  as
+
+$$F(\theta, \beta) = f(\theta, \beta) - \sum_{i=1}^n b_i \log \beta_i, \quad f(\theta, \beta) = \max_{i \in [n]} \beta_i v_i(\theta). \quad (1)$$
+
+The population and sample (dual) EG objectives are then defined as
+
+$$H(\beta) = \mathbb{E}[F(\theta, \beta)], \quad H_t(\beta) = \frac{1}{t} \sum_{\tau=1}^t F(\theta^\tau, \beta). \quad (2)$$
+
+We say  $H$  is the Hessian of market  $\mathcal{M}$  when  $H = \nabla_{\beta\beta}^2 \int F(\theta, \beta) s \, d\theta|_{\beta=\beta^*}$ .
+
+The equilibrium pacing multipliers  $\beta^*$  in  $\text{FPPE}(b, v, s, \Theta)$  can be recovered through the population dual EG program
+
+$$\beta^* = \arg \min_{\beta \in (0, 1]^n} H(\beta). \quad (3)$$
+
+The pacing multiplier vector  $\beta^*$  is the unique solution to Eq. (3). Let  $\beta^\gamma$  be the equilibrium pacing multiplier in  $\widehat{\text{FPPE}}(b, v, 1/t, \gamma)$ . Then  $\beta^\gamma$  solves the sample analogue of Eq. (3):
+
+$$\beta^\gamma = \arg \min_{\beta \in (0, 1]^n} H_t(\beta). \quad (4)$$
+
+Let us briefly comment on the differential structure of  $f$ , since it plays a role in later sections. The function  $f(\beta, \theta)$  is a convex function of  $\beta$  and its subdifferential  $\partial_\beta f(\beta, \theta)$  is the convex hull of  $\{v_i e_i : \text{index } i \text{ such that } \beta_i v_i(\theta) = \max_k \beta_k v_k(\theta)\}$ , with  $e_i$  being the base vector in  $\mathbb{R}^n$ . When  $\max_i \beta_i v_i(\theta)$  is attained by a unique  $i^*$ , the function  $f(\cdot, \theta)$  is differentiable. In that case, all entries of  $\nabla_\beta f(\beta, \theta)$  are zero except that the  $i^*$ -th entry is filled with the value  $v_{i^*}(\theta)$ .
+
+## 3 INTERFERENCE AS CONTAMINATION
+
+In this section, we discuss how to estimate market equilibria when there is *contamination* in the supply, meaning that items are generated from a mixture of two distributions, when in reality we wish to estimate equilibrium quantities from one of the two distributions. Then, we show that interference from other markets can be viewed as a form of contamination, and so the problem of removing interference bias can be analyzed via our contamination framework.
+
+### 3.1 FPPE WITH CONTAMINATED SUPPLY
+
+We assume that we are in the same FPPE setting as before: there are  $n$  buyers, each with budget  $b_i$ , and an item set  $\Theta$  which is now partitioned into  $\Theta_{\text{bad}}$  and  $\Theta_{\text{good}}$ . However, now we assume that the supply  $s$  is contaminated by  $s'$ , another supply distribution. We define the  $\alpha$ -contaminated market as  $\mathcal{M}_\alpha = \text{FPPE}(b, v, s_\alpha, \Theta)$  and the uncontaminated market as  $\mathcal{M}_0 = \text{FPPE}(b, v, s, \Theta)$ , where  $s_\alpha = \alpha s' + (1 - \alpha)s$ , distribution  $s'$  is supported on  $\Theta_{\text{bad}}$ , and  $s$  on  $\Theta_{\text{good}}$ . Our goal is to perform inference about FPPE properties in the limit FPPE with the supply  $s$ . However, we are given access to finite FPPEs sampled from  $s_\alpha$  instead. In particular, let  $\gamma$  be  $t$  i.i.d. draws from  $s_\alpha$  and let  $\widehat{\mathcal{M}}_\alpha = \widehat{\text{FPPE}}(b, v, 1/t, \gamma)$ . We assume  $\alpha$  is known throughout the paper. In practice, this can often be estimated from historical data; in the parallel A/B test setting, this can be estimated directly from the sampled set of items, since we know whether an item is drawn from  $s$  or  $s'$ . Let  $\beta^*$  and  $\beta_\alpha^*$  be the limit pacing multipliers in  $\mathcal{M}_0$  and  $\mathcal{M}_\alpha$ , respectively. Let  $\beta_n^*$  be the pacing multipliers in the sampled market  $\widehat{\mathcal{M}}_\alpha$  and let  $H_{\alpha,t}(\beta) = \frac{1}{t} \sum_{\tau=1}^t F(\theta^\tau, \beta)$  be the sample EG objective.
+
+{5}------------------------------------------------
+
+If we wanted to make inferences about  $\mathcal{M}_\alpha$  then we could use existing statistical inference theory on how to use data in a finite FPPE  $\widehat{\mathcal{M}}_\alpha$  to make inferences about the limit FPPE  $\mathcal{M}_\alpha$  (Liao & Kroer, 2023). However, the supply contamination prevents the application of these tools to our problem.
+
+Our central research question is then on how to use data in the finite contaminated market  $\widehat{\mathcal{M}}_\alpha$  to make inferences about the uncontaminated limit market  $\mathcal{M}_0$ .
+
+In Sec. 4 we propose an estimator for this problem and derive its properties. The results there apply to general item space  $\Theta$  and supplies  $s$  and  $s'$ . By imposing structure on  $\Theta$ ,  $s$  and  $s'$ , we show that the contamination model captures the interference among FPPes.
+
+### 3.2 APPLICATION: MODELING INTERFERENCE AMONG FPPES
+
+Now we show how the contamination model from the previous section can be used to model interference. Consider  $K$  separate auction markets, which together form a global market. In the global market there are  $n$  buyers, each with budget  $b_i$ , and an item set  $\Theta$ , partitioned into  $\Theta_{\text{good}}$  and  $\Theta_{\text{bad}}$ . Let  $C_1, \dots, C_K$  be a partition of the buyers,  $\Theta_1, \dots, \Theta_K$  be a partition of the good item set  $\Theta_{\text{good}}$ , and  $s_1, \dots, s_K$  be a set of supply functions, supported on  $\Theta_1, \dots, \Theta_K$  respectively. The  $k$ -th submarket consists of buyers in  $C_k$ , the item set  $\Theta_k$  and supply  $s_k$ . Let  $s = \frac{1}{K} \sum_k s_k$  be the average mixture and  $s'$  be a supply supported on  $\Theta_{\text{bad}}$ . Let the contaminated supply be  $s_\alpha = \alpha s' + (1 - \alpha)s$ .
+
+By imposing structure on  $\Theta_{\text{good}}$  and  $\Theta_{\text{bad}}$  the contamination model can capture interference among auction markets. We assume that submarkets are separated, which models the ideal case where there is no interference. A buyer  $i \in C_k$  is only interested in items from the submarket he belongs to:  $v_i(\theta) = 0$  for  $\theta \in \Theta_{k'}$ ,  $k' \neq k$ . Next, we let  $\Theta_{\text{bad}}$  represent items that cause outbound edges from submarkets; see the green edges in Fig 2 left panel. An item is referred to as *bad* if it has positive values for buyers from at least two different submarkets. Formally,  $\theta \in \Theta_{\text{bad}}$  if there exist  $i \in C_k$ ,  $j \in C_{k'}$ ,  $k \neq k'$ , such that  $v_i(\theta) > 0$  and  $v_j(\theta) > 0$ . Combining these assumptions, we have that a buyer  $i$  from submarket  $k$  has positive values *only* for items from the sets  $\Theta_k$  and possibly  $\Theta_{\text{bad}}$ . Now we have fully specified a contaminated market setup: we wish to make inferences on the market consisting of only  $\Theta_{\text{good}}$  (which is really  $K$  fully separate submarkets), but we observe an actual market containing items from  $\Theta_{\text{good}} \cup \Theta_{\text{bad}}$ . With this setup, we can use the results developed in the following section to model interference in parallel submarkets.
+
+In Fig 2 we present an example of interference among  $K = 3$  submarkets. The market of interest is the perfectly separated market (right). This is because, in parallel A/B testing, submarkets are explicitly created such that each submarket resembles the global market. Then when a submarket receives a treatment, the observed quantities in that submarket, such as revenues and social welfare, are considered surrogates for the treatment effect in the global market. However, in practice we only observe the interfered finite market (left), which converges to the interfered limit market (middle). In App. F we show how to analyze parallel A/B testing using this framework.
+
+## 4 A DEBIASED ESTIMATOR AND ITS PROPERTIES
+
+This section develops a methodology for making inferences about the uncontaminated limit FPPE. Since the interference setting is a special case of the contamination setting, we develop theories for the latter. We introduce a surrogate for pacing multipliers, based on the notion of directional derivatives, and establish its debiasing property in Sec. 4.1. Then, we focus on estimating this surrogate quantity in Sec. 4.2, and develop asymptotic normality results in Sec. 4.3. Secondly, we consider estimating revenue, which can be thought of as a smooth function of pacing multipliers. We discuss debiased revenue estimation and inference based on our pacing multiplier results in App. E.
+
+### 4.1 A DEBIASED SURROGATE FOR PACING MULTIPLIERS
+
+If we view  $\beta_\alpha^*$  as a function of the level of contamination  $\alpha$ , then one can imagine that under sufficient regularity conditions, the pacing multipliers in the perfectly separated market,  $\beta_0^*$ , can be approximated by some form of Taylor expansion of  $\alpha \mapsto \beta_\alpha^*$  at  $\alpha$ . This can be made rigorous by the
+
+{6}------------------------------------------------
+
+notion of directional derivatives. We define
+
+$$d\beta^*(\alpha) = \lim_{\epsilon \rightarrow 0^+} \frac{\beta_{\alpha-\epsilon}^* - \beta_{\alpha}^*}{\epsilon} . \quad (5)$$
+
+if the limit exists. We will show in Thm. 1 that  $\beta_{\alpha}^* + \alpha d\beta^*(\alpha)$  serves as a good approximation to  $\beta^* = \beta_0^*$ .
+
+Thanks to the convex program characterization of FPPE, the directional derivative  $d\beta^*(\alpha)$  has a closed-form expression under certain regularity conditions (the conditions are given in Thm. 1; the full proof is given in the appendix). We need a few notations for this expression. Define  $\delta_{\alpha} = \int \nabla f(\theta, \beta_{\alpha}^*)(s - s') d\theta$ . Let  $H_{\alpha} = \nabla_{\beta\beta}^2 \int F(\theta, \beta_{\alpha}^*) s_{\alpha} d\theta$  be the Hessian matrix in the market  $\mathcal{M}_{\alpha}$  and  $P_{\alpha} = \text{Diag}(1(\beta_{\alpha,i}^* < 1))$ . Then, under the regularity conditions given in Thm. 1 below,
+
+$$d\beta^*(\alpha) = -(P_{\alpha} H_{\alpha} P_{\alpha})^{\dagger} \delta_{\alpha} . \quad (6)$$
+
+We present a heuristic derivation in App. G. Given the closed-form expression of  $d\beta^*(\alpha)$ , we define the following debiased pacing multiplier
+
+$$\tilde{\beta}^* = \beta_{\alpha}^* + \alpha \cdot (-(P_{\alpha} H_{\alpha} P_{\alpha})^{\dagger} \delta_{\alpha}) . \quad (7)$$
+
+**Theorem 1** (Analysis of Bias). *Suppose that in the market  $\mathcal{M}_0$  conditions SMO and SCS hold, and assume that  $\beta \mapsto \nabla^2 \int F(\theta, \beta) s' d\theta$  is twice continuously differentiable in a neighborhood of  $\beta^*$ . Then the directional derivative  $d\beta^*(\cdot)$  is well-defined in a neighborhood of zero, and is given by Eq. (6). Moreover, as  $\alpha \downarrow 0$ ,*
+
+$$\|\tilde{\beta}^* - \beta^*\|_2 = o(\alpha) .$$
+
+The proof is given in App. B.1. Thm. 1 indicates that the debiased surrogate  $\tilde{\beta}^*$  removes first-order bias caused by contamination. The limit pacing multipliers  $\beta_{\alpha}^*$  of the contaminated market  $\mathcal{M}_{\alpha}$  will have bias of order  $\beta_{\alpha}^* - \beta^* = \Theta(\alpha)$ . In contrast, Thm. 1 shows that the debiased surrogate only incurs a bias of order  $o(\alpha)$ .
+
+### 4.2 THE ESTIMATOR
+
+In this section we introduce a plug-in estimator for the debiased surrogate  $\tilde{\beta}^*$  and introduce a consistency theorem. The next section discusses constructing confidence intervals.
+
+To estimate  $d\beta^*(\alpha)$  in Eq. (6) we need estimates of its three components: the Hessian  $H_{\alpha} = \nabla_{\beta\beta}^2 \int F(\theta, \beta_{\alpha}^*) s_{\alpha} d\theta$ , the diagonal matrix  $P_{\alpha}$  and the vector  $\delta_{\alpha} = \int \nabla f(\theta, \beta_{\alpha}^*)(s - s') d\theta$ .
+
+**The Hessian.** For simplicity in our theoretical results, we will simply assume a generic Hessian estimator  $\widehat{H}_{\alpha}$  such that for some  $\eta_t \downarrow 0$  we have  $\widehat{H}_{\alpha} - H_{\alpha} = O_p(\eta_t)$ . Hong et al. (2015) discuss the estimation of the derivative in detail. Different kinds of statistical guarantees require different rate conditions on  $\eta_t$ ; see Theorems 2 and 3. We then introduce two Hessian estimators: one is applicable for general FPPE, while the other requires an extra market regularity condition. The first Hessian estimator is the finite difference method. Let  $e_i, e_j$  be basis vectors and  $\varepsilon_t$  be a step-size. Then the estimator is
+
+$$\widehat{H}_{\alpha}[i, j] = [H_{\alpha,t}(\beta_{++}^{\pm}) - H_{\alpha,t}(\beta_{+-}^{\pm}) - H_{\alpha,t}(\beta_{-+}^{\pm}) + H_{\alpha,t}(\beta_{--}^{\pm})] / (4\varepsilon_t^2) ,$$
+
+where  $\beta_{\pm\pm}^{\pm} = \beta_{\alpha}^* \pm e_i \varepsilon_t \pm e_j \varepsilon_t$ , and  $H_{\alpha,t}(\beta) = \frac{1}{t} \sum_{\tau=1}^t F(\theta^{\tau}, \beta)$ , with  $\{\theta^{\tau}\}_{\tau}$  being the items in  $\widehat{\mathcal{M}}_{\alpha}$ . In practice, a diagonal approximation of the Hessian suffices. The second method relies on an additional regularity condition, in which case we derive a simplified formula for the Hessian, thereby enabling a simpler estimation procedure (see Thm. 3).
+
+**The vector  $\delta_{\alpha}$ .** Let  $g$  be the Radon-Nikodym ratio  $g(\theta) = (d(s - s')/ds_{\alpha})(\theta) = \frac{1}{1-\alpha} 1_{\theta_{\text{good}}}(\theta) - \frac{1}{\alpha} 1_{\theta_{\text{bad}}}(\theta)$ . With the ratio  $g$ , the true vector  $\delta_{\alpha}$  can be written as  $\delta_{\alpha} = \int g(\theta) \nabla f(\theta, \beta_{\alpha}^*) s_{\alpha}(\theta) d\theta$ , which is easy to estimate given i.i.d. draws from  $s_{\alpha}$ . In particular, our estimator is then  $\widehat{\delta}_{\alpha} = \frac{1}{t} \sum_{\tau=1}^t g(\theta^{\tau}) \mu^{\tau}$ . Here  $\mu^{\tau} = [x_1^{\tau} v_1^{\tau}, \dots, x_n^{\tau} v_n^{\tau}]^{\top}$  is a subgradient of  $f(\theta^{\tau}, \beta_{\alpha}^*)$  w.r.t.  $\beta$ .
+
+**The diagonal matrix  $P_{\alpha}$ .** Recall  $P_{\alpha} = \text{Diag}(1(\beta_{\alpha,i}^* < 1))$ . So a natural estimator is  $\widehat{P}_{\alpha} = \text{Diag}(1(\beta_{\alpha,i}^* < 1 - \iota_t))$ , where the slackness  $\iota_t \asymp \frac{1}{\sqrt{t}}$ .
+
+{7}------------------------------------------------
+
+With all three components estimated, using  $\beta_\alpha^\gamma$  is the pacing multiplier in the market  $\widehat{\mathcal{M}}_\alpha$  we define the plug-in estimator for  $d\beta^*(\alpha)$  in Eq. (6) as
+
+$$\widehat{\beta} = \beta_\alpha^\gamma - \alpha \cdot (\widehat{P}_\alpha \widehat{H}_\alpha \widehat{P}_\alpha)^\dagger \widehat{\delta}_\alpha . \quad (8)$$
+
+**Theorem 2** (Consistency). *Suppose that in the market  $\mathcal{M}_\alpha$  conditions SMO and SCS hold. If the Hessian estimation error satisfies  $\eta_t = o(1)$ , then  $\widehat{\beta} \xrightarrow{P} \beta^*$ . The proof is in App. B.2.*
+
+### 4.3 ASYMPTOTIC NORMALITY AND INFERENCE
+
+We present two asymptotic normality results. In the first result, we require a stronger condition on the Hessian error rate  $\eta_t$ . In particular, as will be shown in Thm. 3, the rate condition  $\eta_t = o(1/\sqrt{t})$  is sufficient for normality. One could use a separate large historical dataset to obtain a good estimate of the Hessian matrix. In the second result, we impose an additional condition on market structure which simplifies the Hessian expression and facilitates efficient Hessian estimation. To describe the additional market structure, we define the gap between the highest and the second-highest bid for an item  $\theta$  under pacing  $\beta$  by  $\text{bidgap}(\beta, \theta) = \max\{\beta_i v_i(\theta)\} - \text{secondmax}\{\beta_i v_i(\theta)\}$ , where  $\text{secondmax}$  is the second-highest entry potentially equal to the highest; e.g.,  $\text{secondmax}([1, 1, 2]) = 1$ . When there is a tie for an item  $\theta$  under pacing  $\beta$ , we have  $\text{bidgap}(\beta, \theta) = 0$ . When there is no tie for an item  $\theta$ , the gap  $\text{bidgap}(\beta, \theta)$  is strictly positive.
+
+For any  $g : \Theta \rightarrow \mathbb{R}$ , let  $\mathbb{E}_\alpha[g] = \int g s_\alpha d\theta$  and  $\text{Cov}_\alpha(g) = \mathbb{E}_\alpha[(g - \mathbb{E}_\alpha[g])(g - \mathbb{E}_\alpha[g])^\top]$ . Recall  $\widetilde{\beta}^*$  is the debiased surrogate in Eq. (7) and  $\widehat{\beta}$  is its estimator defined in Eq. (8).
+
+We need to introduce a few more notations to describe the normality results. First, let  $d_\alpha = -(P_\alpha H_\alpha P_\alpha)^\dagger \nabla f(\cdot, \beta_\alpha^*)$ . As mentioned previously, the pacing multipliers in the contaminated market converge to the limit counterpart and have the representation
+
+$$\sqrt{t}(\beta_\alpha^\gamma - \beta_\alpha^*) = \frac{1}{\sqrt{t}} \sum_{\tau=1}^t (d_\alpha(\theta^\tau) - \mathbb{E}_\alpha[d_\alpha(\theta^\tau)]) + o_p(1) .$$
+
+In the statistics literature, the function  $d_\alpha(\cdot) - \mathbb{E}[d_\alpha]$  is called the influence function (van der Vaart, 2000). For our debiased estimators, we need the following (uncentered) influence functions.
+
+$$d_1(\theta) = (\frac{1}{1-\alpha} \mathbb{1}_{\theta_{\text{good}}}(\theta)) d_\alpha(\theta) , \quad d_2(\theta) = d_1(\theta) - 2\alpha \text{Diag}(\beta_{\alpha,i}^* \delta_{\alpha,i} b_i^{-1}) d_\alpha(\theta) .$$
+
+**Theorem 3.** *Let SCS and SMO hold in  $\mathcal{M}_\alpha$ .*
+
+1. *Asymptotic Normality in a General Market.* It holds that  $\widehat{\beta} - \widetilde{\beta}^* = z_t + O_p(\eta_t) + o_p(\frac{1}{\sqrt{t}})$ , where  $\sqrt{t}z_t \xrightarrow{d} \mathcal{N}(0, \Sigma_1)$  with  $\Sigma_1 = \text{Cov}_\alpha(d_1)$ , and  $\eta_t$  is the Hessian estimation error.
+
+2. *Asymptotic Normality under a Bid Gap Condition.* If in addition  $\mathbb{E}_\alpha[1/\text{bidgap}(\beta_\alpha^*, \theta)] < \infty$ , then  $H_\alpha = \text{Diag}(b_i/(\beta_{\alpha,i}^*)^2)$ . Suppose we estimate  $H_\alpha$  with  $\widehat{H}_\alpha = \text{Diag}(b_i/(\beta_{\alpha,i}^\gamma)^2)$ . Then  $\sqrt{t}(\widehat{\beta} - \widetilde{\beta}^*) \xrightarrow{d} \mathcal{N}(0, \Sigma_2)$  where  $\Sigma_2 = \text{Cov}_\alpha(d_2)$ . The proof is in App. B.3.
+
+Thm. 3 part 1 shows how the error of the Hessian estimate affects the distribution of the estimator  $\widehat{\beta}$ . If  $\eta_t = o(1/\sqrt{t})$ , then the decomposition becomes  $\sqrt{t}(\widehat{\beta} - \widetilde{\beta}^*) = \sqrt{t}z_t + o_p(1)$ , implying asymptotic normality, i.e.  $\sqrt{t}(\widehat{\beta} - \widetilde{\beta}^*) \xrightarrow{d} \mathcal{N}(0, \Sigma_1)$ , in which case one can construct an ellipsoidal confidence region for  $\widetilde{\beta}^*$ . Thm. 3 part 2 shows direct asymptotic normality under the extra condition, with a simpler Hessian estimator that avoids finite differences.
+
+To perform inference, we need to construct a consistent estimate of the covariance matrix. Now we describe a plug-in estimate of  $\Sigma_1$ . Let the estimator  $\widehat{d}_1^\tau$  be  $\widehat{d}_1^\tau = -(\frac{1}{1-\alpha} \mathbb{1}_{\theta_{\text{good}}}(\theta^\tau)) (\widehat{P}_\alpha \widehat{H}_\alpha \widehat{P}_\alpha)^\dagger \mu^\tau$ , where  $\mu^\tau = [x_1^\tau v_1^\tau, \dots, x_n^\tau v_n^\tau]^\top$ , and  $\widehat{P}_\alpha, \widehat{H}_\alpha$  have been defined in Sec. 4.2. The plug-in estimator is  $\widehat{\Sigma}_1 = \frac{1}{t} \sum_{\tau=1}^t (\widehat{d}_1^\tau - \bar{d}_1)(\widehat{d}_1^\tau - \bar{d}_1)^\top$  with  $\bar{d}_1 = \frac{1}{t} \sum_{\tau=1}^t \widehat{d}_1^\tau$ . By similar arguments as in Liao et al. (2023), the plug-in estimates of  $\Sigma_1$  and  $\Sigma_2$  are consistent. Algorithm 1 summarizes the debiasing procedure.
+
+In App. E we present a similar debiased estimator for revenue and its bias and variance properties. In App. F we specialize the debiased estimator to parallel budget-controlled A/B testing.
+
+{8}------------------------------------------------
+
+![Figure 3: Two line plots showing Normalized bias (%) as a function of alpha (0.10 to 0.50). The left plot shows beta* (blue line) and beta^* (orange line). The right plot shows REV* (blue line) and REV (orange line). In both plots, the blue line increases with alpha, while the orange line remains relatively flat and low.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+| alpha | beta* (Left Plot) | beta^* (Left Plot) | REV* (Right Plot) | REV (Right Plot) |
+|-------|-------------------|--------------------|-------------------|------------------|
+| 0.10  | ~8                | ~2                 | ~7                | ~2               |
+| 0.20  | ~12               | ~2.5               | ~11               | ~2               |
+| 0.30  | ~16               | ~3                 | ~16               | ~3               |
+| 0.40  | ~20               | ~4                 | ~19               | ~4               |
+| 0.50  | ~24               | ~5                 | ~23               | ~6               |
+
+Figure 3: Two line plots showing Normalized bias (%) as a function of alpha (0.10 to 0.50). The left plot shows beta\* (blue line) and beta^\* (orange line). The right plot shows REV\* (blue line) and REV (orange line). In both plots, the blue line increases with alpha, while the orange line remains relatively flat and low.
+
+**Figure 3:** Normalized bias (in percent of true value) as a function of  $\alpha$  in semi-synthetic experiments.  $\tilde{\beta}^*$  and  $\widetilde{REV}^*$  are the debiased surrogates for pacing multiplier and revenue in the limit market with interference  $\mathcal{M}_\alpha$ .
+
+## 5 SEMI-SYNTHETIC EXPERIMENT
+
+To evaluate our proposed framework and debiased estimator, we run semi-synthetic simulations to check if the proposed estimator for beta and revenue are indeed less biased, and we test the coverage of the proposed estimator. Fully synthetic experiments are presented in App. H.
+
+In the semi-synthetic experiments, we simulate 40 buyers and 10000 *good* items in two submarkets, with a varying number of *bad* items (up to 5000) in order to study the effect of the contamination parameter  $\alpha$ . For each  $\alpha$ , we randomly sample a budget for each buyer, and compute  $\beta^*$  and  $REV^*$  from the limit pure market  $\mathcal{M}_0$  with a value function in each submarket. Both the budget and values are sampled from historical bidding data, making the budget and value distributions heavy-tailed as in the real-world applications. More specifically, we first sample a certain number of auctions. For each auction, we sample a given number of advertisers with their per-impression bids. Advertisers that are sampled across different auctions are treated as the same buyers and their budgets are determined by aggregating their values over auctions up to a scalar to calibrated to get the percentage of budget-constrained buyers equal to what was observed in the real-world auction market, along the same lines as the experiments of Conitzer et al. (2022b).
+
+To check if the debiased surrogate reduces bias, we compute  $\beta_\alpha^*$  and  $REV_\alpha^*$  from the limit market with interference  $\mathcal{M}_\alpha$  and their surrogates,  $\tilde{\beta}^*$  and  $\widetilde{REV}^*$  ( $\tilde{\beta}^*$  is defined Eq. (7),  $\widetilde{REV}^*$  is defined in App. E. We look at the normalized bias for the surrogate, defined as  $\|\tilde{\beta}^* - \beta^*\|_2 / \|\beta^*\|_2$  for pacing multipliers and as  $|\widetilde{REV}^* / REV^* - 1|$  for revenue, and similarly defined for the limit quantities. Fig 3 shows the normalized bias curves as a function of  $\alpha$ . The magnitude of the bias increases with  $\alpha$ , for both the variables in the limit market with interference  $\mathcal{M}_\alpha$  and their debiased surrogates. The bias of the debiased surrogates is indeed much smaller than the contaminated limit quantities.
+
+Next, we check the coverage of the proposed variance estimator. For each  $\alpha$  and each budget sample, we run 100 simulations in the following way: We sample items (or their values for each buyer) considering two submarkets and bad items. We then run the finite FPPE with bad items and obtain a baseline estimate for pacing multiplier and revenue without applying the debiasing procedure. Then, we apply the debiasing procedure to compute the debiased estimates. For each simulation, we check if the debiased surrogate is within the confidence interval of the debiased estimator. Finally, we aggregate them to compute the estimated coverage of the estimator. The results for both pacing multiplier and revenue are shown in Table 1. For the coverage of  $\tilde{\beta}$ , we first compute the coverage of each component and report only the average in the table. For revenue, we construct the CI using the two approaches as mentioned in App. E: one based on Eq. (22) and the other using parametric bootstrap based on the estimated asymptotic distribution of  $\tilde{\beta}$  (with "b" in the column names).
+
+Firstly, Fig 4 shows that both CIs converges to the true value from the limit market with interference  $\mathcal{M}_\alpha$  as the number of items goes to infinity. Then, in Table 1, we show that the coverage for  $\tilde{\beta}$  is slightly smaller than the nominal level (95%), as well as the coverage of the bootstrap CI of
+
+{9}------------------------------------------------
+
+![Figure 4: A line graph showing Revenue CI (Confidence Interval) on the y-axis (ranging from 0.05 to 0.30) versus Number of items on the x-axis (ranging from 0 to 3000). Three lines are plotted: 'True value' (dashed line), 'analytical CI' (solid blue line), and 'bootstrap CI' (solid orange line). The 'True value' line is horizontal at approximately 0.12. The 'analytical CI' line starts at approximately 0.25 and decreases to approximately 0.12. The 'bootstrap CI' line starts at approximately 0.15 and decreases to approximately 0.12.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 4: A line graph showing Revenue CI (Confidence Interval) on the y-axis (ranging from 0.05 to 0.30) versus Number of items on the x-axis (ranging from 0 to 3000). Three lines are plotted: 'True value' (dashed line), 'analytical CI' (solid blue line), and 'bootstrap CI' (solid orange line). The 'True value' line is horizontal at approximately 0.12. The 'analytical CI' line starts at approximately 0.25 and decreases to approximately 0.12. The 'bootstrap CI' line starts at approximately 0.15 and decreases to approximately 0.12.
+
+**Figure 4:** Revenue confidence intervals as a function of the number of items in semi-synthetic experiments. The analytic CI comes from Eq. (22). The true value is the debiased surrogates for revenue in the limit market with interference  $\mathcal{M}_\alpha$ .
+
+revenue. The under-coverage for  $\hat{\beta}$  is mainly driven by the under-estimation of the variance of  $\hat{\beta}$ , while the under-coverage of the bootstrap CI for revenue can also be partially attributed to the higher dimensionality (with 40 buyers), making the bootstrap resampling harder to explore the whole space.
+
+Although the proposed variance estimator has good asymptotic properties, the results from our synthetic experiments suggest that it can perform badly, in either direction, for finite markets. Constructing more accurate variance estimators for our debiased estimator in finite settings would certainly mitigate the over- or under-coverage issues that we observe here and deserve more future research. One promising alternative is to construct the CI for  $\hat{\beta}$  and  $\widehat{REV}$  by directly bootstrapping the observed value matrix, though this might work best for independent valuations across buyers.
+
+| $\alpha$   | $\hat{\beta}$ |          | $\widehat{REV}$ |          |              |
+|------------|---------------|----------|-----------------|----------|--------------|
+|            | coverage      | CI width | CI width (b)    | coverage | coverage (b) |
+| 1000/11000 | 0.877         | 0.244    | 0.044           | 1.0      | 0.95         |
+| 2000/12000 | 0.849         | 0.225    | 0.043           | 1.0      | 0.87         |
+| 3000/13000 | 0.852         | 0.210    | 0.041           | 1.0      | 0.81         |
+| 4000/14000 | 0.828         | 0.200    | 0.040           | 1.0      | 0.90         |
+| 5000/15000 | 0.826         | 0.191    | 0.039           | 1.0      | 0.90         |
+
+**Table 1:** Coverage of  $\hat{\beta}$  and revenue estimates in the semi-synthetic experiments. All quantities are averaged over 100 simulations for each  $\alpha$  (the ratio of the number of bad items and the total items). The coverage of  $\hat{\beta}$  is averaged over all components of  $\hat{\beta}$ . For revenue estimates, the columns with "(b)" represent the quantities from the bootstrap CI, while the columns without "(b)" are for the CI from Eq. (22). The CI widths are normalized by the revenue from the limit market  $\mathcal{M}_\alpha$ .
+
+## 6 CONCLUSION
+
+We have proposed a practical experimental design for performing concurrent A/B tests in large-scale ad auction markets, using a submarket clustering approach, and showed that in production experiments, this submarket clustering approach leads to strong sign consistency performance, as compared to A/B testing on the full market, while allowing significantly-higher A/B test throughput. In order to model the potential for interference between submarket A/B tests, we introduced a theoretical model of statistical inference in first-price pacing equilibrium problems, under settings with supply contamination. We showed how one can perform statistical inference in such a setting using a debiased estimation procedure, and studied the statistical properties of this procedure. We then showed how our model of statistical inference in FPPE with contamination can be used to model the submarket clustering parallel A/B test design, and gave theoretical performance guarantees. Finally, we presented numerical experiments on fully synthetic and semi-synthetic data derived from Meta ad auctions. The experiments showed that our proposed debiased estimator achieves smaller biases and its statistical coverage on realistic data is generally in line with the predictions from our theory.
+
+ Rest of paper (reference and Appendix) is removed.

@@ -1,0 +1,338 @@
+
+
+{0}------------------------------------------------
+
+# ZERO-SHOT GENERALIZATION OF GNNs OVER DISTINCT ATTRIBUTE DOMAINS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Inductive GNNs are able to generalize across graphs with the same set of node attributes. However, zero-shot generalization across attributed graphs with disparate node attribute domains remains a fundamental challenge in graph machine learning. Existing methods are unable to effectively make use of node attributes when transferring to unseen attribute domains, frequently performing no better than models that ignore attributes entirely. This limitation stems from the fact that models trained on one set of attributes (e.g., biographical data in social networks) fail to capture relational dependencies that extend to new attributes in unseen test graphs (e.g., TV and movies preferences). Here, we introduce STAGE, a method that learns representations of *statistical dependencies* between attributes rather than the attribute values themselves, which can then be applied to completely unseen test-time attributes, generalizing by identifying analogous dependencies between features in test. STAGE leverages the theoretical link between maximal invariants and measures of statistical dependencies, enabling it to provably generalize to unseen feature domains for a family of domain shifts. Our empirical results show that when STAGE is pretrained on multiple graph datasets with unrelated feature spaces (distinct feature types and dimensions) and evaluated zero-shot on graphs with yet new feature types and dimensions, it achieves a relative improvement in Hits@1 between 40% to 103% for link prediction, and an 10% improvement in node classification against state-of-the-art baselines.
+
+## 1 INTRODUCTION
+
+Zero-shot generalization, or a model’s ability to handle unseen test data without additional training or adaptation, has long been a key objective for AI systems (Larochelle et al., 2008; Xian et al., 2017; Wang et al., 2022). An essential prerequisite to zero-shot generalization is for models to learn prediction rules that can be used across entirely different sets of features (or attributes) at test time. This challenge has been addressed in other domains, such as natural language, through processes that can split up any data into a pre-determined set of tokens (Samuel & Øvrelid, 2023).
+
+However, in the context of graph data with node attributes, zero-shot generalization presents unique challenges. First, features can vary significantly between graphs in different domains. Any method must be able to handle heterogeneous node features, including mixtures of continuous and categorical features, as well as features that are highly dataset specific such as *RAM* on an electronics store and clothes *size* in a department store, as shown in Figure 1. Second, the interpretation of certain features (such as *size*) is often context-dependent, requiring graph learning methods that can jointly model both the topology and the node attributes. *These challenges make it hard to define a unified input space allowing graph models to zero-shot generalize to unseen attributed graphs.*
+
+For these reasons, pretraining general purpose graph models remains an open challenge. This is reflected in the fact that generalizing to new attribute domains is rarely tackled in zero-shot settings (as we discuss in Section 5). One strategy in such cases is to ignore node attributes altogether, focusing on learning node and edge relations. Alternatively, some works *textify* node features (or the entire graph) using pre-trained text embedding models (Chen et al., 2024a; Huang et al., 2023; Liu et al., 2024; Zhang et al., 2023). However, this latter approach is limited by the text encoder, which may overlook significant predictive signal in numerical attributes (Collins et al., 2024; Gruver et al., 2024; Schwartz et al., 2024), and the inclusion of text encoders often makes end-to-end training challenging.
+
+{1}------------------------------------------------
+
+![Figure 1: The task of zero-shot generalization to attributed graphs with unseen attribute/features. (a) Train: Alice (age: 30, income_level: $120K, edu_level: college) views and purchases Smartphone 1 (price: $1299, RAM: 3GB, battery: 2716 mAh). Bob (age: 20, income_level: $70K, edu_level: high school) views and purchases Smartphone 2 (price: $699, RAM: 3GB, battery: 2500 mAh). (b) Test: Claire (fashion_news: regular, club_status: active, height: 5'6") views and purchases Clothes 1 (colour_group: red, size: M, product_type: shorts). Dominic (fashion_news: regular, club_status: active, height: 6'2") views and purchases Clothes 2 (colour_group: black, size: XL, product_type: jeans).](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 1: The task of zero-shot generalization to attributed graphs with unseen attribute/features. (a) Train: Alice (age: 30, income\_level: \$120K, edu\_level: college) views and purchases Smartphone 1 (price: \$1299, RAM: 3GB, battery: 2716 mAh). Bob (age: 20, income\_level: \$70K, edu\_level: high school) views and purchases Smartphone 2 (price: \$699, RAM: 3GB, battery: 2500 mAh). (b) Test: Claire (fashion\_news: regular, club\_status: active, height: 5'6") views and purchases Clothes 1 (colour\_group: red, size: M, product\_type: shorts). Dominic (fashion\_news: regular, club\_status: active, height: 6'2") views and purchases Clothes 2 (colour\_group: black, size: XL, product\_type: jeans).
+
+Figure 1: The task of zero-shot generalization to attributed graphs with unseen attribute/features. This task is challenging because features in the train and test graphs have different semantics. Moreover, real-world graphs typically contain a mixture of continuous and categorical features. Nevertheless, features associated with an edge can be highly correlated (e.g. income level is positively correlated to phone price in (a)). Our proposed method, STAGE, jointly learns both the *statistical dependencies among features and the graph structure*, and leverages the analogous statistical dependencies between features in the test graph (e.g. the positively correlated height and clothes sizes in (b)) to perform zero-shot transfer of distinct attribute domains.
+
+Another approach is to focus on test-time adaptation for the GNN node embeddings, accepting that the models representations may degrade on unseen attribute domains. This can be done, for example, by applying linear models to node embeddings using closed-form maximum-likelihood solutions (Zhao et al., 2024). Whilst test-time adaptation may prove to be useful in conjunction with domain generalization, it does not address the fundamental problem of domain generalization itself, which is to bestow the pretrained GNN model with the ability to produce useful representations of any graph.
+
+In this work, we introduce STAGE (Statistical Transfer for Attributed Graph Embeddings), a novel design for encoding node features to address the challenges of generalization to new attribute domains on graphs. The core idea behind STAGE is to transform raw node attributes, which exist in an “absolute” natural space that can vary arbitrarily across graphs, into a *relative* space that captures their statistical dependencies over graph edges. For instance, Figure 1 illustrates purchases triggered by positive correlations between the features in both domains. More specifically, STAGE builds a graphical representation of such statistical dependencies that is invariant to three transformations commonly observed when transferring across distinct attribute domains—changes in attribute values, permutations of attribute dimensions, and permutations of node identities—while preserving the maximal amount of information about the raw attribute values. In particular, STAGE transforms node features into edge embeddings through a two-step process:
+
+1. **STAGE-edge-graph construction:** For each edge in the original graph, STAGE constructs an *STAGE-edge-graph* (such as illustrated in Figure 2(b)), a fully connected weighted graph whose
+
+![Figure 2: Given an input attributed graph G (a), STAGE builds a STAGE-edge-graph (b) for every edge in G. Nodes in a STAGE-edge-graph correspond to individual features of the two edge endpoints, and the node and edge attributes are the empirical marginal and conditional probabilities of feature values (Equations (2) and (3)). STAGE then applies the intra-edge GNN on STAGE-edge-graph (b) to obtain an edge-level embedding for each input graph edge, and finally applies the inter-edge GNN to obtain the input graph representations leveraging the set of edge-level embeddings (c).](895d588a848d9963890c938763de9ecf_img.jpg)
+
+Figure 2: Given an input attributed graph G (a), STAGE builds a STAGE-edge-graph (b) for every edge in G. Nodes in a STAGE-edge-graph correspond to individual features of the two edge endpoints, and the node and edge attributes are the empirical marginal and conditional probabilities of feature values (Equations (2) and (3)). STAGE then applies the intra-edge GNN on STAGE-edge-graph (b) to obtain an edge-level embedding for each input graph edge, and finally applies the inter-edge GNN to obtain the input graph representations leveraging the set of edge-level embeddings (c).
+
+Figure 2: Given an input attributed graph  $G$  (a), STAGE builds a *STAGE-edge-graph* (b) for every edge in  $G$ . Nodes in a *STAGE-edge-graph* correspond to individual features of the two edge endpoints, and the node and edge attributes are the empirical marginal and conditional probabilities of feature values (Equations (2) and (3)). STAGE then applies the intra-edge GNN on *STAGE-edge-graph* (b) to obtain an edge-level embedding for each input graph edge, and finally applies the inter-edge GNN to obtain the input graph representations leveraging the set of edge-level embeddings (c).
+
+{2}------------------------------------------------
+
+nodes correspond to the features of the two endpoints (if there are  $m$  features for each node, the *STAGE-edge-graph* has  $2m$  nodes). The edge weights are the conditional probabilities later introduced in Equation (2), and the node attributes are assigned the marginal probabilities later introduced in Equation (3).
+
+2. **Edge embedding addition:** As illustrated in Figure 2(c), for each edge of the original graph, STAGE associates an embedding of a standard GNN architecture applied to that edge’s *STAGE-edge-graph*. As GNNs can operate on variable-sized graphs, STAGE is capable of learning over feature spaces of varying dimensions.
+
+STAGE then adds these embeddings to their respective edges as edge features (as illustrated in Figure 2(c)), and removes the original node features before applying a second GNN to process the entire modified graph, now featurized only by the new embeddings as edge features. This allows STAGE to end-to-end pretrain on multiple graph datasets from diverse feature domains for a single task. At test time, it can zero-shot generalize to solve that task on *any* graph, regardless of the novelty, unobserved nature, or varying-size of their node feature spaces.
+
+In order to shift from embedding node features to embedding statistical dependencies on edges, the *STAGE-edge-graph* is constructed using principles established by Bell (1964) and Berk & Bickel (1968), which link the theory of maximal invariants to measuring statistical dependencies between random variables. Namely, we prove that any function that can measure statistical dependencies of node features from totally ordered sets (e.g.,  $\mathbb{R}^d$ ,  $d \geq 1$ ), can be described as a graph regression task on a variant of our *STAGE-edge-graph*, as long as its GNN encoder is sufficiently expressive. This means that our method can learn expressive representations independent of the attribute domain for a class of domain shifts, allowing generalization between graph tasks that rely on the interplay between attribute dependencies and graph structure. Note that we *do not* prove generalization between arbitrary graphs, since there are clear worst-case examples for which transfer is impossible.
+
+Our experiments show that STAGE substantially improves zero-shot out-of-domain generalization against state-of-the-art baselines for both link prediction and node classification tasks on multiple datasets. Predicting future customer activity on an e-commerce website (link prediction) involving six distinct stores selling *beds*, *desktops*, *refrigerators*, *smartphones*, *shoes* and *clothes* and *apparel* from another (H&M), STAGE achieves up to a 103% improvement in Hits@1 over the best state-of-the-art baselines. Additionally, in node classification, by pretraining on Friendster and zero-shooting into Pokec, STAGE outperforms state-of-the-art by approximately 10%. Notably, STAGE’s performance improves as the number of training domains increases, showing it is currently the only method capable of learning generalizable patterns across distinct feature domains during pretraining.
+
+These results underscore STAGE’s ability to learn transferable representations that are robust to variations in node attribute domains. By embedding feature dependencies rather than their absolute values, STAGE enables robust zero-shot predictions across entirely new and unseen graph domains.
+
+## 2 STAGE: ZERO-SHOT GENERALIZATION TO DISTINCT ATTRIBUTE DOMAINS
+
+GNNs typically assume that the node feature dimensions of training and test graphs correspond to the same semantics, restricting their applicability to graphs with novel or misaligned feature dimensions at test time. To overcome this limitation, we introduce STAGE, a novel architecture that enables knowledge transfer across graphs with distinct feature spaces.
+
+We are given an attributed graph  $G = (V, E, \mathbf{X})$  where  $V$  is the set of nodes,  $E$  the set of edges, and  $\mathbf{X} = \{\mathbf{x}^v\}_{v \in V}$  the set of node features  $\mathbf{x}^v$  for each node  $v \in V$ . We assume all  $\mathbf{x}^v$  belong to some measurable space of dimension  $d \geq 1$ . To design a model capable of generalizing to test graphs that may have node features living in a different space than  $\mathbf{X}$ , we design a projection map that transforms the node features  $(\mathbf{x}^u, \mathbf{x}^v)$  of an edge  $(u, v) \in E$  into a fixed dimensional pairwise embedding
+
+$$\mathcal{P} : (\mathbf{x}^u, \mathbf{x}^v) \mapsto \mathbf{r}^{uv} \in \mathbb{R}^k, \quad k \geq 1. \quad (1)$$
+
+The choice to consider pairwise embeddings allows STAGE to model relations between features belonging to different nodes. For instance, modeling the relation between customer node Alice and product node Smartphone1 (Phone1) in Figure 2(a). We design the mapping  $\mathcal{P}$  by building a graph based on the pairwise *pdf* feature descriptors. Viewing node features through their *pdfs* is a crucial step as it transforms potentially non-aligned node feature spaces into a universal space of densities.
+
+{3}------------------------------------------------
+
+Concretely, let  $A$  and  $B$  be a random pair of nodes jointly and uniformly sampled from the edge set,  $(A, B) \sim \text{Unif}(E)$ . Let  $x_i^A$  denote the random variable of the  $i$ -th feature value of random node  $A$ , and  $x_j^B$  the  $j$ -th feature value of random node  $B$ . Given a specific pair of distinct nodes  $u, v \in V$  and specific feature values  $x_i^u$  and  $x_j^v$ , we define  $p(x_i^u | x_j^v)$  from the conditional probabilities as follows, accounting for mixture of totally ordered (e.g., scalar) and unordered (e.g., categorical) features:
+
+- $p(x_i^u | x_j^v) := \mathbb{P}_{(A,B) \sim \text{Unif}(E)}(x_i^A \leq x_i^u | x_j^B \leq x_j^v)$ , if both feature  $i$  and  $j$  are totally ordered.
+
+For brevity we omit the distribution  $(A, B) \sim \text{Unif}(E)$ , writing  $\mathbb{P}$  instead of  $\mathbb{P}_{(A,B) \sim \text{Unif}(E)}$  from now.
+
+- $p(x_i^u | x_j^v) := \mathbb{P}(x_i^A = x_i^u | x_j^B \leq x_j^v)$ , if feature  $i$  is unordered and feature  $j$  is totally ordered.
+- $p(x_i^u | x_j^v) := \mathbb{P}(x_i^A \leq x_i^u | x_j^B = x_j^v)$ , if feature  $i$  is totally ordered and feature  $j$  is unordered.
+- $p(x_i^u | x_j^v) := \mathbb{P}(x_i^A = x_i^u | x_j^B = x_j^v)$ , if both feature  $i$  and  $j$  are unordered.
+
+If  $u = v$ , we change the sampling distribution to  $(A) \sim \text{Unif}(V)$  and let  $B = A$ . Everything else remains the same in the definitions above. In practice, all these probabilities can be empirically estimated from the input data. For the node-pair  $u, v$  we define a conditional probability matrix  $S^{uv}$ , with indices  $i, j \in \{1, \dots, 2d\}$ ,  $i \neq j$  as follows:
+
+$$S_{ij}^{uv} = \begin{cases} p(x_i^u | x_j^v) & \text{if } i \leq d \text{ and } j \leq d, \\ p(x_{i-d}^u | x_{j-d}^v) & \text{if } d < i \leq 2d \text{ and } d < j \leq 2d, \\ p(x_i^u | x_{j-d}^v) & \text{if } i \leq d \text{ and } d < j \leq 2d, \\ p(x_{i-d}^u | x_j^v) & \text{if } d < i \leq 2d \text{ and } j \leq d. \end{cases} \quad (2)$$
+
+and for the diagonal  $i = j$  we define,
+
+$$S_{ij}^{uv} = \begin{cases} p(x_i^u) & \text{if } i \leq d, \\ p(x_i^v) & \text{if } i > d, \end{cases} \quad (3)$$
+
+where  $p(x_i^u) := \mathbb{P}(x_i = x_i^u)$  if  $x_i^u$  is unordered and  $p(x_i^u) := \mathbb{P}(x_i \leq x_i^u)$  if  $x_i^u$  is totally ordered. This diagonal term allows STAGE to also model intra-node feature dependencies.
+
+The matrix  $S^{uv}$  is the core node-pair data representation STAGE uses. This matrix is used to define a graph structure which we call a STAGE-edge-graph as illustrated in Figure 2(b), which gives a pairwise feature coordinate-level description of the relation between the two endpoint nodes.
+
+**Definition 2.1** (STAGE-edge-graph). Given a pair of nodes  $u, v \in V$ , a STAGE-edge-graph for  $(u, v)$  is a fully connected, weighted, directed graph  $G(S^{uv})$  with  $2d$  nodes, where node  $i$  has a scalar attribute  $S_{ii}^{uv}$ , and edge  $(i, j)$  has a scalar attribute  $S_{ij}^{uv}$ .
+
+**STAGE algorithm.** As illustrated in Figures 2(b) and 2(c), STAGE uses the STAGE-edge-graph of all edges in a two-stage process to produce attribute-domain-transferable graph representations. First, STAGE uses a GNN to generate expressive embeddings for each STAGE-edge-graph of each edge. After these edge embeddings are added, STAGE removes the original node features. This modified graph is then fed into a second GNN to solve the overall task, producing the final node, link, or graph representation. The two steps of STAGE are as follows.
+
+- (Intra-edge)** Each  $G(S^{uv})$  is processed independently with a GNN  $M_1$  to produce edge-level embeddings  $\mathbf{r}^{uv} = M_1(G(S^{uv}))$  in Equation (1).
+- (Inter-edge)** A second GNN  $M_2$  processes  $G' = (V, E, \{\mathbf{r}^{uv}\}_{(u,v) \in E})$ , i.e., the original graph equipped with the learned edge embeddings to give a final representation  $M(G) := M_2(G')$ .
+
+The two GNNs  $M_1$  and  $M_2$  are trained end-to-end on the task. Note that  $M_1$  can be any GNN designed to produce whole-graph embeddings and can take single-dimensional edge features, whilst  $M_2$  can be any GNN that can take edge embeddings as input.
+
+**Modeling pairwise relations.**  $S^{uv}$  is only computed for edges  $(u, v)$ , and so can only model pairwise relations between nodes connected by an edge. In some cases, such as bipartite graphs, we find it beneficial to add extra edges between nodes of the same type (see Section 4 for details). In general, higher-order relations could also be modelled similarly, albeit at increased complexity. We leave exploration of higher-order relations to future work.
+
+{4}------------------------------------------------
+
+## 3 STATISTICAL UNDERPINNINGS OF STAGE
+
+This section explains how STAGE achieves domain transferability. The central result is to show that STAGE generates representations capable of measuring feature dependencies on graphs. This means that STAGE is able to ignore “absolute” feature values, whilst still generalizing through analogous statistical dependencies of the unseen features in the test graph.
+
+Our first step (Section 3.1) connects measures of statistical dependencies with a novel graph regression task. Then, Section 3.2 shows that our STAGE-edge-graphs (Definition 2.1) can lead to a compact model for this regression, with a variant that is invariant to a class of shifts between train and test feature domains. The following theoretical results are meant to provide insights and are restricted to domains with a fixed number of features to simplify the proofs, extending them to variable size spaces is left as future work. Detailed proofs are provided in Appendix A.
+
+### 3.1 STATISTICAL DEPENDENCE OF NODE-PAIR FEATURES AS A GRAPH REGRESSION
+
+We begin by introducing the framework for building what we call *feature hypergraphs*. We will show that feature hypergraphs can sufficiently encapsulate the statistical dependencies between features, whilst only leveraging the relative orders rather than the numerical values of the feature, enabling it to be invariant to the order-preserving transformations (defined later in Definition A.2) to achieve better domain transferability. Throughout this exposition we assume one feature space defined over a totally ordered set (e.g.,  $\mathbb{R}^d$  for  $d \geq 1$ , where the total order  $\leq$  is well defined). Since the invariances of unordered sets are a special case (as these do not need order-preserving transformations), this section focuses on totally ordered sets. Before we describe how feature hypergraphs are built, we start with the concept of order statistic, which captures the relative ordering of the feature values.
+
+**Order statistic** (David & Nagaraja, 2004). Let  $x_1, x_2, \dots, x_m$  be a sequence of  $m \geq 2$  random variables from some unknown distribution  $F$  over a totally ordered set (e.g., a convex set  $\mathbb{F} \subseteq \mathbb{R}$ ). Its *order statistics* are defined as the sorted values  $x_{(1)} \leq x_{(2)} \leq \dots \leq x_{(m)}$ , where  $x_{(k)}$  denotes the  $k$ -th smallest value in the  $m$  samples.
+
+Consider a domain with  $m$  entities (e.g., products in an appliance store), where each entity is characterized by  $d$  features. Specifically, an entity  $u$  can be represented by a (row) vector of random feature variables,  $x^u = [x_1^u, x_2^u, \dots, x_d^u]$ , where  $x_i^u$  describes the  $i$ -th feature of entity  $u$  that takes on values from the  $i$ -th feature space  $\mathbb{F}_i \subseteq \mathbb{R}$ . With these variables, we define the (random) matrix  $X := [(x^1)^T, (x^2)^T, \dots, (x^m)^T]^T$  of shape  $m \times d$ . Alternatively, we can view  $X$  column-wise, where each feature  $i$  corresponds to a (column) random vector  $x_i = [x_1^1, x_2^2, \dots, x_m^m]^T$ . Next, we introduce the order statistic for these features: let  $x_{i(k)}$  denote the  $k$ -th order statistic of  $\{x_1^1, \dots, x_m^m\}$ . For instance,  $x_{i(1)} = \min\{x_1^1, \dots, x_m^m\}$ .
+
+Given an input graph  $G = (V, E, X)$ , we regard it as a sample from some unknown distribution over all attributed graphs with  $m$  entities and  $d$  features, where  $X$  is a random variable with  $X = [x_1, \dots, x_d]$ . Consider the edges in  $E$  as samples of pairs of nodes that give rise to the multiset of edge endpoint features,  $\mathcal{E} = \{(x^u, x^v) \mid (u, v) \in E\}$ . Together with the order statistics, we now define the feature hypergraph as follows:
+
+**Definition 3.1** (Feature hypergraph  $\mathcal{F}_\mathcal{E}$ ). Given a multiset of edge endpoint features  $\mathcal{E} = \{(x^u, x^v) \mid (u, v) \in E\}$  of  $m$  entities with totally ordered feature spaces, the feature hypergraph  $\mathcal{F}_\mathcal{E}$  is defined as follows. First, we label the graph with  $m$ . Then,
+
+- For each order statistic  $x_{i(k)}$  of feature  $i$  and order  $k$  ( $1 \leq k \leq m$ ), there are 2 nodes, labeled as  $(i, k, 1)$  and  $(i, k, 2)$ , respectively. In total, there are exactly  $2md$  nodes in  $\mathcal{F}_\mathcal{E}$  (feature values need not be unique). Nodes  $(i, k, 1)$  and  $(i, k, 2)$  store a single feature to mark their order:  $k$ .
+- Let  $o_i(u)$  be the order of the feature value  $x_i^u$ , i.e.,  $x_{i(o_i(u))} = x_i^u$ . For each pair of edge endpoint features  $(x^u, x^v) \in \mathcal{E}$ , there is a hyperedge  $H_{uv}$  in  $\mathcal{F}_\mathcal{E}$  defined as
+
+$$H_{uv} := \{(1, o_1(u), 1), (1, o_1(v), 2), (2, o_2(u), 1), (2, o_2(v), 2), \dots, (d, o_d(u), 1), (d, o_d(v), 2)\}.$$
+
+Our first observation is that the feature hypergraph in Definition 3.1 perfectly captures the order statistics of the set  $\mathcal{E}$  but discards the actual values of the features.
+
+{5}------------------------------------------------
+
+We now consider statistical tests that measure dependencies of the endpoint features. As an illustrating example, consider that if  $(\mathbf{x}^u, \mathbf{x}^v) \in \mathcal{E}$  are samples (not necessarily independently sampled) from a bivariate distribution  $(\mathbf{x}, \mathbf{x}') \sim F$ , one may be interested in testing the hypothesis
+
+$$H_0 : F(\mathbf{x}, \mathbf{x}') = F_1(\mathbf{x})F_2(\mathbf{x}'),$$
+
+i.e., that  $\mathbf{x}$  and  $\mathbf{x}'$  are independent. Bell (1964); Berk & Bickel (1968) have shown over totally ordered sets, measures (e.g.,  $p$ -values) of such hypothesis tests, for pairwise independence ( $H_0$  above) and more generally higher-order conditional independence between multiple variables, have invariances that simplify the data representation to such a degree that the original values are discarded, retaining only the order relationships between the variable values. And that any such test is therefore a rank test, i.e., it relies solely on indices of the order statistic rather than the numerical values of the features.
+
+Our first theoretical contribution is the observation that *any statistical test that focuses on measuring the (conditional) dependencies of endpoint features in  $\mathcal{E}$  can be defined as a graph regression task over the feature hypergraph  $\mathcal{F}_\mathcal{E}$  of Definition 3.1.*
+
+**Theorem 3.2.** *Given a multiset of edge endpoint features  $\mathcal{E}$ , the corresponding feature hypergraph  $\mathcal{F}_\mathcal{E}$  (Definition 3.1) and a most-expressive hypergraph GNN encoder  $M_{\theta^*}(\mathcal{F}_\mathcal{E})$ , then any test  $T(\mathcal{E})$  that focuses on measuring the dependence of the endpoint features of  $\mathcal{E}$  has an equivalent function  $h$  within the space of Multilayer Perceptrons (MLPs) that depends solely on the graph representation  $M_{\theta^*}(\mathcal{F}_\mathcal{E})$ , i.e.,  $\exists h \in \text{MLPs s.t. } T(\mathcal{E}) = h(M_{\theta^*}(\mathcal{F}_\mathcal{E}))$ .*
+
+Next we show that the hypergraph  $\mathcal{F}_\mathcal{E}$  can be simplified with STAGE-edge-graph and that its ability to compute dependency measures can be made invariant to some domain shifts between train and test.
+
+### 3.2 TRANSFERABILITY: STAGE CAN MODEL MEASURES OF STATISTICAL DEPENDENCIES AND IS INVARIANT TO A FAMILY OF DOMAIN TRANSFORMATIONS
+
+The feature hypergraph  $\mathcal{F}_\mathcal{E}$  in Definition 3.1 is used to obtain a maximal invariant graph representation via hypergraph GNN. This solution has a high computational cost from the use of hypergraph GNNs. Fortunately, we show that by assigning unique feature identifiers to label the nodes of our STAGE-edge-graphs  $G(\mathbf{S}^{uv})$  (Definition 2.1), STAGE-edge-graphs are as informative as the corresponding feature hypergraph (Definition 3.1) while preserving the same invariances.
+
+**Theorem 3.3.** *Given the endpoint features  $\mathcal{E}$  (Definition 3.1) of a graph  $G = (V, E, \mathbf{X})$ , there exists an optimal parameterization  $\theta_g^*, \theta_s^*$  for a most expressive GNN encoder  $M^g$  and a most-expressive multiset encoder  $M^s$ , respectively, such that  $M_{\theta_g^*, \theta_s^*}(G) := M_{\theta_g^*}^s(\{\{M_{\theta_g^*}^g(G(\mathbf{S}^{uv})) : (u, v) \in E\}\})$  such that any test  $T(\mathcal{E})$  that measures the dependence of  $\mathcal{E}$ 's endpoint features has an equivalent function  $h$  within the space of Multilayer Perceptrons (MLPs) that depends solely on the graph representation  $M_{\theta_g^*, \theta_s^*}(G)$ , i.e.,  $\exists h \in \text{MLPs s.t. } T(\mathcal{E}) = h(M_{\theta_g^*, \theta_s^*}(G))$ .*
+
+Theorem 3.3 motivates the design of STAGE, which leverages a GNN on STAGE-edge-graphs to obtain edge-level embeddings. However, the use of unique feature identifiers in the STAGE-edge-graphs disrupts invariance to permutations in feature dimensions (e.g., U.S. shoe size appearing as the first dimension in one dataset and U.K. shoe size as the last dimension in another), thereby limiting its domain transferability. More broadly, we now describe all the invariances we want for STAGE to have to be robust to a class of feature domain shifts.
+
+**COGG invariances.** STAGE-edge-graphs facilitates domain transfer to distinct feature domains. Intuitively, the full set of invariances required for domain transferability over  $G = (V, E, \mathbf{X})$  consists of: (1) invariance or equivariance to transformations of feature values that preserve the order statistic, (2) invariance or equivariance to permutations of feature dimensions (columns of  $\mathbf{X}$ ), and (3) invariance or equivariance to permutations of entities (nodes) in the graph, affecting both  $V$  (and consequently  $E$ ) and the rows of  $\mathbf{X}$ . These invariances are formally described in Definition A.5 at Appendix A.4 through actions of *component-wise order-preserving groupoid for graphs* (COGG).
+
+We now introduce our final theoretical contribution which establishes that STAGE achieves invariance to COGGs by design. This result shows that STAGE can provably achieve the zero-shot transferability to the class of feature domain shifts defined by COGGs-type transformations.
+
+**Theorem 3.4.** *STAGE (Section 2) is invariant to COGGs (Definition A.5).*
+
+{6}------------------------------------------------
+
+![Bar chart showing Zero-shot Hits@1 performance for various models across six test graph domains: bed, desktop, refrigerators, smartphone, shoes, and H&M. The models compared are random, NBFNet-raw, NBFNet-gaussian, NBFNet-structural, NBFNet-lim, NBFNet-normalized, and NBFNet-STAGE. NBFNet-STAGE consistently achieves the highest performance across all domains, with error bars indicating standard deviation over seeds.](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+| Model             | bed   | desktop | refrigerators | smartphone | shoes | H&M   |
+|-------------------|-------|---------|---------------|------------|-------|-------|
+| random            | ~0.05 | ~0.05   | ~0.05         | ~0.05      | ~0.05 | ~0.05 |
+| NBFNet-raw        | ~0.15 | ~0.15   | ~0.15         | ~0.15      | ~0.15 | ~0.15 |
+| NBFNet-gaussian   | ~0.25 | ~0.25   | ~0.25         | ~0.25      | ~0.25 | ~0.25 |
+| NBFNet-structural | ~0.30 | ~0.30   | ~0.30         | ~0.30      | ~0.30 | ~0.30 |
+| NBFNet-lim        | ~0.30 | ~0.30   | ~0.30         | ~0.30      | ~0.30 | ~0.30 |
+| NBFNet-normalized | ~0.30 | ~0.30   | ~0.30         | ~0.30      | ~0.30 | ~0.30 |
+| NBFNet-STAGE      | ~0.45 | ~0.55   | ~0.48         | ~0.52      | ~0.48 | ~0.45 |
+
+Bar chart showing Zero-shot Hits@1 performance for various models across six test graph domains: bed, desktop, refrigerators, smartphone, shoes, and H&M. The models compared are random, NBFNet-raw, NBFNet-gaussian, NBFNet-structural, NBFNet-lim, NBFNet-normalized, and NBFNet-STAGE. NBFNet-STAGE consistently achieves the highest performance across all domains, with error bars indicating standard deviation over seeds.
+
+Figure 3: Zero-shot Hits@1 performance (higher is better) of STAGE and baselines, pretrained on four (or five) distinct store domains and evaluated on the held-out domain (or H&M dataset). **NBFNet with STAGE feature encoding consistently achieves the highest zero-shot accuracy across all test domains showing up to 103% improvement.** Error bars show standard deviation over seeds.
+
+The proof sketch is essentially as follows. The first insight is to drop the feature-id labels in STAGE-edge-graphs. This modification sacrifices maximal expressivity (Theorem 3.3), but ensures that STAGE is invariant to permutations of the feature dimensions. Second, STAGE employs a second GNN on the original input graph, using the graph embeddings of the STAGE-edge-graphs as additional edge-level embeddings, while omitting the original node features. This configuration ensures STAGE’s invariance to graph isomorphisms. Thus, the entire method is invariant to COGGs.
+
+## 4 EXPERIMENTS
+
+We now show the effectiveness of STAGE across multiple experimental settings. [We refer the reader to Appendix C for details and to Appendix F for a complexity analysis and runtime comparison.](#)
+
+**Datasets.** To evaluate STAGE’s zero-shot generalization to graphs with unseen attributes, we consider several graph datasets with unique domain-specific node features but a shared task. See [Appendix B](#) for more details on these datasets, their tasks, and their construction.
+
+**E-Commerce Stores dataset (link prediction).** We use an E-Commerce dataset from a multi-category store ([Kechinov, 2020](#)) containing customer-product interactions (purchases, cart additions, views) over time. We split it into five single product category domains with disjoint customers (*simulating five distinct single-category stores*): *shoes, refrigerators, desktops, smartphones, and beds*, each with unique features (e.g., *smartphones have display type, RAM size; shoes have ankle height, material*) and unique customers. The task is to predict future customer-product interactions from past actions.
+
+**H&M dataset (link prediction).** We use the H&M Personalized Fashion Recommendations dataset ([Kaggle, 2021](#)), containing transactions from a large fashion retailer, to evaluate the zero-shot performance of models trained on the E-Commerce Stores dataset. Attributes in H&M dataset except one (“price”) are distinct from those in E-Commerce Stores. The task remains predicting future customer-product interactions from past actions.
+
+**Social network datasets (node classification): Friendster and Pokec.** We consider the Friendster ([Teix-eira et al., 2019](#)) and Pokec ([SNAP, 2012](#)) datasets, two online social networks from different regions and user bases. Friendster nodes have features such as *age, gender, interests, etc.*, while Pokec nodes have *public profile status, completion percentage, region, age, and gender*. The task is to predict a node feature common to both social networks using network structure and remaining node features. Since only *age* and *gender* are common, we create two tasks: mask and predict *gender*, and mask and regress on *age* (however, age seems to not be predictable as discussed in [Appendix D](#)).
+
+**Baselines.** We compare STAGE to several baselines for handling new node features. GNN-RAW: Projects each raw node feature into a fixed-dimensional space via linear transformations, before summing across the projected dimensions. GNN-GAUSSIAN: Use Gaussian noise as node fea-
+
+{7}------------------------------------------------
+
+Table 1: Zero-shot Hits@1 and MRR (higher is better) of STAGE and baselines. **NBFNet-STAGE outperforms all baselines in zero-shot Hits@1 and MRR (including supervised approaches) across the E-Commerce Stores and H&M datasets.** Models were trained on all combinations of four graph domains and tested on the remaining domain for the E-Commerce Stores dataset, and trained on the five E-Commerce Stores domains and tested zero-shot on the unseen H&M dataset. The Structural-Supervised baseline was trained on additional edges in the H&M dataset. Improvement (% gain) is calculated as the relative increase in performance of STAGE compared to each baseline.
+
+| Pretraining: E-Commerce Stores |                        | Test: Held-out E-Comm. Store |                        |           |                        | Test: H&M Dataset |                        |           |  |
+|--------------------------------|------------------------|------------------------------|------------------------|-----------|------------------------|-------------------|------------------------|-----------|--|
+| Model                          | Hits@1 (↑)             | % gain                       | MRR                    | % gain    | Hits@1 (↑)             | % gain            | MRR (↑)                | % gain    |  |
+| random                         | 0.0026 ± 0.0000        | 17615%                       | -                      | -         | 0.0006 ± 0.0000        | 77667%            | -                      | -         |  |
+| NBFNet-raw                     | 0.0000 ± 0.0000        | ∞                            | 0.0032 ± 0.0009        | 15434%    | 0.0005 ± 0.0004        | 93220%            | 0.0059 ± 0.0011        | 7871%     |  |
+| NBFNet-gaussian                | 0.2101 ± 0.0428        | 119%                         | 0.2617 ± 0.0489        | 90%       | 0.0925 ± 0.0708        | 404%              | 0.1176 ± 0.0756        | 300%      |  |
+| NBFNet-structural              | 0.3149 ± 0.0253        | 46%                          | 0.3721 ± 0.0219        | 34%       | 0.2231 ± 0.0060        | 109%              | 0.2302 ± 0.0080        | 104%      |  |
+| NBFNet-llm                     | 0.3226 ± 0.0190        | 43%                          | 0.3830 ± 0.0148        | 30%       | 0.2302 ± 0.0015        | 103%              | 0.2365 ± 0.0021        | 99%       |  |
+| NBFNet-normalized              | 0.3269 ± 0.0213        | 41%                          | 0.3844 ± 0.0159        | 29%       | 0.2286 ± 0.0010        | 104%              | 0.2341 ± 0.0018        | 101%      |  |
+| NBFNet-structural-supervised   | N/A                    | N/A                          | N/A                    | N/A       | 0.1546 ± 0.0084        | 202%              | 0.2103 ± 0.0164        | 124%      |  |
+| <b>NBFNet-STAGE (Ours)</b>     | <b>0.4606 ± 0.0123</b> | <b>0%</b>                    | <b>0.4971 ± 0.0073</b> | <b>0%</b> | <b>0.4666 ± 0.0020</b> | <b>0%</b>         | <b>0.4703 ± 0.0029</b> | <b>0%</b> |  |
+
+tures (Sato et al., 2021; Abboud et al., 2021). STRUCTURAL: Disregards node features entirely, using only the graph structure. GNN-LLM: Converts node features into textual descriptions and obtains embeddings using a pre-trained encoder-only language model, akin to PRODIGY (Huang et al., 2023). GNN-NORMALIZED: Retains only continuous features and standardize them. For a fair comparison, [we use the same underlying GNN architecture for all methods](#): NBFNet (Zhu et al., 2021c) for the E-Commerce and H&M datasets (link prediction), and GINE (Hu et al., 2020) for social network datasets (node classification). In addition to these baselines, [we also evaluate our approach against GraphAny](#) (Zhao et al., 2024), a recent method specifically tailored for domain transferability in node classification tasks, but not applicable to link prediction. In Appendix E, [we perform additional ablation studies with alternative GNNs](#). All models share hyperparameters where applicable, and results are averaged over three seeds. For graphs with node types lacking features (e.g., customers in E-Commerce Stores), we build edges between featured nodes of the same type (e.g., products) based on common connections, forming *STAGE-edge-graph* for these new edges. These edges are provided to all baselines.
+
+### 4.1 ZERO-SHOT LINK PREDICTION ON UNSEEN DOMAINS
+
+We evaluate STAGE’s zero-shot out-of-domain generalization using the E-Commerce Stores dataset with five distinct product categories, each having unique features. We train models on a union of four categories and test on the fifth held-out category, predicting customer-product interaction links.
+
+**Results.** Figure 3 shows that STAGE consistently outperforms all baselines in zero-shot Hits@1 scores across test domains, with significant gains in the *smartphone* category, achieving a substantial 103% Hits@1 improvement against the best baseline (NBFNet-structural), with 0.51 Hits@1 for STAGE vs 0.25 for structural. Similar gains are observed in the *bed* and *refrigerator* categories, where STAGE outperforms the strongest baselines (LLM and normalized feature encodings), by margins of 40% (with a Hits@1 score of 0.44) and 33% (with a Hits@1 score of 0.59), respectively.
+
+Table 1 shows the Hits@1 and Mean Reciprocal Rank (MRR) averaged over all held-out E-Commerce Stores. STAGE achieves the highest zero-shot Hits@1 showing a 41% improvement over the strongest baseline (normalized), with a Hits@1 of 0.46. In terms of MRR, STAGE also leads with an MRR of 0.4971, outperforming the best baseline by 29%. Interestingly, not only STAGE’s outperforms the zero-shot SOTA in average, but it also exhibits lower variance across seeds (shown in both Figure 3 and Table 1), emphasizing its robustness to these zero-shot domain-generalization tasks.
+
+### 4.2 ZERO-SHOT LINK PREDICTION WITH EXTREME DOMAIN SHIFT
+
+To further challenge STAGE, we apply the pretrained NBFNet-STAGE on the E-Commerce Stores to zero-shot predict activities in the H&M dataset. The H&M dataset, sourced from an entirely different data provider, with distinct customers, products, features, and activity patterns, works to eliminate any potential shared predictive signals present in the E-Commerce dataset (Kechinov, 2020).
+
+{8}------------------------------------------------
+
+432  
+433  
+434  
+435  
+436  
+437  
+438  
+439  
+440  
+441  
+442  
+443  
+444  
+445  
+446  
+447  
+448  
+449  
+450  
+451  
+452  
+453  
+454  
+455  
+456  
+457  
+458  
+459  
+460  
+461  
+462  
+463  
+464  
+465  
+466  
+467  
+468  
+469  
+470  
+471  
+472  
+473  
+474  
+475  
+476  
+477  
+478  
+479  
+480  
+481  
+482  
+483  
+484  
+485
+
+![Figure 4: Box plots showing Zero-shot Hits@1 and Zero-shot MRR for different numbers of graph domains (1, 2, 3, 4). The models compared are NBFNet-cw, NBFNet-gaussian, NBFNet-structural, NBFNet-llm, NBFNet-normalized, and NBFNet-STAGE. In both plots, NBFNet-STAGE consistently achieves the highest performance, especially as the number of domains increases.](91be14371a97fb5ce9eeb29ae18d07c3_img.jpg)
+
+(a) Zero-shot hits@1
+(b) Zero-shot MRR
+
+Figure 4: Box plots showing Zero-shot Hits@1 and Zero-shot MRR for different numbers of graph domains (1, 2, 3, 4). The models compared are NBFNet-cw, NBFNet-gaussian, NBFNet-structural, NBFNet-llm, NBFNet-normalized, and NBFNet-STAGE. In both plots, NBFNet-STAGE consistently achieves the highest performance, especially as the number of domains increases.
+
+Figure 4: **STAGE’s zero-shot performance improves with more train domains, while this is not the case for other methods.** Zero-shot Hits@1 and MRR plots for different numbers of training graph domains. Box-plot distribution over all combinations of a fixed number of graph domains in the E-Commerce Stores Dataset and testing on the held-out domain, averaged over random seeds.
+
+**Results. Table 1** shows the zero-shot performance on H&M of our pretrained STAGE on E-Commerce Stores is virtually identical to its performance on the held-out E-Commerce Stores (0.46 vs. 0.46 on Hits@1). This highlights the robustness of STAGE to substantial domain shifts, as E-Commerce Stores mostly sells completely different products (household items, electronics, and shoes) from H&M (primarily clothing, very few shoes (Cuoghi, 2021)).
+
+Compared to the baselines, STAGE achieves a relative zero-shot out-of-domain Hits@1 improvement of 102% over the best baseline (NBFNet-llm) (0.46 vs. 0.23 Hits@1). Moreover, STAGE achieves a relative Hits@1 improvement of 201% against a supervised structural method trained and tested on H&M (STRUCTURAL-SUPERVISED). These substantial gains in this stress-test task highlights the ability of a pretrained STAGE to generalize to entirely new domains in zero-shot scenarios, demonstrating transfer learning capabilities that exceed that of the popular approach of encoding numerical features with LLMs. On MRR, STAGE leads with a score of 0.4703, surpassing the best baseline by 99%.
+
+### 4.3 ZERO-SHOT NODE CLASSIFICATION ON UNSEEN DOMAINS
+
+To confirm that our results are not specific to link prediction and E-Commerce tasks, we benchmark on a node classification task using the Pokec and Friendster datasets, where the goal is to predict the *gender* of each user. We train models on a sample of Friendster and evaluate zero-shot on Pokec. Appendix C presents details of this experiment.
+
+**Results.** Table 2 shows that STAGE achieves a 10.3% improvement over the best baseline (and significantly lower standard deviation), including the existing node classification foundation model GraphAny Zhao et al. (2024). This indicates that STAGE effectively captures feature dependencies also in node classification tasks.
+
+Table 2: Zero-shot test accuracy (higher is better) of STAGE and baselines on the pokec dataset, trained on a sample of Friendster. **STAGE demonstrates a gain of 10.88% in zero-shot test accuracy.** For GINE-age, models were trained and tested using only the shared *age* feature.
+
+| Model                    | Accuracy ( $\uparrow$ ) $\pm$ std    |
+|--------------------------|--------------------------------------|
+| GINE-structural          | $0.564 \pm 0.0466$                   |
+| GINE-gaussian            | $0.588 \pm 0.0250$                   |
+| GINE-normalized          | $0.541 \pm 0.0148$                   |
+| GINE-llm                 | $0.550 \pm 0.0368$                   |
+| GraphAny                 | $0.591 \pm 0.0083$                   |
+| <b>GINE-STAGE (Ours)</b> | <b><math>0.652 \pm 0.0042</math></b> |
+
+### 4.4 GENERALIZATION WHEN TRAINING ON MULTIPLE DOMAINS
+
+We now examine how STAGE improves performance if the number of training domains increases.
+
+**Results.** Figure 4a shows that STAGE’s zero-shot out-of-domain Hits@1 and MRR performance consistently improves as the number of training domains increases. This trend is unique to STAGE, indicating that it is the only method capable of learning generalizable patterns across many domains, enabling it to accurately zero-shot predict customer interest in new domains.
+
+**Discussion.** The superior performance of STAGE highlights its ability to generalize when node feature spaces vary significantly between train and test graphs. These results demonstrate that STAGE-
+
+{9}------------------------------------------------
+
+*edge-graphs* effectively encode dependencies between features and topology, making representations transferable across feature space domains. The consistent improvements show that ignoring node features or using generic embeddings can be insufficient for cross-domain generalization. [Appendix E](#) presents more results on ablation studies, confirming STAGE’s effectiveness on alternative GNN backbones and ability to leverage dependencies among unseen attributes on test domains.
+
+## 5 RELATED WORK
+
+A more comprehensive discussion of related work can be found in [Appendix G](#).
+
+**Graphs Generalization under Distribution Shifts.** Several works address distribution shifts between train and test graphs over the same feature space, such as [You et al. \(2022\)](#); [Zhu et al. \(2021b\)](#), which employ learned augmentations to mitigate distribution shift in node attributes. Meanwhile, extensive research has focused on domain adaptation for GNNs ([Dai et al., 2022](#); [Li et al., 2020](#); [Kong et al., 2022](#); [Pei et al., 2020](#); [Veličković et al., 2019](#); [Wiles et al., 2022](#); [Zhang et al., 2019](#); [Zhu et al., 2021a](#)), which typically assume access to data in both source and target domains. In contrast, our work tackles the more challenging scenario of zero-shot generalization to unseen attribute spaces.
+
+**Foundation Models for Graph Data.** Developing foundation models for graph data is a growing research interest, aiming to create versatile graph models capable of generalizing across different graphs and tasks ([Mao et al., 2024](#)). Initial efforts in this direction convert attributed graphs into texts and apply an LLM ([Liu et al., 2024](#); [Chen et al., 2024b;a](#); [Tang et al., 2024](#); [Zhao et al., 2023](#); [He & Hooi, 2024](#); [Huang et al., 2023](#)). However, while promising, this methodology risks information loss and may limit transferability ([Collins et al., 2024](#); [Gruver et al., 2024](#); [Schwartz et al., 2024](#)). In contrast, non-LLM approaches attempt to directly address domain transferability in the attribute space ([Xia & Huang, 2024](#); [Lachi et al., 2024](#); [Zhao et al., 2024](#)), or forgo the attributes entirely ([Gao et al., 2023](#); [Lee et al., 2023](#); [Galkin et al., 2024](#)). However, no definitive solution has emerged, and the search for a universal graph model for node feature domain shift remains an open challenge.
+
+**Maximal Invariants and Statistical Testing.** [Bell \(1964\)](#) first explored the relationship between invariant and almost-invariant tests in hypothesis testing. [Berk & Bickel \(1968\)](#) and [Berk \(1970\)](#) extended Bell’s approach to show that almost-invariant tests are equivalent to invariant ones under certain conditions, which are those met in our work. Later, [Berk et al. \(1996\)](#) explored the interplay between sufficiency and invariance in hypothesis testing by providing counterexamples that demonstrate how these concepts can differ significantly in other scenarios. More recently, [Koning & Hemerik \(2024\)](#) improves the efficiency of hypothesis testing under invariances for large transformation groups such as rotation or sign-flipping without resorting to sampling.
+
+## 6 CONCLUSION
+
+Designing graph models with the same intuitive flexibility as vision and language models is limited by the challenge of learning representations that are informative across diverse feature spaces, including new unseen concepts at test time. We tackle this challenge by proposing STAGE, a method designed for zero-shot generalization across graphs with distinct node feature spaces. STAGE provides a principled framework that learns embeddings by capturing how feature dependencies are structured within the graph topology, rather than feature values. STAGE shows strong empirical performance even under entirely new attribute spaces, unlike its natural baselines. We believe STAGE represents a meaningful advance in graph machine learning, paving the way for more universal pretrained models that generalize across diverse datasets while fully leveraging node attributes.
+
+**Limitations and Future Work.** While our method demonstrates scalability with respect to the number of nodes ([Appendix F](#)), it may encounter limitations when dealing with high-dimensional feature spaces. To address this challenge, various techniques can be explored, such as feature selection via association studies, which we identify as a promising direction for future research.
+
+Looking ahead, several avenues for further investigation emerge. These include extending our framework to accommodate multi-dimensional and multi-modal attributes, such as text and images, integrating large language models (LLMs) into the pipeline, and evaluating its performance on diverse domains, including biomedical and geospatial networks. Pursuing these directions will be a positive step towards realizing a robust graph foundation model for attributed graphs.
+
+ Rest of paper (reference and Appendix) is removed.

@@ -1,0 +1,320 @@
+
+
+{0}------------------------------------------------
+
+# MULTI-OBJECTIVE DIFFERENTIABLE NEURAL ARCHITECTURE SEARCH
+
+Rhea Sanjay Sukthanker<sup>1\*</sup>, Arber Zela<sup>1\*</sup>, Benedikt Staffler<sup>2</sup>, Samuel Dooley<sup>3</sup>,  
+Josif Grabocka<sup>4</sup>, Frank Hutter<sup>1,5</sup>
+
+<sup>1</sup> University of Freiburg, <sup>2</sup> Bosch Center for AI, <sup>3</sup> Meta,
+
+<sup>4</sup> University of Technology Nuremberg, <sup>5</sup> ELLIS Institute Tübingen
+
+## ABSTRACT
+
+Pareto front profiling in multi-objective optimization (MOO), i.e., finding a diverse set of Pareto optimal solutions, is challenging, especially with expensive objectives that require training a neural network. Typically, in MOO for neural architecture search (NAS), we aim to balance performance and hardware metrics across devices. Prior NAS approaches simplify this task by incorporating hardware constraints into the objective function, but profiling the Pareto front necessitates a computationally expensive search for each constraint. In this work, we propose a novel NAS algorithm that encodes user preferences to trade-off performance and hardware metrics, yielding representative and diverse architectures across multiple devices in just a single search run. To this end, we parameterize the joint architectural distribution across devices and multiple objectives via a hypernetwork that can be conditioned on hardware features and preference vectors, enabling zero-shot transferability to new devices. Extensive experiments involving up to 19 hardware devices and 3 different objectives demonstrate the effectiveness and scalability of our method. Finally, we show that, without any additional costs, our method outperforms existing MOO NAS methods across a broad range of qualitatively different search spaces and datasets, including MobileNetV3 on ImageNet-1k, an encoder-decoder transformer space for machine translation and a decoder-only space for language modelling.
+
+# 1 INTRODUCTION
+
+The ability to make good tradeoffs between predictive accuracy and efficiency (in terms of latency and/or energy consumption) has become crucial in an age of ever increasing neural networks complexity and size (Alabdulmohsin et al., 2023; Hoffmann et al., 2022; Kaplan et al., 2020; Zhai et al., 2022) and a plethora of embedded devices. However, finding the right trade-off remains a challenging task that typically requires human intervention and a lot of trial-and-error across devices. With multiple conflicting objectives, it becomes infeasible to optimize all of them simultaneously and return a single solution. Ideally, NAS should empower users to choose from a set of diverse Pareto optimal solutions that represent their preferences regarding the trade-off between objectives.
+
+Neural Architecture Search (NAS) (White et al., 2023) provides a principled framework to search for network architectures in an automated fashion. Several works (Cai et al., 2020; Chen et al., 2021a; Elsken et al., 2019b; Wang et al., 2020b) have extended NAS for multi-objective optimization (MOO), considering performance and hardware efficiency metrics like latency and energy consumption. However, to the best of our knowledge, no existing gradient-based method returns the full Pareto front for the MOO problem at hand *without repeating their search routine multiple times with different hardware constraints*.
+
+In this work, we propose a scalable and hardware-aware **Multi-Objective Differentiable Neural Architecture Search (MODNAS)** algorithm that efficiently trains a single supernet which can be used to read off Pareto-optimal solutions for different user preferences and different target devices, without any additional search steps. To search across devices, we frame the problem as a multi-task, multi-objective optimization problem, where each task (device) has multiple (conflicting) objectives,
+
+\*Equal contribution. Email to: {sukthank, zela}@cs.uni-freiburg.de
+
+{1}------------------------------------------------
+
+![Figure 1: MODNAS overview diagram. The diagram illustrates the MODNAS architecture. On the left, a 'Dir(Φ)' block takes a scalarization vector r (r1, ..., rM) and a device embedding d_i[T] as input to a hypernetwork H_Φ(r, d_i). This outputs an un-normalized architectural distribution α̃. The 'Architect' block, labeled Λ(α̃), samples differentiable discrete architectural parameters α. These parameters are fed into a 'Supernet' block (Obj. 1), which contains a 'MixOp' node that combines different architectural options. The Supernet outputs a loss L_i^1[T]. Simultaneously, the architectural parameters α and device embeddings d_i[T] are fed into a 'MetaPredictor' block (Obj. 2). The MetaPredictor outputs a loss L_i^2[T] for each device. The MetaPredictor block is labeled p_i^M(α, d_i^M). The diagram also shows a list of devices (Device 1 to Device T) with their respective embeddings d_i[T]. On the right, an 'Update' block using Multiple Gradient Descent (MGD) updates the scalarization vector r. The update rule is: g_Φ^r = ∇_r L_Φ^1 + r_2 L_Φ^2 + ... + r_M L_Φ^M, and the update is g_Φ^r = ∑_{i=1}^T γ_i g_Φ^r. A legend defines the symbols: r_m: scalarizations f(·; w, a) : supernet; d_i^m: hw embedd. p_i^M(·) : predictor; L_i^m: loss H_Φ : hypernet; α, α̃: arch param.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 1: MODNAS overview diagram. The diagram illustrates the MODNAS architecture. On the left, a 'Dir(Φ)' block takes a scalarization vector r (r1, ..., rM) and a device embedding d\_i[T] as input to a hypernetwork H\_Φ(r, d\_i). This outputs an un-normalized architectural distribution α̃. The 'Architect' block, labeled Λ(α̃), samples differentiable discrete architectural parameters α. These parameters are fed into a 'Supernet' block (Obj. 1), which contains a 'MixOp' node that combines different architectural options. The Supernet outputs a loss L\_i^1[T]. Simultaneously, the architectural parameters α and device embeddings d\_i[T] are fed into a 'MetaPredictor' block (Obj. 2). The MetaPredictor outputs a loss L\_i^2[T] for each device. The MetaPredictor block is labeled p\_i^M(α, d\_i^M). The diagram also shows a list of devices (Device 1 to Device T) with their respective embeddings d\_i[T]. On the right, an 'Update' block using Multiple Gradient Descent (MGD) updates the scalarization vector r. The update rule is: g\_Φ^r = ∇\_r L\_Φ^1 + r\_2 L\_Φ^2 + ... + r\_M L\_Φ^M, and the update is g\_Φ^r = ∑\_{i=1}^T γ\_i g\_Φ^r. A legend defines the symbols: r\_m: scalarizations f(·; w, a) : supernet; d\_i^m: hw embedd. p\_i^M(·) : predictor; L\_i^m: loss H\_Φ : hypernet; α, α̃: arch param.
+
+Figure 1: **MODNAS overview.** Given a set of  $T$  devices, MODNAS seeks to optimize  $M$  (potentially conflicting) objectives across these devices. To this end, it employs a **MetaHypernetwork**  $H_\Phi(r, d_i)$ , that takes as input a scalarization  $r$ , representing the user preferences, and a device embedding  $d_i$ , to yield an un-normalized architectural distribution  $\tilde{\alpha}$ . The **Architect** uses  $\tilde{\alpha}$  to sample differentiable discrete architectures, used in the **SuperNetwork** to estimate accuracy and in the **MetaPredictor** to estimate the other  $M - 1$  loss functions (e.g. latency, energy consumption) for every device. By iterating over devices and sampling scalarizations uniformly from the  $M$ -dimensional simplex, at each iteration we update the **MetaHypernetwork** using multiple gradient descent (MGD).
+
+e.g., classification accuracy and latency. The user’s preferences are modelled by a *preference vector* that defines a scalarization (weighted sum), of the different objectives. This preference vector, along with features of the hardware of interest, is fed to a hypernetwork (Ha et al., 2017) that outputs continuous architectural parameters  $\alpha$ . To search in the space of architectures, we employ a one-shot model and a bi-level optimization scheme, as is typically done in gradient-based NAS. In our case, however, the upper-level parameters are the hypernetwork weights, optimized in expectation over different preference vectors and hardware devices via multiple gradient descent (Désidéri, 2012).
+
+To evaluate our method, we conduct experiments on multiple NAS search spaces, including CNN and Transformer architectures, and up to 3 objectives across 19 hardware devices. While other NAS methods that utilize hardware constraints in their search objectives require substantial search costs both for each new constraint and each new hardware, MODNAS addresses both in a zero-shot manner, without extra search cost, while yielding higher quality solutions.
+
+Our contributions can be summarized as follows:
+
+1. We present a principled approach for **Multi-objective Differentiable NAS**, that leverages *hyper-networks and multiple gradient descent* for fast Pareto-Front approximation across devices.
+2. This work is the *first* to provide a global view of the Pareto solutions with **just a single search run**, without the need to repeat search or fine-tune on new target devices.
+3. Extensive evaluation of our method across **4 different search spaces** (NAS-Bench-201, MobileNetV3, an encoder-decoder and a decoder-only Transformer space), **3 tasks** (image classification, machine translation and language modeling), and **up to 19 hardware devices and 3 objectives**, show both improved *efficiency and performance* in comparison to previous approaches that use a constrained objective in their search.
+
+To facilitate reproducibility, we provide our code in <https://github.com/automl/modnas>.
+
+# 2 BACKGROUND AND RELATED WORK
+
+In this section, before describing our algorithm, we introduce some basic concepts, definitions and related work. Refer to Appendix J for an extended related work.
+
+**Multi-objective optimization (MOO) for Multi-Task Learning.** Consider a multi-task dataset  $\mathcal{D}$  consisting of  $N$  instances, where the feature vector of the  $i$ -th instance is denoted as  $x_i \in \mathcal{X}$ , and the  $M$ -many associated target variables as  $y_i^1 \in \mathcal{Y}^1, \dots, y_i^M \in \mathcal{Y}^M$ . Moreover, consider there exists a family of parametric models  $f(x; w) : \mathcal{X} \rightarrow \{\mathcal{Y}^1 \times \dots \times \mathcal{Y}^M\}$ , parameterized by  $w$ , that maps the input  $x$  to the joint space of the multiple tasks. To simplify the notation, we denote the prediction of the  $m$ -th task as  $f^m(x; w) : \mathcal{X} \rightarrow \mathcal{Y}^m$ , and the respective loss  $\mathcal{L}^m(w) \triangleq \frac{1}{N} \sum_i \ell^m(y_i^m, f^m(x_i; w))$ . The vector of the values of all loss functions is denoted as  $\mathbf{L}(w) \triangleq (\mathcal{L}^1(w), \dots, \mathcal{L}^M(w))$ . MOO
+
+{2}------------------------------------------------
+
+then seeks to find a set of Pareto-optimal solutions  $w^*$  that jointly minimize  $\mathbf{L}(w)^1$ :
+
+$$w^* \in \operatorname{argmin}_w \mathbf{L}(w) \quad (1)$$
+
+**Definition 2.1.** (Pareto Optimality): A solution  $w_2$  dominates  $w_1$  iff  $\mathcal{L}^m(w_2) \leq \mathcal{L}^m(w_1), \forall m \in \{1, \dots, M\}$ , and  $\mathbf{L}(w_1) \neq \mathbf{L}(w_2)$ . In other words, a dominating solution has a lower loss value on at least one task and no higher loss value on any task. A solution  $w^*$  is called *Pareto optimal* iff there exists no other solution dominating  $w^*$ .
+
+**Definition 2.2.** (Pareto front): The sets of Pareto optimal points and their function values are called *Pareto set* ( $\mathcal{P}_w$ ) and *Pareto front* ( $\mathcal{P}_L = \{\mathbf{L}(w)_{w \in \mathcal{P}_w}\}$ ), respectively.
+
+**Linear Scalarization.** In MOO, a standard technique to solve the  $M$ -dimensional problem is using a preference vector  $r \in \mathcal{S} \triangleq \{\mathbb{R}^M \mid \sum_{m=1}^M r_m = 1, r_m \geq 0, \forall m \in \{1, \dots, M\}\}$  in the  $M$ -dimensional probability simplex (Lin et al., 2019; Mahapatra & Rajan, 2020; Ruchte & Grabocka, 2021). Every  $r \in \mathcal{S}$  yields a convex combination of the loss functions in Equation 1 as  $\mathcal{L}_r(w) = r^T \mathbf{L}(w)$ . Given a preference vector  $r$ , one can apply standard, single-objective optimization algorithms to find a minimizer  $w_r^* = \operatorname{argmin}_w \mathcal{L}_r(w)$ . By sampling multiple  $r$  vectors, one can compute Pareto-optimal solutions  $w_r^*$  that profile the Pareto front. Several methods (Hoang et al., 2023; Lin et al., 2020; Navon et al., 2021; Phan et al., 2022) employ a hypernetwork (Ha et al., 2017) to generate Pareto-optimal solutions given different preference vectors as input. In this work, we utilize a hypernetwork conditioned on scalarizations to generate Pareto-optimal architectures. Furthermore, we also extend the hypernetwork by conditioning it on different task vectors.
+
+**Multiple Gradient Descent (MGD).** MOO can be solved to local optimality via MGD (Désidéri, 2012), as a natural extension of single-objective gradient descent, which iteratively updates  $w$  towards a direction that ensures that all tasks improve simultaneously (called *Pareto improvement*):  $w' \leftarrow w - \xi g_w^*$ , where  $g_w^*$  is a vector field that needs to be determined. If we denote by  $g_w^m = \nabla_w \mathcal{L}^m(w)$  the gradient of the  $m$ -th scalar loss function, via Taylor approximation, the decreasing direction of  $\mathcal{L}^m$  when we update  $w$  towards  $g_w^*$  is given by  $\langle g_w^m, g_w^* \rangle \approx -(\mathcal{L}^m(w') - \mathcal{L}^m(w))/\xi$ . In MGD  $g_w^*$  is chosen to maximize the slowest update rate among all objectives:
+
+$$g_w^* \propto \operatorname{argmax}_{g_w \in \mathbb{R}^d, \|g_w\| \leq 1} \left\{ \min_{m \in [M]} \langle g_w, g_w^m \rangle \right\}. \quad (2)$$
+
+The early work of Désidéri (2012) has been extended in various settings, particularly multi-task learning, with great promise (Lin et al., 2019; Liu & Vicente, 2021; Mahapatra & Rajan, 2020; Sener & Koltun, 2018), but these approaches are applied to mainly a fixed architecture and extending them to a supernet subsuming a search space of multiple architectures is non-trivial.
+
+**One-shot NAS and Bi-Level optimization.** With the architecture space being intrinsically discrete, large (often consisting of upto  $10^{36}$  architectures) and hence expensive to search on, most existing differentiable NAS approaches leverage the weight sharing paradigm and continuous relaxation to enable gradient descent (Bender et al., 2018; Chen et al., 2021b; Dong & Yang, 2019; Liu et al., 2019b; 2023; Movahedi et al., 2022; Pham et al., 2018; Xie et al., 2019; Xu et al., 2020a; Zhang et al., 2021). Typically, in these approaches, architectures are stacks of cells, where the cell structure is represented as a directed acyclic graph (DAG) with  $N$  nodes and  $E$  edges. Every transition from node  $i$  to  $j$ , i.e., edge  $(i, j)$ , is associated with an operation  $o^{(i,j)} \in \mathcal{O}$ , where  $\mathcal{O}$  is a predefined candidate operation set. Liu et al. (2019b) proposed a continuous relaxation of the search space by parameterizing the discrete operation choices in the DAG edges via a learnable vector  $\alpha$ . This enables framing the NAS problem as a bi-level optimization one, with differentiable objectives w.r.t. all variables:
+
+$$\operatorname{argmin}_\alpha \mathcal{L}^{val}(w^*(\alpha), \alpha) \quad s.t. \quad w^*(\alpha) = \operatorname{argmin}_w \mathcal{L}^{train}(w, \alpha), \quad (3)$$
+
+where  $\mathcal{L}^{train}$  and  $\mathcal{L}^{val}$  are the empirical losses on the training and validation data, respectively,  $w$  are the supernetwork parameters,  $\alpha \in \mathcal{A}$  are the continuous architectural parameters, and  $w^*(\alpha) : \mathcal{A} \rightarrow \mathbb{R}^d$  is a best response function that maps architectures to their optimal weights.
+
+**Comparison to single-objective constrained NAS.** Early NAS methods predominantly targeted high accuracy, whereas contemporary hardware-aware differentiable NAS approaches (Cai et al., 2018; Fu
+
+<sup>1</sup> $w$  can be replaced with any other parameter here, also architectural ones (see Section 3).
+
+{3}------------------------------------------------
+
+et al., 2020; Jiang et al., 2021; Wan et al., 2020; Wang et al., 2021; Wu et al., 2019; 2021; Xu et al., 2020b) are designed to identify architectures optimized for target hardware efficiency. Typically, these methods integrate hardware constraints within their objectives, yielding a single optimal solution and necessitating multiple search iterations to construct the Pareto front. Our proposed algorithm addresses this by profiling the entire Pareto front in a *single search iteration*. While single-objective constrained optimization is advantageous in scenarios demanding optimization of one objective under a specific constraint, practical applications often require a suite of models adaptable to varying user preferences even on a single device. Our efficient Pareto-front approximation algorithm provides such a suite of optimal models to choose from.
+
+# 3 HARDWARE-AWARE MULTI-OBJECTIVE DIFFERENTIABLE NEURAL ARCHITECTURE SEARCH
+
+We first formalize the multi-objective bi-level optimization NAS problem across multiple hardware devices, and then introduce a scalable and differentiable method that combines MGD with linear scalarizations to efficiently solve this problem.
+
+## 3.1 PROBLEM DEFINITION & SKETCH OF SOLUTION APPROACH
+
+In multi-objective NAS, the bi-level problem described in Equation 1 becomes more difficult, since we are not only concerned with finding  $\mathbf{w}^*$  given a fixed architecture, but we want to optimize in the space of architectures  $\mathcal{A}$  as well. Assuming we have  $T$  hardware devices (target functions) and  $M$  objectives (e.g. accuracy, latency, etc.), similar to (3), for every  $t \in \{1 \dots T\}$ , the Pareto set can be obtained by solving the following bi-level optimization problem:
+
+$$\operatorname{argmin}_{\alpha} \mathbf{L}_t^{valid}(\mathbf{w}^*(\alpha), \alpha) \quad s.t. \quad \mathbf{w}^*(\alpha) = \operatorname{argmin}_{\mathbf{w}} \mathbf{L}_t^{train}(\mathbf{w}, \alpha), \quad (4)$$
+
+where the  $M$ -dimensional loss vector  $\mathbf{L}_t(\mathbf{w}^*(\alpha), \alpha) \triangleq (\mathcal{L}_1^t(\mathbf{w}^*(\alpha), \alpha), \dots, \mathcal{L}_M^t(\mathbf{w}^*(\alpha), \alpha))$  is evaluated  $\forall t \in \{1, \dots, T\}$ .  $\mathbf{L}_t^{train}$  and  $\mathbf{L}_t^{valid}$  are the vectors with all  $M$  loss functions evaluated on the train and validation splits of  $\mathcal{D}$ , used in the lower- and upper-level problems of (4), respectively.
+
+Our goal is to find Pareto-optimal architectures for each target device, covering diverse and representative preferences for different objectives. However, naively solving (4) for each device  $t$  requires  $T$  independent bi-level searches, making this very inefficient for large models. To overcome this, we incorporate a single hypernetwork within the one-shot model (supernetwork) commonly used in conventional NAS (Bender et al., 2018; Liu et al., 2019b; Pham et al., 2018). This allows us to generate architectures based on device embeddings and preference vectors in just *one search run*, reducing the search cost from  $\mathcal{O}(T)$  to  $\mathcal{O}(1)$ .
+
+### 3.2 ALGORITHM DESIGN AND COMPONENTS
+
+Our search procedure is composed of four core modular components (see Figure 1): (1) a MetaHypernetwork that generates the architectural distribution; (2) an Architect that samples discrete architectures from this distribution; (3) a Supernetwork that exploits the weight-sharing paradigm for search efficiency and serves as a proxy for the network accuracy; and (4) a MetaPredictor that predicts hardware metrics and enables gradient propagation back to the MetaHypernetwork. We now discuss each of these in detail.
+
+**MetaHypernetwork.** In order to generate architectures across multiple devices, inspired by Wang et al. (2022) and Lin et al. (2020), we propose a MetaHypernetwork that can meta-learn across different hardware devices (see Figure 2). Hypernetworks are a class of neural networks that generate the parameters of another model. They were initially proposed for model compression (Ha et al., 2017) and were later adopted for NAS (Brock et al., 2018) and MOO (Lin et al., 2020; Navon et al., 2021). Here, given a preference vector  $\mathbf{r} = (r_1, \dots, r_M)$  and a hardware device feature vector  $d_t$ , for
+
+![Figure 2: Architecture overview of the MetaHypernetwork. The diagram shows an input d_t entering an embedding layer E. The output of E is multiplied element-wise (indicated by a circle with an 'x') with a scalarization r. The result is then summed (indicated by a circle with a '+') to produce an architecture encoding alpha_tilde. This encoding is passed to K hypernetworks (labeled hpn_1, hpn_2, ..., hpn_K), which output parameters alpha_1_tilde, alpha_2_tilde, ..., alpha_K_tilde. The final output is a preference vector r.](f5e131a3fffe09aa98db055df84e4378_img.jpg)
+
+Figure 2: Architecture overview of the MetaHypernetwork. The diagram shows an input d\_t entering an embedding layer E. The output of E is multiplied element-wise (indicated by a circle with an 'x') with a scalarization r. The result is then summed (indicated by a circle with a '+') to produce an architecture encoding alpha\_tilde. This encoding is passed to K hypernetworks (labeled hpn\_1, hpn\_2, ..., hpn\_K), which output parameters alpha\_1\_tilde, alpha\_2\_tilde, ..., alpha\_K\_tilde. The final output is a preference vector r.
+
+Figure 2: Architecture overview of the MetaHypernetwork, which gets as input a device embedding  $d_t$  (input to an embedding layer E) and a scalarization  $\mathbf{r}$  (input to K hypernetworks) and yields an architecture encoding  $\tilde{\alpha}$ .
+
+{4}------------------------------------------------
+
+device  $t \in \{1, \dots, T\}$ , we use the **MetaHypernetwork**  $H_\Phi(\mathbf{r}, d_t)$ , parameterized by  $\Phi$ , to generate an un-normalized architecture distribution  $\tilde{\alpha}_\Phi$  that is later used to compute the upper-level updates in (4). Similar to Lee et al. (2021b),  $d_t$  is a fixed-size feature vector that is obtained by evaluating a fixed set of reference architectures on device  $t$ . The **MetaHypernetwork** is composed of 2 main components (see Figure 2):
+
+1. A bank of  $K$  independent hypernetworks:  $\text{hpn}_1, \dots, \text{hpn}_K$ , that parse the preference vector  $\mathbf{r}$  and generate the architectural parameters  $\tilde{\alpha}_1, \dots, \tilde{\alpha}_K$ , respectively.
+2. A linear layer  $E$ , that learns a similarity map from device feature vectors to the bank of hpns.  $E$  takes as input the device feature vector  $d_t$  and outputs an attention vector of size  $K$ .
+
+The final output,  $\tilde{\alpha}_\Phi$ , of the **MetaHypernetwork** is computed as a weighted sum of the outputs of the  $K$  hypernetworks, where the vector of weights is the output of the linear layer  $E$ . For a more detailed description of the **MetaHypernetwork** we refer the reader to Appendix D.2.
+
+In all experiments, we initialize the **MetaHypernetwork** to yield a uniform probability mass over all architectural parameters for all scalarizations and device embeddings. By using the preference vector  $\mathbf{r}$  to create a linear scalarization of  $L_t$  and the **MetaHypernetwork** to model the architectural distribution across  $T$  devices, the bi-level problem in (4) reduces to:
+
+$$\argmin_{\alpha_\Phi} \mathbb{E}_{\mathbf{r} \sim S} [\mathbf{r}^\top L_t^{\text{valid}}(\mathbf{w}^*(\alpha_\Phi), \alpha_\Phi)] \quad \text{s.t.} \quad \mathbf{w}^*(\alpha_\Phi) = \argmin_{\mathbf{w}} \mathbb{E}_{\mathbf{r} \sim S} [\mathbf{r}^\top L_t^{\text{train}}(\mathbf{w}, \alpha_\Phi)], \quad (5)$$
+
+where  $\alpha_\Phi$  are the normalized architectural parameters obtained from the Architect  $\Lambda(\tilde{\alpha}_\Phi)$  and  $\mathbf{r}^\top L_t(\cdot, \alpha_\Phi) = \sum_{m=1}^M r_m \mathcal{L}_t^m(\cdot, \alpha_\Phi)$  is the scalarized loss for device  $t$ . Conditioning the **MetaHypernetwork** on the hardware embeddings allows us to generate architectures on new test devices without extra finetuning or meta-learning steps. Intuitively, the **MetaHypernetwork**, learns to map the new test device, to the most similar device, in its learnt bank of embeddings (see also Figure 12 in the appendix). We use the *Dirichlet* distribution  $\text{Dir}(\beta)$ ,  $\beta = (\beta_1, \dots, \beta_M)$ , to sample the preference vectors and approximate the expectation over the scalarizations using Monte Carlo sampling. In our experiments, we set  $\beta_1 = \dots = \beta_M = 1$ , for a uniform sampling over the  $(M-1)$ -simplex, however, one can set these differently based on user priors or make it a learnable parameter (Chen et al., 2021b).
+
+**MetaPredictor.** For the cheap-to-evaluate hardware objectives, such as latency, energy consumption, we employ a regression model  $p_\theta^m(\alpha, d_t^m)$  that predicts the target labels  $y_\theta^m$  for objective  $m$  and device  $t$ , given an architecture  $\alpha$  and device embedding  $d_t^m$ . We use the same predictors as Lee et al. (2021b) and optimize the MSE loss:  $\min_{\theta} \mathbb{E}_{\alpha \sim \mathcal{A}, t \sim [T]} (y_\theta^m - p_\theta^m(\alpha, d_t^m))^2$ , as done in Lee et al. (2021a) for meta-learning performance metrics across datasets. In our experiments, we pretrain a separate **MetaPredictor** for every hardware objective  $m$  (e.g. latency, energy, etc.) on a subset of  $(\alpha, y_\theta^m)$  pairs, and use its predicted value directly in (5) as  $\mathcal{L}_t^m(\cdot, \alpha_\Phi) = p_\theta^m(\alpha_\Phi, d_t^m)$ . Since the **MetaPredictor** is in principle a small neural network this pretraining step is inexpensive. During search, we freeze and do not further update the **MetaPredictor** parameters  $\theta$ .
+
+**Supernetwork.** For expensive objectives like neural network classification accuracy, we use a **Supernetwork** that encodes the architecture space and shares parameters between architectures,
+
+#### --- **Algorithm 1: MODNAS** ---
+
+**Data:**  $D_{\text{train}}, D_{\text{eval}}$ : Supernetwork; device features  $\{d_t\}_{t=1}^T$ : **MetaHypernetwork**  $H_\Phi$ ; nr. of objectives  $M$ : Architect  $\Lambda$ ; learning rates  $\xi_1, \xi_2$ .
+
+```
+
+1 while not converged do
+2   for  $t \in \{1, \dots, T\}$  do
+3     Sample scalarization  $\mathbf{r} \sim \text{Dir}(\beta)$ 
+4     Set arch params  $\tilde{\alpha}_\Phi \leftarrow H_\Phi(\mathbf{r}, d_t)$ 
+5     Sample  $\alpha_\Phi \sim \Lambda(\tilde{\alpha}_\Phi)$  from Architect
+6      $g_\Phi^t \leftarrow \sum_{m=1}^M r_m \nabla_\Phi \mathcal{L}_t^m(D_{\text{eval}}; \mathbf{w}, \alpha_\Phi)$ 
+7    $\gamma \leftarrow \text{FrankWolfeSolver}(g_\Phi^1, \dots, g_\Phi^T)$ ; // Alg.4
+8    $g_\Phi^* \leftarrow \sum_{t=1}^T \gamma_t \cdot g_\Phi^t$ 
+9    $\Phi \leftarrow \Phi - \xi_1 \cdot g_\Phi^*$ ; // update MetaHypernetwork
+10  for  $t \in \{1, \dots, T\}$  do
+11    Sample scalarization  $\mathbf{r} \sim \text{Dir}(\beta)$ 
+12    Set arch params  $\tilde{\alpha}_\Phi \leftarrow H_\Phi(\mathbf{r}, d_t)$ 
+13    Sample  $\alpha_\Phi \sim \Lambda(\tilde{\alpha}_\Phi)$  from Architect
+14     $g_w^t \leftarrow \sum_{m=1}^M r_m \nabla_w \mathcal{L}_t^m(D_{\text{train}}; \mathbf{w}, \alpha_\Phi)$ 
+15     $g_w^* \leftarrow \frac{1}{T} \sum_{t=1}^T g_w^t$ 
+16     $\mathbf{w} \leftarrow \mathbf{w} - \xi_2 \cdot g_w^*$ ; // update Supernetwork
+17  return  $H_\Phi$ 
+
+```
+
+---
+
+{5}------------------------------------------------
+
+providing a best response function  $w^*(\alpha_\Phi)$  for the scalarized loss in (5). While any parametric model could estimate this function, such as performance predictors (Lee et al., 2021a), this requires an expensive prior step of creating the training dataset for the predictor, by training architectures from scratch. To reduce memory costs of Supernetwork training, we: (1) use a one-hot encoding of  $\alpha_\Phi$  for differentiable architecture sampling (Cai et al., 2018; Dong & Yang, 2019; Xie et al., 2019), activating only one architecture per step, and (2) entangle operation choice parameters in the Supernetwork, further increasing memory efficiency of the supernetwork beyond weight sharing (Sukthanker et al., 2023).
+
+**Architect.** The Architect  $\Lambda(\tilde{\alpha})$  samples discrete architectural configurations from the unnormalized distribution  $\tilde{\alpha}_\Phi = H_\Phi(r, d_t)$  and enables gradient estimation through discrete variables for  $\nabla_\Phi \mathbf{L}_t(\cdot, \alpha_\Phi)$ . Methods such as GDAS (Dong & Yang, 2019) utilize the Straight-Through Gumbel-Softmax (STGS) estimator (Jang et al., 2017), that integrates the Gumbel reparameterization trick to approximate the gradient. Here we employ the recently proposed *ReinMax* estimator (Liu et al., 2023), that yields second-order accuracy without the need to compute second-order derivatives. See Appendix A.1 for more details on these discrete samplers. Similar to the findings in Liu et al. (2023), in our initial experiments, ReinMax outperforms the GDAS’ STGS estimator (see Figure 15 in the Appendix), therefore, we use ReinMax in all experiments that follow.
+
+## 3.3 OPTIMIZING THE MetaHypernetwork VIA MGD
+
+We denote the gradient of the scalarized loss in (5) with respect to the MetaHypernetwork parameters  $\Phi$ , shared across all devices  $t \in 1, \dots, T$ , as:  $g_\Phi^t = r^T \nabla_\Phi \mathbf{L}_t(\cdot, \alpha_\Phi) = \sum_{m=1}^M r_m \nabla_\Phi \mathbf{L}_t^m(\cdot, \alpha_\Phi)$ , where  $\alpha_\Phi$  is the discrete architectural sample from the Architect  $\Lambda(\tilde{\alpha}_\Phi)$ . Multiple Gradient Descent (MGD) (Désidéri, 2012; Sener & Koltun, 2018) provides a plausible approach to estimate the update directions for every task simultaneously by maximizing (2). Via the Lagrangian duality, the optimal solution to equation 2 is  $g_\Phi^* \propto \sum_{t=1}^T \gamma_t^* g_\Phi^t$ , where  $\{\gamma_t^*\}_{t=1}^T$  is the solution of the following minimization problem:
+
+$$\min_{\gamma_1, \dots, \gamma_T} \left\{ \left\| \sum_{t=1}^T \gamma_t g_\Phi^t \right\|_2^2 \mid \sum_{t=1}^T \gamma_t = 1, \gamma_t \geq 0, \forall t \right\}$$
+
+The solution to this problem is either 0 or, given a small step size  $\xi$ , a descent direction that monotonically decreases all objectives at the same time and terminates when it finds a Pareto stationary point, i.e.  $g_\Phi^* = 0, \forall t \in \{1, \dots, T\}$ . When  $T = 2$ , the problem above simplifies to  $\min_{\gamma \in [0,1]} \left\| \gamma g_\Phi^1 + (1-\gamma) g_\Phi^2 \right\|_2^2$ , which is a quadratic function of  $\gamma$  with a closed form solution:
+
+$$\gamma^* = \max \left( \min \left( \frac{(g_\Phi^2 - g_\Phi^1)^T g_\Phi^2}{\|g_\Phi^2 - g_\Phi^1\|_2^2}, 1 \right), 0 \right).$$
+
+When  $T > 2$ , we utilize the *Frank-Wolfe* solver (Jaggi, 2013) as in Sener & Koltun (2018), where the analytical solution in for  $T = 2$  is used inside the line search. We provide the full algorithm to compute  $\gamma^*$  in Algorithm 4 in Appendix A.3.
+
+In Algorithm 1 and Figure 1 we provide the pseudocode and an illustration of the overall search phase of MODNAS. For every mini-batch sample from  $\mathcal{D}_{valid}$ , we iterate over the device features  $d_t$  (line 2), sample one scalarization  $r$  and condition the MetaHypernetwork on both  $r$  and  $d_t$  to generate the un-normalized architectural distribution  $\tilde{\alpha}_\Phi$  (lines 3-4). We then compute the device-specific gradient in line 6 which is used to estimate the  $\gamma$  coefficients (line 7) used from MGD to update  $\Phi$  (lines 8-9). Similarly to Liu et al. (2019b), we use the first-order approximation to obtain the best
+
+![Figure 3: Hypervolume (HV) of MODNAS and baselines across 19 devices on NAS-Bench-201. The radar plot shows performance across 19 devices: samsung_s20, samsung_s21, samsung_s22, samsung_s23, samsung_s24, samsung_s25, samsung_s26, samsung_s27, samsung_s28, samsung_s29, samsung_s30, samsung_s31, samsung_s32, samsung_s33, samsung_s34, samsung_s35, samsung_s36, samsung_s37, samsung_s38. The plot compares MODNAS (red line with circles) against several baselines: CMA-ES+LaMOO (yellow), MO-ASHA (magenta), qEHVI (blue), RS (light blue), CMA-ES (orange), RS-BO (dark blue), NSGA-II (brown), RHPN (green), LS (purple), and Global opt. (black dashed line). MODNAS consistently achieves higher hypervolume across most devices, indicating better performance.](29ac39bfd74e57a92045649f83cad949_img.jpg)
+
+Figure 3: Hypervolume (HV) of MODNAS and baselines across 19 devices on NAS-Bench-201. The radar plot shows performance across 19 devices: samsung\_s20, samsung\_s21, samsung\_s22, samsung\_s23, samsung\_s24, samsung\_s25, samsung\_s26, samsung\_s27, samsung\_s28, samsung\_s29, samsung\_s30, samsung\_s31, samsung\_s32, samsung\_s33, samsung\_s34, samsung\_s35, samsung\_s36, samsung\_s37, samsung\_s38. The plot compares MODNAS (red line with circles) against several baselines: CMA-ES+LaMOO (yellow), MO-ASHA (magenta), qEHVI (blue), RS (light blue), CMA-ES (orange), RS-BO (dark blue), NSGA-II (brown), RHPN (green), LS (purple), and Global opt. (black dashed line). MODNAS consistently achieves higher hypervolume across most devices, indicating better performance.
+
+Figure 3: Hypervolume (HV) of MODNAS and baselines across 19 devices on NAS-Bench-201. For every device, we optimize for 2 objectives, namely *latency (ms)* and *test accuracy* on CIFAR-10. For each method, metric and device we report the mean of 3 independent search runs. Higher area in the radar plot indicates better HV. Test devices are colored in red around the plot.
+
+{6}------------------------------------------------
+
+response function in the lower level (lines 10-14) and repeat the same procedure for the upper-level (lines 2-6), except now the Supernetwork weights  $w$  are updated with the mean gradient (line 15), over devices.
+
+# 4 EXPERIMENTS
+
+In this section, we firstly demonstrate the scalability and generalizability of our MODNAS approach on a NAS tabular benchmark (Section 4.1). Then, we validate MODNAS on larger search spaces for Machine Translation (Section 4.2), Image Classification and Language Modeling (Section 4.3).
+
+**Search Spaces and Datasets.** We evaluate MODNAS on 4 search spaces: (1) **NAS-Bench-201** (Dong & Yang, 2020; Li et al., 2021) with 19 devices and CIFAR-10 dataset; (2) **MobileNetV3** from Once-for-All (OFA) (Cai et al., 2020) with 12 devices and ImageNet-1k dataset; (3) **Hardware-Aware-Transformer (HAT)** (Wang et al., 2020b) on the machine translation benchmark WMT’14 En-De across 3 different hardware devices; (4) **HW-GPT-Bench** (Sukthanker et al., 2024) – a GPT-2 based search space used for language modeling on the OpenWebText (Gokaslan & Cohen, 2019) across 8 devices. We refer to Appendices E and F for more details on these search spaces.
+
+**Evaluation.** At test time, in order to profile the Pareto front with MODNAS on unseen devices, we sample 24 equidistant preference vectors  $r$  from the  $M$ -dimensional probability simplex and pass them through the pretrained MetaHypernetwork  $H_\phi(r, d_t)$  to get 24 architectures. Here the test device feature  $d_t$  is obtained similarly as for the train devices. See Figure 4 or an illustration.
+
+![Figure 4: Illustration of MODNAS inference. The diagram shows a 'Test Device: FPGA' being input into a 'MetaHPN' block. The MetaHPN block also receives '1) preference vectors' and '2) device type' as inputs. The output of the MetaHPN block is a plot showing 'Accuracy Preference' on the y-axis and 'Latency Preference' on the x-axis, with a dashed line representing the Pareto front. The plot includes several colored dots representing different architectures.](0236eff05bcb8f3a343ea7933aaa306b_img.jpg)
+
+Figure 4: Illustration of MODNAS inference. The diagram shows a 'Test Device: FPGA' being input into a 'MetaHPN' block. The MetaHPN block also receives '1) preference vectors' and '2) device type' as inputs. The output of the MetaHPN block is a plot showing 'Accuracy Preference' on the y-axis and 'Latency Preference' on the x-axis, with a dashed line representing the Pareto front. The plot includes several colored dots representing different architectures.
+
+Figure 4: Illustration of MODNAS inference.
+
+**Baselines.** We compare MODNAS against several baselines<sup>2</sup>, such as Random Search (RS), Local Search (LS) and various Evolutionary Strategy and Bayesian Optimization MOO methods. Please refer to Appendix B for a more comprehensive description of each of them. Furthermore, we also evaluate the MetaHypernetwork with randomly initialized weights (RHPN).
+
+**Metrics.** To assess the quality of the Pareto set solutions, we use the *hypervolume (HV)* indicator, which is a standard metric in MOO. Given a *reference point*  $\rho = [\rho^1, \dots, \rho^M] \in \mathbb{R}_+^M$  that is an upper bound for all objectives  $\{f^m(\cdot; w, \alpha)\}_{m=1}^M$ , i.e.  $\sup_a f^m(\cdot; w, \alpha) \leq \rho^m$ ,  $\forall m \in [M]$ , and a Pareto set  $\mathcal{P}_\alpha \subset \mathcal{A}$ ,  $\text{HV}(\mathcal{P}_\alpha)$  measures the region of non-dominated points bounded above from  $\rho$ :
+
+$$\lambda\left(\left\{q \in \mathbb{R}_+^M \mid \exists \alpha \in \mathcal{P}_\alpha : q \in \prod_{m=1}^M [f^m(\cdot; w, \alpha), \rho^m]\right\}\right),$$
+
+where  $\lambda(\cdot)$  is the Euclidean volume. HV can be interpreted as the total volume of the union of the boxes created by the Pareto front.
+
+![Figure 5: HV over number of evaluated architectures on NAS-Bench-201 of MODNAS and the blackbox MOO baselines on a test device. The plot shows 'Hypervolume' on the y-axis (ranging from 0.70 to 0.95) versus 'Num. evaluations' on the x-axis (ranging from 0 to 50). The legend includes: RS (blue dashed line), RHPN+LUNDO (orange dashed line), CMAS+LUNDO (green dashed line), CMAS (purple dashed line), LS (pink dashed line), NO-SHA (red dashed line), RLBO (blue dashed line), GSEB (orange dashed line), NO-RE (green dashed line), GEM (purple dashed line), NGKAT (red dashed line), and MODNAS (red dashed line with a star marker). MODNAS starts at a high hypervolume of approximately 0.94 and remains relatively stable, while other methods show lower hypervolumes that increase slightly over evaluations.](f6c63daa87b1f2bde4b871f3d540e85b_img.jpg)
+
+Figure 5: HV over number of evaluated architectures on NAS-Bench-201 of MODNAS and the blackbox MOO baselines on a test device. The plot shows 'Hypervolume' on the y-axis (ranging from 0.70 to 0.95) versus 'Num. evaluations' on the x-axis (ranging from 0 to 50). The legend includes: RS (blue dashed line), RHPN+LUNDO (orange dashed line), CMAS+LUNDO (green dashed line), CMAS (purple dashed line), LS (pink dashed line), NO-SHA (red dashed line), RLBO (blue dashed line), GSEB (orange dashed line), NO-RE (green dashed line), GEM (purple dashed line), NGKAT (red dashed line), and MODNAS (red dashed line with a star marker). MODNAS starts at a high hypervolume of approximately 0.94 and remains relatively stable, while other methods show lower hypervolumes that increase slightly over evaluations.
+
+Figure 5: HV over number of evaluated architectures on NAS-Bench-201 of MODNAS and the blackbox MOO baselines on a test device. For MODNAS we only do 24 full evaluations.
+
+## 4.1 SIMULTANEOUS PARETO SET LEARNING ACROSS 19 DEVICES AND ABLATIONS
+
+We firstly validate the scalability and learning capability of MODNAS by evaluating on the NAS-Bench-201 (Dong & Yang, 2020) cell-based convolutional space. Here we want to optimize both latency and classification accuracy on all devices. We utilize the same set of 19 heterogeneous devices as Lee et al. (2021b), from which we use 13 for search and 6 at test time. For the latency predictor, we use the one from HELP, namely a graph convolutional network (GCN), which we pretrain for 3 GPU hours on the ground truth latencies on the 13 search devices as described in Section 3. We run
+
+<sup>2</sup>For baselines, we use SyneTune (Salinas et al., 2022); <https://github.com/awslabs/syne-tune>
+
+{7}------------------------------------------------
+
+![Figure 7: Pareto front on Eyeriss (left) and HV across devices (right).](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 7 consists of two plots. The left plot is a Pareto front on Eyeriss, showing Normalized latency (y-axis, 0.0 to 0.8) versus Normalized error (x-axis, 0.0 to 0.8). The right plot is a radar chart showing HV across devices (Eyeriss, FPGA, NAS-Bench-201) for various latency constraints (0.2, 0.4, 0.6, 0.8, 1.0). The legend includes gold\_6226, Latency constraint, MODNAS, MODNAS (0.2), MODNAS (0.4), MODNAS (0.6), MODNAS (0.8), MODNAS (1.0), and MetaD2A+HELP.
+
+Figure 7: Pareto front on Eyeriss (left) and HV across devices (right).
+
+Figure 7: Pareto front on Eyeriss (left) and HV across devices (right) of MODNAS ran with various latency constraints on NAS-Bench-201. See Fig. 21 in Appendix H for all results.
+
+the MODNAS search (see Appendix D for more details on the search hyperparameters), as described in Algorithm 1, for 100 epochs (22 GPU hours on a single Nvidia RTX2080Ti) and show the HV in Figure 3 of the evaluated Pareto front in comparison to the baselines, for which we allocate the same search time budget across all devices equivalent to the MODNAS search + evaluation.
+
+Most notably, MODNAS consistently outperforms all other baselines across every device. For the baselines, we conduct 19 separate search runs (one for each device), whereas MODNAS leverages meta-learning to generate the Pareto set on each device using the same MetaHypernetwork in a single search run. Interestingly, the trained MODNAS attention-based MetaHypernetwork significantly outperforms the RHPN baseline in profiling the Pareto front, demonstrating its *effectiveness in optimizing across multiple devices and conflicting objectives simultaneously*. In Figure 20a in the Appendix, we compare MODNAS with additional baselines, running them at double the budget used for the experiments in Figure 3. Figure 5 (see Figure 23 in the appendix for all devices) shows that most baselines require more than twice the number of architecture evaluations to reach the same HV as MODNAS. Results show that MODNAS remains the top performer across hardware devices on average. Furthermore, in the appendix, Figure 20 presents radar plots for four additional metrics, and Figure 18 and 17 results on NB201 when optimizing CIFAR-100 accuracy and device latency.
+
+**Reliably learnt embeddings for hardware devices.** To demonstrate the effectiveness of our MetaHypernetwork in learning hardware device similarities, Figure 12 in the appendix shows K-means clustering of original and MetaHypernetwork embeddings, reduced via t-SNE. The MetaHypernetwork successfully clusters similar devices, confirming its efficacy.
+
+**MetaHypernetwork update schemes: robustness of MGD.** We compare the MGD update scheme for the MetaHypernetwork  $\Phi$  (line 9 in Alg. 1) against (1) the **mean** gradient over tasks:  $\Phi \leftarrow \Phi - \xi \frac{1}{T} \sum_{t=1}^T g_t^\Phi$ ; (2) **sequential** updates with all single tasks' gradients:  $\Phi \leftarrow \Phi - \xi g_t^\Phi, \forall t$ ; (3) single updates using gradients of **MC samples** over tasks:  $\Phi \leftarrow \Phi - \xi g_t^\Phi, t \sim \{1, \dots, T\}$ . Figure 6 (see Figure 24 in Appendix H for more results) shows the HV over search epochs for these schemes. MGD, by accounting for inter-task dependencies, achieves higher final HV, better anytime performance, and faster convergence than the other schemes.
+
+**Scalability to three objectives.** We show the scalability of MODNAS to 3 objectives, namely, accuracy, latency and energy consumption. For this experiment we use the FPGA and Eyeriss tabular energy usage values from HW-NAS-Bench (Li et al., 2021). In addition to the MetaPredictor for latency, we pretrain a second predictor on the energy usage objective. We then run MODNAS and the MOO baselines with the same exact settings as for 2 objectives. Results shown in Figure 8 indicate that MODNAS can scale to  $M > 2$  without additional search costs or hyperparameter tuning and yet achieves HV close to the global optimum front of the NAS-Bench-201 space.
+
+**MODNAS vs. constrained single-objective optimization.** To compare against single-objective NAS with hardware constraints in the objective, we run **MetaD2A+HELP** (Lee et al., 2021b). Since MetaD2A + HELP is not able to profile the Pareto front directly, we run the NAS search 24 times with
+
+![Figure 8: HV (left) and Pareto front (right) of MODNAS and baselines on FPGA with 3 normalized objectives.](f5e70cbe66e71e65b4ae4aa7816d266a_img.jpg)
+
+Figure 8 consists of two plots. The left plot is a bar chart showing HV (HyperVolume) for various baselines on FPGA. The right plot is a 3D Pareto front plot showing the trade-off between error, latency, and energy usage for MODNAS and baselines on FPGA. The legend includes gold\_6226, Latency constraint, MODNAS, MODNAS (0.2), MODNAS (0.4), MODNAS (0.6), MODNAS (0.8), MODNAS (1.0), and MetaD2A+HELP.
+
+Figure 8: HV (left) and Pareto front (right) of MODNAS and baselines on FPGA with 3 normalized objectives.
+
+Figure 8: HV (left) and Pareto front (right) of MODNAS and baselines on FPGA with 3 normalized objectives: error, latency and energy usage. HV is computed using the  $(1, 1, 1)$  reference point on the right 3D plot. See Fig. 16 for results on Eyeriss.
+
+![Figure 6: HV over search epochs of different gradient schemes in MODNAS.](635262c3456135a70f7585ae445951e7_img.jpg)
+
+Figure 6 is a line plot showing HyperVolume (y-axis, 0.60 to 0.95) versus Search Epochs (x-axis, 0 to 100). The legend includes MGD (red line), MC Sampling (orange line), Sequential (blue line), and Mean (green line). MGD shows the highest HyperVolume, followed by MC Sampling, Sequential, and Mean.
+
+Figure 6: HV over search epochs of different gradient schemes in MODNAS.
+
+Figure 6: HV over search epochs of different gradient schemes in MODNAS.
+
+{8}------------------------------------------------
+
+different constraints, which we compute by denormalizing the same 24 equidistant preference vectors we use to evaluate MODNAS. We also extend MODNAS to incorporate user prior constraints over the multiple objectives being optimized during search. Namely, we add a normalized constraint  $c^m$ , such that if the predicted value from the `MetaPredictor` during search satisfies this constraint, i.e.  $p_{\theta}^m(\alpha_{\phi}, d_{\phi}^m) \leq c^m$ , we remove the gradient w.r.t. to that objective in lines 6 and 14 of Algorithm 1. In Figure 7 (other devices in Figure 21) we can see that when increasing the latency constraint to 1 (only cross-entropy optimized), though the HV decreases, MODNAS returns Pareto sets with more performant architectures. `MetaD2A+HELP`, despite multiple search runs, prioritizes performance over diversity, resulting in less varied solutions.
+
+## 4.2 PARETO FRONT PROFILING ON TRANSFORMER SPACE
+
+To demonstrate its effectiveness beyond image classification and CNN spaces, we apply MODNAS to the hardware-aware Transformer (HAT) search space from Wang et al. (2020b) on the WMT’14 En-De (Jean et al., 2015; Macháček & Bojar, 2014) machine translation task. We pretrain the `MetaPredictor` (details in Appendix D.1) for 5 GPU hours on 2000 architecture samples from the search space and then conduct the search for 110 epochs (6 days on 8 NVIDIA RTX A6000 GPUs) using 2 search devices, adhering to the same hyperparameters as Wang et al. (2020b) to optimize for *latency* and *validation cross entropy loss*. We allocate to each baseline  $2.5\times$  more runtime budget than MODNAS, resulting in 1300 (RS-BO) to 6000 (MO-ASHA) total architecture evaluations, whereas MODNAS evaluates only 24 generated architectures. Details on the HAT search space and search hyperparameters are in Appendix E. We evaluate MODNAS on all 3 devices (2 search and 1 test) using the BLEU score, and results in Figure 9 show that MODNAS outperforms all baselines, achieving a higher hypervolume (left plot) of the generated Pareto fronts (right plot). For HAT, we evaluate the architectures provided in their paper. Additional results on other training devices and evaluation metrics are presented in Figures 28, 29 and 30 in the Appendix.
+
+![Figure 9: HV and Pareto fronts of MODNAS and baselines across devices on the HAT space. The left plot is a bar chart titled 'RaspberryPi-CPU' showing Hypervolume for various methods: RS, MO-RE, LS, NSGA-II, LS-BO, RS-BO, RS+MODNAS, qMPC, RMT, MODNAS, and HAT. MODNAS has the highest hypervolume. The right plot is a line graph titled 'RaspberryPi-CPU' showing the Pareto front of Hypervolume vs. Latency (ms) for the same methods. MODNAS (green line) achieves the highest hypervolume for a given latency.](891ff9b651838b7f59e9a1612a739e15_img.jpg)
+
+Figure 9: HV and Pareto fronts of MODNAS and baselines across devices on the HAT space. The left plot is a bar chart titled 'RaspberryPi-CPU' showing Hypervolume for various methods: RS, MO-RE, LS, NSGA-II, LS-BO, RS-BO, RS+MODNAS, qMPC, RMT, MODNAS, and HAT. MODNAS has the highest hypervolume. The right plot is a line graph titled 'RaspberryPi-CPU' showing the Pareto front of Hypervolume vs. Latency (ms) for the same methods. MODNAS (green line) achieves the highest hypervolume for a given latency.
+
+Figure 9: HV and Pareto fronts of MODNAS and baselines across devices on the HAT space.
+
+### 4.3 EFFICIENT DIFFERENTIABLE MOO STARTING FROM PRETRAINED SUPERNETWORKS
+
+**Image Classification on ImageNet-1k.** We now evaluate MODNAS on ImageNet-1k using the MobileNetV3 search space from Once-for-All (OFA) (Cai et al., 2020). For this experiment, we run MODNAS using 11 search (and 1 test) devices starting with the pretrained OFA supernetwork and run the search further for 1 day on 8 RTX2080Ti GPUs. During the search, we only update the `MetaHypernetwork` weights and keep the pretrained supernetwork weights frozen. Details on the search space and hyperparameters are in Appendices E and D.3. We use the simple MLP from Lee et al. (2021b) as our `MetaPredictor`, pretraining it for 6 hours on 5000 sampled architecture-latency pairs. To evaluate the 24 points generated by our `MetaHypernetwork` and baselines, we use the OFA pretrained supernetwork. Results in Figure 10 show that MODNAS achieves a higher average HV across all devices compared to baselines, which we run for 192 hours using the OFA pretrained accuracy predictor (see Figure 34 for all results and Figure 33 for the Pareto fronts).
+
+![Figure 10: Average HV of MODNAS and baselines across 12 devices on OFA space. The bar chart shows Hypervolume for methods: RS, LS, NSGA-II, LS-BO, RS-BO, RS+MODNAS, qMPC, RMT, MODNAS, and HAT. MODNAS has the highest average hypervolume.](0d5fdb87a392819c7d2e3b6230912a0b_img.jpg)
+
+Figure 10: Average HV of MODNAS and baselines across 12 devices on OFA space. The bar chart shows Hypervolume for methods: RS, LS, NSGA-II, LS-BO, RS-BO, RS+MODNAS, qMPC, RMT, MODNAS, and HAT. MODNAS has the highest average hypervolume.
+
+Figure 10: Average HV of MODNAS and baselines across 12 devices on OFA space. For every device we optimize for 2 objectives, namely *latency (ms)* and *test accuracy* on ImageNet-1k.
+
+**Comparison to Zero-Cost Proxies.** We also compare the HV of the Pareto front obtained by MODNAS to that produced by NSGA-II (Deb et al., 2002), which uses a zero-cost proxy (ZCP) (Abdelfattah et al., 2021) (we chose Zico (Li et al., 2023)) for performance estimation instead of the actual accuracy. Table 6 in the appendix presents the results of this experiment on two devices. As shown, despite its improved runtime efficiency, the ZCP-guided search underperforms compared to both the existing baselines and MODNAS, which optimize for accuracy directly.
+
+{9}------------------------------------------------
+
+**Language Modeling with GPT-2.** With the rapid growth of language model sizes, it is crucial to identify transformer variants that are efficient during inference (latency) while maintaining competitive performance. We apply MODNAS to the GPT-S space from HW-GPT-Bench (Sukthanker et al., 2024), which features a non-convex Pareto front between perplexity and hardware metric objectives. Using pretrained Supernetwork weights from HW-GPT-Bench, we conduct a single 6-hour search on 4 Nvidia A100 GPUs, optimizing for energy consumption (Wh) and perplexity across 8 different GPU devices. See Appendix D for details on the MetaHypernetwork architecture and search hyperparameters. The Supernetwork weights are kept frozen while updating the MetaHypernetwork. Figure 11 shows that, with the same time budget, MODNAS matches or surpasses other MOO baselines, demonstrating its effectiveness in optimizing beyond convex Pareto fronts.
+
+![Figure 11: Pareto front of MODNAS and baselines on the HW-GPT-Bench, A100 GPU. The plot shows Perplexity (Y-axis, 22.8 to 40.8) versus Energy (Wh) (X-axis, 0.2 to 0.5). MODNAS (red line with circles) starts at approximately (0.25, 40.8) and ends at (0.5, 22.8). Other methods shown include RS (blue line with circles), MOREA (orange line with circles), LS (green line with circles), NSGA2 (yellow line with circles), LSBO (purple line with circles), RSBO (dark blue line with circles), MOXNA (light blue line with circles), and eHVI (pink line with circles). MODNAS consistently achieves lower perplexity for the same energy consumption compared to the other methods.](7801d00a216dc4dc8a7d210dcb5fe3c5_img.jpg)
+
+Figure 11: Pareto front of MODNAS and baselines on the HW-GPT-Bench, A100 GPU. The plot shows Perplexity (Y-axis, 22.8 to 40.8) versus Energy (Wh) (X-axis, 0.2 to 0.5). MODNAS (red line with circles) starts at approximately (0.25, 40.8) and ends at (0.5, 22.8). Other methods shown include RS (blue line with circles), MOREA (orange line with circles), LS (green line with circles), NSGA2 (yellow line with circles), LSBO (purple line with circles), RSBO (dark blue line with circles), MOXNA (light blue line with circles), and eHVI (pink line with circles). MODNAS consistently achieves lower perplexity for the same energy consumption compared to the other methods.
+
+Figure 11: Pareto front of MODNAS and baselines on the HW-GPT-Bench, A100 GPU.
+
+## 4.4 COMPUTATIONAL COMPLEXITY
+
+Ignoring the cost to train final architectures in the Pareto set, methods like MetaD2A + HELP (Lee et al., 2021a;b) have a worst-case time complexity of  $\mathcal{O}(CT)$  to build the Pareto set, where  $T$  is the number of devices and  $C$  is the number of constraints. MODNAS reduces this to  $\mathcal{O}(1)$  by conditioning a single MetaHypernetwork on both device types and constraints. Methods like LEMONADE (Elskien et al., 2019a) and ProxylessNAS (Cai et al., 2018) apply constraints during the search phase, requiring an independent search per device. Black-box methods such as LEMONADE, NSGA-II (Deb et al., 2002), or qEHVI (Daulton et al., 2020) train  $\mathcal{O}(NT)$  architectures or a surrogate based on  $\mathcal{O}(N)$  architectures in the case of MetaD2A + HELP. In contrast, MODNAS and OFA have a cost of  $\mathcal{O}(1)$  as they train a single supernetwork. Although MODNAS iterates over  $T$  devices to compute  $g_n^*$  and  $g_m^*$ , Figure 25 in Appendix H.1 shows that MODNAS generalizes well on 17 test devices with only 2 search devices due to its meta-learning capabilities. See Tables 1 and 5 in the Appendix for more details.
+
+Table 1: Cost of MODNAS and other methods.  $N$  is the number of trained architectures during search,  $T$  the number of devices and  $C$  the number of constraints.
+
+| Method                                                 | Search Cost       | Pareto Set Build Cost |
+|--------------------------------------------------------|-------------------|-----------------------|
+| LEMONADE (Elskien et al., 2019a)                       | $\mathcal{O}(NT)$ | $\mathcal{O}(1)$      |
+| Blackbox MOO (Daulton et al., 2020; Zhao et al., 2022) | $\mathcal{O}(NT)$ | $\mathcal{O}(1)$      |
+| ProxylessNAS (Cai et al., 2018)                        | $\mathcal{O}(CT)$ | $\mathcal{O}(1)$      |
+| MetaD2A + HELP (Lee et al., 2021a;b)                   | $\mathcal{O}(N)$  | $\mathcal{O}(CT)$     |
+| OFA (Cai et al., 2020) + HELP (Lee et al., 2021b)      | $\mathcal{O}(1)$  | $\mathcal{O}(CT)$     |
+| <b>MODNAS (Ours)</b>                                   | $\mathcal{O}(1)$  | $\mathcal{O}(1)$      |
+
+# 5 CONCLUSIONS, BROADER IMPACT AND LIMITATIONS
+
+In this paper, we propose a novel hardware-aware differentiable NAS algorithm for profiling the Pareto front in multi-objective problems. In contrast to constraint-based NAS methods, ours can generate Pareto optimal architectures across multiple devices with a single hypernetwork that is conditioned on preference vectors encoding the trade-off between objectives. Experiments across various hardware devices (up to 19), objectives (accuracy, latency and energy usage), search spaces (CNNs and Transformers), and applications (classification, machine translation, language modeling) demonstrate the effectiveness and efficiency of our method.
+
+**Broader Impact.** In an era of large-scale models (e.g. foundation models), speeding up the search and training cost for inference-optimal neural architectures is an important aspect of responsible research (Cai et al., 2024; Muralidharan et al., 2024; Zhang et al., 2024). The main goal of this work is to improve the search costs, as well as the efficiency of the found architectures in terms of various hardware metrics, therefore reducing the energy consumption and  $\text{CO}_2$  footprint. The energy savings of these architectures will be amplified as they might be deployed on a large number of devices.
+
+**Limitations.** While our differentiable multi-objective search method shows promising results, there are potential limitations. MODNAS inherits challenges common to gradient-based search, such as the risk of failure without proper tuning or regularization (Zela et al., 2020). For example, gradients may favor one objective, leading to local optima that hinder exploration of the full Pareto front. Additionally, the method relies on differentiable proxies for objectives, which may not always align with ground truth values.
+
+ Rest of paper (reference and Appendix) is removed.

@@ -1,0 +1,347 @@
+
+
+{0}------------------------------------------------
+
+# MARKOVIAN COMPRESSION: LOOKING TO THE PAST HELPS ACCELERATE THE FUTURE
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+This paper deals with distributed optimization problems that use compressed communication to achieve efficient performance and mitigate the communication bottleneck. We propose a family of compression schemes in which operators transform vectors fed to their input according to a Markov chain, i.e., the stochasticity of the compressors depends on previous iterations. Intuitively, this should accelerate the convergence of optimization methods, as considering previous iterations seems more natural and robust. The compressors are implemented in the vanilla Quantized Stochastic Gradient Descent (QSGD) algorithm. To further improve efficiency and convergence rate, we apply the momentum acceleration method. We prove convergence results for our algorithms with Markovian compressors and show theoretically that the accelerated method converges faster than the basic version. The analysis covers non-convex, Polyak-Łojasiewicz (PL), and strongly convex cases. Experiments are conducted to demonstrate the applicability of the results to distributed data-parallel optimization problems. Practical results demonstrate the superiority of methods utilizing our compressors design over several existing optimization algorithms.
+
+## 1 INTRODUCTION
+
+The optimization problem is currently a key issue in many practical applications, such as optimization in neural network training, resource allocation in computational systems, and parameter tuning in algorithmic trading strategies.
+
+In addition, a variety of algorithms for optimization on a single device, such as SGD Robbins & Monro (1951), Adam Kingma & Ba (2014), Lion Yazdani & Jolai (2016), have emerged and been subjected to theoretical analysis. However, in the contemporary landscape of deep learning, there is an increasing trend towards adopting intricate and expansive models that pose significant training challenges. Prominent among these challenges are advanced deep learning frameworks for image analysis, sophisticated natural language processing structures akin to transformers Vaswani et al. (2017), and complex reinforcement learning methodologies designed for autonomous system operations Kiran et al. (2021). As a result, the training of such models has become impractical for execution on a single device due to their requirement for extensive data sets for training, which are unfeasible to store on a single device. Consequently, optimization algorithms have been specifically developed for distributed training Verbraeken et al. (2020); Chen et al. (2021). These methods utilize a large number of devices, with each one processing distinct data subsets and participating in an effective data exchange mechanism, thereby aiding in the training of these computationally intensive models. Thus, the problem of classical optimization evolves into a distributed optimization form:
+
+$$\min_{x \in \mathbb{R}^d} \left\{ f(x) := \frac{1}{n} \sum_{i=1}^n f_i(x) \right\}, \quad (1)$$
+
+where  $f_i$  is a function, located on a device  $i$ . This formulation encompasses not only distributed learning, where data is dispersed across multiple devices to expedite training and facilitate the storage of large amounts of data, but also extends to federated learning Konečný et al. (2016); Li et al. (2020); Kairouz et al. (2021), where data distribution is motivated by the architecture of the system itself, allowing for decentralized model training while maintaining data privacy and integrity across diverse devices.
+
+A downside of this approach manifests as the complexity associated with the transmission of large-scale data, a phenomenon often referred to as the "communication bottleneck" Gupta et al. (2021).
+
+{1}------------------------------------------------
+
+This bottleneck can significantly impede the efficiency of the system, particularly in scenarios involving extensive data exchange across distributed networks. The challenge intensifies in environments where the bandwidth is limited, requiring solutions to mitigate the impact of data transmission delays and ensure seamless data flow.
+
+The primary solution at present is the compression of transmitted information Bekkerman et al. (2011); Chlimbi et al. (2014); Alistarh et al. (2017), wherein not a whole package is sent, but rather a selected subset. This method involves strategically selecting and compressing the most informative segments of data for transmission. By doing this way, it significantly reduces the volume of data that needs to be communicated across the network, thereby alleviating the communication bottleneck.
+
+In recent times, a number of methods employing compression have been conceived and scrutinized Mishchenko et al. (2019); Gorbunov et al. (2021a); Richtárik et al. (2021). However, a lot of studies have utilized unbiased compression operators due to their simplicity and amenability to theoretical analysis. Such compression techniques, including methods as random sparsification and value rounding Nesterov (2012a); Alistarh et al. (2017); Horvath et al. (2022); Beznosikov et al. (2023a), fail to consider the integration of information conveyed in prior iterations. We hence highlight a potential research gap regarding the usage of previously transmitted data in compression operators and optimization algorithms.
+
+This omission raises the following research questions that we address in the paper:
+
+- *Is it possible to design compression operators that take into account information about what and how we forwarded in previous iterations?*
+- *What methods can we integrate this kind of compression operators into? How does it affect the convergence rate of the methods, both in theory and in practice?*
+- *Can the methods be made even more efficient, e.g., by using additional momentum acceleration techniques?*
+
+In our paper, we focus on compression-based methods that take into account information collected across multiple preceding iterations, employing what are termed as Markovian compression operators. To the best of our knowledge, this approach emerges as novel and unexplored in the existing literature.
+
+### 1.1 OUR CONTRIBUTIONS
+
+**New type of compression operators.** We introduce a novel type of compressors that utilizes stochasticity transmitted over several previous iterations. We refer to this type of compressors as Markovian, because the states of these compressors can be viewed as a Markov chain. We examine two invented examples of such compressors:  $\text{BanLast}(K, m)$  (Definition 5) and  $\text{KAWASAKI}(K, b, \pi_\Delta, m)$  (Definition 6). The first new compressor operates on a more intuitive basis: it works as random sparsification, but prohibits the transmission of coordinates that were sent in the previous  $K$  iterations. The latter functions in terms of probabilities: it reduces the likelihood of transmitting coordinates that appeared in previous iterations. The  $\text{KAWASAKI}(K, b, \pi_\Delta, m)$  compressor is more flexible and, in fact, modify the idea  $\text{BanLast}(K, m)$ , but it introduces two hyperparameters that will be discussed later in Section 2.1.
+
+**New algorithms.** The compression operators described above give rise to new methods that utilize them. In this context, our paper outlines a general framework based on Alistarh et al. (2017) for distributed gradient descent algorithms that employ Markovian compression operators (MQSGD, see Algorithm 1). Subsequently, to make this basic algorithm faster we apply the multiple momentum technique Nesterov (2012a) and obtain the accelerated method AMQSGD. The formulation of such an algorithm is detailed in Algorithm 2. The basic and accelerated methods are explored both theoretically and experimentally throughout the paper. Furthermore, experiments utilizing Markovian operators in the DIANA Mishchenko et al. (2019) and SGD with momentum algorithms are conducted in Section 3.
+
+**Strongly convex and non-convex cases.** Motivated by various applications primarily from machine learning, we provide the theoretical analysis in the strongly convex (Theorem 3) and non-convex/PL-condition (Theorem 2) cases of the target function  $f$ . Notably, we provide proper analysis for both setups with specific cases, which is rarely present in the field.
+
+**Numerical experiments.** We conduct experiments with Markovian compressors in a data-parallel setup for several optimization problems and datasets. In particular, we analyze the proposed MQSGD and AMQSGD, as well as the DIANA and SGD optimizers for distributed optimization. In all setups, we observe an acceleration of convergence for methods employing the  $\text{BanLast}$  and  $\text{KAWASAKI}$  compressors compared to the baseline random sparsification.
+
+{2}------------------------------------------------
+
+### 1.2 RELATED WORK
+
+**Compressed communications.** The use of compressed communications is a fairly well-known idea in distributed learning Seide et al. (2014). As soon as the main property of compressed messages is that they are much easier to transfer, it can be reached in different ways, such as by quantizing the entries of the input vector Alistarh et al. (2017); Mayekar & Tyagi (2019); Gandikota et al. (2020); Horváth et al. (2022), or by sparsifying it Richtárik & Takáč (2016); Alistarh et al. (2018), or even by combining these ideas Albaysony et al. (2020); Beznosikov et al. (2023a). However, all of the compression operators could be roughly Condat et al. (2023) separated into two large groups: *unbiased* and *biased*.
+
+The first group is much easier to analyze and is therefore more broadly represented in the literature. The basic method with unbiased compression was presented in Alistarh et al. (2017). Later this algorithms were modified using variance reduction technique with compression of gradient differences Mishchenko et al. (2019); Horváth et al. (2019); Gorbunov et al. (2021a) in order to improve the theoretical convergence guarantees. One can also note the works Gorbunov et al. (2019) and Khaled et al. (2020), where the authors developed a general theory for SGD-type methods with unbiased compression.
+
+On the other hand, our understanding of distributed optimization with biased compressors is more complicated. In particular, biased compression implies the use of error compensation techniques Stich et al. (2018). Distributed SGD with biased compression and linear rate of convergence in a multi-node setting was first introduced in Beznosikov et al. (2023a). In the meantime, other error compensation techniques are being actively developed, Lin et al. (2022); Richtárik et al. (2021). The last approach called EF21 was later studied in Fatkhullin et al. (2021), Gruntkowska et al. (2023).
+
+**Markovian stochasticity.** Another recent trend in the literature is to design algorithms that use Markovian stochastic processes instead of *i.i.d.* random variables in various ways. For instance, Duchi et al. (2012) introduced a version of the Mirror Descent algorithm that yields optimal convergence rates for non-smooth and convex problems. Later, Doan et al. (2020a); Dorfman & Levy (2023); Beznosikov et al. (2023b) studied first-order methods in the Markovian noise setting. Alternatively, token algorithms Hendriks (2022); Ayache et al. (2022) are also a popular area of research in Markovian stochasticity. In particular, Even (2023) obtained optimal rates of convergence, and Sun et al. (2022); Mao et al. (2019); Doan et al. (2020b) looked at the token algorithm from the angle of the Lagrangian duality and from variants of the ADMM method. At the same time, there exist particular results, e.g., Bresler et al. (2020), which provide a lower bound for the particular finite sum problems in the Markovian setting.
+
+Despite all of the above, to the best of our knowledge, there are currently no works that combine compressed data communications and Markovian stochasticity of the compressors.
+
+### 1.3 TECHNICAL PRELIMINARIES
+
+**Notations.** We use  $\langle x, y \rangle := \sum_{i=1}^d x_i y_i$  to denote standard inner product of vectors  $x, y \in \mathbb{R}^d$  and  $(x \odot y)_i = x_i y_i$  to denote Hadamard product of vectors  $x, y \in \mathbb{R}^d$ . We introduce  $l_2$ -norm of vector  $x \in \mathbb{R}^d$  as  $\|x\| := \sqrt{\langle x, x \rangle}$ . We define  $x^* \in \mathbb{R}^d$  as a point, where we reach the minimum in the problem (1). We also denote  $f^* > -\infty$  as a global (potentially not unique) minimum of  $f$ . We use a standard notation for  $(d-1)$ -dimensional simplex  $\Delta_d := \left\{ p \in \mathbb{R}^d \mid p_j \geq 0 \text{ and } \sum_{j=1}^d p_j = 1 \right\}$  and for a set of natural numbers  $\overline{1, n} := \{1, 2, \dots, n\}$ . We denote  $C_m^k$  as the binomial coefficient  $\binom{m}{k}$ .
+
+Throughout the paper, we assume that the objective functions  $f_i$  and the function  $f$  from (1) satisfy the following assumptions.
+
+**Assumption 1** ( $L_1$ -smooth). *Every function  $f_i$  is  $L_1$ -smooth on  $\mathbb{R}^d$  with  $L_1 > 0$ , i.e. it is differentiable and there exists a constant  $L_1 > 0$  such that for all  $x, y \in \mathbb{R}^d$  it holds that  $\|\nabla f_i(x) - \nabla f_i(y)\|^2 \leq L_1^2 \|x - y\|^2$ . We define  $L^2 := \frac{1}{n} \sum_{i=1}^n L_i^2$ .*
+
+**Assumption 2** ( $\mu$ -strongly convex). *The function  $f$  is  $\mu$ -strongly convex on  $\mathbb{R}^d$ , i.e., it is differentiable and there is a constant  $\mu > 0$  such that for all  $x, y \in \mathbb{R}^d$  it holds that  $(\mu/2) \|x - y\|^2 \leq f(x) - f(y) - \langle \nabla f(y), x - y \rangle$ .*
+
+**Assumption 3** (PL-condition). *The function  $f$  satisfies the PL-condition, i.e., it is differentiable and there is a constant  $\mu > 0$  such that for all  $x \in \mathbb{R}^d$  it holds that  $\|\nabla f(x)\|^2 \geq 2\mu(f(x) - f^*)$ .*
+
+{3}------------------------------------------------
+
+**Assumption 4** (Data similarity). *The functions  $f_i$  are similar on  $\mathbb{R}^d$ , i.e., there are constants  $\delta, \sigma \geq 0$ , such that the following inequality holds for all  $x \in \mathbb{R}^d$ :  $\|\nabla f_i(x) - \nabla f(x)\|^2 \leq \delta^2 \|\nabla f(x)\|^2 + \sigma^2$ .*
+
+The equation above implies that the data stored at each worker does not differ significantly. This Assumption is quite standard in the literature Shamir et al. (2014); Arjevani & Shamir (2015); Khaled et al. (2020); Woodworth et al. (2020); Gorbunov et al. (2021b); Beznosikov et al. (2022; 2023b).
+
+Now we introduce important definitions related to the theory of Markov processes.
+
+**Definition 1** (Markov chain). *Markov chain with a finite state space  $\{\nu_n\}_{n=0}^N$  is a stochastic process  $\{X_t\}_{t \geq 0}$ , that satisfies Markov property, i.e.  $\mathbb{P}\{X_t = \nu_t \mid X_{t-1} = \nu_{t-1}, X_{t-2} = \nu_{t-2}, \dots, X_0 = \nu_0\} = \mathbb{P}\{X_t = \nu_t \mid X_{t-1} = \nu_{t-1}\}$ .*
+
+**Definition 2** (Ergodicity of Markov chain). *Markov chain  $\{X_t\}_{t \geq 0}$  with a finite state space  $\{\nu_n\}_{n=0}^N$  is referred to be ergodic if for any  $n \in \overline{1, N}$  there exists  $\lim_{t \rightarrow \infty} \mathbb{P}\{X_t = \nu_n \mid X_0 = \nu_0\} = p_n$ , where  $0 \leq p_n \leq 1$  does not depend on the  $\nu_0$ . If Markov chain is ergodic, then  $\{p_n\}_{n=0}^N \in \Delta_N$  and there exist  $0 < \rho < 1, C > 0$ , such that  $|\mathbb{P}\{X_t = \nu_n \mid X_0 = \nu_0\} - p_n| \leq C\rho^t$ .*
+
+**Definition 3** (Mixing time of the discrete Markov chain). *We say that  $\tau_{\text{mix}}(\varepsilon)$  is the mixing time of the ergodic Markov chain  $\{X_t\}_{t \geq 0}$  with stationary distribution  $\{p_n\}_{n=0}^N$ , if  $\forall \varepsilon > 0, \forall t \geq \tau_{\text{mix}}(\varepsilon) \Rightarrow \max_{n \in \overline{0, N}} \{|\mathbb{P}\{X_t = \nu_n \mid X_0 = \nu_0\} - p_n|\} \leq \varepsilon \cdot p_{\min}$ , where  $p_{\min} := \min_{n \in \overline{0, N}} \{p_n\}$ . From the*
+
+*Definition 2, it follows that  $\tau_{\text{mix}}(\varepsilon) \geq \frac{\log(C/p_{\min}\varepsilon)}{\log(1/\rho)}$ .*
+
+These definitions are extremely important for further analysis of the Markovian compressors, which are presented in the next section.
+
+## 2 MAIN RESULTS
+
+### 2.1 MARKOVIAN COMPRESSORS
+
+In this section, we introduce Markovian compressors that take into account the information transmitted in previous  $K$  operations. It is assumed that these compressors function within an iterative algorithm aimed at minimizing the problem (1), wherein a distinct discrete variable, denoted as the step  $t$ , is involved. Consequently, due to the dependence of the compressors on previous states, they exhibit a reliance on the step  $t$ . Let us narrow down the class of compressors to be discussed in this paper.
+
+**Definition 4** (Random sparsification).  *$Q_t(x)$  is a random sparsification compressor, if it operates on the vector  $x \in \mathbb{R}^d$  as  $Q_t(x) = \frac{d}{m} x \odot \mathbb{1}(\nu_t)$ , where  $\nu_t$  is a set of  $m$  coordinates :  $\nu_t \subseteq \overline{1, d}$ .*
+
+The classical **Randm** operator fits Definition 4, in particular, for this compressor subsets  $\nu_t$  are generated uniformly at each step  $t$ , therefore it is unbiased, i.e.,  $\mathbb{E}_t[Q_t(x)] = x$  for all  $t$ . In this paper, we do not generate  $\nu_t$  independently, but according to some Markov chain, i.e., compressors start to take into account past iterations. We formulate this idea as an assumption.
+
+**Assumption 5** (Asymptotic unbiasedness of Markovian compressors). *We assume that operator  $Q_t$  is a random sparsification compressor (Definition 4) and  $\{\nu_t\}_{t \geq 0}$  are realizations of some ergodic Markov chain with uniform stationary distribution.*
+
+Assumption 5 implies that in the limit as  $t \rightarrow \infty$ , the compressor  $Q_t$  is unbiased, i.e.,  $\mathbb{E}[Q_t(x)] \rightarrow x$  as  $t \rightarrow \infty$ , because the stationary distribution of the Markov chain is uniform. We are now ready to introduce two compressors that adhere to Assumption 5. The first compressor is called **BanLast**( $K, m$ ), it prohibits sending coordinates that have been sent at least once in the last  $K$  iterations.
+
+**Definition 5** (**BanLast**( $K, m$ ) compressor). *Let  $Q_t(x)$  be a random sparsification compressor (Definition 4). The  $j \in \nu_t$  are chosen according to the distribution  $p^t \in \Delta_d$  and  $p^t$  is given by the formula:*
+
+$$p_j^t = \begin{cases} 0, & \text{if } j \in \bigcup_{s=t-K}^{t-1} \nu_s, \\ \frac{1}{d-Km}, & \text{otherwise.} \end{cases}$$
+
+The **BanLast**( $K, m$ ) compressor exhibits a limitation in its utility due to an application restriction:  $d \geq (K+1)m$ , since we need at least  $m$  coordinates to have a non-zero probability at each step  $t$ . In order to avoid these limitations, we introduce a more flexible Markovian compressor **KAWASAKI**( $K, b, \pi_\Delta, m$ ).
+
+{4}------------------------------------------------
+
+**Definition 6** (KAWASAKI( $K, b, \pi_\Delta, m$ ) compressor). Let  $Q_t(x)$  be a random sparsification compressor (Definition 4). The  $j \in \nu_t$  are chosen according to the distribution  $p^t \in \Delta_d$ , which is given by the formula:
+
+$$\tilde{p}_j^t = \frac{1/d}{t^\# \text{ of choices } j \text{ for the last } K \text{ iterations}}, \quad j \in \overline{1, d}; \quad p^t = \pi_\Delta(\tilde{p}^t),$$
+
+where  $b > 1$  is a forgetting rate and  $\pi_\Delta : \mathbb{R}^d \rightarrow \Delta_d$  is an activation function.
+
+The KAWASAKI( $K, b, \pi_\Delta, m$ ) compressor is now applicable for arbitrary values of  $d \geq m$ , and  $K$ . However, it introduces two additional hyperparameters in comparison with BanLast( $K, m$ ), namely  $b$  and  $\pi_\Delta$ . The parameter  $b$  is responsible for the how strongly we penalize a coordinate if it was selected in previous iterations, the larger  $b$  is, the less likely we are to select a coordinate in step  $t$  if it was selected in steps  $t - K$  to  $t - 1$ . The function  $\pi_\Delta$  is required in order to obtain the probability vector  $p^t$  from the vector  $\tilde{p}^t$ , the necessary conditions for this function will be introduced later. The following examples illustrate potential selections for  $\pi_\Delta$ :
+
+$$(\pi_\Delta(\tilde{p}))_j = |\tilde{p}_j| / \|\tilde{p}\|_1, \quad \pi_\Delta(\tilde{p}) = \text{Softmax}(\tilde{p}), \quad \pi_\Delta(\tilde{p}) = \arg \min_{p \in \Delta_d} \|\tilde{p} - p\|^2.$$
+
+We now provide an example where using the Markovian compressor BanLast( $K, m$ ) (Definition 5) speeds up the optimization process by a factor of three compared to the unbiased compressor Randm.
+
+**Example 1.** Consider the QSGD algorithm (Algorithm 1), which solves the problem (1) in the case  $n = 1$ , of the form  $x^{t+1} = x^t - \gamma Q(\nabla f(x^t))$ . Assume that at some step  $t$  we observe gradient of the form  $(1, 0, \dots, 0)^T \in \mathbb{R}^d$ . In the QSGD algorithm, we compress the gradient at each step, therefore, we do not always send the first coordinate to the server, i.e. we do not move from the point  $x^t$ .
+
+In the case of  $m = 0.1 \cdot d$ , i.e. we send 10% of all coordinates at each step, if we use the BanLast( $K, m$ ) compressor, then the mathematical expectation of the number of steps to leave the point  $x^t$  is approximately 3.4 in the case of  $K = 7$ . For Rand10% this number is equal to 10, i.e. we speed up the optimization process by a factor of three. For arbitrary values of  $d$  and  $m$ , the formula for calculating the number of steps to leave the point  $x^t$  is provided in Appendix B.
+
+Moreover, in Appendix B, we obtain more general results for an arbitrary value of  $\alpha \in (0; 1]$  with  $d = \alpha \cdot m$ . In particular, we find the exact expression for the dependence of the number of steps to leave the point  $x^t$ . For each fixed  $\alpha$  we can find the optimal value of  $K^*(\alpha)$ . It turns out that empirically this dependence is close to a linear one of the form  $K^*(\alpha) \approx 0.73 \cdot \alpha$ . Such a rule can be used as an automatic way of choosing  $K$ .
+
+We now present a theorem demonstrating that our Markovian compressors from Definitions 5 and 6 satisfy the conditions outlined in Assumption 5.
+
+**Theorem 1** (Asymptotic unbiasedness of BanLast( $K, m$ ) and KAWASAKI( $K, b, \pi_\Delta, m$ )). Compressors from Definitions 5 and 6 can be described using Markov chains with states  $\{\nu_1, \nu_2, \dots, \nu_K\}_{\nu_1, \dots, \nu_K \in M}$ , where  $M$  is the set of all subsets of  $\overline{1, d}$  of size  $m$ . Moreover:
+
+- BanLast( $K, m$ ) (Definition 5) is ergodic with a uniform stationary distribution, if  $d > (K + 1)m$ .
+- If  $d > (2K + 1)m$ , then for BanLast( $K, m$ ) we get
+
+$$\rho = \sqrt{1 - \left( \frac{C_{d-2Km}^m}{(C_{d-Km}^m)^2} \right)^K} \quad \text{and} \quad C = \left( 1 - \left( \frac{C_{d-2Km}^m}{(C_{d-Km}^m)^2} \right)^K \right)^{-1}.$$
+
+- If for all permutations  $\phi$  of the set  $\overline{1, d}$  it holds that  $\pi_\Delta(\phi(\tilde{p})) = \phi(\pi_\Delta(\tilde{p}))$ , then KAWASAKI( $K, b, \pi_\Delta, m$ ) (Definition 6) is ergodic with a uniform stationary distribution.
+- If  $(\pi_\Delta(\tilde{p}))_j = |\tilde{p}_j| / \|\tilde{p}\|_1$ , then
+
+$$\rho = 1 - [db^K - m(b^K - 1)]^{-mK} \quad \text{and} \quad C = (1 - [db^K - m(b^K - 1)]^{-mK})^{-1}. \quad (2)$$
+
+The proof of Theorem 1 is provided in Appendix C. The outcomes of Theorem 1 hold significant importance for the subsequent investigation of algorithms aimed at solving problem (1) employing Markovian compressors. Note that the examples of activation functions  $\pi_\Delta$  provided above satisfy the conditions of Theorem 1.
+
+{5}------------------------------------------------
+
+### 2.2 DISTRIBUTED GRADIENT DESCENT WITH MARKOVIAN COMPRESSORS
+
+In this section, we propose a new algorithm **Markovian QSGD** (Algorithm 1). This algorithm is similar to the vanilla QSGD Alistarh et al. (2017), but in line 7 of Algorithm 1 we use Markovian compressor  $Q_t^i$ , that we introduced in Section 2.1, i.e.,  $Q_t^i$  can be either **BanLast**( $K, m$ ) (Definition 5) or **KAWASAKI**( $K, b, \pi_\Delta, m$ ) (Definition 6).
+
+**Theorem 2** (Convergence of MQSGD (Algorithm 1)). *Consider Assumptions 1, 4 and 5. Let the problem (1) be solved by Algorithm 1.*
+
+- For any  $\varepsilon, \gamma > 0, T > \tau > \tau_{\text{mix}}(\varepsilon)$  satisfying conditions, described in Appendix E.1, it holds that
+
+$$\mathbb{E} \left[ \left\| \nabla f(\hat{x}^T) \right\|^2 \right] = \mathcal{O} \left( \frac{F_\tau}{\gamma T} + \frac{\gamma L \tau d^2}{m^2} \sigma^2 \right),$$
+
+where  $\hat{x}^T$  is chosen uniformly from  $\{x^t\}_{t=0}^T$
+
+- If  $f$  additionally verifies the PL-condition (Assumption 3), then for any  $\varepsilon > 0, \gamma > 0, \tau > \tau_{\text{mix}}(\varepsilon)$  and  $T > \tau$  satisfying conditions, described in Appendix E.1, it holds that
+
+$$F_T = \mathcal{O} \left( \left( 1 - \frac{\mu\gamma}{12} \right)^{T-\tau} F_\tau + \frac{\gamma d^2 L \tau}{\mu m^2} \sigma^2 \right).$$
+
+Here we use the notations  $F_t := \mathbb{E} [f(x^t) - f(x^*)]$  and  $F_\tau := \mathbb{E} [f(x^\tau) - f(x^*)]$ .
+
+The proof of Theorem 2 is provided in Appendix E.3, E.4. If Assumption 4 does not hold we observe different results, which are provided in the Appendix F.
+
+Usually in convergence evaluations of various methods, expressions with the term of  $F_0$ , i.e., something that depends on the initial choice, arise as constants, but in Theorem 2, a term of the form  $F_\tau$  appears. This can be explained by the fact that at iterations from  $t = 0 \rightarrow \tau$  the Markov chain has not yet been stabilized, and the initial state can be taken as  $t = \tau$ .
+
+**Sketch proof of Theorem 2.** Let us write out a descent lemma of the form
+
+#### Algorithm 1 Markovian QSGD (MQSGD)
+
+- 1: **Input:** starting point  $x^0 \in \mathbb{R}^d$ ,
+- 2: step size  $\gamma > 0$ ,
+- 3: number of iterations  $T$
+- 4: **for**  $t = 0$  **to**  $T$  **do**
+- 5:   Broadcast  $x^t$  to all workers
+- 6:   **for**  $i = 1$  **to**  $n$  **in parallel do**
+- 7:     Set  $g_t^i = Q_t^i(\nabla f_i(x^t))$
+- 8:     Send  $g_t^i$  to the server
+- 9:   **end for**
+- 10:   Aggregate  $g^t = \frac{1}{n} \sum_{i=1}^n g_t^i$
+- 11:   Update  $x^{t+1} = x^t - \gamma g^t$
+- 12: **end for**
+
+$$\begin{aligned} \mathbb{E} \left[ \left\| x^{t+1} - x^* \right\|^2 \right] &= \mathbb{E} \left[ \left\| x^t - x^* \right\|^2 \right] - 2\mathbb{E} \left[ \gamma \langle \nabla f(x^t), x^t - x^* \rangle \right] \\ &\quad - \underbrace{\frac{2\gamma}{n} \sum_{i=1}^n \mathbb{E} \left[ \langle Q_t^i(\nabla f(x^t)) - \nabla f_i(x^t), x^t - x^* \rangle \right]}_0 + \gamma^2 \mathbb{E} \left[ \left\| \frac{1}{n} \sum_{i=1}^n Q_t^i(\nabla f_i(x^t)) \right\|^2 \right]. \end{aligned} \quad (3)$$
+
+The expression ① in (3) is zero if  $Q_t^i$  are unbiased and independent from iteration  $t$ , because  $\mathbb{E} \left[ \langle Q_t^i(\nabla f(x^t)) - \nabla f_i(x^t), x^t - x^* \rangle \right] = \mathbb{E} \left[ \langle \mathbb{E}_t [Q_t^i(\nabla f(x^t))] - \nabla f_i(x^t), x^t - x^* \rangle \right] = 0$ , where  $\mathbb{E}_t[\cdot]$  is the conditional expectation at a step  $t$ . Therefore, the theory for such compressors is highly developed. In our case,  $Q_t^i(x^*)$  are unbiased only if  $t - s \rightarrow \infty$ , which follows from asymptotic unbiasedness of our Markovian compressors obtained from Assumption 5. However, we can use some coarsening rather than unbiasedness when  $t - s = \tau$ , where  $\tau > \tau_{\text{mix}}(\varepsilon)$ , using the technique of "stepping back" as follows:
+
+$$\mathbb{E} \left[ \langle Q_t^i(a^{t-\tau}) - a^{t-\tau}, b^{t-\tau} \rangle \right] \leq \frac{\varepsilon d}{m} \mathbb{E} \left[ \left\| a^{t-\tau} \right\| \left\| b^{t-\tau} \right\| \right]. \quad (4)$$
+
+Importantly, we must apply the compressor  $Q_t$  at step  $t$  to the vector  $a^{t-\tau}$  at step  $t - \tau$ , since if we apply it to the vector  $a^t$  at step  $t$ , we will not be able to uncover the conditional expectation, since we will have randomness in  $a^t$  (see details in Appendix D). As can be seen from (3) we need to apply the last inequality with  $a^{t-\tau} = \nabla f_i(x^{t-\tau})$  and  $b^{t-\tau} = x^{t-\tau} - x^*$ , but in (3) we only obtain expression with variables at step  $t$ , therefore, it has to be handled in some way. In order to resolve this issue we use a straightforward algebra:
+
+{6}------------------------------------------------
+
+$$\begin{aligned}
+& \mathbb{E} \left[ \left\langle Q_i^t (\nabla f_i(x^t)) - \nabla f_i(x^t), x^t - x^* \right\rangle \right] = \mathbb{E} \left[ \left\langle Q_i^t (\nabla f_i(x^{t-\tau})) - \nabla f_i(x^{t-\tau}), x^{t-\tau} - x^* \right\rangle \right] \\
+& - \mathbb{E} \left[ \left\langle Q_i^t (\nabla f_i(x^t)) - \nabla f_i(x^{t-\tau}), x^t - x^{t-\tau} \right\rangle \right] \\
+& + \mathbb{E} \left[ \left\langle Q_i^t (\nabla f_i(x^t)) - \nabla f_i(x^{t-\tau}) - \nabla f_i(x^t) + \nabla f_i(x^{t-\tau}), x^t - x^* \right\rangle \right] \\
+& + \mathbb{E} \left[ \left\langle Q_i^t (\nabla f_i(x^t)) - \nabla f_i(x^t), x^t - x^{t-\tau} \right\rangle \right].
+\end{aligned} \tag{5}$$
+
+The first term in the last inequality (5) is solved with the  $\varepsilon$ -inequality (4), other scalar products are solved using the Fenchel-Young inequality. Terms with  $\mathbb{E} \|x^t - x^{t-\tau}\|^2$  are evaluated using line 9 of Algorithm 1:  $x^t - x^{t-\tau} = -\gamma \sum_{s=t-\tau}^{t-1} g^s$ . Terms with  $\mathbb{E} \|Q_i^t (\nabla f_i(x^t)) - \nabla f_i(x^{t-\tau})\|^2$  are obtained from the following inequalities (see details in Appendix E):
+
+$$\|Q_i^t (\nabla f(x) - \nabla f(y))\|^2 \leq \frac{d^2}{m^2} \|\nabla f(x) - \nabla f(y)\|^2 \leq \frac{d^2 L^2}{m^2} \|x - y\|^2,$$
+
+Since the evaluation of  $\mathbb{E} \|x^{t+1} - x^*\|^2$  raises the terms of the form  $\mathbb{E} \|x^{t-\tau} - x^*\|^2$ , we have to do a summation of  $\mathbb{E} \|x^{t+1} - x^*\|^2$  from  $t = \tau$  to  $t = T$ . These terms greatly complicate the proof of Theorem 2 compared to the unbiased compressors. The results of Theorem 2 can be rewritten as an upper complexity bound on a number of iterations  $T$  of the Algorithm 1 by carefully tuning the step size  $\gamma$ .
+
+**Corollary 1** (Step tuning for Theorem 2).
+
+- Under the conditions of Theorem 2 in the non-convex case, choosing  $\gamma$  as in Appendix E.2, in order to achieve the  $\varepsilon$ -approximate solution (in terms of  $\mathbb{E} [\|\nabla f(x^T)\|^2] \leq \varepsilon^2$ ), it takes
+
+$$\mathcal{O} \left( \frac{L\tau d^2}{m^2} F_\tau \left( \frac{\delta^2 + 1}{\varepsilon^2} + \frac{\sigma^2}{\varepsilon^4} \right) \right) \text{ iterations of Algorithm 1.}$$
+
+- Under the conditions of Theorem 2 in the PL-condition (Assumption 3) case, choosing  $\gamma$  as in Appendix E.2 in order to achieve the  $\varepsilon$ -approximate solution (in terms of  $\mathbb{E} [f(x^t) - f(x^*)] \leq \varepsilon$ ), it takes
+
+$$\mathcal{O} \left( \frac{d^2 L\tau}{m^2 \mu} \left( (\delta^2 + 1) \log \left( \frac{1}{\varepsilon} \right) + \frac{\sigma^2}{\mu\varepsilon} \right) \right) \text{ iterations of Algorithm 1.}$$
+
+### 2.3 ACCELERATED METHOD
+
+After giving the convergence result for the vanilla distributed SGD with Markovian compression operator, we now move on to the accelerated scheme. Since we do not assume boundedness of the gradient variance, the classical Nesterov acceleration Nesterov (2014) does not produce the expected effect, and therefore an additional momentum has to be introduced Nesterov (2012b); Vaswani et al. (2019). By applying a multi-step strategy partially similar to Beznosikov et al. (2023b), we obtain our Algorithm 2.
+
+#### Algorithm 2 Accelerated Markovian QSGD (AMQSGD)
+
+- 1: **Input:** starting point  $x^0 \in \mathbb{R}^d$ , step size  $\gamma > 0$ , momentums  $\theta, \eta, \beta, p$ , number of iterations  $T$
+- 2: **for**  $t = 0$  to  $T$  **do**
+- 3:   Update  $x_g^t = \theta x_f^t + (1 - \theta)x^t$
+- 4:   Broadcast  $x_g^t$  to all workers
+- 5:   **for**  $i = 1$  to  $n$  in parallel **do**
+- 6:     Set  $g_i^t = Q_i^t (\nabla f_i(x_g^t))$
+- 7:     Send  $g_i^t$  to the server
+- 8:   **end for**
+- 9:   Aggregate  $g^t = \frac{1}{n} \sum_{i=1}^n g_i^t$
+- 10:   Update  $x_f^{t+1} = x_g^t - p\gamma g^t$
+- 11:   Update  $x^{t+1} = \eta x_f^{t+1} + (p - \eta)x_f^t$
+- 12:    $+ (1 - p)(1 - \beta)x^t + (1 - p)\beta x_g^t$
+- 13: **end for**
+
+**Theorem 3** (Convergence of AMQSGD (Algorithm 2)). Consider Assumptions 1, 2, 4. Let the problem (1) be solved by Algorithm 2. Then for any  $\gamma, \varepsilon > 0, T > \tau > \tau_{\min}(\varepsilon), \beta, \theta, \eta, p$  satisfying conditions, described in Appendix G.1, it holds that
+
+{7}------------------------------------------------
+
+$$F_{\tau+1} = \mathcal{O} \left( \exp \left[ -(T - \tau) \sqrt{\frac{p^2 \mu \gamma}{3}} \right] F_\tau + \exp \left[ -T \sqrt{\frac{p^2 \mu \gamma}{3}} \right] \Delta_\tau + \frac{\gamma}{\mu} \sigma^2 \right).$$
+
+Here we use the notations:  $F_t := \mathbb{E}[\|x^t - x^*\|^2 + 3/\mu(f(x_f^t) - f(x^*))]$  and  $\Delta_\tau \leq \gamma^{1/2} \tau^{-4/3} \mu^{-1/3} \sum_{t=0}^{\tau} (\mathbb{E}[\|\nabla f(x_g^t)\|^2] + \mathbb{E}[\|x^t - x^*\|^2] + \mathbb{E}[f(x_f^t) - f(x^*)])$ .
+
+The above theorem shows that in the strongly convex case Accelerated Markov QSGD with constant step-size can attain sublinear convergence. In terms of dealing with Markovian stochasticity, its proof follows quite similar ideas as the proof of Theorem 2: here again we use the technique of *stepping back* for mixing time, which allows us to effectively deal with the bias of the gradient estimator. The full proof is provided in Appendix G.3. The results of Theorem 3 can be rewritten as an upper complexity bound on a number of iterations  $T$  of the Algorithm 2 by carefully tuning the step-size  $\gamma$ .
+
+**Corollary 2** (Step tuning for Theorem 3). *Under the conditions of Theorem 3, choosing  $\gamma$  as in Appendix G.2 in order to achieve the  $\epsilon$ -approximate solution (in terms of  $\mathbb{E}[\|x^T - x^*\|^2] \leq \epsilon^2$ ), it takes*
+
+$$\mathcal{O} \left( \frac{d^2 L^{\frac{2}{3}} \tau^{\frac{4}{3}}}{m^2 \mu^{\frac{2}{3}}} \left( (\delta^2 + 1) \log \left( \frac{1}{\epsilon} \right) + \frac{\sigma^2}{\mu \epsilon} \right) \right) \text{ iterations of Algorithm 2.}$$
+
+### 2.4 DISCUSSION
+
+Our Example 1 and the numerical experiments in Section 3 show that the using of Markovian compressors could lead to a better performance quite well, however, the theoretical guarantees turn out to be poorer than in the unbiased case. In particular, if we use *Random* in the QSGD algorithm, then we observe the following estimates Beznosikov et al. (2023a):
+
+$$X_T = \mathcal{O} \left( (1 - \mu\gamma)^T X_0 + \gamma \frac{d}{m} \frac{\sigma^2}{\mu n} \right),$$
+
+where  $X_t = \mathbb{E}[\|x^t - x^*\|^2]$  and  $\gamma \lesssim \frac{1}{L(1+d/mn)}$ . However, Theorem 2 gives us such estimates:
+
+$$F_T = \mathcal{O} \left( \left( 1 - \frac{\mu\gamma}{12} \right)^T F_\tau + \gamma \frac{d^2}{m^2} \frac{\tau L \sigma^2}{\mu} \right),$$
+
+where  $F_t := \mathbb{E}[f(x^T) - f(x^*)]$  and  $\gamma \lesssim \frac{m^2}{L d^2 \tau (\sigma^2 + 1)}$ . It is important to note that not only has the theory for Markovian compressors not yet been studied, but also dealing with the Markovian stochasticity itself implies quite strict limitations. For instance,
+
+**$d/m$  vs  $d^2/m^2$ .** We are forced to uniformly bound the noise of the compressor (linearity in the compression constant is prevented by this) due to the impossibility of using the expectation trick, in contrast to the unbiased case Beznosikov et al. (2023a), where the authors estimated the variance of the compressor noise. The assumption of uniformly bounded noise cannot be rejected by any authors who work with Markovian stochasticity Beznosikov et al. (2023b); Dorfman & Levy (2023); Doan et al. (2020a); Sun et al. (2018); Even (2023), therefore, there is no possibility to achieve linearity in the compression rate in our theoretical guaranties, according to the current theoretical advances.
+
+**Mixing time.** Furthermore, it is imperative to emphasize that it follows from Theorems 2 and 3 that the convergence rate is improved as  $\tau$  (and, consequently,  $K$ ) diminishes. In other words, the distribution of the compressor's underlying Markov chain has to converge to a uniform distribution as fast as possible, but empirically one wants the choice of coordinates to depend on previous iterations rather than be random (e.g. for *Random* compressor  $\tau = 1, K = 0$ ). This causes a logical contradiction: while using a large  $K$  will theoretically give poorer convergence, in practice algorithms with non-zero values of  $K$  perform better (see Section 3). It is also worth mentioning that when Markovian stochasticity is employed, we can never avoid  $\tau$  in our estimates, since it appears in the lower bounds on the convergence rate of methods that involve Markovian properties Bresler et al. (2020). Thus, our Algorithms 1 and 2 have a reasonably good polynomial dependence on mixing time (Theorem 2 shows an optimal estimation in terms of  $\tau$ ), considering the fact there are several works Doan et al. (2020b) whose bounds include terms that are even *exponential* in the mixing time.
+
+**$L/\mu$ .** In spite of the difficulties listed above, we still can observe that the momentums implementation in Algorithm 2 gives an acceleration in terms of  $L/\mu$  compared to vanilla QSGD (Algorithm 1). In
+
+{8}------------------------------------------------
+
+the classical version of accelerated Gradient Descent, one can achieve an acceleration of the form  $\sqrt{L/\mu}$  Nesterov (1983), but our analysis allows only to achieve  $(L/\mu)^{2/3}$  in Theorem 3. When Markovian stochasticity is employed, it is also possible to achieve estimation of the form  $\sqrt{L/\mu}$  Beznosikov et al. (2023b), but it is obtained by using batches with size scaled as  $2^j$ , where  $j$  is drawn from a truncated geometric distribution. Unfortunately, this specific batching technique cannot be applied in our paper, as we consider compressors that act as random sparsification (Definition 4), which necessitates that the gradient be compressed only once at each iteration.
+
+**Variance reduction.** In our paper, we focus on the QSGD method and its accelerated version (Algorithms 1 and 2). However, in modern studies on distributed optimization, techniques of variance reduction are of a great interest (DIANA Mishchenko et al. (2019), MARINA Gorbunov et al. (2021a), DASHA Tyurin & Richtárik (2022)), because these methods converge linearly to the exact solution of the problem (1), while QSGD (Algorithms 1 and 2) converges only to the  $\sigma^2$ -neighborhood of the solution. We implement Markovian compressors (Definitions 5 and 6) in these methods in our experiments, but we do not provide theoretical guarantees for such algorithms since we have just developed a theoretical baseline for the study of Markovian compressors. This represents a promising direction for future research.
+
+Even though it is not entirely clear whether it is possible to achieve significant improvements in the theoretical results, due to the peculiarities of dealing with Markovian randomness, for now we could only highlight a significantly better performance of Algorithms 1 and 2 compared to a similar algorithms using a vanilla unbiased compressor Randn (see Section 3).
+
+## 3 EXPERIMENTS
+
+In order to justify the practical usage of the proposed methods and analyze their behavior, we conduct a series of experiments using Markovian compression on distributed optimization problems, specifically logistic regression and neural network-based image classification. We observe that Markovian compressors, when used with MQSGD and AMQSGD, as well as with classical SGD and DIANA Mishchenko et al. (2019), improve convergence on several benchmarks. Appendix H provides a description of the technical setup, extended experiments with hyperparameters analysis, and an application of Markovian compressors to model-parallel neural network training.
+
+### 3.1 LOGISTIC REGRESSION
+
+Firstly, we experiment on a classification task using a logistic regression model with  $L_2$  regularization of the form:
+
+$$\min_{w \in \mathbb{R}^d} \left\{ f(w) = \frac{1}{n} \sum_{i=1}^n \log(1 + \exp(-y_i w^T x_i)) + \lambda \|w\|^2 \right\},$$
+
+with a regularization term  $\lambda = 0.05$ . The dataset is split among  $n = 10$  clients. We use Mushrooms, A9A, and W8A datasets from LibSVM Chang & Lin (2011) and MNIST Deng (2012). Experiments are conducted using Python 3.10 and PyTorch, and a distributed environment is simulated. We experiment with MQSGD, AMQSGD, and DIANA optimizers, employing Rand-10% as a sparsification compressor. Markovian compressors were utilized independently on each client, with normalization activation function, and with all hyperparameters being fine-tuned.
+
+![Figure 1: Logistic Regression on MNIST experiments results. The figure consists of four subplots arranged in a 2x2 grid. The top-left plot shows the loss function value (log scale) vs. Information sent (x10^6) for MQSGD. The top-right plot shows the norm of the gradient (log scale) vs. Information sent (x10^6) for MQSGD. The bottom-left plot shows the loss function value (log scale) vs. Information sent (x10^6) for AMQSGD. The bottom-right plot shows the norm of the gradient (log scale) vs. Information sent (x10^6) for AMQSGD. Each plot compares Rand(d/10), Perm(d/10), Natural (s4), BanLas9, d/10, and KAWASAKI(28, 50, [p_i], [p_i], d/10) methods. In all cases, the Markovian compressors (KAWASAKI) achieve faster convergence and lower loss values compared to the baseline Rand method.](4495fbec19aac6861f1a0b35c4dc38bc_img.jpg)
+
+Figure 1: Logistic Regression on MNIST experiments results. The figure consists of four subplots arranged in a 2x2 grid. The top-left plot shows the loss function value (log scale) vs. Information sent (x10^6) for MQSGD. The top-right plot shows the norm of the gradient (log scale) vs. Information sent (x10^6) for MQSGD. The bottom-left plot shows the loss function value (log scale) vs. Information sent (x10^6) for AMQSGD. The bottom-right plot shows the norm of the gradient (log scale) vs. Information sent (x10^6) for AMQSGD. Each plot compares Rand(d/10), Perm(d/10), Natural (s4), BanLas9, d/10, and KAWASAKI(28, 50, [p\_i], [p\_i], d/10) methods. In all cases, the Markovian compressors (KAWASAKI) achieve faster convergence and lower loss values compared to the baseline Rand method.
+
+Figure 1: Logistic Regression on MNIST experiments results. All hyperparameters are fine-tuned, and best runs are selected.
+
+Figure 1 shows the convergence of the Rand-10% baseline and Markovian compressors on the MQSGD and AMQSGD algorithms on MNIST dataset. Both Markovian compressors achieve faster convergence
+
+{9}------------------------------------------------
+
+than the baseline and more complex compressors like PermK Szlendak et al. (2021) and Natural compressors Horvath et al. (2022). In most of our results, BanLast and KAWASAKI show similar performance with fine-tuned hyperparameters. Experiments on other datasets, and tuning history size  $K$  tuning analysis appear in Appendix H.2. Additionally, as our compressors are fully compatible with classical compressors, we conduct experiments on combination with Natural compression in Appendix H.5.
+
+### 3.2 NEURAL NETWORKS
+
+We also apply Markovian compressors in more complex optimization tasks, such as image classification on CIFAR-10 Krizhevsky et al. (2009) dataset with ResNet-18 convolutional neural network He et al. (2016). Formally, we solve optimization problem:
+
+$$\min_{w \in \mathbb{R}^d} \left\{ f(w) = \frac{1}{n} \sum_{i=1}^n l(\text{softmax}(f(x_i, w)), y_i) \right\},$$
+
+where  $x_i$  is a training image,  $y_i$  is its respective class, and  $l()$  is a cross-entropy loss function. Dataset is split equally between  $n = 5$  clients. We use Rand-5% sparsification operator and SGD optimizer with cosine annealing LR schedule. Hyperparameters, such as the learning rate, batch size, and Markovian-specific ones are fine-tuned.
+
+Table 1: Numerical results of training ResNet-18 on CIFAR-10 with different compressors. Each cell represents mean  $\pm$  standard deviation over 5 runs.
+
+|  | Rand-5% | BanLast | KAWASAKI |
+|-|-|-|-|
+| Train Loss | $0.0743 \pm 0.003$ | $0.0734 \pm 0.003$ | <b><math>0.0305 \pm 0.001</math></b> |
+| Gradient Norm | $1.403 \pm 0.029$ | $1.383 \pm 0.035$ | <b><math>0.745 \pm 0.015</math></b> |
+| Test Accuracy | $87.9 \pm 0.179$ | $88.0 \pm 0.122$ | <b><math>89.05 \pm 0.294</math></b> |
+
+Figure 2 depicts the training loss and gradient norm, with the aggregate values shown in Table 1. As in the previous case, the application of the Markovian compressor favours faster convergence and better validation results. Note that for more complex optimization task, smoother history accumulation (as in KAWASAKI) is required.
+
+![Figure 2: Image classification with ResNet-18 on CIFAR-10 experiments results. Two line plots are shown. The left plot shows training loss f(w^t) on a log scale (10^-1 to 10^0) over 200 epochs. The right plot shows the gradient norm ||\nabla f(w^t)||_2^2 on a log scale (10^0 to 3 \times 10^0) over 200 epochs. Both plots compare Rand(d/20) (blue circles), BanLast(19, d/20) (green squares), and KAWASAKI(10, 5, p_r, 1/||p_r||, d/20) (purple triangles). KAWASAKI shows the lowest loss and gradient norm, indicating faster convergence and better validation results.](64bacf564ff025df294b6d30341c76df_img.jpg)
+
+Figure 2: Image classification with ResNet-18 on CIFAR-10 experiments results. Two line plots are shown. The left plot shows training loss f(w^t) on a log scale (10^-1 to 10^0) over 200 epochs. The right plot shows the gradient norm ||\nabla f(w^t)||\_2^2 on a log scale (10^0 to 3 \times 10^0) over 200 epochs. Both plots compare Rand(d/20) (blue circles), BanLast(19, d/20) (green squares), and KAWASAKI(10, 5, p\_r, 1/||p\_r||, d/20) (purple triangles). KAWASAKI shows the lowest loss and gradient norm, indicating faster convergence and better validation results.
+
+Figure 2: Image classification with ResNet-18 on CIFAR-10 experiments results. Best runs for each method are displayed.
+
+Figure 3 presents comparison with Permutation and Natural compression, which confirm practical usefulness of Markovian compressors on more complex and non-convex optimization problems. Note that our compressors can be applied in combination with complex randomized compressor like Natural compression, making our method even more flexible.
+
+![Figure 3: Comparison with other compressors on Resnet-18 training on CIFAR-10 dataset for Rand-5% sparsification on N = 20 clients. Two line plots are shown. The left plot shows training loss f(w^t) on a log scale (10^-1 to 10^0) over 200 epochs, comparing Rand(d/20)+Natural (blue circles), Perm(d/20)+Natural (orange crosses), BanLast(19, d/20)+Natural (green squares), and KAWASAKI(10, 5, p_r, 1/||p_r||, d/20)+Natural (purple triangles). The right plot shows training loss f(w^t) on a log scale (10^-2 to 10^0) over 4000 information sent, comparing Rand(d/20) (blue circles), Perm(d/20) (orange crosses), Natural (x4) (green squares), BanLast(19, d/20) (purple triangles), and KAWASAKI(10, 5, p_r, 1/||p_r||, d/20) (purple triangles).](9a0dacb540bed1811d90cc1555c3fe7a_img.jpg)
+
+Figure 3: Comparison with other compressors on Resnet-18 training on CIFAR-10 dataset for Rand-5% sparsification on N = 20 clients. Two line plots are shown. The left plot shows training loss f(w^t) on a log scale (10^-1 to 10^0) over 200 epochs, comparing Rand(d/20)+Natural (blue circles), Perm(d/20)+Natural (orange crosses), BanLast(19, d/20)+Natural (green squares), and KAWASAKI(10, 5, p\_r, 1/||p\_r||, d/20)+Natural (purple triangles). The right plot shows training loss f(w^t) on a log scale (10^-2 to 10^0) over 4000 information sent, comparing Rand(d/20) (blue circles), Perm(d/20) (orange crosses), Natural (x4) (green squares), BanLast(19, d/20) (purple triangles), and KAWASAKI(10, 5, p\_r, 1/||p\_r||, d/20) (purple triangles).
+
+Figure 3: Comparison with other compressors on Resnet-18 training on CIFAR-10 dataset for Rand-5% sparsification on  $N = 20$  clients. Natural compression factor is 4. Left figure is sequential combination with Natural compression. Right figure is comparison against PermK and Natural compressors independently, with information sent on x-axis.
+
+## 4 CONCLUSION
+
+In this paper, we propose a family of compression schemes, which takes into account previous iterations of algorithm and transform the input vector according to a Markov chain. We develop two sparsification methods BanLast (Definition 5) and KAWASAKI (Definition 6) based on this idea. These compressors are implemented in QSGD (Algorithm 1) and accelerated QSGD (Algorithm 2). We provide convergence rates under different assumptions on the objective function (Theorems 2 and 3). In experiments, we show that our compression methods outperform the baselines in the deep neural network optimisation problem. Future research may consider the implementation of our Markovian compressors in other optimization methods, e.g. using the variance reduction techniques.
+
+ Rest of paper (reference and Appendix) is removed.

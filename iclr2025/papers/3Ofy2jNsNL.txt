@@ -1,0 +1,451 @@
+
+
+{0}------------------------------------------------
+
+# ACT-IN-LLM: ADAPTIVELY COMPRESSION VISION TOKENS IN LLM FOR HIGH-RESOLUTION MULTIMODAL LARGE LANGUAGE MODELS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+High-resolution inputs empower Multimodal Large Language Models (MLLMs) to capture intricate visual details, thereby enhancing comprehension. However, the self-attention mechanism’s quadratic complexity poses significant computational and memory challenges as image resolution increases, particularly with long-vision tokens. Existing approaches generally alleviate these issues by reducing vision tokens before feeding them into LLMs. Although efficient, this Pre-LLM compression strategy fails to match the performance of models utilizing all tokens, particularly on high-resolution benchmarks. Our experiments reveal that the performance gap arises from this strategy’s limitation in selecting important visual tokens in early LLM layers, leading to the irretrievable loss of critical information. To overcome these challenges, we propose a new strategy that Adaptively Compresses vision Tokens within different LLM layers, named ACT-IN-LLM. Our innovative approach retains all tokens throughout the layers to ensure no vital information is lost while compressing key and value tokens in the self-attention mechanism, to reduce computational costs. The layer-wise compression of ACT-IN-LLM is guided by the interaction information between vision and text tokens, leading to more accurate selections. Our theoretical analysis and extensive experiments demonstrate the effectiveness of ACT-IN-LLM, showing a 6.3% improvement over existing token compression techniques. It also achieves the competitive performance with non-compression methods, while reducing training/inference time by  $\sim 20\%$  and vision tokens by  $\sim 60\%$ .
+
+## 1 INTRODUCTION
+
+In recent years, large language models (LLMs) like GPT-4 (Achiam et al., 2023) and LLaMA (Dubey et al., 2024) have driven advancements in multimodal LLMs (MLLMs), which integrate visual and textual data for better cross-modal understanding (Li et al., 2023c; 2024a; Bai et al., 2023; Zhang et al., 2023; Cheng et al., 2024; Ding et al., 2024). However, MLLMs often process low-resolution visual inputs, limiting fine-grained scene comprehension. While efforts to support high-resolution inputs (Li et al., 2024d; Xu et al., 2024; Li et al., 2024a) exist, they face substantial computational and memory challenges due to the quadratic complexity of self-attention (Vaswani, 2017).
+
+To tackle these challenges, existing methods primarily rely on Pre-LLM (Xu et al., 2024; Chen et al., 2024a; Liu et al., 2024c; Huang et al., 2024; Cha et al., 2024) or Early-LLM (Chen et al., 2024a) compression, where the number of visual tokens is reduced before being fed into the LLM or in the early layers of the LLM. This strategy helps lower the computational load and offers competitive
+
+![Figure 1: Comparison of Pre-LLM Compression and ACT-IN-LLM strategies. (a) Pre-LLM Compression: High-resolution tokens are compressed into low-resolution tokens before entering the LLM layers. The LLM head receives partial information. (b) Ours (ACT-IN-LLM): High-resolution tokens are processed by the LLM layers, and the LLM head receives full information. The compression is dynamic and text-guided, occurring within the LLM layers.](868ef3e0abb37916a7af1e923995f329_img.jpg)
+
+The diagram illustrates two token processing strategies. In (a) Pre-LLM Compression, a sequence of high-resolution tokens (dark blue) is first processed through a 'Compression' block to become low-resolution tokens (light blue). These are then passed through 'LLM Layers' and finally to the 'LLM Head', which outputs a 'partial' result. In (b) Ours (ACT-IN-LLM), the high-resolution tokens are passed through the 'LLM Layers' first. Within the layers, a 'dynamic text-guided' compression block adaptively compresses the tokens. The final output from the 'LLM Head' is a 'full' result.
+
+Figure 1: Comparison of Pre-LLM Compression and ACT-IN-LLM strategies. (a) Pre-LLM Compression: High-resolution tokens are compressed into low-resolution tokens before entering the LLM layers. The LLM head receives partial information. (b) Ours (ACT-IN-LLM): High-resolution tokens are processed by the LLM layers, and the LLM head receives full information. The compression is dynamic and text-guided, occurring within the LLM layers.
+
+Figure 1: (a) Pre-LLM Compression Strategy reduces the number of visual tokens before passing them into the LLM, inevitably leading to information loss. (b) Our ACT-IN-LLM reserves full tokens for final auto-regressive prediction, while adaptively compressing vision tokens within the specific LLM layers.
+
+{1}------------------------------------------------
+
+![Figure 2: Drawbacks of the early compression. (a) Performance vs. Vision Token Dropping Layers. (b) Attention Scores Across Layers.](49ad3a646d84bcfeac02bdf2b3792a3e_img.jpg)
+
+Figure 2 consists of two parts. Part (a) contains two line graphs. The left graph, titled 'High-resolution Benchmark', plots 'Average Performance' (y-axis, 27.5 to 42.5) against 'Layer index' (x-axis, 0 to 30). It shows four methods: 'full' (red squares), 'average' (blue circles), 'separate' (purple triangles), and 'last' (grey diamonds). A red arrow points to the gap between 'full' and 'average' at layer 5, labeled '~15% gap'. The right graph, titled 'General Benchmark', plots 'Average Performance' (y-axis, 66 to 74) against 'Layer index' (x-axis, 0 to 30). It shows the same four methods. A red arrow points to the gap between 'full' and 'average' at layer 5, labeled '~3% gap'. Part (b) shows four heatmaps of attention weights for layers 1, 9, 17, and 25. Each heatmap has 'hr' (high-resolution), 'lr' (low-resolution), and 'txt' (text) on the x-axis. Red dotted boxes highlight the attention weights for 'hr' and 'txt' tokens, showing that early-stage token selection is challenging as low-attention tokens in early layers may gain importance later.
+
+Figure 2: Drawbacks of the early compression. (a) Performance vs. Vision Token Dropping Layers. (b) Attention Scores Across Layers.
+
+Figure 2: **Drawbacks of the early compression.** (a) Performance vs. Vision Token Dropping Layers. The x-axis is the layer index dropping vision tokens, with 0 indicating before the LLM, and the y-axis is the average performance across benchmarks. We observe that *dropping tokens in earlier layers significantly reduces performance on high-resolution tasks by up to 15%*. (b) Attention Scores Across Layers. ‘hr’, ‘lr’ and ‘txt’ mean the high-resolution, low-resolution and text tokens respectively. We observe that *early-stage token selection is challenging as low-attention tokens in early layers may gain importance later (see red dotted boxes)*.
+
+performance in general MLLM tasks. However, as shown in Table 2, there is a notable performance gap ( $\sim 9\%$ ) on high-resolution benchmarks when compared to models that retain all visual tokens.
+
+To investigate this performance gap, we conduct experiments to compare the average performance of compressing vision tokens at different LLM layers on high-resolution and general benchmarks respectively (see Section F.1 for details). We compare four methods: full (all tokens retained), average (dropped based on averaged attention scores), separate (current layer scores, *i.e.*, FastV (Chen et al., 2024a)), and last (final layer scores). In each method, once compression is applied in the specific layer, only 50% of the visual tokens are retained in subsequent layers. Fig. 2 (a) shows that the performance gap widens when compression occurs in earlier layers. Additionally, the visualization of the average attention weights of LLaVA-1.5-HD (Fig. 2 (b)) shows that vision tokens receiving low attention in early layers become critical in the latter, showing the risks of compressing tokens prematurely. In summary, existing Pre-LLM approaches compress vision tokens too early, leading to irreversible performance degradation, potentially due to: (1) early-layer’s insufficient interaction between vision and text tokens, (2) varying token importance across layers, making it difficult to decide which tokens to drop, and (3) the inability to recover lost information in latter layers.
+
+To address the above drawbacks, we propose a novel compression strategy, ACT-IN-LLM, which Adaptively Compresses vision Tokens **within** different LLM layers. Unlike existing methods that discard tokens prematurely, ACT-IN-LLM retains all tokens across layers, ensuring an implicit error correction mechanism that mitigates the loss of critical information (see Fig. 1 (b)). To reduce computational and memory overhead, ACT-IN-LLM uniformly integrates an adaptive compression module (ACM) into various transformer decoder layers, selectively compressing only the key and value tokens within the self-attention mechanism. Specifically, ACM utilizes the final token in each layer’s hidden states—which encodes the complete multimodal context—to guide visual token compression, ensuring more accurate token selection, compared with early-layer selection.
+
+We theoretically demonstrate that this key-value compression used in ACT-IN-LLM provides a better low-rank approximation of the full-token self-attention mechanism compared to the query or all compression used in existing vision token compression techniques. Extensive experiments on high-resolution and general benchmarks, across LLMs of varying sizes (0.5B to 7B parameters), show that ACT-IN-LLM achieves a 6.2% improvement over existing token compression techniques, and competitive performance compared with non-compression models while reducing training/inference time by  $\sim 20\%$  and vision tokens by  $\sim 60\%$ .
+
+## 2 RELATED WORKS
+
+**Multimodal Large Language Models.** Advanced Large Language Models (LLMs) like GPT-4 (OpenAI, 2023), Mistral (Jiang et al., 2023), and Gemini (Team et al., 2023) excel in reasoning, while Multimodal LLMs (MLLMs), such as LLaVA (Liu et al., 2023b), MiniGPT-4 (Zhu et al., 2023), and QwenVL (Bai et al., 2023), extend this to images, though limited resolution hampers fine-grained visual understanding. To address this, splitting images into patches (Bavishi et al.,
+
+{2}------------------------------------------------
+
+2023; Li et al., 2023a) and up-resizing methods (Bai et al., 2023) improve resolution, though they introduce issues like poor visual representation and positional encoding disruptions (Radford et al., 2021). Dual-branch methods add high-resolution branches but increase complexity and training data requirements (Hong et al., 2024; Ding et al., 2023). Cropping strategies offer a more efficient approach by dividing high-resolution images into patches without increasing model parameters (Li et al., 2024d; Xu et al., 2024; Huang et al., 2024). However, increasing image resolution leads to higher computational costs due to the quadratic complexity of self-attention (Vaswani, 2017). This paper is aimed at developing efficient high-resolution MLLMs.
+
+**Vision Token Compression in MLLMs.** Vision Token Compression in MLLMs. Existing methods for vision token compression can be categorized into interaction-based and pre-LLM strategies. Interaction-based approaches (Hong et al., 2024; Li et al., 2024b; Tong et al., 2024) process low-resolution tokens in the LLM while using a high-resolution branch with lightweight cross-attention for feature interaction. However, these methods fail to fully align high-resolution visual inputs with the LLM’s low-resolution and text representations, requiring additional parameters and training data (Huang et al., 2024; Yao et al., 2024). Pre-LLM approaches, on the other hand, reduce tokens before entering the LLM, employing either parameterized (Bai et al., 2023; Li et al., 2023c; Cha et al., 2024; Xu et al., 2024) or non-parameterized (Liu et al., 2024a; Yao et al., 2024; Shang et al., 2024) techniques. Recently, Early-LLM methods such as FastV (Chen et al., 2024a) discard tokens during early LLM layers at inference but risk losing critical information due to suboptimal token selection. In contrast, ACT-IN-LLM introduces adaptive token compression at multiple LLM layers, retaining all tokens for final predictions to minimize information loss. Theoretical analysis and experiments demonstrate that ACT-IN-LLM outperforms existing approaches in efficiency and effectiveness.
+
+**Efficient Attention in Transformer Models.** To reduce the computation and memory costs associated with the self-attention mechanism in Transformers, various alternative attention mechanisms have been proposed (Child et al., 2019; Zaheer et al., 2020; Wang et al., 2020; Choromanski et al., 2020). For instance, Sparse Transformer (Child et al., 2019) employs fixed sparse attention patterns to reduce complexity. BIGBIRD (Zaheer et al., 2020) extends this approach by combining multiple attention patterns, including window, random, and global attention, for further efficiency. Reformer (Kitaev et al., 2020) replaces traditional self-attention with locality-sensitive hashing (LSH) to reduce computation costs. Similarly, Axial Transformer (Beltagy et al., 2020) applies attention along single axes of input tensors, significantly lowering the computational burden. PvT-V2 (Wang et al., 2022) leverages the average-pooling to reduce the tokens of the key and value. All of the above methods primarily target single-modal tasks. In contrast, our work focuses on reducing vision tokens based on the multi-modal information in MLLMs for high-resolution multimodal tasks.
+
+## 3 METHOD
+
+### 3.1 OVERALL FRAMEWORK
+
+As illustrated in Fig. 3, ACT-IN-LLM comprises two components: (i) a vision/text tokenizer that processes an image and a question to generate concatenated vision-text embeddings, and (ii) a large language model (LLM) that utilizes these embeddings to predict responses.
+
+**Vision/Text Tokenizer.** The input image is processed using a cropping strategy (Li et al., 2024a;d), producing multiple slices and a low-resolution slice. The original image is resized and padded into a low-resolution slice. To capture fine-grained details, the high-resolution image is dynamically split into slices, with a maximum slice count determined by the base resolution. This allows the image to automatically select an optimal bounding box by calculating the required rows and columns. These slices, along with the low-resolution slice, are then processed through a shared vision tokenizer like CLIP-ViT (Radford et al., 2021), to produce slice-wise vision embeddings. These embeddings are concatenated, with a connector such as a linear layer (Li et al., 2024a) generating the aligned vision representation  $\mathbf{H}_v^{\text{vis}} \in \mathbb{R}^{N \times D}$ , where  $N$  is the total number of vision tokens and  $D$  is the embedding dimension. Concurrently, we use the LLM’s tokenizer to convert the question into text embeddings, denoted as  $\mathbf{H}_0^{\text{tm}}$   $\in \mathbb{R}^{L \times D}$ , with  $L$  representing the number of text tokens. Finally, the visual and text embeddings are concatenated into  $\mathbf{H}_0 = [\mathbf{H}_v^{\text{vis}}, \mathbf{H}_0^{\text{tm}}] \in \mathbb{R}^{(N+L) \times D}$  for the LLM.
+
+**Large Language Model (LLM).** Existing LLMs, such as Qwen2 (Yang et al., 2024), LLaMA3 (Dubey et al., 2024) generally consist of several Transformer decoder layers, each of which consists of the multi-head self-attention layer (MSA) and feed-forward network (FFN). The MSA is the critical component of the decoder layer to learn the dense relation between tokens. For-
+
+{3}------------------------------------------------
+
+![Figure 3: Framework of ACT-IN-LLM. The diagram shows a Vision/Text Tokenizer on the left that processes images and text into high-resolution, low-resolution, and text tokens. These tokens are then processed by a Large Language Model (LLM) consisting of multiple layers (Early, Middle, Latter). Each layer contains an Adaptive Compression Module (ACM) followed by a Multi-Head Self-Attention (MHA) block and a Feedforward Network (FFN). The ACM uses a Reduce Ratio to compress the key and value tokens. The final output is a Response.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 3: Framework of ACT-IN-LLM. The diagram shows a Vision/Text Tokenizer on the left that processes images and text into high-resolution, low-resolution, and text tokens. These tokens are then processed by a Large Language Model (LLM) consisting of multiple layers (Early, Middle, Latter). Each layer contains an Adaptive Compression Module (ACM) followed by a Multi-Head Self-Attention (MHA) block and a Feedforward Network (FFN). The ACM uses a Reduce Ratio to compress the key and value tokens. The final output is a Response.
+
+Figure 3: **Framework of ACT-IN-LLM.** Our ACT-IN-LLM framework follows the general slicing-based MLLMs (Liu et al., 2024b), while applying the adaptive compression module (ACM) at a series of decoder layers of the LLM for computation efficiency, dynamically reducing key/value tokens before the multi-head self-attention (MHA) block, while preserving all query tokens.
+
+mally, given the hidden-states  $\mathbf{H}_i \in \mathbb{R}^{(N+L) \times D}$  from the  $i$ -th layer of the LLM, the single attention head  $h \in \{1, 2, \dots, H\}$  can be defined as following:
+
+$$\text{head}_{i,h} = \text{Attention}(\mathbf{Q}_{i,h}, \mathbf{K}_{i,h}, \mathbf{V}_{i,h}, \mathbf{M}_i) = \underbrace{\text{softmax} \left( \frac{\mathbf{Q}_{i,h} \mathbf{K}_{i,h}^\top}{\sqrt{D}} + \mathbf{M}_i \right)}_{\mathbf{A}_{i,h}} \mathbf{V}_{i,h}, \quad (1)$$
+
+where  $\mathbf{Q}_{i,h} = \mathbf{W}_{i,h}^Q \mathbf{H}_i$ ,  $\mathbf{K}_{i,h} = \mathbf{W}_{i,h}^K \mathbf{H}_i$  and  $\mathbf{V}_{i,h} = \mathbf{W}_{i,h}^V \mathbf{H}_i$  are the query, key and value matrices,  $\mathbf{W}_{i,h}^Q, \mathbf{W}_{i,h}^K \in \mathbb{R}^{D_k \times D}$ ,  $\mathbf{W}_{i,h}^V \in \mathbb{R}^{D_v \times D}$  are the learnable projection matrices,  $\mathbf{M}_i$  is the causal mask for the  $i$ -th layer.  $\mathbf{A}_{i,h}$  refers to the attention weight of the the  $h$ -th head in the  $i$ -th decoder layer. For clarity, we will not differentiate between  $D_k$ ,  $D_v$  and  $D$ , and just use  $D$  in the following. Then the MSA can be represented as:
+
+$$\text{MSA}(\mathbf{Q}, \mathbf{K}, \mathbf{V}) = \text{Concat}(\text{head}_1, \text{head}_2, \dots, \text{head}_{i,h}) \mathbf{W}_i^O, \quad (2)$$
+
+where  $\mathbf{W}_i^O \in \mathbb{R}^{HD_v \times D}$  is the learnable projection matrix, Concat indicates the concatenation operation. The computational complexity for processing all tokens is  $O((N+L)^2 \times D)$ .
+
+Previous Pre-LLM approaches (Liu et al., 2024b) generally reduce the vision tokens before the LLM (Fig. 1 (a)) leading to several drawbacks as shown in Fig. 2. Differently, our ACT-IN-LLM use the adaptive token compression (ACM) to reduce vision tokens of the key and value within the MSA layer of the LLM, shown as follows:
+
+$$\text{head}_{i,h} = \text{Attention}(\mathbf{Q}_{i,h}, \bar{\mathbf{K}}_{i,h}, \{\bar{\mathbf{V}}_{i,h}\}, \quad \bar{\mathbf{K}}_{i,h}, \bar{\mathbf{V}}_{i,h}\} = \text{ACM}(\{\mathbf{K}_{i,h}, \mathbf{V}_{i,h}\}, \mathbf{A}_{i-1}), \quad (3)$$
+
+where  $\mathbf{A}_{i-1}$  is the averaged attention weight from the  $i-1$ -th layer,  $\{\bar{\mathbf{K}}_{i,h}, \bar{\mathbf{V}}_{i,h}\} \in \mathbb{R}^{(M+L) \times D}$ , where  $M$  is the number of compressed vision tokens, satisfying  $M \ll N$ . In this way, we can reduce the computational complexity of MSA from  $O((N+L)^2 \times D)$  of the full tokens to  $O((N+L) \times (M+L) \times D)$ .
+
+### 3.2 ADAPTIVE COMPRESSION MODULE
+
+As shown in Fig. 2, reducing tokens before the LLM has significant drawbacks, including the absence of text-guided compression, challenges in selecting which tokens to reduce, and the risk of losing important information. To address these issues, our Adaptive Compression Mechanism (ACM) focuses on two key objectives: (i) preserving critical vision tokens to prevent information loss, and (ii) dynamically compressing tokens based on layer-wise vision-text relations. To achieve the first objective, we retain all query tokens  $\mathbf{Q}_i$  across layers, ensuring an inherent error correction mechanism that mitigates the permanent loss of valuable information. For the second objective, our ACM consists of three steps as shown in Fig. 4 (a).
+
+![Figure 4: (a) Adaptive compression module (ACM) diagram showing three steps: 1. Text-guide information, 2. Top Selection, and 3. Compression. It shows the process of selecting and compressing vision tokens based on attention weights and text information. (b) Sampled Causal Mask diagram showing a sparse matrix structure used for the self-attention layer after ACM.](8d3afc46f415cad96c2eba639730f7c3_img.jpg)
+
+Figure 4: (a) Adaptive compression module (ACM) diagram showing three steps: 1. Text-guide information, 2. Top Selection, and 3. Compression. It shows the process of selecting and compressing vision tokens based on attention weights and text information. (b) Sampled Causal Mask diagram showing a sparse matrix structure used for the self-attention layer after ACM.
+
+Figure 4: (a) **Adaptive compression module (ACM)** leverages three steps to compress vision tokens of the key and value at the  $i$ -th layer. (b) **Sampled Causal Mask** for the self-attention layer after ACM.
+
+{4}------------------------------------------------
+
+**Text-guided information extraction.** We utilize attention weights from the previous layer to guide vision token compression, since higher attention weights typically indicate greater importance in the final output (Vaswani, 2017). To leverage the textual information to guide the compression, we focus on the last row of the attention weight,  $\mathbf{A}_{i-1}[N + L, :]$ , which captures the significance of all previous tokens in relation to the last token. We extract the relevant elements for high-resolution and low-resolution visual tokens as follows:
+
+$$\mathbf{a}_{i-1}^{\text{hr}} = \mathbf{A}_{i-1}[N + L, 0 : N^{\text{hr}}], \quad \mathbf{a}_{i-1}^{\text{lr}} = \mathbf{A}_{i-1}[N + L, N^{\text{hr}} : N^{\text{hr}} + N^{\text{lr}}], \quad (4)$$
+
+where  $N^{\text{hr}}$  and  $N^{\text{lr}}$  denote the counts of high-resolution and low-resolution tokens, satisfying  $N^{\text{hr}} + N^{\text{lr}} = N$ .
+
+**Top Selection.** To retain critical vision tokens, we select the top  $N^{\text{hr}}/r_i^{\text{hr}}$  and  $N^{\text{lr}}/r_i^{\text{lr}}$  values from  $\mathbf{a}_{i-1}^{\text{hr}}$  and  $\mathbf{a}_{i-1}^{\text{lr}}$ , respectively:
+
+$$\mathbf{s}^{\text{hr}} = \text{Top}(\mathbf{a}_{i-1}^{\text{hr}}, r_i^{\text{hr}}), \quad \mathbf{s}^{\text{lr}} = \text{Top}(\mathbf{a}_{i-1}^{\text{lr}}, r_i^{\text{lr}}), \quad (5)$$
+
+where  $\mathbf{s}^{\text{hr}} = \{s_1, s_2, \dots, s_{N^{\text{hr}}/r_i^{\text{hr}}}\}$  represents the indices of the top  $N^{\text{hr}}/r_i^{\text{hr}}$  values.
+
+**Vision token Compression.** After obtaining the indices, we sampling the  $\mathbf{K}_i/\mathbf{V}_i$  and the causal mask  $\mathbf{M}_i$  based on  $\mathbf{s} = [\mathbf{s}^{\text{hr}}, \mathbf{s}^{\text{lr}}]$ , which can be formulated as:
+
+$$\bar{\mathbf{K}}_i = \mathbf{K}_i[\mathbf{s}, :], \quad \bar{\mathbf{V}}_i = \mathbf{V}_i[\mathbf{s}, :], \quad \bar{\mathbf{M}}_i = \mathbf{M}_i[\mathbf{s}, \mathbf{s}], \quad (6)$$
+
+where  $\bar{\mathbf{K}}_i/\bar{\mathbf{V}}_i \in \mathbb{R}^{(M+L) \times D}$ ,  $\bar{\mathbf{M}}_i \in \mathbb{R}^{(N+L) \times (M+L)}$  is the sampled causal mask (see the example in Fig. 4 (b)),  $M = N^{\text{hr}}/r_i^{\text{hr}} + N^{\text{lr}}/r_i^{\text{lr}}$ . Finally, the original self-attention in Eq. 1 can be performed as  $\text{Attention}(\mathbf{Q}_{i,h}, \bar{\mathbf{K}}_{i,h}, \bar{\mathbf{V}}_{i,h}, \bar{\mathbf{M}}_i)$ .
+
+### 3.3 ARCHITECTURE CONFIGURATIONS
+
+We incorporate the ACM into the decoder layers of the LLM at three stages in a hierarchical way, *i.e.*,  $r_i < r_j < r_p$ , where  $r_i$  and  $r_p$  are the sampling ratios in the early, middle and latter layers, based on the observation that the attention weights in the early layers are much denser than the latter ones (see Fig. 2 (b)). Note that for efficiency, we keep the vision tokens index to be identical in each stage. The analysis of different configurations for  $r_i/r_j/r_p$  is provided in Table 4a. We uniformly select the  $\sim 70\%$  layers among the early, middle and latter layers within LLM decoder layers to apply ACM, for the best performance and efficiency trade-off; see Table 4c and Table 5.
+
+## 4 FORMULATION AND ANALYSIS OF VISION TOKEN COMPRESSION
+
+In this section, we will theoretically show the superiority of our proposed ACM. To this end, we first give a unified formulation of different vision token compression methods in the self-attention mechanism in Section 4.1. Then, we show that ACM is one low-rank approximation of the original self-attention with full tokens under the specific assumption in MLLMs in Section 4.2. Finally, we prove that our ACM provides a better low-rank approximation of the full self-attention mechanism compared to existing vision token compression techniques in Section 4.3.
+
+### 4.1 UNIFIED FORMULATION
+
+For clarity, we omit the layer index  $i$  and head index  $h$  of Eq. 1 in this section. Formally, the hidden states can be denoted as  $\mathbf{H} \in \mathbb{R}^{(N+L) \times D}$ , where  $N$  and  $L$  are the number of the vision tokens (including high-resolution and low-resolution) and the text tokens; see detailed formulation in Section 3.1. Note we omit the system prompt for clarity in our paper. Then, we present a unified and simplified formulation of these different approaches, *i.e.*, presenting the vision compression process as a compression matrix:
+
+$$\mathbf{C} \cdot \mathbf{H} = \mathbf{C} \cdot [\mathbf{V}; \mathbf{T}], \quad \mathbf{C} \in \mathbb{R}^{(M+L) \times (N+L)}, \quad (7)$$
+
+where  $\cdot$  is the matrix multiplication,  $M$  is the number of the vision tokens after compression,  $\mathbf{C}$  is the compression matrix, which is defined as:
+
+$$\mathbf{C} = \begin{pmatrix} \mathbf{C}^{\text{vis}} & \mathbf{O}^1 \\ \mathbf{O}^2 & \mathbf{I} \end{pmatrix}, \quad (8)$$
+
+{5}------------------------------------------------
+
+![Figure 5: (a) Low-rank degree. Two line plots showing Low-rank Degree (LBD) vs Layer Index for Vicuna-7b (left) and Qwen2-0.5B (right). Both plots show high LBD for high-resolution (hr) tokens and low LBD for text (txt) tokens. (b) Average attention score. A bar chart showing Average Attention Score for hr, lr, and txt tokens. The scores are approximately 0.002 for hr, 0.005 for lr, and 0.038 for txt.](c54b3ca7603d65d4589151bc3a49d054_img.jpg)
+
+Figure 5: (a) Low-rank degree. Two line plots showing Low-rank Degree (LBD) vs Layer Index for Vicuna-7b (left) and Qwen2-0.5B (right). Both plots show high LBD for high-resolution (hr) tokens and low LBD for text (txt) tokens. (b) Average attention score. A bar chart showing Average Attention Score for hr, lr, and txt tokens. The scores are approximately 0.002 for hr, 0.005 for lr, and 0.038 for txt.
+
+Figure 5: **(a) Low-rank degree.** The x-axis represents the layer index in the LLM and the y-axis is the corresponding LDR (defined in Eq. 15). The high low-rank degree of vision tokens exists in both Vicuna-7b (left) and Qwen2-0.5B (right), and high-resolution tokens show more low-rank than low-resolution ones. **(b) Average attention score.** The x-axis represents the layer index in the LLM and the y-axis is the average attention score. Vision tokens receive small attention on average and high-resolution tokens present less attention than low-resolution ones.
+
+where  $\mathbf{C}^{\text{vis}} \in \mathbb{R}^{M \times N}$  is the compression operation for vision tokens,  $\mathbf{I} \in \mathbb{R}^{N \times N}$  is the identity matrix,  $\mathbf{O}^1 \in \mathbb{R}^{M \times L}$  and  $\mathbf{O}^2 \in \mathbb{R}^{L \times N}$  are zero matrices.
+
+Then, the vision token compression in self-attention can be represented as:
+
+$$\text{Com}(\mathbf{C}^Q, \mathbf{C}^K, \mathbf{C}^V) = \text{softmax} \left( \frac{(\mathbf{C}^Q \mathbf{Q})(\mathbf{C}^K \mathbf{K})^\top}{\sqrt{D}} \right) \cdot \mathbf{C}^V \mathbf{V} = \text{softmax} (\mathbf{C}^Q \mathbf{A} (\mathbf{C}^K)^\top) \cdot \mathbf{C}^V \mathbf{V}, \quad (9)$$
+
+where  $\mathbf{C}^Q$ ,  $\mathbf{C}^K$  and  $\mathbf{C}^V$  are the compression matrices with the form of Eq. 8 for the query, key and value respectively.
+
+For simplicity, we omit the causal attention mask  $\mathbf{M}$  as it does not affect the following analysis. A complete formulation can be found in Eq. 14 of the Appendix.
+
+Using this formulation, *i.e.*, Eq. 9, our ACM can be expressed as  $\text{Com}(\mathbf{I}, \mathbf{C}_i^K, \mathbf{C}_i^V)$ , where  $i$  indicates that performing compression in the  $i$ -th decoder layer of the LLMs. Similarly, the Pre-LLM compression methods can be represented as  $\text{Com}(\mathbf{C}_i^Q, \mathbf{C}_i^K, \mathbf{C}_i^V)$ .
+
+### 4.2 LOW-RANK APPROXIMATION
+
+In this section, we would prove that ACM is the low-rank approximation of the self-attention with full tokens based on the formulation of Eq. 9. Note that all proofs of the theorems in this section can be referred to the Appendix.
+
+We first demonstrate that the attention weight of vision tokens, *i.e.*,  $\mathbf{A}^{\text{vis}}$ , is low-rank:
+
+**Theorem 1.** For matrix  $\mathbf{A}$ , and any column vector  $\mathbf{v}$  of matrix  $\mathbf{V}$ , there exists a matrix  $\tilde{\mathbf{A}}$ , such that:
+
+$$\Pr \left( \left\| \tilde{\mathbf{A}} \mathbf{v} - \mathbf{A} \mathbf{v} \right\| \leq \epsilon \left\| \mathbf{A} \mathbf{v} \right\| \right) > 1 - o(1) \text{ and } \text{rank}(\tilde{\mathbf{A}}) = \Theta(\log(N)), \quad (10)$$
+
+where the sub-matrix  $\tilde{\mathbf{A}}_{\text{vis}}$  of  $\tilde{\mathbf{A}}$  is low-rank.
+
+We also conduct experiments to demonstrate that  $\mathbf{A}^{\text{vis}}$  show a higher degree of low-rankness than text tokens in Fig. 5 (a). For more details of this experiment and proof of Eq. 19, refer to the Appendix.
+
+**Assumption 1.** In the attention weight of MLLMs, vision tokens receive much less attention than text tokens.
+
+To verify this assumption, Fig. 5 (b) compares the average attention scores of vision and text tokens, showing that text tokens receive significantly more attention ( $\sim 13\times$ ) than vision tokens.
+
+Based on the above theorem and assumption, we show that ACM, *i.e.*,  $\text{Com}(\mathbf{I}, \mathbf{C}^K, \mathbf{C}^V)$ , can approximate the  $\mathbf{A} \mathbf{v}$ :
+
+{6}------------------------------------------------
+
+**Theorem 2.** For the attention weight  $\mathbf{A}$  and the value  $\mathbf{V}$ , there there exists matrices  $\mathbf{C}^K$  and  $\mathbf{C}^V$  in the formulation of Eq. 8, such that:
+
+$$\Pr(\|\text{softmax}(\mathbf{A}(\mathbf{C}^K)^\top) \mathbf{C}^V \mathbf{V} - \text{softmax}(\mathbf{A}) \mathbf{V}\| \leq \epsilon \|\text{softmax}(\mathbf{A}) \mathbf{V}\|) > 1 - 2e^{-(\epsilon^2 - \epsilon^3)M/4}. \quad (11)$$
+
+### 4.3 COMPARISON OF DIFFERENT VISION TOKEN STRATEGIES
+
+In this section, we show that our vision token compression strategy *i.e.*,  $\text{Com}(\mathbf{I}, \mathbf{C}^K, \mathbf{C}^V)$  is a better approximation of full-token self-attention  $\text{Com}(\mathbf{I}, \mathbf{I}, \mathbf{I})$  than existing strategies, such as Pre-LLM or Early-LLM (FastV) (Li et al., 2024a; Chen et al., 2024a) compression  $\text{Com}(\mathbf{C}^Q, \mathbf{C}^K, \mathbf{C}^V)$  and FlexAttention (Li et al., 2024b)  $\text{Com}(\mathbf{C}^Q, \mathbf{I}, \mathbf{I})$ :
+
+**Theorem 3.** For any row vector  $\mathbf{a}$  of  $\mathbf{A}$  and any column vector  $\mathbf{v}$  of matrix  $\mathbf{V}$ , any matrices  $\mathbf{C}^Q$ ,  $\mathbf{C}^K$  and  $\mathbf{C}^V$  in the formulation of Eq. 8, if Theorem 2 holds, then we have:
+
+$$\Pr(\|\underbrace{\text{Com}(\mathbf{I}, \mathbf{C}^K, \mathbf{C}^V)}_{\text{ACM}} - \underbrace{\text{Com}(\mathbf{I}, \mathbf{I}, \mathbf{I})}_{\text{Full}}\| < \|\underbrace{\text{Com}(\mathbf{C}^Q, \mathbf{C}^K, \mathbf{C}^V)}_{\text{Pre-LLM/Early-LLM}} - \underbrace{\text{Com}(\mathbf{I}, \mathbf{I}, \mathbf{I})}_{\text{Full}}\|) > 1 - o(1) \quad (12)$$
+
+$$\Pr(\|\underbrace{\text{Com}(\mathbf{I}, \mathbf{C}^K, \mathbf{C}^V)}_{\text{ACM}} - \underbrace{\text{Com}(\mathbf{I}, \mathbf{I}, \mathbf{I})}_{\text{Full}}\| < \|\underbrace{\text{Com}(\mathbf{C}^Q, \mathbf{I}, \mathbf{I})}_{\text{FlexAttention}} - \underbrace{\text{Com}(\mathbf{I}, \mathbf{I}, \mathbf{I})}_{\text{Full}}\|) > 1 - o(1) \quad (13)$$
+
+The detailed formulation and complexity comparison with different methods is shown in Table 1.
+
+## 5 EXPERIMENTS
+
+In this section, we conduct extensive experiments to prove the effectiveness of our proposed ACT-IN-LLM. Specifically, we compare our methods with existing vision token approaches under the same setting in Section 5.1. Then, we show that ACT-IN-LLM can be a plug-and-play method to be applied to different LLMs with different scales in Section 5.2. After that, we demonstrate that our scaling-up ACT-IN-LLM can achieve competitive performance compared with the SOTA MLLMs in section 5.3. Finally, the ablation study of our proposed modules are presented in Section 5.4 for further in-depth analysis.
+
+### 5.1 COMPARISON WITH DIFFERENT COMPRESSION METHODS
+
+**Experiment setting.** To ensure a fair comparison with existing vision token compression methods, we maintain all other settings (*e.g.*, epochs, training dataset, learning rate, cropping strategies, number of slices from high-resolution images, etc.) constant, varying only the method of vision token compression to compare their respective performances. Specifically, we utilize CLIP-ViT-L/14-224px as the vision encoder and Vicuna-7B-v1.5 as the LLM. We adopt a two-stage training approach comprising a pre-training stage and an instruction supervised (SFT) fine-tuning stage, following the training parameters outlined in (Liu et al., 2023a). The number of slices is set to four, consistently with LLaVA-1.5-HD (Liu et al., 2023a). All methods ultimately compress visual tokens of high-resolution slices to  $\sim 256$  for fairness.
+
+**Training dataset.** For pre-training, we follow (Liu et al., 2023b) and use a 558K subset of the LAION-CC-SBU dataset with BLIP captions (Li et al., 2023c). For supervised fine-tuning, in addition to the original 665K data from LLaVA, we gather
+
+| Method            | Formulation                                            | Complexity per Layer |
+|-------------------|--------------------------------------------------------|----------------------|
+| Full Token        | $\text{Com}(\mathbf{I}, \mathbf{I}, \mathbf{I})$       | $O((N+L)^2D)$        |
+| Pre-LLM/Early-LLM | $\text{Com}(\mathbf{C}^Q, \mathbf{C}^K, \mathbf{C}^V)$ | $O((M+L)^2D)$        |
+| FlexAttention     | $\text{Com}(\mathbf{C}^Q, \mathbf{I}, \mathbf{I})$     | $O((M+L)(N+L)D)$     |
+| Ours              | $\text{Com}(\mathbf{I}, \mathbf{C}^K, \mathbf{C}^V)$   | $O((N+L)(M+L)D)$     |
+
+Table 1: Comparison of formulation and computation complexity of self-attention operation.  $N$ ,  $M$ ,  $L$  are the number of the original vision tokens, vision tokens after compression and text tokens, respectively. See formulation definition in Eq. 9.
+
+![Figure 6: Trade-off of different methods. A line graph showing Average performance (Y-axis, 35 to 55) versus Single forward pass time (X-axis, 0.4 to 2.4). Five methods are plotted: Full (blue squares), Cabstractor (purple circles), UHD (pink diamonds), FlexAttention (green crosses), and Ours (blue triangles). Full, Cabstractor, and UHD show a sharp drop in performance at higher times, marked with a red 'X' and 'OOM'. Ours maintains high performance across all times, while FlexAttention shows lower performance.](09f2805f8f02dd446045cc4869422a78_img.jpg)
+
+| Method        | Single forward pass time | Average performance |
+|---------------|--------------------------|---------------------|
+| Full          | 0.4                      | 40                  |
+| Full          | 0.8                      | 48                  |
+| Full          | 1.2                      | 52                  |
+| Full          | 1.6                      | 54                  |
+| Full          | 2.0                      | 55                  |
+| Cabstractor   | 0.4                      | 40                  |
+| Cabstractor   | 0.8                      | 48                  |
+| Cabstractor   | 1.2                      | 52                  |
+| Cabstractor   | 1.6                      | 54                  |
+| Cabstractor   | 2.0                      | 55                  |
+| UHD           | 0.4                      | 40                  |
+| UHD           | 0.8                      | 48                  |
+| UHD           | 1.2                      | 52                  |
+| UHD           | 1.6                      | 54                  |
+| UHD           | 2.0                      | 55                  |
+| FlexAttention | 0.4                      | 38                  |
+| FlexAttention | 0.8                      | 42                  |
+| FlexAttention | 1.2                      | 45                  |
+| FlexAttention | 1.6                      | 48                  |
+| FlexAttention | 2.0                      | 50                  |
+| Ours          | 0.4                      | 40                  |
+| Ours          | 0.8                      | 48                  |
+| Ours          | 1.2                      | 52                  |
+| Ours          | 1.6                      | 54                  |
+| Ours          | 2.0                      | 55                  |
+
+Figure 6: Trade-off of different methods. A line graph showing Average performance (Y-axis, 35 to 55) versus Single forward pass time (X-axis, 0.4 to 2.4). Five methods are plotted: Full (blue squares), Cabstractor (purple circles), UHD (pink diamonds), FlexAttention (green crosses), and Ours (blue triangles). Full, Cabstractor, and UHD show a sharp drop in performance at higher times, marked with a red 'X' and 'OOM'. Ours maintains high performance across all times, while FlexAttention shows lower performance.
+
+Figure 6: Trade-off of different methods. 'OOM' indicates the out-of-the-memory.
+
+{7}------------------------------------------------
+
+| Model           | Efficiency  |              | General     |             |               | High-Resolution |             |             |             |                                 |
+|-----------------|-------------|--------------|-------------|-------------|---------------|-----------------|-------------|-------------|-------------|---------------------------------|
+|                 | Times(ms)   | Memory(GB)   | SEED        | POPE        | MME           | VQA-text        | ChartQA     | DocVQA      | InfoVQA     | Average                         |
+| Full            | 621(100.0%) | 19.9(100.0%) | 64.2        | 85.3        | 1466.7        | 60.5            | 49.0        | 46.5        | 35.0        | 48.0                            |
+| Q-former        | 507(81.6%)  | 18.6(93.0%)  | 61.4        | 84.2        | 1432.5        | 53.6            | 21.8        | 21.6        | 25.4        | 30.6                            |
+| Avg-pooling     | 461(74.3%)  | 18.1(90.7%)  | 61.5        | 85.2        | 1402.7        | 56.5            | 37.8        | 34.9        | 27.4        | 39.1                            |
+| FlexAttention   | 505(81.3%)  | 18.6(93.4%)  | 60.0        | 87.3        | 1442.9        | 53.6            | 27.3        | 24.3        | 24.6        | 32.5                            |
+| LLaVA-UHD       | 470(75.7%)  | 18.3(91.9%)  | 60.5        | 85.8        | 1407.5        | 54.2            | 33.2        | 29.9        | 26.9        | 36.0                            |
+| C-Abstracter    | 492(79.2%)  | 18.2(91.6%)  | <u>62.1</u> | 86.6        | <u>1448.1</u> | <u>56.7</u>     | 36.4        | 31.3        | 26.2        | 37.6                            |
+| FastV           | 499(80.3%)  | 18.3(94.0%)  | <u>61.9</u> | 86.7        | <u>1412.9</u> | <u>58.1</u>     | <u>35.0</u> | <u>38.6</u> | <u>27.7</u> | <u>39.9</u> <small>→</small>    |
+| Ours            | 515(83.0%)  | 18.8(94.0%)  | <b>63.5</b> | <b>87.6</b> | <b>1480.3</b> | <b>58.5</b>     | <b>46.1</b> | <b>45.2</b> | <b>31.6</b> | <b>45.4</b> <small>+5.5</small> |
+| FastV w/o train | 499(80.3%)  | 18.3(94.0%)  | <u>61.5</u> | 85.8        | 1412.9        | 57.8            | 33.5        | 37.3        | 26.2        | 38.7                            |
+| Ours w/o train  | 515(83.0%)  | 18.8(94.0%)  | <u>63.2</u> | 87.1        | 1443.2        | 58.3            | 43.2        | 42.8        | 29.8        | 43.5                            |
+
+Table 2: **Comparison with SOTA vision token compression methods.** The ratios of time and memory cost for different methods relative to the full method are highlighted in (green). All models are trained in the same setting. Gray means the model without vision token compression. ‘w/o train’ means the direct using our method without training. **Bold** means the best value and underline mean the second-best value. The number in blue indicates the difference to the prior state of the art.
+
+additional public datasets from high-resolution benchmarks, including ChartQA (Masry et al., 2022), DocVQA (Mathew et al., 2021), and InfoVQA (Mathew et al., 2022), yielding a total of 774K data.
+
+**Evaluation dataset.** We evaluate different methods on both high-resolution benchmarks including VQA-text(Singh et al., 2019), ChartQA val set (Masry et al., 2022), DocVQA val set (Mathew et al., 2021), InfoVQA val set (Mathew et al., 2022), and general multimodal benchmarks including SEED (Li et al., 2023b), POPE (Li et al., 2023d), MME (Fu et al., 2023).
+
+**Results.** We compare our method with state-of-the-art pre-LLM approaches (e.g., Q-former (Li et al., 2023c), Avg-pooling (Li et al., 2024a), LLaVA-UHD (Xu et al., 2024), and C-Abstracter (Cha et al., 2024)) and interaction approaches (e.g., FlexAttention (Li et al., 2024b)), as well as FastV (Chen et al., 2024a). From Table 2, our method demonstrates a superior trade-off compared to existing approaches, e.g., achieving 82.96% of the single-forward time of the full tokens while attaining 45.35% average performance on high-resolution benchmarks, outperforms 5.5% over the previous SOTA. Without training, our method can also outperform other vision token compression approaches even if they are trained.
+
+Furthermore, we analyze the trade-offs of various vision token compression approaches by reporting average performance on high-resolution benchmarks alongside the single-example forward pass time at different input resolutions, executed on one V100 GPU. As shown in Fig. 6, our method demonstrates a superior trade-off, particularly as image resolution increases, indicating its effectiveness in balancing performance and efficiency, around 65% times compared with the full model while achieving the competitive performance.
+
+### 5.2 SCALING UP ACT-IN-LLM
+
+**Experiment setting.** This section investigates whether our ACT-IN-LLM performance improves with increasing model size and SFT dataset size. We employ the pre-trained InternViT-300M (Chen et al., 2024b) as our vision encoder, evaluating various scale LLMs (Qwen2-0.5B (Yang et al., 2024), Phi3-3B (Abdin et al., 2024), and InternLM2-7B (Cai et al., 2024)) alongside SFT data sizes of 0.5M, 0.7M, and 1.2M. Average performance on high-resolution benchmarks is reported in Fig. 7.
+
+**Impact of LLM Scale.** As illustrated in Fig. 7, our ACT-IN-LLM shows consistent improvement with increasing model size across different SFT data scales. For example, with 0.7M SFT data, ACT-IN-LLM(0.5B) achieves an average score of 54.58%, while ACT-IN-LLM(3B) reaches 67.00%, resulting in a 6.23% gain when scaling from 3B to 7B.
+
+**Impact of SFT Data Size.** Fig. 7 also indicates that training with larger SFT datasets enhances ACT-IN-LLM performance across various LLM sizes. Specifically, increasing from 0.5M to 0.7M
+
+![Figure 7: A line graph showing Average Performance (Y-axis, 55 to 75) versus LLM Scale (X-axis, 0.5B, 3B, 7B). Three data series are plotted for different SFT data sizes: 0.5M (blue circles), 0.7M (light blue squares), and 1.2M (purple triangles). All series show a consistent increase in performance as the LLM scale increases from 0.5B to 3B to 7B. The 1.2M data size consistently achieves the highest performance, followed by 0.7M, and then 0.5M.](635262c3456135a70f7585ae445951e7_img.jpg)
+
+| LLM Scale | 0.5M SFT | 0.7M SFT | 1.2M SFT |
+|-----------|----------|----------|----------|
+| 0.5B      | ~54.58%  | ~56.0%   | ~58.0%   |
+| 3B        | ~67.00%  | ~69.0%   | ~71.0%   |
+| 7B        | ~70.0%   | ~73.0%   | ~75.0%   |
+
+Figure 7: A line graph showing Average Performance (Y-axis, 55 to 75) versus LLM Scale (X-axis, 0.5B, 3B, 7B). Three data series are plotted for different SFT data sizes: 0.5M (blue circles), 0.7M (light blue squares), and 1.2M (purple triangles). All series show a consistent increase in performance as the LLM scale increases from 0.5B to 3B to 7B. The 1.2M data size consistently achieves the highest performance, followed by 0.7M, and then 0.5M.
+
+Figure 7: **Effect of different model and data sizes.**
+
+{8}------------------------------------------------
+
+| Model                                                               | Max Tokens <sup>V</sup> | Data size | General      |              |              |             | High-Resolution |                        |                        |                         |              |
+|---------------------------------------------------------------------|-------------------------|-----------|--------------|--------------|--------------|-------------|-----------------|------------------------|------------------------|-------------------------|--------------|
+|                                                                     |                         |           | SEED         | GAQ          | POPE         | MME         | VQA-text        | CharQA <sup>test</sup> | DocVQA <sup>test</sup> | InfoVQA <sup>test</sup> | AVG          |
+| <i>Without Vision Token Compression</i>                             |                         |           |              |              |              |             |                 |                        |                        |                         |              |
+| LLaVA-Next                                                          | 2880                    | 760K      | 72.7         | <b>65.2</b>  | -            | 1519        | 64.9            | 69.5                   | 72.6                   | -                       | -            |
+| Mini-Gemini-HD                                                      | 2880                    | 1.5M      | <b>73.2</b>  | <u>64.5*</u> | <u>86.0*</u> | 1546        | <b>68.4</b>     | <u>53.5*</u>           | <u>56.1*</u>           | <u>39.5*</u>            | <u>53.4*</u> |
+| LLaVA-Onevision                                                     | 7290                    | 4.8M      | -            | -            | -            | 1580        | -               | <u>80.0</u>            | <u>90.2</u>            | <u>70.7</u>             | -            |
+| InternVL2                                                           | 3072                    | >5M       | 70.7         | 63.2         | <b>86.9</b>  | <b>1648</b> | <b>77.4</b>     | <b>83.3</b>            | <b>91.6</b>            | <b>74.8</b>             | <b>81.8</b>  |
+| <i>With Vision Token Compression or <math>\leq 1k</math> tokens</i> |                         |           |              |              |              |             |                 |                        |                        |                         |              |
+| LLaVA-FlexAttn                                                      | ~576                    | 665K      | <u>62.8*</u> | <u>62.2</u>  | <u>85.9</u>  | <u>1479</u> | 48.9            | -                      | -                      | -                       | -            |
+| UReader                                                             | ~841                    | -         | -            | -            | -            | -           | 57.6            | 59.3                   | 65.4                   | 42.2                    | 56.1         |
+| TextMonkey                                                          | 768                     | 409K      | -            | -            | -            | -           | 65.9            | 65.5                   | 71.5                   | 28.2                    | 57.8         |
+| DOCOWL2                                                             | 324                     | 6.4M      | -            | -            | -            | -           | 66.7            | 70.0                   | <u>80.7</u>            | <u>46.4</u>             | <u>65.9</u>  |
+| Cambrian-1                                                          | 576                     | 10M       | -            | -            | -            | -           | <b>71.7</b>     | <u>73.3</u>            | <u>77.8</u>            | -                       | -            |
+| ACT-IN-LLM (Ours)                                                   | ~1K                     | 1.2M      | <b>71.3</b>  | <b>64.4</b>  | <b>86.1</b>  | <b>1523</b> | <u>71.4</u>     | <b>77.3</b>            | <b>81.0</b>            | <b>55.9</b>             | <b>71.4</b>  |
+
+Table 3: **Comparison with the stat-of-the-art MLLMs.** ‘Tokens<sup>V</sup>’ means the vision token numbers. The LLM size of all models is around 7B. Within each group, the best and the second-best values are marked in **Bold** and Underline. \* means the results reproduced by ours using official checkpoints.
+
+yields approximately 2% improvement, while moving to 1.2M data further boosts performance by around 6% relative to 0.7M data.
+
+In summary, as both model size and SFT data increase, our method consistently achieves significant gains, indicating its potential applicability for training larger-scale models and datasets.
+
+### 5.3 STATE-OF-THE-ART COMPARISON
+
+Our ACT-IN-LLM utilizes the 7B LLM trained on 1.2M SFT data, achieving the best performance as detailed in Section 5.2. We compare our model against state-of-the-art (SOTA) MLLMs, including: (i) MLLMs without vision token compression: LLaVA-NeXT (Liu et al., 2024b), Mini-Gemini-HD (Li et al., 2024c), LLaVA-Onevision (Li et al., 2024a), and InternVL2 (Chen et al., 2024b) and (ii) MLLMs with vision token compression or the vision tokens  $\leq 1K$ : LLaVA-FlexAttn (Li et al., 2024b), UReader (Ye et al., 2023), Cambrian-1 (Tong et al., 2024), TextMonkey (Liu et al., 2024c) and DOCOWL2 (Hu et al., 2024).
+
+Table 3 summarizes the performance of different methods alongside the maximum number of vision tokens and STF data sizes. From the table, we can observe that our ACT-IN-LLM obtains the SOTA performance on both general and high-resolution benchmarks among the MLLMs in the second group. Even compared with the MLLMs in the first group those using exceed 3K tokens, our ACT-IN-LLM achieves 87.2% of InternVL2’s performance on high-resolution benchmarks while utilizing only 32.8% of the vision tokens and less than 24% of the SFT data, highlighting its efficiency.
+
+### 5.4 ABLATION STUDY
+
+In this section, we evaluate the effectiveness of the Adaptive Compression Module (ACM), a pivotal component of ACT-IN-LLM. Using the baseline configuration outlined in Section 5.1, our ablation study addresses three critical aspects: (i) *compression ratios—quantifying vision token reduction*, (ii) *compression implementation methods—strategies for token compression*, and (iii) *compression layers—optimal layers for token reduction*.
+
+**Compression Ratios.** Compression ratios dictate the number of vision tokens reduced, specifically characterized by  $r_j^{\text{hr}}$  and  $r_i^{\text{lr}}$ , which represent the reduction ratios for high-resolution and low-resolution tokens at layer  $i$ . We categorize the LLM layers into three types: the early layers with compression ratio of  $r_j^{\text{hr}}/r_j^{\text{lr}}$ , the middle with compression ratio of  $r_j^{\text{hr}}/r_j^{\text{hr}}$  and the latter layers with compression ratio of  $r_k^{\text{hr}}/r_k^{\text{hr}}$ . To explore the best configuration of the compression ratios, our ablation study consists of two steps. First, we maintain equal compression ratios for the high-resolution and low-resolution vision tokens ( $r^{\text{hr}} = r^{\text{lr}}$ ) and change  $r$  across different layer groups, i.e., plain type ( $r_i = r_j = r_p$ ) and hierarchical type ( $r_i \neq r_j \neq r_p$ ). Results (rows (a) to (e) in Table 4a) indicate that a hierarchical approach ( $r_i < r_j < r_p$ ) outperforms the plain type, aligning with the observed trend of sparser attention in deeper layers (Fig.2(b)). Subsequently, we investigate distinct ratios for high- and low-resolution tokens within each layer. The results from row (f) to row (i) in Table 4a demonstrate that  $r^{\text{hr}} > r^{\text{lr}}$  performs better than  $r^{\text{hr}} \leq r^{\text{lr}}$ , likely due to the higher low-rank nature of high-resolution tokens (Fig. 5).
+
+{9}------------------------------------------------
+
+486  
+487  
+488  
+489  
+490  
+491  
+492  
+493  
+494  
+495  
+496  
+497  
+498  
+499  
+500  
+501  
+502  
+503  
+504  
+505  
+506  
+507  
+508  
+509  
+510  
+511  
+512  
+513  
+514  
+515  
+516  
+517  
+518  
+519  
+520  
+521  
+522  
+523  
+524  
+525  
+526  
+527  
+528  
+529  
+530  
+531  
+532  
+533  
+534  
+535  
+536  
+537  
+538  
+539
+
+| $\{r_i^{\text{hr}}/r_i^{\text{lr}}\}_{i=j,p}$                                                    | <i>time</i> | <i>general</i> | <i>hr</i>    |
+|--------------------------------------------------------------------------------------------------|-------------|----------------|--------------|
+| <b>plain:</b> $r_i = r_j = r_p$ <b>identical:</b> $r^{\text{hr}} = r^{\text{lr}}$                |             |                |              |
+| (a) {2/2, 2/2, 2/2/2}                                                                            | 563         | 74.25          | <b>45.89</b> |
+| (b) {4/4, 4/4, 4/4/4}                                                                            | 516         | 74.01          | 44.18        |
+| (c) {8/8, 8/8, 8/8/8}                                                                            | <b>506</b>  | 74.12          | 43.25        |
+| <b>hierarchical:</b> $r_i \neq r_j \neq r_p$ <b>identical:</b> $r^{\text{hr}} = r^{\text{lr}}$   |             |                |              |
+| (d) {2/2, 4/4, 8/8/8}                                                                            | 513         | 74.86          | 44.95        |
+| (e) {8/8, 4/4, 2/2/2}                                                                            | 513         | 74.42          | 43.35        |
+| <b>hierarchical:</b> $r_i \neq r_j \neq r_p$ <b>distinct:</b> $r^{\text{hr}} \neq r^{\text{lr}}$ |             |                |              |
+| (f) {2/1, 4/1, 8/1/1}                                                                            | 531         | 75.02          | 45.11        |
+| (g) {2/2, 4/2, 8/2/2}                                                                            | 515         | 74.98          | 45.12        |
+| (h) {2/1, 4/2, 8/4/4}                                                                            | 515         | <b>75.04</b>   | 45.35        |
+| (i) {2/4, 4/4, 8/4/4}                                                                            | 513         | 74.23          | 44.51        |
+
+(a) **Compression ratios**  $r$ . The detailed definition of  $\{r_i^{\text{hr}}/r_i^{\text{lr}}, r_j^{\text{hr}}/r_j^{\text{lr}}, r_p^{\text{hr}}/r_p^{\text{lr}}\}$  is presented in Section 3.2.
+
+Table 4: **ACM module ablation experiments**. **time**: single-forward pass time (ms). **general**: the average performance on general benchmarks. **hr**: the average performance on high-resolution benchmarks. Best results and default settings are reported in **Bold** and gray.
+
+**Compression Ways.** In Section 3.2, we use the attention weight  $A_{i-1}$  from the  $i-1$ th layer to guide the vision token compression in the  $i$ -th layer. We compare the attention weight with three alternative compression methods, including (i) average-pooling 1D: directly apply average-pooling 1D to the vision tokens of  $K_i/V_i$ . (ii) average-pooling 2D: reshape the vision-tokens in  $K_i/V_i$  to be 2D, and then apply average-pooling 2D to the reshaped 2D hidden states. (iii) Learnable projection: use a learnable projection to reduce the length of  $K_i/V_i$ .
+
+Table 4b reports the average performance<sup>1</sup> of general and high-resolution benchmarks of different implementations. Results show that all different ways of ACM can outperform Pre-LLM approaches, confirming the effectiveness of our method. Non-parameter ways consistently yield better performance than parameterized ones (e.g., learnable projection), possibly due to the learnable methods requiring additional training complexity of learning effective mappings to compress vision tokens.
+
+**Compression Layers.** We compress vision tokens in a uniform way as described in Section 3.3, i.e., uniformly reducing tokens in early, middle and latter layers. To ablate where to reduce vision tokens, we further compare the other three types of compression layers: (i) the first 70% layers, (ii) the middle 70% layers and (iii) the last 70% layers. From Table 4c, we can find that selecting 70% layers uniformly across all layers of the LLM to apply ACM achieves the best performance. We also experiment with different proportions of ACM layers applied across all LLM layers in Table 5, showing that using more ACM layers would improve the efficiency while degrading the performance. The detailed layer indexes of incorporating ACM can be found in the Appendix.
+
+## 6 CONCLUSION
+
+In this paper, we introduce ACT-IN-LLM, which enhances the efficiency of multimodal large language models (MLLMs) by adaptively compressing vision tokens across different LLM layers. Unlike prior methods that reduce vision tokens before LLM processing, our approach retains all tokens, providing an inherent error correction mechanism to prevent the loss of critical information. Additionally, the layer-wise compression is guided by interactions between vision and text tokens, ensuring precise token selection. Our theoretical analysis and extensive experiments demonstrate that ACT-IN-LLM outperforms existing vision token compression techniques. Moreover, we reveal the potential for scaling up ACT-IN-LLM to achieve competitive performance even with SOTA MLLMs without vision token compression.
+
+<sup>1</sup>The MME Perception score is scaled down by 20 to align with other datasets, as (Tong et al., 2024).
+
+| way                  | <i>general</i> | <i>hr</i>    |
+|----------------------|----------------|--------------|
+| Attention-weight     | 75.04          | <b>45.35</b> |
+| AvgPool-1D           | <b>75.06</b>   | 45.08        |
+| AvgPool-2D           | 74.12          | 43.56        |
+| Learnable Projection | 74.07          | 42.21        |
+| Pre-LLM              | 72.28          | 39.15        |
+
+(b) **Compression ways**. ‘Pre-LLM’: the best Pre-LLM approaches in Table 2.
+
+| layer positions | <i>general</i> | <i>hr</i>    |
+|-----------------|----------------|--------------|
+| early           | 73.51          | 42.33        |
+| middle          | 74.68          | 44.08        |
+| latter          | 74.30          | 44.29        |
+| uniform         | <b>75.04</b>   | <b>45.35</b> |
+
+(c) **Compression layer positions**. There are totally 20 layers to compress tokens for fair compression.
+
+| num | <i>times</i> | <i>general</i> | <i>high-resolution</i> |
+|-----|--------------|----------------|------------------------|
+| 50% | 552          | <b>75.25</b>   | <b>46.12</b>           |
+| 60% | 538          | 75.02          | 45.68                  |
+| 70% | 515          | 75.04          | 45.35                  |
+| 80% | 512          | 74.19          | 44.61                  |
+| 90% | <b>502</b>   | 74.08          | 43.17                  |
+
+Table 5: **Effect of the ratio of ACM layers among all layers**. Best results and default settings are reported in **Bold** and gray.
+
+ Rest of paper (reference and Appendix) is removed.

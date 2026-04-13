@@ -1,0 +1,388 @@
+
+
+{0}------------------------------------------------
+
+# ONE STEP DIFFUSION-BASED SUPER-RESOLUTION WITH TIME-AWARE DISTILLATION
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Diffusion-based image super-resolution (SR) methods have shown promise in reconstructing high-resolution images with fine details from low-resolution counterparts. However, these approaches typically require tens or even hundreds of iterative samplings, resulting in significant latency. Recently, techniques have been devised to enhance the sampling efficiency of diffusion-based SR models via knowledge distillation. Nonetheless, when aligning the knowledge of student and teacher models, these solutions either solely rely on pixel-level loss constraints or neglect the fact that diffusion models prioritize varying levels of information at different time steps. To accomplish effective and efficient image super-resolution, we propose a time-aware diffusion distillation method, named TAD-SR. Specifically, we introduce a novel score distillation strategy to align the score functions between the outputs of the student and teacher models after minor noise perturbation. This distillation strategy eliminates the inherent bias in score distillation sampling (SDS) and enables the student models to focus more on high-frequency image details by sampling at smaller time steps. Furthermore, to mitigate performance limitations stemming from distillation, we fully leverage the knowledge in the teacher model and design a time-aware discriminator to differentiate between real and synthetic data. This discriminator effectively distinguishes the diffused distributions of real and generated images under varying levels of noise disturbance through the injection of time information. Extensive experiments on SR and blind face restoration (BFR) tasks demonstrate that the proposed method outperforms existing diffusion-based single-step techniques and achieves performance comparable to state-of-the-art diffusion models that rely on multi-step generation.
+
+## 1 INTRODUCTION
+
+Image super-resolution (SR), a cornerstone task in low-level vision, involves reconstructing high-resolution (HR) images with intricate details from low-resolution (LR) counterparts. Owing to the inherent ill-posed nature of this task, multiple high-resolution reconstructions are plausible for a given low-resolution input, presenting a persistent and perplexing challenge. Recently, the diffusion model (Ho et al., 2020; Song et al., 2020), a novel generative model, has garnered increasing attention for its capacity to model complex data distributions. It has gradually emerged as a successor to Generative Adversarial Networks (GANs) (Goodfellow et al., 2020) in various downstream tasks, including image editing (Meng et al., 2021; Hertz et al., 2022), image inpainting (Chung et al., 2022; Lugmayr et al., 2022) and image super-resolution (Saharia et al., 2022; Yue et al., 2024).
+
+Specifically, existing diffusion-based image super-resolution methods can be broadly categorized into two streams: one involves feeding low-resolution images along with noise into the diffusion model and training the model from scratch (Rombach et al., 2022; Yue et al., 2024), while the other (Wang et al., 2023b; Wu et al., 2024b) adapts SR tasks by fine-tuning the pre-trained text-to-image diffusion model. While these methods have demonstrated promising results, generating images typically demands tens or even hundreds of iterative samplings, significantly impeding their practical application and further advancement.
+
+To enhance the inference efficiency of diffusion models, various acceleration techniques have been proposed, such as the development of numerical samplers (Lu et al., 2022; Zheng et al., 2024) and the applications of knowledge distillation (Salimans & Ho, 2022; Sauer et al., 2023). However,
+
+{1}------------------------------------------------
+
+054  
+055  
+056  
+057  
+058  
+059  
+060  
+061  
+062  
+063  
+064  
+065  
+066  
+067  
+068  
+069  
+070  
+071  
+072  
+073  
+074  
+075  
+076  
+077  
+078  
+079  
+080  
+081  
+082  
+083  
+084  
+085  
+086  
+087  
+088  
+089  
+090  
+091  
+092  
+093  
+094  
+095  
+096  
+097  
+098  
+099  
+100  
+101  
+102  
+103  
+104  
+105  
+106  
+107
+
+![Figure 1: Qualitative comparisons on a typical real-world example of the proposed method and recent SR approaches. The figure shows a polar bear in snow. A red rectangle highlights a region of interest on the bear's face. To the right of the main image are two rows of zoomed-in crops. The top row shows crops from (b) BSRGAN, (c) ESRGAN, (d) SwinIR, (e) RealESRGAN, and (f) RealSR-JPEG. The bottom row shows crops from (g) DASR, (h) LDM-15, (i) ResShift-15, (j) SinSR-1, and (k) Ours-1. The 'Ours-1' crop shows significantly more detail and sharper edges compared to the other methods.](61972112770d9c8fb00883057954f885_img.jpg)
+
+Figure 1: Qualitative comparisons on a typical real-world example of the proposed method and recent SR approaches. The figure shows a polar bear in snow. A red rectangle highlights a region of interest on the bear's face. To the right of the main image are two rows of zoomed-in crops. The top row shows crops from (b) BSRGAN, (c) ESRGAN, (d) SwinIR, (e) RealESRGAN, and (f) RealSR-JPEG. The bottom row shows crops from (g) DASR, (h) LDM-15, (i) ResShift-15, (j) SinSR-1, and (k) Ours-1. The 'Ours-1' crop shows significantly more detail and sharper edges compared to the other methods.
+
+Figure 1: Qualitative comparisons on a typical real-world example of the proposed method and recent SR approaches, including BSRGAN (Zhang et al., 2021), RealESRGAN (Wang et al., 2021b), SwinIR (Liang et al., 2021), DASR (Liang et al., 2022b), RealSR-JPEG (Ji et al., 2020) LDM (Rombach et al., 2022), ResShift (Yue et al., 2024), and SinSR (Wang et al., 2023c). We mark the number of sampling steps of diffusion-based SR method with the format of “Method-n” for more intuitive visualization, where “n” is the number of sampling steps. Note that LDM contains more diffusion steps in training and is accelerated to “n” steps using DDIM (Song et al., 2020) during inference. Please zoom in for a better view.
+
+due to the requirement of SR tasks to output images with clear details while ensuring high visual similarity with LR images, directly applying existing acceleration methods to SR tasks presents significant challenges. For the SR task, ResShift (Yue et al., 2024) has improved the sampling efficiency of diffusion-based SR models by utilizing information from LR images to reformulate the diffusion process, thereby reducing the number of sampling steps to 15. Furthermore, SinSR (Wang et al., 2023c) merges distillation techniques with a cycle consistency approach to refine the ResShift model into a single inference step. However, it only constrains the output of the student model at a single scale and fails to leverage the ability of the pre-trained diffusion model to fit diffused distributions across different time steps, a property referred to as the time-aware of the diffusion model in this paper. Recently, AddSR (Xie et al., 2024) employs adversarial diffusion distillation (ADD) (Sauer et al., 2023) for SR task to enhance sampling efficiency. Although it employs the expertise of the teacher model to optimize the student model via Score Distillation Sampling (SDS) (Poole et al., 2022), inherent biases in the gradients calculated by SDS lead to image blurring and excessive smoothness. Additionally, AddSR does not take advantage of the diffusion model’s ability to extract semantic features at different levels. Instead, it relies on a pre-trained DINOv2 (Oquab et al., 2023) discriminator in pixel space, which is both expensive and challenging to optimize.
+
+To address the aforementioned issues, we propose a time-aware distillation method that fully leverages the time-aware property of the teacher model and the latent knowledge embedded in the diffusion process. Specifically, we propose a high-frequency enhanced score distillation technique that eliminates the inherent bias in score distillation sampling and improves the high-frequency details in the student model’s output by focusing on sampling in small time steps. Additionally, To overcome the performance limitations of teacher models, we incorporate adversarial learning into the distillation framework, forcing the student model to directly generate samples that lie on the manifold of real images in a single inference step. Specifically, we extract features from real and synthetic data under varying noise disturbances using the teacher model, while designing a time-aware discriminator to effectively distinguish these features. Combined with the above design, our method can match or even surpass the performance of state-of-the-art (SOTA) methods with only one-step sampling.
+
+Overall, our contributions can be summarized as follows:
+
+- By fully leveraging the time-aware property of the diffusion model and the latent knowledge embedded in the diffusion process, we propose a time-aware distillation method that accelerates diffusion-based SR models into a single inference step.
+- We analyze the inherent bias in score distillation sampling and propose a novel score distillation method to eliminate this bias. Additionally, we focus on enhancing the high-frequency details in the student model’s output by sampling at small time steps.
+
+{2}------------------------------------------------
+
+![Figure 2: A grid of images showing diffusion model predictions and noise. The grid has three rows: z_0^{stu}, z_0^{ch}, and z_0. Each row has five columns for time steps t=1, 4, 7, 10, 13. The first five columns show clean data predictions (heatmaps). The next five columns show the difference between predicted values and true values (noise) for the pre-trained model. The last five columns show the score differences for the teacher model and GT. Labels on the right indicate the noise levels: |z_0 - z_0|, |z_0^{ch} - z_0^{stu}|, and |z_0 - z_0^{stu}|.](d9d706121d1c4ba9ad2c793746382361_img.jpg)
+
+Figure 2: A grid of images showing diffusion model predictions and noise. The grid has three rows: z\_0^{stu}, z\_0^{ch}, and z\_0. Each row has five columns for time steps t=1, 4, 7, 10, 13. The first five columns show clean data predictions (heatmaps). The next five columns show the difference between predicted values and true values (noise) for the pre-trained model. The last five columns show the score differences for the teacher model and GT. Labels on the right indicate the noise levels: |z\_0 - z\_0|, |z\_0^{ch} - z\_0^{stu}|, and |z\_0 - z\_0^{stu}|.
+
+Figure 2: On the left side of the figure, we visualize the clean data predictions made by the pre-trained diffusion model after applying noise to the single-step output of the student model, the multi-step output of the teacher model, and GT (HR image). The first row on the right side of the figure illustrates the difference between the predicted values obtained by inputting GT with added noise into the pre-trained model and the true values. The second and third rows show the score differences predicted by the pre-trained diffusion model after adding noise to the outputs of student model, the outputs of teacher model and GT. Here, we use the symbol  $\hat{\cdot}$  to represent the prediction results of the pre-trained diffusion model after re-adding noise to the model’s output.
+
+- We highlight the importance of time in distinguishing between the diffused distributions of real and synthetic data and design a time-aware discriminator to provide efficient and effective supervision for the student model.
+- Extensive experiments on real-world SR and blind face restoration (BFR) tasks have demonstrated that our method, using only single-step sampling, achieves performance that is comparable to or surpasses state-of-the-art methods.
+
+## 2 PRELIMINARY
+
+**Diffusion model** is a type of probabilistic generative model, which utilizes a Markov chain to transform complex data distribution  $z_0 \sim p_{data}$  into noise distribution  $z_T \sim \mathcal{N}(0, I)$  and recover the data by gradually removing the noise. In image super-resolution tasks, Resshift (Yue et al., 2024) changes the initial state of the diffusion model and constructs a new Markov chain to generate high-resolution images. The forward process can be mathematically expressed as follows:
+
+$$q(z_t|z_0, y) = \mathcal{N}\left(z_t|z_0 + \eta_t(z_y - z_0), \kappa^2 \eta_t I\right), \quad (1)$$
+
+where  $z_0$  and  $z_y$  represent the latent codes obtained by encoding the HR images  $x$  and LR images  $y$ , respectively.  $\eta_t$  is a serial of hyper-parameters that monotonically increases with timestep  $t$  and satisfies  $\eta_0 \rightarrow 0$  and  $\eta_T \rightarrow 1$ .  $\kappa$  is a hyper-parameter controlling the noise variance. Based on this forward process, the reverse process will commence from the initial state with rich information in low-resolution images to perform denoising. The formula is as follows:
+
+$$q(z_{t-1}|z_t, z_0, y) = \mathcal{N}\left(z_{t-1}\left|\frac{\eta_{t-1}}{\eta_t}z_t + \frac{\alpha_t}{\eta_t}z_0, \kappa^2 \frac{\eta_{t-1}}{\eta_t} \alpha_t I\right.\right), \quad (2)$$
+
+where  $\alpha_t = \eta_t - \eta_{t-1}$ . To mitigate the influence of randomness on distillation (Wang et al., 2023c), we reformulate Eq. 2 to employ deterministic sampling as follows:
+
+$$q(z_{t-1}|z_t, z_0, y) = \delta(k_t z_0 + m_t z_t + j_t z_y), \quad (3)$$
+
+where  $\delta$  is the unit impulse,  $m_t = \sqrt{\frac{\eta_{t-1}}{\eta_t}}$ ,  $j_t = \eta_{t-1} - \sqrt{\eta_{t-1}\eta_t}$  and  $k_t = 1 - j_t - m_t$ . The details of the derivation can be found in SinSR (Wang et al., 2023c). In the backward process,  $z_0$  is usually predicted by a trainable neural network  $f_\theta$ . The training objective function of  $f_\theta$  is as follows:
+
+$$\min_{\theta} \sum_t w_t \|f_\theta(z_t, y, t) - z_0\|_2^2, \quad (4)$$
+
+{3}------------------------------------------------
+
+![Figure 3: Visualization results with different score distillation techniques. The figure shows five images of a golden retriever: (a) LR (Low Resolution), (b) SDS (Score Distillation Sampling), (c) SDS with HR (Score Distillation Sampling with High Resolution), (d) SDS with Outputs (Score Distillation Sampling with Teacher Model Outputs), and (e) HR (High Resolution).](dc1e692e5b7efd8e5a2a790c458646d9_img.jpg)
+
+Figure 3: Visualization results with different score distillation techniques. The figure shows five images of a golden retriever: (a) LR (Low Resolution), (b) SDS (Score Distillation Sampling), (c) SDS with HR (Score Distillation Sampling with High Resolution), (d) SDS with Outputs (Score Distillation Sampling with Teacher Model Outputs), and (e) HR (High Resolution).
+
+Figure 3: **Visualization results with different score distillation techniques.** In the figure, (a) and (e) represent the LR image and its corresponding HR image, respectively. (b) shows the result obtained by employing SDS technique, while (c) and (d) depict the results obtained by leveraging HR images and the output of the teacher model to eliminate bias terms in SDS.
+
+Table 1: **Diffusion-based SR with different score distillation technologies and discriminators on RealSR dataset.** We compare SDS with two score distillation designs that address the inherent biases in SDS. Additionally, based on our proposed score distillation method, we evaluate the performance of a vanilla discriminator, multiple discriminators, and our time-aware discriminator in super-resolution tasks.
+
+| Settings | Score distillation |             |                  | Discriminators |          |               |
+|----------|--------------------|-------------|------------------|----------------|----------|---------------|
+|          | SDS                | SDS with HR | SDS with Outputs | Vanilla        | Multiple | Time-aware    |
+| CLIPIQA↑ | 0.450              | 0.556       | <b>0.671</b>     | 0.711          | 0.724    | <b>0.741</b>  |
+| MUSIQ↑   | 54.069             | 60.079      | <b>61.506</b>    | 63.550         | 64.223   | <b>65.701</b> |
+
+where  $w_t = \frac{\alpha_t}{2\kappa^2\eta_t\eta_{t-1}}$ . In practice, omitting this weight often leads to performance improvement.
+
+**Score Distillation Sampling (SDS)** is a distillation technique based on pre-trained diffusion models. It leverages the rich generative prior of pre-trained diffusion models to optimize the generated images or the generator. Specifically, it adds noise to the clean samples generated by the student model and feeds them into a pre-trained diffusion model for prediction. The student model is optimized by calculating the discrepancy between the predicted distribution and the clean sample distribution produced by the student model, which can be expressed as follows:
+
+$$\nabla_{\theta} \mathcal{L}_{SDS}(\mathbf{z}, y, \epsilon, t) = (\epsilon_{\phi}(\mathbf{z}_t, y, t) - \epsilon) \frac{\partial \mathbf{z}_t}{\partial \theta}, \quad (5)$$
+
+where  $\mathbf{z}_t$  refers to the noised version of the clean samples generated by the student model. According to (Poole et al., 2022), the U-Net jacobian term  $\frac{\partial \epsilon_{\phi}(\mathbf{z}_t, y, t)}{\partial \mathbf{z}_t}$  is omitted to lead an effective gradient.
+
+## 3 METHODOLOGY
+
+### 3.1 MOTIVATION
+
+Building on prior knowledge of Score Distillation Sampling (SDS), we know that SDS can optimize student models by leveraging the latent knowledge of pre-trained diffusion models, ensuring that the output image distribution aligns as closely as possible with that of the pre-trained diffusion models. However, due to the inherent error in pre-trained diffusion models, we observed that even when GT (HR images) are noised and fed into the pre-trained diffusion model, a deviation still exists between the predicted distribution and the actual data distribution (as illustrated in the first row on the right side of Fig. 2). This indicates that even in ideal situations, SDS itself has biases, consistent with the conclusions of previous related work (Hertz et al., 2023; Wang et al., 2024). Thus, we decompose the gradient calculated by SDS into two components:  $\nabla_{\theta} \mathcal{L}_{SDS} = \epsilon_{\phi}(\mathbf{z}_t^{stu}, y, t) - \epsilon = D_{tr} + \Delta_{bias}$ . The first is the expected direction, which guides the student model to generate high-resolution images aligned with the distribution of the teacher model. The second component is the deviation between the predicted and true values of high-quality images that align with the diffusion model’s prior distribution. This deviation disrupts the optimization of the student model, producing non-detailed and blurry outputs (as shown in Fig. 3). Our goal is to identify this deviation and eliminate it during the optimization process.
+
+{4}------------------------------------------------
+
+![Figure 4: Method overview diagram. The diagram illustrates the training pipeline for a student model. At the top, a 'Teacher' block (blue) takes a noisy latent $z_0^{tch}$ and a time step $t$ to produce a clean latent $z_0^{tch}$. A 'Student' block (orange) takes a noisy latent $z_0^{stu}$ and a time step $t$ to produce a clean latent $z_0^{stu}$. A 'diffusion' block (dashed) takes $z_0^{tch}$ and $z_0^{stu}$ to produce a 'gradient' block. A 'Loss' block (red) calculates the loss between the teacher and student outputs. At the bottom, a 'Trainable' block (orange) takes a high-resolution image $HR(x)$ and encodes it to $z_0$, which is then diffused to $z_t$. A 'Freeze' block (blue) takes $z_t$ and a time step $t$ to produce a 'Multi-scale feature' block. A 'Discriminator' block (green) takes the multi-scale feature and a time step $t$ to produce a 'Time encoding' block. A 'Loss' block (red) calculates the loss between the discriminator and the time encoding.](690fce4fb5c9cbb8beb560cb2a3fcbeb_img.jpg)
+
+Figure 4: Method overview diagram. The diagram illustrates the training pipeline for a student model. At the top, a 'Teacher' block (blue) takes a noisy latent \$z\_0^{tch}\$ and a time step \$t\$ to produce a clean latent \$z\_0^{tch}\$. A 'Student' block (orange) takes a noisy latent \$z\_0^{stu}\$ and a time step \$t\$ to produce a clean latent \$z\_0^{stu}\$. A 'diffusion' block (dashed) takes \$z\_0^{tch}\$ and \$z\_0^{stu}\$ to produce a 'gradient' block. A 'Loss' block (red) calculates the loss between the teacher and student outputs. At the bottom, a 'Trainable' block (orange) takes a high-resolution image \$HR(x)\$ and encodes it to \$z\_0\$, which is then diffused to \$z\_t\$. A 'Freeze' block (blue) takes \$z\_t\$ and a time step \$t\$ to produce a 'Multi-scale feature' block. A 'Discriminator' block (green) takes the multi-scale feature and a time step \$t\$ to produce a 'Time encoding' block. A 'Loss' block (red) calculates the loss between the discriminator and the time encoding.
+
+Figure 4: **Method overview.** We train student model to map noisy latent to clean latent through one step sampling. To match the student model’s output  $z_0^{stu}$  with the multi-step sampling outputs of the teacher model  $z_0^{tch}$ , we optimize the student model using both regression loss and our proposed HSD. Additionally, to further improve the performance of the student model, we propose a time-aware discriminator that provides effective supervision through adversarial training.
+
+To achieve this, we attempt to re-noise HR image and the output of the teacher model, then input them into the pre-trained diffusion model to calculate the bias  $\Delta_{bias} = \epsilon_\phi(z_t, y, t) - \epsilon$  or  $\epsilon_\phi(z_t^{tch}, y, t) - \epsilon$ . This bias is subsequently subtracted from SDS to guide the model’s optimization. The example results are shown in Fig. 3. From the figure, it is evident that the outputs obtained by subtracting the bias using these two methods outperform the results of SDS. Additionally, using the teacher model’s output to calculate the score difference and guide the optimization of the student model produces clearer images. This improvement is likely due to the significant difference between HR images and the student model’s output, making it challenging to optimize the student model by calculating the score difference on a point-by-point basis. Furthermore, Fig. 2 clearly demonstrates a significant difference in the denoising scores of images generated by the teacher model and the student model under slight noise disturbances (small time steps). Due to the diffusion model’s focus on high-frequency information in images at small time steps, it can be concluded that the student model’s output notably lacks high-frequency details compared to the teacher model, which aligns with our expectations. Therefore, calculating the score difference between the outputs of the teacher and the student model under mild noise interference provides an effective gradient direction to guide the optimization of the student model.
+
+To ensure that the student model’s performance is not overly restricted by the teacher model, we propose incorporating real images into the distillation framework to offer additional supervision. As previously noted, optimizing the model by directly calculating the pixel-wise distance between the real data and the student model’s output is difficult. In contrast, we suggest employing adversarial learning to align the output distribution of the student model with that of real data. The successful deployment of pre-trained diffusion models in downstream tasks has revealed that denoising networks can extract multi-level semantic information from images. Consequently, we can utilize the teacher model to extract features and offer supervisory signals to student models via adversarial learning. However, as illustrated in the third row of Fig. 2, the distribution difference between the student model’s output and the real data varies over time, making it challenging for the discriminator to accurately fit the diffused distribution of the images at different time steps. A straightforward solution is to employ multiple discriminators, each specializing in the diffused distribution at different time steps. As shown in Table 1, this approach significantly enhances the quality of the generated images. However, managing multiple discriminators and their respective time periods introduces complexity and incurs substantial training costs. Given that variations in diffused distribution are primarily related to time steps, we propose that a unique set of parameters can be adaptively learned from each time step and integrated into the discriminator’s features. From Table 1, it can be seen that our design effectively improves the quality of generated images.
+
+{5}------------------------------------------------
+
+### 3.2 TAD-SR
+
+The overview framework of our proposed TAD-SR is illustrated in Fig. 4, consisting of a teacher model  $F_\phi$  parameterized by  $\phi$ , a student network  $f_\phi$  initialized from the teacher model with weights  $\theta$ , and a trainable time-aware discriminator  $D_\psi$  parameterized by  $\psi$ . During training, the student model generates samples from noisy data and computes the regression loss against the samples generated iteratively by the teacher model. Subsequently, we introduce slight noise to the samples produced by both the student and teacher models, predict the score function via the teacher model, and refine the student network by leveraging the discrepancy between the two score functions. Furthermore, to mitigate the performance constraints of the teacher model on the student model, we design a time-aware discriminator built upon the encoder network of the pre-trained teacher model, enhancing the perceptual quality of the generated samples through adversarial training processes.
+
+**Regression loss.** We utilize the multi-step output results  $z_0^{tech}$  of the teacher model as the learning objective for the student model. It guides the student model to establish a mapping between low-resolution and high-resolution images through single-step inference. The loss is formulated as the following formula:
+
+$$\mathcal{L}_{reg} = \|z_T^{tech} - z_0^{stu}\|_2^2, \quad z_0^{stu} = f_\phi(z_T, T, y), \quad (6)$$
+
+where  $z_T$  is obtained through the forward process Eq. (1). Specifically, Note that our student model samples only the time step  $T$  to obtain the noise latent code  $z_T \sim \mathcal{N}(x_t; y, \kappa^2 \eta_t \mathbf{I})$ .
+
+**High-frequency enhanced score distillation.** As analyzed in Section 3.1, employing SDS (Poole et al., 2022) to accelerate diffusion-based SR models is not an optimal solution. Its inherent bias may introduce meaningless gradient directions to the student model, leading to a blurring and smoothing output (Wang et al., 2024; Hertz et al., 2023). To eliminate this bias, DMD (Yin et al., 2023) trains a new diffusion model to learn the score function of samples generated by the student model and updates the generator based on the difference between the score functions predicted by the new model and the teacher model. However, this approach involves a complex training process that requires alternating training between the student model and the new diffusion model.
+
+By contrast, based on the observations presented in Fig. 2, we develop an effective and efficient score distillation method. Specifically, we calculate the difference between the predicted score function of the teacher model's output and the true score function to obtain the bias term in score distillation sampling. By subtracting this bias term, we obtain a meaningful gradient direction. According to Eq. 5, the following formula is derived:
+
+$$\mathcal{L}_{hsd} = \mathbb{E}_{z_t^{tech}, z_t^{stu}, y} [\omega ((\epsilon_\phi(z_t^{stu}, t, y) - \epsilon) - (\epsilon_\phi(z_t^{tech}, t, y) - \epsilon))], \quad (7)$$
+
+where  $\omega = 1/CS$  is a weighting function,  $C$  is the number of channels and  $S$  is the number of spatial pixels.  $z_t^{tech}$  and  $z_t^{stu}$  are the noise data obtained by adding noise to the outputs of the teacher model  $z_0^{tech}$  and the output of student model  $z_0^{stu}$ , respectively, through Eq. 1. By simplifying this formula, our high-frequency enhanced score distillation (HSD) technique essentially calculates the score difference  $\epsilon_\phi(z_t^{stu}, t, y) - \epsilon_\phi(z_t^{tech}, t, y)$  between the teacher model and the student model's outputs under different degrees of noise interference. As can be seen from the second row of Fig. 2, these differences are primarily significant under mild noise disturbances (i.e., small time steps). Given that diffusion models typically predict high-frequency information in images at small time steps, this suggests that images generated by student models are predominantly deficient in high-frequency details compared to those produced by teacher models. Consequently, we mainly constrain the score difference between the student model and the teacher model output under slight noise disturbance, specifically when  $t' \sim U(1, T/5)$ . According to Eq. 1, we can simplify Eq. 7 as follows:
+
+$$\mathcal{L}_{hsd} = \mathbb{E}_{z_t^{tech}, z_t^{stu}, y} [\omega_2 (z_0^{stu} - z_0^{tech} + F_\phi(z_t^{tech}, t, y) - F_\phi(z_t^{stu}, t, y))], \quad (8)$$
+
+where  $\omega_2 = \frac{\omega(1-\eta_t)}{\sqrt{\eta_t \kappa}}$ . The details of the derivation can be found in the appendix. Note that during the loss backpropagation in Eq. 7, similar to SDS, we omit the U-Net Jacobian matrix term.
+
+{6}------------------------------------------------
+
+![Figure 5: Comparison of various score distillation techniques. (a) SDS (Poole et al., 2022) shows a student model TCH(z_t^{stu}, t') generating z_0^{stu} from z_t^{stu}. A loss L_{SDS} is calculated between z_0^{stu} and z_t^{stu}. (b) DMD (Yin et al., 2023) shows a student model TCH(z_t^{stu}, t') generating z_0^{stu} from z_t^{stu}. A loss L_{KL} is calculated between z_0^{stu} and z_t^{stu}. (c) HSD (Ours) shows a student model TCH(z_t^{stu}, t') generating z_0^{stu} from z_t^{stu}. A loss L_{had} is calculated between z_0^{stu} and z_t^{stu}. All three diagrams include a backpropagation arrow from the loss to the student model.](1956f44611abd5c3c41049836aa78ad8_img.jpg)
+
+Figure 5: Comparison of various score distillation techniques. (a) SDS (Poole et al., 2022) shows a student model TCH(z\_t^{stu}, t') generating z\_0^{stu} from z\_t^{stu}. A loss L\_{SDS} is calculated between z\_0^{stu} and z\_t^{stu}. (b) DMD (Yin et al., 2023) shows a student model TCH(z\_t^{stu}, t') generating z\_0^{stu} from z\_t^{stu}. A loss L\_{KL} is calculated between z\_0^{stu} and z\_t^{stu}. (c) HSD (Ours) shows a student model TCH(z\_t^{stu}, t') generating z\_0^{stu} from z\_t^{stu}. A loss L\_{had} is calculated between z\_0^{stu} and z\_t^{stu}. All three diagrams include a backpropagation arrow from the loss to the student model.
+
+Figure 5: **Comparison of various score distillation techniques.** Compared to SDS (Poole et al., 2022; Sauer et al., 2023) and DMD (Yin et al., 2023), our high-frequency enhanced score distillation fully utilizes the potential of teacher model, providing meaningful gradient guidance to student models without training an extra diffusion model.
+
+From the above equation, it can be seen that when the output of the student model is the same as that of the teacher model, the loss is zero, and there is no additional bias. Compared to SDS, our proposed HSD provides more meaningful gradient guidance for student models.
+
+**Time-aware discriminator.** To prevent the student model’s performance from being entirely constrained by the teacher model, we propose incorporating real images (HR images) into the distillation framework. However, directly calculating the regression loss between the real image and the student model’s output can result in optimization challenges. Recent studies (Sauer et al., 2023) (Sauer et al., 2024) have shown that adversarial loss can be integrated into diffusion models to enhance the quality of generated images. However, ADD (Sauer et al., 2023) relies on pre-training the DINOv2 discriminator in pixel space, which is both costly and complex. To reduce training costs and enhance model performance, LADD (Sauer et al., 2024) employed a pre-trained diffusion model for adversarial training in latent space. Despite its contribution, LADD overlooks the critical correlation between the features extracted by the diffusion model and their corresponding time steps. It relies on a single discriminator to differentiate between the distribution differences of real and synthetic data under various noise disturbances, which poses significant challenges for optimizing the discriminator. To address this issue, we propose a time-aware discriminator, which is capable of distinguishing between the distributions of real and generated images that have undergone various perturbations in latent space. Specifically, we first utilize the encoder part of the teacher model to extract multi-scale features  $F_k$  from both the student model’s output images and real images.
+
+$$F_k = Enc_\phi(z_t, t, y), \quad (9)$$
+
+where  $Enc_\phi$  denotes the encoder part of the teacher model’s denoising network,  $k$  denotes the scale of the extracted features.  $z_t$  represents the noisy latent code after adding noise to the real latent code. We use  $F_t^{stu}$  to denote the multi-scale features extracted from the output of the student model. We then encode the time step  $t$  as of sinusoidal timestep embeddings, which are sent to different discriminator heads  $D_{\psi,k}$  to learn a set of parameters  $\gamma_k$  and  $\beta_k$  through several linear layers. These parameters are used to modulate multi-scale features:  $Norm(F_k) * (1 + \gamma_k) + \beta_k$ .
+
+After modulation, the features at each scale are evaluated through their corresponding discriminator heads. The final output is obtained by averaging the results from each discriminator head. For simplicity, we denote the process of modulating and discriminating features in the discriminator head as  $D_{\psi,k}(F_k, t)$ . Consequently, the corresponding adversarial loss can be formulated as follows:
+
+$$\mathcal{L}_{adv}^f = -\mathbb{E}_{z_0^{stu}} \left[ \sum_k D_{\psi,k}(F_k^{stu}, t) \right], \quad (10)$$
+
+$$\mathcal{L}_{adv}^D = \mathbb{E}_{z_0^{stu}} \left[ \sum_k \max(0, 1 - D_{\psi,k}(F_k^{stu}, t)) \right] + \mathbb{E}_{z_0} \left[ \sum_k \max(0, 1 - D_{\psi,k}(F_k, t)) \right]. \quad (11)$$
+
+{7}------------------------------------------------
+
+Table 2: Quantitative results of different methods on the dataset of *ImageNet-Test*. The best and second best results are highlighted in **bold** and underline. \* indicates that the result was obtained by replicating the method in the paper.
+
+| Methods         | Metrics      |              |              |              |               |
+|-----------------|--------------|--------------|--------------|--------------|---------------|
+|                 | PSNR↑        | SSIM↑        | LPIPS↓       | CLIPIQA↑     | MUSIQ↑        |
+| ESRGAN          | 20.67        | 0.448        | 0.485        | 0.451        | 43.615        |
+| RealSR-JPEG     | 23.11        | 0.591        | 0.326        | 0.537        | 46.981        |
+| BSRGAN          | 24.42        | 0.659        | 0.259        | 0.581        | <u>54.697</u> |
+| SwinIR          | 23.99        | 0.667        | 0.238        | 0.564        | 53.790        |
+| RealESRGAN      | 24.04        | 0.665        | 0.254        | 0.523        | 52.538        |
+| DASR            | 24.75        | <u>0.675</u> | 0.250        | 0.536        | 48.337        |
+| LDM-15          | <u>24.89</u> | 0.670        | 0.269        | 0.512        | 46.419        |
+| ResShift-15     | <b>25.01</b> | <b>0.677</b> | 0.231        | 0.592        | 53.660        |
+| SinSR-1         | 24.56        | 0.657        | <b>0.221</b> | 0.611        | 53.357        |
+| SinSR*-1        | 24.59        | 0.659        | 0.231        | 0.599        | 52.462        |
+| DMD*-1          | 24.05        | 0.629        | 0.246        | <u>0.612</u> | 54.124        |
+| <i>TAD-SR-1</i> | 23.91        | 0.641        | <u>0.227</u> | <b>0.652</b> | <b>57.533</b> |
+
+Table 3: Quantitative results of different methods on two real-world datasets.
+
+| Methods         | Datasets      |               |                  |               |
+|-----------------|---------------|---------------|------------------|---------------|
+|                 | <i>RealSR</i> |               | <i>RealSet65</i> |               |
+|                 | CLIPIQA↑      | MUSIQ↑        | CLIPIQA↑         | MUSIQ↑        |
+| ESRGAN          | 0.236         | 29.048        | 0.374            | 42.369        |
+| RealSR-JPEG     | 0.362         | 36.076        | 0.528            | 50.539        |
+| BSRGAN          | 0.543         | 63.586        | 0.616            | 65.582        |
+| SwinIR          | 0.465         | 59.636        | 0.578            | 63.822        |
+| RealESRGAN      | 0.490         | 59.678        | 0.600            | 63.220        |
+| DASR            | 0.363         | 45.825        | 0.497            | 55.708        |
+| LDM-15          | 0.384         | 49.317        | 0.427            | 47.488        |
+| ResShift-15     | 0.596         | 59.873        | 0.654            | 61.330        |
+| SinSR-1         | 0.689         | 61.582        | 0.715            | 62.169        |
+| SinSR*-1        | 0.691         | 60.865        | 0.712            | 62.575        |
+| DMD*-1          | 0.709         | 63.610        | 0.723            | <u>66.177</u> |
+| <i>TAD-SR-1</i> | <b>0.741</b>  | <b>65.701</b> | <b>0.734</b>     | <b>67.500</b> |
+
+**The total objective.** The student network is trained with the above three losses as follows:
+
+$$\mathcal{L}_{fo} = \mathcal{L}_{reg} + \lambda_1 \mathcal{L}_{hsd} + \lambda_2 \mathcal{L}_{adv}^fo, \quad (12)$$
+
+where  $\lambda_1$  and  $\lambda_2$  are the hyperparameters to control the relative importance of these objectives.
+
+## 4 EXPERIMENTS
+
+### 4.1 EXPERIMENTAL SETUP
+
+**Training Details.** For a fair comparison, we follow the same experimental setup and backbone design as that in (Yue et al., 2024; Wang et al., 2023c). Specifically, we use the weights of the teacher model (ResShift) to initialize the student model, and then train the model for 30K iterations based on our proposed loss functions. For real-world SR task, we set the weighting factor  $\lambda_1 = 1$  and  $\lambda_2 = 0.02$ . For blind face restoration (BFR) task, we set  $\lambda_1 = 0.1$  and  $\lambda = 0.2$ .
+
+**Compared methods.** For real-world SR task, we evaluate the effectiveness and efficiency of TAD-SR in comparison to representative SR models, including BSRGAN (Zhang et al., 2021), SwinIR (Liang et al., 2021), RealESRGAN (Wang et al., 2021b), DASR (Liang et al., 2022b), RealSR-JPEG (Ji et al., 2020) LDM (Rombach et al., 2022), ResShift (Yue et al., 2024) and SinSR (Wang et al., 2023c). Additionally, we also apply DMD (Yin et al., 2023) to super-resolution tasks as a baseline. For BFR task, we compare TAD-SR with recent BFR methods, including DFDNet (Li et al., 2020), PSFRGAN (Chen et al., 2021), GFPGAN (Wang et al., 2021a), RestoreFormer (Wang et al., 2022), VQFR (Gu et al., 2022), CodeFormer (Zhou et al., 2022), and DiffFace (Yue & Loy, 2022).
+
+{8}------------------------------------------------
+
+432  
+433  
+434  
+435  
+436  
+437  
+438  
+439  
+440
+
+![Figure 6: Qualitative comparisons of different methods on two synthetic examples of the ImageNet-Test dataset. The figure shows two rows of images. The top row displays a dog, and the bottom row displays a stack of books. Each row contains ten images labeled (a) through (i): (a) LR (Low Resolution), (b) SwinIR, (c) BSRGAN, (d) LDM-15, (e) ResShift-15, (f) DMD-1, (g) SnsR-1, (h) Ours-1, and (i) HR (High Resolution). The 'Ours-1' method (h) shows superior detail recovery and sharper edges compared to the other methods.](0ba998c66ef6a980bac9c0c12e9452bf_img.jpg)
+
+Figure 6: Qualitative comparisons of different methods on two synthetic examples of the ImageNet-Test dataset. The figure shows two rows of images. The top row displays a dog, and the bottom row displays a stack of books. Each row contains ten images labeled (a) through (i): (a) LR (Low Resolution), (b) SwinIR, (c) BSRGAN, (d) LDM-15, (e) ResShift-15, (f) DMD-1, (g) SnsR-1, (h) Ours-1, and (i) HR (High Resolution). The 'Ours-1' method (h) shows superior detail recovery and sharper edges compared to the other methods.
+
+Figure 6: Qualitative comparisons of different methods on two synthetic examples of the *ImageNet-Test* dataset. Please zoom in for a better view.
+
+441  
+442  
+443  
+444  
+445  
+446  
+447  
+448  
+449  
+450  
+451
+
+![Figure 7: Qualitative comparisons of different methods on two synthetic examples of the CelebA-Test dataset. The figure shows two rows of images. The top row displays a woman's face, and the bottom row displays a man's face. Each row contains ten images labeled (a) through (i): (a) LR (Low Resolution), (b) GFPGAN, (c) CodeFormer, (d) VQFR, (e) DiffFace-100, (f) ResShift-15, (g) SnsR-1, (h) Ours-1, and (i) HR (High Resolution). The 'Ours-1' method (h) generates more natural-looking faces with richer details and better facial structures compared to the other methods.](aaec7c7044d764c324cdb35c0201da6f_img.jpg)
+
+Figure 7: Qualitative comparisons of different methods on two synthetic examples of the CelebA-Test dataset. The figure shows two rows of images. The top row displays a woman's face, and the bottom row displays a man's face. Each row contains ten images labeled (a) through (i): (a) LR (Low Resolution), (b) GFPGAN, (c) CodeFormer, (d) VQFR, (e) DiffFace-100, (f) ResShift-15, (g) SnsR-1, (h) Ours-1, and (i) HR (High Resolution). The 'Ours-1' method (h) generates more natural-looking faces with richer details and better facial structures compared to the other methods.
+
+Figure 7: Qualitative comparisons of different methods on two synthetic examples of the *CelebA-Test* dataset. Please zoom in for a better view.
+
+452  
+453  
+454  
+455  
+456  
+457  
+458  
+459  
+460
+
+**Metrics.** For real-world SR tasks, we utilize LPIPS (Zhang et al., 2018b), CLIPIQA (Wang et al., 2023a) and MUSIQ (Ke et al., 2021) as evaluation metrics. PSNR and SSIM (Wang et al., 2004) are also reported for reference. For BFR task, we also evaluate methods with identity score (IDS), landmark distance (LMD) and FID (Heusel et al., 2017). Note that we take non-reference metrics as the primary metrics since they are closer to human perception (Wang et al., 2023b; Xie et al., 2024).
+
+461  
+462  
+463  
+464  
+465  
+466  
+467  
+468  
+469
+
+**Datasets.** For the real-world image super-resolution task, we train the models on the training set of ImageNet (Deng et al., 2009) following the same pipeline with ResShift (Yue et al., 2024) where the degradation model is adopted from RealESRGAN (Wang et al., 2021b). Then, we evaluate our model on one synthetic dataset ImageNet-Test (Deng et al., 2009; Yue et al., 2024) and two real-world datasets RealSR (Cai et al., 2019) and RealSet65 (Yue et al., 2024). For the BFR task, We train the models on FFHQ dataset (Karras et al., 2019), and the LQ images are synthesized following a typical degradation model used in (Wang et al., 2021a). One synthetic dataset CelebA-Test (Karras et al., 2018; Yue et al., 2024) and three real-world datasets LFW (Huang et al., 2008), WebPhoto and WIDER (Yang et al., 2016) are adopted to evaluate the performance of face restoration model.
+
+470  
+471
+
+### 4.2 EXPERIMENTAL RESULTS
+
+472  
+473  
+474  
+475  
+476  
+477  
+478  
+479  
+480  
+481  
+482  
+483  
+484  
+485
+
+**Evaluation on synthetic datasets.** For the real-world SR task, we conduct a comprehensive comparison between TAD-SR and other SR methods on the ImageNet-Test dataset, as summarized in Table 2 and Fig. 6. The following conclusions can be drawn: i) TAD-SR significantly outperforms other methods in terms of non-reference metrics, and achieves second-best results in the full-reference metric LPIPS. It demonstrates that TAD-SR has the ability to generate images with high perceptual quality and realism. ii) Visual results show that TAD-SR produces images with higher clarity and better visual perception. Additionally, the complexity comparison of different SR methods is presented in Table 6. The table shows that our method improves the inference speed of the teacher model by approximately tenfold. For BFR task, We used CelebA-Test as the testing dataset, and the results are summarized in Table 4 and Fig. 7. From the perspective of evaluation metrics, the proposed method achieves SOTA results in terms of FID and comparable results in terms of IDS, LMD, CLIPIQA, and MUSIQ, which demonstrates the effectiveness of TAD-SR on BFR task. As shown in Fig. 7, the generated faces by TAD-SR appear more natural and exhibit richer details. Furthermore, we visualize the spectrograms obtained from the Fourier transform of images generated by TAD-SR and other methods. As shown in Fig. 10, the spectrograms indicate that TAD-SR retains more high-frequency information compared to other methods.
+
+{9}------------------------------------------------
+
+Table 4: Quantitative results of different methods on the dataset of *CelebA-Test*. The best and second best results are highlighted in **bold** and underline.
+
+| Methods       | Metrics            |                  |                  |                    |                    |                    |                  |
+|---------------|--------------------|------------------|------------------|--------------------|--------------------|--------------------|------------------|
+|               | LPIPS $\downarrow$ | IDS $\downarrow$ | LMD $\downarrow$ | FID-F $\downarrow$ | FID-G $\downarrow$ | CLIPIQA $\uparrow$ | MUSIQ $\uparrow$ |
+| DFDNet        | 0.739              | 86.323           | 20.784           | 93.621             | 76.118             | 0.619              | 51.173           |
+| PSFRGAN       | 0.475              | 74.025           | 10.168           | 63.676             | 60.748             | 0.630              | 69.910           |
+| GPGAN         | 0.416              | 66.820           | 8.886            | 66.308             | 27.698             | 0.671              | <u>75.388</u>    |
+| RestoreFormer | 0.488              | 70.518           | 11.137           | 50.165             | 51.997             | <b>0.736</b>       | 71.039           |
+| VQFR          | 0.411              | 65.538           | 8.910            | 58.423             | 25.234             | 0.685              | 73.155           |
+| CodeFormer    | 0.324              | <b>59.136</b>    | 5.035            | 62.794             | 26.160             | 0.698              | <b>75.900</b>    |
+| DiffFace-100  | 0.338              | 63.033           | 5.301            | 52.531             | 23.212             | 0.527              | 66.042           |
+| ResShift-4    | <b>0.309</b>       | <u>59.623</u>    | 5.056            | <u>50.164</u>      | <u>17.564</u>      | 0.613              | 73.214           |
+| SinSR*-1      | 0.319              | 60.305           | <b>4.935</b>     | 55.292             | 21.681             | 0.634              | 74.140           |
+| TAD-SR-1      | 0.341              | 59.897           | <u>5.050</u>     | <b>41.968</b>      | <b>16.779</b>      | <u>0.735</u>       | 75.027           |
+
+Table 5: Quantitative results of different methods on three real-world human face datasets.
+
+| Methods       | Datasets           |                  |                    |                  |                    |                  |
+|---------------|--------------------|------------------|--------------------|------------------|--------------------|------------------|
+|               | LFW                |                  | WebPhoto           |                  | WIDER              |                  |
+|               | CLIPIQA $\uparrow$ | MUSIQ $\uparrow$ | CLIPIQA $\uparrow$ | MUSIQ $\uparrow$ | CLIPIQA $\uparrow$ | MUSIQ $\uparrow$ |
+| DFDNet        | 0.716              | 73.109           | 0.654              | 59.024           | 0.625              | 63.210           |
+| PSFRGAN       | 0.647              | 73.602           | 0.637              | 71.674           | 0.648              | 71.507           |
+| GPGAN         | 0.687              | <u>74.836</u>    | 0.651              | <u>73.369</u>    | 0.663              | <b>74.694</b>    |
+| RestoreFormer | 0.741              | 73.704           | 0.709              | 69.837           | 0.730              | 67.840           |
+| VQFR          | 0.710              | 74.386           | 0.677              | 70.904           | 0.707              | 71.411           |
+| CodeFormer    | 0.689              | <b>75.480</b>    | 0.692              | <b>74.004</b>    | 0.699              | 73.404           |
+| DiffFace-100  | 0.593              | 70.362           | 0.555              | 65.379           | 0.561              | 64.970           |
+| ResShift-4    | 0.626              | 70.643           | 0.621              | 71.007           | 0.629              | 71.084           |
+| SinSR*-1      | 0.640              | 72.457           | 0.641              | 73.357           | 0.654              | 73.556           |
+| TAD-SR-1      | <b>0.768</b>       | 74.085           | <b>0.718</b>       | 71.952           | <b>0.770</b>       | <u>73.739</u>    |
+
+**Evaluation on real-world datasets.** In addition to evaluating our method on synthetic datasets, we also assess the method in real-world datasets. As shown in Table 3, in terms of non-reference metrics, the proposed method significantly outperforms other methods with just a single-step sampling. Specifically, when compared to ResShift, which serves as our teacher model, the non-reference metrics show substantial improvement after applying TAD-SR. Additionally, visual comparisons are displayed in Fig 1 and Fig. 11. To ensure a comprehensive evaluation, we include diverse scenarios, such as buildings, animals, and landscapes. It can be observed that the images generated by TAD-SR appear more naturalistic, as evidenced by the distinct brick textures, as well as the fine and natural-looking polar bear fur. For BFR task, we evaluate recent methods on LFW, Webphoto, and WIDER datasets. The results are presented in Table 5, leading to several significant conclusions. Across all three datasets, the proposed method achieves the highest CLIPIQA, outperforming other methods by a substantial margin. On the WIDER dataset, the proposed method also achieves the second-best MUSIQ. All these results inform that in terms of BFR task, TAD-SR can generate images with really high perceptual quality. Visual comparisons are provided in Fig. 14, where it is evident that TAD-SR produces more realistic hair details, sharper facial contours, and improved skin textures.
+
+## 5 CONCLUSION
+
+In this paper, we propose a time-aware distillation method that accelerates diffusion-based super-resolution models to a single inference step. We introduce a high-frequency enhanced score distillation technique that optimizes the generator by calculating the score difference between the outputs of the teacher and student models following slight noise perturbation, thereby enhancing the high-frequency details in the student model’s output. To elevate the student model’s performance ceiling, we incorporate generative adversarial learning into the diffusion model framework. Specifically, we design a time-aware discriminator that distinguishes between generated and real data in latent space, providing more efficient and effective supervision for the student model. Extensive experiments demonstrate that our method can achieve performance on par with or surpassing that of the SOTA methods in a single inference step.
+
+ Rest of paper (reference and Appendix) is removed.

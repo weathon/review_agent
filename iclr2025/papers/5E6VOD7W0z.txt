@@ -1,0 +1,316 @@
+
+
+{0}------------------------------------------------
+
+# ON ERRONEOUS AGREEMENTS OF CLIP IMAGE EMBEDDINGS
+
+## Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Recent research suggests that the failure of Vision-Language Models (VLMs) in visual reasoning could be attributed to the CLIP image encoder ambiguously encoding distinct images into embeddings with high cosine similarity, namely *erroneous agreements*. In this paper, we show that they are not the sole issue, as multimodal large language models (MLLMs) may extract distinct information even from image embeddings with high cosine similarities. On Subset A of the What’sUp benchmark, where the Left/Right image pairs are embedded by CLIP with average cosine similarity greater than 0.99, CLIP’s performance is near random guess. In contrast, LLaVA-1.5-7B, which uses the same image encoder as CLIP, achieves nearly 100% accuracy. This discrepancy is also observed between LLaVA-1.5-7B and CLIP-like models on similar benchmarks. To investigate this performance gap, we conduct controlled experiments to test the effect of varying evaluation methods, training data, and language processing choices. We find that the CLIP image embeddings contain more extractable information than previously suggested, but it is likely obscured by the inadequate vision-language alignment of the CLIP’s paradigm. Motivated by this observation, we reconsider the LLaVA-1.5 model on the MMVP benchmark, for which prior work showed that it could not distinguish image pairs with high cosine similarity. We observe a performance gain brought about by an alternative decoding algorithm, which attends more to visual input. Further, we show that the accuracy significantly increases if the model can take both images as input to emphasize their nuanced differences. Both findings indicate that LLaVA-1.5 did not utilize extracted visual information sufficiently. In conclusion, our findings suggest that while improving image encoders could benefit VLMs, there is room to enhance the models with a fixed image encoder through better strategies for extracting and utilizing visual information.
+
+## 1 INTRODUCTION
+
+Despite the rapid development and success of Vision-Language Models (VLMs), recent work pointed out that state-of-the-art VLMs (Radford et al., 2021; Zhai et al., 2023; Liu et al., 2024; Google, 2023a;b; OpenAI, 2023) still struggle with some simple visual reasoning tasks (Li et al., 2023d; Liu et al., 2023b; Tong et al., 2024c; Rahmanzadeghergi et al., 2024), where they were asked to answer questions about the images, such as recognizing shapes and describing the object relationships. These are basic tasks that VLMs should be able to solve before we deploy them to real-world scenarios like home robots responding to spoken or written commands.
+
+Recent work argued that the pretrained CLIP image encoder (Radford et al., 2021), which serves as the “eyes” of many VLMs, could be the cause and cure for such visual shortcomings (Tong et al., 2024c). In these VLMs, any input image is first encoded by the CLIP image encoder and then used to calculate image-text similarity or as the input for a generative language model. Therefore, any deficiency of the CLIP image encoder propagates into the VLMs. The deficiency found by the authors is named *erroneous agreements*: Visually different images could be ambiguously encoded with high cosine similarity in the embedding space. They claimed this suggested information loss and caused VLMs’ failure in relevant visual reasoning tasks, such as the MMVP benchmark (Tong et al., 2024c). This benchmark consists of selected, semantically distinct image pairs erroneously agreeing in the CLIP image embedding space, and CLIP-based VLMs failed to answer questions
+
+{1}------------------------------------------------
+
+054 [regarding the visual semantic difference better than random chance](#). This criterion is adopted in  
+055 Taghipour et al. (2024) and similarly used in Tong et al. (2024b).
+
+056  
+057 In this work, we provide evidence that VLMs face challenges beyond erroneous agreements. The  
+058 query-relevant visual information might still be present in the image embeddings despite the high  
+059 cosine similarity, but a better strategy is required to pull it out. For instance, in the What’sUp  
+060 benchmark (Kamath et al., 2023a) with paired, tightly controlled image pairs for evaluating VLM’s  
+061 spatial reasoning ability, the average cosine similarity of image pairs on three out of four subsets  
+062 is greater than 0.95 in CLIP image embedding space, reaching the similarity threshold in Tong  
+063 et al. (2024c). While CLIP’s accuracy in distinguishing these images is nearly random (about 50%),  
+064 LLaVA-1.5-7B (Liu et al., 2024) with the pretrained, frozen image encoder of CLIP-ViT-L/14-336px  
+065 still achieves beyond 80% in binary classification accuracies on all four subsets in What’sUp. Sim-  
+066 ilarly, on the COCO-spatial and GQA-spatial benchmark used in Kamath et al. (2023a), LLaVA-  
+067 1.5-7B surpasses CLIP-like models (including SigLIP (Zhai et al., 2023)) by a large margin. On the  
+068 [more challenging](#) MMVP and MMVP-VLM benchmark (Tong et al., 2024c), though its absolute  
+069 performance is poor, LLaVA-1.5 still outperforms CLIP-like models, showcasing a stronger ability  
+070 to extract information from given image embeddings.
+
+071 What causes their discrepancy in extracting the given visual information? First, we unify the eval-  
+072 uation methods of CLIP and LLaVA and observe that the performance gap still exists. Then we  
+073 decompose their difference into three parts: training data, language processing choice, and model  
+074 paradigm (training and inference pipeline). Through ablation studies, we find that CLIP’s failure is  
+075 likely caused by the inadequate visual-language alignment of CLIP’s paradigm. [This also implies](#)  
+076 [that the visual information extraction module in LLaVA-1.5, consisting of the two-layer MLP con-](#)  
+077 [nector and the language model, adopts an inherently different mechanism from CLIP’s paradigm.](#)
+
+078 The above results emphasize the importance of effective visual information extraction and highlight  
+079 LLaVA-1.5’s extracting ability. However, its poor performance on the MMVP benchmark remains a  
+080 mystery. We look into its failure and provide insight into future directions in the discussion section.  
+081 To help LLaVA-1.5 keep the visual information during decoding, we try an alternative decoding  
+082 algorithm, Multi-Modal Mutual-Information Decoding (M3ID) (Favero et al., 2024), leading to per-  
+083 formance gain (+6%). We further find that visual nuances are often extracted and aligned with the  
+084 correct semantics by LLaVA-1.5 rather than being discarded after visual encoding, but they did not  
+085 induce enough difference in outputs. To explore the amount of such visual formation, we reevaluate  
+086 LLaVA-1.5 with relaxed constraints, which allows for comparing the slight difference induced in the  
+087 outputs of two images. In this setting, its accuracy is significantly above random chance (+23.3%),  
+088 while the result in the original one-image setting is just around random chance (+0.3%), suggest-  
+089 ing insufficient visual information utilization in the original evaluation. In conclusion, despite the  
+090 erroneous agreements in the CLIP embedding space, visual nuances might still be extracted with  
+091 improved strategies. This underscores the potential to enhance model performance by employing  
+092 better extraction and utilization techniques with the same pretrained image encoder.
+
+## 2 RELATED WORK
+
+093  
+094  
+095  
+096 **Benchmarking VLMs’ visual reasoning ability.** Vision reasoning tasks underline VLMs’ visual  
+097 perception ability. Many recent challenging benchmarks on visual reasoning focus on assessing spe-  
+098 cific abilities of current VLMs like compositionality (Winoground (Thrush et al., 2022), ARO (Yuk-  
+099 sekgonul et al., 2023), SugarCrepe (Hsieh et al., 2024)), hallucination (POPE (Li et al., 2023d),  
+100 HallusionBench (Liu et al., 2023a), and VHILT (Rawte et al., 2024)), distinguishing image pairs  
+101 (MMVP (Tong et al., 2024c)), spatial understanding of VLMs (What’sUp (Kamath et al., 2023a)  
+102 and Embspatial-bench (Du et al., 2024)), and core visual perception abilities (BLINK (Fu et al.,  
+103 2024) for various aspects like visual correspondence and BlindTestbasic (Rahmanzadehgerivi et al.,  
+104 2024) for recognizing basic patterns). State-of-the-art VLMs often fail unexpectedly on simple test  
+105 cases, performing significantly worse than human accuracy or even random guess. [For our discus-](#)  
+106 [sion on erroneous agreements, we mainly consider the MMVP and What sUp benchmark since their](#)  
+107 [image pairs exhibit this property in the CLIP embedding space. Nevertheless, findings on these](#)  
+[benchmarks reveal the relationship between vision encoders and VLMs, supporting the broader goal](#)  
+[of enhancing VLMs for general visual reasoning.](#)
+
+{2}------------------------------------------------
+
+![Diagram illustrating the CLIP and LLaVA-1.5 model structures. On the left, the CLIP model takes 'mug left of plate' and 'mug right of plate' as options, which are processed by a CLIP Text Encoder. Two images, (1) showing a mug to the left of a plate and (2) showing a mug to the right of a plate, are processed by a CLIP Image Encoder. The text and image embeddings are compared using Cosine Similarity, resulting in a similarity of approximately 0.9844. The CLIP model's individual accuracy is approximately 50% and its pair accuracy is less than 11% for the Left/Right subset. On the right, the LLaVA-1.5 model takes the same images and a question 'Is the mug to the left of or to the right of the plate? Answer left or right.' The question is processed by a Tokenizer & Embedding block, then a Two-Layer MLP Connector, and finally a Language Model (Vicuna-1.5). The model's response is 'LLaVA-1.5: (1) right (2) left', which is marked with a green checkmark. LLaVA-1.5's individual accuracy is approximately 100% and its pair accuracy is approximately 100% for the Left/Right subset.](1b7d539e02a202c2cf2d97698b911447_img.jpg)
+
+Diagram illustrating the CLIP and LLaVA-1.5 model structures. On the left, the CLIP model takes 'mug left of plate' and 'mug right of plate' as options, which are processed by a CLIP Text Encoder. Two images, (1) showing a mug to the left of a plate and (2) showing a mug to the right of a plate, are processed by a CLIP Image Encoder. The text and image embeddings are compared using Cosine Similarity, resulting in a similarity of approximately 0.9844. The CLIP model's individual accuracy is approximately 50% and its pair accuracy is less than 11% for the Left/Right subset. On the right, the LLaVA-1.5 model takes the same images and a question 'Is the mug to the left of or to the right of the plate? Answer left or right.' The question is processed by a Tokenizer & Embedding block, then a Two-Layer MLP Connector, and finally a Language Model (Vicuna-1.5). The model's response is 'LLaVA-1.5: (1) right (2) left', which is marked with a green checkmark. LLaVA-1.5's individual accuracy is approximately 100% and its pair accuracy is approximately 100% for the Left/Right subset.
+
+Figure 1: An illustration of CLIP and LLaVA-1.5 model structures sharing the same pretrained image encoder with an example test case from the Left/Right subset of What’s Up benchmark. We find that the query-relevant nuances in the CLIP image embeddings may be extracted by LLaVA-1.5 despite erroneous agreements, and we note their performance gap on several similar benchmarks.
+
+**Exploring causes of the visual shortcomings of VLMs.** Researchers are actively exploring the root causes of VLMs’ failures on benchmarks above, mainly from the model perspective. **(1) Vision modality.** Tong et al. (2024c) argued that the flawed CLIP image encoder adopted by many VLM architectures could lead to downstream failure because of erroneous agreements. (Chandhok et al., 2024) agreed that the image encoder is responsible for the information loss in spatial reasoning tasks since CLIP’s performance is quite low. However, we find evidence that erroneous agreements do not necessarily lead to VLM’s failure and that LLaVA is stronger at extracting information from similar visual embeddings than CLIP. **(2) Language understanding.** In CLIP, Kamath et al. (2023b); Tong et al. (2024b) found that its text encoder could also lose relevant information during encoding. In multimodal LLMs (MLLMs), the language model might not timely terminate answer generation (Yue et al., 2024), put false priority on the input text and format (Stan et al., 2024), or neglect information like negation (Quantmeyer et al., 2024). Qiao et al. (2024) decoupled the perception stage and reasoning stage of VLMs and found that they are often limited by reasoning ability. In this paper, we perform an ablation study on the text encoder and find that CLIP-like models still fail when equipped with a stronger text encoder. **(3) Vision-language alignment.** Others discussed the importance of modality alignment, such as visual grounding (Rajabi & Kosecka, 2023). From the language model side, Ye et al. (2024) pointed out that the MLLMs might utilize multimodal spurious correlation in the training data due to the coarse-grained training objectives. Similarly, Yang et al. (2024a) found that the model wrongly raised the probability of deceptive candidates. From the image encoder side, Yang et al. (2024b) proposed the cross-modal Alignment and Correspondence score of visual representations, which is linearly correlated to model performance. We abstractly view the components of VLMs other than the vision part as visual information extraction and utilization module and demonstrate their different abilities. **(4) Other factors.** Apart from the model, others looked into the problem with training data (Udandarao et al., 2024) or downstream tasks, such as the hardness of the visual query (Zhang et al., 2024).
+
+**Improving the visual reasoning ability of VLMs.** Following the observations about VLM’s limitation, researchers mainly focused on improving the model structure with better image encoders and vision-languageconnectors (Luo et al., 2024a; Zeng et al., 2021; Yao et al., 2024; Kar et al., 2024; Jiang et al., 2023; Zong et al., 2024; Xu et al., 2024; Tong et al., 2024a; Meng et al., 2024) or using different training objectives with additional loss terms (Zhang et al., 2023; Zeng et al., 2024). From the data-centric perspective, previous paper tried adding relevant instruction tuning data (Ranasinghe et al., 2024; Chen et al., 2024), using long caption in pretraining (Zheng et al., 2024), hard negative mining (Yuksekgonul et al., 2023; Paiss et al., 2023) or using synthesized images (Chatterjee et al., 2024; Jiao et al., 2024).
+
+Post-training techniques are also explored to improve the performance of off-the-shelf VLMs. Some leveraged feedback from other models (Wang et al., 2024a; Luo et al., 2024b; Deng et al., 2024), various text or visual prompting methods (Wan et al., 2024; Lei et al., 2024; Wu et al., 2024), or multi-turn reflection (Huang et al., 2024; Wu et al., 2024; Wu & Xie, 2023; Kim et al., 2024b).
+
+{3}------------------------------------------------
+
+![Diagram illustrating the evaluation of CLIP-like models on the What'sUp benchmark. It shows two images of a mug and a plate. The top image has the mug to the right of the plate, and the bottom image has the mug to the left of the plate. The model generates CLIP Image Embeddings for both images and CLIP Text Embeddings for two options: 'mug right of plate' and 'mug left of plate'. Cosine similarity scores (S_c) are calculated between each image embedding and each text embedding. For the top image, S_c = 0.4 with 'mug right of plate' and S_c = 0.8 with 'mug left of plate'. For the bottom image, S_c = 0.5 with 'mug right of plate' and S_c = 0.9 with 'mug left of plate'. The model chooses the highest similarity score for each image, resulting in 'mug right of plate' for the top image and 'mug left of plate' for the bottom image. This leads to a Pair Accuracy of 0 and an Individual Accuracy of 0.5.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+The diagram shows two rows of image-text matching. In the first row, an image with a mug to the right of a plate is compared against two text options: "mug right of plate" and "mug left of plate". The similarity scores are  $S_c = 0.4$  and  $S_c = 0.8$  respectively. In the second row, an image with a mug to the left of a plate is compared against the same two text options. The similarity scores are  $S_c = 0.5$  and  $S_c = 0.9$  respectively. The model selects the option with the highest similarity score for each image. Below the diagram, a box indicates "Pair Accuracy: 0" and "Individual Accuracy: 0.5".
+
+Diagram illustrating the evaluation of CLIP-like models on the What'sUp benchmark. It shows two images of a mug and a plate. The top image has the mug to the right of the plate, and the bottom image has the mug to the left of the plate. The model generates CLIP Image Embeddings for both images and CLIP Text Embeddings for two options: 'mug right of plate' and 'mug left of plate'. Cosine similarity scores (S\_c) are calculated between each image embedding and each text embedding. For the top image, S\_c = 0.4 with 'mug right of plate' and S\_c = 0.8 with 'mug left of plate'. For the bottom image, S\_c = 0.5 with 'mug right of plate' and S\_c = 0.9 with 'mug left of plate'. The model chooses the highest similarity score for each image, resulting in 'mug right of plate' for the top image and 'mug left of plate' for the bottom image. This leads to a Pair Accuracy of 0 and an Individual Accuracy of 0.5.
+
+Figure 2: Example for evaluating CLIP-like models on What’sUp benchmark. For two-way evaluation, a test case consists of two similar images and two captions. The model chooses one caption for each image, and it gets one point in pair accuracy only if choosing correctly for both images.
+
+Without external feedback or changing the task format, others developed probability-based output correction (Zhou et al., 2023), including hallucination-reducing decoding strategies (Chuang et al., 2023; Yang et al., 2024a; Kim et al., 2024a;c; Favero et al., 2024). Besides decoding, visual attention recalibration was proposed in response to the false priority put by VLMs (Woo et al., 2024). In this work, we achieve performance gain on MMVP through a decoding algorithm, M3ID (Favero et al., 2024), and test a new evaluation with relaxed constraints to show that current visual information utilization in LLaVA-1.5 is insufficient.
+
+## 3 ERRONEOUS AGREEMENTS
+
+We begin by introducing the task setup and the concept of erroneous agreements. Using a toy example, we demonstrate that information might still be extracted through alternative methods despite erroneous agreements. This is further validated through LLaVA-1.5’s good performance on the What’sUp benchmark (Kamath et al., 2023a), showing that erroneous agreements are not the sole issue as it is possible for LLaVA-1.5 to extract distinct visual information from highly similar embeddings. We also notice a significant performance gap between LLaVA-1.5 and CLIP on What’sUp and across several other benchmarks.
+
+### 3.1 TASK SETUP
+
+This paper focuses on the setup in which VLMs are asked to choose from several captions based on a given image. For MLLMs, the image is accompanied by a question. Here, we use What’sUp benchmark Kamath et al. (2023a), which was proposed for evaluating VLM’s spatial reasoning ability. Every test case includes four captions (e.g., “A dog left of/right of/on/under a table”) and four corresponding images photographed with minimal change except for the object spatial relationship. For the convenience of calculating cosine similarity and comparing it to model performance, we split each test case into two pairs: In the previous example, one pair consists of “A dog left of a table” and “A dog right of a table” together with the ground truth images, and the other pair is the remaining captions and images. This way, we get four subsets of the original benchmark.
+
+For CLIP-like models, we calculate the matching score between images and texts. For CLIP with image encoder  $f_v$  and text encoder  $f_t$ , this is the cosine similarity between its image embeddings  $f_v(\mathbf{v})$  and text embeddings  $f_t(\mathbf{t})$ , denoted as
+
+$$S_c(f_v(\mathbf{v}), f_t(\mathbf{t})) = \frac{f_v(\mathbf{v})^\top f_t(\mathbf{t})}{\|f_v(\mathbf{v})\| \|f_t(\mathbf{t})\|} \quad (1)$$
+
+As evaluation metrics, **pair accuracy** (Tong et al., 2024c; Kamath et al., 2023a) requires correct matching for both images, while the accuracy for two images independently is called **individual**
+
+{4}------------------------------------------------
+
+**accuracy.** An example from the What’sUp benchmark, together with the evaluation of CLIP, is shown in Figure 2.
+
+The concept of erroneous agreements stems from this evaluation setup for CLIP. Specifically, if erroneous agreement happens for two different images  $\mathbf{v}_1$  and  $\mathbf{v}_2$ , then
+
+$$S_C(f_v(\mathbf{v}_1), f_v(\mathbf{v}_2)) > \tau \quad (2)$$
+
+where  $\tau$  is a chosen threshold near 1 (e.g.,  $\tau = 0.95$  is used in Tong et al. (2024c)). Intuitively, when the cosine similarity is high, the two image embeddings point in nearly the same direction, and they will be close in Euclidean distance after  $l_2$ -normalization. From the view of captions, they will result in highly similar image-text matching scores with any caption. From the image side, the margin is small, so adding a slight noise in either embedding could reverse the preference over the captions, which might result from a small perturbation in either  $\mathbf{v}_1$  or  $\mathbf{v}_2$ . Hence, the difference between  $\mathbf{v}_1$  and  $\mathbf{v}_2$  cannot be stably extracted by the CLIP model, and the relevant information seems lost. If this suggests the CLIP image encoder is “blind,” this will also undermine VLMs that use it as “eyes.”
+
+This intuition is supported by the results on the MMVP benchmark designed to include image pairs with a cosine similarity greater than 0.95 for CLIP embeddings but less than 0.6 for DINOv2 embeddings, along with the MMVP-VLM benchmark for CLIP-like models (Tong et al., 2024c). LLaVA-1.5 and CLIP perform close to random chance on these two benchmarks, respectively. The authors also demonstrated a correlation between CLIP model accuracy and LLaVA-1.5’s accuracy on different visual patterns.
+
+### 3.2 DO ERRONEOUS AGREEMENTS MEAN BLINDNESS?
+
+We note that cosine similarity does not depict all aspects of vector pairs. One criticism of it as the similarity metric is that it only captures the linear relationship of vectors. As an example, consider the following image embeddings
+
+$$f_v(\mathbf{v}_1) = [10, 11, 12]^\top, f_v(\mathbf{v}_2) = [12, 11, 10]^\top$$
+
+While  $S_C(f_v(\mathbf{v}_1), f_v(\mathbf{v}_2)) > 0.989$ , Spearman’s rank correlation coefficient can tell their sharp difference:  $\rho = -1$ , showing that **their order information is fully opposed**. Therefore, the difference in visual inputs might still be extracted through other means when erroneous agreements occur.
+
+We show that this scenario happens in experiments. In many VLMs using CLIP image encoder as their “eyes,” the output score is nonlinear, different from CLIP-like models. For instance, in LLaVA-1.5 (Liu et al., 2024), the CLIP image embeddings first pass through a two-layer MLP and are then used as input tokens for the transformer, Vicuna-1.5, which yields the token probability determining the model response. We evaluate LLaVA-1.5-7B using the pretrained weights and design the question format. (An illustration and an example are in Figure 1, and more details are in Appendix A.1.) The results are shown in Table 1. Despite the high cosine similarity, LLaVA-1.5-7B’s individual accuracy and pair accuracy are both quite high, showing that it can extract and align query-relevant information from image embeddings and produce the correct answer. In other words, erroneous agreements do not contribute to the failure of VLMs on their own.
+
+Apart from this two-way evaluation, in Table 2, we report the results of the original evaluation, which is a four-way classification for each image. Besides, we include the results on COCO-spatial and GQA-spatial used in Kamath et al. (2023a) also for evaluating VLM’s spatial reasoning ability. These benchmarks are in the format of an image paired with two captions differing only by a preposition. On all these benchmarks, LLaVA-1.5-7B wins CLIP-like models by a large margin, even compared with the best model XVLN-COCO (Zeng et al., 2021) reported in the paper. **We also find that this performance gap relative to CLIP generalizes to some other MLLMs with different scales and language models in Appendix B.5.**
+
+To see if LLaVA-1.5-7B shows better extraction ability on tasks other than recognizing spatial relationships, we compare it and CLIP on MMVP and MMVP-VLM (Tong et al., 2024c). There was no direct comparison in the original paper: The MMVP benchmark is not in CLIP’s format, while the MMVP-VLM benchmark is incompatible with MLLMs. So, we manually convert them into suitable formats without changing the content, and the evaluation of CLIP on MMVP-VLM is changed to the method described in Section 3.1 accordingly. The results are shown in Table 3. Although their absolute accuracy is low, there is a clear performance gap between CLIP-ViT-L/14-336px and LLaVA-1.5-7B with the same image encoder.
+
+{5}------------------------------------------------
+
+Table 1: The average cosine similarity of CLIP-ViT-L/14-336px embeddings and results of LLaVA-1.5-7B model on four subsets of What’sUp. The individual accuracy and pair accuracy are in percentage points. The average cosine similarity of the CLIP-ViT-L/14-336px image embeddings for image pairs is calculated for each category.
+
+|  | What’sUp Subset A |  |  |  | What’sUp Subset B |  |  |  |
+|-|-|-|-|-|-|-|-|-|
+|  | Left/Right |  | On/Under |  | Left/Right |  | Front/Behind |  |
+|  | Indiv. | Pairs | Indiv. | Pairs | Indiv. | Pairs | Indiv. | Pairs |
+| CLIP-ViT-L/14-336px | 49.0 | 1.9 | 61.7 | 23.3 | 54.9 | 10.8 | 51.5 | 7.8 |
+| LLaVA-1.5-7B | <b>99.0</b> | <b>98.1</b> | <b>80.1</b> | <b>60.2</b> | <b>100</b> | <b>100</b> | <b>98.5</b> | <b>97.1</b> |
+| Avg. Embedding Cosine Sim. | 0.995 |  | 0.971 |  | 0.955 |  | 0.902 |  |
+
+Table 2: Results of varied vision-language models on What’sUp, COCO-spatial, and GQA-spatial benchmark. We test the models on the four-way classification of each image. “Set of 4” is the correctness for all four images in a set.
+
+|  | What’sUp Subset A |  |  | What’sUp Subset B |  |  | COCO-spatial |  | GQA-spatial |  |
+|-|-|-|-|-|-|-|-|-|-|-|
+|  | Indiv. | Pairs | Set of 4 | Indiv. | Pairs | Set of 4 | One-obj. | Two-obj. | One-obj. | Two-obj. |
+| CLIP-ViT-L/14-224px | 26.7 | 1.0 | 0.0 | 25.7 | 1.5 | 0.0 | 49.1 | 50.2 | 46.0 | 48.1 |
+| CLIP-ViT-L/14-336px | 28.9 | 1.0 | 0.0 | 27.2 | 1.0 | 0.0 | 48.9 | 51.1 | 46.6 | 49.1 |
+| SigLIP-ViT-L/16-384px | 26.7 | 0.0 | 0.0 | 28.7 | 2.0 | 0.0 | 50.3 | 48.6 | 47.8 | 48.7 |
+| XVLM-COCO | 41.8 | 17.0 | 1.9 | 42.2 | 15.7 | 2.9 | 68.4 | 73.6 | 69.1 | 67.0 |
+| LLaVA-1.5-7B | <b>62.1</b> | <b>41.3</b> | <b>14.6</b> | <b>74.0</b> | <b>61.8</b> | <b>23.5</b> | <b>96.0</b> | <b>82.3</b> | <b>96.0</b> | <b>90.7</b> |
+| Random chance | 25.0 | 6.3 | 0.4 | 25.0 | 6.3 | 0.4 | 50.0 | 50.0 | 50.0 | 50.0 |
+
+## 4 INVESTIGATE THE PERFORMANCE GAP
+
+The above performance gap might be caused by various factors: evaluation methods, training data, language processing choice, and model paradigm. Firstly, we used cosine-similarity-based evaluation for CLIP-like models and model-response-based evaluation for LLaVA-1.5. Apart from this, CLIP-like models and LLaVA-1.5 were trained on different data, adopted different language processing techniques, and were in different VLM paradigms.
+
+In this section, we design and conduct ablation studies to determine whether these factors contribute to the failure of CLIP-like models. The ablation of evaluation methods is conducted first to determine whether there is really a performance gap. Then, we control the training data and text encoder of CLIP-like models to see if they cause the failure (See the illustration in Figure 3).
+
+### 4.1 UNIFIED EVALUATION
+
+One might first question the different evaluations performed on the CLIP-like models and LLaVA-1.5. For the former, the evaluation is numeric-value based, while the latter is judged by its output response as a conversation agent, following the practice in previous work (Tong et al., 2024c). Hence, we test LLaVA-1.5 again using standard Multiple-Choice (MC) evaluation, where we rank the perplexity of options (“A” and “B”) calculated based on the probability of output tokens. This is similar to the CLIP-like models’ evaluation, where the image-text matching scores are ranked.
+
+In Table 3, we observe that MC evaluation yields similar results on the MMVP benchmark and even better results on MMVP-VLM. Thus, this does not count for their performance discrepancy. The increase in results on MMVP-VLM is possibly related to the hallucination of MLLMs, where they tend to follow their language prior during long answer generation and might gradually “forget” the visual input.
+
+### 4.2 TRAINING DATA
+
+The web-crawled image-caption corpora used for pretraining models like CLIP generally contain very few high-quality, unambiguous image-caption pairs with prepositions, as pointed out in Kamath
+
+{6}------------------------------------------------
+
+Table 3: Results of CLIP and LLaVA-1.5 on the MMVP and MMVP-VLM benchmark. The last row is the LLaVA-1.5-7B accuracy in the Multiple-Choice setting. Accuracy with an asterisk is obtained on a converted version of the original benchmark.
+
+|  | MMVP |  | MMVP-VLM |  |
+|-|-|-|-|-|
+|  | Indiv. | Pairs | Indiv. | Pairs |
+| CLIP-ViT-L/14-336px | 54.7* | 14.0* | 58.1 | 20.7 |
+| LLaVA-1.5-7B | <b>61.7</b> | <b>25.3</b> | 60.7* | 28.2* |
+| LLaVA-1.5-7B(MC) | 61.3 | <b>25.3</b> | <b>63.7*</b> | <b>31.1*</b> |
+| Random chance | 50.0 | 25.0 | 50.0 | 25.0 |
+
+![Figure 3: Illustration for the CLIP paradigm and the ablation studies. The diagram shows three main components: 1. Evaluation method, 2. Training data, and 3. Text Encoder. The Text Encoder is a dashed box containing a Two-Layer MLP Connector and an LLaMA-2-chat Converted Encoder. The CLIP Image Encoder is a solid box. Arrows indicate the flow of information: from the Text Encoder to the CLIP Image Encoder, and from the CLIP Image Encoder back to the Text Encoder, both labeled 'Cosine Similarity'. Below the Text Encoder, there are two boxes: 'Two-Layer MLP Connector' and 'LLaMA-2-chat Converted Encoder', which are connected by a 'Replace' arrow. Below the Training data box, there is a box labeled 'LLaVA-1.5's Training data', which is also connected by a 'Replace' arrow.](997233d405f0d4b89ddeb7683e047f66_img.jpg)
+
+Figure 3: Illustration for the CLIP paradigm and the ablation studies. The diagram shows three main components: 1. Evaluation method, 2. Training data, and 3. Text Encoder. The Text Encoder is a dashed box containing a Two-Layer MLP Connector and an LLaMA-2-chat Converted Encoder. The CLIP Image Encoder is a solid box. Arrows indicate the flow of information: from the Text Encoder to the CLIP Image Encoder, and from the CLIP Image Encoder back to the Text Encoder, both labeled 'Cosine Similarity'. Below the Text Encoder, there are two boxes: 'Two-Layer MLP Connector' and 'LLaMA-2-chat Converted Encoder', which are connected by a 'Replace' arrow. Below the Training data box, there is a box labeled 'LLaVA-1.5's Training data', which is also connected by a 'Replace' arrow.
+
+Figure 3: Illustration for the CLIP paradigm and the ablation studies.
+
+et al. (2023a). Equipped with the pretrained CLIP image encoder, LLaVA-1.5 was finetuned on LCS-558K, a subset from LAION-CC-SBU with BLIP captions, and Instruction-following Data Mixture (hereafter referred to as DataMix-665K) (Liu et al., 2024). These datasets were carefully curated and thus of higher quality than web-crawled data. Besides, they are more relevant to the spatial reasoning tasks: They have around 13K samples with phrases containing “left” or “right,” accounting for around 1% of all data. This ratio is higher than that in LAION-2B (English), where various prepositions, including other directions like top and bottom, represent less than 0.22% of the training data (Kamath et al., 2023a). Hence, we hypothesized that LLaVA-1.5’s visual information extraction ability benefits from these data.
+
+To check the effect of training data, we use LLaVA-1.5’s training data to fine-tune CLIP-like models. We convert both datasets to the image-caption format (More details in Appendix B.2). By default, we lock the image encoder during finetuning for strict ablation. The results are shown in Table 4. Finetuning on LLaVA-1.5’s training data slightly improves CLIP’s performance, but it does not help SigLIP. Still, their accuracy is around random chance. On SigLIP, we try unlocking the image encoder during finetuning, but this does not increase model performance notably either (See results in Appendix B.3). In Appendix B.4, we also explore the effect of high-quality data on the gap between LLaVA-1.5 and another VLM paradigm, XVLN (Zeng et al., 2021), and find that data do not explain it solely. This result aligns with the failure in previous work to enhance CLIP models significantly by finetuning them on a much larger, preposition-focused subset of LAION (Kamath et al., 2023a).
+
+One might argue that the CLIP training objective differs from LLaVA-1.5, heavily relying on negative samples beyond data quality, so CLIP’s failure on the new dataset might be due to the lack of corresponding negatives. Next, we check this by observing whether negative samples help the CLIP-like models learn better. For this experiment, we focus on the model’s ability to distinguish “left” and “right” and use the Left/Right subsets as the benchmarks. We construct hard negative captions by switching the related phrases to their opposite, e.g., replacing “on the left” with “on the right.” The loss objective changes accordingly, following the NegCLIP method (Yuksekgonul et al., 2023).
+
+The results are shown in Table 5. This strategy does not increase the model performance consistently on the Left/Right subset, which is observed in Kamath et al. (2023a) as well. Likewise, we try unlocking the image encoder of SigLIP in this setting, which does not make a big difference (See
+
+{7}------------------------------------------------
+
+Table 4: Results of CLIP and SigLIP on What’sUp, COCO-spatial, and GQA-spatial benchmark after finetuning on LLaVA-1.5’s training data.
+
+|  | What’sUp Subset A |  |  | What’sUp Subset B |  |  | COCO-spatial |  | GQA-spatial |  |
+|-|-|-|-|-|-|-|-|-|-|-|
+|  | Indiv. Pairs | Set of 4 | Indiv. Pairs | Set of 4 | Indiv. Pairs | Set of 4 | One-obj. | Two-obj. | One-obj. | Two-obj. |
+| CLIP-ViT-L/14-336px | 28.9 | 1.0 | 0.0 | 27.2 | 1.0 | 0.0 | 48.9 | 51.1 | 46.6 | 49.1 |
+| + finetuning | 31.1 | 9.7 | 0.0 | 30.6 | 7.4 | 0.0 | 54.2 | 55.5 | 51.0 | 52.6 |
+| SigLIP-ViT-L/16-384px | 26.7 | 0.0 | 0.0 | 28.7 | 2.0 | 0.0 | 50.3 | 48.6 | 47.8 | 48.7 |
+| + finetuning | 27.2 | 1.9 | 0.0 | 24.8 | 2.0 | 0.0 | 49.3 | 50.5 | 47.0 | 54.6 |
+| Random chance | 25.0 | 6.3 | 0.4 | 25.0 | 6.3 | 0.4 | 50.0 | 50.0 | 50.0 | 50.0 |
+
+Table 5: Two-way evaluation results of CLIP and SigLIP focusing on the Left/Right subsets of What’sUp, COCO-spatial, and GQA-spatial benchmark with or without substituted text encoder, after finetuning on LLaVA-1.5’s training data with or without hard negative captions. After finetuning, the accuracies are still around or below random chance.
+
+|  | What’sUp Subset A |  | What’sUp Subset B |  | COCO-spatial |  | GQA-spatial |  |
+|-|-|-|-|-|-|-|-|-|
+|  | Indiv. Pairs | Indiv. Pairs | Indiv. Pairs | Indiv. Pairs | One-obj. | Two-obj. | One-obj. | Two-obj. |
+| CLIP-ViT-L/14-336px | 49.0 | 1.9 | 54.9 | 10.8 | 51.6 | 48.4 | 52.1 | 50.4 |
+| + finetuning | 50.5 | 2.0 | 53.9 | 5.9 | 49.9 | 53.4 | 49.1 | 53.8 |
+| + neg. cap. | 50.5 | 1.0 | 50.5 | 1.0 | 48.5 | 55.6 | 49.4 | 50.4 |
+| + llm2vec, finetuning | 50.0 | 1.0 | 49.5 | 0.0 | 48.5 | 48.0 | 50.0 | 53.8 |
+| + llm2vec, neg. cap. | 49.5 | 2.9 | 50.5 | 6.9 | 48.8 | 46.2 | 48.1 | 51.9 |
+| SigLIP-ViT-L/16-384px | 50.0 | 1.9 | 51.5 | 5.9 | 48.7 | 50.2 | 51.2 | 47.0 |
+| + finetuning | 49.0 | 1.0 | 51.0 | 3.9 | 50.8 | 53.1 | 49.7 | 55.3 |
+| + neg. cap. | 50.0 | 0.0 | 50.0 | 0.0 | 50.5 | 53.8 | 51.0 | 48.1 |
+| + llm2vec, finetuning | 50.5 | 2.9 | 51.0 | 3.9 | 50.1 | 54.8 | 49.1 | 51.1 |
+| + llm2vec, neg. cap. | 50.5 | 1.0 | 51.0 | 3.9 | 50.0 | 47.7 | 48.8 | 50.0 |
+| Random chance | 50.0 | 25.0 | 50.0 | 25.0 | 50.0 | 50.0 | 50.0 | 50.0 |
+
+results in Appendix B.3). All the above results indicate that data alone are not to blame for the failure of CLIP-like models.
+
+### 4.3 LANGUAGE MODEL CHOICES
+
+Previous research suggested that the CLIP text encoder is “blind” too (Tong et al., 2024b; Kamath et al., 2023b; Yuksekgonul et al., 2023)– It struggles with capturing changed word orders, negation, and spatial or numerical details. On the other hand, LLaVA-1.5-7B employs a pretrained large language model (LLM), Vicuna-1.5-7B, which is supposed to be better than the CLIP text encoder at language reasoning, and the commonsense knowledge it learned during language modeling should benefit VLMs.
+
+Is pretrained LLM the secret to the success of LLaVA-1.5? To answer this question, we perform further experiments on finetuning CLIP-like models using both the LLaVA-1.5 training data and a stronger text encoder. Since Vicuna-1.5-7B is a decoder-only language model, we utilize the LLaMA-2-7B-chat-hf-mntp checkpoint provided in llm2vec (BehnamGhader et al., 2024), where LLaMA-2-7B-chat model was converted to a text encoder and showed excellent performance in encoding texts. We replace the original CLIP text encoder with this pretrained model and add a two-layer MLP connector on top of it to align its output dimension with the CLIP image encoder. Since this text encoder is well-trained, we freeze it during finetuning. To make a fair comparison, we lock the image encoder again and use the same connector design as the one used in LLaVA-1.5-7B with only differing widths.
+
+We train the models in two settings: plain data and data with hard negative captions. The hard negative captions are constructed in the same way as in Section 4.2. The results are shown in Table 5. Surprisingly, a strong text encoder does not help either. Like the practice in Section 4.2, we try unlocking the image encoder in this setting (See Appendix B.3). We only observe a significant increase in the pair accuracy on What’sUp when a strong text encoder, hard negative captions, and unlocked image encoder are all used. Still, in this case, the individual accuracy and the accuracy
+
+{8}------------------------------------------------
+
+Table 6: Results of LLaVA-1.5-7B with M3ID ( $\alpha = 0.6, \lambda = 0.15$ ) using original evaluation on MMVP benchmark, along with the results of other methods.
+
+|  | Indiv. | Acc. | Pairs Acc. |
+|-|-|-|-|
+| LLaVA-1.5-7B | 61.7 |  | 25.3 |
+| w/ RP (Jiao et al., 2024) | – |  | 27.3 |
+| w/ M3ID (Favero et al., 2024) | <b>64.3</b> |  | <b>31.3</b> |
+| w/ DIVA (Wang et al., 2024a) | – |  | <b>31.3</b> |
+| Random chance | 50.0 |  | 25.0 |
+
+cies for the COCO-spatial and GQA-spatial do not improve. Based on these results, we argue that higher quality and relevant training data or stronger language models do not solely contribute to the performance gap.
+
+By controlling other factors, we suggest that differences in VLM paradigms may largely explain the performance gap. One hypothesis is that CLIP-like models use a dot product for image-text alignment during training and inference. For a given image embedding, every text embedding is linearly projected into a spectrum  $[-1, 1]$  regarding their matching degree. While this multimodal contrastive paradigm achieves great success in tasks like zero-shot classification, the learned alignment might not effectively capture all correspondences between image and text for various downstream tasks. This hypothesis aligns with our analysis in Section 3.1 that different visual information extraction strategies matter.
+
+## 5 DISCUSSION
+
+Although we find that visual information extraction methods matter a lot, and LLaVA-1.5 has a stronger extraction ability on highly similar embeddings, its poor performance on the MMVP benchmark remains unexplained (Tong et al., 2024c). In this section, we reconsider its failure and provide insight into future improvements based on two findings in MLLMs: They might not attend enough to the visual input, and the visual information is often aligned correctly but probably did not induce enough differences in the output token probability.
+
+### 5.1 ALTERNATIVE DECODING FOR LLaVA
+
+Inspired by the findings in Section 4.1 that MLLMs might “forget” the visual input gradually, one possible improvement is to “remind” MLLMs of them, magnifying the effect of visual input on language models. Multi-Modal Mutual-Information Decoding (M3ID) was designed for this purpose on MLLMs like LLaVA (Favero et al., 2024). For token in each decoding step  $t$ , M3ID computes the output probability with the image and without any input image, denoted as  $l_c$  and  $l_u$ , respectively. The latter corresponds to the language prior. Then a correction term  $(l_c - l_u)$  is added to  $l_c$  with weight  $\frac{1 - \exp(-\lambda t)}{\exp(-\lambda t)}$  if the model is not highly confident with the next token ( $\max_k (l_c)_k < \log \alpha$ ). This correction prevents the VLM from omitting the visual input and relying on the language prior.
+
+We test this decoding strategy on the MMVP benchmark in the standard setting. In Table 6, this method achieves the most gain (+6%) relative to the baseline LLaVA-1.5-7b. We note that this surpasses some methods that modified the vision part, such as Libra (30.0 with a decoupled and more complex vision system) (Xu et al., 2024) and is on par with I-MoF (31.3 with interleaved CLIP and DINO features) (Tong et al., 2024c). This result suggests that LLaVA-1.5 did not attend to the visual input enough and thus might miss the key information for answering the query. A similar finding was described through the interpretability perspective in Stan et al. (2024).
+
+### 5.2 EVALUATION WITH RELAXED CONSTRAINTS
+
+We look into the results of the MC evaluation and find that the output token probability often differs for two images (e.g., compared with image 2, image 1 slightly prefers caption 1 more). Still, the evaluation omits them since we always pick the caption with a higher probability for each im-
+
+{9}------------------------------------------------
+
+Table 7: Results of CLIP-ViT-L/14-336px and LLaVA-1.5-7B using original pair evaluation and new evaluation with relaxed constraints on MMVP benchmark.
+
+|  | Original Evaluation w/ Relaxed Constraints |  |
+|-|-|-|
+| CLIP-ViT-L/14-336px | 14.0 | 64.0 |
+| LLaVA-1.5-7B | 25.3 | 73.3 |
+| Random chance | 25.0 | 50.0 |
+
+age. Such differences show that the visual nuances are often extracted and aligned with the correct semantics by LLaVA-1.5 rather than being discarded after visual encoding.
+
+How many visual nuances are preserved and extracted by LLaVA-1.5? We explore this question by testing the LLaVA-1.5 on a new evaluation pipeline with relaxed constraints. To catch the slight difference in model output, similar to the MC evaluation, we calculate the model perplexity of two possible options. MC only uses the letters “A” and “B” when computing perplexity, but we use the full option for perplexity computation, e.g., “(a) Open” and “(b) Closed” in the questions provided by the original benchmark. Denote the perplexity of two options (normalized by the number of tokens) given two images to be  $ppl_{i1c1}, ppl_{i1c2}, ppl_{i2c1}, ppl_{i2c2}$ , respectively. We consider the model to be correct for this test case if they satisfy
+
+$$\frac{ppl_{i1c1}}{ppl_{i1c1} + ppl_{i1c2}} > \frac{ppl_{i2c1}}{ppl_{i2c1} + ppl_{i2c2}},$$
+
+In other words, the model considers (image 1, caption 1) with (image 2, caption 2) more possible matches than (image 2, caption 1) with (image 1, caption 2). This way, we “force” the model to output differently for two images in a pair, and thus, the random chance is 50%. Through this comparison, we amplify the semantics induced by visual nuances. We also apply this evaluation on CLIP, replacing perplexity with cosine similarity. In Table 7, the new performance is significantly higher than random chance as the baseline (+23.3%), compared with the pair accuracy under the original evaluation (+0.3%). This means more visual information can be extracted from the image embedding and aligned with the correct semantics than the original results suggested.
+
+The possible reason why they failed to be extracted in the original setting is that the language model did not fully utilize the image-induced semantics. Consequently, they failed to affect the output probability enough to produce the correct answer. Influenced by language prior and spurious correlation with irrelevant text tokens (Ye et al., 2024), it will probably output common answers or even hallucinations. Hence, reaching this “upper bound” in the original evaluation requires the VLM to utilize extracted visual nuances properly and balance it with language prior during generation.
+
+## 6 CONCLUSION
+
+Our study questions the use of erroneous agreements to reflect CLIP image encoders’ information loss or blindness and finds that they are not the sole cause of VLM failures. We show that the amount of extracted visual information largely depends on the extraction strategy, which varies widely across VLMs. LLaVA-1.5, with a stronger extraction ability, outperforms CLIP-like models on our benchmarks. Our controlled experiments suggest that the key factor in their performance discrepancy might lie in their paradigms. We believe the information loss of the image encoder should be defined when conditioning on the VLM paradigm and possibly the downstream task.
+
+Our results suggest there is still room to enhance VLMs with a fixed, pretrained image encoder. While balancing the visual grounding ability and image-text correspondence (e.g., combining popular visual representation learning models in various styles) could reach the best trade-off on the curve for heterogeneous benchmarks, developing advanced methods for VLMs to extract and utilize given visual information might shift the curve upwards.
+
+**Limitation.** We view the VLMs abstractly and do not look into fine-grained details on how the visual information is extracted and leads to the model’s output. We leave its dissection for future research. For ablation studies, we do not train CLIP or SigLIP models from scratch or use larger batch sizes due to the limitation in computing resources, so the conclusion on the effects of different factors is restricted.
+
+ Rest of paper (reference and Appendix) is removed.

@@ -1,0 +1,327 @@
+
+
+{0}------------------------------------------------
+
+# ADAPTIVE CACHING FOR FASTER VIDEO GENERATION WITH DIFFUSION TRANSFORMERS
+
+## Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Generating temporally-consistent high-fidelity videos can be computationally expensive, especially over longer temporal spans. More-recent Diffusion Transformers (DiTs)— despite making significant headway in this context— have only heightened such challenges as they rely on larger models and heavier attention mechanisms, resulting in slower inference speeds. In this paper, we introduce a *training-free* method to accelerate video DiTs, termed Adaptive Caching (*AdaCache*), which is motivated by the fact that “*not all videos are created equal*”: meaning, some videos require fewer denoising steps to attain a reasonable quality than others. Building on this, we not only cache computations through the diffusion process, but also devise a caching schedule tailored to each video generation, maximizing the quality-latency trade-off. We further introduce a Motion Regularization (*MoReg*) scheme to utilize video information within AdaCache, essentially controlling the compute allocation based on motion content. Altogether, our plug-and-play contributions grant significant inference speedups (e.g. up to  $4.7\times$  on Open-Sora 720p - 2s video generation) without sacrificing the generation quality, across multiple video DiT baselines. Our code will be made publicly-available.
+
+## 1 INTRODUCTION
+
+Diffusion models (Ho et al., 2020; Song et al., 2020) have become the standard for generative modeling in recent years, arguably surpassing the quality of VAEs (Kingma, 2013; Rolfe, 2016), GANs (Karras et al., 2019; Goodfellow et al., 2020) and Auto-Regressive models (Chang et al., 2022; 2023). This observation holds in a wide-range of applications including image (Rombach et al., 2022; Saharia et al., 2022), video (Singer et al., 2022; Blattmann et al., 2023a), 3D (Poole et al., 2022; Liu et al., 2023a), and audio (Kong et al., 2020; Huang et al., 2023) generation, as well as image (Hertz et al., 2022; Avrahami et al., 2023) and video (Qi et al., 2023; Wu et al., 2023) editing. More recent Diffusion Transformers (DiTs) (Peebles & Xie, 2023; Ma et al., 2024a) show better promise in terms of scalability and generalization compared to prior UNet-based diffusion models (Rombach et al., 2022), revealing intriguing horizons in GenAI for the years to come.
+
+Despite the state-of-the-art performance, DiTs can also be computationally expensive both in terms of memory and computational requirements. This becomes especially critical when applied with a large number of input tokens (e.g. high-resolution long video generation). For instance, the reason for models such as Sora (OpenAI, 2024) not being publicly-served is speculated to be the high resource demands and slower inference speeds (Liu et al., 2024). To tackle these challenges and reduce the footprint of diffusion models, various research directions have emerged such as latent diffusion (Rombach et al., 2022), step-distillation (Sauer et al., 2023; Yin et al., 2024), caching (Wimbauer et al., 2024; Ma et al., 2024c; Habibian et al., 2024), architecture-search (Zhao et al., 2023b; Li et al., 2024b), token reduction (Bolya & Hoffman, 2023; Li et al., 2024a) and region-based methods (Nitzan et al., 2024; Kahatapitiya et al., 2024). Fewer techniques transfer readily from UNet-based pipelines to DiTs, whereas others often require novel formulations. Hence, DiT acceleration has been under-explored as of yet.
+
+Moreover, we note that *not all videos are created equal*. Some videos contain high-frequency textures and significant motion content, whereas others are much simpler (e.g. with homogeneous textures or static regions). Having a diffusion process tailored specifically for each video generation can be beneficial in terms of realizing the best quality-latency trade-off. This idea has been explored
+
+{1}------------------------------------------------
+
+![Figure 1: Effectiveness of Adaptive Caching. A qualitative comparison of AdaCache (right) applied on top of Open-Sora (left). The figure shows five rows of video frames. Each row has a label on the left indicating the number of steps: 100 steps, 100 steps, 100 steps, 100 steps, and 100 steps. The first column (Open-Sora) shows the results for each row. The second column (Open-Sora + AdaCache) shows the results for the same prompts. The VBenCh quality and average latency are reported for each column: VBenCh quality = 84.16, Avg. latency = 419.60s for Open-Sora; VBenCh quality = 83.40, Avg. latency = 89.53s (4.7x speedup) for Open-Sora + AdaCache.](c803f6f6e2c49429d2951832bd0f208d_img.jpg)
+
+054  
+055  
+056  
+057  
+058  
+059  
+060  
+061  
+062  
+063  
+064  
+065  
+066  
+067  
+068  
+069  
+070  
+071  
+072  
+073  
+074  
+075  
+076  
+077  
+078  
+079  
+080  
+081  
+082  
+083  
+084  
+085  
+086  
+087  
+088  
+089  
+090  
+091  
+092  
+093  
+094  
+095  
+096  
+097  
+098  
+099  
+100  
+101  
+102  
+103  
+104  
+105  
+106  
+107
+
+Figure 1: Effectiveness of Adaptive Caching. A qualitative comparison of AdaCache (right) applied on top of Open-Sora (left). The figure shows five rows of video frames. Each row has a label on the left indicating the number of steps: 100 steps, 100 steps, 100 steps, 100 steps, and 100 steps. The first column (Open-Sora) shows the results for each row. The second column (Open-Sora + AdaCache) shows the results for the same prompts. The VBenCh quality and average latency are reported for each column: VBenCh quality = 84.16, Avg. latency = 419.60s for Open-Sora; VBenCh quality = 83.40, Avg. latency = 89.53s (4.7x speedup) for Open-Sora + AdaCache.
+
+Figure 1: **Effectiveness of Adaptive Caching:** We show a qualitative comparison of AdaCache (right) applied on top of Open-Sora (Zheng et al., 2024) (left), a baseline video DiT. Here, we consider generating 720p - 2s video clips, and report VBenCh (Huang et al., 2024) quality and average latency on the standard benchmark prompts from Open-Sora gallery. AdaCache generates videos significantly faster (*i.e.*,  $4.7\times$  speedup) with a comparable quality. Also, the number of computed steps varies for each video. Best-viewed with zoom-in. Prompts in supplementary.
+
+to some extent in region-based methods (Avrahami et al., 2023; Nitzan et al., 2024; Kahatapitiya et al., 2024), but not sufficiently in the context of video generation.
+
+Motivated by the above, we introduce Adaptive Caching (*AdaCache*) for accelerating video diffusion transformers. This approach requires *no training* and can seamlessly be integrated into a baseline video DiT at inference, as a plug-and-play component. The core idea of our proposal is to cache residual computations within transformer blocks (*e.g.* attention or MLP outputs) in a certain diffusion step, and reuse them through a number of subsequent steps, that is dependent on the video being generated. We do this by devising a caching schedule, *i.e.*, deciding when-to-recompute-next whenever making a residual computation. This decision is guided by a distance metric that measures the rate-of-change between previously-stored and current representations. If the distance is high we would not cache for an extended period (*i.e.*, #steps), to avoid reusing incompatible representations. We further introduce a Motion Regularization (*MoReg*) to allocate computations based on the motion content in the video being generated. This is inspired by the observation that high-moving sequences require more diffusion steps to achieve a reasonable quality. Altogether, our pipeline is applied on top of multiple video DiT baselines showing much-faster inference speeds without sacrificing generation quality (see Fig. 1). Finally, we validate the effectiveness of our contributions and justify our design decisions through ablations and qualitative comparisons.
+
+## 2 RELATED WORK
+
+**Diffusion-based Video Generation** (Singer et al., 2022; Ho et al., 2022; Blattmann et al., 2023a; Girdhar et al., 2023; Chen et al., 2024a) has surpassed the quality and diversity of GAN-based approaches (Vondrick et al., 2016; Saito et al., 2017; Tulyakov et al., 2018; Clark et al., 2019; Yu et al., 2022), while also being competitive with recent Auto-Regressive models (Yan et al., 2021; Hong et al., 2022; Villegas et al., 2022; Kondratyuk et al., 2023; Xie et al., 2024). They have become a standard component in the pipelines for frame interpolation (Wang et al., 2024c; Feng et al., 2024), video outpainting (Fan et al., 2023; Chen et al., 2024e; Wang et al., 2024a), image-to-video Guo et al. (2023); Blattmann et al. (2023a); Xing et al. (2023), video-to-video (*i.e.*, video editing or translation) (Yang et al., 2023a; Yatim et al., 2024; Hu et al., 2024), personalization (Wu et al., 2024; Men et al., 2024), motion customization (Zhao et al., 2023a; Xu et al., 2024) and
+
+{2}------------------------------------------------
+
+compositional generation (Liu et al., 2022; Yang & Wang, 2024). The underlying architecture of video diffusion models has evolved from classical UNets (Ronneberger et al., 2015; Rombach et al., 2022) with additional spatio-temporal attention layers (He et al., 2022; Blattmann et al., 2023b; Chen et al., 2023b; Girdhar et al., 2023), to fully-fledged transformer-based (*i.e.*, DiT (Peebles & Xie, 2023)) architectures (Lu et al., 2023; Ma et al., 2024b; Gao et al., 2024; Zhang et al., 2024b). In the process, the latency of denoising (Song et al., 2020; Lu et al., 2022) has also scaled with larger models (Podell et al., 2023; Gao et al., 2024). This becomes critical especially in applications such as long-video generation (Yin et al., 2023; Wang et al., 2023a; Zhao et al., 2024a; Henschel et al., 2024; Tan et al., 2024; Zhou et al., 2024), while also affecting the growth of commercially-served video models (Runway AI, 2024; OpenAI, 2024; Luma AI, 2024; Kling AI, 2024).
+
+**Efficiency of Diffusion models** has been actively explored with respect to both training and inference pipelines. Multi-stage training at varying resolutions (Chen et al., 2023a; 2024b; Gao et al., 2024) and high-quality data curation (Ramesh et al., 2022; Ho et al., 2022; Dai et al., 2023; Blattmann et al., 2023a) have cut down training costs significantly. In terms of inference acceleration, there exist two main approaches: (1) methods that require re-training such as step-distillation (Salimans & Ho, 2022; Meng et al., 2023; Sauer et al., 2023; Liu et al., 2023b), consistency regularization (Song et al., 2023; Luo et al., 2023), quantization (Li et al., 2023; Chen et al., 2024c; He et al., 2024; Wang et al., 2024b; Deng et al., 2024), and architecture search/compression (Zhao et al., 2023b; Yang et al., 2023b; Li et al., 2024b), or (2) methods that require no re-training such as token reduction (Bolya & Hoffman, 2023; Li et al., 2024a; Kahatapitiya et al., 2024) and caching (Ma et al., 2024c; Wimbauer et al., 2024; Habibian et al., 2024; Chen et al., 2024d; Zhao et al., 2024b). Among these, training-free methods are more-attractive as they can be widely-adopted without any additional costs. This becomes especially relevant for video diffusion models that are both expensive to train and usually very slow at inference. In this paper, we explore a caching-based approach tailored for video DiTs. Different from prior fixed caching schedules in UNet-based (Ma et al., 2024c; Wimbauer et al., 2024; Habibian et al., 2024) and DiT-based (Chen et al., 2024d; Zhao et al., 2024b) pipelines, we introduce a content-dependent (*i.e.*, adaptive) caching scheme to squeeze out the best quality-latency trade-off.
+
+**Content-adaptive Generation** may focus on improving consistency (Couairon et al., 2022; Bar-Tal et al., 2022; Avrahami et al., 2022; 2023; Wang et al., 2023b; Xie et al., 2023), quality (Suin et al., 2024; Abu-Hussein et al., 2022), and/or efficiency (Tang et al., 2023; Nitzan et al., 2024; Kahatapitiya et al., 2024; Starodubcev et al., 2024). Most region-based methods (*e.g.* image or video editing) rely on a user-provided mask to ensure consistent generations aligned with context information (Avrahami et al., 2023; Xie et al., 2023). Some others automatically detect (Suin et al., 2024) or retrieve (Abu-Hussein et al., 2022) useful information to improve generation quality. Among efficiency-oriented approaches, there exist proposals for selectively-processing a subset of latents (Nitzan et al., 2024; Kahatapitiya et al., 2024), switching between diffusion models with varying compute budgets (Starodubcev et al., 2024), or adaptively-controlling the number of denoising steps (Tang et al., 2023; Wimbauer et al., 2024). AdaDiff (Tang et al., 2023) skips all subsequent computations in a denoising step, if an uncertainty threshold is met at a certain layer. Block caching (Wimbauer et al., 2024) introduces a caching schedule tailored for a given pretrained diffusion model. Both these handle image generation tasks. In contrast, our proposed AdaCache— which also controls #denoising-steps adaptively— provides better flexibility, and is applied to more-challenging video generation. It is flexible in the sense that (1) it can selectively-cache any layer or even just a specific module within a layer, and (2) it is tailored to each video generation instead of being fixed for a given architecture. Thus, AdaCache gains more control over the diffusion process, enabling a better-adaptive compute allocation.
+
+## 3 NOT ALL VIDEOS ARE CREATED EQUAL
+
+In this section, we motivate the need for a content-dependent denoising process, and show how it can help maximize the quality-latency trade-off. This motivation is based on a couple of interesting observations which we describe below.
+
+First, we note that each video is unique. Hence, videos have varying levels of complexity. Here, the complexity of a given video can be expressed by the rate-of-change of information across both space and time. Simpler videos may contain more homogeneous regions and/or static content. In contrast,
+
+{3}------------------------------------------------
+
+![Figure 2: Not all videos are created equal. The figure shows a grid of video frames generated from Open-Sora. The left side shows a 4x4 grid of frames with labels for 100, 50, 20, and 10 steps. The right side shows histograms of L1-dist vs. #steps for different video sequences, illustrating unique variations in denoising difficulty.](e94f3bbb6f7501b9a1344dd0210e5dd8_img.jpg)
+
+Figure 2: Not all videos are created equal. The figure shows a grid of video frames generated from Open-Sora. The left side shows a 4x4 grid of frames with labels for 100, 50, 20, and 10 steps. The right side shows histograms of L1-dist vs. #steps for different video sequences, illustrating unique variations in denoising difficulty.
+
+Figure 2: **Not all videos are created equal:** We show frames from 720p - 2s video generations based on Open-Sora (Zheng et al., 2024). (Left) We try to break each generation by reducing the number of diffusion steps. Interestingly, not all videos have the same break point. Some sequences are extremely robust (e.g. first-two columns), while others break easily. (Right) When we plot the difference between computed representations in subsequent diffusion steps, we see unique variations (L1-dist vs. #steps). If we are to reuse similar representations, it needs to be tailored to each video. Both these observations suggest the need for a content-dependent denoising process, which is the founding motivation of Adaptive Caching. Best-viewed with zoom-in. Prompts in supplementary.
+
+complex videos have more high-frequency details and/or significant motion. Standard video compression techniques exploit such information to achieve best possible compression ratios without sacrificing quality (Wiegand et al., 2003; Sullivan et al., 2012). Motivated by the same, we explore how the compute cost affects the quality of video generations based on DiTs. We measure this w.r.t. the number of denoising steps, and the observations are shown in Fig. 2 (Left). Some video sequences are very robust, and achieve reasonable quality even at fewer denoising steps. Others break easily when we keep reducing the #steps, but the break point varies. This observation suggests that the minimal #steps (or, computations) required to generate a video with a reasonable quality varies, and having a content-dependent denoising schedule can exploit this to achieve the best speedups.
+
+Next, we observe how the computed representations (i.e., residual connections in attention or MLP blocks within DiT) change during the denoising process, across different video generations. This may reveal the level of compute redundancy in each video generation, enabling us to reuse representations and improve efficiency. More specifically, we visualize the feature differences between subsequent diffusion steps as histograms given in Fig. 2 (Right). Here, we report L1-distance vs. #steps. We observe that each histogram is unique. Despite having higher changes in early/latter steps and smaller changes in the middle, the overall distribution and the absolute values vary considerably. A smaller change corresponds to higher redundancy across subsequent computations, and an opportunity for reusing. This motivates the need for a non-uniform compute-schedule not only within the diffusion process of a given video (i.e., at different stages of denoising), but also across different videos.
+
+Finally, we evaluate the video generation quality at a capped-budget (i.e., fixed computations or latency). We can have multiple generation configurations at an approximately-fixed latency, by computing a constant number of representations. For instance, we can cache and reuse representations more-frequently in a setup with more denoising steps, still having the same latency of a process with fewer steps. The observations of a study with either 30 or 100 base denoising steps is shown in Fig. 3. We see that the generation quality varies significantly despite spending a similar cost and having the same underlying pretrained DiT. This motivates us to think about how best to allocate our resources at inference, tailored for each video generation.
+
+![Figure 3: Videos generated at a capped-budget. The figure shows a 4x3 grid of video frames. The rows are labeled with '100 steps base' and '30 steps base'. The columns represent different generation configurations. The images show various scenes including a city street, a landscape, and a character.](d0baec9a9191662196c3f3be304ee01c_img.jpg)
+
+Figure 3: Videos generated at a capped-budget. The figure shows a 4x3 grid of video frames. The rows are labeled with '100 steps base' and '30 steps base'. The columns represent different generation configurations. The images show various scenes including a city street, a landscape, and a character.
+
+Figure 3: **Videos generated at a capped-budget:** There exist different configurations for generating videos at an approximately-fixed latency (e.g. having arbitrary #denoising-steps, yet only computing a fixed #representations and reusing otherwise). We observe a significant variance in quality in such videos. Best-viewed with zoom-in. Prompts in supplementary.
+
+{4}------------------------------------------------
+
+## 4 ADAPTIVE CACHING FOR FASTER VIDEO DITs
+
+![Figure 4: Overview of Adaptive Caching. (Left) A grid showing diffusion steps (columns) and layers (rows) for Baseline DiT and Adaptive Caching. Adaptive Caching uses a distance metric $c_t = \text{dist}(p_{t+k}, p_t)$ to decide which blocks to cache. (Right) A detailed view of a transformer block with STA, CA, and MLP layers, showing how residuals ($p_t^l, q_t^l, r_t^l$) are computed, skipped, or reused across layers $l$ and $l+1$.](e394c2b5c61344f6a12397f430086072_img.jpg)
+
+Figure 4: Overview of Adaptive Caching. (Left) A grid showing diffusion steps (columns) and layers (rows) for Baseline DiT and Adaptive Caching. Adaptive Caching uses a distance metric \$c\_t = \text{dist}(p\_{t+k}, p\_t)\$ to decide which blocks to cache. (Right) A detailed view of a transformer block with STA, CA, and MLP layers, showing how residuals (\$p\_t^l, q\_t^l, r\_t^l\$) are computed, skipped, or reused across layers \$l\$ and \$l+1\$.
+
+Figure 4: **Overview of Adaptive Caching:** (Left) During the diffusion process, we choose to cache residual computations within selected DiT blocks. The caching schedule is *content-dependent*, as we decide when to compute the next representation based on a distance metric ( $c_t$ ). This metric measures the rate-of-change from previously-computed (and, stored) representation to the current one, and can be evaluated per-layer or the DiT as a whole. Each computed residual can be cached and reused across multiple steps. (Right) We only cache the residuals (*i.e.*, skip-connections) which amount to the actual computations (*e.g.* spatial-temporal/cross attention, MLP). The iteratively denoised representation (*i.e.*,  $f_{t+k}, f_t$ ) always gets updated either with computed or cached residuals.
+
+### 4.1 PRELIMINARIES: VIDEO DIFFUSION TRANSFORMERS
+
+Video Diffusion Transformers are extended from Latent Diffusion Transformers (DiTs) (Peebles & Xie, 2023) introduced for image generation. DiTs provide a much-more streamlined, scalable architecture compared to prior UNet-based diffusion models (Rombach et al., 2022), by only having transformer blocks with a homogeneous token resolution (instead of convolutional blocks with up/downsampling). A simplified transformer block (*i.e.*, w/o normalizing or timestep conditioning layers) in a video DiT is shown in Fig. 4 (right)—gray block. It consists of spatial-temporal attention (STA), cross-attention (CA) and linear (MLP) layers. Depending on the implementation, STA may be a single joint spatio-temporal attention layer, or separate spatial and temporal attention layers repeated within alternating blocks. Without loss of generality, let us denote a latent feature at the input/output of such block by  $f_t^l$  and  $f_t^{l+1}$ , respectively. Here,  $l$  represents the layer index, and  $t$ , the diffusion timestep. A simplified flow of computations within each block can be represented as,
+
+$$p_t^l = \text{STA}(f_t^l); \quad \bar{f}_t^l = f_t^l + p_t^l, \quad (1)$$
+
+$$q_t^l = \text{CA}(\bar{f}_t^l); \quad \bar{f}_t^l = \bar{f}_t^l + q_t^l, \quad (2)$$
+
+$$r_t^l = \text{MLP}(\bar{f}_t^l); \quad f_t^{l+1} = \bar{f}_t^l + r_t^l. \quad (3)$$
+
+Here  $p_t^l, q_t^l$  and  $r_t^l$  are residual connections corresponding to each compute-element. Such computations repeat through  $L$  layers, generating the noise prediction of each step  $t$ , and across a total of  $T$  denoising steps. In the current streamlined video DiT architectures with homogeneous token resolutions, each layer of each denoising step costs the same.
+
+### 4.2 ADAPTIVE CACHING
+
+In this subsection, we introduce Adaptive Caching (*AdaCache*), a *training-free* mechanism for content-dependent compute allocation in video DiTs. The overview of Adaptive Caching is shown in Fig. 4. Compared to a standard DiT that computes representations for all layers across all diffusion steps, in AdaCache, we decide which layers or steps to compute, adaptively (*i.e.*, dependent on each video generation). This decision is based on the rate-of-change in the residual connections (*e.g.*  $p_t^l, q_t^l$  or  $r_t^l$ ) across diffusion steps, which amount to all significant computations within the DiT. Without loss of generality, let us assume that the residuals in block  $l$  in current and immediately-prior diffusion steps  $t$  and  $t+k$  are already computed. Here, step  $t+k$  is identified as ‘immediately-prior’
+
+{5}------------------------------------------------
+
+to step  $t$  since any residuals between these two steps are not computed (i.e., cached residuals reused). We make a decision on the next compute-step based on the distance metric ( $c_t^l$ ) given by,
+
+$$c_t^l = \text{dist}(p_{t+k}^l, p_t^l) = \|p_t^l - p_{t+k}^l\| / k. \quad (4)$$
+
+Here, we use L1 distance by default, but other distance metrics can also be applied (e.g. L2, cosine). Once we have the distance metric, we select the next caching rate ( $\tau_t^l$ ) based on a pre-defined codebook of basis cache-rates that corresponds to the original denoising schedule (i.e., #steps). The codebook is basically a collection of cache-rates coupled with metric thresholds to select them.
+
+$$\tau_t^l = \text{codebook}(c_t^l). \quad (5)$$
+
+For all denoising steps within  $t$  and  $t - \tau$ , we reuse previously-cached representations and only recompute after the current caching schedule (while also estimating the metric, again).
+
+$$p_{t-k}^l = \begin{cases} p_t^l & \text{if } k < \tau_t^l; \\ p_{t-k}^l = \text{STA}(f_{t-k}^l) & \text{if } k = \tau_t^l. \end{cases} \quad (6)$$
+
+The same applies to other residual computations (e.g.  $q_{t-k}^l, r_{t-k}^l$ ) as well. By design, we can have unique caching schedules for each layer (and, each residual computation). However, we observe that it will make the generations unstable. Therefore, we decide to have a common metric (i.e.,  $c_t^l = c_t$ ) and hence, a common caching rate (i.e.,  $\tau_t^l = \tau_t$ ) across all DiT layers. For instance, we can consider an averaged metric, or a metric computed at a certain layer to decide the caching schedule. Meaning, when we recompute residuals in a certain step, we do so for the whole DiT rather than selectively for each layer.
+
+Overall, this setup allows us to adaptively-control the compute spent on each video generation. If the rate-of-change between residuals is high, we will have a smaller caching rate, and otherwise, we have a higher rate. The choice of a lightweight distance metric (e.g. L1) helps us avoid any additional latency overheads.
+
+### 4.3 MOTION REGULARIZATION
+
+To further improve Adaptive Caching by making use of video information, we introduce a Motion Regularization (*MoReg*). This is motivated by the observation that the optimal number of denoising steps varies based on the motion content of each generated video. The core idea is to cache less (i.e., recompute more) if a generated video has a high motion content. To regularize our caching schedule, we estimate a latent motion-score ( $m_t^l$ ) based on residual frame differences. Without loss of generality, let us denote residual latent frames of  $p_t^l$  as  $\{p_{t,n}^l \mid n = 0, \dots, N-1\}$  where  $N$  is the #frames in latent space (given by the VAE encoder). We estimate the motion-score as,
+
+$$m_t^l = \|p_{t,i:N}^l - p_{t,0:N-i}^l\| \cdot i. \quad (7)$$
+
+Here,  $i$  denotes the frame step-size (or, frame-rate),  $\|\cdot\|$ , the L1 distance, and  $i : j$ , all frames within the corresponding range. However, since we operate on noisy-latents, we observe that our motion estimate in early diffusion steps is not reliable. Meaning, it does not provide a reasonable regularization in early steps (i.e., the change in caching schedule does not correlate well with the observed motion of a generated video in pixel space). To alleviate this, we also compute a motion-gradient ( $mg_t^l$ ) across diffusion steps, which can act as a reasonable early-predictor of motion that we may observe in latter diffusion steps (that also correlates with the motion in pixel space).
+
+$$mg_t^l = (m_t^l - m_{t+k}^l) / k. \quad (8)$$
+
+Finally, we use both motion and motion-gradient as a multiplier for the distance metric ( $c_t^l$ ) to regularize our caching schedule.
+
+$$c_t^l = c_t^l \cdot (m_t^l + mg_t^l). \quad (9)$$
+
+This means, when we have a higher estimated motion, the distance metric will be increased and a smaller basis cache-rate will be selected from the codebook. Similar to before, we enforce a common motion-regularization to all DiT layers by computing a common motion score (i.e.,  $m_t^l = m_t$ ,  $mg_t^l = mg_t$ ), ensuring the stability of denoising process. We can also choose to compute motion at different frame-rates, which we ablate in our experiments.
+
+{6}------------------------------------------------
+
+Table 1: **Quantitative evaluation of quality and latency:** Here, we compare AdaCache with other *training-free* DiT acceleration methods (e.g.  $\Delta$ -DiT (Chen et al., 2024d), T-GATE (Zhang et al., 2024a), PAB (Zhao et al., 2024b)) on multiple video baselines (e.g. Open-Sora (Zheng et al., 2024), 480p - 2s at 30-steps, Open-Sora-Plan (Lab & etc., 2024)  $512 \times 512$  - 2.7s at 150-steps, Latte (Ma et al., 2024b)  $512 \times 512$  - 2s at 50-steps). We measure the generation quality with VBenCh (Huang et al., 2024), PSNR, LPIPS and SSIM, while reporting complexity with FLOPs, latency and speedup (measured on a single 80G A100 GPU). AdaCache-fast consistently shows the best speedups at a comparable or slightly-lower generation quality. AdaCache-slow gives absolute-best quality while still being faster than prior methods. Our motion-regularization significantly improves the generation quality consistently, with a minimal added-latency.
+
+| Method | VBenCh (%) $\uparrow$ | PSNR $\uparrow$ | LPIPS $\downarrow$ | SSIM $\uparrow$ | FLOPs (T) | Latency (s) | Speedup |
+|-|-|-|-|-|-|-|-|
+| Open-Sora (Zheng et al., 2024) | 79.22 | — | — | — | 3230.24 | 54.02 | 1.00 $\times$ |
+| + $\Delta$ -DiT (Chen et al., 2024d) | 78.21 | 11.91 | 0.5692 | 0.4811 | 3166.47 | — | — |
+| + T-GATE (Zhang et al., 2024a) | 77.61 | 15.50 | 0.3495 | 0.6760 | 2818.40 | — | — |
+| + PAB-fast (Zhao et al., 2024b) | 76.95 | 23.58 | 0.1743 | 0.8220 | 2558.25 | 40.23 | 1.34 $\times$ |
+| + PAB-slow (Zhao et al., 2024b) | 78.51 | 27.04 | 0.0925 | 0.8847 | 2657.70 | 44.93 | 1.20 $\times$ |
+| + AdaCache-fast | 79.39 | 24.92 | 0.0981 | 0.8375 | <b>1331.97</b> | <b>24.16</b> | <b>2.24<math>\times</math></b> |
+| + AdaCache-fast (w/ MoReg) | 79.48 | 25.78 | 0.0867 | 0.8530 | 1383.66 | 25.71 | 2.10 $\times$ |
+| + AdaCache-slow | <b>79.66</b> | <b>29.97</b> | <b>0.0456</b> | <b>0.9085</b> | 2195.50 | 37.01 | 1.46 $\times$ |
+| Open-Sora-Plan (Lab & etc., 2024) | 80.39 | — | — | — | 12032.40 | 129.67 | 1.00 $\times$ |
+| + $\Delta$ -DiT (Chen et al., 2024d) | 77.55 | 13.85 | 0.5388 | 0.3736 | 12027.72 | — | — |
+| + T-GATE (Zhang et al., 2024a) | 80.15 | 18.32 | 0.3066 | 0.6219 | 10663.32 | — | — |
+| + PAB-fast (Zhao et al., 2024b) | 71.81 | 15.47 | 0.5499 | 0.4717 | 8551.26 | 89.56 | 1.45 $\times$ |
+| + PAB-slow (Zhao et al., 2024b) | 80.30 | 18.80 | 0.3059 | 0.6550 | 9276.57 | 98.50 | 1.32 $\times$ |
+| + AdaCache-fast | 75.83 | 13.53 | 0.5465 | 0.4309 | <b>3283.60</b> | <b>35.04</b> | <b>3.70<math>\times</math></b> |
+| + AdaCache-fast (w/ MoReg) | 79.30 | 17.69 | 0.3745 | 0.6147 | 3473.68 | 36.77 | 3.53 $\times$ |
+| + AdaCache-slow | <b>80.50</b> | <b>22.98</b> | <b>0.1737</b> | <b>79.10</b> | 4983.30 | 58.88 | 2.20 $\times$ |
+| Latte (Ma et al., 2024b) | 77.40 | — | — | — | 3439.47 | 32.45 | 1.00 $\times$ |
+| + $\Delta$ -DiT (Chen et al., 2024d) | 52.00 | 8.65 | 0.8513 | 0.1078 | 3437.33 | — | — |
+| + T-GATE (Zhang et al., 2024a) | 75.42 | 19.55 | 0.2612 | 0.6927 | 3059.02 | — | — |
+| + PAB-fast (Zhao et al., 2024b) | 73.13 | 17.16 | 0.3903 | 0.6421 | 2576.77 | 24.33 | 1.33 $\times$ |
+| + PAB-slow (Zhao et al., 2024b) | 76.32 | 19.71 | 0.2699 | 0.7014 | 2767.22 | 26.20 | 1.24 $\times$ |
+| + AdaCache-fast | 76.26 | 17.70 | 0.3522 | 0.6659 | <b>1010.33</b> | <b>11.85</b> | <b>2.74<math>\times</math></b> |
+| + AdaCache-fast (w/ MoReg) | 76.47 | 18.16 | 0.3222 | 0.6832 | 1187.31 | 13.20 | 2.46 $\times$ |
+| + AdaCache-slow | <b>77.07</b> | <b>22.78</b> | <b>0.1737</b> | <b>0.8030</b> | 2023.65 | 20.35 | 1.59 $\times$ |
+
+## 5 EXPERIMENTS
+
+### 5.1 IMPLEMENTATION DETAILS
+
+We select multiple prominent open-source video DiTs as backbone video generation pipelines in our experiments, namely, Open-Sora-v1.2 (Zheng et al., 2024), Open-Sora-Plan-v1.1 (Lab & etc., 2024) and Latte (Ma et al., 2024b). Since we focus on inference-based latency optimizations (i.e., without any re-training), we compare AdaCache against similar methods such as  $\Delta$ -DiT (Chen et al., 2024d), T-GATE (Zhang et al., 2024a) and PAB (Zhao et al., 2024b). In our main experiments, we generate 900+ videos based on standard VBenCh (Huang et al., 2024) benchmark prompts at the corresponding generation settings of each baseline (e.g. 480p - 2s with 30-steps in Open-Sora,  $512 \times 512$  - 2.7s with 150-steps in Open-Sora-Plan and  $512 \times 512$  - 2s with 50-steps in Latte) measuring multiple quality-complexity metrics. We report VBenCh average and reference-based PSNR, SSIM and LPIPS as quality metrics, and report FLOPs, Latency (s) and Speedup as complexity metrics. Here, Latency is measured on a single 80G A100 GPU. In all our ablations and qualitative results, we experiment on the standard prompts from Open-Sora benchmark gallery, generating 720p - 2s videos with 100-steps.
+
+### 5.2 MAIN RESULTS
+
+In Table 1, we present a quantitative evaluation of quality and latency on VBenCh (Huang et al., 2024) benchmark. We consider three variants of AdaCache: a slow variant, a fast variant with more speedup and the same with motion regularization. We compare with other training-free acceleration methods, showing consistently better speedups with a comparable generation quality. With Open-Sora (Zheng et al., 2024) baseline, AdaCache-slow outperforms others on all quality metrics, while giving a 1.46 $\times$  speedup compared to PAB (Zhao et al., 2024b) with 1.20 $\times$  speedup. AdaCache-fast
+
+{7}------------------------------------------------
+
+![Figure 5: Quality-Latency trade-off plots for VBenCh, PSNR, SSIM, and LPIPS metrics.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 5 consists of four line plots showing the quality-latency trade-off for different configurations of AdaCache and PAB. The x-axis for all plots is Latency (s), ranging from 80 to 400. The y-axes represent different quality metrics: VBenCh (top-left), PSNR (top-right), SSIM (bottom-left), and LPIPS (bottom-right). The legend indicates four series: AdaCache (w/ MoReg) (blue circles), AdaCache (green circles), Open-Sora (blue circles), and PAB (red circles). In all plots, AdaCache variants consistently achieve higher quality with lower latency compared to PAB. The VBenCh plot shows a significant performance gap, especially at lower latencies.
+
+Figure 5: Quality-Latency trade-off plots for VBenCh, PSNR, SSIM, and LPIPS metrics.
+
+Figure 5: **Quality-Latency trade-off:** We show quality vs. latency curves for different configurations of AdaCache and PAB (Zhao et al., 2024b), with Open-Sora (Zheng et al., 2024) 720p - 2s generations. AdaCache outperforms PAB consistently, showing a more-stable performance while reducing latency. This stability is more-prominent in reference-free metric VBenCh (Huang et al., 2024) compared to reference-based metrics, validating that AdaCache generations are aligned with human preference even at its fastest speeds, despite not being exactly-aligned with the reference.
+
+![Figure 6: Visualizing the impact of Moiton Regularization.](efca2dce0095c9dc2a68e9af6b2bfd40_img.jpg)
+
+Figure 6 is a grid of images comparing the Baseline, AdaCache, and AdaCache (w/ MoReg) methods across six different scenes. The rows represent the methods, and the columns represent different scenes. Red boxes highlight artifacts, blue boxes highlight motion inconsistencies, and green boxes highlight color inconsistencies. The AdaCache (w/ MoReg) method shows significantly fewer artifacts and inconsistencies compared to the Baseline and AdaCache methods.
+
+Figure 6: Visualizing the impact of Moiton Regularization.
+
+Figure 6: **Visualizing the impact of Moiton Regularization:** We show a qualitative comparison of AdaCache and AdaCache (w/ MoReg), applied on top of Open-Sora (Zheng et al., 2024) baseline. Here, we consider generation of 720p - 2s clips. Despite giving a  $4.7\times$  speedup, AdaCache can also introduce some inconsistencies over time (e.g. artifacts, motion, color). Motion Regularization helps avoid most of them by allocating more computations proportional to the amount of motion (still giving a  $4.5\times$  speedup). Best-viewed with zoom-in. Prompts in supplementary.
+
+gives the highest acceleration of  $2.24\times$  with a slight drop in quality. AdaCache-fast (w/ MoReg) shows a clear improvement in quality compared to AdaCache-fast, validating the effectiveness of our regularization and giving a comparable speedup of  $2.10\times$ . All AdaCache variants outperform even the baseline (w/o any acceleration) on VBenCh average quality, which aligns better with human preference compared to other reference-based metrics. Similar observations hold with the other baselines as well. With Open-Sora-Plan (Lab & etc., 2024), AdaCache shows the best speedup of  $3.70\times$  compared to the previous-best  $1.45\times$  of PAB, and the best quality with a  $2.20\times$  speedup. With Latte (Ma et al., 2024b), we gain the best speedup of  $2.74\times$  compared to prior  $1.33\times$ , and the best overall quality with a  $1.59\times$  speedup.
+
+### 5.3 ABLATION STUDY
+
+**Quality-Latency trade-off:** In Fig. 5, we compare the quality-latency trade-off of AdaCache with PAB (Zhao et al., 2024b). First, we note that AdaCache enables significantly higher reduction rates (i.e., much-smaller absolute latency) compared to PAB. Moreover, across this whole range of latency configurations, AdaCache gives a more-stable performance over PAB, on all quality metrics. Such behavior is especially evident in reference-free metric VBenCh (Huang et al., 2024), that aligns better with human preference. Even if we see a drop in reference-based scores (e.g. PSNR, SSIM) at extreme reduction rates, the qualitative results suggest that the generations are still good (see Fig. 1), despite not being aligned exactly with the reference.
+
+{8}------------------------------------------------
+
+Table 2: **Ablation study:** We evaluate different design decisions of AdaCache on Open-Sora (Zheng et al., 2024) benchmark prompts, reporting VBench (Huang et al., 2024) scores (%), latency (s) and speedup. Here, we consider 32 videos generated with 100 diffusion steps, and use VBench custom dataset evaluation as suggested in the benchmark.
+
+(a) **AdaCache with Motion Regularization:** We show different variants of AdaCache. All versions achieve significant speedups. AdaCache + MoReg shows a better quality with a slightly-lower speedup.
+
+| Method | VBench | Latency | Speedup |
+|-|-|-|-|
+| Open-Sora (Zheng et al., 2024) | 84.16 | 419.60 | 1.0 $\times$ |
+| + AdaCache | 83.40 | 89.53 | 4.7 $\times$ |
+| + AdaCache + MoReg | 83.50 | 93.50 | 4.5 $\times$ |
+| + AdaCache + MoReg (w/o grad) | 83.36 | 89.01 | 4.7 $\times$ |
+| + AdaCache + MoReg (multi-step) | 83.42 | 95.65 | 4.4 $\times$ |
+
+(b) **Speedups at different resolutions:** We compare AdaCache with baselines at different resolutions. AdaCache generalizes across resolutions, providing a stable acceleration.
+
+| Resolution | AdaCache | VBench | Latency | Speedup |
+|-|-|-|-|-|
+| 480p - 2s | $\times$ | 83.68 | 173.84 | 1.0 $\times$ |
+|  | $\checkmark$ | 83.18 | 38.52 | 4.5 $\times$ |
+| 480p - 4s | $\times$ | 82.77 | 349.90 | 1.0 $\times$ |
+|  | $\checkmark$ | 82.16 | 80.16 | 4.4 $\times$ |
+| 720p - 2s | $\times$ | 84.16 | 419.60 | 1.0 $\times$ |
+|  | $\checkmark$ | 83.40 | 89.53 | 4.7 $\times$ |
+
+(c) **Cache metric:** Among different caching metrics, L1/L2 give similar performance compared to cosine distance.
+
+| Cache metric | VBench | Latency |
+|-|-|-|
+| L1-distance | 83.40 | 89.53 |
+| L2-distance | 83.50 | 92.70 |
+| Cosine-distance | 83.19 | 86.74 |
+
+(d) **Cache location:** We compute the cache metric at mid-DiT, for best quality-latency trade-off.
+
+| Cache loc. | VBench | Latency |
+|-|-|-|
+| Start | 83.30 | 87.55 |
+| Mid | 83.40 | 89.53 |
+| End | 83.43 | 91.20 |
+| Multiple | 83.41 | 90.27 |
+
+(e) **AdaCache Variants:** We achieve a range of speedups (and quality) by controlling the basis cache-rates in AdaCache. Our default configuration is AdaCache-fast.
+
+| AdaCache variant | Basis-rates | VBench | Latency |
+|-|-|-|-|
+| AdaCache-fast | 12-10-8-6-4-3 | 83.40 | 89.53 |
+| AdaCache-mid | 8-6-4-2-1 | 83.94 | 143.87 |
+| AdaCache-slow | 2-1 | 84.12 | 274.30 |
+
+**AdaCache with Motion Regularization:** We compare AdaCache with different versions of motion regularization in Table 2a. Both vanilla and motion-regularized versions provide significant speedups, 4.7 $\times$  and 4.5 $\times$  respectively, at a comparable quality with baseline Open-Sora (Zheng et al., 2024). Considering motion-gradient as an early-prediction of motion at latter diffusion steps helps (83.50 vs. 83.36 on VBench). We also estimate motion at different frame-rates by considering varying step-size in frame differences, which seems to increase the latency without improving quality. Overall, we consider AdaCache + MoReg as the configuration with best quality-latency trade-off. This improvement in quality is more-prominent in qualitative examples shown in Fig. 6 and benchmark comparison in Table 1.
+
+**Speedups at different resolutions:** In Table 2b, we compare the trade-offs of AdaCache at various resolutions of video generations, namely, 480p - 2s, 480p - 4s and 720p - 2s, all at 100-steps. AdaCache provides consistent speedups across different resolutions without affecting the quality.
+
+**Cache metric and location:** When adaptively deciding the caching schedule, we consider different metrics to compute the rate-of-change between representations, namely, L1/L2 distance or cosine distance. Among these, L1/L2 give an absolute measure which aligns better with the actual change. In contrast, cosine computes a normalized-distance, which is not a good estimate of change (e.g. if the representations differ only by a scale, the distance will be zero, even though we want to have a non-zero metric). This observation is verified by the results in Table 2c. Moreover, we consider computing the cache metric at various locations (i.e., layers) in the DiT. Doing so at a single layer (e.g. start, mid, end) is not significantly different from computing an aggregate over multiple-layers (see Table 2d). By default, we compute the cache metric in the mid-layer as a reasonable choice without extra overheads.
+
+**AdaCache variants:** To achieve a range of speedups (and quality), we consider different basis cache-rates in our AdaCache implementation. For instance, we can have higher-speedup with a slightly-lower quality (e.g. AdaCache-fast), a lower-speedup with a higher-quality (e.g. AdaCache-slow), or balance both (e.g. AdaCache-mid). We can conveniently control this by having corresponding basis cache-rates as shown in Table 2e. By default, we resort to AdaCache-fast which gives the best speedups.
+
+{9}------------------------------------------------
+
+![Figure 7: Qualitative comparison of video generation results. The figure is a grid of 7 rows and 9 columns. The columns are grouped under three main baselines: Open-Sora, Open-Sora-Plan, and Latte. Each baseline has three sub-columns: Baseline, + PAB, and + AdaCache. Each cell contains a 4-frame video sequence. Below each column group are generation times and speedup factors. For Open-Sora: 419.60s, 331.77s (1.26x), 93.50s (4.49x). For Open-Sora-Plan: 129.67s, 89.56s (1.45x), 36.77s (3.53x). For Latte: 32.45s, 24.33s (1.33x), 13.20s (2.46x).](625e10f48104ba2b06b2220a9b224712_img.jpg)
+
+Figure 7: Qualitative comparison of video generation results. The figure is a grid of 7 rows and 9 columns. The columns are grouped under three main baselines: Open-Sora, Open-Sora-Plan, and Latte. Each baseline has three sub-columns: Baseline, + PAB, and + AdaCache. Each cell contains a 4-frame video sequence. Below each column group are generation times and speedup factors. For Open-Sora: 419.60s, 331.77s (1.26x), 93.50s (4.49x). For Open-Sora-Plan: 129.67s, 89.56s (1.45x), 36.77s (3.53x). For Latte: 32.45s, 24.33s (1.33x), 13.20s (2.46x).
+
+Figure 7: **Qualitative comparison:** We show qualitative results on multiple video-DiT baselines including Open-Sora (Zheng et al., 2024) (720p - 2s at 100-steps), Open-Sora-Plan (Lab & etc., 2024) (512×512 - 2.7s at 150-steps) and Latte (Ma et al., 2024b) (512×512 - 2s at 50-steps), while comparing against prior *training-free* inference acceleration method PAB (Zhao et al., 2024b). AdaCache shows a comparable generation quality at much-faster speeds. Best-viewed with zoom-in. Prompts in supplementary.
+
+### 5.4 QUALITATIVE RESULTS
+
+In Fig. 7, we present qualitative results on multiple video DiT baselines, including Open-Sora (Zheng et al., 2024), Open-Sora-Plan (Lab & etc., 2024) and Latte (Ma et al., 2024b). We compare AdaCache against each baseline and prior training-free inference acceleration method for DiTs, PAB (Zhao et al., 2024b). Here, we consider three different configurations: 720p - 2s generations at 100-steps for Open-Sora, 512×512 - 2.7s generations at 150-steps for Open-Sora-Plan, and 512×512 - 2s generations at 50-steps for Latte, while considering standard prompts from Open-Sora gallery (see supplementary for prompt details). AdaCache shows comparable generation quality, while having much-faster inference pipelines. In fact, it achieves  $4.49\times$  (vs.  $1.26\times$  in PAB),  $3.53\times$  (vs.  $1.45\times$  in PAB),  $2.46\times$  (vs.  $1.33\times$  in PAB) speedups respectively on the three considered baseline DiTs. In most cases our generations are aligned well with the baseline in the pixel-space. Yet this is not a strict requirement, as the denoising process can deviate considerably from that of the baseline, at high caching rates. Still, AdaCache is faithful to the text prompt and is not affected by significant artifacts.
+
+## 6 CONCLUSION
+
+In this paper, we introduced Adaptive Caching (*AdaCache*), a plug-and-play component that improves the the inference speed of video generation pipelines based on diffusion transformers, without needing any re-training. It caches residual computations, while also devising the caching schedule dependent on each video generation. We further proposed a Motion Regularization (*MoReg*) to utilize video information and allocate computations based on motion content, improving the quality-latency trade-off. We apply our contributions on multiple open-source video DiTs, showing comparable generation quality at a fraction of latency. We believe AdaCache is widely-applicable with minimal effort, helping democratize high-fidelity long video generation.
+
+ Rest of paper (reference and Appendix) is removed.

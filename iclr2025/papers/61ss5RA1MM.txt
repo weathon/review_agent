@@ -1,0 +1,323 @@
+
+
+{0}------------------------------------------------
+
+# TRAINING FREE GUIDED FLOW MATCHING WITH OPTIMAL CONTROL
+
+Luran Wang<sup>1</sup>, Chaoran Cheng<sup>2</sup>, Yizhen Liao<sup>3</sup>, Yanru Qu<sup>2</sup>, Ge liu<sup>2</sup>
+
+<sup>1</sup>University of Cambridge
+
+<sup>2</sup>University of Illinois Urbana-Champaign
+
+<sup>3</sup>Tsinghua University
+
+lw703@cam.ac.uk, chaoran7@illinois.edu
+
+liaoyz0711@gmail.com, yanruqu2@illinois.edu
+
+geliu@illinois.edu
+
+## ABSTRACT
+
+Controlled generation with pre-trained Diffusion and Flow Matching models has vast applications. One strategy for guiding ODE-based generative models is through optimizing a target reward  $\mathcal{R}(x_1)$  while staying close to the prior distribution. Along this line, some recent work showed the effectiveness of guiding flow model by differentiating through its ODE sampling process. Despite the superior performance, the theoretical understanding of this line of methods is still preliminary, leaving space for algorithm improvement. Moreover, existing methods predominately focus on Euclidean data manifold, and there is a compelling need for guided flow methods on complex geometries such as  $\text{SO}(3)$ , which prevails in high-stake scientific applications like protein design. We present OC-Flow, a general and theoretically grounded training-free framework for guided flow matching using optimal control. Building upon advances in optimal control theory, we develop effective and practical algorithms for solving optimal control in guided ODE-based generation and provide a systematic theoretical analysis of the convergence guarantee in both Euclidean and  $\text{SO}(3)$ . We show that existing backprop-through-ODE methods can be interpreted as special cases of Euclidean OC-Flow. OC-Flow achieved superior performance in extensive experiments on text-guided image manipulation, conditional molecule generation, and all-atom peptide design.
+
+## 1 INTRODUCTION AND RELATED WORK
+
+SDE and ODE-based generative models such as diffusion and continuous normalizing flow (CNF) have exhibited excellent performance on various domains such as images (Ho et al., 2020; Esser et al., 2024), audio (Zhang et al., 2023; Défossez et al., 2022), and discrete data (Lou et al., 2023; Cheng et al., 2024). Particularly, the simplicity of Riemannian Flow Matching on  $\text{SO}(3)$  manifold (Chen & Lipman, 2023) empowers *de novo* generation of small molecules (Song et al., 2024; Xu et al., 2023) and proteins (Yim et al., 2023; Bose et al., 2023; Li et al., 2024), leading to enormous advancement in biomedicine. Controlled generation from pre-trained diffusion and flow matching priors has gained growing interest in numerous fields, as it encompasses a wide range of practical tasks including constrained generation (Giannone et al., 2023), solving inverse problems (Liu et al., 2023; Ben-Hamu et al., 2024), and instruction alignment (Black et al., 2023; Esser et al., 2024).
+
+There are several lines of work for guiding diffusion and flow models. Classifier-free guidance (CFG) (Ho & Salimans, 2022) trains conditional generative models that take conditions as input. Reward fine-tuning approaches update the generative model parameters to align with certain target objective functions (Black et al., 2023). Both methods require specialized training routines, which are costly and not extendable to new tasks. Training-free guidance on diffusion (Kawar et al., 2022; Chung et al., 2024; Song et al., 2023) alters the scores in the SDE generation process with the gradients from the target function to achieve posterior sampling. These guidances often rely on strong assumptions of the denoising process and require estimating target function gradients w.r.t noised samples which are often intractable. Accurate posterior sampling is only guaranteed for a limited family of objective functions such as linear. Therefore, efforts that deploy such guidance to flow models by bridging the ODE path and SDE path share similar constraints (Pokle et al., 2023; Yim et al., 2024).
+
+{1}------------------------------------------------
+
+Notably, two recent works showed the effectiveness of guiding pre-trained flow models by differentiating through the ODE sampling process, outperforming popular guidance-based approaches. Particularly, Ben-Hamu et al. (2024) differentiates a loss  $R(x)$  through the forward-ODE w.r.t the initial noise  $x_0$ , which induces implicit regularization by projecting the gradient onto the “data manifold” under Gaussian path assumption. This strong confinement to the prior might hinder optimization when the target reward function diverges from the prior distribution. Liu et al. (2023) formulates an optimal control problem where a control term  $u_t$  at each timestep is solved to guide the ODE trajectory. However, the gradient decomposition trick used in Liu et al. (2023) ignores the running cost of control terms and thus could lead to suboptimal behavior. Despite the good performance, there is a lack of systematic theoretical analysis on the convergence behavior and explicit regularization of the differentiate-through-ODE approaches to better guide algorithm design in this space. Furthermore, existing works predominantly focus on the Euclidean manifold due to its simplicity, and there is a compelling need for a theoretically grounded guided flow matching framework on more complex geometries such as  $\text{SO}(3)$  which is heavily used in scientific applications.
+
+To fill the gap between the practical applications of guided generation and theoretical grounds, we propose OC-Flow, a general, practical, and theoretically grounded framework for training-free guided flow matching under optimal control formulation. Our key contributions are as follows:
+
+1. We formulate “controlled generation with pre-trained ODE-based priors” as an **optimal control** problem with a *control term*  $u_t$  and a *running cost* that regulates the trajectory proximity to the prior model while optimizing for target loss. Building upon advances in optimal control theory, we develop effective optimization algorithms for **both Euclidean and  $\text{SO}(3)$  space** through iterative updates of a *co-state flow* and control term, with **theoretical guarantees** under continuous-time formulation.
+2. In Euclidean space, we show that **running cost bounds the KL divergence** between prior and OC-Flow-induced joint distribution. We develop a simple algorithm for OC-Flow through iterative gradient update and provide convergence analysis. We further demonstrate that Dflow and Flow-grad can be interpreted as special cases of Euclidean OC-Flow, **providing a unified view** of the problem.
+3. We present one of the first guided flow-matching algorithm on the  $\text{SO}(3)$  manifold with theoretical grounds. Our approach extends the Extended Method of Successive Approximations (E-MSA) to  $\text{SO}(3)$  with a rigorous convergence analysis. Additionally, we propose approximation techniques to enable computationally **efficient OC-Flow on  $\text{SO}(3)$** .
+4. We provide an efficient and practical implementation of OC-Flow, by introducing the vector-Jacobian product and asynchronous update scheme. We show the effectiveness of our method with extensive empirical experiments, including **text-guided image manipulation**, controllable generation of **small molecules** on QM9, and energy optimization of flow-based **all-atom peptide design**.
+
+## 2 PRELIMINARIES AND PERSPECTIVES ABOUT FLOW MATCHING
+
+**Euclidean Flow Matching.** Flow matching (Lipman et al., 2022; Liu et al., 2022) provides an efficient framework for training a generative model by approximating the time-dependent vector field associated with the flow represented as  $\psi_t : [0, 1] \times \mathbb{R}^d \rightarrow \mathbb{R}^d$ . This vector field  $u_t : [0, 1] \times \mathbb{R}^d \rightarrow \mathbb{R}^d$  defines a probability path of the evolution of an initial noise distribution, denoted by  $p_0$ , towards a target distribution,  $p_1$ , with the pushforward probability as  $p_t := (\psi_t)_* p_0$ . The dynamics of the vector field that governs this flow can be described by the flow ordinary differential equation (ODE) of the form  $\dot{x}_t = u_t(x_t)$ , where we follow the convention to use Newton’s notation with respect to time  $t$  and the state at time  $t$  is given by  $x_t := \psi_t(x_0)$ . Lipman et al. (2022) demonstrates that a tractable flow matching objective can be obtained by conditioning on the target data  $x_1$ . The primary goal of conditional flow matching is to train a model,  $f_t^p : [0, 1] \times \mathbb{R}^d \rightarrow \mathbb{R}^d$ , such that it minimizes the difference between its output and the ground truth conditional vector field as  $\mathcal{L}_{\text{CFL}} = \mathbb{E}_{t, p(x_0, x_1)} \|f_t^p(x_t) - u_t(x_t | x_1, x_0)\|^2$ . The trained model  $f^p$  can be employed as the marginal vector field during the inference phase. In this context, once a noise sample  $x_0$  is drawn, the system’s evolution can be described by the following differential equation:
+
+$$\dot{x}_t = f_t^p(x_t), \quad x_0 \sim p_0(x). \quad (1)$$
+
+**Rotation Group  $\text{SO}(3)$ .** The formulation of flow matching can naturally extend to Riemannian manifolds (Chen & Lipman, 2023). On the Riemannian manifold, a flow is defined as a time-dependent diffeomorphisms  $\varphi_t : G \rightarrow G$ , which describe the continuous evolution of points on the
+
+{2}------------------------------------------------
+
+![Figure 1: Comparison of backpropagation-through-ODE algorithms. The figure is divided into three panels: D-FLOW, FlowGrad, and OC-Flow(ours) in SO(3). Each panel shows a state trajectory (black curve) and updated trajectories (red curves) over time t_0 to t_1. D-FLOW updates the state at t_0 only, while FlowGrad propagates updates across all time steps. OC-Flow incorporates the running cost and reward-weighting factor alpha into the terminal reward. The co-state flow mu_t (green curves) combines gradient information and system dynamics to iteratively update the control terms {theta_t}.](d9d706121d1c4ba9ad2c793746382361_img.jpg)
+
+Figure 1: Comparison of backpropagation-through-ODE algorithms. The figure is divided into three panels: D-FLOW, FlowGrad, and OC-Flow(ours) in SO(3). Each panel shows a state trajectory (black curve) and updated trajectories (red curves) over time t\_0 to t\_1. D-FLOW updates the state at t\_0 only, while FlowGrad propagates updates across all time steps. OC-Flow incorporates the running cost and reward-weighting factor alpha into the terminal reward. The co-state flow mu\_t (green curves) combines gradient information and system dynamics to iteratively update the control terms {theta\_t}.
+
+Figure 1: Comparison of backpropagation-through-ODE algorithms. For D-Flow (left) and FlowGrad (middle), the black curves represent the state trajectory at the  $k$ -th iteration, while the red curves show the updated trajectories at the  $(k+1)$ -th iteration, using gradient updates (blue dashed arrows). D-Flow updates the state at  $t_0$  only, while FlowGrad propagates updates across all time steps. OC-Flow (right) incorporates the running cost and reward-weighting factor  $\alpha$  into the terminal reward. The co-state flow  $\mu_t$  (green curves) combines gradient information and system dynamics to iteratively update the control terms  $\{\theta_t\}$ , which in turn updates the states.
+
+manifold over time, generated by a vector field  $V$ , with  $V(p) \in T_p G$  for each  $p \in G$  where  $T_p$  is the tangent space at point  $p \in G$ . The flow evolves according to:  $\frac{d}{dt} x_t = V(x_t) = L_{x_t} V(e)$ . The CFM objective in Equation 1 can also be adapted for Riemannian flow matching, in which the ground truth vector field can be calculated as the time derivative using the exponential and logarithm maps. Details about rotation group  $\text{SO}(3)$  can be found in Appendix A. In this work, we focus specifically on the  $\text{SO}(3)$ , the Riemannian manifold of all 3D rotations equipped with the canonical Frobenius inner product. In previous flow-based protein design models, each amino acid is associated with a rotation that defines its orientation (Yim et al., 2023; Bose et al., 2023; Li et al., 2024). Guiding such pre-trained generative models toward the desirable protein properties can potentially have a profound impact on the pharmaceutical industry.
+
+## 3 OPTIMAL CONTROL FRAMEWORK FOR GUIDED FLOW MATCHING
+
+The key challenge in guided generation is balancing optimization and faithfulness to the prior distribution. To address such a need, we propose the following framework. Given a pre-trained flow model,  $f_t^p(x)$ , parameterized by a neural network, our goal is to determine the optimal control terms  $\theta_t$  that maximize the reward  $\mathcal{R}(x)$  while maintaining the proximity of the resulting vector field to the original vector field induced by  $f_t^p(x)$ . The reward can be customized for diverse tasks such as inverse problem  $\mathcal{R} = \|H(x) - y\|^2$ , conditional generation  $\mathcal{R} = (f(x) - c)^2$ , and constrained generation  $\mathcal{R} = \|x - y\|^2$ . To ensure proximity, we incorporate a penalty on the state trajectory or control terms  $\int_0^T L(\theta_t)$ , also known as the *running cost*. Optionally, one may also introduce a metric  $d(\cdot, \cdot)$  to penalize the deviation between the new terminal state  $x_1^\theta$  and the prior terminal state  $x_1^p$ . The modified terminal reward function is then defined as:  $\Phi(x_1^\theta) = \mathcal{R}(x_1^\theta) - d(x_1^\theta, x_1^p)$ , and scaling the terminal reward by a constant  $\alpha$ , we can formulate the problem as a standard optimal control task:
+
+$$J(\theta) := \alpha \Phi(x_T^\theta) + \int_0^T L(\theta_t) dt \quad \text{subject to} \quad \dot{x}_t^\theta = h_t(x_t^\theta, \theta_t). \quad (2)$$
+
+A fundamental result in optimal control theory is Pontryagin’s Maximum Principle (PMP) (Pontryagin (2018)), which provides the necessary conditions for optimal solutions in control problems. Specifically, at the core of PMP is the introduction of the Hamiltonian function,  $H$ . This Hamiltonian is defined in terms of the state of the system, the control, and a new entity called the *co-state*  $\mu$ , which resides in the cotangent space of the state manifold:
+
+$$H(t, x, \mu, \theta) = \langle \mu, h_t(x_t^\theta, \theta_t) \rangle - L(\theta). \quad (3)$$
+
+The co-state  $\mu_t$ , also known as the adjoint variable, encodes the influence of the terminal cost function. Their evolution captures how the sensitivity of the system impacts the cost function, ensuring that the state variables evolve in accordance with the system dynamics. Consequently, in optimal control, the Hamiltonian must be maximized by jointly evolving the states and costates according to a system of coupled differential equations. The details of PMP conditions can be found in Appendix B.1.
+
+{3}------------------------------------------------
+
+### 3.1 OC-FLOW ON EUCLIDEAN MANIFOLD
+
+We first develop the algorithm and theoretical analysis for OC-flow in Euclidean space. One of the simplest choices for the control term is an additive control (Kobilarov & Marsden (2011)), which directly perturbs the prior trajectory. In fact, with the linear expansion, the additive control could be seen as a general case and is widely used in optimal control. Specifically, with  $\theta_t$  representing the control input, the new state dynamics and the corresponding running cost can be defined as:
+
+$$\dot{x}_t = h_t(x_t^\theta, \theta_t) = f_t^p(x_t) + \theta_t, \quad L(\theta_t) = -\frac{1}{2}\|\theta_t\|^2. \quad (4)$$
+
+The running cost effectively acts as a constraint on the trajectory to encourage proximity to the original prior distribution. To better understand the effect of running costs on the guided distribution, we provide the following proposition to formally prove that it can control deviation from the prior distribution measured by KL-divergence.
+
+**Proposition 1.** *For Affine Gaussian Probability Path, the expectation of the running cost upper bounds the KL divergence between the prior joint distribution  $p_1(x^p, x_1) = p_1(x^p|x_1)p_{\text{data}}(x_1)$  and the joint distribution after guidance  $p_1(x^\theta, x_1) = p_1(x^\theta|x_1)p_{\text{data}}(x_1)$ , with  $x_1 \sim p_{\text{data}}$ ,  $x^p$  induced by prior conditional vector field  $u_t^p(x|x_1)$  and  $x^\theta$  sampled by applying control  $\theta_t(x_1)$  on  $u_t^p$ :*
+
+$$\mathbb{E}_{x_1 \sim p_{\text{data}}(x_1)} \left[ \frac{1}{2} \int_0^1 \|\theta_t(x_1)\|^2 dt \right] \geq C \cdot \text{KL} \left( p_1(x^\theta, x_1) \| p_1(x^p, x_1) \right). \quad (5)$$
+
+Furthermore, for square-shaped data  $x$  with non-zero probability path, the expectation of the running cost, combined with the  $L_1$ -distance between the prior sample  $x_1^p$  and the corresponding guided sample  $x_1^\theta$ , upper bounds the KL divergence between the marginal distributions of the prior model  $p_1^p$  and the guided model  $p_1^\theta$ :
+
+$$\mathbb{E}_{x_1^p \sim p_1^p(x)} \left[ A \|x_1^p - x_1^\theta\| + B \int_0^1 \|\theta_t(x_1^p)\|^2 dt \right] \geq \text{KL}(p_1^\theta \| p_1^p). \quad (6)$$
+
+One effective approach for directly applying PMP to optimal control tasks is the Extended Method of Successive Approximations (E-MSA) (Li et al., 2018). E-MSA builds upon the basic MSA algorithm (Chernousko & Lyubushin (1982)), which iteratively updates the terms in the PMP conditions (Appendix B.2). The primary enhancement of E-MSA over the basic MSA is its ability to extend convergence guarantees beyond a limited class of linear quadratic regulators (Aleksandrov (1968)).
+
+A key assumption is the global Lipschitz condition for the functions involved. However, note that this assumption can be relaxed to a local Lipschitz condition if we can demonstrate that  $x_t^\theta$  is bounded, which can be safely assumed provided that appropriate regularization techniques are applied. Furthermore several prior work has shown the Lipschitz continuity for the deep learning models. (Gouk et al. (2021), Khromov & Singh (2024))
+
+When the E-MSA algorithm is applied to the guided controlled generation task on Euclidean space, the trajectory of the co-states  $\mu_t$  can be calculated in closed form. Specifically, they can be expressed as  $\nabla_{x_t} \Phi(X_t^k)$  which enables us to derive the following update rule with convergence guarantees:
+
+**Theorem 2:** *Assume that the reward function, the prior model, and their derivatives satisfy Lipschitz continuity, bounded by a Lipschitz constant  $L$ . Utilizing the E-MSA, for each iteration  $k$ , for each constant  $\gamma > 2C$  with  $C$  is a function of  $L$ , such that under the additive control and the running cost defined in Equation 4, the optimal update is following:*
+
+$$\theta_t^{k+1} = \frac{\gamma}{1+\gamma} \theta_t^k + \frac{\alpha}{1+\gamma} \nabla_{x_t} \Phi(X_1^k). \quad (7)$$
+
+This update rule for the control term  $\theta_t$  guarantees an increase in the objective function defined in Equation 2:
+
+$$J(\theta^{k+1}) - J(\theta^k) \geq \left( 1 - \frac{2C}{\gamma} \right) \epsilon_\gamma^k, \quad \epsilon_\gamma^k \geq 0. \quad (8)$$
+
+{4}------------------------------------------------
+
+In practice, solving continuous ODEs requires discretization. The discretized version of the proposed algorithm is outlined in Algorithm 1. In this formulation, the weight decay term is parameterized as  $\beta = \frac{\gamma}{1+\gamma}$ , and the learning rate is defined as  $\eta = \frac{\alpha}{1+\gamma}$ . As demonstrated in Appendix C.3, the discretization error introduced by the Euler method is of the order  $O(\Delta t)$ . This error diminishes as the number of ODE steps increases, ensuring the algorithm converges to the global optimum.
+
+### 3.2 PRACTICAL IMPLEMENTATION AND ACCELERATION
+
+#### 3.2.1 ADJOINT METHOD AND VECTOR-JACOBIAN PRODUCT
+
+A significant portion of the computational time in the OC-Flow algorithm is spent on evaluating the gradient  $\nabla_{x_1} \Phi(x_1)$ . The computational cost of directly back-propagating through ODE with vanilla Autograd requires saving all intermediate computation values, which results in a demanding memory complexity of  $O(ND^2)$  (Pan et al., 2023; Chen et al., 2018) where  $N$  is the ODE steps. We instead employ the adjoint method where the gradient  $\nabla_{x_1} \Phi(x_1)$  is computed using a vector-Jacobian product by the double-backwards trick, which reduces the memory cost to  $O(D^2)$ .
+
+$$\nabla_{x_{k/N}} \Phi = (\nabla_{x_{(k+1)/N}} \Phi) \cdot \Phi_{x_{(k+1)/N}}(x_{k/N}). \quad (9)$$
+
+#### 3.2.2 ASYNCHRONOUS SETTING FOR FLEXIBLE UPDATE SCHEDULING
+
+In practice, discretization techniques are employed to simulate the ODEs governing both the state trajectory  $x_t$  and the co-states  $\mu_t$  and operate in a *synchronous* setting, where the number of time steps for the state trajectory  $x_t$  coincides with the number of control terms  $\theta_t$ .
+
+Here we show that OC-Flow can be extended to an *asynchronous* framework, providing greater flexibility in scheduling. We subdivide the time interval  $\Delta t$  into  $N$  equally spaced subintervals. Let  $\{x_t\}$  denote the state trajectory over the time interval  $[t, t + \Delta t]$ , and  $\{x_t^\theta\}$  represent the trajectory when the control term  $\theta_t$  is applied in the first subinterval. The trajectory can be approximated as:
+
+$$x_{t+\Delta t} = x_t + \frac{\Delta t}{N} \sum_{l=1}^{N-1} f^p \left( x_{t+\frac{l\Delta t}{N}}^\theta \right) + \frac{\Delta t}{N} \theta_t \approx x_t + \Delta t \left( \frac{1}{N} \sum_{l=1}^{N-1} f^p \left( x_{t+\frac{l\Delta t}{N}} \right) + \frac{1}{N} \theta_t \right). \quad (10)$$
+
+Consequently, the asynchronous setting allows the algorithm to be applied without modification while enabling finer updates to both the control terms and state trajectories by adjusting the frequency  $N$  of control term updates relative to the state trajectory simulation (see Appendix C.4 for the proof and justification of the approximations in Equation 10). In our peptide design experiment, the asynchronous setting is applied for efficient computing.
+
+Table 1: Comparison of runtime and memory complexity of different methods used in backprop-through guided-ODE in Euclidean and SO(3) manifold. For complexity,  $N$  is the number of ODE steps,  $n$  is the number of effective control terms with synchronized and in the range  $[1, N]$  and  $D^2$  is the complexity of computing 1-step gradient (VJP or Autograd), D depends on data and model size.
+
+|          | Number of Control Terms | Running Cost     | Memory Complexity | Runtime Complexity | Convergence to Optimal | Generalization to SO(3) |
+|----------|-------------------------|------------------|-------------------|--------------------|------------------------|-------------------------|
+| OC-Flow  | $n$                     | $\ \theta_t^2\ $ | $O(D^2)$          | $O(nD^2)$          | ✓                      | ✓                       |
+| FlowGrad | $n$                     | 0                | $O(D^2)$          | $O(nD^2)$          | ✗                      | ✗                       |
+| D-Flow   | 1                       | Implicit         | $O(ND^2)$         | $O(ND^2)$          | ✗                      | ✗                       |
+
+### 3.3 CONNECTION TO OTHER BACKPROP-THROUGH GUIDED-ODE APPROACHES
+
+Several previous works discussed backprop-through-ODE guidance in flow-matching models. Notable examples include D-Flow (Ben-Hamu et al., 2024) and FlowGrad (Liu et al., 2023). An illustration of their algorithms and ours is shown in Figure 1. In this section, we demonstrate that our framework is more general, and both of these methods can be viewed as special cases of our algorithm.
+
+FlowGrad formulates the optimization task in a manner similar to our optimal control target in Equation 2. Specifically, it directly applies gradient descent to the control variables:
+
+$$\theta_t^{k+1} = \theta_t^k + \alpha \nabla_{\theta_t} \Phi(X_t^k) = \theta_t^k + \frac{\alpha}{N} (\nabla_{x_t} X_{t+\Delta t})^{-1} \nabla_{x_t} \Phi(X_t^k), \quad (11)$$
+
+which can be interpreted as a limiting case of our algorithm in Equation 7, where  $\gamma \rightarrow \infty$  and given with  $dt \rightarrow 0$ ,  $\nabla_{x_t} X_{t+\Delta t} \rightarrow I$ . However, as shown in Equation 8, the convergence rate is a complex
+
+{5}------------------------------------------------
+
+function of  $\gamma$ , so in practice,  $\gamma$  is treated as a tunable parameter. FlowGrad’s setting  $\gamma \rightarrow \infty$  may undermine the convergence speed. D-Flow optimizes the reward by applying gradient descent to the initial noise  $x_0$ :
+
+$$X_0^{k+1} = X_0^k + \text{LBFGS}(\nabla_{x_0} \Phi(X_1^k)). \quad (12)$$
+
+In fact, with the update rule  $x_{t+dt} = x_0 + f(x_0) dt + \theta_t dt$ , the update of  $\theta_0$  can be seen as an increment to  $x_0$ . The LBFGS algorithm provides a dynamic learning rate, aligning with our framework, where  $\gamma$  is allowed to vary across iterations. Hence, D-Flow can be viewed as a special case of our asynchronous algorithm when the number of control terms is 1. A more detailed comparison of the algorithms can be found in Table 6 and additional discussion on computation efficiency is in Appendix D.
+
+## 4 OPTIMAL CONTROL FRAMEWORK FOR GUIDED FLOW MATCHING ON $\text{SO}(3)$
+
+Most optimization algorithms are primarily designed for Euclidean spaces and face significant challenges when applied to non-Euclidean settings, such as the  $\text{SO}(3)$  manifold, which plays a crucial role in drug discovery and peptide design (Huguet et al. (2024)). This section extends the E-MSA algorithm to the  $\text{SO}(3)$  manifold and presents a rigorous proof of its convergence.
+
+### 4.1 OC-FLOW FOR $\text{SO}3$
+
+To begin, we define the vector field governing the system dynamics. The state trajectory, influenced by control terms  $\theta_t \in \mathfrak{so}(3)$ , evolves according to the following differential equation:
+
+$$\dot{x}_t^\theta = x_t^\theta (f_t(x_t^\theta) + \theta_t). \quad (13)$$
+
+In this work, the left-invariant vector field is utilized, under which the Hamiltonian can be shown to reduce to a linear functional in  $\mathfrak{so}(3)^*$  (Jurdjevic (1996), Colombo & Dimarogonas (2020)). Given the co-state  $\mu_t \in \mathfrak{so}(3)^*$ , the Hamiltonian function is redefined as:
+
+$$H : [0, T] \times \text{SO}(3) \times \mathfrak{so}(3)^* \times \mathfrak{so}(3) \rightarrow \mathbb{R}, \quad (t, x, \mu, \theta) \mapsto \mu_t (f_t(x_t^\theta) + \theta_t) - L(\theta). \quad (14)$$
+
+A direct approach to apply PMP conditions on the  $\text{SO}(3)$  manifold involves iteratively updating the cotangent vector  $\mu_t$  and the state trajectory  $x_t$  as shown in Step 4 and Step 5 in Algorithm 2 and then apply an update rule to determine the control term  $\theta_t$  for the subsequent iteration with weight decay  $\beta$  and learning rate  $\eta$  the update for  $\theta_t$  can be written as:
+
+$$\theta_t^{k+1} = \beta \theta_t^k + \eta \tilde{\mu}_t^{\theta^k}, \quad (15)$$
+
+where  $\tilde{\mu}_t^{\theta^k}$  is defined by  $\langle \tilde{\mu}_t^{\theta^k}, v \rangle = \mu_t^{\theta^k}(v)$  with  $\tilde{\mu}_t \in \mathfrak{so}(3)$  for all  $v \in \mathfrak{so}(3)$ . The existence of  $\tilde{\mu}_t^{\theta^k}$  can be derived from the Riesz Representation Theorem (Goodrich (1970)). This formulation leads to the introduction of the OC-FLOW algorithm on  $\text{SO}(3)$ , as detailed in Algorithm 2.
+
+#### --- Algorithm 2 OC-Flow on $\text{SO}(3)$ ---
+
+- 1: **Given:** Pre-trained model:  $f_t^\theta$ , initial state:  $x_0$
+  - 2: **Initialize:** Control term  $\theta^0 \in \mathfrak{so}(3)$ , learning rate  $\eta$ , weight decay  $\beta$
+  - 3: **for**  $k = 0$  to MaxIterations **do**
+  - 4:   Solve for the state trajectory:  $\dot{X}_t^{\theta^k} = X_t^{\theta^k} (f^p(t, X_t^{\theta^k}) + \theta^k)$ ,  $X_0^{\theta^k} = x_0$
+  - 5:   Solve for the adjoint variables:  $\dot{\mu}_t^{\theta^k} = -\text{ad}_{\frac{\partial H}{\partial \mu}}^* \mu^{\theta^k} - (dL_{x_T^\theta})^* \frac{\partial H}{\partial x}, \mu_T^{\theta^k} = (dL_{x_T^\theta})^* \nabla \Phi(x_T^\theta)$
+  - 6:   Update control:  $\theta_t^{k+1} = \beta \theta_t^k + \eta \tilde{\mu}_t^{\theta^k}$
+  - 7: **end for**
+- 
+
+### 4.2 CONVERGENCE OF OC-FLOW ON $\text{SO}3$
+
+To derive the proof of the convergence of our Algorithm 2, we first establish that under the PMP conditions on  $\text{SO}(3)$ , the objective function  $J(\theta)$ , as defined in Equation 2, can be bounded. This is formalized in the following proposition:
+
+{6}------------------------------------------------
+
+**Proposition 3:** Assume that the reward function, the prior model, and their derivatives satisfy Lipschitz continuity, bounded by a Lipschitz constant  $L$ . Then, there exists a constant  $C > 0$  such that for any  $\theta, \phi \in \mathfrak{so}(3)$ , the following inequality holds:
+
+$$J(\theta) + \int_0^1 \Delta_{\phi_t, \theta} H(t) dt - C \|\phi_t - \theta_t\|^2 dt \leq J(\phi), \quad (16)$$
+
+where  $X^0$  and  $P^0$  satisfy the PMP conditions on  $SO(3)$  manifold, and  $\Delta H_{\phi, \theta}$  denotes the change in the Hamiltonian, defined as:
+
+$$\Delta H_{\phi, \theta}(t) := H(t, x_t^\phi, \mu_t^\phi, \phi_t) - H(t, x_t^\theta, \mu_t^\theta, \theta_t). \quad (17)$$
+
+Proposition 2 provides a lower bound for the difference in the objective function values under two distinct control terms that satisfy the PMP conditions described by the Hamiltonian equations in Appendix B.1.
+
+However, applying this result directly as an optimization algorithm presents several challenges. First, the difference in the Hamiltonian  $\Delta H_{\phi, \theta}(t)$  is not inherently bounded. Second, the term  $\|\phi - \theta\|^2$  is non-negative, which complicates the minimization process. To address these issues, inspired by the method of E-MSA, we introduce a positive constant  $\gamma$  and define an *Extended Hamiltonian*:
+
+$$\tilde{H}(t, x, \mu, \theta, \phi) := H(t, x, \mu, \theta) - \frac{\gamma}{2} \|\theta - \phi\|^2 = \langle \mu, f_t(x) + \theta \rangle - \frac{1}{2} \|\theta\|^2 - \frac{\gamma}{2} \|\theta - \phi\|^2. \quad (18)$$
+
+The introduction of the extended Hamiltonian enables the combination of the original Hamiltonian with the penalty term  $\|\phi - \theta\|^2$  into a unified expression that can be optimized jointly. A natural approach to achieve this is by updating  $\theta$  to maximize the Extended-Hamiltonian. The resulting update rule is given by:
+
+$$\theta_t^{k+1} = \arg \max_{\theta} \tilde{H}(t, x^{\theta^k}, \mu^{\theta^k}, \theta, \theta^k) = \frac{\gamma}{1+\gamma} \theta^k + \frac{1}{1+\gamma} \mu_t^\theta = \beta \theta^k + \eta \mu_t^\theta. \quad (19)$$
+
+By performing this maximization step at each iteration, we ensure that the change in the Extended-Hamiltonian,  $\Delta \tilde{H}$ , is non-negative, indicating that the algorithm progresses towards an optimal solution. Furthermore, we can show that when the update process converges, i.e., when  $\Delta \tilde{H} = 0$  or equivalently  $\Delta H = 0$ , the algorithm has reached the optimal control point. These insights can be formalized in the following proposition:
+
+**Proposition 4:** Let  $X^0$  and  $P^0$  satisfy the PMP conditions. If the update rule follows Algorithm 2, we define  $\epsilon_k := \int_0^1 \Delta_{\theta^{k+1}, \theta^k} H(t) dt$ , and  $\epsilon_k$  is bounded as:
+
+$$\epsilon_k := \int_0^1 \Delta_{\theta^{k+1}, \theta^k} H(t) dt, \quad \lim_{k \rightarrow \infty} \epsilon_k = 0. \quad (20)$$
+
+Furthermore, when  $\epsilon_k = 0$ , we have  $\theta = \theta^* := \arg \max_{\theta} J(\theta)$
+
+With these results, we can now extend the result in E-MSA to the  $SO(3)$  manifold and establish a bound for the optimization algorithm based on the derived theoretical properties:
+
+**Theorem 5:** Assume that the reward function, the prior model, and their derivatives satisfy Lipschitz continuity, bounded by a Lipschitz constant  $L$ . Let  $\theta^0 \in \mathfrak{so}(3)$  be any initial measurable control with  $J(\theta^0) < +\infty$ . Suppose also that  $\inf_{\theta \in \mathfrak{so}(3)} J(\theta) > -\infty$ . If the update of  $\theta$  satisfies equation 19, for sufficiently large  $\gamma$ , the following inequality holds for some constant  $D > 0$ :
+
+$$D\epsilon_k \leq J(\theta^{k+1}) - J(\theta^k). \quad (21)$$
+
+Therefore, by invoking Proposition 3, we can conclude that after each update, the target function is non-decreasing and when the update process terminates, the optimal solution has been attained. This establishes the convergence of the OC-Flow algorithm on the  $SO(3)$  manifold.
+
+### 4.3 PRACTICAL IMPLEMENTATION
+
+In practice, directly optimizing Algorithm 2 using existing ODE methods is challenging due to the nature of the adjoint variable  $\tilde{\mu}_t$ , which is a linear functional in the dual space  $\mathfrak{so}(3)^*$ . Instead, we can optimize  $\tilde{\mu}_t$  as defined in Section 4.1. We can decompose  $\tilde{\mu}_t$  into its projections onto a set of orthogonal bases within the  $\mathfrak{so}(3)$  group.
+
+{7}------------------------------------------------
+
+![Figure 2: Visualization of text-guided generated faces with different expressions. The figure is a grid of 16 rows and 12 columns. The first column is labeled 'reference' and shows 16 different face images. The next three columns are grouped under the expression 'sad', the next three under 'angry', and the last six under 'curly hair'. Each group of columns shows the results from four methods: StyleCLIP, FlowGrad, OC-Flow, and Ours (the proposed method). The 'Ours' method consistently generates faces that better match the target expression while maintaining the identity of the reference face.](892f25e3d71d8e315a2a51092a8a8da7_img.jpg)
+
+Figure 2: Visualization of text-guided generated faces with different expressions. The figure is a grid of 16 rows and 12 columns. The first column is labeled 'reference' and shows 16 different face images. The next three columns are grouped under the expression 'sad', the next three under 'angry', and the last six under 'curly hair'. Each group of columns shows the results from four methods: StyleCLIP, FlowGrad, OC-Flow, and Ours (the proposed method). The 'Ours' method consistently generates faces that better match the target expression while maintaining the identity of the reference face.
+
+Figure 2: Visualization of text-guided generated faces with different expressions.
+
+A frequently used choice for the basis in  $\mathfrak{so}(3)$  is the canonical basis  $\{E_1, E_2, E_3\}$  (McCann et al. (2023)) satisfying the condition  $\langle v, E_i \rangle = 2$  for all  $v \in \mathfrak{so}(3)$ . Thus we can decompose the time derivative of the adjoint variable  $\tilde{\mu}_t$  as:  $\tilde{\mu}_t^i = \langle \tilde{\mu}_t, E_i \rangle$  and  $\tilde{\mu}_t = \frac{1}{2} \sum_{i=1}^3 \tilde{\mu}_t^i E_i$ . Thus, with the closed forms for the partial derivatives related to Hamiltonian, the practical update for  $\mu_t$  in Algorithm 2 can be written as follows. The vector-Jacobian method can be applied to compute the term  $\frac{\partial f_t^p}{\partial x}(x_t^k E_j)$  in Algorithm 2, which significantly reduces complexity from  $O(D^4)$  to  $O(D^2)$ . Meanwhile, the method of asynchronous can also be applied. See Appendix C.4.
+
+$$\begin{aligned} \dot{\tilde{\mu}}_{t,i}^k &= -\langle \tilde{\mu}_t^k, [f_t^p + \theta_t, E_i] \rangle - \left\langle \tilde{\mu}_t^k, \frac{\partial f_t^p}{\partial x} x_t^k E_i \right\rangle, \quad \left\langle \tilde{\mu}_t, \frac{\partial f_t^p}{\partial x} x_t^k E_j \right\rangle = \text{Tr} \left( \tilde{\mu}_t^T \frac{\partial f_t^p}{\partial x} (x_t^k E_j) \right) \\ \tilde{\mu}_{t-\Delta t}^k &= \tilde{\mu}_t^k - \frac{\Delta t}{2} \sum_{i=1}^3 \dot{\tilde{\mu}}_{t,i}^k E_i, \quad \tilde{\mu}_t^k = \langle \nabla \Phi(x_t^k), x_t^k E_i \rangle. \end{aligned} \quad (22)$$
+
+## 5 EXPERIMENTS
+
+### 5.1 TEXT-GUIDED IMAGE MANIPULATION
+
+We first validate our OC-Flow on the traditional text-to-image generation task. Previous work has demonstrated the importance of alignment with the given text prompt using either automatic metrics or human preference as the reward (Black et al., 2023; Esser et al., 2024). In our text-guided image manipulation task, we want to guide the generative model pre-trained on the celebrity face dataset CelebA-HQ (Karras, 2017) to text guidance {sad, angry, curly hair} showing different facial expressions or traits. Following the same setup in Liu et al. (2023), given an input image  $x_0$ , the reward for alignment with the text prompt can be effectively evaluated by the CLIP model (Radford et al., 2021) pre-trained in a contrastive way to score the similarity between arbitrary image-text pairs. Following (Liu et al., 2023), we adopt the pre-trained Rectified Flow (RF) (Liu et al., 2022) as the generative prior. Inspired by Proposition 1, for this image task where the square-like assumption is satisfied, an extra terminal constraint  $x_1^p - x_1^q$  is added as part of the terminal reward function.
+
+We choose two state-of-the-art text-guided image manipulation baselines, StyleCLIP (Patashnik et al., 2021) and FlowGrad (Liu et al., 2023). We run StyleCLIP and FlowGrad with their official implementation and default parameter configurations. For *ours*, we set time step of 100, step size  $\eta = 2.5$ , weight decay of 0.995, the weight of the extra constraint of 0.4, and the number of optimization steps of 15. For qualitative comparison, we show generated examples of different text-guided expressions in Figure 2. Due to the large gap between reference and guided distributions, StyleCLIP fails to manipulate with *sad*. Lacking in regularization, FlowGrad may change the content too much with *curly hair*. Our OC-Flow generally produces the best results with a good alignment with the text prompt while preserving the generative prior so as to produce reasonable faces that are not distorted much.
+
+Table 2: Comparison of methods on LPIPS, ID, and CLIP metrics. Lower LPIPS and ID indicate better performance, while higher ID and CLIP values are preferred.
+
+| Method                | LPIPS ↓      | ID ↑         | CLIP ↑       |
+|-----------------------|--------------|--------------|--------------|
+| CG + RF               | 0.346        | 0.643        | 0.292        |
+| CG + LDM              | 0.383        | 0.513        | 0.298        |
+| DiffusionCLIP         | 0.398        | 0.659        | 0.285        |
+| StyleCLIP + e4e       | 0.359        | 0.704        | 0.267        |
+| FlowGrad + RF         | 0.302        | <b>0.737</b> | 0.299        |
+| <b>OC-Flow (Ours)</b> | <b>0.207</b> | 0.732        | <b>0.302</b> |
+
+### 5.2 MOLECULE GENERATION FOR QM9
+
+We further instantiate our OC-Flow for controllable molecule generation on the QM9 dataset (Rudigkeit et al., 2012; Ramakrishnan et al., 2014), a commonly used molecular dataset containing small molecules with up to 9 heavy atoms from C, O, N, F. Following Hoogeboom et al. (2022); Ben-Hamu
+
+{8}------------------------------------------------
+
+![Figure 3: Visualization of OC-Flow generated molecules with various dipole moments condition. The figure shows six molecular structures arranged horizontally, each with a numerical value below it representing its dipole moment. The values are 0.114, 1.575, 2.438, 3.354, 4.550, and 5.536. The molecules range from simple hydrocarbons to more complex structures containing oxygen and nitrogen atoms, showing a clear trend in dipole moment increase.](3266a437c52e0ddda0748acb590aeb76_img.jpg)
+
+Figure 3: Visualization of OC-Flow generated molecules with various dipole moments condition. The figure shows six molecular structures arranged horizontally, each with a numerical value below it representing its dipole moment. The values are 0.114, 1.575, 2.438, 3.354, 4.550, and 5.536. The molecules range from simple hydrocarbons to more complex structures containing oxygen and nitrogen atoms, showing a clear trend in dipole moment increase.
+
+Figure 3: Visualization of OC-Flow generated molecules with various dipole moments condition.
+
+et al. (2024), we target for conditional generation of molecules with specified quantum chemical property values including polarizability  $\alpha$ , orbital energies  $\epsilon_{\text{HOMO}}$ ,  $\epsilon_{\text{LUMO}}$  and their gap  $\Delta\epsilon$ , dipole moment  $\mu$ , and heat capacity  $c_v$ . Such a conditional generation setting of molecules with desired properties has profound practical applications in drug design and virtual screening. To define the loss function, separate classifiers for each property are first trained to predict the property value for the generated molecule (Hoogeboom et al., 2022), and the loss can be then calculated as the mean absolute error (MAE) between the predicted and the reference property values. The pre-trained unconstrained generative model is taken from Song et al. (2024) (EquiFM), a flow-based generative model that uses an equivariant vector field parameterization for generating the atom coordinates and types via the learned flow dynamics. To demonstrate the zero-shot guidance performance on such a conditional generation task, we compare our approach with other gradient-based methods of D-Flow (Ben-Hamu et al., 2024) and FlowGrad (Liu et al., 2023) on the same pre-trained EquiFM. To be comparable to D-Flow, we follow its setting to use the L-BFGS optimizer with 5 optimization steps with linear search. We generate 1000 molecules for each property and report the MAE in Table 3. The unconditional EquiFM is also included as an upper bound for the guided models. It can be seen that our approach consistently outperforms both of them with lower MAEs, which better balances the reward optimization and the faithfulness to the prior. We provide guided generation samples in Figure 3 with respect to different target dipole moments. A clear trend from hydrocarbons with more symmetric structures to molecules with more high-electronegativity atoms of oxygen and nitrogen can be observed, indicating an increase in the dipole moment.
+
+As we have theoretically demonstrated the impact of the regularization strength from the optimal control perspective, we further experiment with a different  $\gamma$  and examine the quality of the conditionally generated molecules by evaluating additional metrics following Song et al. (2024). Specifically, we calculate the atom stability percentage (ASP), molecule stability percentage (MSP), and valid & unique percentage (VUP). Ideally, these metrics should not be greatly lower than the pre-trained model, and a higher strength of regularization should lead to higher scores. Indeed, as demonstrated in Table 4, in which we provide these scores for two different settings of  $\gamma = 0.01$  and 10, all scores are higher with a higher strength of regularization at the cost of also a higher MAE. In this way, our OC-Flow effectively prevents exploitation from direct gradient descent that may hack the loss function and provides more flexible and fine-grained control over the guided generation.
+
+Table 3: MAE for guided generations on QM9 (lower is better).
+
+| Property Unit | $\alpha$ Bohr <sup>3</sup> | $\Delta\epsilon$ meV | $\epsilon_{\text{HOMO}}$ meV | $\epsilon_{\text{LUMO}}$ meV | $\mu$ D      | $c_v$ cal K·mol |
+|---------------|----------------------------|----------------------|------------------------------|------------------------------|--------------|-----------------|
+| OC-Flow(Ours) | <b>1.383</b>               | 367                  | <b>183</b>                   | <b>342</b>                   | <b>0.314</b> | <b>0.819</b>    |
+| D-Flow        | 1.566                      | <b>355</b>           | 205                          | 346                          | 0.330        | 0.893           |
+| FlowGrad      | 2.484                      | 517                  | 273                          | 429                          | 0.542        | 1.270           |
+| EquiFM        | 8.969                      | 1439                 | 622                          | 1438                         | 1.593        | 6.873           |
+| Classifier    | 0.095                      | 64                   | 40                           | 35                           | 0.046        | 0.041           |
+
+Table 4: MAE and other evaluation metrics for our approach with  $\gamma = 0.01 / \gamma = 10$ .
+
+| Property | $\alpha$      | $\Delta\epsilon$ | $\epsilon_{\text{HOMO}}$ | $\epsilon_{\text{LUMO}}$ | $\mu$         | $c_v$         |
+|----------|---------------|------------------|--------------------------|--------------------------|---------------|---------------|
+| MAE ↓    | 1.383 / 1.557 | 367 / 365        | 183 / 188                | 342 / 339                | 0.314 / 0.320 | 0.819 / 0.852 |
+| ASP ↑    | 94.8 / 96.0   | 95.2 / 96.1      | 95.2 / 96.1              | 95.8 / 96.1              | 95.2 / 96.1   | 95.2 / 96.1   |
+| MSP ↑    | 64.4 / 69.9   | 67.9 / 70.5      | 65.8 / 69.8              | 68.5 / 70.8              | 68.0 / 70.1   | 67.1 / 68.9   |
+| VUP ↑    | 86.2 / 88.6   | 88.2 / 89.8      | 86.2 / 87.7              | 87.6 / 88.7              | 88.2 / 89.0   | 89.4 / 88.5   |
+
+### 5.3 PEPTIDE DESIGN
+
+We evaluate our OC-Flow approach for peptide backbone design using a test set derived from (Li et al., 2024), which includes 162 complexes clustered based on 40% sequence identity using mmseqs2 (Steinegger & Söding, 2017). Our experiments focus on PepFlow w/Bb, a model designed to exclusively sample peptide backbones while optimizing translations in Euclidean space and
+
+{9}------------------------------------------------
+
+![Figure 4: Visualization of OC-Flow generated peptide and unconditional generated peptide (5djd_C). The figure shows five molecular structures side-by-side, each with a yellow label above it indicating the binding energy. From left to right: Ground-truth (bind: -49.041), PepFlow (bind: -41.665), OC-Flow(trans) (bind: -46.676), OC-Flow(rot) (bind: -42.627), and OC-Flow(trans+rot) (bind: -50.410). Each structure shows a protein surface in grey with a peptide ligand in stick representation (carbon in green, oxygen in red, nitrogen in blue).](b0a74353d8701d86ee4929643eef3b00_img.jpg)
+
+Figure 4: Visualization of OC-Flow generated peptide and unconditional generated peptide (5djd\_C). The figure shows five molecular structures side-by-side, each with a yellow label above it indicating the binding energy. From left to right: Ground-truth (bind: -49.041), PepFlow (bind: -41.665), OC-Flow(trans) (bind: -46.676), OC-Flow(rot) (bind: -42.627), and OC-Flow(trans+rot) (bind: -50.410). Each structure shows a protein surface in grey with a peptide ligand in stick representation (carbon in green, oxygen in red, nitrogen in blue).
+
+Figure 4: Visualization of OC-Flow generated peptide and unconditional generated peptide (5djd\_C).
+
+rotations in  $SO(3)$  space. The model employs the MadraX force field (Orlando et al., 2024) for energy optimization, and performance is evaluated using several key metrics. These metrics include MadraX energy, which assesses the total energy of the generated peptide structures, along with Rosetta-based measures of stability and affinity. Currently, our stability and affinity metrics are represented by their respective means: stability quantifies the energy states of peptide-protein complexes, while affinity measures the binding energies. In addition, we employ an existing metric, denoted as IMP, which measures the percentage of generated peptides that exhibit lower energy than the original ground truth. Additionally, we use the root-mean-square deviation (RMSD) to evaluate structural accuracy by aligning the generated peptides to their native structures and calculating the  $C_\alpha$  RMSD. To further analyze structural characteristics, we compute the secondary-structure similarity ratio (SSR), which reflects the proportion of shared secondary structures, and the binding site ratio (BSR), which quantifies the overlap between the binding sites of the generated and native peptides on the target protein. Structural diversity is assessed using the average of one minus the pairwise TM-Score (Zhang & Skolnick, 2005) among the generated peptides, representing their dissimilarities.
+
+We compare our method to the pre-trained unconditional PepFlow model (Li et al., 2024), serving as a baseline. We also include ablations where our model guides only translations (Euclidean) or rotations ( $SO(3)$ ). As shown in Table 5, our OC-Flow method, applied to both Euclidean and  $SO(3)$  spaces, consistently outperforms the baseline, even though we only optimize for the Madrax target function. This indicates that our algorithm not only achieves higher target function scores but also captures more natural structural configurations. It generates peptide backbones that are more stable, energetically favorable, and diverse, while improving key metrics such as stability, affinity, IMP, diversity, SSR, and BSR. In comparison, optimizing in Euclidean space alone yields only marginal improvements in IMP, while optimizing rotations alone achieves comparable performance. More experimental details and ablation can be found in Appendix E.3.
+
+Table 5: Evaluation of OC-Flow peptide design.
+
+|                    | MadraX $\downarrow$ | RMSD $\downarrow$ | SSR % $\uparrow$ | BSR % $\uparrow$ | Stability $\downarrow$ | Affinity $\downarrow$ | Diversity $\uparrow$ | imp(%) $\uparrow$ |
+|--------------------|---------------------|-------------------|------------------|------------------|------------------------|-----------------------|----------------------|-------------------|
+| Ground-truth       | -0.588              | -                 | -                | -                | -84.893                | -36.063               | -                    | -                 |
+| PepFlow            | -0.195              | 1.645             | 0.794            | 0.874            | -45.660                | -26.538               | 0.310                | 14.3              |
+| OC-Flow(trans)     | -0.229              | 1.774             | <b>0.797</b>     | <b>0.876</b>     | -48.380                | -27.328               | 0.323                | 14.4              |
+| OC-Flow(rot)       | -0.221              | <b>1.643</b>      | 0.794            | 0.872            | -48.636                | -27.211               | 0.310                | 14.5              |
+| OC-Flow(trans+rot) | <b>-0.263</b>       | 2.127             | <b>0.797</b>     | 0.869            | <b>-48.853</b>         | <b>-27.468</b>        | <b>0.338</b>         | <b>15.0</b>       |
+
+## 6 CONCLUSIONS AND DISCUSSION
+
+In this paper, we propose OC-Flow, a general and theoretically grounded framework for training-free guided flow matching under optimal control formulation. Our framework provides a unified perspective on existing backprop-through-ODE approaches and lays the foundation for systematic analysis of the optimization dynamics of this setting. Extensive empirical experiments demonstrate the effectiveness of OC-Flow. Future extensions of OC-Flow include generalizing beyond additive control terms and bridging connection with fine-tuning regimes where control terms can be solved as learning updates to the model parameters. Another extension could be scaling up the  $SO(3)$  OC-Flow to guide generative tasks for larger molecular systems such as protein motif scaffolding. One potential limitation of backprop-through-ode approaches, despite its superior result, is the higher computation cost compared to posterior sampling approaches. Such tradeoff has been demonstrated in Dflow/FlowGrad as well. Our practical implementations of OC-Flow improve the time and memory complexity (see analysis in Appendix D), where sampling on the image takes 216s compared to 15 minutes in D-Flow. We hope that our findings can guide algorithm design and motivate further model improvement in guided flow matching.
+
+ Rest of paper (reference and Appendix) is removed.

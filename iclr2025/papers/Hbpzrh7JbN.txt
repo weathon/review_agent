@@ -1,0 +1,272 @@
+
+
+{0}------------------------------------------------
+
+# SATURN: SAMPLE-EFFICIENT GENERATIVE MOLECULAR DESIGN USING MEMORY MANIPULATION
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Generative molecular design for drug discovery has very recently achieved a wave of experimental validation, with language-based backbones being the most common architectures employed. The most important factor for downstream success is whether an *in silico* oracle is well correlated with the desired end-point. To this end, current methods use cheaper proxy oracles with higher throughput before evaluating the most promising subset with high-fidelity oracles. The ability to *directly* optimize high-fidelity oracles would greatly enhance generative design and be expected to improve hit rates. However, current models are not efficient enough to consider such a prospect, exemplifying the sample efficiency problem. In this work, we introduce **Saturn**, which demonstrates the first application of the Mamba architecture for generative molecular design. We elucidate *how* experience replay with data augmentation improves sample efficiency and *how* Mamba synergistically exploits this mechanism. Saturn outperforms 22 models on multi-parameter optimization tasks relevant to drug discovery and may possess sufficient sample efficiency to consider the prospect of directly optimizing high-fidelity oracles. The code is available at <https://figshare.com/s/21059896530e222b9cd5>.
+
+## 1 INTRODUCTION
+
+Within the last year, there has been a surge of works reporting experimental validation of generative molecular design for drug discovery (Du et al., 2024). The fundamental task of generative molecular design is learn a distribution of molecules with *tailored* property profiles. All generative models achieve this in one of two ways: distribution learning, where a base model is subjected to transfer learning on a set of known positives, and goal-directed generation, which encompasses both conditional generation and using an optimization algorithm to shift the distribution. Experimental validation has been demonstrated for all methods, but with a notable over-representation from optimization algorithms as of the last 9 months, particularly reinforcement learning (RL) (Du et al., 2024). Algorithmic molecular optimization always proceeds via the following workflow: generate molecules, assess *desirability* using an *in silico* oracle, update the model, and repeat. When assessing the suitability of molecules absent experimental validation, the crucial indicator to success is *correlation* of an *in silico* oracle to the actual end-point. All protocols that *directly* optimize for an oracle without the use of a surrogate predictor follow a funnel workflow where less resource-intensive oracles are initially used to prioritize the most promising subset for evaluation with computationally expensive high-fidelity oracles. A concrete and ubiquitous example is designing molecules with high binding affinity to a protein target. By far the most common oracle used to estimate binding affinity is molecular docking, and many works (Guo et al., 2021; Thomas et al., 2022; Shen et al., 2023; Yang et al., 2021; Lee et al., 2023; 2024; Fu et al., 2022) have demonstrated the ability to generate molecules with improved docking scores. However, docking scores are often poorly correlated with binding affinity, especially when applied out-of-the-box (Guo et al., 2021; Crivelli-Decker et al., 2024). Correspondingly, the most promising candidates from docking are subjected to higher-fidelity oracles, particularly molecular dynamics (MD) simulations, which offer a much more accurate estimation of binding affinity (Wang et al., 2019; Moore et al., 2022; 2023; Crivelli-Decker et al., 2024), but with industry-standard methods typically being closed-source (Moore et al., 2023). *Directly* optimizing high-fidelity oracles offers the prospect of learning the distribution and can greatly improve the quality of the generated set (Eckmann et al., 2024). However, doing so is infeasible due to computational cost, exemplifying the sample efficiency problem. Either simulation protocols become much faster without sacrificing
+
+{1}------------------------------------------------
+
+accuracy, or generative models become *sufficiently efficient* to optimize under an acceptable oracle budget. **We note that QSAR models are often used, which can have great predictive accuracy, but may suffer from a narrow domain of applicability (within their training data)** (Neves et al., 2018).
+
+Recently, more works have explicitly considered sample efficiency by constraining the oracle budget on various drug discovery optimization tasks (Yang et al., 2021; Fu et al., 2022; Guo & Schwaller, 2024a;b; Lee et al., 2023; 2024; Shen et al., 2023). More recently, Guo et al. (Guo & Schwaller, 2024a) proposed Augmented Memory which is built on REINVENT (Olivecrona et al., 2017; Blaschke et al., 2020a). It combines experience replay with SMILES augmentation (Weininger, 1988; Bjerrum, 2017) and empirically shows that this data augmentation can improve sample efficiency. In this work, we push towards the prospect of direct optimization of high-fidelity oracles and release **Saturn**. First, we elucidate the mechanism of Augmented Memory, which uses an LSTM (Hochreiter & Schmidhuber, 1997) recurrent neural network (RNN) as the language model backbone, and characterize exactly *how* data augmentation and experience replay improve sample efficiency. Next, we systematically assess more advanced generative architectures from just RNNs (Hochreiter & Schmidhuber, 1997) to decoder transformers (Vaswani et al., 2017; Radford et al., 2019), and the recent Mamba (Gu & Dao, 2023) state space model (SSM). Our results show that the Mamba architecture, in conjunction with data augmentation and experience replay, displays synergistic behavior to improve sample efficiency by *strategic* overfitting. Our contribution is as follows:
+
+1. We show the first application of Mamba for molecular generative design and specifically for goal-directed generation with reinforcement learning.
+2. We elucidate the mechanism into *how* Augmented Memory improves sample efficiency, as the original work only showed its empirical benefits.
+3. We comprehensively evaluate language model backbones (**> 500 experiments, all across 10 seeds**) including RNN, decoder transformer, and Mamba, which enables us to characterize *model-intrinsic* and *scaling* properties that lead to improved sample efficiency.
+4. Through ablation studies, we demonstrate that *local sampling* in chemical space is a key component for sample efficiency. Our results provide discourse on the nature of optimization landscapes *commonly* encountered in drug discovery.
+5. We propose **Saturn**, which leverages Mamba and outperforms 22 models on multi-parameter optimization (MPO) drug discovery tasks under heavily-constrained oracle budgets.
+
+## 2 RELATED WORK
+
+**Sample Efficiency in Goal-directed Molecular Design.** The goal of inverse design is to achieve *tailored* molecular generation. Existing works have tackled this problem using a variety of architectures, including SMILES (Weininger, 1988)-based RNNs (Olivecrona et al., 2017; Segler et al., 2018; Popova et al., 2018; Neeser et al., 2023), transformers (Vaswani et al., 2017; Radford et al., 2019; Bagal et al., 2021; Wang et al., 2023; Feng et al., 2023; Mazuz et al., 2023; Hu et al., 2024; He et al., 2024), variational autoencoders (VAEs) (Kingma & Welling, 2013; Gómez-Bombarelli et al., 2018; Jin et al., 2018; Zhavoronkov et al., 2019), adversarial approaches (Goodfellow et al., 2014; Kadurin et al., 2017; De Cao & Kipf, 2018; Ivanenkov et al., 2023), graph-based models (You et al., 2018; Jin et al., 2020b; Mercado et al., 2021; Yang et al., 2021; Maziarz et al., 2022; Vignac et al., 2023), GFlowNets (Bengio et al., 2023; 2021; Shen et al., 2023), genetic algorithms (GAs) (Mitchell, 1998; Jensen, 2019; Fu et al., 2022; Lee et al., 2024), and diffusion models (Lee et al., 2023; Igashov et al., 2024; Schneuing et al., 2023). However, many works do not explicitly consider an oracle budget (or use a very lenient budget) and focus mostly on showing that goal-directed generation is possible. The release of the PMO benchmark (Gao et al., 2022) highlighted that improvements in sample efficiency are vital to even consider the prospect of directly optimizing high-fidelity oracles, e.g., MD may take GPU hours per molecules (Moore et al., 2023). In the benchmark, the oracle budget is 10,000, but as we push towards high-fidelity oracles, a more stringent budget would be necessary. More recent works (Yang et al., 2021; Fu et al., 2022; Guo & Schwaller, 2024a;b; Lee et al., 2023; 2024; Shen et al., 2023) have enforced fixed oracle budgets when comparing performance against other methods. All the objective functions considered in these works include docking, which is used in *every single* experimentally validated structure-based generative design case study (Du et al., 2024)
+
+{2}------------------------------------------------
+
+![Diagram of the Saturn generative workflow. The central element is a planet Saturn. Around it are four main components: 1. Mamba (Generate) at the bottom, which outputs SMILES strings. 2. Compute Reward at the right, which sends rewards to an Oracle Cache. 3. Reinforcement Learning at the top, which uses a Replay Buffer and a formula for expected return. 4. SMILES Augmentation at the left, which uses Augmented Memory to update the agent. A Genetic Algorithm at the top right uses the Replay Buffer as a parent population and applies crossover and mutation. The Oracle Cache on the right stores canonicalized SMILES and their rewards.](1b7d539e02a202c2cf2d97698b911447_img.jpg)
+
+Reinforcement Learning formula:
+
+$$E_{\tau \sim \mathcal{D}} \left[ \sum_{t=0}^{\infty} \gamma^t R(s_t, a_t) \right]$$
+
+Take Agent Action
+
+|  |  |  |
+|-|-|-|
+| Observed | C | OS |
+| Observed | N | OS |
+
+Repeat  $N$  times
+
+SMILES Augmentation
+
+Canonicalized SMILES and Cached Rewards:
+
+|  |  |
+|-|-|
+| <chem>O=Cc1ccc(O)c(O)c1</chem> | 0.851 |
+| <chem>O=Cc1ccc(O)c(O)c1</chem> | 0.791 |
+| <chem>O=Cc1ccc(O)c(O)c1</chem> | 0.732 |
+
+Diagram of the Saturn generative workflow. The central element is a planet Saturn. Around it are four main components: 1. Mamba (Generate) at the bottom, which outputs SMILES strings. 2. Compute Reward at the right, which sends rewards to an Oracle Cache. 3. Reinforcement Learning at the top, which uses a Replay Buffer and a formula for expected return. 4. SMILES Augmentation at the left, which uses Augmented Memory to update the agent. A Genetic Algorithm at the top right uses the Replay Buffer as a parent population and applies crossover and mutation. The Oracle Cache on the right stores canonicalized SMILES and their rewards.
+
+Figure 1: Saturn generative workflow. All generated SMILES and their rewards are stored in the Oracle Cache after canonicalization. A genetic algorithm can be optionally applied using the replay buffer as the parent population. Augmented Memory is used to update the Agent numerous times.
+
+and in commercial drug discovery (Pun et al., 2023). Correspondingly, in this work, we consider a wide range of docking tasks under heavily-constrained oracle budgets (1,000 or 3,000).
+
+**Language-based Molecular Generative Models.** Text is one of the most widely used molecular representations, with common ones being simplified molecular-input line-entry systems (SMILES) (Weininger, 1988) and self-referencing embedded strings (SELFIES) (Krenn et al., 2020; 2022). Recent work has shown that the former is generally more performant, despite not enforcing 100% validity (Gao et al., 2022; Skinnider, 2024). Leveraging advances in natural language processing (NLP), language-based molecular generative models are amongst the first and still widely used models, encompassing RNNs(Olivecrona et al. (2017); Segler et al. (2018); Popova et al. (2018), transformers (Vaswani et al., 2017; Radford et al., 2019; Bagal et al., 2021; Wang et al., 2023; Feng et al., 2023; Mazuz et al., 2023; Hu et al., 2024; He et al., 2024), and recently SSM S4 (Özçelik et al., 2024). In early benchmarks (GuacaMol (Brown et al., 2019) and MOSES (Polykovskiy et al., 2020)), language-based models have been shown to essentially solve the validity, uniqueness, and novelty metrics. Subsequently, the non-injective syntax of SMILES confers advantageous properties for generative design. Specifically, a single molecule can be expressed as at least  $N$  (number of heavy atoms) SMILES, in a process known as SMILES augmentation, enumeration, or randomization (Bjerrum, 2017). This mechanism can be exploited to pre-train models under low data regimes to generalize in chemical space (Artús-Pous et al., 2019; Moret et al., 2020; Skinnider et al., 2021), improve sample efficiency (Bjerrum et al., 2023; Guo & Schwaller, 2024a), and perform transfer learning with a single positive example (Ballarotto et al., 2023). Despite the recent trend towards 3D molecular generation (Igashov et al., 2024; Schneuing et al., 2023), language-based models have demonstrated the ability to generate molecules that satisfy 3D-dependent objectives, such as docking in a sample-efficient manner (Guo & Schwaller, 2024a,b). This suggests that language-based models are not entirely 3D-naive and can effectively explore relevant regions of the 3D chemical space. Finally, language models are amongst the most sample-efficient models (Gao et al., 2022; Polykovskiy et al., 2020; Brown et al., 2019) and most studies achieving experimental validation of a generated molecule incorporate SMILES-based models (Du et al., 2024).
+
+## 3 METHOD
+
+In this section, each component of Saturn (Fig. 1) is described: the language model backbone for molecular generation, the Augmented Memory (Guo & Schwaller, 2024a) RL algorithm, the GA, and specific details into key components responsible for sample efficiency and mitigating mode collapse.
+
+**Autoregressive Language Model Backbone for Molecular Generation.** Molecules are represented as SMILES (Weininger, 1988) and the task of goal-directed generation is cast as an RL problem. Let
+
+{3}------------------------------------------------
+
+$S_t$  denote the state space representing all intermediate token sequences during molecular generation. The action space,  $A_t(s_t)$ , is defined as the conditional token distribution induced by the policy,  $\pi_\theta$ , and parameterized by a language model backbone. In this work, we investigated RNN, decoder transformer, and Mamba backbones with the latter chosen as the default after extensive experimentation. Therefore  $\theta$  represents the parameters of the Mamba backbone (Gu & Dao, 2023; Chen, 2024), which is a state-space model (Gu et al., 2021b;a) and features four *learnable* matrices to propagate sequence information:  $\bar{\mathbf{A}}$ ,  $\bar{\mathbf{B}}$ ,  $\bar{\mathbf{C}}$ ,  $\bar{\mathbf{D}}$ :
+
+$$h_t = \bar{\mathbf{A}}h_{t-1} + \bar{\mathbf{B}}(x_t)x_t$$
+
+$$y_t = \bar{\mathbf{C}}(x_t)h_t + \bar{\mathbf{D}}x_t$$
+
+where  $h$  is the state,  $x$  is the input sequence (SMILES in this work), and  $y$  is the output. Importantly, the input-dependent parameters confer a *selective* mechanism that can handle contextual importance, and notably differs from previous state-space models (Gu et al., 2021b;a). Like other language models, a linear projection transforms the Mamba output to a multinomial token distribution. This enables sequence generation, which we define as a Markov process, and thus, sampling a SMILES,  $x$ , is given by the product of conditional token probabilities (Eq. 1):
+
+$$P(x) = \prod_{t=1}^T \pi_{\theta \text{ Agent}}(a_t | s_t) \quad (1)$$
+
+where  $\pi_\theta$  is the Mamba backbone and referred to as the *Agent* to match RL terminology and  $a_t$  and  $s_t$  are the token selected and token sequence so far, at time-step  $t$ , respectively. We couple RL to the generative process to enable multi-parameter optimization (MPO). The general objective in RL is to maximize the expected reward (Eq. 2):
+
+$$J(\theta) = \mathbb{E}_{a_t \sim \pi_{\theta \text{ Agent}}} \left[ \sum_{t=1}^T R(a_t, s_t) \right] \quad (2)$$
+
+$R$  is the reward function and can represent any arbitrary MPO objective and  $\sigma$  is a scalar factor modulating its effect. Next, the Augmented Likelihood (Olivecrona et al., 2017) (Eq. 3) is defined, where the prior is the pre-trained model with *frozen* weights:
+
+$$\log \pi_{\text{Augmented}}(x) = \log \pi_{\text{prior}}(x) + \sigma R(x) \quad (3)$$
+
+The reward is defined as  $\log \pi_{\text{Augmented}} - \log \pi_{\theta \text{ Agent}}$ . Following previous works (Olivecrona et al., 2017; Fialková et al., 2021; Guo & Schwaller, 2024a), maximizing Eq. 2 is equivalent (up to a factor) to minimizing the squared difference between the Augmented Likelihood and the Agent Likelihood (Eq. 4):
+
+$$L(\theta) = \frac{1}{|B|} \left[ \sum_{a \in A^*} (\log \pi_{\text{Augmented}} - \log \pi_{\theta \text{ Agent}}) \right]^2 \quad (4)$$
+
+$A^*$  is defined as the actions taken across all time-steps in a given batch. During optimization, the expected reward (Eq. 2) is approximated by sampling a batch,  $B$ , of SMILES. The batch size controls for variance as approximating the expectation with fewer samples is necessarily more noisy. See Appendix B.5 for full details on the algorithm and pseudo-code.
+
+**Augmented Memory.** In Saturn, Augmented Memory maintains a replay buffer of the top 100 SMILES ranked by their rewards. At each generation epoch, the Agent is updated  $N$  augmentation rounds times. *Each augmentation round involves taking every SMILES in the buffer, augmenting (randomizing)* (Bjerrum, 2017) them, and updating the Agent following Eq. 4. A Diversity Filter (DF) (Blaschke et al., 2020b) stores the Bemis-Murcko (Bemis & Murcko, 1996) scaffolds of every
+
+{4}------------------------------------------------
+
+SMILES generated. If a scaffold is generated more than a permitted threshold ( $M = 10$  in this work), its reward is truncated to 0. Before executing Augmented Memory, scaffolds associated with penalized rewards are purged from the buffer, preventing mode collapse.
+
+**Genetic Algorithm.** Saturn adapts GraphGA (Jensen, 2019) where the replay buffer is treated as the parent population. The motivation is to generate more high reward SMILES to *replace* the buffer SMILES, under the hypothesis that on average, these too, will be high reward (Appendix C.5).
+
+**Differences to Previous Works.** Saturn adapts Augmented Memory (Guo & Schwaller, 2024a) but differs in several important ways. Firstly, unlike the original work, we elucidate the mechanism into *why* Augmented Memory can improve sample efficiency and *explicitly* show that it makes generating the replay buffer molecules likely. The following Results section will show that high sample efficiency can be achieved by *local sampling*, whereby the modeled distribution is strategically *overfit* on these replay buffer molecules. Precisely, this means making the Agent particularly likely, but *not* deterministic, to generate *any SMILES sequence form* of the replay buffer molecules. By nature of multinomial decoding, stochastic generation means that unique sampled molecules might only differ by a small number of tokens, which translates to the molecules differing by a small number of atoms. Secondly, we show that Mamba synergistically enhances this mechanism by nature of being a proficient distribution learner. Exactly because Mamba can overfit the distribution of replay buffer molecules, it displays the greatest degree of *local sampling*. To accommodate repeat generated molecules, we introduce an oracle cache under the assumption that oracle evaluations are *near deterministic* (for docking oracles, we fix the seed). If the same SMILES is generated at a later epoch, the reward is retrieved from the cache and does not impose an oracle call. Finally, by showing that strategic overfitting can be beneficial, we further demonstrate that scaling up architectures (Appendix F.6) can also improve sample efficiency. This offers discourse into benefits of architectural differences in the small molecule goal-directed generation regime. We show that there are benefits despite the modeled sequences being relatively short ( $< 80$  tokens).
+
+## 4 RESULTS AND DISCUSSION
+
+The results section is comprised of three parts: formulating Saturn on a toy MPO task, demonstrating sample efficiency on an MPO docking (3 targets) task, and benchmarking against 22 models (including dataset screening baselines) on another MPO docking (5 targets) task which also considers synthesizability. **Every experiment was run across 10 seeds (0-9 inclusive)**, comprising  $> 5,000$  experiments.
+
+### 4.1 PART 1: ELUCIDATING THE OPTIMIZATION DYNAMICS OF SATURN
+
+We begin by identifying the optimal architecture and hyperparameters for Saturn. First, we experiment with varying the batch size and augmentation rounds of the Augmented Memory algorithm (Guo & Schwaller, 2024a), and explicitly demonstrate the trade-off between sample efficiency and diversity. Unlike the original Augmented Memory work, which used an RNN backbone, we investigate more advanced architectures: decoder transformer (Vaswani et al., 2017; Radford et al., 2019) and Mamba (Gu & Dao, 2023). Our analysis elucidates *how* SMILES augmentation, combined with these architectures, synergistically improves sample efficiency in Saturn. **The key mechanism is *local sampling* in chemical space, whereby relatively small atomic changes are made to high-reward replay buffer molecules.**
+
+**Experimental Details.** We define a toy experiment with the following MPO objective: molecular weight (MW)  $< 350$  Da, number of rings  $\geq 2$ , and maximize topological polar surface area (tPSA) (Guo & Schwaller, 2024b). Optimizing this objective *requires* generating molecules with rings saturated with heteroatoms, which are dissimilar from the training data. Hence, it is also testing out-of-distribution optimization. All experiments in this section were run across 10 seeds (0-9 inclusive) with an oracle budget of 1,000, and the models were pre-trained with ChEMBL 33 (Gaulton et al., 2012) (Appendix C.1).
+
+**Metrics.** The sample efficiency metrics are **Yield** and **Oracle Burden (OB)**. Yield is the number of *unique* generated molecules above a reward threshold, and OB is the number of oracle calls required
+
+{5}------------------------------------------------
+
+to generate  $N$  *unique* molecules above a reward threshold. The reward threshold in this experiment is 0.7 as molecules start to possess saturated heteroatom rings. Most configurations generate at least *some* molecules passing this threshold within the budget, enabling us to report statistics.
+
+**Understanding the Limits of Augmented Memory.** Augmented Memory (Guo & Schwaller, 2024a) improves sample efficiency by repeated learning from high reward SMILES. With decreasing batch size, performance variance increases, as the approximation to the expected reward (Eq. 2) becomes more noisy. In return, fewer oracle calls are imposed, and the Agent learns from an increasingly smaller set of unique SMILES. We hypothesize that as long as unique high reward SMILES are still generated, sample efficiency can improve with decreasing batch size, at the expense of diversity. We perform a grid search and vary the batch size (64, 32, 16, 8) and augmentation rounds (0-20 inclusive) using the default RNN architecture (Appendix 5). We make the following key observations: with *increasing* augmentation rounds and *decreasing* batch size, sample efficiency improves, diversity decreases, and generating repeated SMILES becomes increasingly prevalent but is tolerable with oracle caching. The optimal augmentation rounds and batch size are 5-10 and 16, respectively, as pushing further introduces *too much* variance, such that apparent improvements are not statistically significant (at the 95% confidence level). In Appendix C.4, we explored the addition of Beam Enumeration (Guo & Schwaller, 2024b) but improvements were not consistently statistically significant. In Appendix C.5, we explored allocating a portion of the oracle budget to a GA, which decreases sample efficiency, but recovers diversity, in agreement with previous works (Liu et al., 2021; Lee et al., 2024). Finally, see Appendix C.2 for systematic ablation studies on the effect of every component of Saturn.
+
+**Small Molecule Goal-directed Generation: Beyond RNNs.** In this section, we move beyond RNN (5.8M) to Decoder transformer (Vaswani et al., 2017; Radford et al., 2019) (6.3M) and **Mamba** (Gu & Dao, 2023) (5.2M) (see Appendix B.2 for Mamba details), and empirically show that varying the architecture can improve sample efficiency. Complete grid search results are presented in Appendix C.3. We make the following observations: Increasing augmentation rounds decreases diversity and *inconsistently* improves Yield and OB for RNN and transformer. Mamba *more consistently* benefits from increasing augmentation rounds to generate more high reward molecules and also faster. Across the Yield and OB metrics, Mamba consistently outperforms both the RNN and transformer backbones. Given Mamba’s superior sample efficiency, we focus our analysis on comparing it to the RNN baseline in the remainder of this section (transformer results are provided in Appendix C.3)
+
+**Mamba: Enhanced Maximum Likelihood.** Table 15 shows that the Mamba architecture notably generates repeated SMILES, which can be rationalized with the maximum likelihood objective. Mamba (5.2M) and RNN (5.8M) have similar parameter counts but during pre-training, the former converges to a lower loss during pre-training (Appendix C.1), indicating a better match to the data distribution. Accordingly, and during RL, Eq. 4 aims to make generating high reward SMILES *more likely*. Mamba generates repeated SMILES suggesting it overfits the data distribution. We demonstrate this by cross-referencing Fig. 2a, which shows that with high augmentation rounds, the average max conditional token probability (during generation) approaches 1, and near collapses to a Dirac delta function (less so for RNN). This makes it likely, but *not* deterministic, to generate the same SMILES repeatedly.
+
+**Squeezing the Likelihood of Augmented SMILES.** While the original Augmented Memory work (Guo & Schwaller, 2024a) demonstrated its empirical benefits, we elucidate the underlying mechanism. To isolate its effect, we design a sub-experiment as follows: generate molecules until the buffer is full (100) and then save the Agent state before and after executing Augmented Memory (10 augmentation rounds) and save every augmented SMILES form. After execution, the (End) Agent becomes more likely to generate the set of augmented SMILES (Fig. 2b). The more *improbable* the SMILES (high NLL), the larger the  $\Delta$ NLL shift (Fig. 2c). According to the loss function (Eq. 4), a larger difference between the Augmented Likelihood (Eq. 3) and Agent Likelihood results in a higher loss. When these terms are near equal, the loss approaches 0 (Fig. 2c circles). The purpose of the Augmented Likelihood is to regularize the Agent, preventing it from deviating *too far* from the prior (Olivecrona et al., 2017). Improbable SMILES, which impose a large gradient update, adjust the Agent towards a higher probability of generating such sequences. However, already probable (low NLL) SMILES can also impose large loss magnitudes (Fig. 2c), but the  $\Delta$ NLL shift is small because the softmax function saturates, causing minimal changes to the softmax output when the logits are tuned. Taking these observations together, Augmented Memory squeezes the likelihood of augmented SMILES, making the Agent more likely to generate *any* SMILES representation of the
+
+{6}------------------------------------------------
+
+![Figure 2: Performance analysis of Mamba vs RNN. (a) Delta distribution collapse plot. (b) Violin plot of NLL for buffer SMILES. (c) Scatter plot of Start vs Augmented NLL. (d) UMAP embeddings of Agent chemical space. (e) Heatmap of intra-chunk and inter-chunk similarity.](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+Figure 2 consists of five panels (a-e) illustrating the performance and behavior of the Mamba model compared to an RNN baseline.
+
+- Panel a:** A line plot titled "Mamba Approaches Delta Distribution Collapse". The y-axis is "Average maximum token probability" (0.00 to 1.00) and the x-axis is "Agent State (0-20)". Four lines represent Mamba Aug. 10 (blue), Mamba Aug. 1 (orange), RNN Aug. 1 (green), and RNN Aug. 10 (red). Mamba Aug. 10 shows a sharp peak at state 10, indicating a delta distribution collapse.
+- Panel b:** A violin plot titled "Augmented Buffer SMILES". The y-axis is "NLL" (0 to 60) and the x-axis shows "Start Agent NLL" and "End Agent NLL". The "End Agent NLL" distribution is shifted to the left, indicating improved performance.
+- Panel c:** A scatter plot titled "Augmented SMILES NLL Squeeze". The y-axis is "NLL (End Agent)" (-17.5 to 2.5) and the x-axis is "Start Agent NLL" (10 to 60). A color bar on the right indicates "Augmented NLL" (0 to 100). The plot shows a negative correlation between start and end NLL.
+- Panel d:** Two UMAP plots. The left plot is titled "Mamba (Batch 16, Aug. Rounds 10)" and the right is "RNN (Batch 64, Aug. Rounds 2)". Both show UMAP1 vs UMAP2 axes. Arrows indicate the direction of chemical space traversal. Mamba shows a more directional traversal compared to the more global sampling of the RNN.
+- Panel e:** A heatmap titled "Mamba: Hop-and-Locally-Explore". The x-axis is "Chunk (300 SMILES per Chunk)" (1 to 10) and the y-axis is "Model" (Mamba, RNN). The color scale represents "Tanimoto Similarity" (0.10 to 0.35). The top values (intra-chunk similarity) are higher for Mamba, while the bottom values (inter-chunk similarity) are higher for RNN.
+
+Figure 2: Performance analysis of Mamba vs RNN. (a) Delta distribution collapse plot. (b) Violin plot of NLL for buffer SMILES. (c) Scatter plot of Start vs Augmented NLL. (d) UMAP embeddings of Agent chemical space. (e) Heatmap of intra-chunk and inter-chunk similarity.
+
+Figure 2: **a.** Average maximum token probability across Agent states. Augmentation pushes the Agent action distribution towards a delta distribution. **b.** Augmented Memory (10 augmentation rounds) makes the likelihood of generating SMILES in the buffer more likely. **c.** Top: On average, augmented forms of the buffer SMILES become more likely. Bottom: Similar loss magnitudes impose larger changes on improbable sequences and the Agent is driven towards generating these specific sequences. When the Augmented Likelihood is equal to the Agent likelihood, the loss approaches 0 (circles). **d.** 3,000 oracle budget test experiment chunked into 300 SMILES. UMAP embedding of the Agent chemical space traversal (arrows are the centroid of each chunk). Mamba exhibits a directional traversal while RNN (baseline Augmented Memory) continues to sample globally. **e.** Mamba exhibits a "hop-and-locally-explore" behavior where the intra-chunk Tanimoto similarity (top values) are higher than RNN. The bottom value is the inter-chunk similarity.
+
+same molecular graph. We next demonstrate how the Mamba architecture synergistically leverages this mechanism to enhance sample efficiency.
+
+**Mamba: Hop-and-Locally-Explore.** Mamba approaches Dirac delta function collapse (Fig. 2a) when learning from repeated augmented SMILES and in the previous section, we have shown that the Agent becomes increasingly likely to generate the buffer *molecules*. We hypothesized that Mamba exhibits a "hop-and-locally-explore" behavior: because it is likely to generate *some* SMILES representation of these molecules (*strategic overfitting*), small changes to any tokens in these set of augmented sequences equates to small changes to the *same* molecular graph, essentially performing a local exploration (similar molecules, on average, exhibit similar properties, provided the property landscape is not too rough (Aldeghi et al., 2022)). We verify our hypothesis with the following experiment: generate molecules (3,000 oracle budget) and separate the generated set into 10 chunks (each 300 SMILES). We trace the generation trajectory using UMAP (McInnes et al., 2018) and plot the chunk centroids, comparing Mamba and the baseline (vanilla Augmented Memory) (Fig. 2d). Mamba traverses chemical space in an increased directional manner and the chunks are more locally confined. Further analysis into the intra- and inter-chunk Tanimoto similarity reveals that *within* chunks, Mamba exhibits much greater similarity than the baseline, and similarity is always lower *between* chunks (Fig. 2e). Taking these observations together, Mamba (batch size 16) with Augmented Memory (10 augmentation rounds) and oracle caching synergistically improves sample efficiency via "hop-and-locally-explore" behavior (see Appendix D for further quantitative and qualitative analyses). From here on, this model configuration will be referred to as **Saturn** and hyperparameters are *fixed* such that all performance metrics in the following sections are out-of-the-box.
+
+### 4.2 PART 2: TRANSFERABILITY OF SAMPLE EFFICIENCY TO PHYSICS-BASED ORACLES
+
+In this section, we demonstrate that Saturn’s sample efficiency transfers to an MPO objective involving docking against targets related to neurodegeneration (DRD2 (Wang et al., 2018) and AChE (Kryger et al., 1999)) and inflammation (MK2 kinase (Argiriadi et al., 2010)). The optimization objective is to constrain MW < 500 Da, maximize the quantitative estimate of drug-likeness (QED) (Bickerton
+
+{7}------------------------------------------------
+
+et al., 2012), and minimize AutoDock Vina (Trott & Olson, 2010) docking score (see Appendix E.1 for details on the docking protocol). All experiments were run across 10 seeds (0-9 inclusive) and with a 1,000 oracle budget. We compare Saturn (with and without GA) to baseline Augmented Memory (Guo & Schwaller, 2024a) using the Yield and OB metrics. Saturn generates more high reward molecules and faster, given the fixed oracle budget (Table 1). This holds even for the more challenging MK2 kinase target where the pre-training data (ChEMBL 33 (Gaulton et al., 2012)) is less suited. Furthermore, in agreement with the results from the test experiments, adding a GA on the buffer does not improve sample efficiency but recovers diversity, which can be useful in certain cases.
+
+Table 1: Docking MPO with 1,000 oracle budget. Baseline is vanilla Augmented Memory (Guo & Schwaller, 2024a). IntDiv1 (Polykovskiy et al., 2020) is the internal diversity, Scaffolds is the number of unique Bemis-Murcko (Bemis & Murcko, 1996) scaffolds, OB is Oracle Burden (oracle calls required to generate  $N$  unique molecules). All metrics are computed at the 0.8 reward threshold. The number in parentheses in the OB statistics represents how many runs out of 10 were successful. The mean and standard deviation across 10 seeds (0-9 inclusive) is reported. Best models (statistically significant at the 95% confidence level) are bolded.
+
+| Target | Model | Yield (↑) | IntDiv1 (↑) | Scaffolds (↑) | OB 1 (↓) | OB 10 (↓) | OB 100 (↓) |
+|-|-|-|-|-|-|-|-|
+| DRD2 | Augmented Memory | $22 \pm 7$ | $0.774 \pm 0.019$ | $22 \pm 7$ | $143 \pm 75(10)$ | $733 \pm 120(10)$ | Failed |
+|  | Saturn | $369 \pm 62$ | $0.671 \pm 0.050$ | $310 \pm 70$ | $93 \pm 53(10)$ | $391 \pm 56(10)$ | $663 \pm 55(10)$ |
+|  | Saturn-GA | $209 \pm 55$ | $0.745 \pm 0.041$ | $189 \pm 57$ | $96 \pm 56(10)$ | $403 \pm 75(10)$ | $806 \pm 84(10)$ |
+| ACHE | Augmented Memory | $173 \pm 19$ | $0.843 \pm 0.009$ | $170 \pm 18$ | $57 \pm 2(10)$ | $189 \pm 52(10)$ | $776 \pm 58(10)$ |
+|  | Saturn | $480 \pm 79$ | $0.757 \pm 0.020$ | $400 \pm 96$ | $32 \pm 24(10)$ | $185 \pm 82(10)$ | $508 \pm 80(10)$ |
+|  | Saturn-GA | $343 \pm 57$ | $0.809 \pm 0.013$ | $287 \pm 50$ | $32 \pm 25(10)$ | $187 \pm 80(10)$ | $565 \pm 80(10)$ |
+| MK2 | Augmented Memory | $0.2 \pm 0.4$ | — | $0.2 \pm 0.4$ | $836 \pm 186(2)$ | Failed | Failed |
+|  | Saturn | $14.9 \pm 14.1$ | $0.454 \pm 0.212$ | $14.1 \pm 13.2$ | $677 \pm 186(9)$ | $861 \pm 108(6)$ | Failed |
+|  | Saturn-GA | $6.1 \pm 6.5$ | $0.415 \pm 0.202$ | $5.6 \pm 5.5$ | $678 \pm 140(9)$ | $911 \pm 11(2)$ | Failed |
+
+### 4.3 PART 3: BENCHMARKING SATURN AND DEMONSTRATING ENHANCED OPTIMIZATION
+
+In this section, we compare Saturn’s performance to previous works, including the state-of-the-art Goal-aware fragment Extraction, Assembly, and Modification (GEAM) proposed by Lee et al. (Lee et al., 2024), which recently reported impressive results on a docking MPO task that considers synthesizability, outperforming baselines by a large margin.
+
+**Experimental Details.** We facilitate an exact comparison with GEAM (Lee et al., 2024) by extracting their oracle code for our experiments, pre-training on the provided ZINC 250k (Sterling & Irwin, 2015) dataset (Appendix F,) and used their MPO objective function (Eq. 5),
+
+$$R(x) = \widehat{DS}(x) \times QED(x) \times \widehat{SA}(x) \in [0, 1], \quad (5)$$
+
+where  $\widehat{DS}$  is the normalized QuickVina 2 (Alhossary et al., 2015) docking score and  $\widehat{SA}$  is the normalized synthetic accessibility score (Ertl & Schuffenhauer, 2009) (see Appendix F for normalization details). Following GEAM (Lee et al., 2024), docking was performed against 5 targets: **parp1**, **fa7**, **5ht1b**, **brf**, and **jak2**. We ran GEAM and Saturn across 10 seeds (0-9 inclusive) with an oracle budget of 3,000. **We note that GEAM’s pre-training requires the labeled ZINC 250k with all docking values already pre-computed, so there is a large up-front oracle cost.** We also emphasize that we *do not tune* Saturn’s hyperparameters for this task and the results in this section are out-of-the-box.
+
+**Metrics.** Following Lee et al. (Lee et al., 2023; 2024), we assess the **Hit Ratio (%)** (molecules with a better docking score than the median of known actives,  $QED > 0.5$ ,  $SA < 5$ ) and **Novel Hit Ratio (%)** (with the additional constraint of maximum Tanimoto similarity of 0.4 to the training data). We further propose **Strict Hit Ratio (%)** and **Strict Novel Hit Ratio (%)** which filter for the more stringent criteria of  $QED > 0.7$  (based on DrugStore dataset of marketed drugs (Bickerton et al., 2012)) and  $SA < 3$  (based on off-the-shelf catalog molecules (Ertl & Schuffenhauer, 2009)). While drug candidates need not necessarily meet these stricter thresholds, this metric assesses *optimization capability*, which becomes pertinent when jointly optimizing all components is especially crucial. From an optimization perspective, the objective function (Eq. 5) aims to maximize QED and minimize SA and docking score simultaneously. Therefore, achieving high QED and low SA is part of the goal itself. We additionally measure molecular diversity using **IntDiv1** (Polykovskiy et al., 2020) and **#Circles** (Xie et al., 2023) with distance threshold 0.75.
+
+{8}------------------------------------------------
+
+Table 2: Hit Ratio (%). Results are from Lee et al. (Lee et al., 2023) except Augmented Memory, GEAM, datasets, and Saturn which we ran across 10 seeds (0-9 inclusive). The mean and standard deviation are reported. Best results (statistically significant at the 95% confidence level) are bolded.
+
+| Method | Target Protein |  |  |  |  |
+|-|-|-|-|-|-|
+|  | pur1 | fa7 | 5h1b | braf | jak2 |
+| <b>Datasets</b> |  |  |  |  |  |
+| ZINC 250k (Sterling & Irwin, 2015) | 3.993 ± 0.355 | 1.097 ± 0.192 | 24.260 ± 0.622 | 1.020 ± 0.193 | 6.183 ± 0.344 |
+| ChEMBL 33 (Gaulton et al., 2012) | 6.077 ± 0.453 | 1.830 ± 0.240 | 24.163 ± 0.715 | 2.073 ± 0.181 | 9.013 ± 0.562 |
+| <b>Generative Models</b> |  |  |  |  |  |
+| REINVENT (Olivecrona et al., 2017) | 4.693 ± 1.776 | 1.967 ± 0.661 | 26.047 ± 2.497 | 2.207 ± 0.800 | 5.667 ± 1.067 |
+| JT-VAE (Jin et al., 2018) | 3.200 ± 0.348 | 0.933 ± 0.152 | 18.044 ± 0.747 | 0.644 ± 0.157 | 5.856 ± 0.204 |
+| GraphAF (Shi et al., 2020) | 0.822 ± 0.113 | 0.011 ± 0.016 | 6.978 ± 0.952 | 1.422 ± 0.556 | 1.233 ± 0.284 |
+| MORLID (Jeon & Kim, 2020) | 0.047 ± 0.050 | 0.007 ± 0.013 | 0.893 ± 0.758 | 0.047 ± 0.040 | 0.227 ± 0.118 |
+| HeirVAE (Jin et al., 2020a) | 1.180 ± 0.182 | 0.033 ± 0.030 | 0.740 ± 0.371 | 0.367 ± 0.187 | 0.487 ± 0.183 |
+| GraphDF (Guo et al., 2021) | 0.044 ± 0.031 | 0.000 ± 0.000 | 0.000 ± 0.000 | 0.011 ± 0.016 | 0.011 ± 0.016 |
+| FREEED (Yang et al., 2021) | 4.860 ± 1.415 | 1.487 ± 0.242 | 14.227 ± 5.116 | 2.707 ± 0.721 | 6.667 ± 0.790 |
+| FREEED-QS (Yang et al., 2021) | 5.960 ± 0.902 | 1.687 ± 0.177 | 23.140 ± 2.422 | 3.880 ± 0.623 | 7.653 ± 1.373 |
+| LIMO (Eckmann et al., 2022) | 0.456 ± 0.057 | 0.044 ± 0.016 | 1.200 ± 0.178 | 0.278 ± 0.134 | 0.711 ± 0.329 |
+| GDSS (Jo et al., 2022) | 2.367 ± 0.316 | 0.467 ± 0.112 | 6.267 ± 0.287 | 0.300 ± 0.198 | 1.367 ± 0.258 |
+| MOOD (Lee et al., 2023) | 7.260 ± 0.764 | 0.787 ± 0.128 | 21.427 ± 0.502 | 5.913 ± 0.311 | 10.367 ± 0.616 |
+| Aug. Mem. (Guo & Schwaller, 2024a) | 16.966 ± 3.224 | 2.637 ± 0.860 | 52.016 ± 2.302 | 8.307 ± 1.714 | 21.548 ± 4.938 |
+| GEAM (Lee et al., 2024) | <b>45.158 ± 2.408</b> | <b>20.552 ± 2.357</b> | <b>47.664 ± 1.198</b> | <b>30.444 ± 1.610</b> | <b>46.129 ± 2.073</b> |
+| Saturn (ours) | <b>57.981 ± 18.537</b> | 14.527 ± 9.961 | <b>08.185 ± 3.400</b> | <b>38.999 ± 10.114</b> | <b>60.827 ± 11.502</b> |
+
+Table 3: Novel Hit Ratio (%). Results are from Lee et al. (Lee et al., 2024) except GEAM and Saturn which we ran across 10 seeds (0-9 inclusive). The mean and standard deviation are reported. Best results (statistically significant at the 95% confidence level) are bolded.
+
+| Method | Target Protein |  |  |  |  |
+|-|-|-|-|-|-|
+|  | pur1 | fa7 | 5h1b | braf | jak2 |
+| REINVENT (Olivecrona et al., 2017) | 0.480 ± 0.344 | 0.213 ± 0.081 | 2.453 ± 0.561 | 0.127 ± 0.088 | 0.613 ± 0.167 |
+| GCN (You et al., 2018) | 0.056 ± 0.016 | 0.444 ± 0.333 | 0.444 ± 0.150 | 0.033 ± 0.027 | 0.256 ± 0.087 |
+| JT-VAE (Jin et al., 2018) | 0.856 ± 0.211 | 0.289 ± 0.016 | 4.656 ± 1.406 | 0.144 ± 0.068 | 0.815 ± 0.044 |
+| GraphAF (Shi et al., 2020) | 0.680 ± 0.166 | 0.011 ± 0.016 | 3.178 ± 0.393 | 0.956 ± 0.319 | 0.754 ± 0.098 |
+| GraphEG (Jensen, 2019) | 4.811 ± 1.661 | 0.422 ± 0.193 | 7.011 ± 2.732 | 3.767 ± 1.498 | 5.311 ± 1.667 |
+| MORLID (Jeon & Kim, 2020) | 0.047 ± 0.050 | 0.007 ± 0.013 | 0.880 ± 0.735 | 0.047 ± 0.040 | 0.227 ± 0.118 |
+| HeirVAE (Jin et al., 2020a) | 0.553 ± 0.214 | 0.007 ± 0.013 | 0.507 ± 0.278 | 0.207 ± 0.220 | 0.227 ± 0.127 |
+| RationalDL (Jin et al., 2020b) | 0.247 ± 0.450 | 0.900 ± 0.098 | 2.967 ± 0.307 | 0.000 ± 0.000 | 2.967 ± 0.196 |
+| GA+D (Nigam et al., 2020) | 0.044 ± 0.042 | 0.011 ± 0.016 | 1.544 ± 0.273 | 0.800 ± 0.864 | 0.756 ± 0.204 |
+| MARS (Xie et al., 2021) | 1.178 ± 0.299 | 0.367 ± 0.072 | 6.833 ± 0.706 | 0.478 ± 0.083 | 2.178 ± 0.545 |
+| GEGL (Ahn et al., 2020) | 0.789 ± 0.150 | 0.256 ± 0.083 | 3.167 ± 0.260 | 0.244 ± 0.016 | 0.933 ± 0.072 |
+| GraphDF (Guo et al., 2021) | 0.040 ± 0.031 | 0.000 ± 0.000 | 0.000 ± 0.000 | 0.011 ± 0.016 | 0.011 ± 0.016 |
+| FREEED (Yang et al., 2021) | 4.627 ± 0.727 | 1.332 ± 0.113 | 16.767 ± 0.897 | 2.940 ± 0.359 | 5.800 ± 0.295 |
+| LIMO (Eckmann et al., 2022) | 0.455 ± 0.057 | 0.044 ± 0.016 | 1.189 ± 0.181 | 0.278 ± 0.134 | 0.689 ± 0.319 |
+| GDSS (Jo et al., 2022) | 1.933 ± 0.208 | 0.368 ± 0.103 | 4.667 ± 0.306 | 0.167 ± 0.134 | 1.167 ± 0.281 |
+| PS-VAE (Kong et al., 2022) | 1.644 ± 0.389 | 0.478 ± 0.140 | 12.622 ± 1.437 | 0.367 ± 0.047 | 4.178 ± 0.933 |
+| MOOD (Lee et al., 2023) | 7.017 ± 0.428 | 0.733 ± 0.141 | 18.673 ± 0.423 | 5.240 ± 0.285 | 9.200 ± 0.524 |
+| GEAM (Lee et al., 2024) | 39.159 ± 2.790 | <b>19.540 ± 2.347</b> | 40.123 ± 1.611 | <b>27.467 ± 1.374</b> | <b>41.765 ± 3.412</b> |
+| Saturn (ours) | 3.839 ± 3.316 | 0.470 ± 0.272 | 5.731 ± 6.166 | 3.652 ± 3.777 | 6.129 ± 5.449 |
+| Saturn-Tanimoto (ours) | <b>50.552 ± 9.530</b> | <b>20.181 ± 5.598</b> | <b>54.260 ± 6.722</b> | 19.820 ± 10.120 | <b>47.785 ± 14.041</b> |
+
+**Saturn and GEAM Outperform all Baselines.** We evaluate the Hit Ratio and include random sampling of 3,000 molecules from ZINC 250k (Sterling & Irwin, 2015) and ChEMBL 33 (Gaulton et al., 2012) as baselines (Table 2). The results show that only Augmented Memory (Guo & Schwaller, 2024a), GEAM (Lee et al., 2024), and Saturn outperform these baselines, with GEAM and Saturn displaying similar performance. However, Saturn exhibits higher variance, likely due to the small batch size (16) used to approximate the expected reward (Eq. 2). For the Novel Hit Ratio (Table 3), Saturn performs worse than GEAM. However, this is expected since the Mamba backbone excels at maximum likelihood estimation and fits the ZINC 250k training distribution well (Appendix F.1). It is then unsurprising that generated molecules are not particularly dissimilar to ZINC. We highlight that this 0.4 threshold is arbitrary and that modeling distributions *well* is the fundamental *goal* of generative models. However, to demonstrate how to satisfy this “Novel” metric, we divide the task into two phases, akin to curriculum learning (Guo et al., 2022). Firstly, we task the base Saturn model to generate molecules with high Tanimoto *dissimilarity* (this is the only optimization objective) to the training data. We run this process for 1,500 oracle calls (see Appendix F.4 for more details). This new model checkpoint (Saturn-Tanimoto) now generates molecules that are dissimilar to ZINC 250k and is the starting point for GEAM’s MPO task. Table 3 shows that performance immediately recovers and matches GEAM. We believe this is still a fair assessment as computing Tanimoto similarity is cheap (this process took minutes) and also shows the flexibility of Saturn.
+
+{9}------------------------------------------------
+
+Table 4: Strict Hit Ratio (%). GEAM and Saturn results are across 10 seeds (0-9 inclusive). OB is Oracle Burden (oracle calls required to generate  $N$  unique molecules). The number in parentheses in the OB statistics represents how many runs out of 10 were successful. The mean and standard deviation are reported. Best results (statistically significant at the 95% confidence level) are **bolded**.
+
+| Method | Target Protein |  |  |  |  |
+|-|-|-|-|-|-|
+|  | pur1 | fa7 | 5ht1b | braf | jak2 |
+| <b>GEAM</b> (Lee et al., 2024) |  |  |  |  |  |
+| Strict Hit Ratio (†) | 6.510 $\pm$ 1.087 | 2.106 $\pm$ 0.958 | 8.719 $\pm$ 0.903 | 3.685 $\pm$ 0.524 | 7.944 $\pm$ 1.157 |
+| OB (1) (L) | 250 $\pm$ 157(10) | 433 $\pm$ 209(10) | 114 $\pm$ 112(10) | 355 $\pm$ 96(10) | 230 $\pm$ 117(10) |
+| OB (10) (L) | 743 $\pm$ 52(10) | 1446 $\pm$ 404(10) | 531 $\pm$ 38(10) | 892 $\pm$ 144(10) | 537 $\pm$ 70(10) |
+| OB (100) (L) | 2106 $\pm$ 202(10) | 2927 $\pm$ 10(1) | 1527 $\pm$ 110(10) | 2674 $\pm$ 163(6) | 1606 $\pm$ 218(10) |
+| <b>IntDiv1</b> (†) | 0.766 $\pm$ 0.017 | 0.709 $\pm$ 0.043 | 0.799 $\pm$ 0.017 | 0.751 $\pm$ 0.023 | 0.763 $\pm$ 0.021 |
+| #Circles (†) | 14 $\pm$ 3 | 7 $\pm$ 2 | 25 $\pm$ 3 | 11 $\pm$ 2 | 18 $\pm$ 2 |
+| <b>Saturn (ours)</b> |  |  |  |  |  |
+| <b>Strict Hit Ratio</b> | 55.102 $\pm$ 18.027 | 13.887 $\pm$ 9.723 | 64.730 $\pm$ 3.717 | 37.250 $\pm$ 9.615 | 55.903 $\pm$ 13.613 |
+| OB (1) (L) | 139 $\pm$ 96(10) | 352 $\pm$ 206(10) | 21 $\pm$ 7(10) | 291 $\pm$ 143(10) | 88 $\pm$ 56(10) |
+| OB (10) (L) | 518 $\pm$ 92(10) | 924 $\pm$ 247(10) | 105 $\pm$ 23(10) | 581 $\pm$ 123(10) | 348 $\pm$ 96(10) |
+| OB (100) (L) | 956 $\pm$ 259(10) | 1776 $\pm$ 551(10) | 441 $\pm$ 44(10) | 1057 $\pm$ 187(10) | 785 $\pm$ 191(10) |
+| <b>IntDiv1</b> (†) | 0.596 $\pm$ 0.049 | 0.592 $\pm$ 0.066 | 0.685 $\pm$ 0.021 | 0.597 $\pm$ 0.042 | 0.638 $\pm$ 0.034 |
+| #Circles (†) | 5 $\pm$ 0 | 3 $\pm$ 1 | 17 $\pm$ 3 | 4 $\pm$ 0 | 7 $\pm$ 1 |
+
+**Saturn: Enhanced MPO.** Due to the superior performance of Saturn and GEAM, we further investigate their optimization capability by applying a strict filter for QED  $> 0.7$  and SA  $< 3$  (Table 4). The results show that GEAM’s Hit Ratios drop drastically while Saturn’s remain relatively unchanged, which demonstrates that Saturn optimizes the MPO objective to a much greater degree (see Appendix F for *Novel* Strict Filter results). Importantly, Saturn finds molecules passing this strict filter with much fewer oracle calls (OB metrics in Table 4), trading off diversity to do so. For **fa7** and **braf**, GEAM does not find 100 molecules passing the strict filter in 9/10 and 4/10 replicates, respectively, while Saturn is successful in 10/10 for both (Table 4). Finding desirable molecules under minimal oracle calls is practically relevant when moving to computationally expensive high-fidelity oracles, so as to identify a small set of *excellent* candidates satisfying the MPO objective.
+
+## 5 CONCLUSION
+
+In this work, we present **Saturn**, a framework for sample-efficient *de novo* molecular design using memory manipulation. We demonstrate the first application of the Mamba (Gu & Dao, 2023) architecture for generative molecular design with reinforcement learning and show how it synergistically leverages SMILES augmentation and experience replay for enhanced sample efficiency. Through systematic study, we elucidate the mechanism of Augmented Memory (original work only showed its empirical benefits) and show it squeezes sequence generation likelihoods such that it becomes increasingly likely to generate *some* SMILES representation of the replay buffer molecular graphs. Next, we show *how* Mamba leverages this mechanism to improve sample efficiency through "hop-and-locally-explore" behavior. With the optimal architecture and hyperparameters identified for sample efficiency in a test experiment, we apply Saturn on two sets of MPO tasks relevant to drug discovery, outperforming all baseline models and the recent GEAM (Lee et al., 2024) model which, when released, outperformed all baselines by a large margin. Compared to GEAM, we further show that Saturn achieves superior MPO, finding desirable molecules faster with fewer oracle calls, albeit with a trade-off in diversity. Our work opens up the prospect of *directly* optimizing expensive high-fidelity oracles (beyond docking), which are more correlated with relevant drug discovery end-points. Recent work has applied multi-fidelity learning (Eckmann et al., 2024) or active learning (Loeffler et al., 2024a; Dodds et al., 2024) to enable on-the-fly update of a surrogate model to predict such oracle evaluations for generative design. These workflows can be applied directly with Saturn, but importantly, we may be *sufficiently efficient* to directly optimize these oracles, mitigating surrogate out-of-domain concerns. Moreover, it is straightforward to augment Saturn with known strategies to improve sample efficiency, such as curriculum learning (Guo et al., 2022) as we have shown in Part 3. Correspondingly, future work will stress-test Saturn on high-fidelity oracles and interrogate the prospect of directly optimizing QM/MM and free energy (Wang et al., 2019; Moore et al., 2022; 2023; Crivelli-Decker et al., 2024) protocols with modest computational resources.
+
+ Rest of paper (reference and Appendix) is removed.

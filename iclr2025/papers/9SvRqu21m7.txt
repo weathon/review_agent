@@ -1,0 +1,371 @@
+
+
+{0}------------------------------------------------
+
+# MULTI-STUDENT DIFFUSION DISTILLATION FOR BETTER ONE-STEP GENERATORS
+
+**Anonymous authors**
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Diffusion models achieve high-quality sample generation at the cost of a lengthy multistep inference procedure. To overcome this, diffusion distillation techniques produce student generators capable of matching or surpassing the teacher in a single step. However, the student model’s inference speed is limited by the size of the teacher architecture, preventing real-time generation for computationally heavy applications. In this work, we introduce Multi-Student Distillation (MSD), a framework to distill a conditional teacher diffusion model into multiple single-step generators. Each student generator is responsible for a subset of the conditioning data, thereby obtaining higher generation quality for the same capacity. MSD trains multiple distilled students allowing smaller sizes and, therefore, faster inference. Also, MSD offers a lightweight quality boost over single-student distillation with the same architecture. We demonstrate MSD is effective by training multiple same-sized or smaller students on single-step distillation using distribution matching and adversarial distillation techniques. With smaller students, MSD gets competitive results with faster inference for single-step generation. Using 4 same-sized students, MSD sets a new state-of-the-art for one-step image generation: FID 1.20 on ImageNet-64×64 and 8.20 on zero-shot COCO2014.
+
+## 1 INTRODUCTION
+
+Diffusion models are the dominant generative model in image, audio, video, 3D assets, protein design, and more (Ho et al., 2020; Kong et al., 2022; Blattmann et al., 2023; Anand and Achim, 2022; Nichol et al., 2022). They allow different conditioning inputs – such as class labels, text, or images – and achieve high-quality generated outputs. However, their inference process typically requires hundreds of model evaluations – with an often slow and bulky network – for a single sample. This procedure costs millions of dollars per day (Valyayeva, 2024; Google, 2024). It also prohibits applications requiring rapid synthesis, such as augmented reality. Real-time, low-cost, and high-quality generation will have huge financial and operational impacts while enabling new usage paradigms.
+
+There has been a flurry of work on diffusion-distillation techniques to address the slow sampling of diffusion models (Luhman and Luhman, 2021; Song et al., 2023; Yin et al., 2024a). Inspired by knowledge distillation (Hinton et al., 2015), these methods use the trained diffusion model as a teacher and optimize a student model to match its generated output in as few as a single step. However, most diffusion distillation methods use the same student and teacher architecture. This prevents real-time generation for applications with bulky networks, such as video synthesis (Blattmann et al., 2023). While reducing model size can reduce inference time, it typically yields worse generation quality, thus presenting a speed-to-quality tradeoff dilemma with existing distillation methods.
+
+We tackle this dilemma with our method, Multi-Student Distillation (MSD), that introduces multiple single-step student generators distilled from the pretrained teacher. Each student is responsible for a subset of conditioning inputs. We determine which student to use during inference and perform a single-model evaluation to generate a high-quality sample. This way, MSD enjoys the benefit of a mixture of experts (Jordan and Jacobs, 1994): it increases the model capacity without incurring more inference cost, thereby effectively pushing the limit of the speed-quality tradeoff.
+
+{1}------------------------------------------------
+
+When distilling into the same-sized students, MSD has the flexibility of being conceptually applicable to any distillation method for a performance boost. In addition, MSD allows distilling into multiple smaller students for reduced single-step generation time. Using smaller students prevents one from initializing a student from teacher weights, posing an additional technical challenge. We solve this challenge by adding a relatively lightweight score-matching pretraining stage before distillation (Sec. 4.3), and demonstrating its necessity and efficiency via extensive experiments.
+
+We validate our approaches by applying MSD to distill the teacher into 4 same-sized students using distribution matching and adversarial distillation procedures (Yin et al., 2024a;b). The resulting students collectively outperform single-student counterparts, setting new state-of-the-art FID scores of 1.20 on one-step ImageNet-64×64 generation (Tab. 1) and 8.20 on one-step zero-shot COCO2014 generation (Tab. 2). We also distill the same teacher into 4 smaller students, which achieve a competitive FID of 2.88 on ImageNet (Tab. 1), with 42% less parameters per student.
+
+We summarize our contributions below, which include:
+
+- A new framework, MSD, that upgrades existing single-step diffusion distillation methods (Sec. 4.1) by increasing the effective model capacity without changing inference latency.
+- Demonstrating the effectiveness of MSD by training multiple same sized students using SOTA distillation techniques (Yin et al., 2024a;b) in Sec. 4.2, resulting in new record FID scores in ImageNet-64×64 (Sec. 5.2) and zero-shot text-to-image generation (Sec. 5.3).
+- A successful scheme to distill multiple smaller single-step students from the teacher model, achieving comparable generation quality with reduced inference time.
+
+## 2 RELATED WORK
+
+**Diffusion Sampling Acceleration.** While a line of work aims to accelerate diffusion models via fast numerical solvers for the PF-ODE (Lu et al., 2022a;b; Zheng et al., 2024; Karras et al., 2022; Liu et al., 2022), they usually still require more than 10 steps. Training-based methods that usually follow the knowledge distillation pipeline can achieve low-step or even one-step generation. Luhman and Luhman (2021) first used the diffusion model to generate a noise and image pair dataset that is then used to train a single-step generator. DSNO (Zheng et al., 2023) precomputes the denoising trajectory and uses neural operators to estimate the whole PF-ODE path. Progressive distillation (Salimans and Ho, 2022; Meng et al., 2023) iteratively halves the number of sampling steps required without needing an offline dataset. Rectified Flow (Liu et al., 2023a) and follow-up works (Liu et al., 2023b; Yan et al., 2024) straighten the denoising trajectories to allow sampling in fewer steps. Another approach uses self-consistent properties of denoising trajectories to inject additional regularization for distillation (Gu et al., 2023; Berthelot et al., 2023; Song et al., 2023; Song and Dhariwal, 2024; Luo et al., 2023; Ren et al., 2024; Kim et al., 2024).
+
+The methods above require the student to follow the teacher’s trajectories. Instead, a recent line of works aims to only match the distribution of the student and teacher output via variational score distillation (Yin et al., 2024a;b; Salimans et al., 2024; Xie et al., 2024a; Luo et al., 2024a; Zhou et al., 2024a; Nguyen and Tran, 2024). The adversarial loss (Goodfellow et al., 2014), often combined with the above techniques, has been used to enhance the distillation performance further (Xiao et al., 2022; Zheng and Yang, 2024; Sauer et al., 2023a; Wang et al., 2023; Xu et al., 2024; Lin et al., 2024; Kim et al., 2024). Although MSD is conceptually compatible and offers a performance boost to all of these distillation methods, in this work, we demonstrate two specific techniques: distribution matching (Yin et al., 2024a) and adversarial distillation (Yin et al., 2024b).
+
+**Mixture of experts training and distillation.** Mixture of Experts (MoE), first proposed in Jordan and Jacobs (1994), has found success in training very large-scale neural networks (Shazeer et al., 2017; Lepikhin et al., 2021; Fedus et al., 2022; Lewis et al., 2021; Borde et al., 2024). Distilling a teacher model into multiple students was explored by Hinton et al. (2015), and after that, has been further developed for supervised learning (Chen et al., 2020; Ni and Hu, 2023; Chang et al., 2022) and language modeling (Xie et al., 2024b; Kudugunta et al., 2021; Zuo et al., 2022). Although several works (Hoang et al., 2018; Park et al., 2018; Ahmetoğlu and Alpaydin, 2021) have proposed
+
+{2}------------------------------------------------
+
+MoE training schemes for generative adversarial networks, they train the MoE from scratch. This requires carefully tuning the multi-expert adversarial losses. eDiff-I (Balaji et al., 2022) uses different experts in different denoising timesteps for a multi-step diffusion model. A recent work (Zhou et al., 2024b) proposes to distill a pretrained diffusion model into an MoE for policy learning, which shares similar motivations with our work. However, to the best of our knowledge, MSD is the first method to *distill* multi-step teacher diffusion models into multiple one-step students for image generation.
+
+**Efficient architectures for diffusion models.** In addition to reducing steps, an orthogonal approach aims to accelerate diffusion models with more efficient architectures. A series of works (Bao et al., 2022; Peebles and Xie, 2023; Hoogeboom et al., 2023) introduces vision transformers to diffusion blocks and trains the diffusion model with new architectures from scratch. Another line of work selectively removes or modifies certain components of a pretrained diffusion model and then either finetunes (Kim et al., 2023; Li et al., 2024; Zhang et al., 2024) or re-trains (Zhao et al., 2023) the lightweight diffusion model, from which step-distillation can be further applied (Li et al., 2024; Zhao et al., 2023). Our approach is orthogonal to these works in two regards: 1) In our method, each student only handles a subset of data, providing a gain in relative capacity. 2) Instead of obtaining a full diffusion model, our method employs a lightweight pretraining stage to obtain a good initialization for single-step distillation. Combining MSD with more efficient architectures is a promising future direction.
+
+## 3 PRELIMINARY
+
+We introduce the background on diffusion models in Sec. 3.1 and distribution matching distillation (DMD) in Sec. 3.2. We discuss how applying adversarial losses to improve distillation in Sec. 3.3.
+
+### 3.1 DIFFUSION MODELS
+
+Diffusion models learn to generate data by estimating the score functions (Song et al., 2021) of the corrupted data distribution on different noise levels. Specifically, at different timesteps  $t$ , the data distribution  $p_{\text{real}}$  is corrupted with an independent Gaussian noise:  $p_{t,\text{real}}(\mathbf{x}_t) = \int p_{\text{real}}(\mathbf{x}) q_t(\mathbf{x}_t|\mathbf{x}) d\mathbf{x}$  where  $q_t(\mathbf{x}_t|\mathbf{x}) \sim \mathcal{N}(\alpha_t \mathbf{x}, \sigma_t^2 \mathbf{I})$  with predetermined  $\alpha_t, \sigma_t$  following a forward diffusion process (Song et al., 2021; Ho et al., 2020). The neural network learns the score of corrupted data  $\mathbf{s}_{\text{real}} := \nabla_{\mathbf{x}_t} \log p_{t,\text{real}}(\mathbf{x}_t) = -(\mathbf{x}_t - \alpha_t \mathbf{x})/\sigma_t^2$  by equivalently predicting the denoised  $\mathbf{x}$ :  $\boldsymbol{\mu}(\mathbf{x}_t, t) \approx \mathbf{x}$ . After training with the denoising score matching loss  $\mathbb{E}_{\mathbf{x}, t, \mathbf{x}_t} [\lambda_t \|\boldsymbol{\mu}(\mathbf{x}_t, t) - \mathbf{x}\|_2^2]$ , where  $\lambda_t$  is a weighting coefficient, the model generates the data by an iterative denoising process over a decreasing sequence of time steps.
+
+### 3.2 DISTRIBUTION MATCHING DISTILLATION
+
+Inspired by Wang et al. (2024), the works of Luo et al. (2024); Yin et al. (2024a); Ye and Liu (2024); Nguyen and Tran (2024) aim to train the single-step distilled student to match the generated distribution of the teacher diffusion model. This is done by minimizing the following reverse KL divergence between teacher and student output distributions, diffused at different noise levels for better support over the ambient space:
+
+$$\mathbb{E}_{\mathbf{x}_t} D_{\text{KL}}(p_{t,\text{fake}} \| p_{t,\text{real}}) = \mathbb{E}_{\mathbf{x}_t} \left( \log \left( \frac{p_{t,\text{fake}}(\mathbf{x}_t)}{p_{t,\text{real}}(\mathbf{x}_t)} \right) \right). \quad (1)$$
+
+The training only requires the gradient of Eq. (1), which reads (with a custom weighting  $w_t$ ):
+
+$$\nabla_{\theta} \mathcal{L}_{\text{KL}}(\theta) := \nabla_{\theta} \mathbb{E}_{\mathbf{z}, t, \mathbf{x}_t} [w_t \alpha_t (s_{\text{fake}}(\mathbf{x}_t, t) - s_{\text{real}}(\mathbf{x}_t, t)) \nabla_{\theta} G_{\theta}(\mathbf{z})], \quad (2)$$
+
+where  $\mathbf{z} \sim \mathcal{N}(0, \mathbf{I}), t \sim \text{Uniform}[T_{\min}, T_{\max}]$ , and  $\mathbf{x}_t \sim q(\mathbf{x}_t|\mathbf{x})$ , the noise injected version of  $\mathbf{x} = G_{\theta}(\mathbf{z})$  generated by the one-step student. Here, we assume the teacher denoising model accurately approximates the score of the real data, and a “fake” denoising model approximates the score of generated fake data:
+
+$$s_{\text{real}}(\mathbf{x}_t, t) \approx -\frac{\mathbf{x}_t - \alpha_t \boldsymbol{\mu}_{\text{teacher}}(\mathbf{x}_t, t)}{\sigma_t^2}, \quad s_{\text{fake}}(\mathbf{x}_t, t) \approx -\frac{\mathbf{x}_t - \alpha_t \boldsymbol{\mu}_{\text{fake}}(\mathbf{x}_t, t)}{\sigma_t^2}. \quad (3)$$
+
+{3}------------------------------------------------
+
+![Figure 1: Diagram illustrating distillation into multiple students. On the left, a 'Partition' block takes input D and splits it into two students, Student G1 and Student Gk. Student G1 is trained with input 'oven vase iron lamp' and produces an image of a lamp. Student Gk is trained with input 'seal rabbit husky cat' and produces an image of a cat. A 'Teacher' block provides guidance to both students. On the right, during inference, a single input 'lamp husky' is partitioned and passed to Student G1 and Student Gk, which generate images of a lamp and a cat respectively.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 1: Diagram illustrating distillation into multiple students. On the left, a 'Partition' block takes input D and splits it into two students, Student G1 and Student Gk. Student G1 is trained with input 'oven vase iron lamp' and produces an image of a lamp. Student Gk is trained with input 'seal rabbit husky cat' and produces an image of a cat. A 'Teacher' block provides guidance to both students. On the right, during inference, a single input 'lamp husky' is partitioned and passed to Student G1 and Student Gk, which generate images of a lamp and a cat respectively.
+
+Figure 1: We visualize distilling into multiple students, where each student handles a subset of the input condition. At training, students are trained separately with filtered data. At inference, a single student is retrieved for generation given the corresponding input condition.
+
+The “fake” denoising model is trained with the denoising objective with weighting  $\lambda_t$ :
+
+$$\mathcal{L}_{\text{denoise}}(\phi) = \mathbb{E}_{\mathbf{z}, t, \mathbf{x}_t} [\lambda_t \|\mu_{\text{fake}}^{\phi}(\mathbf{x}_t, t) - \mathbf{x}\|_2^2]. \quad (4)$$
+
+The generator and the “fake” denoising model are updated alternatively. To facilitate better convergence of the KL divergence, Distribution Matching Distillation (DMD) and DMD2 (Yin et al., 2024b) used two distinct strategies, both significantly improving the generation performance. DMD proposes to complement the KL loss with a regression loss to encourage mode covering:
+
+$$\mathcal{L}_{\text{reg}}(\theta) = \mathbb{E}_{(\mathbf{z}, \mathbf{y}) \sim \mathcal{D}_{\text{paired}}} \ell(G_{\theta}(\mathbf{z}), \mathbf{y}), \quad (5)$$
+
+where  $\mathcal{D}_{\text{paired}}$  is a dataset of latent-image pairs generated by the teacher model offline, and  $\ell$  is the Learned Perceptual Image Patch Similarity (LPIPS) (Zhang et al., 2018). DMD2 instead applies a two-timescale update rule (TTUR), where they update the “fake” score model for  $N$  steps per generator update, allowing more stable convergence. We use distribution matching (DM) to refer to all relevant techniques introduced in this section.
+
+### 3.3 ENHANCING DISTILLATION QUALITY WITH ADVERSARIAL LOSS
+
+The adversarial loss, originally proposed by Goodfellow et al. (2014), has shown a remarkable capability in diffusion distillation to enhance sharpness and realism in generated images, thus improving generation quality. Specifically, DMD2 (Yin et al., 2024b) proposes adding a minimal discriminator head to the bottleneck layer of the “fake” denoising model  $\mu_{\text{fake}}$ , which is naturally compatible with DMD’s alternating training scheme and the TTUR. Moreover, they showed that one should first train the model without GAN to convergence, then add the GAN loss and continue training. This yields better terminal performance than training with the GAN loss from the beginning. We use adversarial distribution matching (ADM) to refer to distribution matching with added adversarial loss.
+
+## 4 METHOD
+
+In Sec. 4.1, we introduce the general Multi-Student Distillation (MSD) framework. In Sec. 4.2, we show how MSD is applied to distribution matching and adversarial distillation. In Sec. 4.3, we introduce an additional training stage enabling distilling into smaller students.
+
+### 4.1 DISTILLING INTO MULTIPLE STUDENTS
+
+We present Multi-Student Distillation (MSD), a general drop-in framework to be combined with any conditional single-step diffusion distillation method that enables a cheap upgrade of model capacity without impairing the inference speed. We first identify the key components of a single-step diffusion distillation framework and then present the modification of MSD.
+
+{4}------------------------------------------------
+
+![Figure 2: Three-stage training scheme. Stage 0: Multi-step student distills to Teacher via TSM. Stage 1: One-step student distills to Teacher via DM. Stage 2: One-step student distills to Teacher via ADM. Curved arrows indicate the progression from Stage 0 to Stage 1 to Stage 2.](690fce4fb5c9cbb8beb560cb2a3fcbeb_img.jpg)
+
+The diagram illustrates a three-stage distillation process. In Stage 0, a 'Multi-step student' (represented by blue blocks) takes a noisy input and generates an image of a cat, which is then compared to a 'Teacher' (grey blocks) using 'TSM' (Teacher Score Matching). A curved arrow points to Stage 1, where a 'One-step student' (red blocks) generates an image from noise, and 'DM' (Distribution Matching) is used to align it with the Teacher. Another curved arrow points to Stage 2, where a 'One-step student' (red blocks) generates an image, and 'ADM' (Adversarial Distribution Matching) is used for distillation. In all stages, the Teacher is shown with a lock icon, indicating it is frozen.
+
+Figure 2: Three-stage training scheme. Stage 0: Multi-step student distills to Teacher via TSM. Stage 1: One-step student distills to Teacher via DM. Stage 2: One-step student distills to Teacher via ADM. Curved arrows indicate the progression from Stage 0 to Stage 1 to Stage 2.
+
+Figure 2: Three-stage training scheme in Eq. 9. Acronym meanings: **TSM**: teacher score matching (Eq. 8 & Eq. 9); **DM**: distribution matching (Eq. 9 & Sec. 3.2); **ADM**: adversarial distribution matching (Eq. 9 and Sec. 3.3). **Stage 1** and **Stage 2** are techniques from previous works that help with same-sized students; **Stage 0** is our contribution, which is required for smaller students who cannot initialize with teacher weights.
+
+In the vanilla one-student distillation, we have a pretrained teacher denoising diffusion model  $\mu_{\text{teacher}}$ , a training dataset  $\mathcal{D}$ , and a distillation method. The distillation yields a single-step generator  $G(z; y \in \mathcal{Y})$  via  $G = \text{Distill}(\mu_{\text{teacher}}; \mathcal{D})$ . The obtained generator  $G$  maps a random latent  $z$  and an input condition  $y$  into an image. In comparison, in an MSD scheme, we instead distill the teacher into  $K$  different one-step generators  $\{G_k(z; y \in \mathcal{Y}_k)\}_{k=1}^K$  via
+
+$$G_k = \text{Distill}(\mu_{\text{teacher}}, \mathcal{D}_k = F(\mathcal{D}, \mathcal{Y}_k)), \quad k = 1, \dots, K \quad (6)$$
+
+Specifically, each distilled student  $G_k$  is specialized in handling a partitioned subset  $\mathcal{Y}_k$  of the whole input condition set  $\mathcal{Y}$ . So, it is trained on a subset of the training data  $\mathcal{D}_k \subset \mathcal{D}$ , determined by  $\mathcal{Y}_k$  via a filtering function  $F$ . Fig. 1 illustrates this idea.
+
+The partition of  $\mathcal{Y}$  into  $\{\mathcal{Y}_k\}_{k=1}^K$  determines the input condition groups for which each student is responsible. As a starting point, we make the following three simplifications for choosing a partition:
+
+- **Disjointness**: This prevents potential redundant training and redundant usage of model capacity.
+- **Equal size**: Since students have the same architecture, the partitions  $\{\mathcal{Y}_k\}_{k=1}^K$  should be of equal size that require similar model capacity.
+- **Clustering**: Conditions within each partition should be more semantically similar than those in other partitions, so networks require less capacity to achieve a set quality on their partition.
+
+The first two conditions can be easily satisfied in practice, while the third is not straightforward. For a class-conditional generation, partitioning by semantically similar and equal-sized classes serves a straightforward strategy, though extending it to text-conditional generation is nontrivial. Another promising strategy uses pretrained embedding layers such as the CLIP (Radford et al., 2021) embedding layer or the teacher embedding layer. One could find embeddings of the input conditions and then perform clustering on those embeddings, which are fixed-length numerical vectors containing implicit semantic information. We ablate partition strategies in Sec. 5.4.
+
+The data filtering function  $F$  determines the training subset data  $\mathcal{D}_k$  from  $\mathcal{Y}_k$ . For example, a vanilla filtering strategy could set  $F(\mathcal{D}, \mathcal{Y}_k) = \mathcal{D}_k := \mathcal{D}_{\mathcal{Y}_k}$ , where  $\mathcal{D}_{\mathcal{Y}_k}$  denotes the subset of the training dataset  $\mathcal{D}$  that contains the desired condition  $\mathcal{Y}_k$ . Empirically, we found that this filtering works in most cases, although sometimes a different approach is justified, as demonstrated in Sec. 4.2.
+
+{5}------------------------------------------------
+
+### 4.2 MSD WITH DISTRIBUTION MATCHING
+
+As a concrete example, we demonstrate the MSD framework using distribution matching (DM) and adversarial distillation techniques. Inspired by the two-stage framework in Yin et al. (2024b), each of our students is trained with a distribution matching scheme at the first stage and finetuned with an additional adversarial loss at the second stage (adversarial distribution matching, or ADM):
+
+$$\begin{aligned} G_k^{(1)} &= \text{Distill}_{\text{DM}}(\mu_{\text{teacher}}, F_{\text{DM}}(\mathcal{D}_{\text{DM}}, \mathcal{Y}_k)), \quad k = 1, \dots, K, \\ G_k^{(2)} &= \text{Distill}_{\text{ADM}}\left(\mu_{\text{teacher}}, F_{\text{ADM}}(\mathcal{D}_{\text{ADM}}, \mathcal{Y}_k); G_k^{(1)}\right), \quad k = 1, \dots, K, \end{aligned} \quad (7)$$
+
+where we recall that  $\mu_{\text{teacher}}$  is the teacher diffusion model,  $G_k^{(i)}$  is the  $k$ -th student generator at the  $i$ -th stage,  $F$  is the data filtering function,  $\mathcal{D}$  is the training data, and  $\mathcal{Y}_k$  is the set of labels that student  $k$  is responsible of. The first stage  $\text{Distill}_{\text{DM}}$  uses distribution matching with either a complemented regression loss or the TTUR, with details in Sec. 3.2. These two methods achieve optimal training efficiency among other best-performing single-step distillation methods (Xie et al., 2024a; Zhou et al., 2024a; Kim et al., 2024) without an adversarial loss, with a detailed comparison in App. B.3. The second stage  $\text{Distill}_{\text{ADM}}$  adds an additional adversarial loss (details in Sec. 3.3, which introduces minimal additional computational overhead and allows resuming from the first stage checkpoint, making it a natural choice.
+
+**Designing the training data** From Sec. 3, the data required for DM and ADM are  $\mathcal{D}_{\text{DM}} = (\mathcal{D}_{\text{paired}}, \mathcal{C})$  and  $\mathcal{D}_{\text{ADM}} = (\mathcal{D}_{\text{real}}, \mathcal{C})$ , where  $\mathcal{D}_{\text{paired}}, \mathcal{D}_{\text{real}}, \mathcal{C}$  represents generated paired data, real data and separate conditional input, respectively. We now discuss choices for the filtering function.
+
+For the first stage data filtering  $F_{\text{DM}}$ , we propose  $F_{\text{DM}}(\mathcal{D}_{\text{DM}}, \mathcal{Y}_k) = (\mathcal{D}_{\text{paired}}, \mathcal{C}_{\mathcal{Y}_k})$ , where  $\mathcal{C}_{\mathcal{Y}_k}$  denotes the subset of condition inputs  $\mathcal{C}$  that contains  $\mathcal{Y}_k$ . In other words, we sample all input conditions only on the desired partition for the KL loss but use the whole paired dataset for the regression loss. This special filtering is based on the observation that the size of  $\mathcal{D}_{\text{paired}}$  critically affects the terminal performance of DMD distillation: using fewer pairs causes mode collapse, whereas using more pairs challenge the model capacity. Naively filtering paired datasets by partition reduces the paired dataset size for each student and leads to worse performance, as in our ablation in App. B.2. Instead of generating more paired data to mitigate this imbalance, we simply reuse the original paired dataset for the regression loss. This is remarkably effective, which we hypothesize is because paired data from other input conditions provides effective gradient updates to the shared weights in the network.
+
+For the second stage, we stick to the simple data filtering  $F_{\text{ADM}}(\mathcal{D}_{\text{ADM}}, \mathcal{Y}_k) = (\mathcal{D}_{\text{real}, \mathcal{Y}_k}, \mathcal{C}_{\mathcal{Y}_k})$ , so that both adversarial and KL losses focus on the corresponding partition, given that each student has enough mode coverage from the first stage.
+
+### 4.3 DISTILLING SMALLER STUDENTS FROM SCRATCH
+
+Via the frameworks presented in the last two sections, MSD enables a performance upgrade over alternatives for one student with the same model architecture. In this section, we investigate training multiple students with smaller architectures – and thus faster inference time – without impairing much performance. However, this requires distilling into a student with a different architecture, preventing initialization from pretrained teacher weights. Distilling a single-step student from scratch has previously been difficult (Xie et al., 2024a), and we could not obtain competitive results with the simple pipeline in Eq. 7. Therefore, we propose an additional pretraining phase  $\text{Distill}_{\text{TSM}}$ , with TSM denoting Teacher Score Matching, to find a good initialization for single-step distillation. TSM employs the following score-matching loss:
+
+$$\mathcal{L}_{\text{TSM}} = \mathbb{E}_t [\lambda_t \|\mu_{\text{TSM}}^\varphi(\mathbf{x}_t, t) - \mu_{\text{teacher}}(\mathbf{x}_t, t)\|_2^2], \quad (8)$$
+
+where the smaller student with weights  $\varphi$  is trained to match the teacher’s score on real images at different noise levels. This step provides useful initialization weights for single-step distillation and
+
+{6}------------------------------------------------
+
+![Figure 3: A 2D toy model. The figure consists of three scatter plots on the left and a line graph on the right. The scatter plots are labeled 'Teacher', '1 student', and '8 students'. Each plot shows a distribution of points (red dots) and a set of circles (blue outlines) representing the generated samples. The 'Teacher' plot shows a complex, multi-modal distribution. The '1 student' plot shows a simpler, single-modal distribution. The '8 students' plot shows a distribution that is more complex than the 1-student plot but simpler than the teacher plot. The line graph on the right shows the 'l1 distance' (y-axis, ranging from 1.6 to 2.2) versus the 'Number of students' (x-axis, ranging from 1 to 8). The data points are (1, 2.1), (2, 1.9), (4, 1.7), and (8, 1.6), showing a decreasing trend as the number of students increases.](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+Figure 3: A 2D toy model. The figure consists of three scatter plots on the left and a line graph on the right. The scatter plots are labeled 'Teacher', '1 student', and '8 students'. Each plot shows a distribution of points (red dots) and a set of circles (blue outlines) representing the generated samples. The 'Teacher' plot shows a complex, multi-modal distribution. The '1 student' plot shows a simpler, single-modal distribution. The '8 students' plot shows a distribution that is more complex than the 1-student plot but simpler than the teacher plot. The line graph on the right shows the 'l1 distance' (y-axis, ranging from 1.6 to 2.2) versus the 'Number of students' (x-axis, ranging from 1 to 8). The data points are (1, 2.1), (2, 1.9), (4, 1.7), and (8, 1.6), showing a decreasing trend as the number of students increases.
+
+Figure 3: A 2D toy model. From left to right: teacher (multi-step) generation and student, one-step generation with 1 and 8 distilled students, the  $\ell_1$  distance of generated samples between teacher and students. **Takeaway:** More students improve distillation quality on this easy-to-visualize setup.
+
+is crucial to ensure convergence. With TSM added, the whole pipeline now becomes:
+
+$$\begin{aligned}\mu^{(0)} &= \text{Distill}_{\text{TSM}}(\mu_{\text{teacher}}, \mathcal{D}_{\text{real}}), \\ G_k^{(1)} &= \text{Distill}_{\text{DM}}(\mu_{\text{teacher}}, F_{\text{DM}}(\mathcal{D}_{\text{DM}}, \mathcal{Y}_k); \mu^{(0)}), \quad k = 1, \dots, K, \\ G_k^{(2)} &= \text{Distill}_{\text{ADM}}(\mu_{\text{teacher}}, F_{\text{ADM}}(\mathcal{D}_{\text{ADM}}, \mathcal{Y}_k); G_k^{(1)}), \quad k = 1, \dots, K.\end{aligned}\quad (9)$$
+
+Although a smaller student may not perfectly match the teacher’s score, it still provides a good initialization for stages 1 and 2. The performance gap is remedied in the latter stages by focusing on a smaller partition for each student. This three-stage training scheme is illustrated in Fig. 2.
+
+## 5 EXPERIMENTS
+
+To evaluate the effectiveness of our approach, we trained MSD with different design choices and compared against competing methods, including other single-step distillation methods.
+
+In Sec. 5.1, we compare single vs multiple students on a 2D toy problem for direct visual comparison. For these experiments, we used only the DM stage. In Sec. 5.2, we investigate class-conditional image generation on ImageNet-64×64 (Deng et al., 2009) where we have naturally defined classes to partition. Here we explored training with the DM stage only, with both DM and ADM stages, and with all three stages for smaller students. We then evaluate MSD for a larger model in Sec. 5.3. We explored text-to-image generation on MS-COCO2014 (Lin et al., 2014) with varying training stages. We use the standard Fréchet Inception Distance (FID) (Heusel et al., 2017) score to measure generation quality. Comprehensive comparisons confirm that MSD outperforms single-student counterparts and achieves state-of-the-art performance in single-step diffusion distillation. Finally, in Sec. 5.4, we summarize our ablation experiments over design choices.
+
+To focus on the performance boost from multi-student distillation, we applied minimal changes to the hyperparameters used by Yin et al. (2024a;b) for their distribution matching distillation implementations. More details on training and evaluation can be found in the App. D and E.
+
+### 5.1 TOY EXPERIMENTS
+
+In Fig. 3, we show the sample density of MSD with DM stage for a 2D toy experiment, where the real data distribution has 8 classes, and each class is a mixture of 8 Gaussians. We used a simple MLP with EDM schedules to train the teacher and then distill into 1, 2, 4, and 8 students for comparison. From the displayed samples and the  $\ell_1$  distance from teacher generation, we observe that the collective generation quality increases as the number of students increases.
+
+### 5.2 CLASS-CONDITIONAL IMAGE GENERATION
+
+**Student architecture the same as the teacher:** We trained  $K = 4$  students using the MSD framework and the EDM (Karras et al., 2022) teacher on class-conditional ImageNet-64×64 generation.
+
+{7}------------------------------------------------
+
+Table 1: Comparing class-conditional generators on ImageNet-64×64. The number of function evaluations (NFE) for MSD is 1 as a single student is used at inference for the given input.
+
+| Method                                          | NFE (↓) | FID (↓) |
+|-------------------------------------------------|---------|---------|
+| <i>Multiple Steps</i>                           |         |         |
+| RIN (Jabri et al., 2023)                        | 1000    | 1.23    |
+| ADM (Dhariwal and Nichol, 2021)                 | 250     | 2.07    |
+| DPM Solver (Lu et al., 2022a)                   | 10      | 7.93    |
+| Multistep CD (Heek et al., 2024)                | 2       | 2.0     |
+| <i>Single Step, w/o GAN</i>                     |         |         |
+| PD (Salimans and Ho, 2022)                      | 1       | 15.39   |
+| DSNO (Zheng et al., 2023)                       | 1       | 7.83    |
+| Diff-Instruct (Luo et al., 2024)                | 1       | 5.57    |
+| iCT-deep (Song and Dhariwal, 2024)              | 1       | 3.25    |
+| Moment Matching (Salimans et al., 2024)         | 1       | 3.0     |
+| DMD (Yin et al., 2024a)                         | 1       | 2.62    |
+| <b>MSD (ours): 4 students, DM only</b>          | 1       | 2.37    |
+| EMD (Xie et al., 2024a)                         | 1       | 2.20    |
+| SiD (Zhou et al., 2024a)                        | 1       | 1.52    |
+| <i>Single Step, w/ GAN</i>                      |         |         |
+| Post-distillation, 4 42% smaller students       | 1       | 11.67   |
+| <b>MSD (ours): 4, 42% smaller students, ADM</b> | 1       | 2.88    |
+| StyleGAN-XL (Sauer et al., 2022)                | 1       | 1.52    |
+| CTM (Kim et al., 2024)                          | 1       | 1.92    |
+| DMD2 (Yin et al., 2024b)                        | 1       | 1.28    |
+| <b>MSD (ours): 4 students, ADM</b>              | 1       | 1.20    |
+| <i>teacher</i>                                  |         |         |
+| EDM (teacher, ODE) (Karras et al., 2022)        | 511     | 2.32    |
+| EDM (teacher, SDE) (Karras et al., 2022)        | 511     | 1.36    |
+
+Table 2: Comparing MSD to other methods on zero-shot text-to-image generation on MS-COCO2014. We measure speed with sampling time per prompt (latency) and quality with FID.
+
+| Method                                 | Latency (↓) | FID (↓) |
+|----------------------------------------|-------------|---------|
+| <i>Unaccelerated</i>                   |             |         |
+| DALL-E 2 (Ramesh et al., 2022)         | -           | 10.39   |
+| LDM (Rombach et al., 2022)             | 3.7s        | 12.63   |
+| eDiff-I (Balaji et al., 2022)          | 32.0s       | 6.95    |
+| <i>GANs</i>                            |             |         |
+| StyleGAN-T (Sauer et al., 2023b)       | 0.10s       | 12.90   |
+| GigaGAN (Yu et al., 2022)              | 0.13s       | 9.09    |
+| <i>Accelerated</i>                     |             |         |
+| DPM++ (4 step) (Lu et al., 2022b)      | 0.26s       | 22.36   |
+| InstaFlow-0.9B (Liu et al., 2023b)     | 0.09s       | 12.10   |
+| UFOGen (Xu et al., 2024)               | 0.09s       | 12.78   |
+| DMD (Yin et al., 2024a)                | 0.09s       | 11.49   |
+| EMD (Xie et al., 2024a)                | 0.09s       | 9.66    |
+| DMD2 (w/o GAN)                         | 0.09s       | 9.28    |
+| <b>MSD (ours): 4 students, DM only</b> | 0.09s       | 8.80    |
+| DMD2 (Yin et al., 2024b)               | 0.09s       | 8.35    |
+| <b>MSD (ours): 4 students, ADM</b>     | 0.09s       | 8.20    |
+| <i>teacher</i>                         |             |         |
+| SDv1.5 (50 step, CFG=3, ODE)           | 2.59s       | 8.59    |
+| SDv1.5 (200 step, CFG=2, SDE)          | 10.25s      | 7.21    |
+
+We applied the simplest strategy for splitting classes among students: Each student is responsible for 250 consecutive classes in numerical order (i.e.,  $1/\kappa$  of the 1000 classes). We compare the performance with previous methods and display the results in Tab. 1. Our DM stage, which uses the complementary regression loss, surpasses the one-student counterpart DMD (Yin et al., 2024a), achieving a modest drop of 0.25 in FID score, making it a strong competitor in single-step distillation without an adversarial loss. We then took the best pretrained checkpoints and trained with the ADM stage. The resulting model achieved the current state-of-the-art FID score of 1.20. It surpasses even the EDM teacher, StyleGAN-XL (Sauer et al., 2022), the multi-step RIN (Jabri et al., 2023) due to the adversarial loss. Fig. 4(a) and (b) display a comparison of sample generations, showing that our best students have comparable generation quality as the teacher.
+
+**Student architecture smaller than the teacher:** Next, we trained 4 smaller student models with the prepended teacher score matching (TSM) stage from Sec. 4.3. This achieved a 42% reduction in model size and a 7% reduction in latency, with a slight degradation in FID score, offering a flexible framework to increase generation speed by reducing student size, and increasing generation quality by training more students. Fig. 4(c) displays sample generation from these smaller students, whereas Fig. 4(d) shows sample generations from an even smaller set of students, with a 71% percent reduction in model size and a 23% percent reduction in latency. We observed slightly degraded but still competitive generation qualities. Using more and larger students will further boost performance, as shown by ablations in Sec. 5.4 and App. B.4. Smaller students without the TSM stage fail to reach even proper convergence. Moreover, instead of the TSM stage, we performed post output distillation on best single-step checkpoints, and observed significant drop in performance. Hence the TSM stage is both necessary and efficient.
+
+### 5.3 TEXT-TO-IMAGE GENERATION
+
+**Student architecture the same as the teacher:** We evaluated the performance of text-to-image generation using the MS-COCO2014 (Lin et al., 2014) evaluation dataset. We distilled 4 students from Stable Diffusion (SD) v1.5 (Rombach et al., 2022) on a 5M-image subset of the COYO dataset (Byeon et al., 2022). For splitting prompts among students, we again employed a minimalist design: pass the prompts through the pre-trained SD v1.5 text encoder, pool the embeddings over the temporal dimension, and divide into 4 disjoint subsets along 4 quadrants. We trained with a classifier-free guidance (CFG) scale of 1.75 for best FID performance. Tab. 2 compares the evaluation results with previous methods. Our baseline method with only the DM stage again achieved a performance boost with a 0.48 drop in FID over the single-student counterpart DMD2 without adversarial loss
+
+{8}------------------------------------------------
+
+432  
+433  
+434  
+435  
+436  
+437  
+438  
+439
+
+![Figure 4: Sample generations on ImageNet-64x64 from the teacher and different sized students. The figure shows four columns of images: (a) Teacher (multistep), (b) Same-sized students, (c) 42% smaller students, and (d) 71% smaller students. Each column contains a 2x2 grid of images showing various subjects like a peacock, a dog, a cat, and a bird.](0ba998c66ef6a980bac9c0c12e9452bf_img.jpg)
+
+Figure 4: Sample generations on ImageNet-64x64 from the teacher and different sized students. The figure shows four columns of images: (a) Teacher (multistep), (b) Same-sized students, (c) 42% smaller students, and (d) 71% smaller students. Each column contains a 2x2 grid of images showing various subjects like a peacock, a dog, a cat, and a bird.
+
+(a) Teacher (multistep) (b) Same-sized students (c) 42% smaller students (d) 71% smaller students
+
+440  
+441  
+442  
+443  
+444  
+445
+
+Figure 4: Sample generations on ImageNet-64×64 from the teacher and different sized students, with architecture and latency details in App. D. The same-size students have comparable or slightly better generation quality than the teacher. Smaller students achieve faster generation while still having decent qualities. Same-sized students are trained with DM and ADM stages, whereas smaller students are trained with all three stages (see Fig. 2).
+
+446  
+447  
+448  
+449  
+450  
+451  
+452  
+453  
+454  
+455  
+456  
+457
+
+![Figure 5: Samples on high guidance-scale text-to-image generations from the SD v1.5 teacher and different sized students. The figure shows three columns of images: (a) Teacher (multistep), (b) Same-sized student, and (c) 83% smaller student. Each column contains a 2x2 grid of images showing various dogs and text overlays like 'YOUR', 'YUR', 'YOPR', 'HePpY', 'HIsEp Doggy', 'DOGEODS DUDGOODS'.](f5aaecb6473222e3d65f65164fab048e_img.jpg)
+
+Figure 5: Samples on high guidance-scale text-to-image generations from the SD v1.5 teacher and different sized students. The figure shows three columns of images: (a) Teacher (multistep), (b) Same-sized student, and (c) 83% smaller student. Each column contains a 2x2 grid of images showing various dogs and text overlays like 'YOUR', 'YUR', 'YOPR', 'HePpY', 'HIsEp Doggy', 'DOGEODS DUDGOODS'.
+
+(a) Teacher (multistep)
+
+(b) Same-sized student
+
+(c) 83% smaller student
+
+458  
+459  
+460  
+461  
+462  
+463
+
+Figure 5: Samples on high guidance-scale text-to-image generations from the SD v1.5 teacher and different sized students, with full training details in App. D. The same-sized student has comparable quality to the teacher. The smaller student, trained on a subset of dog-related data, achieves faster generation while still having decent qualities. The same-sized student is trained with DM stage only, whereas the smaller student is trained with TSM and DM stages (see Fig. 2).
+
+464  
+465  
+466  
+467
+
+(Yin et al., 2024b). Continuing the ADM stage from the best checkpoint yielded a terminal FID of 8.20, again surpassing the single-student counterpart and achieving the current state-of-the-art FID score. In addition, for better visual quality, we also train with a larger CFG scale of 8, and display corresponding samples in Fig. 5(b) and App. F.2.
+
+468  
+469  
+470  
+471  
+472  
+473  
+474
+
+**Student architecture smaller than the teacher:** As a preliminary exploration, with the prepended teacher score matching (TSM) stage, we train a 83% smaller and 5% faster student on a dog-related prompt subset of COYO (containing  $\sim 1\,210\,000$  prompts). We trained with a CFG scale of 8 and display the samples in Fig. 5. We observed fair generation quality despite a significant drop in model size. Improved training is likely to obtain better sample quality and generalization power. Due to limited computational resources and the complete coverage of the prompt set by the 4-student model, we did not train the full set of students at this size.
+
+475  
+476
+
+### 5.4 ABLATION STUDIES
+
+477  
+478  
+479  
+480
+
+Here, we ablate the effect of different components in MSD and offer insight into scaling. Unless otherwise mentioned, all experiments are conducted for class-conditional generation ImageNet-64×64, using only the DM stage for computational efficiency.
+
+481  
+482  
+483  
+484  
+485
+
+**MSD is still better with the same effective batch size.** To investigate if the performance boost from MSD comes from only a batch size increase over single student distillation, we make a comparison with the same effective batch size. As showcased in Tab. 3, MSD with 4 students and a batch size of 32 per student performs slightly better than the single-student counterpart with a batch size of 128, indicating that MSD likely benefits from a capacity increase than a batch size increase. As a takeaway, with a fixed training resource measured in processed data points, users are better off
+
+{9}------------------------------------------------
+
+distilling into multiple students with partitioned resources each than using all resources to distill into a single student. This is also reflected in our previous experiments, where we used significantly less resources per student than the single-student counterparts (see details in App. D). Although multiple students means multiple model weights to save, storage is often cheap, so in many applications, this cost is outweighed by our improved quality or latency.
+
+**Simple splitting works surprisingly well.** We used consecutive splitting of classes in Sec. 5.2. Although it shows obvious advantage over random splitting, as shown in Tab. 3, it does not use the embedding information from the pretrained EDM model. Therefore, we investigated another strategy where we performed a  $K$ -means clustering ( $K = 4$ ) on the label embeddings, resulting in 4 clusters of similar sizes: (230, 283, 280, 207). However, MSD trained with these clustered partitions performs similarly to sequential partition, as shown in Tab. 3. For text-to-image generation, we performed  $K$ -means clustering on the pooled embeddings of prompts in the training data, resulting in clusters of vastly uneven sizes. Due to computational limitations, we opted for the simpler partition strategies outlined in Sec. 5.
+
+**Effect of scaling the number of students.** In Tab. 3, we study the effect of increasing  $K$ , the number of distilled students. We kept the per-student batch size fixed so more students induce a larger effective batch size. We observe better FID scores for more students. We hypothesize that better training strategies, such as per-student tuning, will further improve the quality. Optimal strategies for scaling to ultra-large numbers of students is an interesting area for future work.
+
+## 6 DISCUSSION
+
+### 6.1 LIMITATIONS
+
+MSD is the first work to explore diffusion distillation with multiple students, and it admits a few limitations that call for future work. 1) Further explorations could offer more insights into optimal design choices for a target quality and latency on various datasets, such as the number of students, input condition size for each student, and other hyperparameters. This is especially beneficial if the training budget is limited. 2) We apply simple partitioning for both class- and text-conditions and assign them disjointly to different students. Although our empirical study shows that simple alternatives do not offer obvious advantages, more sophisticated routing mechanisms may help. 3) We use simple channel reduction when designing smaller students to demonstrate feasibility. This results in a significantly smaller latency reduction than sample size reduction. Exploring other designs of smaller students will likely increase their quality and throughput. 4) We train different students separately, but we expect that carefully designed weight-sharing, loss-sharing, or other interaction schemes can further enhance training efficiency. 5) We hypothesize that MSD can be applied to other diffusion distillation methods and other modalities for similar benefits, but leave this for future work.
+
+### 6.2 CONCLUSION
+
+This work presented Multi-Student Distillation, a simple yet efficient method to increase the effective model capacity for single-step diffusion distillation. We applied MSD to the distribution matching and adversarial distillation methods. We demonstrated their superior performance over single-student counterparts in both class-conditional generation and text-to-image generation. Particularly, MSD with DMD2’s the two-stage training achieves state-of-the-art FID scores. Moreover, we successfully distilled smaller students from scratch, demonstrating MSD’s potential in further reducing the generation latency with multiple smaller student distillations. We envision building on MSD to enable generation in real-time, enabling many new use cases.
+
+Table 3: Ablation studies on different components of MSD. All experiments are done on ImageNet-64×64, trained with only the DM stage for 20k iterations, where  $B$  is the batch size per student. See App. B.1.
+
+| Method                                             | FID (↓)     |
+|----------------------------------------------------|-------------|
+| 4 students, $B = 32$                               | 2.53        |
+| 1 students, $B = 128$                              | 2.60        |
+| 2 students, $B = 128$                              | 2.49        |
+| <b>4 students, <math>B = 128</math> (baseline)</b> | <b>2.37</b> |
+| 8 students, $B = 128$                              | 2.32        |
+| 4 students, $B = 128$ , $K$ -means splitting       | 2.39        |
+| 4 students, $B = 128$ , random splitting           | 2.45        |
+
+ Rest of paper (reference and Appendix) is removed.

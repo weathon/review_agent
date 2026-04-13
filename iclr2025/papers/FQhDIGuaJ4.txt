@@ -1,0 +1,303 @@
+
+
+{0}------------------------------------------------
+
+# WAVELET DIFFUSION NEURAL OPERATOR
+
+Peiyuan Hu<sup>2§\*</sup> Rui Wang<sup>3§\*</sup> Xiang Zheng<sup>4§</sup> Tao Zhang<sup>1</sup> Haodong Feng<sup>1</sup>  
+Ruiqi Feng<sup>1</sup> Long Wei<sup>1</sup> Yue Wang<sup>5</sup> Zhi-Ming Ma<sup>2</sup> Tailin Wu<sup>1†</sup>
+
+<sup>1</sup>Department of Artificial Intelligence, School of Engineering, Westlake University,
+
+<sup>2</sup>Academy of Mathematics and Systems Science, Chinese Academy of Sciences,
+
+<sup>3</sup>Fudan University, <sup>4</sup>South China University of Technology, <sup>5</sup>Microsoft AI4Science
+
+{hupeiyuan, wutailin}@westlake.edu.cn, ruiwang18@fudan.edu.cn
+
+## ABSTRACT
+
+Simulating and controlling physical systems described by partial differential equations (PDEs) are crucial tasks across science and engineering. Recently, diffusion generative models have emerged as a competitive class of methods for these tasks due to their ability to capture long-term dependencies and model high-dimensional states. However, diffusion models typically struggle with handling system states with abrupt changes and generalizing to higher resolutions. In this work, we propose Wavelet Diffusion Neural Operator (WDNO), a novel PDE simulation and control framework that enhances the handling of these complexities. WDNO comprises two key innovations. Firstly, WDNO performs diffusion-based generative modeling in the wavelet domain for the entire trajectory to handle abrupt changes and long-term dependencies effectively. Secondly, to address the issue of poor generalization across different resolutions, which is one of the fundamental tasks in modeling physical systems, we introduce multi-resolution training. We validate WDNO on five physical systems, including 1D advection equation, three challenging physical systems with abrupt changes (1D Burgers' equation, 1D compressible Navier-Stokes equation and 2D incompressible fluid), and a real-world dataset ERA5, which demonstrates superior performance on both simulation and control tasks over state-of-the-art methods, with significant improvements in long-term and detail prediction accuracy. Remarkably, in the challenging context of the 2D high-dimensional and indirect control task aimed at reducing smoke leakage, WDNO reduces the leakage by 78% compared to the second-best baseline. The code can be found at <https://github.com/AI4Science-WestlakeU/wdno.git>.
+
+## 1 INTRODUCTION
+
+Many systems across science and engineering are described by partial differential equations (PDEs). Simulating and controlling these PDE systems are fundamental tasks with numerous applications, including weather forecasting (Lynch, 2008), controlled nuclear fusion (Carpanese, 2021), astronomical simulation (Courant et al., 1967), and aviation (Paranjape et al., 2013).
+
+With developments of neural networks, deep learning-based methods have emerged to address this problem (Li et al., 2021; Lu et al., 2021; Tripatha & Chakraborty, 2022; Hu et al., 2022). Among them, diffusion generative models (Ho et al., 2020b) achieve impressive results in both simulation (Cachay et al., 2023; Price et al., 2023; Rihling Cachay et al., 2023) and control (Ajay et al., 2022; Chi et al., 2023; Wei et al., 2024). On the one hand, simulation and control tasks are typically long-term, where small variations in the early stage can have a long-term impact on the full trajectory, making their accurate prediction and control difficult. Diffusion models alleviate the long-term challenge by the noise-learning mechanism and recovering the full trajectory from a Gaussian distribution as a whole. Therefore, they can better capture long-term dynamics and generate coherent plans for certain goals (Janner et al., 2022; Chi et al., 2023; Wei et al., 2024). On the other hand, PDE dynamics are typically high-dimensional and nonlinear, and the diffusion model demonstrates strong capabilities in modeling complex high-dimensional data (Ho et al., 2022; Harvey et al., 2022; Vahdat et al., 2022; Li et al., 2024). See Appendix D for more related works.
+
+\*Equal contribution. §Work done as an intern at Westlake University. †Corresponding author.
+
+{1}------------------------------------------------
+
+![Figure 1: Overview of WDNO. The diagram illustrates the training and inference pipeline. On the left, the 'Original Domain' is transformed into the 'Wavelet Domain' using a 'Transform' step. In the 'Wavelet Domain', 'Add Noise' is applied, followed by the 'Base-Resolution Model (BRM)'. The output is then processed by 'SRM' (Super-Resolution Model) to produce 'Training' data. On the right, the 'Wavelet Domain' is processed by 'Denoise' and 'Inverse' steps to return to the 'Original Domain'. The 'SRM' is also used for 'Inference' to produce 'Super resolution' output. Vertical arrows on the far left and right indicate 'Downsample' and 'Super resolution' respectively.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 1: Overview of WDNO. The diagram illustrates the training and inference pipeline. On the left, the 'Original Domain' is transformed into the 'Wavelet Domain' using a 'Transform' step. In the 'Wavelet Domain', 'Add Noise' is applied, followed by the 'Base-Resolution Model (BRM)'. The output is then processed by 'SRM' (Super-Resolution Model) to produce 'Training' data. On the right, the 'Wavelet Domain' is processed by 'Denoise' and 'Inverse' steps to return to the 'Original Domain'. The 'SRM' is also used for 'Inference' to produce 'Super resolution' output. Vertical arrows on the far left and right indicate 'Downsample' and 'Super resolution' respectively.
+
+Figure 1: **Overview of WDNO.** The figure shows the training and inference of the Base-Resolution Model (BRM) and Super-Resolution Model (SRM).
+
+However, for PDE simulation and control with diffusion models, two key challenges arise. Firstly, the evolution of physical systems is often accompanied by abrupt changes, which reflect key mechanisms of the system (Ben-Dor & Ben-Dor, 2007; Rassweiler et al., 2011). Due to their rapid and intense local variations, and even discontinuities, these changes are difficult to capture. Secondly, existing diffusion models typically operate on a fixed spatial-temporal resolution, and cannot generalize to finer resolutions (Croitoru et al., 2023; Yue et al., 2024; Shang et al., 2024), which is a fundamental requirement of neural PDE solvers (Li et al., 2021; Boussif et al., 2022; Yin et al., 2022).
+
+In this work, we introduce Wavelet Diffusion Neural Operator (WDNO) to address the above two challenges. Our WDNO method consists of two key innovations: **(1) Generation in the wavelet domain.** Since the wavelet transform is both space and frequency localized and excels at approximating functions with *abrupt changes* (Tripura & Chakraborty, 2022), generation in the wavelet space endowed by the wavelet transform is ideal for modeling abrupt changes. Besides, due to the linearity and locality of the wavelet transform, it can integrate seamlessly with the multi-resolution training. **(2) Multi-resolution training.** To enable generalization to finer resolutions, we prepare training datasets across multiple spatial and temporal resolutions utilizing the approximate scale invariance. Since changes of the equation forms are approximately the same across resolutions, the model is trained to generalize to finer resolutions conditioned on coarser resolutions, which opens up the capability to generalize to even finer resolutions *not seen* during training.
+
+Concretely, our contributions include the following: **(1)** We introduce the WDNO method that comprises diffusion in the wavelet space, addressing the challenges of modeling states with abrupt changes in simulation and control. **(2)** We propose multi-resolution training to address the issue of poor generalization to higher-resolution simulations, which is a fundamental task in PDE modeling. **(3)** We evaluate our method on 1D advection equation, complex PDEs with abrupt changes including 1D Burgers’ equation, 1D compressible fluid, and 2D incompressible fluid, and a real-world dataset ERA5. Compared with strong baselines in physical simulation and control, our method shows competitive performance. Particularly, the 2D experiments are extremely challenging as they involve indirect control with 3,584 spatial control variables at each time step, for a total of 32 time steps. It is noteworthy that WDNO reduces 79% of the leaked smoke compared to the prior state-of-the-art.
+
+## 2 PRELIMINARY
+
+### 2.1 PROBLEM SETUP
+
+We consider a PDE on  $[0, T] \times D \subset \mathbb{R} \times \mathbb{R}^d$  with the following form
+
+$$\frac{\partial u}{\partial t} = F\left(u, \frac{\partial u}{\partial x}, \frac{\partial^2 u}{\partial x^2}, \dots\right) + f(t, x), \quad (t, x) \in [0, T] \times D, \quad (1)$$
+
+$$u(0, x) = u_0(x), \quad x \in D, \quad B[u](t, x) = 0, \quad (t, x) \in [0, T] \times \partial D,$$
+
+where  $u : [0, T] \times D \rightarrow \mathbb{R}^n$  is the solution, with the initial condition  $u_0(x)$  at time  $t = 0$  and boundary condition  $B[u](t, x) = 0$  on the boundary.  $F$  is a function and  $f(t, x)$  is the force term.
+
+For such PDE systems, there are two fundamental tasks: simulation and control. The former involves learning a mapping from certain parameter functions  $a$ , such as initial conditions and boundary
+
+{2}------------------------------------------------
+
+conditions, to the solutions  $u$  that represent a mapping from an infinite-dimensional function space to another infinite-dimensional function space. The latter task involves identifying the external control  $f$  for a specific objective  $\mathcal{J}(u, f)$  which is a function of  $u$  and  $f$ , aiming at finding  $f$  that minimizes  $\mathcal{J}$ .
+
+### 2.2 DIFFUSION MODEL
+
+A representative instance of diffusion models is the Denoising Diffusion Probabilistic Model (DDPM) (Ho et al., 2020b), which contains a forward and a reverse process to generate samples. In the forward process, noise is progressively added to clean data  $\mathbf{x}_0$  until it is corrupted into Gaussian noise  $\mathbf{x}_K \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$ . This process follows the Gaussian transition kernel  $q(\mathbf{x}_{k+1}|\mathbf{x}_k) = \mathcal{N}(\mathbf{x}_{k+1}; \sqrt{\alpha_k}\mathbf{x}_k, (1 - \alpha_k)\mathbf{I})$ , where  $\{\alpha_k\}_{k=1}^K$  denotes the variance schedule. In the reverse process, data is sampled from Gaussian noise  $\mathcal{N}(\mathbf{0}, \mathbf{I})$  and a denoising model  $\epsilon_\theta$  gradually removes the noise from the data until it returns the original clean data distribution. The model predicts the mean  $\mu_\theta(\mathbf{x}_k)$  of  $\mathbf{x}_{k-1}$  and the reverse process is defined with the transition  $p_\theta(\mathbf{x}_{k-1}|\mathbf{x}_k) = \mathcal{N}(\mathbf{x}_{k-1}; \mu_\theta(\mathbf{x}_k, k), \sigma_k \mathbf{I})$ .
+
+To train the denoising model  $\epsilon_\theta$ , the training loss is defined as follows, which optimizes a simplified variant of the variational lower-bound for the data's log-likelihood (Ho et al., 2020b).
+
+$$\mathcal{L} = \mathbb{E}_{k \sim U(1, K), \mathbf{x}_0 \sim p(\mathbf{x}), \epsilon \sim \mathcal{N}(\mathbf{0}, \mathbf{I})} [\|\epsilon - \epsilon_\theta(\sqrt{\alpha_k}\mathbf{x}_0 + \sqrt{1 - \alpha_k}\epsilon, k)\|_2^2], \text{ where } \bar{\alpha}_k := \prod_{i=1}^k \alpha_i. \quad (2)$$
+
+**Guided Diffusion Generation.** Modeling the conditional distribution  $q(\mathbf{x}|\mathbf{y})$  enables controllable sample generation. Methods for conditioning in diffusion models include classifier-based guidance (Du et al., 2023) and classifier-free guidance (Ho & Salimans, 2022; Ajay et al., 2022). The former employs an additional classifier model trained on clean data to directly modify the denoising direction of the data during generation. The classifier-free conditioning simplifies the architecture and enables guided generation without an explicit classifier. It trains the model to learn both conditional and unconditional probabilities  $\epsilon_\theta(\mathbf{x}, \varnothing) \propto \nabla_{\mathbf{x}} \log q(\mathbf{x})$  and  $\epsilon_\theta(\mathbf{x}, \mathbf{y}) \propto \nabla_{\mathbf{x}} \log q(\mathbf{x}|\mathbf{y})$ , where  $\varnothing$  is an identifier that tells the model  $\epsilon_\theta$  to output  $p(\mathbf{x})$  instead of  $p(\mathbf{x}|\mathbf{y})$  (Ho & Salimans, 2022). During sample generation, it combines noise terms following  $\epsilon_\theta(\mathbf{x}, \varnothing) + \omega(\epsilon_\theta(\mathbf{x}, \mathbf{y}) - \epsilon_\theta(\mathbf{x}, \varnothing))$ , where  $\omega \in [0, 1]$  is the weight. In this paper, we combine the use of both guidance methods.
+
+## 3 METHOD
+
+In this section, we detail our proposed WDNO from two perspectives: Section 3.1 describes how we perform the generative process within the wavelet domain, including basic concepts and practical implementation of wavelet transforms, and algorithms for applying WDNO to simulation and control problems. Section 3.2 presents the approximate scale invariance of PDE systems and our proposed multi-resolution training based on this property. The overall algorithm is presented in Figure 1.
+
+### 3.1 GENERATION IN THE WAVELET DOMAIN
+
+The WDNO performs generative control and simulation in the wavelet domain. Compared to the Fourier transform, the wavelet transform features locality while simultaneously retaining information in both space-time and frequency domains, allowing more accurate modeling for abrupt changes.
+
+**Wavelet basis.** Intuitively, we use wavelet analysis to represent signals with basis functions localized in both space-time and frequency domains, taking values only within finite intervals. Specifically, this set of basis functions can be divided into two categories: one type is the scaling function  $\phi$  used to represent the general outline (low-frequency information) of the original signal, and the other type is the mother wavelet  $\psi$ , which is used to depict the detailed information (high-frequency information) of the original signal (Alpert et al., 2002; Selesnick et al., 2005).
+
+By scaling the function  $\phi$  and mother wavelets  $\psi$ , we obtain  $\phi_{l,m}$  and  $\psi_{l,m}$ :
+
+$$\phi_{l,m}(x) = 2^{l/2}\phi(2^l x - m), \quad \psi_{l,m}(x) = 2^{l/2}\psi(2^l x - m),$$
+
+where  $m$  adjusts the position of the wavelet along the  $x$ -axis and  $l$  represents the level of the basis. When  $l$  increases, the wavelet narrows, and its frequency increases. Then, the entire space can be spanned by  $\phi_{l,m}$  at a particular level  $l_0$  and  $\psi_{l,m}$  at levels greater than or equal to  $l_0$ , which can be presented as follows:
+
+{3}------------------------------------------------
+
+$$u(x) = \sum_m c_{l_0}(m) \phi_{l_0, m}(x) + \sum_{l=l_0}^{\infty} \sum_m d_l(m) \psi_{l, m}(x).$$
+
+Thus we get the coarse wavelet coefficients  $c_{l_0}(m)$  and the detail wavelet coefficients  $d_l(m)$ .
+
+**Practical implementation.** However, due to the discrete nature of real-world data, the levels of  $\psi_{l, m}$  will have an upper bound  $L$ , meaning there exists a minimum length interval for  $\psi$ . As mentioned in the introduction (Sec. 1), to preserve the locality of the data for integration with the multi-resolution training, we choose  $l_0 = L$ . So, the decomposition can be presented as:
+
+$$u(x) = \sum_m c_L(m) \phi_{L, m}(x) + \sum_m d_L(m) \psi_{L, m}(x).$$
+
+To verify the reliability of the wavelet decomposition's implementation, in Appendix A, we conduct tests of the reconstruction error on training data and discover that the relative  $l_2$  errors of such reconstructions are on the order of  $10^{-7}$ , indicating that there is nearly no information loss. Further details about the wavelet transform can be found in Appendix A.
+
+**WDNO for simulation.** For simulation, as introduced in Section 2.1, the objective is to learn a mapping from the equation parameter function  $a$  to the solution function  $u_{[0, T]}$ . We can view the learning of this mapping as learning a conditional probability  $p(u_{[0, T]}|a)$ . However, we consider the conditional probability in the wavelet space,  $p(W_{u_{[0, T]}}|W_a)$ , where  $W_a$  and  $W_a$  are the wavelet-transformed values of  $u_{[0, T]}$  and  $a$ . Here, we adopt classifier-free conditioning to guide the sampling process in diffusion models. Specifically, to ensure that the generated wavelet-transformed values  $W_{u_{[0, T]}}$  align with the corresponding  $W_a$ , we include  $W_a$  as a conditioning factor. Specifically, we initialize an optimization variable  $W_{f_{[0, T]}}^{(k)}$  with Gaussian noise  $\mathcal{N}(\mathbf{0}, \mathbf{I})$ , and iteratively update it via:
+
+$$W_{f_{[0, T]}}^{(k-1)} = W_{f_{[0, T]}}^{(k)} - \eta \epsilon_{\theta}(W_{f_{[0, T]}}^{(k)}, W_a, k) + \xi, \quad \xi \sim \mathcal{N}(\mathbf{0}, \sigma_k^2 \mathbf{I}), \quad (3)$$
+
+where  $k$  denotes the denoising step,  $\eta$  is the scaling factor and  $\sigma_k$  represents the noise schedules. Repeatedly applying this denoising procedure from  $k = M$  down to  $k = 1$  yields the final solution  $W_{f_{[0, T]}}^{(0)}$ . Besides, during inference, we follow the Denoising Diffusion Implicit Model (DDIM) (Song et al., 2020), which can largely speed up the sampling process.
+
+**WDNO for control.** For the control problem, in a task aimed to minimize  $\mathcal{J}$ , our goal is to find the optimal  $f_{[0, T]}$  based on an environment determined by a parameter function  $a$ , such as the initial condition. Consequently, this problem can be naturally modeled as learning  $p(f_{[0, T]}|a)$ . Here, we also transform it into the wavelet domain, thus learning  $p(W_{f_{[0, T]}}|W_a)$ . Similar to the simulation, we employ a conditional diffusion model. However, a challenge arises in that we can only model and train  $p(W_{f_{[0, T]}}|W_a)$  as represented in the training set, where  $f$  is typically not optimal. To address this issue, we view the control problem from an energy optimization perspective, and thus during inference, we enhance the denoising process with guidance  $\mathcal{J}$  to steer the generation of  $f$  towards a smaller  $\mathcal{J}$ . Note that without this term, the model can only generate control sequences that follow the same distribution as the dataset, without optimizing for the control objectives. Specifically, initializing  $W_{f_{[0, T]}}^{(k)}$  from Gaussian noise  $\mathcal{N}(\mathbf{0}, \mathbf{I})$ , we iteratively update
+
+$$W_{f_{[0, T]}}^{(k-1)} = W_{f_{[0, T]}}^{(k)} - \eta \left( \epsilon_{\theta}(W_{f_{[0, T]}}^{(k)}, W_a, k) + \lambda \nabla_{W_{f_{[0, T]}}} \mathcal{J}(\hat{W}_{f_{[0, T]}}^{(k)}) \right) + \xi, \quad \xi \sim \mathcal{N}(\mathbf{0}, \sigma_k^2 \mathbf{I}), \quad (4)$$
+
+where  $\sigma_k$  and  $\eta$  are the noise schedule and the scaling factor respectively, and  $\lambda$  is the weight of guidance. Here  $\hat{W}_{f_{[0, T]}}^{(k)}$  is the approximate noise-free  $W_{f_{[0, T]}}^{(0)}$  estimated from  $W_{f_{[0, T]}}^{(k)}$  by:
+
+$$\hat{W}_{f_{[0, T]}}^{(k)} = (W_{f_{[0, T]}}^{(k)} - \sqrt{1 - \alpha_k} \epsilon_{\theta}(W_{f_{[0, T]}}^{(k)}, W_a, k)) / \sqrt{\alpha_k}, \quad (5)$$
+
+We calculate  $\mathcal{J}$  in Eq. 4 based on  $\hat{W}_{f_{[0, T]}}^{(k)}$  instead of directly using  $W_{f_{[0, T]}}^{(k)}$  because otherwise noise in  $W_{f_{[0, T]}}^{(k)}$  could bring errors to  $\mathcal{J}$ . Repeatedly applying this denoising procedure yields the final solution  $W_{f_{[0, T]}}^{(0)}$ . Similar to the simulation, we also employ the DDIM to accelerate the denoising.
+
+### 3.2 MULTI-RESOLUTION FRAMEWORK
+
+Next, to enable the diffusion model to generalize across different resolutions, we will introduce our multi-resolution framework based on the approximate scale invariance, which we will introduce in
+
+{4}------------------------------------------------
+
+the following. In contrast to the model mentioned in the previous section, which we refer to as the Base-Resolution Model (BRM), we will introduce a Super-Resolution Model (SRM) in this section. The framework integrates seamlessly with the wavelet transform technique and enables zero-shot super-resolution, which is one of the fundamental requirements of a neural operator.
+
+**Approximate scale invariance.** We first introduce the approximate scale invariance. For simplicity, let us first assume that the spatial domain of the PDE in Eq. 1 is  $D = [0, 1]$ . Given the high-resolution data  $d_+$  of size  $N \times M$ , and low-resolution data  $d_-$  of size  $(N/2) \times (M/2)$ , although both are originally defined over the same spatiotemporal domain  $[0, T] \times D$ , we can rescale the low-resolution data into a new spatiotemporal domain  $[0, T/2] \times \tilde{D}$ , where the spatial domain  $\tilde{D}$  is scaled to  $[0, 1/2]$ . In this case,  $d_+$  and  $d_-$  can be *aligned* to the same precision. However, note that the coordinates of  $d_-$  are now scaled, meaning that the system no longer follows the original equation.
+
+For any arbitrary spatial domain, we can always achieve such alignment through a linear transformation. We denote the linear transformations of time and space as  $a_1 t + b_1$  and  $a_2 x + b_2$  respectively. Then the stretched function actually satisfies the transformed version of the original equation:
+
+$$\frac{\partial u}{\partial a_1 t} = F \left( u, \frac{\partial u}{\partial a_2 \partial x}, \frac{\partial^2 u}{\partial a_2^2 \partial x^2}, \dots \right) + f(t, x), \quad (t, x) \in [0, T/2] \times \tilde{D}. \quad (6)$$
+
+Note that if we consistently consider the same factor of resolution change, this linear transformation remains constant, meaning that the coefficients  $a_1$  and  $a_2$  are fixed. Therefore, the pattern of change between different resolutions is consistent. Additionally, since the wavelet transform is linear and localized, this pattern remains consistent in the wavelet domain.
+
+Correspondingly, in practical operations, we consider that each refinement of the discrete observations of the physical system follows the same pattern, which inspires us to develop the idea of multi-resolution training. Specifically, based on the training dataset at a given resolution, we downsample it to create a multi-resolution training dataset and then use this dataset for training to learn this pattern. Thus, during inference, we can naturally follow this pattern to achieve zero-shot super-resolution.
+
+**Multi-resolution training data.** In practical implementation, we introduce the Super-Resolution Model, which is a conditional diffusion model. Assuming the resolution of the original training dataset is  $N \times M$ , that is,  $N$  time steps and  $M$  spatial points, we obtain data at the resolution of  $(N/2) \times (M/2)$  through *downsampling*, which means we do not need finer-resolution data. We thus get the data pairs of sizes  $N \times M$  and  $(N/2) \times (M/2)$ . This downsampling process can be repeated to obtain data pairs of  $(N/2) \times (M/2)$  and  $(N/4) \times (M/4)$ ,  $(N/4) \times (M/4)$  and  $(N/8) \times (M/8)$ , and so forth, to compose the multi-resolution training dataset for training the Super-Resolution Model.
+
+**Training.** We take the conditional diffusion model (Ho & Salimans, 2022) to model the conditional probability  $p(W_h | W_l, W_{a_h})$ , where  $h$  and  $l$  respectively present high- and low-resolution data of data pairs in the multi-resolution training dataset,  $a_h$  is the high-resolution equation parameter, and  $W_h$ ,  $W_l$  and  $W_{a_h}$  are the corresponding wavelet-transformed values. In detail, to align low-resolution with high-resolution data, we duplicate the low-resolution data to match the size of high-resolution data. During training, each batch randomly selects data pairs from a given resolution.
+
+**Inference.** During the inference process, when super-resolution is required, we first downsample the high-resolution equation parameters  $a$  to the same resolution  $N \times M$  as the training data and perform a wavelet transform. Then, using the Base-Resolution Model, we first generate the wavelet coefficients of the base low resolution. Subsequently, we utilize the Super-Resolution Model to generate the data based on both the wavelet coefficients of lower-resolution results with size  $N \times M$  and the wavelet coefficients of  $a_h$  at the post-super-resolution resolution  $2N \times 2M$ . This process is iterated, allowing us to ultimately generate results with the same resolution as the original  $a$ .
+
+## 4 EXPERIMENTS
+
+In this section, we aim to test **(1)** the advantages of WDNO in handling complex long-term dynamics with abrupt changes on simulation and control problems, **(2)** the effectiveness of multi-resolution training in performing zero-shot super-resolution, and **(3)** the benefits of integrating wavelet transform.
+
+We report the Mean Squared Error (MSE) measured on entire state sequences excluding initial conditions for the simulation tasks, and the control objective  $\mathcal{J}$  for control problems. Besides, we consider state-of-the-art baselines from different fields. For control tasks, the following methods are
+
+{5}------------------------------------------------
+
+compared: (1) the classical control algorithm Proportional-Integral-Derivative (PID) (Li et al., 2006) (2) Supervised Learning method (SL) (Hwang et al., 2022), reinforcement learning and imitation learning methods including (3) Soft Actor-Critic (SAC) (Haarnoja et al., 2018), (4) Behavior Cloning (BC) (Pomerleau, 1988), (5) Behavior Proximal Policy Optimization (BPPO), and (6) DDPM (Zhuang et al., 2023). For simulation, we consider (1) DDPM (Ho et al., 2020a), (2) Wavelet Neural Operator (WNO) (Tripatha & Chakraborty, 2022), (3) Multiwavelet Neural Operator (MWT) (Gupta et al., 2021), (4) Fourier Neural Operator (FNO) (Li et al., 2021), (5) CNN (Hwang et al., 2022), (6) Operator Transformer (OFormer) (Li et al., 2023), and (7) U-Net (Ronneberger et al., 2015). Details can be referenced in Appendix I, J and K. For reproducibility, the code is available here.
+
+### 4.1 1D BURGERS’ EQUATION
+
+**Experiment setting.** We first consider the 1D Burgers’ equation, a fundamental equation describing shock waves and turbulence in fluid dynamics, with the Dirichlet boundary condition and external force  $f$ , which follows previous works (Hwang et al., 2022; Mowlavi & Nabi, 2023) and is more difficult due to the long time horizon of 81 steps. The visualizations are presented in Figure 6. More details about the setting are in Appendix F. The simulation task is to learn the mapping from the initial condition  $u_0$  and force term  $f$  to the entire trajectory  $u_{[0,T]}$ , while the control objective  $\mathcal{J}$  corresponding to the target state  $u^*(x)$  and the fixed weight  $\alpha$  is
+
+$$\mathcal{J} = \int_D |u(T, x) - u^*(x)|^2 dx + \alpha \int_{[0,T] \times D} |f(t, x)|^2 dt dx. \quad (7)$$
+
+**Data preparation.** We perform a 2D wavelet transform on the original data using the *bior2.4* wavelet basis and the ‘periodization’ mode, implemented using the *pytorch\_wavelets* package (Cotter, 2019). Since the initial condition and the target state are 1D, we take the 1D wavelet transform, repeat the coefficients, and then concatenate them with the 2D coefficients.
+
+**Results** We report results of simulation and control tasks in Table 1 and Table 2a. From Table 1, it is evident that WDNO and DDPM achieve results that far surpass other baselines in simulation, demonstrating the capability of diffusion models for long-term predictions. In this particular simulation experiment, the performance of WDNO and DDPM is quite similar, while advantages of WDNO over DDPM are detailed in Section 4.6 and Section 4.7. For the control problem, WDNO achieves the best results, which clearly illustrates the superior performance of WDNO.
+
+Table 1: **Results of simulation.** Bold font denotes the best model and the runner-up is underlined.
+
+| Methods | 1D |  |  | 2D |  |
+|-|-|-|-|-|-|
+|  | Burgers’ | Advection | Navier-Stokes | Fluid | ERA5 |
+| WNO | 0.00572 | 4.216e-02 | 6.5428 | 0.07975 | – |
+| MWT | 0.00052 | 3.468e-04 | 1.3830 | 0.01556 | 21.85750 |
+| OFormer | 0.00023 | 1.858e-04 | 0.6227 | 0.04303 | 18.26230 |
+| FNO | 0.00015 | 9.712e-04 | 0.2575 | 0.00684 | 14.38638 |
+| CNN (1D) / U-Net (2D) | 0.00198 | 5.033e-04 | 12.4966 | 0.00737 | 15.51342 |
+| DDPM | <b>0.00013</b> | <u>4.209e-05</u> | 5.5228 | 0.01578 | 15.21103 |
+| <b>WDNO (ours)</b> | <u>0.00014</u> | <b>2.898e-05</b> | <b>0.2195</b> | <b>0.00231</b> | <b>12.83291</b> |
+
+### 4.2 1D ADVECTION EQUATION
+
+**Experiment setting.** Next, we consider the advection equation, which models pure advection behavior without nonlinearity. This dataset, sourced from PDEBench (Takamoto et al., 2022), is set up to predict 80 timesteps of evolution based on the one-time-step initial condition. The system exhibits relatively smooth and simple dynamics. We aim to observe the performance of various methods on a system without abrupt changes using this dataset.
+
+**Data preparation.** Since the data shape is similar to that of the 1D Burgers’ equation, the data preparation process is consistent with that of the first experiment.
+
+**Results.** From results in Table 1, we can observe that most models achieve low prediction errors. However, WDNO still delivers the best results.
+
+{6}------------------------------------------------
+
+![Figure 2: Visualizations of 1D Navier-Stokes equation and 2D incompressible fluid. (a) Results of WDNO and DDPM on the 1D Navier-Stokes equation. (b) Results of WDNO on the 2D indirect control.](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+Figure 2 consists of two parts. Part (a) is a line plot showing 'state' on the y-axis (ranging from 0 to 14) against 'x' on the x-axis (ranging from 0.0 to 1.5). It compares three data series: WDNO (solid blue line), DDPM (dashed red line), and Ground truth (dotted black line). The plot shows a sharp transition around x=1.0. Part (b) shows five sequential heatmaps of a 2D environment at time steps t=0, t=7, t=14, t=21, and t=28. Each heatmap shows a yellow smoke plume navigating around grey rectangular obstacles to reach a target bucket at the top center. The smoke's position and density change over time as it moves towards the goal.
+
+Figure 2: Visualizations of 1D Navier-Stokes equation and 2D incompressible fluid. (a) Results of WDNO and DDPM on the 1D Navier-Stokes equation. (b) Results of WDNO on the 2D indirect control.
+
+(a) **Results of WDNO and DDPM on the 1D Navier-Stokes equation.**
+
+(b) **Results of WDNO on the 2D indirect control.** The objective is to navigate the yellow smoke to get around grey obstacles and reach the target bucket located at the top center.
+
+Figure 2: Visualizations of 1D Navier-Stokes equation and 2D incompressible fluid.
+
+### 4.3 1D COMPRESSIBLE NAVIER-STOKES EQUATION
+
+**Experiment setting.** We also consider the important 1D compressible Navier-Stokes equation which can describe complex phenomena, such as shock wave formation and propagation in aerodynamics around airplane wings and interstellar gas dynamics. We consider a particularly challenging scenario from the 1D CFD dataset in PDEBench (Takamoto et al., 2022). We select extremely small viscosity coefficients,  $\eta = 10^{-8}$  and  $\zeta = 10^{-8}$ . The initial conditions are shock-tube fields consisting of piecewise constant values generating shocks and rarefactions. Boundary conditions allow waves to exit the domain. Since this pre-existing dataset does not include time-varying control terms, we only perform the simulation task on it. We provide more details in Appendix G.
+
+**Data preparation.** The data preparation process is also similar to the above ones.
+
+**Results.** From Table 1, we can observe that WDNO still gains the best performance among strong baselines. It is particularly noteworthy that the MSE of DDPM exceeds that of WDNO by over 25 times. In Figure 2a and Figure 7, we further present the detailed prediction results of DDPM and WDNO. It can be seen that for physical dynamics with abrupt changes, DDPM struggles to model shocks and loses many fine details. This highlights the necessity of introducing the wavelet transform. More results, including MSEs, MAEs, and  $L_\infty$ , and other baselines can be found in Appendix C.1.
+
+Table 2: **Results of control tasks.** Bold font denotes the best model and the runner-up is underlined.
+
+| (a) 1D Burgers' equation. |  | (b) 2D incompressible fluid. |  |
+|-|-|-|-|
+| Methods | $\mathcal{J}$ | Methods | $\mathcal{J}$ |
+| PID (surrogate-solver) | 0.6645 | BC | 0.3085 |
+| SAC (pseudo-online) | 0.1376 | BPPO | 0.3066 |
+| SAC (offline) | 0.3210 | SAC (pseudo-online) | 0.3212 |
+| BC (surrogate-solver) | 0.2998 | SAC (offline) | 0.6503 |
+| BC (solver) | 0.1879 | DDPM | 0.3124 |
+| BPPO (surrogate-solver) | 0.3075 | <b>WDNO (ours)</b> | <b>0.0679</b> |
+| BPPO (solver) | 0.1867 |  |  |
+| SL | 0.0235 |  |  |
+| DDPM | 0.0272 |  |  |
+| <b>WDNO (ours)</b> | <b>0.0205</b> |  |  |
+
+### 4.4 2D INCOMPRESSIBLE FLUID
+
+**Experiment setting.** Next, we experiment on 2D fluid problems following the incompressible Navier-Stokes equation. The experiment setting, a complex scenario close to real-world, follows previous works (Wei et al., 2024), where the control can only be exercised out of the frame as shown in Figure 2b. The boundary condition at obstacles is the no-slip condition, meaning that the velocities are set to 0 at the boundary. This experiment thus includes fluid-solid coupling, where functions have discontinuities and are hard to model. The different data trajectories share the same initial velocity field; the variations are in initial smoke positions, specifically the smoke's initial density, and control
+
+{7}------------------------------------------------
+
+sequences. The simulation task is to predict the smoke’s density, velocity field, and the percentage of smoke passing through the target bucket based on the initial smoke density and control sequences.
+
+For the control problem, our goal is to move the smoke from its initial position, located beneath the central obstacle, into the middle bucket at the top. To be more specific,  $\mathcal{J}$  is defined as the percentage of smoke not passing through the target bucket. Firstly, this objective presents considerable challenges due to the restriction that forces can only be applied in the peripheral regions. This problem requires the model to plan ahead in the middle of the entire trajectory to avoid entry into the wrong opening. Furthermore, we need to generate 3,584 control parameters over a time span of 32 steps in these peripheral zones to indirectly control the velocity field in the central region.
+
+**Data preparation.** We perform a 3D wavelet transform on original data using *bior1.3* wavelet basis and ‘zero’ mode, implemented through Pytorch Wavelet Toolbox (ptwt) (Wolter et al., 2024). Since the initial condition and percentage of smoke are 2D and 1D respectively, we take the 2D and 1D wavelet transform and repeat the coefficients to concatenate them.
+
+**Results.** Table 1 are the simulation results, showing our method is far superior to DDPM and exceeds all the baselines. It is worth noting that the prediction error of WDNO is an order of magnitude lower than that of DDPM. As for the results of the control problem shown in Table 2b, our method can make more than 90% of the smoke pass through the target bucket, and its  $\mathcal{J}$  is 22% of the next best method’s  $\mathcal{J}$ , showing our model’s superiority under complex dynamics with abrupt changes.
+
+### 4.5 ERA5
+
+**Experiment setting.** The ERA5 dataset (Kalnay et al., 2018), provided by ECMWF, is a challenging real-world dataset for weather forecasting. It offers hourly atmospheric estimates with a  $0.25^\circ$  latitude-longitude resolution from the Earth’s surface to 100 km altitude, spanning from 1979 to the present. We conduct simulation experiments on this dataset to demonstrate the superior performance of WDNO. The selected variable is temperature, and the specific task involves predicting the system’s evolution over the next 20 hours based on its state over the past 12 hours.
+
+**Data preparation.** Due to similar data size, the process of data preparation is similar to Section 4.4.
+
+**Results.** We present the results in Table 1. Here we experiment with different parameters for WNO, but all configurations fail to converge. It is clear that WDNO still achieves the best performance, with a relative  $L_2$  error as low as 0.0161, demonstrating its outstanding capability on challenging datasets.
+
+### 4.6 ZERO-SHOT SUPER RESOLUTION
+
+In this subsection, we will present the super-resolution simulation results for the 1D Burgers’ equation and 2D incompressible fluid. For the 1D experiments, the resolution of the training dataset is of the time-space resolution  $80 \times 120$ . We demonstrate the results of single, double, and triple super-resolution steps on both time and space, with the corresponding unseen resolutions of  $160 \times 240$ ,  $320 \times 480$ , and  $640 \times 960$  respectively. For the 2D experiments, the training dataset has a resolution of  $32 \times 64 \times 64$ , and we transfer to the resolution  $32 \times 128 \times 128$ . The visualization of 1D zero-shot super resolution is presented in Figure 3.
+
+To evaluate the performance across different resolutions, we interpolate the outcomes of each super-resolution step to the highest resolution level. This allows us to assess whether the model can accurately
+
+![Figure 3: 1D zero-shot super-resolution. The figure shows a 3x3 grid of plots. The columns are labeled 'No upsampling', 'Single upsampling', and 'Double upsampling'. The rows represent different time steps 't'. The first row shows the initial state. The second row shows the ground truth. The third row shows the difference between the first and second rows. As resolution increases from left to right, the model's output (second row) becomes closer to the ground truth (first row), and the difference (third row) decreases.](68aa26525c9346e4590a15c75d394e9d_img.jpg)
+
+Figure 3: 1D zero-shot super-resolution. The figure shows a 3x3 grid of plots. The columns are labeled 'No upsampling', 'Single upsampling', and 'Double upsampling'. The rows represent different time steps 't'. The first row shows the initial state. The second row shows the ground truth. The third row shows the difference between the first and second rows. As resolution increases from left to right, the model's output (second row) becomes closer to the ground truth (first row), and the difference (third row) decreases.
+
+Figure 3: **1D zero-shot super-resolution.** The first row shows WDNO’s simulation results with no super resolution, one-level super resolution, and two-level super resolution. The second row is the ground truth, and the third row is the difference between the first and second rows. As resolution increases, WDNO’s output gets closer to the ground truth, demonstrating its zero-shot super resolution capability.
+
+{8}------------------------------------------------
+
+![Figure 4: Results in Section 4.6 and Section 4.7 after n super-resolution steps. (a) 1D Burgers' results, (b) 2D results in Section 4.6, and (c) 2D results in Section 4.7. Each plot shows Log(MSE) vs. Number of Upsampling (0, 1, 2, 3). WDNO (linear) and WDNO (nearest) consistently show lower Log(MSE) than DDPM (linear) and DDPM (nearest) as the number of upsampling steps increases.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 4: Results in Section 4.6 and Section 4.7 after n super-resolution steps. (a) 1D Burgers' results, (b) 2D results in Section 4.6, and (c) 2D results in Section 4.7. Each plot shows Log(MSE) vs. Number of Upsampling (0, 1, 2, 3). WDNO (linear) and WDNO (nearest) consistently show lower Log(MSE) than DDPM (linear) and DDPM (nearest) as the number of upsampling steps increases.
+
+Figure 4: **Results in Section 4.6 and Section 4.7 after  $n$  super-resolution steps.** All MSEs are calculated at the finest resolution through linear or nearest interpolation. (a), (b) are 1D Burgers’ and 2D results in Section 4.6, respectively, and (c) is the results in Section 4.7.
+
+![Figure 5: Results of ablation studies. (a) Long-term dependencies: MSE vs. Time Step (0 to 30). WDNO (ours) maintains lower MSE than other models as time step increases. (b) Number of training samples: MSE vs. Percentage of Trajectories Used (20% to 100%). WDNO (ours) shows a sharp decrease in MSE as training samples increase. (c) Comparison with Fourier transform: Bar chart of MSE (x10^-3) for Diffusion + FFT, FNO, DDPM, and WDNO. WDNO has the lowest MSE. (d) Measurement noise: Bar chart of MSE (x10^-3) vs. Scale (0.01, 0.001, 0.0001, 0). WDNO shows lower MSE than DDPM across scales.](bedcca5cdf168e3508ef511d94ec514c_img.jpg)
+
+Figure 5: Results of ablation studies. (a) Long-term dependencies: MSE vs. Time Step (0 to 30). WDNO (ours) maintains lower MSE than other models as time step increases. (b) Number of training samples: MSE vs. Percentage of Trajectories Used (20% to 100%). WDNO (ours) shows a sharp decrease in MSE as training samples increase. (c) Comparison with Fourier transform: Bar chart of MSE (x10^-3) for Diffusion + FFT, FNO, DDPM, and WDNO. WDNO has the lowest MSE. (d) Measurement noise: Bar chart of MSE (x10^-3) vs. Scale (0.01, 0.001, 0.0001, 0). WDNO shows lower MSE than DDPM across scales.
+
+Figure 5: **Results of ablation studies.**
+
+generate data on finer grid points beyond the resolutions encountered during training. We consider linear interpolation and nearest interpolation, taking the mesh-invariant model FNO and WNO as the baselines. Due to WNO’s implementation, it can only perform spatiotemporal super-resolution simultaneously, making it unsuitable for 2D super-resolution experiments. As shown in Figure 4a, Figure 4b, Table 16 and Table 17, in both 1D and 2D scenarios, our method surpasses results of interpolation by achieving significantly improved outcomes with each super-resolution step. It can effectively reconstruct the values on the newly added grid points at the highest resolution, outperforming the mesh-invariant FNO and WNO.
+
+### 4.7 ABLATION STUDY
+
+**Abrupt changes.** We first verify whether the wavelet transform can enhance DDPM’s ability to model abrupt changes. To this end, we present the system’s states and prediction errors of WDNO and DDPM over time in Figure 6 and Figure 9. Note that, although WDNO and DDPM have similar overall MSEs in Table 1, we can observe that at moments when the state exhibits abrupt changes in space, WDNO achieves a lower prediction error compared to DDPM. This demonstrates that the wavelet transform helps to model dynamics with abrupt changes that are otherwise difficult to learn.
+
+![Figure 6: MAE and state trajectories. Top plot: MAE vs. time t (0 to 80). WDNO (blue line) has lower MAE than DDPM (purple line) during abrupt changes. Bottom plot: State trajectories x vs. time t (0 to 1). WDNO (blue lines) shows smoother trajectories compared to DDPM (purple lines) during abrupt changes.](0d5fdb87a392819c7d2e3b6230912a0b_img.jpg)
+
+Figure 6: MAE and state trajectories. Top plot: MAE vs. time t (0 to 80). WDNO (blue line) has lower MAE than DDPM (purple line) during abrupt changes. Bottom plot: State trajectories x vs. time t (0 to 1). WDNO (blue lines) shows smoother trajectories compared to DDPM (purple lines) during abrupt changes.
+
+Figure 6: MAE and state trajectories.
+
+#### Combination of wavelet and multi-resolution training.
+
+To assess the efficacy of integrating wavelet transform with multi-resolution training due to the wavelet transform’s locality, we provide outcomes from DDPM combined with multi-resolution training by applying the framework directly in the space-time domain, as depicted in Figure 4c. Notably, in the 1D experiment, as the number of super-resolution steps increases, evaluations at the highest resolution reveal that the disparity between WDNO and the application of the multi-resolution training in the original space-time domain becomes more pronounced, verifying the efficiency of utilizing wavelet transforms for super resolution.
+
+{9}------------------------------------------------
+
+**Comparison with Fourier transform.** We also evaluate the diffusion model in the Fourier domain (Diffusion + FFT). The implementation strictly follows WDNO, except for replacing the wavelet transform with Fourier transform. The MSEs on the 1D compressible Navier-Stokes equation are shown in figure 5c. While the Fourier transform also provides some improvement over DDPM, its performance is significantly inferior to that of the wavelet transform, which verifies that wavelet transforms inherently decompose information into low-frequency components and high-frequency details across different directions, making them more effective for learning complex system dynamics, such as those with abrupt changes. In addition, we take the FNO as the noise prediction model (FNO Denoiser), but the results indicate inferior performance. This may be because FNO tends to filter out high-frequency information, which is crucial for a noise prediction mode.
+
+**Long-term dependencies.** Long-time predictions tend to perform poorly due to error accumulation and prediction instability. Therefore, capturing long-term dependencies allows WDNO to grasp the dynamics over extended periods better, naturally improving WDNO performance. To further verify it, in Figure 5a, we provide errors of baselines and WDNO at different time steps in the 2D simulation experiment. It is obvious that WDNO exhibits the slowest error growth, confirming its ability to capture long-term dependencies.
+
+**Measurement noise.** To evaluate on datasets with increasing measurement noise, we add noise to both the training and testing datasets of 1D Burgers’ equation, sampled as Gaussian noise scaled by the original data’s standard deviation multiplied by a scale factor. We test scale factors of 0.01, 0.001, and 0.0001. As shown in the Figure 5d, WDNO’s results exhibit minimal variation with changes in scale, demonstrating its robustness to noise.
+
+**Number of training samples.** We reduce the training dataset size to 0.2, 0.4, 0.6, and 0.8 times the current size (9000 samples) and measure WDNO’s MSE on the 1D compressible Navier-Stokes equation. The results in Figure 5b show that even when the dataset size is reduced to 0.4 times, WDNO’s error remains within a relatively small range. When the dataset size is reduced to 0.2 times, the error shows a noticeable increase.
+
+**Additional results.** Due to space constraints, we provide additional details in Appendix C, which include sensitivity analysis of key hyperparameters, verifying approximate scale invariance, evaluating the sensitivity of baselines and WDNO to noise in control sequences, comparing computational resource usage between baselines and WDNO, and analyzing the impact of the guidance parameter.
+
+## 5 LIMITATION AND FUTURE WORK
+
+Firstly, although we do not conduct real-world experiments, WDNO is not limited to the specific environments, which means that it can be applied to real scenarios, such as turbulence, structural materials and plasma, which we will leave as future work. Secondly, due to the wavelet transform and denoising model U-Net, WDNO is only applicable to static, uniform grid data. We are considering applying WDNO to irregular data by using geometric wavelets (Xu et al., 2018) combined with diffusion models designed for graph structures (Vignac et al., 2023), or projecting data from irregular grids onto regular uniform grids (Li et al., 2020b; Lin et al., 2023), among others. Finally, our current approach does not yet incorporate information from equations, such as adding physics-informed loss based on the PDEs, which can enhance the model’s accuracy, robustness, and generalizability.
+
+## 6 CONCLUSION
+
+In this paper, we have introduced Wavelet Diffusion Neural Operator (WDNO), a method for simulation and control of PDE systems. By introducing two innovations of generation in the wavelet domain and multi-resolution training, WDNO addresses the challenges of modeling states with abrupt changes and generalizing across resolutions typical in PDE systems. Experiments on challenging settings including the 1D Burgers’ equation, 1D Advection Equation, 1D CFD, 2D incompressible fluid and ERA5 demonstrate WDNO’s superior performance and its ability to generalize to much finer spatial and temporal resolutions than in training. We believe that WDNO will be useful for complex physical simulation and control in a wide range of scientific and engineering domains.
+
+ Rest of paper (reference and Appendix) is removed.

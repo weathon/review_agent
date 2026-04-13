@@ -1,0 +1,295 @@
+
+
+{0}------------------------------------------------
+
+# 000 001 002 003 004 005 006 007 008 009 010 011 012 013 014 015 016 017 018 019 020 021 022 023 024 025 026 027 028 029 030 031 032 033 034 035 036 037 038 039 040 041 042 043 044 045 046 047 048 049 050 051 052 053 C<sup>2</sup>INET: REALIZING INCREMENTAL TRAJECTORY PREDICTION WITH PRIOR-AWARE CONTINUAL CAUSAL INTERVENTION
+
+**Anonymous authors**
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Trajectory prediction for multi-agents in complex scenarios is crucial for applications like autonomous driving. However, existing methods often overlook environmental biases, which leads to poor generalization. Additionally, hardware constraints limit the use of large-scale data across environments, and continual learning settings exacerbate the challenge of catastrophic forgetting. To address these issues, we propose the Continual Causal Intervention (C<sup>2</sup>INet) method for generalizable multi-agent trajectory prediction within a continual learning framework. Using variational inference, we align environment-related prior with the posterior estimator of confounding factors in the latent space, thereby intervening in causal correlations that affect trajectory representation. Furthermore, we store optimal variational priors across various scenarios using a memory queue, ensuring continuous debiasing during incremental task training. The proposed C<sup>2</sup>INet enhances adaptability to diverse tasks while preserving previous task information to prevent catastrophic forgetting. It also incorporates pruning strategies to mitigate overfitting. Comparative evaluations on three real and synthetic complex datasets against state-of-the-art methods demonstrate that our proposed method consistently achieves reliable prediction performance, effectively mitigating confounding factors unique to different scenarios. This highlights the practical value of our method for real-world applications.
+
+## 1 INTRODUCTION
+
+Predicting the movement trajectories of multiple agents across various scenarios is a critical challenge in numerous research areas, including autonomous driving decision systems (Gao et al., 2020; Shi et al., 2024), security surveillance systems (Xu et al., 2022b), traffic flow analysis (Zhang et al., 2022), and sports technology (Xu et al., 2023; 2022a). Trajectory sequence-based representation learning has demonstrated considerable efficacy in addressing this challenge (Gupta et al., 2018; Yu et al., 2020; Shi et al., 2021). Typically, partial trajectories of observable agents serve as input, encoded by integrating spatial positions, inter-agent interactions, and scene semantics. This process generates a latent representation of the observed trajectories, enabling the prediction of future paths through probabilistic inference or recurrent decoding methods. Many existing studies focus on training and prediction within specific scenarios (Yuan et al., 2021). For example, predictions made on a low-traffic highway often favor rapid, straight-line movements. In contrast, predictions in high-traffic urban environments require models to account for irregular routes, as vehicles frequently avoid obstacles. Furthermore, regional regulations and customs can significantly affect trajectory prediction. On roads where motorized and non-motorized vehicles share lanes, regional driving styles influence trajectory patterns, including the spacing between agents and their speed. A model lacking generalizability cannot be effectively applied across diverse scenarios, necessitating significant computational resources for retraining. Moreover, trajectory prediction is critical in applications like autonomous driving and security surveillance, where failures can have catastrophic consequences.
+
+{1}------------------------------------------------
+
+054  
+055  
+056  
+057  
+058  
+059  
+060  
+061  
+062  
+063  
+064  
+065  
+066  
+067  
+068  
+069  
+070  
+071  
+072  
+073  
+074  
+075  
+076  
+077  
+078  
+079  
+080  
+081  
+082  
+083  
+084  
+085  
+086  
+087  
+088  
+089  
+090  
+091  
+092  
+093  
+094  
+095  
+096  
+097  
+098  
+099  
+100  
+101  
+102  
+103  
+104  
+105  
+106  
+107
+
+These issues primarily arise because multiple interacting factors influence the trajectory paths of agents. Empirical samples often contain spurious features, which can be incorporated into conditional probability models, leading to neither directly observable nor explainable confounders. These confounders distort representations and prediction outcomes. Moreover, the intrinsic trajectory patterns may shift significantly when inferring in a new domain. Eliminating confounding biases during training does not ensure their absence during inference. Two key challenges contribute to this: the incorrect introduction of past intervention factors into new causal relationships and the failure to account for newly emerging relevant factors. Unlike image data with distinct categories, trajectory data in spatial contexts exhibit infinite variations, complicating the establishment of feature-scene relationships and rendering traditional bias elimination methods ineffective (Zhang et al., 2020).
+
+Causal inference techniques have been developing rapidly in recent years, primarily used to eliminate factors that interfere with outcomes and to study the direct relationships between phenomena. Based on causal intervention techniques, it is possible to eliminate confounding biases in the complete paths of multiple agents, which affects the trajectory generation process and directly interferes with the predictor through biased pathways. A typical backdoor adjustment method blocks the interference of confounding variables on causal effects. By estimating the intervention distribution, the true effects influencing the trajectories are captured. However, existing methods focus exclusively on source-specific and stationary observational data. These learning strategies assume that all observational data is available during the training phase and comes from a single source (Yuan et al., 2021; Kamenev et al., 2022). In rapidly changing real-world applications, this assumption no longer holds. For example, in autonomous driving, the surrounding vehicles and pedestrians are constantly changing. To ensure accurate behavior prediction, new environmental data must be continuously incorporated during training. This requires designing perception-related factors with a strong capability to handle temporal variations in time-series data. Additionally, in ever-changing scenarios, models often face catastrophic forgetting. Due to privacy protection or limited storage space, models can not have access to complete historical data during training. Therefore, it is essential to ensure that old correlations are remembered during continuous training.
+
+This paper investigates the widely adopted end-to-end trajectory representation paradigm to enable continuous intervention in prediction models. This approach encodes observed data  $X$  to estimate the probabilistic distribution of the latent representation  $P(Z|X)$ , and then predict future trajectories  $P(Y|Z)$ . We identify a confounding factor  $C$  that influences the distribution of observed trajectories  $X$ , the latent representation  $Z$ , and the predicted trajectories  $Y$ . Building on this, we propose a method for continuous intervention in the latent representation. First, we apply the *do*-operator to intervene in the observed trajectories  $X$ , reducing the impact of spurious environmental factors (e.g., traffic rules, social norms) on the feature distribution. Unlike previous methods, our approach does not require prior exposure to additional data to achieve stable predictions. Second, we introduce a progressive continuous training strategy that ensures the trajectory representations adapt to newly acquired domain. Third, extensive experiments show that our model effectively handles incremental trajectory samples while mitigating catastrophic forgetting, leading to improved bias elimination.
+
+![Figure 1: Diagram illustrating causal confusion and causal intervention in trajectory prediction. The top part shows 'Different Environments' (city, highway, rural) and 'Confounding Variables' (Law&Regulations, Etiquette&Customs, Road Nature&Condition). Below, two causal graphs are shown. Graph (a) 'Causal Confusion' shows a dashed arrow from C to X, a solid arrow from X to Y, and a solid arrow from Z to Y. Graph (b) 'Causal Intervention' shows a red 'do' operator on the arrow from C to X, and a solid arrow from X to Y, and a solid arrow from Z to Y. Below the graphs are two images: 'Intersection Turning' and 'Highway Overtaking'.](6d6670b8e65d3ff8126e5ab9aeaffbd8_img.jpg)
+
+Figure 1: Diagram illustrating causal confusion and causal intervention in trajectory prediction. The top part shows 'Different Environments' (city, highway, rural) and 'Confounding Variables' (Law&Regulations, Etiquette&Customs, Road Nature&Condition). Below, two causal graphs are shown. Graph (a) 'Causal Confusion' shows a dashed arrow from C to X, a solid arrow from X to Y, and a solid arrow from Z to Y. Graph (b) 'Causal Intervention' shows a red 'do' operator on the arrow from C to X, and a solid arrow from X to Y, and a solid arrow from Z to Y. Below the graphs are two images: 'Intersection Turning' and 'Highway Overtaking'.
+
+**Figure 1:** In real-world applications, various environmental scenarios often contain confounding variables (denoted as  $C$ ), such as regulations, customs, and road conditions, influencing trajectory data. To address this, our method constructs a causal model designed to mitigate the effects of spurious correlations on prediction outcomes. For instance, predicting a turn at an intersection and a lane change on a highway may be conflated, as both trajectories exhibit an initial directional shift.
+
+{2}------------------------------------------------
+
+![Figure 2: Diagram of the proposed C^2Net model architecture. The model consists of two main modules: Causal Intervention Trajectory Prediction and Continual Memory Module. The Causal Intervention Trajectory Prediction module takes a Trajectory Input X and an Environment Encoder Q(C|X) to produce a Trajectory Prior P(X), which is then processed by a Trajectory Encoder P(Z|X) to produce a Distribution Mixture P(Z|X,C). This is followed by a Decoder P(Y|X,Z) to produce a Loss P(Y|X). The Continual Memory Module maintains a Prior Queue of tasks (Task #1, Task #2, ..., Task #T) and an Aggregated Prior P(C) = \sum_{i=1}^T Q(C|U_i). The KL-Divergence between the Trajectory Prior and the Aggregated Prior is used for training. The Continual Training process involves adding new tasks to the Prior Queue and updating the Aggregated Prior.](1b7d539e02a202c2cf2d97698b911447_img.jpg)
+
+Figure 2: Diagram of the proposed C^2Net model architecture. The model consists of two main modules: Causal Intervention Trajectory Prediction and Continual Memory Module. The Causal Intervention Trajectory Prediction module takes a Trajectory Input X and an Environment Encoder Q(C|X) to produce a Trajectory Prior P(X), which is then processed by a Trajectory Encoder P(Z|X) to produce a Distribution Mixture P(Z|X,C). This is followed by a Decoder P(Y|X,Z) to produce a Loss P(Y|X). The Continual Memory Module maintains a Prior Queue of tasks (Task #1, Task #2, ..., Task #T) and an Aggregated Prior P(C) = \sum\_{i=1}^T Q(C|U\_i). The KL-Divergence between the Trajectory Prior and the Aggregated Prior is used for training. The Continual Training process involves adding new tasks to the Prior Queue and updating the Aggregated Prior.
+
+Figure 2: The proposed  $C^2$ Net model incorporates a causal intervention trajectory prediction framework and a Continual Memory module with a prior queue. Utilizing a min-max training strategy, the model is optimized while acquiring optimal continual prior for newly added scenarios.
+
+## 2 CAUSAL INTERVENTION FOR TRAJECTORY PREDICTION
+
+### 2.1 PROBLEM FORMULATION
+
+The multi-agent trajectory prediction problem primarily focuses on scenarios with  $m$  agents moving simultaneously within a certain time  $n$  frames. Their trajectories are denoted as  $T = \{t_1, t_2, \dots, t_m\}$ . The trajectory of the  $i$ -th agent is defined as  $t_i = \{x_1, x_2, \dots, x_n\}$ , where  $x_i \in \mathbb{R}^3$  or  $x_i \in \mathbb{R}^2$  represents the coordinate position. A typical trajectory prediction task involves predicting the future trajectory  $Y_i = \{x_{\text{obs}+1}, x_{\text{obs}+2}, \dots, x_n\}$  based on the observed trajectory  $X_i = \{x_1, x_2, \dots, x_{\text{obs}}\}$ . Assuming the trajectory data is collected from different task domains, such as pedestrians and vehicles in various scenarios across different cities, it can be represented as  $\{D_1, D_2, \dots, D_N\}$ . This work focuses on sequential learning across domains without accessing task/domain information. During training, each task domain is loaded sequentially as a data stream, with the model processing only the current task's samples  $D_K$  in small batches. For testing, the model's performance is validated on previously encountered domains  $\{D_1, D_2, \dots, D_K\}$  by computing the empirical probability distribution and generating prediction results. The contextual information is computed as  $E_t = E(T_t, C_t)$ , where  $C_t$  represents the background characteristics of the  $t$ -th environment and  $T_t$  denotes the trajectory patterns, reflecting the interactions between agents and the environment. The trajectory prediction problem is then formulated as  $Y = F(X, E)$ .
+
+### 2.2 CAUSALITY ANALYSIS
+
+We first define the causal variables related to trajectory representations and prediction models, which are critical for constructing the Causal Structure Model (CSM). In the CSM,  $X \rightarrow Y$  signifies that changes in  $X$  directly impact  $Y$ , indicating a direct causal relationship. Following our previous setup, we introduce the confounding factor  $C$ , a contextual prior representing environmental information and influencing trajectory generation. For instance, acquaintances may walk side by side or pause when interacting, while strangers typically avoid each other. Similarly, turning trajectories differ depending on whether driving occurs on the left or right side of the road, varying by region.
+
+Further, we construct a causal graph to represent the dependency relationships between trajectory data distribution and the prediction model as shown in Fig.1. The causal path  $C \rightarrow X$  illustrates the influence of environmental prior on trajectory patterns, a direct and easily defined relationship. Given that the model includes an encoder  $P(Z|X)$ , which extracts features  $Z$  from observed trajectories  $X$ , we establish the dependency path  $X \rightarrow Z \leftarrow C$ . The influence of  $C$  on  $Z$  stems from
+
+{3}------------------------------------------------
+
+the encoder, which integrates environmental, map, and interaction information. While this enhances performance, it also introduces harmful associations that affect accuracy.
+
+The final prediction is generated by the decoder  $P(Y|Z)$ , which computes future trajectory distributions or derives specific positions from the features of the known trajectories, leading to the dependency  $X \rightarrow Y \leftarrow Z$ . Analyzing the CSM, we find that the confounding effect of  $C$  influences both the generation of known trajectories  $X$  and the representation  $Z$  (and by extension,  $Y$ ). This confounding distorts the model's ability to capture accurate causal relationships, complicating the exploration of intrinsic properties in multi-agent trajectory data.
+
+### 2.3 PREDICTION INTERVENTION
+
+We introduce a causal intervention framework using the *do*-operator  $P(Y|do(X))$  to intervene in the conditional probability and mitigate confounded causal relationships. This intervention removes the direct influence of  $C$  on  $X$ , as illustrated in Fig.2. Based on the Markov probability theorem, beneficial interventions render  $Z$  independent of the confounding disturbance from  $C$ . The formula  $P(Y|do(X))$  intervenes in  $X$ , effectively cutting off the path  $C \rightarrow X$  and establishing the direct relationship  $X \rightarrow Z \rightarrow Y$ . However, environmental influence are often inaccessible in real-world scenarios, and collecting comprehensive trajectory data is costly and complex. In this work, we apply the backdoor adjustment method, assigning sampled values to  $C$ , simulating trajectory probability relationships under different environments while removing confounding effects by cutting off the path  $C \rightarrow X$ . Specifically, we aim to solve the following formula:
+
+$$\begin{aligned}
+P(Y|do(X)) &= \mathbb{E}_{P(C)} P(Y|do(X), Z, C) \\
+&= \mathbb{E}_{P(C)} P(Y|do(X), Z, C) P(Z|do(X), C) P(C|do(X)) \\
+&= \mathbb{E}_{P(C)} P(Y|X, Z, C) P(Z|X, C) P(C) = \mathbb{E}_{P(C)} P(Y, Z, C|X) \\
+&= \mathbb{E}_{P(C)} P(Y, Z|X) P(C) = \mathbb{E}_{P(Z)} \frac{P(Y, Z, C|X)}{P(C|X, Y, Z)}.
+\end{aligned} \tag{1}$$
+
+The derivation details of formula  $P(Y|do(X))$  can be found in App. A.2.1. In this context, directly accessing  $P(C)$  is challenging, making it infeasible to compute  $P(Y|do(X))$  directly. Using the log-likelihood function for maximum likelihood estimation, Eq.1 are transformed as follows:
+
+$$\begin{aligned}
+\log P(Y|do(X)) &= \mathbb{E}_{P(Z)} \log \frac{P(Y, Z, C|X)}{P(C|X, Y, Z)} \\
+&= \mathbb{E}_{Q(C|X)} \log \frac{P(Y, Z, C|X) Q(C|X)}{P(C|X, Y, Z) Q(C|X)} \\
+&= \mathbb{E}_{Q(C|X)} \log \frac{P(Y|X, Z, C) P(Z|X, C) P(C) Q(C|X)}{P(C|X, Y, Z) Q(C|X)} \\
+&= \mathbb{E}_{Q(C|X)} \log \frac{P(Y|X, Z, C) P(C) Q(C|X)}{P(C|X, Y, Z) Q(C|X)} \\
+&= \mathbb{E}_{Q(C|X)} [\log P(Y|X, Z, C) + \text{KL}(Q(C|X) \| P(C|X, Y, Z)) - \text{KL}(Q(C|X) \| P(C))] \\
+&\geq \mathbb{E}_{Q(C|X)} [\log P(Y|X, Z, C) - \text{KL}(Q(C|X) \| P(C))] \\
+&= \mathbb{E}_{Q(C|X)} [\log P(Y|X, Z, C) + \mathbb{H}[Q(C|X)] + \log P(C)].
+\end{aligned} \tag{2}$$
+
+In the second term of the third line of Eq.2, the distribution of environmental characteristics  $Q(C|X)$  is adjusted toward the posterior probability  $P(C|X, Y, Z)$ . Since the latter is unknown, this term is omitted. Meanwhile, the third term  $Q(C|X)$  ensures that the environmental encoding approximates the prior  $P(C)$ . This can also be interpreted as maximizing the entropy of the environmental encoding to capture more information while satisfying both prior and posterior probabilities. Consider realization, the environmental encoding  $Q(C|X)$  can be derived using the reparameterization trick (Kingma, 2013) with a multivariate normal distribution to produce a d-dimensional contextual representation. The prior  $P(C)$  serves as a key constraint for context generation. In models based on CVAE framework (Sohn et al., 2015; Xu et al., 2022a), it is typically set as a standard normal distribution. In the following sections, we will explore methods for obtaining a more optimal prior distribution. We refer to Eq.2 as  $L_e$ , representing the evidence lower bound (ELBO) for intervening confounding factors. This includes the prediction loss for future trajectories  $P(Y|X, Z, C)$  and the previously mentioned KL divergence. According to the Markov property,  $P(Y|X, Z, C) = P(Y|X, Z) P(Z|X, C)$ . For  $P(Z|X, C)$ , the intermediate representation  $P(Z|X) \sim N(\mu_1, \omega_1)$  is obtained using the trajectory encoder, while  $Q(C|X) \sim N(\mu_2, \omega_2)$  serves
+
+{4}------------------------------------------------
+
+as the posterior distribution representing  $C$ . These distributions are combined to derive the optimal mixed distribution  $P(Z|X, C) \sim N(\mu^*, \omega^*)$ .
+
+$$\mu^* = \frac{\omega_1^2 \mu_2 + \omega_2^2 \mu_1}{\omega_1^2 + \omega_2^2}, \quad \omega^* = \sqrt{\frac{\omega_1^2 \omega_2^2}{\omega_1^2 + \omega_2^2}}. \quad (3)$$
+
+The decoder  $P(Y|X, Z)$  is then used to predict future paths, as shown in Fig.2. Following previous studies, we also consider the distribution for reconstructing past trajectories  $P(X|Z)$ . The reconstruction loss is computed using the L2 norm between the reconstructed trajectory  $X'$  and the observed  $X$ , denoted as  $L_r = \|X' - X\|_2$ .
+
+## 3 PRIOR CONTINUAL LEARNING
+
+While the proposed causal models bias by controlling for confounding factors, real-world scenarios often involve dynamic changes that can cause posterior estimates to deviate from optimal values or become stuck in local optima. Two key issues arise: first, catastrophic forgetting, where performance in earlier scenarios declines as new scene data is introduced; and second, the model's limited domain generalization, reflected in its inability to adapt to different scenarios.
+
+In our framework, the prior distribution  $P(C)$  represents the inherent nature of confounding factors within the environment, and high-quality prior significantly enhances the expressiveness of the estimator. Several prior studies have explored the selection of appropriate prior distributions. Research by Hoffman & Johnson (2016) and Tomczak & Welling (2018) demonstrates that using a simple gaussian prior can limit the expressiveness of variational inference. Studies such as Makhzani et al. (2015) and Tomczak & Welling (2018) propose using a posterior aggregation estimator to improve prior representation, while Egorov et al. (2021) introduces trainable pseudo-parameters optimized alongside the ELBO loss. Inspired by the aforementioned studies, we explore how to approximate optimal prior estimation using trajectory samples.
+
+In the context of continuously changing tasks, the sample information under different environments can be represented as  $P(E_i(\tilde{X}))$ , while the corresponding contextual posterior is defined as  $Q_i(C|X)$ , the problem addressed by Eq.2 can correspondingly be written as:
+
+$$(2) = \mathbb{E}_{Q(C|X)} \log P(Y|X, Z, C) - \sum_{i=1}^K \mathbb{E}_{\substack{P(E_i(X)) \\ Q_i(C|X)}} \text{KL}[Q_i(C|X) \parallel \hat{P}(C)], \quad (4)$$
+
+where  $E_i$  represents the  $i$ -th environment in which the training set is located, the trajectory features' distribution changes continuously with environmental factors.  $Q_i(C|X)$  represents the optimal posterior for each environmental factor, while  $\hat{P}(C)$  represents the iteratively updated environmental prior. The optimization problem can be seen as iteratively updating a continuously changing prior that better adapts to the current environment. Assuming the initial prior  $\hat{P}_1(C)$  is credible, when executing task  $K$ , the change in the second item of Eq.4 can be expressed as follows:
+
+$$\begin{aligned} & \sum_{i=1}^K \mathbb{E}_{P(E_i(X))} \text{KL}[Q_i(C|X) \parallel \alpha_{K-1}(\dots \alpha_2(\alpha_1 \hat{P}_1(C) + (1 - \alpha_1) \hat{P}_2(C)) \\ & + (1 - \alpha_2) \hat{P}_3(C) + \dots) + (1 - \alpha_{K-1}) \hat{P}_K(C)] \end{aligned} \quad (5)$$
+
+For the convenience of calculation, We define  $M_{\leq K-1}(C) = \prod_{j=1}^{K-1} \alpha_j \hat{P}_1(C) + \prod_{j=2}^{K-1} \alpha_j (1 - \alpha_1) \hat{P}_2(C) + \dots + \alpha_{K-1} (1 - \alpha_{K-2}) \hat{P}_{K-1}(C)$ . Inspired by Egorov et al. (2021), Eq.5 can be simplified as follows according to the calculation formula of limit:
+
+$$(5) = \sum_{i=1}^K \mathbb{E}_{P(E_i(X))} [\text{KL}[Q_i(C|X) \parallel M_{\leq K-1}(C)] - \underbrace{(1 - \alpha_{K-1})(\hat{P}_K(C) - \frac{Q_i(C|X)}{M_{\leq K-1}(C)}}_{(6)} - 1)] + o(\alpha_{K-1}).$$
+
+The detailed derivation process can be found in the App. A.2.2. Building on the convex property, we optimize two variables alternately:  $\hat{P}_K(C)$ , representing the shift in the prior probability density function, and  $\alpha_K$ , which adjusts the scaling factor. For step  $K$ , the first term in Eq.6 is fixed, while the optimal value of  $\hat{P}_K(C)$  is derived from the target posteriors  $Q_i(C|X)$  of the currently observed samples and the obtained prior  $M_{\leq K-1}(C)$  from previous steps.
+
+{5}------------------------------------------------
+
+In line with continual learning theory, we design a prior queue to store a representative set for each task. The environment-specific prior align with the trajectory feature fingerprints stored in memory to optimize task performance. A straightforward approach uses the posterior from inputs to approximate the optimal prior for different environments, constrained by  $\int P(C)dC = 1$ . As noted by Tomczak & Welling (2018), relying solely on posterior probability risks of overfitting and entirely storing all data is impractical. Instead, we employ multiple pseudo-features  $U$  to approximate  $P(\hat{E}_i(X))$  for the corresponding scenario.
+
+$$\hat{P}_i(C) = \frac{1}{|\mathcal{M}_i|} \sum_{U_i \in \mathcal{M}_i} Q(C|U_i), \quad (7)$$
+
+where  $\mathcal{M}_i$  is the prior set related to the  $i$ -th scene stored in the memory queue. Using the online or offline mechanisms discussed later, we obtain prior components closely associated with the scenarios. These components are iteratively optimized with scene data during training and stored in a dedicated prior queue.
+
+## 4 TRAINING PROCESS
+
+To streamline the training process, we design a min-max method that promotes iterative optimization. In the minimization step, the goal is to update the prior  $\hat{P}_K(C)$  for the current task, as in Eq.6 and Eq.7, by solving for the corresponding pseudo feature  $U_K$ . Recalling the optimization objective of the probability density function, we aim to minimize Eq.6, where the first term is a constant value that can be ignored, and we emphasize the target probability to be optimized with an underline. Concurrently, to improve the robustness of the representation process, we introduce an information entropy loss for  $\hat{P}_K(C)$ , resulting in the following:
+
+$$\begin{aligned} \hat{P}_K^*(C) &= \arg \min (\mathbb{E}(\hat{P}_K(C) \log(\hat{P}_K(C)) - \log(\hat{P}_K(C) \frac{\sum_{i=1}^K Q_i(C|X)}{M_{\leq K-1}(C)}}))) \\ &\leq \arg \min (\mathbb{E}(\hat{P}_K(C) \log(\hat{P}_K(C)) - \hat{P}_K(C) \log(\frac{\sum_{i=1}^K Q_i(C|X)}{M_{\leq K-1}(C)}}))) \\ &= \arg \min \text{KL}[\hat{P}_K(C) \| \frac{\sum_{i=1}^K Q_i(C|X)}{M_{\leq K-1}(C)}}]. \end{aligned} \quad (8)$$
+
+Where the second line is derived based on Jensen's inequality. The optimized prior  $\hat{P}_K^*(C) = Q(C|U_K)$  is computed from the trainable pseudo feature set  $U_K$  of the current task  $K$ , while  $M_{\leq K-1}(C)$  represents the optimal prior maintained up to round  $K-1$ . The posterior probability of the environmental variable  $Q_i(C|X)$  is the target to be solved and can be approximately expressed as  $\frac{|D_{\leq K-1}|}{|D_{\leq K}|} Q(C|U \leq K-1) + \frac{|D^K|}{|D_{\leq K}|} \sum_{T \sim D_K} Q(C|X_T)$ . Given the temporal nature of trajectory data, we design both offline and online update mechanisms to generate pseudo features  $U$  to the memory queue.
+
+**Online Mode:** The online mode is selected when access to the full training dataset is limited, or during streaming processes where historical data cannot be stored, such as when adapting autonomous vehicles to new regions. In each task  $K$ , one pseudo feature  $U_K^i$  is incrementally added in a streaming manner to solve for the prior. However, unlike structured data such as images that can be processed randomly, trajectory data requires careful handling due to its temporal inductive bias. We initialize  $U_K$  using agents' trajectories  $X^i$  from the current batch  $B_K$ , where divergence is optimal, determined by  $\arg \min_{X^i \in B_K} \text{KL}(Q(C|X^i) \| \sum_{i=1}^K Q_i(C|X))$ . To prevent overfitting, we introduce trainable random noise  $\epsilon \sim N(1, 0)$  for the initialization. Once the optimal prior is obtained, its corresponding weights must be close to the shape of the aggregated posterior distribution, as specified by the first line of Eq.6:
+
+$$\alpha_{K-1}^* = \text{KL}[\sum_{i=1}^K Q_i(C|X)] \| (\alpha_{K-1} M_{\leq K-1}(C) + (1 - \alpha_{K-1}) \hat{P}_K(C))]. \quad (9)$$
+
+**Offline Mode:** In offline mode, where all training data is available in advance, selecting the highest-quality fingerprint vectors for the current task helps avoid local optima. We designed a simple clustering-based method, similar to Wang et al. (2023), employing an LSTM+CNN approach to extract pre-trained feature values. The cluster centers serve as the informative pseudo-features for the
+
+{6}------------------------------------------------
+
+current task, and trainable noise  $\epsilon \sim N(1, 0)$  is uniformly added to them. Unlike the online mode, pseudo-features are added in batches at the beginning of the task, and all samples and corresponding weights are updated in each iteration, with loss functions similar to Eq.8 and Eq.9.
+
+The optimization is continually refined with each training batch iteration using the formula above. In the maximization step, we optimize according to Eq.2, with a focus on the KL divergence constraint term. To reduce optimization difficulty while simultaneously improve the training efficiency, we use a pre-trained trajectory encoder as the initial parameter for  $Q(C|X)$ . To enhance the diversity of pseudo-features and enable them to capture more information, we adopt a regularization approach used in Egrov et al. (2021) which increases the symmetric KL divergence between  $Q(C|U_K)$  from the current iteration and the mixture component latent distribution  $M_{\leq K-1}(C)$  from the previous iteration. The pseudo-labels are better aligned to extract information of the current iteration under this constraint. Based on all of the above analysis, the loss function for the maximization step is formulated as follows:
+
+$$\max \mathbb{E}_{P(\mathbb{E}_K(X))} [P(Y|X, Z, C) + P(X|Z) - \text{KL}[Q(C|X) || \tilde{P}_K(C)]] + \text{KL}_{\text{sym}}[Q(C|U_K) || M_{\leq K-1}(C)]. \quad (10)$$
+
+**Pruning:** For generalization across different regions, it is essential to maintain component expansion within a controllable range while preserving maximal diversity. A common method involves using clustering techniques to identify similar prior clusters, followed by pruning. However, given the sparsity of the distribution, obtaining meaningful clusters can be challenging. Drawing inspiration from Ye & Bors (2023), we propose a pruning strategy that introduces greater diversity into the priors across multiple tasks. Specifically, if two pseudo-features encapsulate identical critical information, their corresponding latent variables are expected to be similar. We calculate the similarity  $S(\cdot, \cdot)$  between each pair of  $\{Q(C|U^i)\}_{i=1}^{|U|}$  and identify the closest pair of variables, deeming them redundant:
+
+$$a^*, b^* = \arg \min_{\substack{a, b \neq b \\ a, b \in \{1, |U|\}}} S(a, b). \quad (11)$$
+
+We evaluate  $S(a, b)$  by calculating the squared loss  $\|\cdot\|_2$ . The indices  $a^*$  and  $b^*$  represent the selected candidate pairs. We then compute the differences between these two representations and the remaining pseudo-features, pruning the feature with the smallest difference.
+
+$$I^* = \text{argmin} \left\{ \sum_{\substack{j=1 \\ j \neq a^*, b^*}}^{|U|} S(a^*, j), \sum_{\substack{j=1 \\ j \neq a^*, b^*}}^{|U|} S(b^*, j) \right\}. \quad (12)$$
+
+The index  $I^*$  represents the selected index for pruning. We iteratively perform the pruning operation to ensure that the number of features remains below the threshold  $\gamma$ .
+
+This training mechanism is plug-and-play, accommodating generic encoders and decoders. Prediction can be made directly using the original model during the inference phase. The detailed process of our proposed model can be referred to Algorithm 1 in App. A.1.
+
+## 5 EXPERIMENTS
+
+We validate the superiority of the proposed multi-agent trajectory prediction model, C<sup>2</sup>INet, using both real-world datasets encompassing multiple scenarios and synthetic datasets. The model's performance is validated using two widely adopted trajectory prediction metrics: Average Displacement Error (ADE) and Final Displacement Error (FDE). ADE measures the mean squared error (MSE) between predicted and ground-truth trajectories, while FDE calculates the L2 distance between their final positions. Following prior studies, we generate 20 samples from the predicted distribution and select the one closest to the ground truth for both metrics. Each metric is evaluated five times using different random seeds, and the average value is reported. Due to space limitations, some experimental analysis conclusions can be found in App. A.4.
+
+### 5.1 DATASETS
+
+**ETH-UCY Dataset:** This widely used dataset contains the trajectories of 1,536 pedestrians in real-world scenarios, capturing complex social interactions (Lerner et al., 2007). The data was collected at 2.5 Hz (one sample every 0.4 seconds). Following the experimental setups of Liu et al. (2022); Chen et al. (2021a); Bagi et al. (2023), we use 3.2 seconds (8 frames) of observed trajectories to predict the next 4.8 seconds (12 frames). The dataset includes five distinct environments:
+
+{7}------------------------------------------------
+
+{hotel, eth, univ, zara1, zara2}. Each task is trained for 300 epochs, corresponding to the unique environments in our continual learning framework.
+
+**Synthetic Dataset:** This dataset is used to evaluate the effectiveness of continual learning for trajectories across different motion styles. It is based on the framework from Liu et al. (2022), capturing multi-agent trajectories in circle-crossing scenarios. The dataset includes various minimum distance settings between pedestrians: {0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8} meters. Each domain consists of 10,000 training trajectories, 3,000 validation trajectories, and 5,000 test trajectories. The model uses 8-frame observation segments to predict future 12-frame trajectories.
+
+**SDD Dataset:** The Stanford Drone Dataset (SDD) (Robicquet et al., 2016) is a large-scale collection of images and videos featuring various agents across eight distinct scene regions, making it well-suited for continual learning setups. The dataset captures over 40,000 interactions between agents and the environment and more than 185,000 interactions between agents, providing a rich foundation for trajectory prediction tasks in highly interactive scenarios.
+
+### 5.2 BASELINES
+
+We select specific baselines for the continual training scenarios discussed in this paper. To assess the generality of our counterfactual analysis method, we integrate it as a plug-and-play module into two baseline models: the RNN-based STGAT (Alahi et al., 2016) and the CNN-based SocialSTGCNN (Zhao et al., 2019). We also experiment with the CVAE-based PECNet (Mangalam et al., 2020) and YNet (Mangalam et al., 2021) which incorporates scene map information from the SDD dataset, both based on an encoder-decoder architecture. Additionally, we compare other causal intervention methods, such as COUNTERFACTUAL (Chen et al., 2021a) and INVARIANT (Liu et al., 2022) (reporting the best-performing  $\mu = 1.0$ ). We select GCRL (Bagi et al., 2023) and EXPANDING (Ivanovic et al., 2023) for continual learning methods, with the latter implemented by us as it is not open-source. These methods are based on domain adaptation, where the prior distribution is retrained for new scenarios without using previous data. We also compare our approach with typical continual learning methods (using STGAT as backbone), including Elastic Weight Consolidation (EWC) (Kirkpatrick et al., 2017), which applies gradient constraints; latent features modeled as a mixture of Gaussians with diagonal covariance (MoG); and the random coresets method (Coresets) (Bachem et al., 2015), which uses memory replay during training. Our analysis shows that our approach effectively captures high-quality changes in environmental content.
+
+### 5.3 RESULTS IN CONTINUAL LEARNING SETTING
+
+Table 1 below and Table 2-3 in App. A.4.1 present comprehensive comparisons of the average performance for current and previously completed tasks under continual learning, evaluated across three datasets categorized by task scenarios. In the first column, a colon preceding the task name denotes the combination of the current and completed task sample sets. We test the proposed  $C^2$ INet in both online and offline modes, employing STGAT and STGCNN as backbones to compare  $C^2$ INet’s performance with that of GCRL.
+
+On the ETH-UCY dataset,  $C^2$ INet-offline consistently delivers the best performance across the first four tasks. In contrast,  $C^2$ INet-online shows slightly weaker results, mainly due to the challenges of acquiring high-quality prior in the online mode, which increases the risk of the model converging to local optima. Compared to the original STGAT and STGCNN models, continual causal intervention provides at least a 10.4% improvement, particularly as tasks are progressively added. This demonstrates that our method significantly enhances model stability at a low computational cost, with the Continual Memory module substantially boosting the model’s generalization capacity. For alternative causal intervention methods like COUNTERFACTUAL, the debiasing effect is most evident in complex environments, such as the “hotel” scenario, where it ultimately achieves superior results. However, traditional continual learning methods such as EWC and random Coresets cannot outperform our approach, lagging by at least 2.5% on metrics like ADE.
+
+On the Synthesis dataset containing fixed noise, explicit causal intervention methods like COUNTERFACTUAL exhibited more substantial advantages. Nonetheless, both versions of  $C^2$ INet remained competitive. Specifically,  $C^2$ INet-online with STGAT demonstrate a slight edge in the “0.3” and “0.4” tasks, while  $C^2$ INet-offline outperform in the “0.2”, “0.5”, and “0.6” tasks. Overall, the relatively stable Synthesis dataset supports strong performance across various continual learning strategies. In the “0.1” task, GCRL paired with STGAT initially performs well, but as the number
+
+{8}------------------------------------------------
+
+Table 1: The table presents the model’s average performance across all previously encountered tasks on ETH-UCY dataset. The first column lists the newly added tasks in the continual learning setup, with the preceding colon indicating the average trajectory prediction results for all tasks encountered up to that point. All results are averaged over five runs, with the best outcomes highlighted in bold and the second-best results underlined. Color blocks indicate the ranking of different backbones for comparison.
+
+| TASK                                           | univ             | :eth             | :zara1           | :zara2           | :hotel           |
+|------------------------------------------------|------------------|------------------|------------------|------------------|------------------|
+| STGAT                                          | 0.67/1.35        | 0.96/1.92        | 0.84/1.66        | 0.63/1.26        | 0.96/1.92        |
+| STGCNN                                         | <u>0.82/1.66</u> | <u>1.27/2.37</u> | <u>1.05/2.04</u> | <u>0.76/1.52</u> | <u>1.33/2.55</u> |
+| PECNet                                         | 0.60/1.27        | 0.89/1.85        | 0.71/1.51        | 0.60/1.27        | 0.91/1.83        |
+| COUNTERFACTUAL                                 | 0.58/1.21        | 0.86/1.82        | 0.67/1.40        | 0.52/1.12        | <b>0.83/1.75</b> |
+| INVARIANT                                      | 0.61/1.35        | 1.05/2.21        | 0.76/1.70        | 0.69/1.56        | 1.07/2.06        |
+| ADAPTIVE                                       | 0.87/1.69        | 1.13/2.19        | 0.84/1.81        | 0.61/1.38        | 0.99/1.96        |
+| EWC                                            | 0.57/1.23        | 0.84/1.73        | 0.71/1.41        | 0.59/1.29        | 0.98/1.89        |
+| MoG                                            | 0.68/1.35        | 0.84/1.81        | 0.77/1.46        | 0.69/1.31        | 1.01/1.98        |
+| Corsets                                        | 0.59/1.25        | 0.89/1.87        | 0.57/1.26        | 0.52/1.14        | 0.95/1.89        |
+| GCRL <sub>+STGAT</sub>                         | 0.79/1.59        | 1.12/2.21        | 0.71/1.48        | 0.53/1.13        | 0.94/2.01        |
+| GCRL <sub>+STGCNN</sub>                        | <u>0.82/1.58</u> | <u>1.24/2.31</u> | <u>0.99/1.93</u> | <u>0.69/1.38</u> | <u>1.27/2.54</u> |
+| C <sup>2</sup> INet-online <sub>+STGAT</sub>   | <u>0.52/1.13</u> | <u>0.79/1.65</u> | <u>0.54/1.19</u> | <u>0.49/1.10</u> | <u>0.86/1.82</u> |
+| C <sup>2</sup> INet-online <sub>+STGCNN</sub>  | 0.64/1.32        | 0.94/1.89        | 0.72/1.49        | 0.59/1.27        | 0.98/1.95        |
+| C <sup>2</sup> INet-offline <sub>+STGAT</sub>  | <b>0.51/1.09</b> | <b>0.75/1.58</b> | <b>0.54/1.14</b> | <b>0.48/1.03</b> | <b>0.86/1.81</b> |
+| C <sup>2</sup> INet-offline <sub>+STGCNN</sub> | <u>0.57/1.19</u> | <u>0.91/1.87</u> | <u>0.69/1.42</u> | <u>0.56/1.19</u> | <u>0.95/1.91</u> |
+
+of tasks increases, its performance degrades due to catastrophic forgetting, ultimately falling behind our proposed method.
+
+On the SDD dataset, YNet, which incorporates map information to support trajectory prediction, excels in several tasks. The performance gap between STGAT and SocialSTGCNN is minimal; however, their corresponding C<sup>2</sup>INet variants produce performance improvements of around 1.5% to 7% across different tasks. COUNTERFACTUAL performs optimally during the early stages of training, underscoring its strong debiasing effect. However, as tasks accumulate, the forgetting effect allows C<sup>2</sup>INet-offline to take the lead gradually. In this dataset, the offline mode outperforms the online mode, which can be attributed to the complexity of SDD tasks and the diversity of agent types. The offline model demonstrates better resilience in avoiding local optima under these conditions.
+
+In conclusion, our proposed model exhibits robustness across multiple datasets, consistently enhancing trajectory prediction performance and effectively mitigating the challenge of catastrophic forgetting. We also provide detailed metric analysis for each task, which is illustrated in App. A.4.3.
+
+### 5.4 TRAINING PROCESS ANALYSIS
+
+Fig.4 in App. A.4.2 illustrates the ADE’s statistics for each model across different tasks during the training process. It shows that performance on previously completed tasks deteriorates with the introduction of new tasks. The performance curves for STGAT and GCRL follow similar trends, exhibiting overall stability. Specifically, for the STGAT model, performance on the "univ" task declines sharply after adding the "eth" task. At the same time, GCRL experiences a more gradual performance decline following introducing the "hotel" task, indicating a greater resilience to optimization loss. In contrast, STGAT displays more abrupt, stepwise performance shifts.
+
+The EWC and COUNTERFACTUAL exhibit greater volatility in performance throughout training, particularly on the "eth", "zara1" and "zara2" tasks. COUNTERFACTUAL, in particular, shows sharp fluctuations, resulting in significant variations in its average performance. By comparison, C<sup>2</sup>INet-offline consistently delivers superior results, with its Continual Memory module effectively retaining information from prior tasks, thereby guiding the optimization process and enabling stable performance improvements across all tasks. While C<sup>2</sup>INet-online performs slightly below its offline counterpart, its integrated training strategy produces smoother performance curves, reflecting more excellent stability throughout the training process.
+
+{9}------------------------------------------------
+
+### 5.5 QUALITATIVE RESULTS
+
+Fig.8 in App. A.4.4 visually represents the prediction results across multiple scenarios within the ETH-UCY dataset, utilizing randomly selected samples under consistent training configurations as previously described. The gray lines depict the observed trajectories, the red points indicate the predicted paths and the green points represent the ground truth. From the experimental outcomes, several key conclusions can be drawn: (1) Both  $C^2$ INet-online and  $C^2$ INet-offline exhibit robust predictive performance across the tested scenarios. (2) In contrast, the GCRL and STGAT models demonstrate noticeable performance degradation, primarily due to the residual effects of prior training tasks. For example, errors such as incorrectly predicting a straight path as a turn (eth #42, #43) or misclassifying a right turn as a left turn (eth #37, #39) are evident.
+
+Overall, our proposed method significantly enhances the stability and reliability of trajectory prediction models by integrating the Causal Intervention and Continual Memory mechanisms. This improvement is particularly pronounced in scenarios where slight changes in direction are often misclassified as sharp turns—an issue commonly observed in STGAT and GCRL models. Such errors are primarily attributable to noise introduced in multi-task environments, which impairs the models’ predictive accuracy. By effectively addressing these challenges,  $C^2$ INet offers a more resilient approach to handling complex trajectory prediction tasks.
+
+### 5.6 VISUALIZATION ANALYSIS
+
+In this section, we present a visualization of the two-dimensional posterior probability  $Q(C|X)$  across various tasks to provide insights into the model’s performance improvements. As depicted in Fig.3, the priors derived from task-specific memories encode highly distinct posterior distributions. Following training on five separate tasks from the ETH-UCY dataset, a well-defined mixture of Gaussian distributions emerges in both  $C^2$ INet-online and  $C^2$ INet-offline. This result can be attributed to the imposed prior constraints, which allow the model to effectively differentiate between new tasks while retaining knowledge of previously learned ones. In contrast, the variant posterior  $Q(S|X)$  produced by GCRL on both backbones (STGAT and STGCNN) exhibits an indistinguishable, aggregated distribution. This lack of discriminative task representation leads to confusion between tasks during continual updates, highlighting the limitations of GCRL in preserving task-specific knowledge. The observed differences explain the importance of distinct posterior distributions in enhancing model adaptability and preventing task interference in continual learning scenarios.
+
+![Figure 3: Visualization of the posterior distribution for different models with 2D latent space. The figure shows four heatmaps: C^2INet-online, C^2INet-offline, GCRL-STGAT, and GCRL-STGCNN. The first two show distinct, well-defined distributions, while the last two show more aggregated, less distinct distributions.](33228b4227fa57e1477b27b9e07483e6_img.jpg)
+
+The figure displays four heatmaps representing the posterior distribution in a 2D latent space for different models. The first heatmap, labeled 'C<sup>2</sup>INet-online', shows a distribution with several distinct, elongated peaks. The second heatmap, labeled 'C<sup>2</sup>INet-offline', shows a similar distribution with distinct peaks. The third heatmap, labeled 'GCRL-STGAT', shows a more aggregated, single large peak. The fourth heatmap, labeled 'GCRL-STGCNN', also shows a more aggregated, single large peak. This visualizes the difference in task representation between the proposed method and the baseline methods.
+
+Figure 3: Visualization of the posterior distribution for different models with 2D latent space. The figure shows four heatmaps: C^2INet-online, C^2INet-offline, GCRL-STGAT, and GCRL-STGCNN. The first two show distinct, well-defined distributions, while the last two show more aggregated, less distinct distributions.
+
+Figure 3: Visualization of the posterior distribution for different models with 2D latent space.
+
+## 6 CONCLUSION
+
+In this paper, we focus on developing a trajectory data mining method that can generalize across different domains through end-to-end training, even under continual learning conditions where data from all task scenarios cannot be accessed simultaneously. First, we analyze the spurious correlations introduced by complex real-life environments and propose a plug-and-play Continual Causal Intervention ( $C^2$ INet) framework that mitigates confounding factors affecting representations. Considering the practical challenges of incomplete data collection or limited device resources, we innovatively combine the proposed trajectory learning framework with a continual learning strategy. Experiments on multiple types of datasets fully demonstrate that the proposed  $C^2$ INet model effectively addresses the issue of catastrophic forgetting and enhances the robustness of trajectory prediction.
+
+ Rest of paper (reference and Appendix) is removed.

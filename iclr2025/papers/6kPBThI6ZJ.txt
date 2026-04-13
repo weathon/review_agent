@@ -1,0 +1,329 @@
+
+
+{0}------------------------------------------------
+
+# HUMMINGBIRD: HIGH FIDELITY IMAGE GENERATION VIA MULTIMODAL CONTEXT ALIGNMENT
+
+Minh-Quan Le<sup>1,2\*</sup>, Gaurav Mittal<sup>1\*</sup>, Tianjian Meng<sup>1</sup>, A S M Iftekhar<sup>1</sup>,  
+Vishwas Suryanarayanan<sup>1</sup>, Barun Patra<sup>1</sup>, Dimitris Samaras<sup>2</sup>, Mei Chen<sup>1</sup>  
+<sup>1</sup>Microsoft, <sup>2</sup>Stony Brook University
+
+## ABSTRACT
+
+While diffusion models are powerful in generating high-quality, diverse synthetic data for object-centric tasks, existing methods struggle with scene-aware tasks such as Visual Question Answering (VQA) and Human-Object Interaction (HOI) Reasoning, where it is critical to preserve scene attributes in generated images consistent with a multimodal context, i.e. a reference image with accompanying text guidance query. To address this, we introduce **Hummingbird**, the first diffusion-based image generator which, given a multimodal context, generates highly diverse images w.r.t. the reference image while ensuring high fidelity by accurately preserving scene attributes, such as object interactions and spatial relationships from the text guidance. Hummingbird employs a novel Multimodal Context Evaluator that simultaneously optimizes our formulated Global Semantic and Fine-grained Consistency Rewards to ensure generated images preserve the scene attributes of reference images in relation to the text guidance while maintaining diversity. As the first model to address the task of maintaining both diversity and fidelity given a multimodal context, we introduce a new benchmark formulation incorporating MME Perception and Bongard HOI datasets. Benchmark experiments show Hummingbird outperforms all existing methods by achieving superior fidelity while maintaining diversity, validating Hummingbird’s potential as a robust multimodal context-aligned image generator in complex visual tasks. Project page: <https://roar-ai.github.io/hummingbird>
+
+## 1 INTRODUCTION
+
+In recent years, diffusion models (Ho et al., 2020; Rombach et al., 2022) have emerged as powerful tools for image generation, offering impressive capabilities in creating high-quality and diverse synthetic data. This synthetic data has proven valuable in various applications, particularly for *object-centric* image classification tasks (Shu et al., 2022; Feng et al., 2023). However, for *scene-aware* tasks like Visual Question Answering (VQA) (Goyal et al., 2017; Antol et al., 2015) and Human-Object Interaction (HOI) Reasoning (Jiang et al., 2022; Ulutan et al., 2020), it is essential that the generated images accurately preserve scene attributes relevant to the task, as specified by the accompanying text queries. These attributes may include numerical attributes (e.g., object count), physical properties (e.g., color), spatial relationships (e.g., relative positions of objects), object interactions (e.g., how objects interact with each other), or scene-level details. Although defining an all-exhaustive list of such attributes is intractable, tasks like VQA and HOI, through their open-ended questions (Antol et al., 2015), enable to capture the relevant semantic attributes effectively.
+
+While existing image generation methods have made great strides in improving the *diversity* (defined as how different the generated images are from a given reference image and from each other), they often fall short in maintaining high *fidelity*. Given a text query as guidance pertaining to scene attributes in relation to a given reference image (together referred to as *multimodal context*), we define *fidelity* as how truthfully the image generator can preserve those attributes in the generated image. Existing methods, including state-of-the-art (SOTA) diffusion models like Stable Diffusion XL (SDXL) (Podell et al., 2024), Image Translation techniques like Boomerang (Luzi et al., 2024), Textual Inversion (Gal et al., 2023; Trabucco et al., 2024), and Image Variation (Xu et al., 2023),
+
+\*Equal contribution. This work was done as Minh-Quan’s internship project at Microsoft.
+
+{1}------------------------------------------------
+
+![Figure 1: Hummingbird aligns generated image with multimodal context input. The figure is a grid of image pairs. Rows (a) through (f) show specific attribute and reasoning tasks: (a) Numerical Attribute (six people), (b) Physical Attribute (Color) (red hat), (c) Object Existence (bottle), (d) Special Relationship (dog under pool), (e) Visual Attribute (Scene) (general store outdoor), and (f) Human-Object Interaction Reasoning (person swinging or holding a tennis racket). Row (g) shows a Diversity/Fidelity Comparison with six methods: Reference Image, I2T2F SDXL, Image Variation, Image Translation, Textual Inversion, and Hummingbird. Below each method in (g) is a checkmark and 'Diversity' and 'Fidelity' scores. Below the grid is a text guidance example and its context description.](c803f6f6e2c49429d2951832bd0f208d_img.jpg)
+
+Text Guidance: Are there **six** people?  
+Reference [Ans: Yes] Generated [Ans: Yes]
+
+(a) Numerical Attribute
+
+Is there a **red** hat?  
+Reference [Ans: No] Generated [Ans: No]
+
+(b) Physical Attribute (Color)
+
+Is there a **bottle**?  
+Reference [Ans: Yes] Generated [Ans: Yes]
+
+(c) Object Existence
+
+Text Guidance: Is the dog **under** the pool?  
+Reference [Ans: No] Generated [Ans: No]
+
+(d) Special Relationship
+
+Is this a **general store outdoor**?  
+Reference [Ans: Yes] Generated [Ans: Yes]
+
+(e) Visual Attribute (Scene)
+
+Is person **swinging or holding** a tennis racket?  
+Reference [Ans: swing] Generated [Ans: swing]
+
+(f) Human-Object Interaction Reasoning
+
+(g) Diversity/Fidelity Comparison
+
+Reference Image I2T2F SDXL Image Variation Image Translation Textual Inversion Hummingbird
+
+✓ Diversity X Fidelity ✓ Diversity ✓ Fidelity X Diversity ✓ Fidelity ✓ Diversity X Fidelity ✓ Diversity ✓ Fidelity
+
+Figure 1: Hummingbird aligns generated image with multimodal context input. The figure is a grid of image pairs. Rows (a) through (f) show specific attribute and reasoning tasks: (a) Numerical Attribute (six people), (b) Physical Attribute (Color) (red hat), (c) Object Existence (bottle), (d) Special Relationship (dog under pool), (e) Visual Attribute (Scene) (general store outdoor), and (f) Human-Object Interaction Reasoning (person swinging or holding a tennis racket). Row (g) shows a Diversity/Fidelity Comparison with six methods: Reference Image, I2T2F SDXL, Image Variation, Image Translation, Textual Inversion, and Hummingbird. Below each method in (g) is a checkmark and 'Diversity' and 'Fidelity' scores. Below the grid is a text guidance example and its context description.
+
+Text Guidance: Is the clock above people?
+
+Context Description from MLLM: The image shows a city street scene with a clock mounted on a building. The clock is positioned above the street level, where pedestrians are walking. The street is lined with shops and buildings, and there are people walking on the sidewalk. The clock is clearly visible and serves as a prominent feature in the image.
+
+Figure 1: Hummingbird aligns generated image with multimodal context input (reference image + text guidance) ensuring the synthetic image is diverse w.r.t. reference image while exhibiting high fidelity (i.e. preserves the scene attribute from reference image in relation to text guidance). (a-f) By doing so, for VQA and HOI Reasoning, Hummingbird enables the answer to the question in the text guidance to remain consistent between the reference and generated images. (g) Hummingbird is also able to preserve both diversity and fidelity without the trade-off exhibited by existing methods.
+
+often lose fine-grained scene details as the embeddings do not have a precise control on which scene attributes to capture. This lack of fidelity is particularly problematic in synthetic data generation for *scene-aware* tasks like VQA and HOI Reasoning, where preserving scene elements in relation to text query is critical for high performance.
+
+To achieve high fidelity while preserving diversity in image generation w.r.t multimodal context, we introduce Hummingbird, the first diffusion-based general-purpose image generator designed to produce high-fidelity images guided by a multimodal context while maintaining diversity. Given a multimodal context, containing a reference image and accompanying text guidance, Hummingbird generates highly diverse images that differ from the reference image while accurately preserving the scene attributes referenced in the text guidance.
+
+Hummingbird contains a novel Multimodal Context Evaluator that simultaneously maximizes our formulated Global Semantic and Fine-grained Consistency Rewards. Given the multimodal context input, Hummingbird crafts an instruction prompt to provide to a Multimodal Large Language Model (MLLM) (Liu et al., 2024; Chen et al., 2024) to obtain a text-based Context Description containing the necessary scene attributes to focus on for image generation. Hummingbird then finetunes the SDXL diffusion model using the rewards from the Multimodal Context Evaluator based on the alignment between the generated image and the MLLM Context Description. While SDXL enables generating images with high diversity (i.e. visually different from the reference image), the rewards encourage the fine-tuning process to align the generated image closely with the scene attributes provided in the multimodal context to achieve high fidelity. Unlike existing methods, Hummingbird is able to balance both diversity and fidelity in generated images which is a prerequisite for leveraging synthetic data for scene-aware tasks like VQA and HOI Reasoning. Figure 1 (a-f) illustrates how, given text guidance (a question) and a reference image, the generated image remains visually diverse
+
+{2}------------------------------------------------
+
+w.r.t reference image while preserving the specified scene attributes, thus ensuring that the answer to the question in the text guidance remains consistent between the reference and generated images.
+
+As the first approach to address the task of multimodal context-aware image generation with high fidelity and diversity, we also introduce a new benchmark formulation to evaluate different methods on this task. Our benchmark leverages the MME Perception benchmark (Fu et al., 2024) to perform Test-Time Augmentation (TTA) (Shanmugam et al., 2021; Kim et al., 2020) with real and generated synthetic images to evaluate the ability of a method to maintain fidelity on scene attributes related to spatial existence, count, position, color, and scene. We further leverage Bongard Human-Object Interaction (HOI) (Jiang et al., 2022) dataset to perform Test-time Prompt Tuning (TPT) (Shu et al., 2022) to test a method’s ability to maintain fidelity when focusing on sophisticated human-object interactions. Finally, we compute a method’s ability to maintain diversity using feature-based distance metrics between the reference and generated images. Experiments show that Hummingbird is able to outperform all existing methods on MME Perception and Bongard HOI (i.e. provide the best fidelity) while achieving high diversity. Hummingbird also outperforms all other methods consistently on ImageNet and its OOD variants. This validates its effectiveness on large and diverse datasets from both scene-aware and object-centric tasks. Figure 1 (g) demonstrates that Hummingbird is able to preserve diversity and fidelity without the trade-off exhibited by existing methods.
+
+Our contributions are as follows:
+
+- We introduce Hummingbird, the first diffusion-based image generator to synthesize high fidelity images guided by multimodal context of reference image and text guidance while maintaining high diversity.
+- We develop a novel Multimodal Context Evaluator that simultaneously maximizes our formulated Global Semantic and Fine-grained Consistency Rewards during end-to-end fine-tuning. This enables the diffusion model to focus on both local and global scene attributes.
+- Hummingbird outperforms existing methods on MME Perception and Bongard HOI datasets as part of a newly formulated benchmark that evaluates the ability to generate images with both high fidelity and high diversity given a multimodal context.
+
+## 2 RELATED WORK
+
+Popular diffusion-based image generators, such as **SDXL** (Podell et al., 2024), have made tremendous progress in producing high-quality diverse images. But these methods struggle to fully translate complex scene details from text to image, especially if it involves preserving a specific scene attribute w.r.t. a reference image. We can observe this limitation in Figure 1(g) where the image generated based on a text description of a reference image (image-to-text-to-image (**IT2T2I**)) cannot preserve the scene elements from reference image (poor fidelity).
+
+**Image Variation** methods like Xu et al. (2023); Feng et al. (2023); Zhang et al. (2024); Le et al. (2024); Graikos et al. (2024); Belagali et al. (2024), use an image encoder to extract embeddings to condition diffusion models. While this helps to retain high-level semantics and allow changes to style and other low-level features, these methods fail to preserve specific scene attributes of a reference image due to a lack of precise control over which detail to emphasize. Moreover, addition of noise during diffusion process introduces randomness which causes significant deviation from the reference image, again resulting in poor fidelity (Figure 1 (g)).
+
+**Image Translation** or Image Editing techniques, such as Boomerang (Luzi et al., 2024) and ControlNet (Zhang et al., 2023), add noise to reference input image to create variations around the original reference image in latent space. Since they aim to generate multiple local samples, they fail to produce sufficiently diverse images (Figure 1 (g)). Moreover, the added noise during forward diffusion step often distorts or removes the details on specific scene attributes in the reference image.
+
+**Textual Inversion** methods (Gal et al., 2023; Trabucco et al., 2024; Ahn et al., 2024; Nguyen et al., 2024) encode new concepts as “pseudo-words” in text embedding space to guide image generation. Although effective for style transfer, these methods struggle with tasks where a single reference image is involved, such as TTA, to generate multiple synthetic images. When fine-tuning with just one reference image, these methods lead to images containing irrelevant scene attributes and fail to preserve the attributes from the original reference image (leading to poor fidelity, Figure 1 (g)).
+
+{3}------------------------------------------------
+
+![Figure 2: Model Overview diagram showing the training pipeline of Hummingbird. The diagram illustrates the flow from Multimodal Context M (Text Guidance g and Reference Image x) through an MLLM to generate Context Description C. Both x and C are encoded via CLIP (Image and Text Encoders) into embeddings T_x and T_c. These are fed into a UNet Denoiser epsilon_theta to generate image x-tilde. A Multimodal Context Evaluator then provides Global Semantic and Fine-grained Consistency Rewards. A legend indicates Frozen components (blue snowflake), LoRA Fine-tuning (orange flame), and Gradient Flow (red dashed arrow).](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+The diagram illustrates the training pipeline of Hummingbird. It starts with a **Multimodal Context  $\mathcal{M}$**  consisting of **Text Guidance  $g$**  (a question and answer about the number of dogs) and a **Reference Image  $x$** . The Text Guidance is processed by a **Prompt Template  $\mathcal{P}$**  (using [INST] and [/INST] tokens) to create a **Prompt Template  $p$** . This prompt  $p$  is fed into an **MLLM** along with the Reference Image  $x$  to generate a **Context Description  $\mathcal{C}$** . The Reference Image  $x$  is encoded by a **CLIP Image Encoder** into an **Image Embedding  $T_x$** . The Context Description  $\mathcal{C}$  is encoded by a **CLIP Text Encoder** into a **Text Embedding  $T_c$** . Both  $T_x$  and  $T_c$  are fed into a **UNet Denoiser  $\epsilon_\theta$**  to generate an image  $\tilde{x}$ . A **Multimodal Context Evaluator** then provides **Global Semantic Reward** and **Fine-grained Consistency Reward** to align  $\tilde{x}$  with  $\mathcal{M}$ . A legend indicates that components with a blue snowflake are **Frozen**, components with an orange flame are **LoRA Fine-tuning**, and red dashed arrows indicate **Gradient Flow**.
+
+Figure 2: Model Overview diagram showing the training pipeline of Hummingbird. The diagram illustrates the flow from Multimodal Context M (Text Guidance g and Reference Image x) through an MLLM to generate Context Description C. Both x and C are encoded via CLIP (Image and Text Encoders) into embeddings T\_x and T\_c. These are fed into a UNet Denoiser epsilon\_theta to generate image x-tilde. A Multimodal Context Evaluator then provides Global Semantic and Fine-grained Consistency Rewards. A legend indicates Frozen components (blue snowflake), LoRA Fine-tuning (orange flame), and Gradient Flow (red dashed arrow).
+
+Figure 2: **Model Overview:** Given text guidance  $g$  and reference image  $x$  (multimodal context  $\mathcal{M}$ ), Hummingbird crafts an instruction prompt  $p$  to feed to MLLM and obtain Context Description  $\mathcal{C}$ . It then embeds  $x$  and  $\mathcal{C}$  via CLIP to feed to UNet Denoiser of SDXL to generate image  $\tilde{x}$ . To improve the fidelity of  $\tilde{x}$  w.r.t.  $\mathcal{M}$  while preserving diversity, Hummingbird introduced Multimodal Context Evaluator to simultaneously maximize novel rewards – Global Semantic and Fine-Grained Consistency Rewards – to align  $\tilde{x}$  with scene attributes provided in  $\mathcal{M}$ .
+
+## 3 PRELIMINARIES
+
+**Latent Diffusion Models (LDM)** (Podell et al., 2024; Rombach et al., 2022) operate in a compressed latent space rather than directly in pixel space. Using a VAE (Kingma, 2013) encoder  $\mathcal{E}$ , they encode an input image  $x \sim \mathbb{P}_{\text{data}}$  into a lower-dimensional latent variable  $z_0$ , on which the diffusion process is applied. The model iteratively corrupts  $z_0$  with noise and learns to reverse this process to generate new samples coherent with the original data distribution. The training objective minimizes the error between the noisy latent sample at time  $t$  and the denoised prediction:
+
+$$\mathcal{L}_{\text{simple}} = \mathbb{E}_{t \sim \mathcal{U}[0,1], x \sim \mathbb{P}_{\text{data}}, z_0 = \mathcal{E}(x), \epsilon \sim \mathcal{N}(0,1)} [\|\epsilon - \epsilon_\theta(z_t, t)\|^2], \quad (1)$$
+
+where  $\epsilon_\theta(z_t, t)$  represents UNet denoiser’s (Ho et al., 2020; Rombach et al., 2022) predicted noise.
+
+**Denoising Diffusion Implicit Models (DDIM)** (Song et al., 2021) accelerate the sampling process in diffusion models while maintaining high-quality samples. DDIM adjusts the reverse diffusion process by directly predicting the latent variable at the next timestep using deterministic sampling, which allows for faster convergence. The DDIM update step is defined as:
+
+$$z_{t-1} = \sqrt{\alpha_{t-1}} \frac{z_t - \sqrt{1 - \alpha_t} \epsilon_\theta(z_t, t)}{\sqrt{\alpha_t}} + \sqrt{1 - \alpha_{t-1}} \cdot \epsilon_\theta(z_t, t). \quad (2)$$
+
+## 4 METHOD
+
+### 4.1 MODEL OVERVIEW
+
+Figure 2 provides an overview of the end-to-end training setup of Hummingbird. Let  $\mathcal{M} = \{x, g\}$  denote the multimodal context fed as input to Hummingbird.  $\mathcal{M}$  comprises of the reference image  $x$  and text guidance  $g$  for Hummingbird to generate image  $\tilde{x}$  that is visually diverse w.r.t.  $x$  while faithfully preserves the scene attributes in relation to  $g$ . Depending on the task,  $g$  can be a question or a set of annotations accompanying  $x$ . During training,  $g$  additionally consists of the ground truth (such as answer to the question or correct annotation) which is unavailable during evaluation.
+
+We feed the multimodal context  $\mathcal{M}$  to MLLM to generate a text-based Context Description,  $\mathcal{C}$ . For this, we need to provide  $\mathcal{M}$  as an instruction prompt to MLLM such that it guides the MLLM on which scene attributes to focus on in the reference image  $x$  in relation to the text guidance  $g$ . We devise a prompt template  $p : g \rightarrow \mathcal{P}$  to transform  $g \in \mathcal{M}$  into an instruction prompt  $\mathcal{P}$ . We then feed  $\mathcal{P}$  along with  $x$  as the multimodal instruction prompt to the MLLM to obtain  $\mathcal{C}$ . Figure 2 provides a sample of one such prompt template. Please refer Appendix C for more samples.
+
+$\mathcal{C}$  provides a detailed description of  $x$ , capturing the scene attributes specified by  $g$ , such as object relationships, their interactions, or other spatial attributes. We pass  $\mathcal{C}$  through a CLIP text encoder
+
+{4}------------------------------------------------
+
+![Diagram of Hummingbird's Multimodal Context Evaluator architecture. The diagram shows the flow from a UNet Denoiser (epsilon_g) generating an image x-tilde, which is then encoded by a CLIP ViT-L/14 Image Encoder into image tokens I_tokens(x-tilde). Simultaneously, a Context Description C is encoded by a BERT Base Text Encoder into text tokens T_tokens(C), including a [CLS] token. These tokens are processed by a BLIP-2 QFormer, which includes a Cross Attention layer that produces visual representation tokens Z. These tokens Z are used to compute a Global Semantic Reward and are also processed by a Bidirectional SA + ITM Classifier to produce a Fine-grained Consistency Reward. Learned Queries Q_learned are also input to the Cross Attention layer. A legend at the bottom indicates that blue snowflake icons represent frozen components, orange flame icons represent LoRA Fine-tuning, and dashed arrows represent gradient flow.](690fce4fb5c9cbb8beb560cb2a3fcbeb_img.jpg)
+
+Diagram of Hummingbird's Multimodal Context Evaluator architecture. The diagram shows the flow from a UNet Denoiser (epsilon\_g) generating an image x-tilde, which is then encoded by a CLIP ViT-L/14 Image Encoder into image tokens I\_tokens(x-tilde). Simultaneously, a Context Description C is encoded by a BERT Base Text Encoder into text tokens T\_tokens(C), including a [CLS] token. These tokens are processed by a BLIP-2 QFormer, which includes a Cross Attention layer that produces visual representation tokens Z. These tokens Z are used to compute a Global Semantic Reward and are also processed by a Bidirectional SA + ITM Classifier to produce a Fine-grained Consistency Reward. Learned Queries Q\_learned are also input to the Cross Attention layer. A legend at the bottom indicates that blue snowflake icons represent frozen components, orange flame icons represent LoRA Fine-tuning, and dashed arrows represent gradient flow.
+
+Figure 3: Hummingbird’s Multimodal Context Evaluator leverages pre-trained BLIP-2 QFormer. It simultaneously maximizes our novel Global Semantic and Fine-grained Consistency Rewards to align generated image  $\tilde{x}$  with Content Description  $\mathcal{C}$  corresponding to multimodal context  $\mathcal{M}$ .
+
+(Radford et al., 2021) to convert it into a text embedding  $\mathcal{T}_e$ . In parallel, we also encode  $x$  using a CLIP image encoder to generate the image embedding  $\mathcal{I}_e$  comprising the semantic features of  $x$ .
+
+We feed the embeddings  $\mathcal{I}_e$  and  $\mathcal{T}_e$  to the UNet denoiser  $\epsilon_g$  of SDXL (Podell et al., 2024) to generate image  $\tilde{x}$ . While  $\tilde{x}$  exhibits diversity (i.e. visually different from  $x$ ), we fine-tune the denoiser via LoRA (Hu et al., 2022) to enhance the fidelity of  $\tilde{x}$  (i.e. preserve the scene attributes occurring in  $x$  in relation to  $g$ ). To facilitate the fine-tuning, we introduce Multimodal Context Evaluator which simultaneously maximizes our two novel rewards – Global Semantic and Fine-Grained Consistency Rewards – to align  $\tilde{x}$  with the scene attributes provided in the multimodal context  $\mathcal{M}$  (Figure 3).
+
+### 4.2 FINE-TUNING WITH MULTIMODAL CONTEXT REWARDS
+
+**Multimodal Context Evaluator.** We design our Multimodal Context Evaluator using the multimodal representation connector in pre-trained vision-language models (VLMs). Specifically, we leverage the pre-trained QFormer from BLIP-2 (Li et al., 2023) due to its unique ability to capture both global and local alignment between image-text pairs. We use BLIP-2’s image encoder to extract the image tokens  $\mathcal{I}_{\text{tokens}}(\tilde{x})$  for the image  $\tilde{x}$  generated by SDXL (Figure 3). In parallel, we use BLIP-2’s BERT-based (Kenton & Toutanova, 2019) text encoder to extract the text tokens  $\mathcal{T}_{\text{tokens}}$  (including the representative token  $\mathcal{T}_{[\text{CLS}]}$ ) for the text-based Context Description  $\mathcal{C}$  obtained from the MLLM. We then utilize the learned queries  $\mathcal{Q}_{\text{learned}}$  from the pre-trained BLIP-2 QFormer to extract the visual representation token sequence  $\mathcal{Z}$  via the Cross-Attention layer as,
+
+$$\mathcal{Z} = \text{CrossAttention}(\mathcal{Q}_{\text{learned}}, \mathcal{I}_{\text{tokens}}(\tilde{x})) \quad (3)$$
+
+**Global Semantic Reward.** Using the visual representation tokens  $\mathcal{Z}$  and the representative text token  $\mathcal{T}_{[\text{CLS}]}$ , we compute cosine similarity between each visual token  $\mathcal{Z}_i$  and  $\mathcal{T}_{[\text{CLS}]}$  and define Global Semantic Reward,  $\mathcal{R}_{\text{global}}$ , as the maximum of these computed cosine similarities,
+
+$$\mathcal{R}_{\text{global}} = \max_i \frac{\mathcal{Z}_i^T \cdot \mathcal{T}_{[\text{CLS}]}}{\|\mathcal{Z}_i\| \|\mathcal{T}_{[\text{CLS}]}\|} \quad (4)$$
+
+Through the above formulation, the Global Semantic Reward,  $\mathcal{R}_{\text{global}}$ , ensures the overall scene context in the generated image  $\tilde{x}$  aligns with that in the textual context description  $\mathcal{C}$  by maximizing their global feature similarity.
+
+**Fine-Grained Consistency Reward.** While  $\mathcal{R}_{\text{global}}$  allows to align the global semantics of the generated image  $\tilde{x}$  with that of the textual context description  $\mathcal{C}$ , it is not sufficient to maintain optimal fidelity as SDXL can still omit capturing key scene attributes specified in  $g$ . We therefore introduce Fine-Grained Consistency Reward,  $\mathcal{R}_{\text{fine-grained}}$ , that helps to complement  $\mathcal{R}_{\text{global}}$  and captures the multimodal context in  $\tilde{x}$  more comprehensively in a fine-grained manner. For this, we leverage the bi-directional self-attention along with the image-text matching (ITM) classifier of pre-trained BLIP-2 QFormer to attend to all the visual tokens  $\mathcal{Z}$  and Context Description text tokens  $\mathcal{T}_{\text{tokens}}$  with each other. The ITM classifier outputs two logits: one for the positive match (with index  $j = 1$ ) and one for the negative match (with index  $j = 0$ ). In the training of Hummingbird, positive pairs are defined as the generated image and its corresponding context description within the same training
+
+{5}------------------------------------------------
+
+#### **Algorithm 1** Multimodal Context Rewards Fine-tuning
+
+**Require:** Pre-trained UNet denoiser  $\epsilon_\theta$ ; original data distribution  $\mathbb{P}_{\text{data}}$ ; context descriptor MLLM.**Ensure:**  $\epsilon_\theta$  converges and minimizes  $\mathcal{L}_{\text{total}}$ .Activate UNet denoiser  $\epsilon_\theta$ ; freeze context rewards  $\mathcal{R}_{\text{global}}$ ,  $\mathcal{R}_{\text{fine-grained}}$ , context descriptor MLLM**while**  $\mathcal{L}_{\text{total}}$  not converged **do**  Sample multimodal context input  $\{\mathbf{x}, \mathbf{g}\} \sim \mathbb{P}_{\text{data}}$ ;  $t = T$    $\mathcal{P} \leftarrow p(\mathbf{g})$   ▷ Create instruction prompt  $\mathcal{P}$  from text guidance  $\mathbf{g}$  and prompt template  $p$    $\mathcal{C} \leftarrow \text{MLLM}(\mathbf{x}, \mathcal{P})$   ▷ Extract context description  $\mathcal{C}$  from MLLM  Extract image embedding  $\mathcal{I}_e$  of reference image  $\mathbf{x}$   Extract text embedding  $\mathcal{T}_e$  of description  $\mathcal{C}$   **while**  $t > 0$  **do**
+
+▷ perform DDIM denoising
+
+ $\mathbf{z}_{t-1} \leftarrow \frac{\mathbf{z}_t - \sqrt{1 - \alpha_t} \cdot \epsilon_\theta(\mathbf{z}_t, \mathcal{I}_e, \mathcal{T}_e, t)}{\sqrt{\alpha_t}} + \sqrt{1 - \alpha_{t-1}} \cdot \epsilon_\theta(\mathbf{z}_t, \mathcal{I}_e, \mathcal{T}_e, t)$   **end while**   $\tilde{\mathbf{x}} \leftarrow \mathcal{D}(\mathbf{z}_0)$   ▷ VAE Decoder decodes latent  $\mathbf{z}_0$  to pixel space   $\mathcal{L}_{\text{total}} \leftarrow -(\lambda_1 \mathcal{R}_{\text{global}} + \lambda_2 \mathcal{R}_{\text{fine-grained}})$   Backward  $\mathcal{L}_{\text{total}}$  and update  $\epsilon_\theta$  for last  $K$  steps.**end while**batch. We select the logit corresponding to the positive match  $j = 1$  of the classifier as  $\mathcal{R}_{\text{fine-grained}}$ ,
+
+$$\mathcal{R}_{\text{fine-grained}} = \text{ITM\_Classifier}(\text{Bidirectional\_SA}(\mathcal{Z}, \mathcal{T}_{\text{tokens}}))_{j=1}, \quad (5)$$
+
+ $\mathcal{R}_{\text{fine-grained}}$  therefore captures the fine-grained multimodal image-text alignment between  $\tilde{\mathbf{x}}$  and  $\mathcal{C}$ .**Loss Function.** We combine  $\mathcal{R}_{\text{global}}$  and  $\mathcal{R}_{\text{fine-grained}}$  to compute loss  $\mathcal{L}_{\text{total}}$  to fine-tune denoiser  $\epsilon_\theta$ ,
+
+$$\mathcal{L}_{\text{total}} = -(\lambda_1 \mathcal{R}_{\text{global}} + \lambda_2 \mathcal{R}_{\text{fine-grained}}), \quad (6)$$
+
+where  $\lambda_1$  and  $\lambda_2$  are the hyperparameters balancing the contribution from the two rewards.**Training Procedure.** During training, we freeze all components of Hummingbird except UNet denoiser  $\epsilon_\theta$  in SDXL which we fine-tune using LoRA (Figure 2 and 3). Additionally, text guidance  $\mathbf{g}$  comprises the ground truth corresponding to the reference image in relation to the input text query. Algorithm 1 presents an overview of the training procedure. We optimize the UNet denoiser  $\epsilon_\theta$  in SDXL using DDIM (Song et al., 2021) scheduler, guided by the two rewards  $\mathcal{R}_{\text{global}}$  and  $\mathcal{R}_{\text{fine-grained}}$ . For each training step, we extract the image embedding  $\mathcal{I}_e$  of the reference image and text embedding  $\mathcal{T}_e$  of context description  $\mathcal{C}$  to condition the generation process. We obtain the generated image  $\tilde{\mathbf{x}}$  via 25-steps DDIM and VAE decoder  $\mathcal{D}$  from latent  $\mathbf{z}_0$  to pixel space  $\tilde{\mathbf{x}}$ , which we feed to Multimodal Context Evaluator along with  $\mathcal{C}$ . Since each timestep in the denoising process is differentiable, we compute the gradient to update parameters  $\theta$  in denoiser  $\epsilon_\theta$  through chain rule,
+
+$$\frac{\partial \mathcal{L}}{\partial \theta} = -\frac{\partial \mathcal{R}}{\partial \tilde{\mathbf{x}}} \cdot \frac{\partial \tilde{\mathbf{x}}}{\partial \mathbf{z}_0} \cdot \prod_{t=0}^T \frac{\partial \left[ \frac{\mathbf{z}_{t-1} - \sqrt{1 - \alpha_t} \cdot \epsilon_\theta(\mathbf{z}_t, \mathcal{I}_e, \mathcal{T}_e, t)}{\sqrt{\alpha_t}} + \sqrt{1 - \alpha_{t-1}} \cdot \epsilon_\theta(\mathbf{z}_t, \mathcal{I}_e, \mathcal{T}_e, t) \right]}{\partial \theta} \quad (7)$$
+
+**Evaluation.** During evaluation, we remove the Multimodal Context Evaluator with final output being the generated image  $\tilde{\mathbf{x}}$  (Appendix D, Figure 9). For fair evaluation, text guidance  $\mathbf{g}$  no longer includes the ground truth corresponding to the reference image in relation to the input text query.
+
+## 5 EXPERIMENT
+
+### 5.1 BENCHMARK FORMULATION
+
+To evaluate Hummingbird’s effectiveness as a multimodal context-aligned image generator, we introduce a benchmark focused on two key criteria: *fidelity*, which measures how accurately the generated images preserve scene attributes as per the multimodal context, and *diversity*, which assesses how distinct the generated images are from each other as well as from the reference image.
+
+For **fidelity**, we build our evaluation framework around three main considerations: *Applicability*, ensuring generated images enhance model performance when combined with real data; *Efficiency*, emphasizing computationally light and resource-efficient protocols; and *Fairness*, promoting standardized test-time evaluation to mitigate biases caused by varying training processes.
+
+Based on these principles, we adopt two evaluation settings: (1) VQA Benchmark for MLLMs using Test-Time Augmentation (TTA) (Shanmugam et al., 2021), and (2) Human-Object Interaction (HOI)
+
+{6}------------------------------------------------
+
+Reasoning using Test-time Prompt Tuning (TPT) from Shu et al. (2022). Both settings leverage real and synthetic data to boost performance while allowing computational efficiency. TTA uses pre-trained MLLMs without requiring additional training for fair comparison, while TPT fine-tunes prompt embeddings for quick convergence.
+
+For **diversity**, we conduct two experiments using CLIP ViT-G/14 (Radford et al., 2021) features. First, we compute the Euclidean distance between the generated and reference images to quantify how distinct the generated images are from their reference counterparts. Second, we generate images using 20 different random seeds and compute the average pairwise Euclidean distance across all generated images, providing a measure of intra-set diversity.
+
+**Datasets and Metrics.** For the VQA benchmark, we fine-tune Hummingbird on VQAv2 (Goyal et al., 2017) and GQA (Hudson & Manning, 2019), then evaluate using TTA on MME Perception (Fu et al., 2024), a common benchmark for assessing SOTA MLLMs. Our benchmark covers MME Perception tasks related to Existence, Count, Position, Color, and Scene (more discussion on this in Appendix A). We generate synthetic images using the test image as a reference and pair them with corresponding questions as text guidance. We then feed the real (reference) and generated images to MLLMs along with yes/no questions to extract the logit for the next token [yes] / [no]. We determine the final predicted token by averaging the logits and comparing it to the ground truth (yes/no). Using the paired yes and no questions for each test image, we report Accuracy (ACC), which measures the correctness of individual question predictions, and Accuracy+ (ACC+), which measures the joint correctness of the question pair.
+
+For HOI Reasoning, we fine-tune Hummingbird on Bongard-HOI (Jiang et al., 2022) training set and evaluate on associated test sets using TPT from Shu et al. (2022). Following the setup, given a query test image with support sets of positive (e.g., *riding bicycle*) and negative (e.g., *not riding bicycle*) images, we generate synthetic images for support set images as reference using corresponding label as text guidance. We then use the augmented support sets to optimize a pair of prompt embeddings that contrast each other and predict the human-object interaction in query image by comparing its feature similarity to the two optimized prompts. Please refer to Shu et al. (2022) for more details. We use Accuracy as a measure of model’s ability to correctly predict these human-object interactions.
+
+**Method Comparisons.** We compare Hummingbird against representative techniques from four groups of SOTA image generation techniques (covered in Section 2): (1) customized T2I diffusion models (referred to as I2T2I SDXL), (2) Image Variation, (3) Image Translation/Editing, and (4) Textual Inversion, as well as data augmentation methods like RandAugment (Cubuk et al., 2020).
+
+**Object-Centric Benchmark.** In addition to scene-aware tasks like VQA and HOI Reasoning, we also evaluate Hummingbird on an object-centric benchmark to demonstrate its versatility. Specifically, we fine-tune the UNet denoiser on the ImageNet training set (Deng et al., 2009), and perform TPT (Shu et al., 2022) using real and generated images on the ImageNet test set and four out-of-distribution (OOD) datasets: ImageNet-A (Hendrycks et al., 2021b), ImageNet-V2 (Recht et al., 2019), ImageNet-R (Hendrycks et al., 2021a), and ImageNet-Sketch (Wang et al., 2019). This enables us to assess the robustness of Hummingbird under natural distribution shifts. We use Top-1 accuracy which measures the correctness of classifying test images.
+
+### 5.2 IMPLEMENTATION DETAILS
+
+For Hummingbird, we use SDXL Base 1.0 which is a standard pre-trained diffusion-based image generation model. We further employ CLIP ViT-G/14 as the image encoder and both CLIP-L/14 & CLIP-G/14 as the text encoders (Radford et al., 2021). We perform LoRA fine-tuning with 11M trainable parameters ( $\approx 0.46\%$  of total 2.6B parameters) on 8 NVIDIA A100 80GB GPUs using AdamW (Loshchilov & Hutter, 2019) optimizer, learning rate of  $5e-6$ , and gradient accumulation steps of 8. Please refer to Appendix Q for more details.
+
+### 5.3 COMPARISON WITH EXISTING METHODS ON THE BENCHMARK FORMULATION
+
+**VQA benchmark.** To evaluate Hummingbird for VQA using MME Perception, we experiment with SOTA MLLMs including LLaVA v1.6 (Liu et al., 2024) and InternVL 2.0 (Chen et al., 2024). Table 1 shows that Hummingbird significantly improves both ACC and ACC+ compared to all existing methods on both LLaVA v1.6 and InternVL 2.0 consistently across all tasks. The ability of Hummingbird’s generated images to enhance MLLM performance on complex VQA tasks validates
+
+{7}------------------------------------------------
+
+Table 1: Comparison for VQA benchmark on MME Perception using Test-Time Augmentation (TTA). Hummingbird outperforms SOTA image generation and augmentation techniques consistently across all MME tasks, when evaluating with different MLLMs.
+
+| MLLM Name                               | Method                                       | Existence              |                        | Count                   |                         | Position               |                        | Color                   |                         | Scene                  |                        |
+|-----------------------------------------|----------------------------------------------|------------------------|------------------------|-------------------------|-------------------------|------------------------|------------------------|-------------------------|-------------------------|------------------------|------------------------|
+|                                         |                                              | ACC                    | ACC+                   | ACC                     | ACC+                    | ACC                    | ACC+                   | ACC                     | ACC+                    | ACC                    | ACC+                   |
+| LLaVA v1.6 7B<br>(Liu et al., 2024)     | Real only                                    | 95.00                  | 90.00                  | 81.67                   | 66.67                   | 76.67                  | 53.33                  | 93.33                   | 86.67                   | 86.00                  | 72.50                  |
+|                                         | Real + RandAugment (Cubuk et al., 2020)      | 93.33<br>↓ 1.67        | 86.67<br>↓ 3.33        | 78.33<br>↓ 3.34         | 60.00<br>↓ 6.67         | 78.33<br>↓ 1.66        | 56.67<br>↓ 3.34        | 91.67<br>↓ 1.66         | 83.33<br>↓ 3.34         | 85.50<br>↓ 0.50        | 72.00<br>↓ 0.50        |
+|                                         | Real + Image Variation (Xu et al., 2023)     | 88.33<br>↓ 6.67        | 76.67<br>↓ 13.33       | 71.67<br>↓ 10.00        | 46.67<br>↓ 20.00        | 76.67<br>-             | 56.67<br>↓ 3.34        | 85.00<br>↓ 8.33         | 73.33<br>↓ 13.34        | 86.50<br>↓ 0.50        | 73.00<br>↓ 0.50        |
+|                                         | Real + Image Translation (Luzi et al., 2024) | 93.33<br>↓ 1.67        | 86.67<br>↓ 3.33        | 78.33<br>↓ 3.34         | 60.00<br>↓ 6.67         | 80.00<br>↓ 3.33        | 60.00<br>↓ 6.67        | 93.33<br>-              | 86.67<br>-              | 86.75<br>↓ 0.75        | 73.00<br>↓ 0.50        |
+|                                         | Real + Textual Inversion (Gal et al., 2023)  | 86.67<br>↓ 8.33        | 73.33<br>↓ 16.67       | 71.67<br>↓ 10.00        | 43.33<br>↓ 23.34        | 73.33<br>↓ 3.34        | 50.00<br>↓ 3.33        | 85.00<br>↓ 8.33         | 70.00<br>↓ 16.67        | 85.25<br>↓ 0.75        | 71.00<br>↓ 1.50        |
+|                                         | Real + I2T2I SDXL (Podell et al., 2024)      | 96.67<br>↓ 1.67        | 93.33<br>↓ 3.33        | 81.67<br>-              | 66.67<br>-              | 75.00<br>↓ 1.67        | 50.00<br>↓ 3.33        | 88.33<br>↓ 5.00         | 76.67<br>↓ 10.00        | 85.50<br>↓ 0.50        | 72.50<br>-             |
+|                                         | Real + Hummingbird                           | <b>96.67</b><br>↓ 1.67 | <b>93.33</b><br>↓ 3.33 | <b>83.33</b><br>↓ 1.66  | <b>70.00</b><br>↓ 3.33  | <b>81.67</b><br>↓ 1.67 | <b>66.67</b><br>↓ 3.33 | <b>95.00</b><br>↓ 13.34 | <b>93.33</b><br>↓ 1.67  | <b>87.75</b><br>↓ 1.75 | <b>74.00</b><br>↓ 1.50 |
+|                                         | Real only                                    | 96.67                  | 93.33                  | 73.33                   | 50.00                   | 76.67                  | 60.00                  | 91.67                   | 83.33                   | 85.00                  | 70.00                  |
+| InternVL v2.0 8B<br>(Chen et al., 2024) | Real + RandAugment (Cubuk et al., 2020)      | 95.00<br>↓ 1.67        | 90.00<br>↓ 3.33        | 76.67<br>↓ 3.34         | 66.67<br>↓ 16.67        | 76.67<br>-             | 60.00<br>-             | 88.33<br>↓ 3.34         | 76.67<br>↓ 6.66         | 84.75<br>↓ 0.25        | 69.50<br>↓ 0.50        |
+|                                         | Real + Image Variation (Xu et al., 2023)     | 91.67<br>↓ 5.00        | 83.33<br>↓ 10.00       | 73.33<br>-              | 53.33<br>↓ 3.33         | 70.00<br>↓ 6.67        | 46.67<br>↓ 13.34       | 78.33<br>↓ 13.34        | 60.00<br>↓ 23.33        | 85.25<br>↓ 0.25        | 70.50<br>↓ 0.50        |
+|                                         | Real + Image Translation (Luzi et al., 2024) | 85.00<br>↓ 11.67       | 70.00<br>↓ 23.33       | 75.00<br>↓ 1.67         | 50.00<br>-              | 78.33<br>↓ 1.66        | 63.33<br>↓ 3.33        | 90.00<br>↓ 1.67         | 80.00<br>↓ 3.33         | 85.50<br>↓ 0.50        | 70.50<br>↓ 0.50        |
+|                                         | Real + Textual Inversion (Gal et al., 2023)  | 83.33<br>↓ 13.34       | 66.67<br>↓ 26.66       | 70.00<br>↓ 3.33         | 46.67<br>↓ 3.33         | 61.67<br>↓ 15.00       | 40.00<br>↓ 20.00       | 75.00<br>↓ 16.67        | 56.67<br>↓ 26.66        | 84.25<br>↓ 0.75        | 68.50<br>↓ 1.50        |
+|                                         | Real + I2T2I SDXL (Podell et al., 2024)      | 93.33<br>↓ 3.34        | 86.67<br>↓ 6.66        | 78.33<br>↓ 5.00         | 56.67<br>↓ 6.67         | 65.00<br>↓ 11.67       | 43.33<br>↓ 16.67       | 95.00<br>↓ 3.33         | 90.00<br>↓ 6.67         | 84.75<br>↓ 0.25        | 70.50<br>↓ 0.50        |
+|                                         | Real + Hummingbird                           | <b>98.33</b><br>↓ 1.66 | <b>96.67</b><br>↓ 3.34 | <b>86.67</b><br>↓ 13.34 | <b>73.33</b><br>↓ 23.33 | <b>78.33</b><br>↓ 1.66 | <b>63.33</b><br>↓ 3.33 | <b>98.33</b><br>↓ 6.66  | <b>96.67</b><br>↓ 13.34 | <b>86.25</b><br>↓ 1.25 | <b>71.00</b><br>↓ 1.00 |
+
+Table 2: Comparison on Human-Object Interaction (HOI) Reasoning using Test-time Prompt Tuning (TPT). Hummingbird outperforms SOTA methods on all 4 test splits of Bongard-HOI dataset.
+
+| Method                                | Test Splits             |                           |                           |                             | Average                 |
+|---------------------------------------|-------------------------|---------------------------|---------------------------|-----------------------------|-------------------------|
+|                                       | seen act.,<br>seen obj. | unseen act.,<br>seen obj. | seen act.,<br>unseen obj. | unseen act.,<br>unseen obj. |                         |
+| RandAugment (Cubuk et al., 2020)      | 66.39                   | 68.50                     | 65.98                     | 65.48                       | 66.59                   |
+| Image Variation (Xu et al., 2023)     | 57.86 $\pm$ 1.83        | 59.71 $\pm$ 8.79          | 56.07 $\pm$ 9.91          | 55.58 $\pm$ 9.90            | 57.31 $\pm$ 9.28        |
+| Image Translation (Luzi et al., 2024) | 66.22 $\pm$ 0.17        | 68.13 $\pm$ 0.37          | 66.09 $\pm$ 0.11          | 66.12 $\pm$ 0.64            | 66.64 $\pm$ 0.05        |
+| Textual Inversion (Gal et al., 2023)  | 55.18 $\pm$ 11.21       | 59.16 $\pm$ 9.34          | 55.30 $\pm$ 10.68         | 54.16 $\pm$ 11.32           | 55.95 $\pm$ 10.64       |
+| I2T2I SDXL (Podell et al., 2024)      | 67.26 $\pm$ 0.87        | 69.25 $\pm$ 0.75          | 67.23 $\pm$ 1.25          | 65.76 $\pm$ 0.28            | 67.38 $\pm$ 0.79        |
+| Hummingbird                           | <b>68.14</b> $\pm$ 1.75 | <b>70.95</b> $\pm$ 2.45   | <b>68.28</b> $\pm$ 2.80   | <b>67.56</b> $\pm$ 2.08     | <b>68.73</b> $\pm$ 2.14 |
+
+that Hummingbird can generate images faithful to the input multimodal context. The improvement is particularly prominent for tasks needing a fine-grained understanding of the scene as in Count and Position. For LLaVA v1.6, Hummingbird boosts Position ACC by 5% and ACC+ by 13.34%, while for InternVL 2.0, it significantly improves both Count ACC and Color ACC+ by 13.34% and Count ACC+ by 23.33%. This also highlights Hummingbird’s generalizability across different MLLMs.
+
+**HOI Reasoning.** We experiment with CLIP-ResNet50 (Radford et al., 2021) to evaluate Hummingbird on Bongard-HOI using TPT. Table 2 shows that Hummingbird outperforms all existing augmentation/image generation methods consistently across all test splits, achieving the highest average accuracy of 68.73% (+2.14% over data augmentation-based baseline). While VQA on MME Perception helps to demonstrate Hummingbird’s effectiveness on spatial scene attributes, Hummingbird’s superior performance on Bongard-HOI demonstrates the method’s ability to generate high-fidelity augmentations also for novel interaction-based scene attributes.
+
+**Object-Centric benchmarks.** Table 3 shows the evaluation of Hummingbird on object-centric benchmarks, including ImageNet and its OOD variants (ImageNet-A, ImageNet-V2, ImageNet-R, and ImageNet-Sketch) using TPT. We can observe that Hummingbird consistently outperforms all other image generation/augmentation methods across all object-centric benchmarks. This validates Hummingbird’s versatility by being effective on both scene-aware and object-centric tasks.
+
+**Qualitative Study.** Figure 4 provides qualitative comparison between Hummingbird and other image generation methods across different scene-aware tasks from MME Perception and HOI Reasoning benchmarks. Hummingbird consistently surpasses all other approaches, achieving higher fidelity w.r.t. the input multimodal context (reference image along with text guidance) while main-
+
+{8}------------------------------------------------
+
+Table 3: Hummingbird outperforms SOTA generation/augmentation methods on object-centric datasets including out-of-distribution (OOD) variants showing its robustness to distribution shifts.
+
+| Method                   | ImageNet                           | ImageNet-A                          | ImageNet-V2                        | ImageNet-R                         | ImageNet-Sk.                       | Average                            | OOD Avg.                           |
+|--------------------------|------------------------------------|-------------------------------------|------------------------------------|------------------------------------|------------------------------------|------------------------------------|------------------------------------|
+| Real only                | 58.10                              | 22.81                               | 53.00                              | 53.90                              | 33.50                              | 42.26                              | 40.80                              |
+| Real + RandAugment       | 59.40 $\pm$ 1.30                   | 27.34 $\pm$ 4.53                    | 53.20 $\pm$ 2.20                   | 56.80 $\pm$ 2.90                   | 34.50 $\pm$ 1.00                   | 46.65 $\pm$ 4.30                   | 43.46 $\pm$ 2.66                   |
+| Real + Image Variation   | 60.80 $\pm$ 2.70                   | 31.06 $\pm$ 8.25                    | 55.80 $\pm$ 2.80                   | 58.80 $\pm$ 4.90                   | 37.10 $\pm$ 3.60                   | 48.71 $\pm$ 6.45                   | 45.69 $\pm$ 4.89                   |
+| Real + Image Translation | 61.90 $\pm$ 3.80                   | 32.14 $\pm$ 9.33                    | 56.20 $\pm$ 3.20                   | 59.60 $\pm$ 5.70                   | 37.20 $\pm$ 3.70                   | 49.41 $\pm$ 7.15                   | 46.29 $\pm$ 5.49                   |
+| Real + Textual Inversion | 60.10 $\pm$ 3.00                   | 30.85 $\pm$ 8.04                    | 55.50 $\pm$ 2.50                   | 57.40 $\pm$ 3.50                   | 35.50 $\pm$ 2.00                   | 47.87 $\pm$ 5.61                   | 44.81 $\pm$ 4.01                   |
+| Real + I2T2I SDXL        | 61.20 $\pm$ 3.10                   | 31.56 $\pm$ 8.75                    | 56.20 $\pm$ 3.20                   | 58.50 $\pm$ 4.60                   | 38.10 $\pm$ 4.60                   | 49.11 $\pm$ 6.85                   | 46.09 $\pm$ 5.29                   |
+| Real + Hummingbird       | <b>62.60 <math>\pm</math> 4.50</b> | <b>32.85 <math>\pm</math> 10.04</b> | <b>56.50 <math>\pm</math> 3.50</b> | <b>60.20 <math>\pm</math> 6.30</b> | <b>38.80 <math>\pm</math> 5.30</b> | <b>50.19 <math>\pm</math> 7.93</b> | <b>47.09 <math>\pm</math> 5.29</b> |
+
+![Figure 4: Generated image comparison between Hummingbird and SOTA methods on MME Perception and HOI Reasoning. The figure shows three rows of images. Row 1: Reference image of four people in a room. Text Guidance: 'Are there four people in the image? [Count / Ans: Yes]'. Generated images: I2T2I SDXL (3 people), Image Variation (7 people), Image Translation (6 people), Textual Inversion (5 people), Hummingbird (4 people). Row 2: Reference image of a room with a TV. Text Guidance: 'Is the TV on the left of the lamp? [Position / Ans: Yes]'. Generated images: I2T2I SDXL (TV on right), Image Variation (TV on right), Image Translation (TV on right), Textual Inversion (TV on right), Hummingbird (TV on left). Row 3: Reference image of a person holding a tennis racket. Text Guidance: 'Is person holding or swinging a tennis racket? [HOI Reasoning / Ans: holding]'. Generated images: I2T2I SDXL (swinging), Image Variation (swinging), Image Translation (swinging), Textual Inversion (swinging), Hummingbird (holding).](c37fe03d7cad74ad675a0eb16aa43821_img.jpg)
+
+Figure 4: Generated image comparison between Hummingbird and SOTA methods on MME Perception and HOI Reasoning. The figure shows three rows of images. Row 1: Reference image of four people in a room. Text Guidance: 'Are there four people in the image? [Count / Ans: Yes]'. Generated images: I2T2I SDXL (3 people), Image Variation (7 people), Image Translation (6 people), Textual Inversion (5 people), Hummingbird (4 people). Row 2: Reference image of a room with a TV. Text Guidance: 'Is the TV on the left of the lamp? [Position / Ans: Yes]'. Generated images: I2T2I SDXL (TV on right), Image Variation (TV on right), Image Translation (TV on right), Textual Inversion (TV on right), Hummingbird (TV on left). Row 3: Reference image of a person holding a tennis racket. Text Guidance: 'Is person holding or swinging a tennis racket? [HOI Reasoning / Ans: holding]'. Generated images: I2T2I SDXL (swinging), Image Variation (swinging), Image Translation (swinging), Textual Inversion (swinging), Hummingbird (holding).
+
+Figure 4: Generated image comparison between Hummingbird and SOTA methods on MME Perception and HOI Reasoning. Hummingbird achieves highest fidelity while maintaining high diversity. Table 4: Euclidean distance (diversity) between features of real and generated images, and among generated images with varying random seeds. Higher is better. **Bold** denotes best and underline is second best. While achieving best fidelity (Table 1-3), Hummingbird provides second best diversity.
+
+| Comparison Type               | RandAugment | I2T2I SDXL   | Image Variation | Image Translation | Textual Inversion | Hummingbird          |                          |
+|-------------------------------|-------------|--------------|-----------------|-------------------|-------------------|----------------------|--------------------------|
+|                               |             |              |                 |                   |                   | $\times$ fine-tuning | $\checkmark$ fine-tuning |
+| Reference (real) vs generated | 15.80       | <b>37.22</b> | 36.37           | 21.89             | 36.84             | 36.10                | <u>36.94</u>             |
+| Among generated               | 18.51       | <b>27.14</b> | 25.85           | 20.39             | 26.46             | 26.08                | <u>26.67</u>             |
+
+taining high diversity w.r.t the reference image. For example, in Figure 4 (Row 1), the reference image depicts 4 people, and Hummingbird successfully maintains this count in the generated image. In contrast, I2T2I SDXL, Image Translation, and Textual Inversion generate images with 6, 5, and 2 people, respectively. Image Variation struggles even with image quality, with an estimated people count ranging between 3 and 7. Please refer to Appendix R for more qualitative results.
+
+### 5.4 ABLATION STUDY
+
+**Diversity Analysis.** Table 4 shows that Hummingbird (after fine-tuning) achieves the second-highest Euclidean distance score, both w.r.t the reference image and among generated images, slightly behind I2T2I SDXL, while securing the highest fidelity as shown in Tables 1 and 2. Figure 5 illustrates Hummingbird’s high diversity in generated images across different random seeds, validating its ability to provide high fidelity w.r.t multimodal context while preserving diversity.
+
+**Effectiveness of Multimodal Context Rewards.** Table 5 shows an ablation to evaluate the impact of Global Semantic  $\mathcal{R}_{\text{global}}$  and Fine-Grained Consistency Reward  $\mathcal{R}_{\text{fine-grained}}$  of Hummingbird. We use LLaVA 1.6 7B for evaluation while considering both LLaVA 1.6 7B and InternVL 2.0 8B as MLLM for Context Description. Table 5 (Row 1 and 5) show that Hummingbird achieves the best performance when both rewards are applied. Performance reduces in absence of either reward, especially on tasks requiring detailed multimodal context preservation (e.g. for Position and Count).
+
+**Impact of MLLM as Context Descriptor.** Table 5 also helps to analyze the effect of using different MLLMs to obtain Context Description  $\mathcal{C}$ . We consider LLaVA 1.6 7B and InternVL 2.0
+
+{9}------------------------------------------------
+
+Table 5: Ablation on Multimodal Context Rewards, MLLM Context Descriptor, and Fine-tuning.
+
+**Bold** is overall best, **blue** is best per Context Descriptor, **gray** is baseline without fine-tuning.
+
+| MLLM Name                              | Context Descriptor | Reward       |                    | Existence    |              | Count        |              | Position     |              | Color        |              | Scene        |              |
+|----------------------------------------|--------------------|--------------|--------------------|--------------|--------------|--------------|--------------|--------------|--------------|--------------|--------------|--------------|--------------|
+|                                        |                    | $R_{global}$ | $R_{fine-grained}$ | ACC          | ACC+         | ACC          | ACC+         | ACC          | ACC+         | ACC          | ACC+         | ACC          | ACC+         |
+| LLaVA<br>v1.6 7B<br>(Liu et al., 2024) | ✓                  | ✓            | ✓                  | 96.67        | 93.33        | 83.33        | <b>70.00</b> | <b>81.67</b> | <b>66.67</b> | <b>95.00</b> | <b>93.33</b> | <b>87.75</b> | <b>74.00</b> |
+|                                        | ✓                  | ✓            | ✓                  | 96.67        | 93.33        | 83.33        | <b>70.00</b> | 80.00        | 63.33        | <b>95.00</b> | <b>93.33</b> | 87.25        | 73.50        |
+|                                        | ✓                  | ✓            | ✓                  | 96.67        | 93.33        | 81.67        | 66.67        | 81.67        | <b>66.67</b> | 93.33        | 90.00        | 87.50        | 74.00        |
+|                                        | ✓                  | ✓            | ✓                  | 96.67        | 93.33        | 81.67        | 66.67        | 78.33        | 56.67        | 90.00        | 83.33        | 86.75        | 73.50        |
+|                                        | <b>✓</b>           | <b>✓</b>     | <b>✓</b>           | <b>98.33</b> | <b>96.67</b> | <b>85.00</b> | <b>70.00</b> | 80.00        | 63.33        | <b>95.00</b> | <b>93.33</b> | 87.25        | 73.50        |
+|                                        | <b>✓</b>           | <b>✓</b>     | <b>✓</b>           | <b>98.33</b> | <b>96.67</b> | <b>85.00</b> | <b>70.00</b> | 78.33        | 60.00        | <b>95.00</b> | <b>93.33</b> | 87.00        | 73.00        |
+| InternVL 2.0 8B<br>(Chen et al., 2024) | ✓                  | ✓            | ✓                  | <b>98.33</b> | <b>96.67</b> | 83.33        | 66.67        | 78.33        | 60.00        | 91.67        | 90.00        | 86.75        | 73.00        |
+|                                        | <b>✓</b>           | <b>✓</b>     | <b>✓</b>           | <b>98.67</b> | <b>93.33</b> | <b>81.67</b> | <b>66.67</b> | <b>76.67</b> | <b>56.67</b> | <b>90.00</b> | <b>86.67</b> | <b>86.50</b> | <b>72.50</b> |
+
+![Figure 5: Hummingbird exhibits high diversity across different random seeds while producing high-fidelity images each time w.r.t multimodal context (reference image + text guidance).](e9b30aeb317ed964fa6de36804acf24c_img.jpg)
+
+Figure 5 shows two rows of generated images. The first row is titled 'Reference Image' and 'Seed 0' through 'Seed 4'. The reference image shows a giraffe in a savanna. The generated images show giraffes in various poses and settings, demonstrating diversity. The text guidance for this row is: 'Text Guidance: Are there **three** giraffes? [Count / Ans: No]'. The second row shows a person on a skateboard. The text guidance is: 'Text Guidance: Is there a skateboard with red wheels? [Color / Ans: Yes]'. The generated images show the person on a skateboard with red wheels in different poses and settings.
+
+Figure 5: Hummingbird exhibits high diversity across different random seeds while producing high-fidelity images each time w.r.t multimodal context (reference image + text guidance).
+
+Figure 5: Hummingbird exhibits high diversity across different random seeds while producing high-fidelity images each time w.r.t multimodal context (reference image + text guidance).
+
+![Figure 6: Fine-tuning with Multimodal Context Rewards improves fidelity in generated images.](d3f6de4fe9f9138fc6afc584b5104433_img.jpg)
+
+Figure 6 shows a row of generated images for a classroom scene. The reference image shows six people in a classroom. The generated images are labeled 'No training', 'Iter 45k', 'Iter 48k', and 'Iter 50k'. The text guidance is: 'Text Guidance: Are there six people appear in this image?'. The counts of people in the generated images are: 'Count: 6' (reference), 'Count: 7 X' (No training), 'Count: 8 X' (Iter 45k), 'Count: 6 ✓' (Iter 48k), and 'Count: 6 ✓' (Iter 50k). The images show a group of people sitting at desks in a classroom, with some people standing and talking.
+
+Figure 6: Fine-tuning with Multimodal Context Rewards improves fidelity in generated images.
+
+Figure 6: Fine-tuning with Multimodal Context Rewards improves fidelity in generated images. 8B for evaluation. Table 5 (Row 1 and 5) show that training Hummingbird with  $C$  obtained from LLaVA performs better than that from InternVL for Position and Scene tasks while  $C$  from InternVL achieves better accuracy on Existence and Count tasks. This experiment emphasizes the importance of choosing a strong MLLM to get Context Description to fine-tune Hummingbird.
+
+**Effectiveness of Fine-tuning.** Table 5 shows that fine-tuning SDXL in Hummingbird leads to better performance consistently across all tasks compared to the baseline without finetuning (gray-shaded Rows 4, 8). Figure 6 further illustrates how fine-tuning improves fidelity while preserving diversity (with reference image having 6 people and text guidance referencing Count attribute, generated image also has 6 people after fine-tuning while remaining visually diverse w.r.t. reference image).
+
+## 6 CONCLUSION
+
+We introduce Hummingbird, a novel diffusion-based image generation algorithm that provides both high fidelity and diversity when generating images guided by multimodal context, consisting of a reference image and accompanying text guidance. By incorporating a Multimodal Context Evaluator and leveraging Global Semantic and Fine-Grained Consistency Rewards, Hummingbird ensures that the generated images accurately preserve specified scene attributes, such as object interactions and spatial relationships, while maintaining visual diversity. Our comprehensive experiments demonstrate that Hummingbird outperforms SOTA methods across multiple benchmarks, including VQA and HOI Reasoning, as well as object-centric benchmarks. The results validate Hummingbird’s ability to generate high-fidelity, multimodal context-aligned images that improve scene-aware task performance while maintaining diversity of generated images. Hummingbird sets a new standard for scene-aware image generation, with potential applications for a wide range of multimodal tasks.
+
+ Rest of paper (reference and Appendix) is removed.

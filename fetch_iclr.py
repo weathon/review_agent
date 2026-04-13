@@ -228,22 +228,34 @@ def download_pdf(
     outfile.write_bytes(pdf_bytes)
     return outfile
 
+from datalab_sdk import DatalabClient, ConvertOptions
 
 def pdf_to_markdown(pdf_path: Path) -> str:
-    """Convert PDF to markdown text, cleaning up line numbers and artifacts."""
-    import re
-    import pymupdf4llm
-    text = pymupdf4llm.to_markdown(str(pdf_path))
+    # """Convert PDF to markdown text, cleaning up line numbers and artifacts."""
+    # import re
+    # import pymupdf4llm
+    # text = pymupdf4llm.to_markdown(str(pdf_path))
 
-    # Clean up line numbers (e.g. **000**, **001**, **012 013**)
-    text = re.sub(r"\*\*\d{3}(?:\s+\d{3})*\*\*\s*", "", text)
-    # Remove status headers that leak review outcome
-    text = re.sub(r"Under review as a conference paper at ICLR \d{4}\s*\n?", "", text)
-    text = re.sub(r"Published as a conference paper at ICLR \d{4}\s*\n?", "", text)
-    # Collapse excessive blank lines
-    text = re.sub(r"\n{4,}", "\n\n\n", text)
-    return text.strip()
+    # # Clean up line numbers (e.g. **000**, **001**, **012 013**)
+    # text = re.sub(r"\*\*\d{3}(?:\s+\d{3})*\*\*\s*", "", text)
+    # # Remove status headers that leak review outcome
+    # text = re.sub(r"Under review as a conference paper at ICLR \d{4}\s*\n?", "", text)
+    # text = re.sub(r"Published as a conference paper at ICLR \d{4}\s*\n?", "", text)
+    # # Collapse excessive blank lines
+    # text = re.sub(r"\n{4,}", "\n\n\n", text)
+    # return text.strip()
 
+    client = DatalabClient()
+    options = ConvertOptions(
+        output_format="markdown",  # "markdown", "html", "json", "chunks"
+        mode="fast",           # "fast", "balanced", "accurate"
+        paginate=True,             # Add page delimiters
+        page_range="0-9",         # Process specific pages (0-indexed)
+        token_efficient_markdown=True,  # Optimize markdown output for LLM token usage
+    )
+
+    result = client.convert(pdf_path, options=options)
+    return result.markdown + "\n\n Rest of paper (reference and Appendix) is removed."
 
 def stratified_sample(papers, n, seed):
     rng = random.Random(seed)
@@ -377,12 +389,13 @@ def main(n_samples: int = 100, seed: int = 42, balanced: bool = False, data_dir:
         pid = pdf_path.stem
         paper = next((paper for paper in all_papers if paper["paper_id"] == pid), None)
         if paper is None:
-            raise RuntimeError(f"Found PDF with no matching paper metadata: {pdf_path}")
+            print(f"Found PDF with no matching paper metadata: {pdf_path}, skipping")
+            continue
         md_path = PAPERS_DIR / f"{pid}.txt"
         review_path = REVIEWS_DIR / f"{pid}.md"
         conversion_jobs.append((paper, pdf_path, md_path, review_path))
 
-    worker_count = max(1, multiprocessing.cpu_count() // 2)
+    worker_count = 10
     print(
         f"Converting {len(conversion_jobs)} PDFs from {PDFS_DIR} with {worker_count} workers..."
     )

@@ -1,0 +1,273 @@
+
+
+{0}------------------------------------------------
+
+# FULLY-INDUCTIVE NODE CLASSIFICATION ON ARBITRARY GRAPHS
+
+Jianan Zhao<sup>1,2,\*</sup>, Zhaocheng Zhu<sup>1,2,\*</sup>, Mikhail Galkin<sup>3,†</sup>, Hesham Mostafa<sup>4</sup>
+
+Michael Bronstein<sup>5,6</sup>, Jian Tang<sup>1,7,8</sup>
+
+<sup>1</sup>Mila - Québec AI Institute, <sup>2</sup>Université de Montréal, <sup>3</sup>Google Research <sup>4</sup>Intel Labs
+
+<sup>5</sup>University of Oxford, <sup>6</sup>AITHYRA, <sup>7</sup>HEC Montréal, <sup>8</sup>CIFAR AI Chair
+
+## ABSTRACT
+
+One fundamental challenge in graph machine learning is generalizing to new graphs. Many existing methods following the inductive setup can generalize to test graphs with new structures, but assuming the feature and label spaces remain the same as the training ones. This paper introduces a fully-inductive setup, where models should perform inference on *arbitrary test graphs with new structures, feature and label spaces*. We propose GraphAny as the first attempt at this challenging setup. GraphAny models inference on a new graph as an analytical solution to a LinearGNN, which can be naturally applied to graphs with any feature and label spaces. To further build a stronger model with learning capacity, we fuse multiple LinearGNN predictions with learned inductive attention scores. Specifically, the attention module is carefully parameterized as a function of the entropy-normalized distance features between pairs of LinearGNN predictions to ensure generalization to new graphs. Empirically, GraphAny trained on a single Wisconsin dataset with only 120 labeled nodes can generalize to 30 new graphs with an average accuracy of 67.26%, surpassing not only all inductive baselines, but also strong transductive methods trained separately on each of the 30 test graphs.
+
+## 1 INTRODUCTION
+
+One of the most important requirements for machine learning models is the ability to generalize to new data. Models with better generalization abilities are able to perform better on unseen data and tasks, which is a key property for foundation models (Achiam et al., 2023; Team et al., 2023; Touvron et al., 2023) that are designed to accomplish a wide range of downstream tasks. For graphs, generalization is challenging since different graphs usually have different structures and associated attributes. Ideally, graph machine learning models are expected to accommodate this difference and learn functions that are applicable to all graphs.
+
+Many previous works on graphs (Hamilton et al., 2017; Hang et al., 2021; Qu et al., 2022; Jang et al., 2023) consider generalization in the inductive setup, where models are supposed to perform inference on test graphs with new structures different from the training ones. However, these works rely on the assumption that the training and test graphs share the same feature and label spaces, which limits their applications to graphs in a fixed domain (e.g. social networks, citation networks). Ideally, we would like to have a model that generalizes to arbitrary graphs, involving new structures, new dimensions
+
+![Figure 1: A scatter plot showing Average test accuracy on 31 graphs (y-axis, ranging from 57 to 67.5) versus Total training labeled nodes (k) on a logarithmic x-axis (ranging from 0.1 to 1000). The plot compares GraphAny (blue squares) and other methods (GAT, GCN, MLP) (red circles). GraphAny is shown for two datasets: Wisconsin (trained on 1 graph) and Arxiv (trained on 31 graphs). GraphAny's performance is high and stable across different training sizes, while GAT, GCN, and MLP show lower performance.](ea11d7fce37edc22702de204c57abeb1_img.jpg)
+
+| Method | Trained on | Total training labeled nodes (k) | Avg test acc. on 31 graphs |
+|-|-|-|-|
+| GraphAny | 1 Graph (Wisconsin) | ~1 | ~67.26 |
+| GraphAny | 31 Graphs (Arxiv) | ~100 | ~67.5 |
+| GAT | - | ~1000 | ~66.8 |
+| GCN | - | ~1000 | ~66.5 |
+| MLP | - | ~1000 | ~57.5 |
+
+Figure 1: A scatter plot showing Average test accuracy on 31 graphs (y-axis, ranging from 57 to 67.5) versus Total training labeled nodes (k) on a logarithmic x-axis (ranging from 0.1 to 1000). The plot compares GraphAny (blue squares) and other methods (GAT, GCN, MLP) (red circles). GraphAny is shown for two datasets: Wisconsin (trained on 1 graph) and Arxiv (trained on 31 graphs). GraphAny's performance is high and stable across different training sizes, while GAT, GCN, and MLP show lower performance.
+
+Figure 1: Average performance on 31 datasets. GraphAny is trained on a single dataset (Wisconsin or Arxiv) and performs inductive inference on any graph. The other methods have to be trained on each dataset.
+
+<sup>\*</sup>Equal contribution. Code release: <https://github.com/DeepGraphLearning/GraphAny>
+
+<sup>†</sup>Work done while at Intel Labs
+
+{1}------------------------------------------------
+
+![Figure 2: Fully-inductive node classification diagram. The diagram is split into two horizontal sections: 'Pre-training' and 'Inference'. In the 'Pre-training' section, a graph G(V, E) is shown with its structure, a feature matrix X in R^{|V| x d}, and observed labels Y_L in R^{|V_L| x e}. An arrow labeled 'predict' points to the unobserved labels Y_U in R^{|V_U| x e}. In the 'Inference' section, a new graph G'(V', E') is shown with its structure, a feature matrix X' in R^{|V'| x d'}, and observed labels Y'_L in R^{|V'_L| x d'}. An arrow labeled 'predict' points to the unobserved labels Y'_U in R^{|V'_U| x d'}.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 2: Fully-inductive node classification diagram. The diagram is split into two horizontal sections: 'Pre-training' and 'Inference'. In the 'Pre-training' section, a graph G(V, E) is shown with its structure, a feature matrix X in R^{|V| x d}, and observed labels Y\_L in R^{|V\_L| x e}. An arrow labeled 'predict' points to the unobserved labels Y\_U in R^{|V\_U| x e}. In the 'Inference' section, a new graph G'(V', E') is shown with its structure, a feature matrix X' in R^{|V'| x d'}, and observed labels Y'\_L in R^{|V'\_L| x d'}. An arrow labeled 'predict' points to the unobserved labels Y'\_U in R^{|V'\_U| x d'}.
+
+Figure 2: Fully-inductive node classification: Trained on a graph  $G$ , a fully-inductive model should generalize to any new graph  $G'$  with new feature and label spaces *without additional training*.
+
+and semantics for their feature and label spaces without additional training. We name this more general and practical setting as the *fully-inductive* setup (visualized in Figure 2).
+
+The fully-inductive setup is particularly challenging for existing graph machine learning models for two reasons: (1) Existing models learn transformations specific to the dimension, type, and structure of the features and labels used in the training, and cannot perform inference on feature and label spaces that are different from the training ones. This requires us to develop a new model architecture for arbitrary feature and label spaces. (2) Existing models learn functions specific to the training graph and cannot generalize to new graphs. This calls for an inductive function that can generalize to any graph once it is trained. Despite these challenges, it is always possible to cheat the fully-inductive setup by training a separate instance of existing models for each test dataset. We emphasize that this solution does not solve the fully-inductive setup. However, this cheating solution can be regarded as a strong baseline for fully-inductive models, since it additionally leverages back propagation on the labeled nodes and hyperparameter tuning on the validation data of the test datasets.
+
+**Our Contributions.** We propose GraphAny to solve node classification in the fully-inductive setup. GraphAny consists of two components: *LinearGNNs* that perform inference on new feature and label spaces without training steps, and an *inductive attention* module based on entropy-normalized distance features that ensure generalization to new graphs. Specifically, our LinearGNN models the mapping between node features and labels as a non-parametric graph convolution followed by a linear layer, whose parameters are determined in analytical form without requiring explicit training steps. While a single LinearGNN model may be far from optimal for many graphs, we employ multiple LinearGNN models with different graph convolution operators and learn an attention vector to adaptively fuse their predictions. The attention vector is carefully parameterized as a function of *distance features* between the predictions of LinearGNNs, which guarantees the model to be invariant to the permutations of feature and label dimensions. To further improve the generalization ability of our model, we propose entropy normalization to rectify the distance feature distribution to a fixed entropy, which reduces the effect of different label dimensions. By combining both modules, GraphAny learns to combine the LinearGNNs’ predictions for each node based on their prediction distributions, which reflects statistics of its local structure, and generalizes to new graphs.
+
+To summarize, the contribution of GraphAny are four folds:
+
+- We introduce the fully-inductive setup for generalization across arbitrary graphs. Fully-inductive setup is more general and practical than the conventional inductive setup, allowing knowledge transfer across diverse domains, such as from knowledge graphs to e-commerce graphs.
+- We devise LinearGNN, an analytical solution for node classification that enables efficient inductive inference on any new graph without the need for gradient descent.
+
+{2}------------------------------------------------
+
+- We identify two necessary properties for fully-inductive generalization: permutation invariance and dimensional robustness w.r.t. the feature and label spaces. Towards these goals, we design an inductive attention module that satisfies these properties and generalizes to new graphs.
+- By combining LinearGNN and the inductive attention module, we present GraphAny, the first fully-inductive model for node classification. Across 31 datasets, GraphAny outperforms strong transductive baselines trained separately on each test dataset and achieves a  $2.95\times$  speedup.
+
+## 2 RELATED WORK
+
+**Inductive Node Classification.** Depending on the test graphs which models generalize to, tasks on graphs can be categorized into *transductive* and *inductive* setups. In the transductive (semi-supervised) node classification setup (Kipf and Welling, 2017), test nodes belong to the same training graph the model was trained on. In the inductive setup (Hamilton et al., 2017), the test graph might be different. The majority of GNNs aiming to work in the inductive setup use known node labels as features. Hang et al. (2021) introduced *Collective Learning* GNNs with iterative prediction refinement. Jang et al. (2023) applied a diffusion model for such prediction refinement. Structured Proxy Networks (Qu et al., 2022) combined GNNs and conditional random fields (CRF) in the *structured prediction* framework. However, the train-test setup in all those works is limited to different partitions of the same bigger graph, that is, they cannot generalize to unseen graphs with different input feature dimensions and number of classes. To the best of our knowledge, GraphAny is the first approach for fully-inductive node classification, which generalizes to unseen graphs with arbitrary feature and label spaces.
+
+**Labels as Features.** Addanki et al. (2021) demonstrated that node labels used as features yield noticeable improvements in the transductive node classification setup on MAG-240M in OGB-LSC (Hu et al., 2021a). Sato (2024) used labels as features for training-free transductive node classification with a specific GNN weight initialization strategy mimicking label propagation (hence only applicable to homophilic graphs). In homophilic graphs, node label largely depends on the labels of its close neighbors whereas in heterophilic graphs, node label does not depend on the neighboring nodes. GraphAny supports both homophilic and heterophilic graphs in both transductive and inductive setups.
+
+**Connections to Graph Foundation Models.** Graph foundation models (GFMs), which aim to develop a single model transferable to new graphs and diverse graph tasks, have garnered significant attention in the graph learning community. The core challenge in designing a GFM is achieving *generalization across graphs with varying input and output spaces*, which requires identifying an invariant feature space that transfers effectively across graphs (Mao et al., 2024). While fine-tuning a pre-trained model on a new graph is feasible (Zhu et al., 2024), we focus on the more challenging fully-inductive setting, where the model must generalize to unseen graphs *without* additional training.
+
+In scenarios where graphs *share a common feature space*, such as in molecular learning (Kläser et al., 2024; Kovács et al., 2023; Zhang et al., 2023; Sypetkowski et al., 2024; Shoghi et al., 2024) and material design (Batatia et al., 2024), GNNs can be applied to the shared feature space of atoms, acting as GFMs. For *non-featurized graphs*, GNNs equipped with labeling tricks (Zhang et al., 2021) have shown promise as generalizable link predictors in homogeneous graphs (Dong et al., 2024) and multi-relational knowledge graphs (Galkin et al., 2024). Another line of research (Zhao et al., 2023; Tang et al., 2023; Chai et al., 2023; Fatemi et al., 2024; Perozzi et al., 2024; Liu et al., 2024) focuses on *text-attributed graphs* (Yan et al., 2023), where features are represented as, or converted into, text. Here, large language models (LLMs) serve as universal featurizers by verbalizing the (sub)graph structure and the associated task in natural language. However, it is unclear whether the sequential nature of LLMs is suitable for graphs with permutation invariance.
+
+In summary, while existing GFMs have shown promising results, their generalization capabilities often rely on strong assumptions over the training and test graphs, particularly the presence of a shared input space. In contrast, GraphAny is the first attempt to the more general and challenging problem of generalizing across *arbitrary graphs*. This broader scope opens up new possibilities for transferring knowledge between different graph domains, such as from knowledge graphs to e-commerce graphs. Additionally, we believe our proposed model, along with essential generalization properties like permutation invariance and dimensional robustness, provide a solid foundation for future research on powerful and versatile GFMs.
+
+{3}------------------------------------------------
+
+![Figure 3: Overview of GraphAny architecture. The diagram shows the flow from an input graph with features and labels to the final prediction. The input graph is processed by LinearGNNs (Graph Conv, Pseudo-inverse, Predictions) to produce distance features. These are then processed by an Inductive Attention module (Entropy Normalization, Attention) to produce the final prediction. The legend indicates that non-learnable components are blue and learnable components are green.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+The diagram illustrates the GraphAny architecture. It starts with an input graph with features  $A$  and observed labels  $Y_L$ . This is processed by a series of LinearGNNs: Graph Conv. (producing features  $F$ ), Pseudo-inverse (producing  $F^+$ ), and Predictions (producing  $\hat{Y}$ ). These predictions are then processed by an Inductive Attention module. The module uses Entropy Normalization to produce a distance matrix  $t \times t$ , which is then processed by an Attention block (producing  $t \times 1$  attention weights). The final prediction  $\hat{Y}$  is obtained by element-wise multiplication of the predictions and the attention weights. A legend indicates that non-learnable components are blue and learnable components are green.
+
+Figure 3: Overview of GraphAny architecture. The diagram shows the flow from an input graph with features and labels to the final prediction. The input graph is processed by LinearGNNs (Graph Conv, Pseudo-inverse, Predictions) to produce distance features. These are then processed by an Inductive Attention module (Entropy Normalization, Attention) to produce the final prediction. The legend indicates that non-learnable components are blue and learnable components are green.
+
+Figure 3: Overview of GraphAny: LinearGNNs are used to perform non-parametric predictions and derives the entropy-normalized distance features. The final prediction is generated by fusing multiple LinearGNN predictions on each node with an attention learned based on the distance features.
+
+## 3 GRAPHANY: FULLY-INDUCTIVE NODE CLASSIFICATION ON ANY GRAPH
+
+Our goal is to devise a fully-inductive model that can perform inductive inference on any new graph with arbitrary feature and label spaces, typically different from the ones associated with the training graph (Figure 2). Here we propose such a solution GraphAny, which consists of two main components (Figure 3): a LinearGNN and an attention module. Each LinearGNN provides a basic solution to inductive inference on new graphs with arbitrary feature and label spaces, while the attention module learns to combine multiple LinearGNNs based on inductive features that generalize to new graphs.
+
+Formally, in a semi-supervised node classification task, we are given a graph  $\mathcal{G} = (\mathcal{V}, \mathcal{E})$ , typically represented as an adjacency matrix  $A$ , and node features  $X \in \mathbb{R}^{|\mathcal{V}| \times d}$ , a set of labeled nodes  $\mathcal{V}_L$  and their labels  $Y_L \in \mathbb{R}^{|\mathcal{V}_L| \times c}$ , where  $c$  is the number of unique label classes. The goal of node classification is to predict the labels  $\hat{Y}$  for all the unlabeled nodes  $\mathcal{V}_U = \mathcal{V} \setminus \mathcal{V}_L$  in the graph. In the conventional transductive learning setup, this is performed by training a GNN (e.g. GCN (Kipf and Welling, 2017), GAT (Veličković et al., 2018)) on the subset of labeled nodes using standard backpropagation requiring multiple gradient steps. Such a GNN assumes the full graph to be given and typically does not generalize to a new graph out of the box without some forms of re-training or fine-tuning. Conversely, a fully-inductive model is expected to predict the labels  $\hat{Y}$  for any graph without expensive gradient steps. Furthermore, when a new graph is provided, it might have different dimensionality  $d'$  of the features and number of class labels,  $c'$ , which can also appear in an arbitrary permuted order.
+
+### 3.1 INDUCTIVE INFERENCE WITH LINEARGNNs
+
+A key idea of this paper is to use simple GNN models whose parameters can be expressed analytically. Following existing works that simplifies GNN (Wu et al., 2019; Zhu and Koniusz, 2021; Yoo et al., 2023) by removing non-linearity, we leverage graph convolutions to process node features, followed by a linear layer to predict the labels,
+
+$$\hat{Y} = \text{softmax}(FW), \quad (1)$$
+
+where  $F = A^k X \in \mathbb{R}^{|\mathcal{V}| \times d}$  is the processed features and  $W \in \mathbb{R}^{d \times c}$  is the weight of the linear layer. Originally, the parameters of most existing GNNs are trained to minimize a cross-entropy loss on node classification, which does not have analytical solution and requires gradient descent to learn the weights. Alternatively, we propose to use a mean-squared error loss for optimizing the weights:
+
+$$W^* = \arg \min_W \|\hat{Y}_L - Y_L\|^2, \quad (2)$$
+
+where we use  $\hat{Y}_L$  to denote model predictions on the set of labeled nodes. The benefit of this approximation is that now we have an analytical solution for the optimal weights  $W^*$ :
+
+$$W^* = F_L^+ Y_L, \quad (3)$$
+
+where  $F_L^+$  is the pseudo inverse of  $F_L$ , and the model prediction is given by:
+
+$$\hat{Y} = F F_L^+ Y_L. \quad (4)$$
+
+{4}------------------------------------------------
+
+We term this architecture *LinearGNN*, as it approximates the prediction of linear GNNs (like SGC (Wu et al., 2019)) with a single forward pass. Its main advantage is that it requires no training, which makes it significantly more computationally efficient (see Section 3.3). Note that the derivation of LinearGNNs is independent of the graph convolution operation, and can be applied to other linear convolution operations as well. We stress that while we do not expect LinearGNNs to outperform existing transductive models on node classification, they provide a simple basic module for inductive inference. In Section 3.2, we will see how to combine multiple LinearGNNs to create a stronger model with inductive attention that generalizes to new graphs.
+
+### 3.2 LEARNING INDUCTIVE ATTENTION OVER LINEARGNN PREDICTIONS
+
+Although LinearGNNs provide basic solutions to inductive inference on new graphs, the learned weights are still *transductive*, i.e. specific to the training graph, and do not capture transferable knowledge that can be applied to unseen graphs. Besides, our experiments (Figure 7) suggest that different graphs may require LinearGNNs with convolution operations. Hence, a natural way to incorporate fully-inductive learning is to add an *inductive attention module* over a set of multiple LinearGNNs. Let  $\alpha_u^{(1)}, \alpha_u^{(2)}, \dots, \alpha_u^{(t)}$  denote the node-level attention over  $t$  LinearGNNs. We generate the final prediction as a combination of all LinearGNN predictions:
+
+$$\bar{y}_u = \sum_{i=1}^t \alpha_u^{(i)} \hat{y}_u^{(i)}. \quad (5)$$
+
+While there are various ways to parameterize this attention module, finding an inductive solution is non-trivial since neural networks can easily fit the information specific to the training graph. We notice a necessary property for fully-inductive functions is that it should be robust to transformations on features and labels, such as permutation or masking on some dimensions (Figure 4). This requires our attention module, to be *permutation invariant* and *robust to dimension changes*, which motivates our design of distance features and entropy normalization respectively.
+
+![Figure 4: Transformations on graph features and labels: permutation (left), masking (right).](ca5566458a134032dd860e88fdaa0d2b_img.jpg)
+
+The diagram illustrates two types of data transformations. On the left, 'Permutation' shows two matrices of size  $|V| \times d$ . The first matrix has columns in order 1, 2, 3, 4. The second matrix shows a permutation of these columns to the order 2, 1, 4, 3. On the right, 'Masking' shows two matrices. The first matrix has size  $|V| \times c$  and contains values in some cells. The second matrix has size  $|V| \times c'$  and shows a subset of the columns from the first matrix, with some columns completely removed (masked).
+
+Figure 4: Transformations on graph features and labels: permutation (left), masking (right).
+
+Figure 4: Transformations on graph features and labels: permutation (left), masking (right).
+
+**Permutation-Invariant Attention with Distance Features.** We would like to design an attention module that is permutation invariant (Bronstein et al., 2021) along the data dimension.<sup>1</sup> Consider a new graph generated by permuting feature and label dimensions of the training graph. We expect our attention output to be invariant to these permutations in order to generate the same prediction as for the unpermuted training set.
+
+Our idea is to construct a set of permutation-invariant features, such that any attention module we build on top of these features becomes permutation-invariant. Formally, if the permutation matrices for feature and label dimensions are  $P \in \mathbb{R}^{d \times d}$  and  $Q \in \mathbb{R}^{c \times c}$  respectively, a function  $f$  is (*data*) *permutation-invariant* if:
+
+$$f(XP, Y_L Q) = f(X, Y_L). \quad (6)$$
+
+In our LinearGNN, the prediction  $\hat{Y}$ , as a function of the new graph, is invariant to the feature permutation and equivariant to the label permutation since it has the following analytical form:
+
+$$\hat{Y}(XP, Y_L Q) = FF_L^+ Y_L Q. \quad (7)$$
+
+Deriving a feature that is invariant to the label permutation requires us to cancel  $Q$  with its inverse  $Q^\top$ . A straightforward solution is to use a dot product feature for predictions on each node:
+
+$$\hat{Y} \hat{Y}^\top = FF_L^+ Y_L Y_L^\top (F_L^+ )^\top F^\top, \quad (8)$$
+
+<sup>1</sup>It is important to distinguish between *domain symmetry* (in this case, permutation of the nodes of the graph) and *data symmetry* (permutation of the feature and label dimensions). Invariance to domain symmetry (node permutations) is provided by design in our LinearGNN.
+
+{5}------------------------------------------------
+
+which is invariant to both feature and label-permutation matrices  $P$  and  $Q$ . Generally, any feature that is a linear combination of dot products between LinearGNN predictions is also permutation invariant, e.g. Euclidean distance or Jensen-Shannon divergence. For a set of  $t$  LinearGNN predictions  $\hat{y}_u^{(1)}, \hat{y}_u^{(2)}, \dots, \hat{y}_u^{(t)}$  on a single node  $u$ , we construct the following  $t(t-1)$  permutation-invariant features to capture their squared distances:
+
+$$\|\hat{y}_u^{(1)} - \hat{y}_u^{(2)}\|^2, \|\hat{y}_u^{(1)} - \hat{y}_u^{(3)}\|^2, \dots, \|\hat{y}_u^{(t)} - \hat{y}_u^{(t-1)}\|^2. \quad (9)$$
+
+We include detailed proofs in Appendix A. An advantage of such permutation-invariant features is that any model taking them as input is also permutation invariant, allowing us to use a simple model, such as multi-layer perceptrons (MLP), to predict the attention scores over different LinearGNNs.
+
+![Figure 5: Comparison of Euclidean distances (the first row) and entropy-normalized (the second row) features between five channels across six datasets. The figure consists of 12 density plots arranged in a 2x6 grid. The columns represent datasets: Wisconsin (5 classes), Cora (7 classes), Roman (18 classes), Arxiv (40 classes), Product (47 classes), and FullCora (70 classes). The rows represent feature types: Euclidean distances (top) and entropy-normalized features (bottom). Each plot compares five channels: Linear (blue), LinearSGC1 (orange), LinearSGC2 (green), LinearHGC1 (red), and LinearHGC2 (purple). The x-axis is 'Value' from 0.00 to 1.00, and the y-axis is 'Density' from 0 to 10. In the top row, the distributions are highly skewed towards zero, especially for larger datasets. In the bottom row, the distributions are more spread out and consistent across datasets.](ac99eff233b8fe51d30f499e7413c345_img.jpg)
+
+Figure 5: Comparison of Euclidean distances (the first row) and entropy-normalized (the second row) features between five channels across six datasets. The figure consists of 12 density plots arranged in a 2x6 grid. The columns represent datasets: Wisconsin (5 classes), Cora (7 classes), Roman (18 classes), Arxiv (40 classes), Product (47 classes), and FullCora (70 classes). The rows represent feature types: Euclidean distances (top) and entropy-normalized features (bottom). Each plot compares five channels: Linear (blue), LinearSGC1 (orange), LinearSGC2 (green), LinearHGC1 (red), and LinearHGC2 (purple). The x-axis is 'Value' from 0.00 to 1.00, and the y-axis is 'Density' from 0 to 10. In the top row, the distributions are highly skewed towards zero, especially for larger datasets. In the bottom row, the distributions are more spread out and consistent across datasets.
+
+Figure 5: Comparison of Euclidean distances (the first row) and entropy-normalized (the second row) features between five channels:  $F = X$  (Linear),  $F = AX$  (LinearSGC1),  $F = A^2X$  (LinearSGC2),  $F = (I - A)X$  (LinearHGC1) and  $F = (I - A)^2X$  (LinearHGC2) with  $A$  denoting the row normalized adjacency matrix. Entropy-normalized features are on the same scale and exhibit transferrable patterns across datasets.
+
+**Robust Dimension Generalization with Entropy Normalization.** While the distance features for inductive attention ensure a permutation-invariant attention module, the distance features are known to suffer from the curse of dimensionality, where distances between vectors with larger dimensions have smaller scales (Beyer et al., 1999). This will hamper the generalization performance when the dimensions of label spaces vary across training and inference graphs (e.g. training on 7 classes for Cora and inference on 70 classes for FullCora). Empirically, as shown in the first row of Figure 5, the scale of Euclidean distance distributions decreases drastically when the number of classes increases, hampering the generalization ability of the attention module trained on a single graph.
+
+A naive approach is to normalize the distance-feature distributions using a hyperparameter (e.g., temperature). However, due to the varying neighbor patterns across graphs (or even nodes (Luan et al., 2022)), a single hyperparameter may not be suitable for all nodes and graphs. Instead, we propose an adaptive solution that normalizes distance features to a consistent scale. To achieve this, we employ *entropy normalization*, a technique commonly used in manifold learning (Hinton and Roweis, 2002; van der Maaten and Hinton, 2008) to adaptively determine the similarity features. For node  $u$ , the asymmetric similarity feature between LinearGNN predictions  $i$  and  $j$  is defined as:
+
+$$p_u(j|i) = \frac{\exp(-\|\hat{y}_u^{(i)} - \hat{y}_u^{(j)}\|^2/2(\sigma_u^{(i)})^2)}{\sum_{k \neq i} \exp(-\|\hat{y}_u^{(i)} - \hat{y}_u^{(k)}\|^2/(\sigma_u^{(k)})^2)}, \quad (10)$$
+
+where  $\sigma_u^{(i)}$  is the standard deviation of an isotropic multivariate Gaussian, determined by matching the entropy of distance distributions  $P_u^{(i)} = \{p_u(j|i) | j \in [1, t]\}$  to a fixed hyperparameter  $H$ . Since the similarity features are derived from distance features, they are also permutation-invariant to the feature and label dimensions of the graph. Intuitively, this imposes a soft constraint on the
+
+{6}------------------------------------------------
+
+number of LinearGNN predictions considered similar to  $\hat{y}_u^{(t)}$ , significantly reducing the gap between training and test features. As shown in the second row of Figure 5, entropy-normalized feature distributions are on consistent scales across datasets. Additionally, we observe that different types of homophilic graphs (e.g., the citation graph Cora and the e-commerce graph Product) exhibit similar entropy-normed features. We will further verify the effectiveness of entropy normalization empirically in Section 4.4.
+
+### 3.3 EFFICIENT TRAINING AND FULLY-INDUCTIVE INFERENCE
+
+In this section, we summarize how GraphAny utilizes the techniques introduced in the previous section and derive an efficient fully-inductive node classification model. As shown in Figure 3, given any graph, GraphAny first utilizes  $t$  LinearGNNs to provide basic predictions with different channels. Then, entropy-normalized features are computed based on the distances between these predictions, leading to  $t(t-1)$ -dimensional features. Further, an inductive attention module  $f_\theta$  (e.g. MLP) is used to compute the attention scores for fusing different predictions into a final prediction (Eq. 5). Since the only trainable module of GraphAny lies in the inductive attention module  $f_\theta : \mathbb{R}^{t(t-1)} \rightarrow \mathbb{R}^t$ , which is *independent* to feature dimension  $d$  and label dimension  $c$ , GraphAny enjoys fully-inductive inference on any graph with arbitrary feature and label dimensions.
+
+One advantage of GraphAny is that it is more efficient than conventional graph neural networks (e.g. GCN (Kipf and Welling, 2017), which is due to two reasons. First, LinearGNN leverages non-parametric graph convolution operations, which can be preprocessed and cached for all nodes on a graph, reducing the optimization complexity to  $O(|\mathcal{V}_L|)$  compared with the complexity of  $O(|\mathcal{E}|)$  for standard GNNs. Second, once trained, GraphAny is ready to generalize to arbitrary graphs, eliminating the need for gradient descent on test graphs.
+
+Table 1 shows the time complexity and total wall time of GCN, LinearGNN and GraphAny. The total wall time considers all training and inference time on 31 graphs. Even without any speed optimization in our implementation, GraphAny is  $2.95\times$  faster than the optimized DGL’s (Wang et al., 2020) GCN implementation in total time. We believe the speedup can be even larger with dedicate implementations of GraphAny.
+
+Table 1: Comparison of time complexity and wall time. Note that GCN has to be trained individually on each of the 31 graphs while GraphAny only needs 1 training graph.
+
+| Model | Pre-processing | Optimization | Inference | Total Wall Time<br>(31 graphs) |
+|-|-|-|-|-|
+| GCN | 0 | $O( \mathcal{E} )$ | $O( \mathcal{E} )$ | 18.80 min |
+| LinearGNN | $O( \mathcal{E} )$ | $O( \mathcal{V}_L )$ | $O( \mathcal{V}_U )$ | 1.25 min (15.04 $\times$ ) |
+| GraphAny | $O( \mathcal{E} )$ | $O( \mathcal{V}_L )$ | $O( \mathcal{V}_U )$ | 6.37 min (2.95 $\times$ ) |
+
+## 4 EXPERIMENTS
+
+In this section, we evaluate the performance of GraphAny against both transductive and inductive methods on 31 node classification datasets (details in Appendix B). We visualize the attention of GraphAny on different datasets, shedding light on what inductive knowledge our model has learned (Section 4.3). To provide a comprehensive understanding of the proposed techniques of GraphAny, we further conduct ablation studies on the entropy-normalized feature and attention parameterization in Section 4.4. More training and implementation details are provided in Appendix C.
+
+### 4.1 EXPERIMENTAL SETUP
+
+**Datasets.** We have compiled a diverse collection of 31 node classification datasets from three sources: PyG (Fey and Lenssen, 2019), DGL (Wang et al., 2020), and OGB (Hu et al., 2021b). These datasets encompass a wide range of graph types including academic collaboration networks, social networks, e-commerce networks and knowledge graphs, with sizes varying from a few hundreds to a few millions of nodes. The number of classes across these datasets ranges from 2 to 70. Detailed statistics for each dataset are provided in Appendix B.
+
+{7}------------------------------------------------
+
+![Bar chart showing Inductive test accuracy (%) for various datasets. The y-axis ranges from 0 to 100. The x-axis lists 30 datasets: Questions, CoPhy, Reddit, CoCS, AmzPhoto, AmzComp, Minesswapper, LastFMAsia, Tokens, Cora, BlogCatalog, Pubmed, WikKG, Texas, Wisconsin, DBLP, Citeseer, Cornell, Roman, Wiki, Products, Chameleon, Arxiv, FullCora, Deezer, ArulDS, AmazonRatings, Squirrel, AirBnb, Auto, and Average. For each dataset, four bars are shown: GraphAny (Wisconsin) | 120 training nodes (orange), GAT | 511,673 training nodes (light blue), GCN | 511,673 training nodes (dark blue), and MLP | 511,673 training nodes (dark blue). GraphAny generally outperforms the baselines across most datasets, with an average accuracy of approximately 65%.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Bar chart showing Inductive test accuracy (%) for various datasets. The y-axis ranges from 0 to 100. The x-axis lists 30 datasets: Questions, CoPhy, Reddit, CoCS, AmzPhoto, AmzComp, Minesswapper, LastFMAsia, Tokens, Cora, BlogCatalog, Pubmed, WikKG, Texas, Wisconsin, DBLP, Citeseer, Cornell, Roman, Wiki, Products, Chameleon, Arxiv, FullCora, Deezer, ArulDS, AmazonRatings, Squirrel, AirBnb, Auto, and Average. For each dataset, four bars are shown: GraphAny (Wisconsin) | 120 training nodes (orange), GAT | 511,673 training nodes (light blue), GCN | 511,673 training nodes (dark blue), and MLP | 511,673 training nodes (dark blue). GraphAny generally outperforms the baselines across most datasets, with an average accuracy of approximately 65%.
+
+Figure 6: Inductive test accuracy (%) of GraphAny pre-trained using 120 labeled nodes of the Wisconsin dataset on 30 diverse graphs. Baseline methods are trained individually on each graph (511k labeled nodes in total). GraphAny is slightly better than the baselines in average performance.
+
+**Implementation Details.** For GraphAny, we employ 5 LinearGNNs with different graph convolution operations:  $F = X$  (Linear),  $F = \tilde{A}X$  (LinearSGC1),  $F = \tilde{A}^2X$  (LinearSGC2),  $F = (I - \tilde{A})X$  (LinearHGC1) and  $F = (I - \tilde{A})^2X$  (LinearHGC2) with  $\tilde{A}$  denoting the row normalized adjacency matrix, which cover identical, low-pass and high-pass spectral filters. In our experiments, we consider 4 GraphAny models trained separately on 4 datasets respectively: Cora (homophilic, small), Wisconsin (heterophilic, small), Arxiv (homophilic, medium), and Products (homophilic, large). The remaining 27 datasets are held out from these training sets, ensuring that the evaluations on these datasets are conducted in a fully-inductive manner. More implementation details can be found at Appendix C.
+
+**Baselines.** As there are no existing fully-inductive node classification baselines, we include non-parametric methods (models without learnable parameters) like label propagation (Zhu and Ghahramani, 2002) and the five LinearGNNs used in GraphAny. While these methods perform inductive inference, they do not transfer knowledge across graphs. Additionally, we compare GraphAny with transductive models, including MLP, GCN (Kipf and Welling, 2017), and GAT (Veličković et al., 2018). These models are trained separately on each dataset and serve as strong baselines for inductive models, as they benefit from backpropagation on labeled nodes and hyperparameter tuning on validation sets of the test dataset.
+
+### 4.2 PERFORMANCE OF INDUCTIVE NODE CLASSIFICATION
+
+Table 2 presents the results of GraphAny and various baselines on 31 node classification datasets (complete results for each dataset are provided in Appendix D). Our proposed LinearGNNs, despite being non-parametric, demonstrate competitive performance. Notably, LinearSGC2, a linear model with a two-hop graph convolution layer, achieves only 2.1% lower accuracy than GCN, which aligns with previous findings that SGC performs comparably to GCN (Wu et al., 2019). Moreover, LinearSGC2 leverages an analytical solution for inference, making it approximately  $15\times$  faster than training a GCN from scratch on each dataset (see Table 1). Additionally, we observe that the optimal LinearGNN model differs across datasets, highlighting that no single graph convolution kernel is universally effective for all graphs.
+
+As for GraphAny, which is trained on just 1 of the 31 graphs, it significantly outperforms LinearGNNs and even slightly surpasses transductive baselines that are individually trained on all 31 graphs. This improvement is primarily driven by inductive generalization, as GraphAny achieves its strongest performance on the 27 held-out (fully-inductive) datasets rather than the 4 training (transductive) datasets. A closer examination of Figure 6 shows that GraphAny performs well on both homophilic and heterophilic graphs in an inductive manner. We attribute this to the inductive attention module, which adaptively fuses predictions from different graph convolution kernels for each node. Interestingly, we also observe minimal performance differences between GraphAny when trained on small datasets (e.g., Cora and Wisconsin) and large datasets (e.g., Arxiv and Products). We hypothesize that even small datasets contain sufficiently diverse local node patterns (e.g., homophily
+
+{8}------------------------------------------------
+
+Table 2: Main experiment results (test accuracy %).
+
+| Category | Method | Cora | Wisconsin | Arxiv | Products | Held Out Avg.<br>(27 graphs) | Total Avg.<br>(31 graphs) |
+|-|-|-|-|-|-|-|-|
+| <b>Transductive</b> | MLP | 48.42 $\pm$ 0.63 | 66.67 $\pm$ 3.51 | 55.50 $\pm$ 0.23 | 61.06 $\pm$ 0.08 | 57.09 | 57.20 |
+|  | GCN | 81.40 $\pm$ 0.70 | 37.25 $\pm$ 1.64 | 71.74 $\pm$ 0.29 | 75.79 $\pm$ 0.12 | 65.55 | 66.55 |
+|  | GAT | <b>81.70<math>\pm</math>1.43</b> | 52.94 $\pm$ 3.10 | <b>73.65<math>\pm</math>0.11</b> | <b>79.45<math>\pm</math>0.59</b> | 65.31 | 67.03 |
+| <b>Non-parametric</b> | LabelProp | 60.30 $\pm$ 0.00 | 16.08 $\pm$ 2.15 | 0.98 $\pm$ 0.00 | 74.50 $\pm$ 0.00 | 50.73 $\pm$ 0.31 | 49.01 $\pm$ 0.27 |
+|  | Linear | 52.80 $\pm$ 0.00 | <b>80.00<math>\pm</math>2.15</b> | 46.79 $\pm$ 0.00 | 42.10 $\pm$ 0.00 | 57.91 $\pm$ 0.43 | 57.59 $\pm$ 0.42 |
+|  | LinearSGC1 | 74.30 $\pm$ 0.00 | 45.49 $\pm$ 13.96 | 55.33 $\pm$ 0.00 | 56.58 $\pm$ 0.00 | 62.69 $\pm$ 0.24 | 62.08 $\pm$ 0.48 |
+|  | LinearSGC2 | 78.20 $\pm$ 0.00 | 57.64 $\pm$ 1.07 | 59.58 $\pm$ 0.00 | 62.92 $\pm$ 0.00 | 64.38 $\pm$ 0.48 | 64.41 $\pm$ 0.39 |
+|  | LinearHG1 | 22.50 $\pm$ 0.00 | 64.32 $\pm$ 2.15 | 22.92 $\pm$ 0.00 | 15.00 $\pm$ 0.00 | 37.01 $\pm$ 0.20 | 36.26 $\pm$ 0.23 |
+|  | LinearHG2 | 23.80 $\pm$ 0.00 | 56.08 $\pm$ 4.29 | 20.65 $\pm$ 0.00 | 13.39 $\pm$ 0.00 | 35.62 $\pm$ 0.68 | 34.70 $\pm$ 0.55 |
+| <b>Inductive<br/>(training set)</b> | GraphAny (Cora) | 80.18 $\pm$ 0.13 | 61.18 $\pm$ 5.08 | 58.62 $\pm$ 0.05 | 61.60 $\pm$ 0.10 | 67.24 $\pm$ 0.23 | 67.00 $\pm$ 0.14 |
+|  | GraphAny (Wisconsin) | 77.82 $\pm$ 1.15 | 71.77 $\pm$ 5.98 | 57.79 $\pm$ 0.56 | 60.28 $\pm$ 0.80 | 67.31 $\pm$ 0.38 | 67.26 $\pm$ 0.20 |
+|  | GraphAny (Arxiv) | 79.38 $\pm$ 0.16 | 65.10 $\pm$ 3.22 | 58.68 $\pm$ 0.17 | 61.31 $\pm$ 0.20 | 67.65 $\pm$ 0.31 | 67.46 $\pm$ 0.27 |
+|  | GraphAny (Products) | 79.36 $\pm$ 0.23 | 65.89 $\pm$ 2.23 | 58.58 $\pm$ 0.11 | 61.19 $\pm$ 0.23 | <b>67.66<math>\pm</math>0.39</b> | <b>67.48<math>\pm</math>0.33</b> |
+
+![Figure 7: Normalized performance of LinearGNNs and attention weights. The figure consists of three heatmaps. The left heatmap shows normalized performance for 10 LinearGNN variants across 27 datasets, with a color scale from 0.3 (green) to 1.0 (red). The middle heatmap shows attention weights for GraphAny-Wisconsin, with a color scale from 0.15 (green) to 0.52 (red). The right heatmap shows attention weights for GraphAny-Arxiv, with a color scale from 0.15 (green) to 0.77 (red). In all heatmaps, the best-performing LinearGNN for each dataset is highlighted with a red rectangle, and the second-best is highlighted with a purple rectangle. The datasets are listed on the y-axis, and the LinearGNN variants are listed on the x-axis.](bedcca5cdf168e3508ef511d94ec514c_img.jpg)
+
+Figure 7: Normalized performance of LinearGNNs and attention weights. The figure consists of three heatmaps. The left heatmap shows normalized performance for 10 LinearGNN variants across 27 datasets, with a color scale from 0.3 (green) to 1.0 (red). The middle heatmap shows attention weights for GraphAny-Wisconsin, with a color scale from 0.15 (green) to 0.52 (red). The right heatmap shows attention weights for GraphAny-Arxiv, with a color scale from 0.15 (green) to 0.77 (red). In all heatmaps, the best-performing LinearGNN for each dataset is highlighted with a red rectangle, and the second-best is highlighted with a purple rectangle. The datasets are listed on the y-axis, and the LinearGNN variants are listed on the x-axis.
+
+Figure 7: Normalized performance of LinearGNNs (left; best as 1.00) and attention weights of GraphAny trained on Wisconsin (middle) and Arxiv (right) respectively. The best and second best LinearGNN performance and attention weights for each dataset are highlighted with red and purple rectangles respectively. The learned inductive attention of GraphAny successfully identifies the best-performing LinearGNN for most datasets.
+
+and heterophily) (Luan et al., 2022), enabling GraphAny to learn an effective node-level attention mechanism that generalizes well with a limited number of nodes (e.g., 120). A detailed analysis of the attention module is provided in Section 4.3.
+
+### 4.3 VISUALIZATION OF THE INDUCTIVE ATTENTION
+
+To understand how LinearGNNs are combined in GraphAny by the inductive attention, we visualize the attention weights of GraphAny (Wisconsin) and GraphAny (Arxiv) on all datasets, averaged across nodes. For reference, we also visualize the performance of each individual LinearGNN on all datasets. As shown in Figure 7, we can see that half of the datasets are homophilic with LinearSGC2 being the optimal LinearGNN, while the other half prefers LinearHG1, Linear or LinearSGC1. In most cases, GraphAny successfully identifies the optimal LinearGNN within its top-2 attention weights, with Hits@2 being 0.65 and 0.77 for GraphAny trained on Wisconsin and Arxiv respectively.
+
+We hypothesize that this amazing inductive performance comes from the inductive entropy-normed distance feature we derived, where homophilic and heterophilic graphs share different patterns (see the second row in Figure 5). Interestingly, there is a distinction between the attention distributions when training on different datasets: GraphAny-Wisconsin leads a relatively balanced distribution of attention across 5 LinearGNNs, while Graph-Arxiv prefers a more focused distribution of attention, favoring low-pass filters like LinearSGC1 and LinearSGC2. This reflects the nature of these training sets: As shown in the left part of Figure 7, all LinearGNN channels in Wisconsin are reasonably good,
+
+{9}------------------------------------------------
+
+![Figure 8: Performance of different distance features with and without entropy normalization. The figure contains two line plots. The left plot shows 'Transductive Test Accuracy' (y-axis, 57.5 to 59.5) vs 'Training Batch' (x-axis, 0 to 2000). The right plot shows 'Inductive Test Accuracy' (y-axis, 63 to 67) vs 'Training Batch' (x-axis, 0 to 2000). Both plots compare EntNorm-4 (blue), EntNorm-3 (orange), EntNorm-2 (green), EntNorm-1 (red), EntNorm-0.5 (light blue), EntNorm-0.25 (light orange), Euc. Distance (dark blue), and JS-Divergence (light green). In the transductive setting, EntNorm variants generally achieve higher accuracy than distance features. In the inductive setting, EntNorm variants show a decrease in accuracy as training progresses, while distance features remain relatively stable.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 8: Performance of different distance features with and without entropy normalization. The figure contains two line plots. The left plot shows 'Transductive Test Accuracy' (y-axis, 57.5 to 59.5) vs 'Training Batch' (x-axis, 0 to 2000). The right plot shows 'Inductive Test Accuracy' (y-axis, 63 to 67) vs 'Training Batch' (x-axis, 0 to 2000). Both plots compare EntNorm-4 (blue), EntNorm-3 (orange), EntNorm-2 (green), EntNorm-1 (red), EntNorm-0.5 (light blue), EntNorm-0.25 (light orange), Euc. Distance (dark blue), and JS-Divergence (light green). In the transductive setting, EntNorm variants generally achieve higher accuracy than distance features. In the inductive setting, EntNorm variants show a decrease in accuracy as training progresses, while distance features remain relatively stable.
+
+Figure 8: Performance of different distance features with and without entropy normalization.
+
+Figure 9: Performance of different attention parameterizations.
+
+indicating diverse message-passing pattern exists, but Arxiv is a homophilic dataset where Linear, LinearSGC1 and LinearSGC2 have better performance (Table 2). These different message-passing patterns are learned and used by GraphAny to generate inductive attention scores.
+
+### 4.4 ABLATION STUDIES
+
+**Entropy Normalization.** A key component of GraphAny is the entropy normalization technique applied to distance features. As discussed in Figure 5, entropy normalization ensures that the generated features are of a consistent scale. Here, we further evaluate entropy normalization from a performance perspective. Figure 8 demonstrates that unnormalized features, such as Euclidean distance and Jensen-Shannon divergence, yield better test performance in the transductive setting. However, their performance in the inductive setting decreases as training progresses, indicating that the model overfits to transductive information in the features, such as feature scale. In contrast, distance features normalized to the same entropy  $H$  (denoted as EntNorm- $H$  in the figure) achieve stable convergence in both transductive and inductive settings. Additionally, entropy normalization shows robustness to the choice of the hyperparameter entropy value  $H$ , with different selections resulting in similar convergence rates and performance.
+
+**Attention Parameterization.** It is known that the optimal message-passing patterns vary for different graphs (Zhu et al., 2020) or even different nodes (Luan et al., 2022). Therefore, GraphAny utilizes a *node-level attention* to adaptively combine different LinearGNN predictions. Here we consider two variants of attention parameterization: (1) *Graph-level attention* uses distance features averaged over all nodes in a training batch, which results in the same attention for all nodes in a training batch, losing the personalization for each node. (2) *Transductive attention* directly parameterizes attention weights as a  $t$ -dimensional vector and assumes they can transfer to new graphs. Figure 9 plots the transductive and inductive test performance curves for different attention parameterizations. We notice that transductive attention does not even learn anything useful, given its performance is worse than a single LinearSGC2 model (see Table 2). Comparing node-level attention and graph-level attention, we can see that node-level attention converges slower than graph-level attention, but results in better performance in both transductive and inductive settings. This suggests the effectiveness of learning fine-grained attention based on the local information of each node.
+
+## 5 CONCLUSION
+
+In this paper, we propose GraphAny, the first fully-inductive node classification model capable of performing inference on any graph with arbitrary feature or label space. GraphAny is composed of two core components: LinearGNNs and an inductive attention module. LinearGNNs enable efficient inductive inference on unseen graphs, while the inductive attention module learns to adaptively aggregate predictions from multiple LinearGNNs. Trained on a single graph, GraphAny demonstrates strong generalization to 30 new graphs, even surpassing the average performance of transductive models that are trained separately on each dataset.
+
+ Rest of paper (reference and Appendix) is removed.

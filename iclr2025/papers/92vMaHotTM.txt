@@ -1,0 +1,298 @@
+
+
+{0}------------------------------------------------
+
+# EDGE PROMPT TUNING FOR GRAPH NEURAL NETWORKS
+
+**Xingbo Fu**
+
+University of Virginia  
+xf3av@virginia.edu
+
+**Yinhan He**
+
+University of Virginia  
+nee7ne@virginia.edu
+
+**Jundong Li**
+
+University of Virginia  
+jundong@virginia.edu
+
+## ABSTRACT
+
+Pre-training powerful Graph Neural Networks (GNNs) with unlabeled graph data in a self-supervised manner has emerged as a prominent technique in recent years. However, inevitable objective gaps often exist between pre-training and downstream tasks. To bridge this gap, graph prompt tuning techniques design and learn graph prompts by manipulating input graphs or reframing downstream tasks as pre-training tasks without fine-tuning the pre-trained GNN models. While recent graph prompt tuning methods have proven effective in adapting pre-trained GNN models for downstream tasks, they overlook the crucial role of edges in graph prompt design, which can significantly affect the quality of graph representations for downstream tasks. In this study, we propose EdgePrompt, a simple yet effective graph prompt tuning method from the perspective of edges. Unlike previous studies that design prompt vectors on node features, EdgePrompt manipulates input graphs by learning additional prompt vectors for edges and incorporates the edge prompts through message passing in the pre-trained GNN models to better embed graph structural information for downstream tasks. Our method is *compatible* with prevalent GNN architectures pre-trained under various pre-training strategies and is *universal* for different downstream tasks. We provide comprehensive theoretical analyses of our method regarding its capability of handling node classification and graph classification as downstream tasks. Extensive experiments on ten graph datasets under four pre-training strategies demonstrate the superiority of our proposed method against six baselines. Our code is available at <https://github.com/xbfu/EdgePrompt>.
+
+## 1 INTRODUCTION
+
+Recent years have witnessed the remarkable success of Graph Neural Networks (GNNs) (Kipf & Welling, 2017; Hamilton et al., 2017; Veličković et al., 2018; Xu et al., 2019; Wu et al., 2019; Chen et al., 2020; Wang et al., 2023b) for modeling ubiquitous graph-structured data in various real-world scenarios, including social networks (Wei et al., 2023; Zhou et al., 2023), point cloud analysis (Wang et al., 2019; Zhou et al., 2021), and healthcare systems (Fu et al., 2023; Wan et al., 2024a; Liu et al., 2024). Such success is mainly attributed to their impressive capability to incorporate node features and graph structures into the representations of graph data. Generally, GNN models are trained for specific downstream tasks in an end-to-end manner. Nevertheless, the end-to-end manner for training powerful GNN models usually encounters significant challenges in practical deployments (Hu et al., 2020b; Sun et al., 2022a; Liu et al., 2023; Fang et al., 2023). First, annotating a sufficient number of labels for graph data is typically time-consuming and resource-intensive in the real world. Second, well-trained GNN models cannot be well generalized to other tasks, even on the same graph data (Wang et al., 2024b). To grapple with these critical challenges, applying pre-training techniques on graph data has become increasingly prevalent.
+
+Numerous recent studies have focused on designing effective pre-training strategies for training powerful GNN models without using any label information from downstream tasks (Veličković et al., 2019; Hu et al., 2020b; You et al., 2020; Hou et al., 2022; Xia et al., 2022; Wang et al., 2024a; Wan et al., 2024b). The philosophy behind these pre-training strategies is to first train a GNN model on pre-training tasks via self-supervised learning and subsequently transfer the pre-trained GNN model to specific downstream tasks. Generally, there exists inevitable objective gaps between
+
+{1}------------------------------------------------
+
+Table 1: A brief comparison of graph prompt tuning methods in the existing studies. (PT=Pre-training, DT=Downstream task)
+
+| Method                          | PT Compatibility | DT Universality | Prompt Insertion        |
+|---------------------------------|------------------|-----------------|-------------------------|
+| GPPT (Sun et al., 2022a)        | ✗                | ✗               | Task Embedding          |
+| GraphPrompt (Liu et al., 2023)  | ✓                | ✓               | Readout                 |
+| GraphPrompt+ (Yu et al., 2024b) | ✓                | ✓               | Hidden Representation   |
+| ALL-in-one (Sun et al., 2023)   | ✓                | ✓               | Node Feature            |
+| GPF-plus (Fang et al., 2023)    | ✓                | ✓               | Node Feature            |
+| MultiGPrompt (Yu et al., 2024d) | ✗                | ✓               | Hidden Representation   |
+| <b>EdgePrompt+ (Ours)</b>       | ✓                | ✓               | <b>Edge Aggregation</b> |
+
+pre-training and the downstream tasks. For example, the GNN model can be pre-trained for link prediction via self-supervised learning, while the downstream task may be node classification. To bridge the objective gap between pre-training and downstream tasks, we typically need to adapt the pre-trained GNN model for downstream tasks by either fine-tuning or graph prompt tuning. During fine-tuning, the parameters of the pre-trained GNN model are updated for downstream tasks (Huang et al., 2024; Zhili et al., 2024; Sun et al., 2024). Unlike fine-tuning, graph prompt tuning usually keeps the pre-trained GNN model frozen and instead trains graph prompts for downstream tasks (Sun et al., 2022a; Liu et al., 2023; Fang et al., 2023; Sun et al., 2023; Tan et al., 2023; Yu et al., 2024b; Ma et al., 2024; Yu et al., 2024a; Li et al., 2025).
+
+While recent graph prompt tuning methods show great prowess in adapting pre-trained GNN models for various downstream tasks, the existing methods still have several fundamental limitations. First, a few studies (Sun et al., 2022a; Yu et al., 2024d) design graph prompt tuning methods based on specific pre-training strategies, which hinders their application to off-the-shelf pre-trained GNN models. Second, the important dependency information carried by graph structures is ignored in the existing studies (Fang et al., 2023; Liu et al., 2023; Sun et al., 2023). As illustrated in Table 1, these methods focus on designing and learning graph prompts primarily by applying them to node features or node representations. In this scenario, graph prompts are unable to enhance pre-trained GNN models in capturing complex graph structural information for downstream tasks.
+
+Although the significant role of edges in graph learning has been amplified by a cornucopia of studies (Schlichtkrull et al., 2018; Gong & Cheng, 2019; Vashishth et al., 2020; Yang & Li, 2020), unfortunately, none of the existing studies have exploited edges for graph prompt tuning. Naturally, we may ask a question: *how can we devise an edge-level graph prompt tuning method to effectively enhance the performance of a pre-trained GNN model for downstream tasks?* In this study, we aim to answer this question through a pioneering investigation into designing edge prompts for downstream tasks. In our investigation, we need to overcome two key challenges. First, edge prompt design needs to be *universal*, capable of handling graphs of varying sizes and different downstream tasks, such as node classification and graph classification. Second, edge prompt design must be *compatible* with prevalent GNN models pre-trained by various strategies, especially with those that cannot accommodate edge attributes. These two challenges make the edge prompt design nontrivial, requiring an ingenious approach to graph prompt tuning.
+
+To address the above issues, we propose a novel graph prompt tuning method named EdgePrompt purely from the perspective of edges, fundamentally differing from node-level prompt designs in the existing studies (Sun et al., 2023; Fang et al., 2023). The intuition of EdgePrompt is to manipulate the input graph by adding extra learnable prompt vectors to edges and thereby enhance the capability of pre-trained GNN models for downstream tasks. In EdgePrompt, all the edges in the input graph learn a shared prompt vector at each layer of the pre-trained GNN model. The edge prompts will be aggregated along with node representations during the forward pass of the message-passing mechanism. To further enhance the capacity of edge prompts, we propose an advanced version EdgePrompt+ that enables each edge to learn its customized prompt vectors. We provide theoretical analyses to support that our proposed method has the capability of enhancing the pre-trained GNN models for downstream tasks. We conduct extensive experiments over ten graph datasets under four pre-training strategies. The results validate the superiority of our proposed method compared with six baselines. Our contributions to this study can be summarized as follows:
+
+{2}------------------------------------------------
+
+- We devise a simple yet effective graph prompt tuning method, EdgePrompt and its variant EdgePrompt+, from the perspective of edges to narrow the objective gap between pre-training and downstream tasks.
+- We provide comprehensive analyses of our method regarding its capability of handling various downstream tasks, including node classification and graph classification.
+- We conduct extensive experiments over ten datasets under four pre-training strategies to evaluate the effectiveness of our proposed method. Experimental results demonstrate the superiority of our method compared with six baselines for both node classification and graph classification tasks.
+
+## 2 RELATED WORK
+
+**Graph Pre-training.** Numerous studies have proposed to train powerful GNN models via self-supervised learning (Veličković et al., 2019; Sun et al., 2020; Hu et al., 2019; You et al., 2020; Jin et al., 2020; Rossi et al., 2020; Xia et al., 2022; Hou et al., 2022; Wang et al., 2023a). These studies can be roughly categorized into two genres: contrastive methods and generative methods. Contrastive methods typically aim to maximize the agreement between augmented instances of the same object. For instance, DGI (Veličković et al., 2019) and InfoGraph (Sun et al., 2020) adopt the mutual information maximization between the local augmented instances and the global representation. GraphCL (You et al., 2020) maximizes the agreement between two views of the same graph by different augmentation strategies. SimGRACE (Xia et al., 2022) uses GNN models with perturbed parameters to obtain contrastive views without data augmentation. In the meantime, generative methods attempt to pre-train GNN models by reconstructing specific information in the input graph. For example, GraphMAE (Hou et al., 2022) pre-trains GNNs by reconstructing masked node features. In addition, edge prediction is also employed as the pre-training technique by a cornucopia of studies (Rossi et al., 2020; Jin et al., 2020; Sun et al., 2022a; Liu et al., 2023).
+
+**Graph Prompt Tuning.** To bridge the gap between pre-training and downstream tasks, graph prompt tuning methods modify the input graph with learnable prompt vectors for downstream tasks, while keeping the pre-trained GNN model frozen. For example, GPF-plus (Fang et al., 2023) transforms the input graph to a prompted one by adding extra learnable prompt vectors to node features for downstream tasks. All-in-one (Sun et al., 2023) unifies various downstream tasks as graph-level tasks and similarly learns prompt vectors that are added to node features. GPPT (Sun et al., 2022a) mainly focuses on node classification as the downstream task and adopts link prediction as the pre-training strategy. It narrows the gap between pre-training and downstream tasks by converting node classification to link prediction. GraphPrompt (Liu et al., 2023) designs graph prompts as a feature weighting vector to obtain task-specific (sub)graph-level representations. MultiGPrompt (Yu et al., 2024d) chooses to insert prompt vectors into node representations at each hidden layer. However, all the aforementioned studies ignore the role of edges when designing graph prompts, which are widely regarded as fundamental properties in graph data.
+
+## 3 PRELIMINARIES
+
+Let  $\mathcal{G} = (\mathcal{V}, \mathcal{E})$  denote a graph where  $\mathcal{V} = \{v_1, v_2, \dots, v_N\}$  is the set of  $N$  nodes, and  $\mathcal{E}$  is the edge set.  $\mathbf{X} \in \mathbb{R}^{N \times D}$  denotes the node feature matrix where the  $i$ -th row  $\mathbf{x}_i$  represents a  $D$ -dimensional feature vector of node  $v_i \in \mathcal{V}$ . The edges in  $\mathcal{G}$  can also be represented by an adjacency matrix  $\mathbf{A} \in \{0, 1\}^{N \times N}$  where each entry  $a_{ij} = 1$  if  $(v_i, v_j) \in \mathcal{E}$ , otherwise  $a_{ij} = 0$ . Generally, GNN models aim to learn expressive node representations through the message-passing mechanism (Kipf & Welling, 2017; Veličković et al., 2018; Hamilton et al., 2017; Xu et al., 2019) where the representation of a target node is iteratively updated by aggregating the representations of its neighboring nodes. Specifically, a GNN model has two fundamental operators:  $\text{AGG}(\cdot)$  extracting the neighboring information of the node, and  $\text{COMB}(\cdot)$  integrating the previous representation of the node and its neighboring information. Mathematically, the  $l$ -th layer of an  $L$ -layer GNN model  $f$  updates the representation of node  $v_i \in \mathcal{V}$  by
+
+$$\mathbf{h}_i^{(l)} = \text{COMB}^{(l)}(\mathbf{h}_i^{(l-1)}, \text{AGG}^{(l)}(\{\mathbf{h}_j^{(l-1)} : v_j \in \mathcal{N}(v_i)\})), \quad (1)$$
+
+{3}------------------------------------------------
+
+![Figure 1: Learning prompt vectors on nodes and edges. (a) Learning prompt vectors on nodes: A graph with nodes v1, v2, v3. v3 is connected to v1 and v2. v1 is connected to v2. v3 has two outgoing edges to v1 and v2, labeled with prompt vectors p1, p2, and p3. (b) Learning prompt vectors on edges: A graph with nodes v1, v2, v3. v3 is connected to v1 and v2. v1 is connected to v2. v3 has two outgoing edges to v1 and v2, labeled with prompt vectors e31, e32, e12, and e21.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 1: Learning prompt vectors on nodes and edges. (a) Learning prompt vectors on nodes: A graph with nodes v1, v2, v3. v3 is connected to v1 and v2. v1 is connected to v2. v3 has two outgoing edges to v1 and v2, labeled with prompt vectors p1, p2, and p3. (b) Learning prompt vectors on edges: A graph with nodes v1, v2, v3. v3 is connected to v1 and v2. v1 is connected to v2. v3 has two outgoing edges to v1 and v2, labeled with prompt vectors e31, e32, e12, and e21.
+
+Figure 1: Learning prompt vectors on a node may uniformly pass them to its neighboring nodes while learning prompt vectors on edges can result in customized prompt aggregation.
+
+where  $h_i^{(l)} \in \mathbb{R}^{D_l}$  denotes the  $D_l$ -dimensional representation of node  $v_i$  at the  $l$ -th layer, and  $\mathcal{N}(v_i)$  denotes the neighbors of node  $v_i$ .  $h_i^{(0)} \in \mathbb{R}^D$  is initialized with node  $v_i$ 's feature  $x_i$ . The final node representation  $h_i^{(L)}$  after the  $L$ -th layer of the GNN model can be subsequently used for various downstream tasks (e.g., node classification and graph classification) with a trainable classifier  $g$ .
+
+## 4 METHODOLOGY
+
+In this section, we present our proposed method EdgePrompt and its variant EdgePrompt+. Figure 1 illustrates the difference between node prompt-based methods (Sun et al., 2023; Fang et al., 2023) and our edge prompt-based method. We first formulate the research problem studied in this paper. Then we introduce our design on edge prompts in EdgePrompt and EdgePrompt+ in detail. Furthermore, we provide comprehensive analyses to demonstrate that our method has the capability of benefiting pre-trained GNN models for node classification tasks. At last, we extend our method to graph classification as the downstream task.
+
+### 4.1 PROBLEM SETTING
+
+This study focuses on the standard problem of graph prompt tuning following previous studies (Fang et al., 2023; Sun et al., 2023). We consider a GNN model pre-trained by a pre-training task. We aim to adapt the pre-trained GNN model to a downstream task on a graph dataset through graph prompt tuning while keeping its parameters frozen. Specifically, given a pre-trained GNN model  $f$ , the goal is to transform the input graph  $\mathcal{G}$  to a prompted graph  $\mathcal{G}' = \mathcal{T}(\mathcal{G})$  with learnable prompts and obtain expressive node representations on  $\mathcal{G}'$  by  $f$  for a specific downstream task. Here,  $\mathcal{T}$  is a graph transformation to obtain  $\mathcal{G}'$  by adding prompts to  $\mathcal{G}$ . The key problem in graph prompt tuning is to design and learn suitable graph prompts to benefit downstream tasks.
+
+### 4.2 EDGE PROMPT DESIGN
+
+Inspired by pixel-level visual prompts (Bahng et al., 2022; Wu et al., 2022) in Computer Vision, the existing studies (Sun et al., 2023; Fang et al., 2023) design graph prompts at the data level by adding extra learnable prompt vectors to node features. Nevertheless, this strategy does not take account of the dependencies between nodes in graph data, which can significantly impact the final node representations via the message-passing mechanism in GNN models (Fatemi et al., 2021; Sun et al., 2022b; Liu et al., 2022a;b). Motivated by this, we propose to design our graph prompt tuning method from the perspective of edges in this study.
+
+**EdgePrompt.** Considering the dependencies between nodes in graph data, we design learnable prompt vectors on edges and manipulate the input graph to a prompted one with the edge prompts; therefore, the pre-trained GNN model can generate expressive node representations on the prompted graph for the downstream task. More concretely, for each edge  $(v_i, v_j) \in \mathcal{E}$ , we aim to learn a prompt vector  $e_{ij}^{(l)} \in \mathbb{R}^{D_{l-1}}$  on it at the  $l$ -th layer of the pre-trained GNN model. Typically, this prompt vector can be regarded as the learnable properties of edges. As discussed previously, one critical challenge arises here: many popular GNN models, such as GCN (Kipf & Welling, 2017), do not accommodate edge attributes during the message-passing mechanism. Therefore, they are unable to absorb  $e_{ij}^{(l)}$  into node representations. To overcome this issue, we propose to aggregate the prompt vector along with node representations through the message-passing mechanism during
+
+{4}------------------------------------------------
+
+the forward pass at each layer of the pre-trained GNN model. Specifically, to compute  $h_i^{(l)}$  of each node  $v_i$  at the  $l$ -th layer, the GNN model will aggregate not only  $h_j^{(l-1)}$  from its neighboring node  $v_j \in \mathcal{N}(v_i)$  but also  $e_{ij}^{(l)}$  associated with edge  $(v_i, v_j)$ . Mathematically, we can reformulate Equation (1) with the edge prompt vector at the  $l$ -th layer of the pre-trained GNN model by
+
+$$h_i^{(l)} = \text{COMB}^{(l)}(h_i^{(l-1)}, \text{AGG}^{(l)}(\{h_j^{(l-1)} : v_j \in \mathcal{N}(v_i)\}, \{e_{ij}^{(l)} : v_j \in \mathcal{N}(v_i)\})). \quad (2)$$
+
+To obtain the prompt vector, one simple yet effective way is to learn a global prompt vector shared by all the edges. Let  $\mathbf{p}^{(l)} \in \mathbb{R}^{D_{l-1}}$  denote the global prompt vector at the  $l$ -th layer of the pre-trained GNN model. The prompt vector for each edge  $(v_i, v_j)$  at the  $l$ -th layer can be written as
+
+$$e_{ij}^{(l)} = \mathbf{p}^{(l)}, \quad \forall (v_i, v_j) \in \mathcal{E}. \quad (3)$$
+
+The above design with global prompt vectors on edges is termed EdgePrompt in our method.
+
+**EdgePrompt+.** Although EdgePrompt designs graph prompts from the perspective of edges, a single shared prompt vector for all the edges is insufficient to model different complex dependencies between nodes. Motivated by this, we conceive an advanced version of the above EdgePrompt, called EdgePrompt+, to learn customized prompt vectors on edges. Specifically, instead of using a shared prompt vector  $\mathbf{p}^{(l)}$  for all the edges at the  $l$ -th layer, each edge  $(v_i, v_j) \in \mathcal{E}$  will learn its own customized prompt vector  $e_{ij}^{(l)}$ . Nevertheless, learning  $|\mathcal{E}|$  independent prompt vectors is infeasible in practice. When we optimize prompt vectors for downstream tasks (e.g., node classification), we may have only a limited number of labeled nodes. Therefore, most edges cannot receive supervision information (Fatemi et al., 2021) for optimizing their prompt vectors, especially in a few-shot setting. In this case, it will be hard to directly learn  $e_{ij}^{(l)}$  for edge  $(v_i, v_j) \in \mathcal{E}$  if it is not involved in computing the representations of any labeled nodes. To overcome this issue, we propose to learn the prompt vectors as a weighted average of multiple anchor prompts. To achieve this, we first construct a set of  $M_l$  anchor prompts  $\mathcal{P}^{(l)} = \{\mathbf{p}_1^{(l)}, \mathbf{p}_2^{(l)}, \dots, \mathbf{p}_{M_l}^{(l)}\}$  at the  $l$ -th layer of the pre-trained GNN model, where each vector  $\mathbf{p}_m^{(l)} \in \mathbb{R}^{D_{l-1}}$  is a learnable anchor prompt. For each edge  $(v_i, v_j) \in \mathcal{E}$ , its customized prompt vector  $e_{ij}^{(l)}$  at the  $l$ -th layer is computed as the weighted average of the anchor prompts in  $\mathcal{P}^{(l)}$  with the score vector  $\mathbf{b}_{ij}^{(l)} \in \mathbb{R}^{M_l}$ . Mathematically, we can obtain  $e_{ij}^{(l)}$  at the  $l$ -th layer by
+
+$$e_{ij}^{(l)} = \sum_{m=1}^{M_l} b_{ijm}^{(l)} \cdot \mathbf{p}_m^{(l)}, \quad (4)$$
+
+where  $b_{ijm}^{(l)}$  denotes the  $m$ -th entry in  $\mathbf{b}_{ij}^{(l)}$ . Since all the edges share the same anchor prompts  $\mathcal{P}^{(l)}$  at the  $l$ -th layer, the score vector  $\mathbf{b}_{ij}^{(l)}$  directly determines how  $e_{ij}^{(l)}$  differs from those of the other edges. Therefore, our next goal is to conceive an effective strategy to obtain the desired  $\mathbf{b}_{ij}^{(l)}$ . According to Equation (2),  $e_{ij}^{(l)}$  of edge  $(v_i, v_j)$  affects message passing between nodes  $v_i$  and  $v_j$ , so we may naturally consider  $\mathbf{b}_{ij}^{(l)}$  to depend on both nodes  $v_i$  and  $v_j$ . Motivated by this, we propose to compute  $\mathbf{b}_{ij}^{(l)}$  at the  $l$ -th layer using a score function  $\phi^{(l)}$  followed by the softmax operation. Formally, we compute  $\mathbf{b}_{ij}^{(l)}$  by
+
+$$\mathbf{b}_{ij}^{(l)} = \text{Softmax}(\phi^{(l)}(v_i, v_j)), \quad (5)$$
+
+where  $\text{Softmax}(\cdot)$  represents the softmax operation. Here,  $\phi^{(l)}$  takes each pair of nodes  $v_i$  and  $v_j$  as the input and generates the score vector. Basically, it describes the relationship of two nodes at the  $l$ -th layer and embeds them into a single vector. Many typical formulations (Veličković et al., 2018; Brody et al., 2022; Yang et al., 2021) can be used to achieve this goal. In this study, we adopt the classic attention mechanism (Veličković et al., 2018) as  $\phi^{(l)}$  by
+
+$$\phi^{(l)}(v_i, v_j) = \text{LeakyReLU}([h_i^{(l-1)} || h_j^{(l-1)}] \cdot \mathbf{W}^{(l)}), \quad (6)$$
+
+where  $\mathbf{W}^{(l)} \in \mathbb{R}^{2D_{l-1} \times M_l}$  is the weight matrix of  $\phi^{(l)}$  at the  $l$ -th layer, and  $[||]$  denotes the vector concatenation. In-depth investigations into different variants of the score function  $\phi$  will be reserved
+
+{5}------------------------------------------------
+
+for our future work. It is worth noting that GPF-plus (Fang et al., 2023) can be regarded as a special case of EdgePrompt+ with the score function as a linear mapping of  $\mathbf{x}_i$ .
+
+With the learnable edge prompts, we can obtain more suitable node representations  $\mathbf{h}_i^{(L)}$  for node  $v_i \in \mathcal{V}$  by the pre-trained GNN model for node classification. Given the labeled node set  $\mathcal{V}_L \in \mathcal{V}$ , we optimize our edge prompts and a classifier  $g$  by
+
+$$g, \{p^{(1)}, \dots, p^{(L)}, w^{(1)}, \dots, w^{(L)}\} \min_{\frac{1}{|\mathcal{V}_L|}} \sum_{v_i \in \mathcal{V}_L} \ell_D(g(f(g')_i), y_i), \quad (7)$$
+
+where  $y_i$  is the ground-truth label of node  $v_i \in \mathcal{V}_L$ , and  $\ell_D$  is the downstream task loss, i.e., the cross-entropy loss for classification tasks.
+
+### 4.3 ANALYSIS OF EDGE PROMPT TUNING FOR NODE CLASSIFICATION
+
+In this subsection, we provide a comprehensive analysis to investigate why our proposed EdgePrompt+ is more effective for node classification than existing approaches, particularly those that focus on learning additional prompt vectors on node features.
+
+We first provide our insights regarding the issue of uniform message passing on prompt vectors. As introduced previously, GPF-plus (Fang et al., 2023) and All-in-one (Sun et al., 2023) design learnable prompt vectors on the node level and manipulate the input graph by adding the prompt vectors to node features. For each node  $v_i$ , its learned prompt vector  $p_i$  completely depends on its node feature  $\mathbf{x}_i$ . In many prevalent GNN models, such as GCNs, the prompt vector will be uniformly aggregated by neighboring nodes through the message-passing mechanism (Yang et al., 2021). Taking node  $v_1$  in Figure 1(a) as an example, its two neighboring nodes  $v_2$  and  $v_3$  will always receive the same prompt vector  $p_1$  from node  $v_1$  in pre-trained GCN models. Unfortunately, such propagation of prompt vectors may not benefit node classification. Instead, the prompt vector aggregated by a node can retain adverse information from different classes. In contrast, our proposed EdgePrompt+ designs prompt vectors on edges. Unlike one shared prompt vector of a node for all its neighboring nodes, EdgePrompt+ enables these neighboring nodes to receive different learned prompt vectors (e.g.,  $e_{21}$  and  $e_{31}$  in Figure 1(b)) from the node. In this way, the issue of uniform passing on prompt vectors can be mitigated.
+
+Furthermore, we would like to provide a theoretical analysis of how edge prompts in our proposed EdgePrompt+ can benefit node classification. Our analysis is based on random graphs generated by the contextual stochastic block model (CSBM) (Tsitsulin et al., 2022; Ma et al., 2022). Specifically, we consider a random graph  $\mathcal{G}$  generated by the CSBM consisting of two node classes  $c_1$  and  $c_2$ . For each node  $v_i$ , its node feature  $\mathbf{x}_i$  follows a Gaussian distribution  $\mathbf{x}_i \sim \mathcal{N}(\boldsymbol{\mu}_1, \mathbf{I})$  if it is from class  $c_1$ , otherwise  $\mathbf{x}_i \sim \mathcal{N}(\boldsymbol{\mu}_2, \mathbf{I})$ . Generally, we assume  $\boldsymbol{\mu}_1 \neq \boldsymbol{\mu}_2$ . In the graph  $\mathcal{G}$ , edges are generated following an intra-class probability  $p$  and an inter-class probability  $q$ . More concretely, a pair of nodes will be connected by an edge with probability  $p$  if they are from the same class; otherwise, the probability is  $q$ . In this section, we use  $\mathcal{G} \sim \text{CSBM}(\boldsymbol{\mu}_1, \boldsymbol{\mu}_2, p, q)$  to denote a random graph generated by the CSBM.
+
+Our analysis aims to investigate the improvement of linear separability under pre-trained GCN models caused by edge prompts in EdgePrompt+. Specifically, we focus on the linear classifiers with the largest margin based on node representations after GCN operations with and without edge prompts. Typically, if the expected distance between the two class centroids is larger, the node representations will have higher linear separability by the linear classifier.
+
+**Theorem 1.** *Given a random graph  $\mathcal{G} \sim \text{CSBM}(\boldsymbol{\mu}_1, \boldsymbol{\mu}_2, p, q)$  and a pre-trained GCN model  $f$ , there always exist a set of  $M \geq 2$  anchor prompts  $\mathcal{P} = \{\mathbf{p}_1, \mathbf{p}_2, \dots, \mathbf{p}_M\}$  and the score vectors  $\mathbf{b}_{i,j}$  for each edge  $(v_i, v_j)$  that improve the expected distance after GCN operation between classes  $c_1$  and  $c_2$  to  $T$  times without using edge prompts, where  $T \in (1, 1 + \frac{p}{|p-q|}]$ .*
+
+A detailed proof can be found in Appendix A. According to Theorem 1, we will have a larger expected distance between the two class centroids after GCN operation with edge prompts in EdgePrompt+. In this case, the node representations from the two classes will have a lower probability of being misclassified. Therefore, we can conclude that our proposed EdgePrompt+ benefits pre-trained GNN models for node classification.
+
+{6}------------------------------------------------
+
+### 4.4 EXTENSION TO GRAPH CLASSIFICATION
+
+In the last subsection, we present our edge prompt design in EdgePrompt and EdgePrompt+ for node classification. As discussed previously, edge prompts should be capable of handling various downstream tasks, including graph classification. In this subsection, we would like to introduce how EdgePrompt and EdgePrompt+ tackle graph classification.
+
+In graph classification, we have a set of labeled graphs  $\{\mathcal{G}_1, \mathcal{G}_2, \dots, \mathcal{G}_K\}$  with their label set  $\{y_1, y_2, \dots, y_K\}$ . To obtain the representation of the entire graph  $\mathcal{G}$ , we typically integrate the final representations of all nodes in  $\mathcal{G}$  via a permutation-invariant READOUT function (Xu et al., 2019), such as *sum* and *mean*, as the entire graph's representation  $h_{\mathcal{G}} = \text{READOUT}(\{h_i | v_i \in \mathcal{V}\})$ . Therefore, we can optimize our edge prompts and a classifier  $g$  by
+
+$$\min_{g, \{\mathcal{P}^{(1)}, \dots, \mathcal{P}^{(L)}, \mathbf{W}^{(1)}, \dots, \mathbf{W}^{(L)}\}} \frac{1}{K} \sum_{k=1}^K \ell_D(g(f(\mathcal{G}'_k)), y_k). \quad (8)$$
+
+Now we analyze the capability of EdgePrompt for graph classifications. The goal of our analysis is to investigate whether learning edge prompts in EdgePrompt can result in consistent graph representations with those using any prompt strategies. To this end, we propose the following theorem.
+
+**Theorem 2.** *Given an input graph  $\mathcal{G} = (\mathbf{X}, \mathbf{A})$  and its transformation  $\mathcal{G}' = (\mathbf{X}', \mathbf{A}')$  by an arbitrary transformation function  $\mathcal{T}$ , there exists a set of edge prompt vectors  $\{\mathbf{p}^{(1)}, \mathbf{p}^{(2)}, \dots, \mathbf{p}^{(L)}\}$  in EdgePrompt that can satisfy*
+
+$$f(\mathbf{X}, \mathbf{A}, \{\mathbf{p}^{(1)}, \dots, \mathbf{p}^{(L)}\}) = f(\mathbf{X}', \mathbf{A}') \quad (9)$$
+
+for any pre-trained GNN model  $f$ .
+
+The complete proof of Theorem 2 is provided in Appendix B. According to Theorem 2, we can conclude that our edge prompts have the capability to get graph  $\mathcal{G}$ 's representation which is equal to those of its variants by transformations with any prompt strategies. According to Theorem 1 by Fang et al. (2023), our EdgePrompt has a comparable universal capability with GPF. Since EdgePrompt+ provides finer edge prompts than EdgePrompt, it will have a stronger universality than EdgePrompt.
+
+## 5 EXPERIMENTS
+
+### 5.1 EXPERIMENTAL SETUP
+
+**Datasets and downstream tasks.** We evaluate the effectiveness of our proposed method on node classification over five public graph datasets, including Cora (Yang et al., 2016), CiteSeer (Yang et al., 2016), Pubmed (Yang et al., 2016), ogbn-arxiv (Hu et al., 2020a), and Flickr (Zeng et al., 2020). In addition, we adopt five graph datasets from TUDataset (Morris et al., 2020), including ENZYMES, DD, NCII, NCII09, and Mutagenicity, to conduct experiments for graph classification. Basic information and statistics about these datasets can be found in Appendix C.1.
+
+**Pre-training strategies.** To evaluate the compatibility of our proposed method with various pre-training strategies, we consider four pre-training strategies in our experiments. For contrastive methods, we use GraphCL (You et al., 2020) and SimGRACE (Xia et al., 2022). For generative methods, we use two edge prediction-based methods, i.e., EP-GPPT and EP-GraphPrompt, adopted by GPPT (Sun et al., 2022a) and GraphPrompt (Liu et al., 2023), respectively. We provide detailed descriptions of these pre-training strategies in Appendix C.2.
+
+**Baselines.** We evaluate our proposed method against five state-of-the-art graph prompt tuning methods in our experiments, including GPPT (Sun et al., 2022a), GraphPrompt (Liu et al., 2023) All-in-one (Sun et al., 2023), GPF (Fang et al., 2023), and GPF-plus (Fang et al., 2023). Since GPPT is specifically designed for node classification, we only report its performance for node classification tasks. In addition, we also report the performance of solely training classifiers without any prompts (named as *Classifier Only*) in our experiments.
+
+**Implementation details.** In our experiments, We use a 2-layer GCN (Kipf & Welling, 2017) as the backbone for node classification tasks and a 5-layer GIN (Xu et al., 2019) as the backbone for graph classification tasks. The size of hidden layers is set as 128. The classifier adopted for downstream
+
+{7}------------------------------------------------
+
+Table 2: Accuracy on 5-shot node classification tasks over five datasets. The best-performing method is **bolded** and the runner-up is underlined.
+
+| Pre-training Strategies | Tuning Methods  | Cora                             | CiteSeer                         | Pubmed                           | ogbn-arxiv                       | Flickr                           |
+|-------------------------|-----------------|----------------------------------|----------------------------------|----------------------------------|----------------------------------|----------------------------------|
+| GraphCL                 | Classifier Only | 53.05 $\pm$ 4.76                 | 38.62 $\pm$ 3.43                 | 64.28 $\pm$ 4.51                 | 21.15 $\pm$ 1.64                 | 24.32 $\pm$ 2.93                 |
+|                         | GPPT            | 50.96 $\pm$ 6.67                 | 39.50 $\pm$ 1.67                 | 60.47 $\pm$ 4.75                 | 17.99 $\pm$ 1.14                 | 24.35 $\pm$ 1.84                 |
+|                         | GraphPrompt     | 55.71 $\pm$ 4.62                 | 40.81 $\pm$ 2.11                 | 63.47 $\pm$ 2.23                 | 21.03 $\pm$ 1.92                 | <b>26.08<math>\pm</math>3.44</b> |
+|                         | ALL-in-one      | 38.00 $\pm$ 4.17                 | 40.27 $\pm$ 2.09                 | 58.61 $\pm$ 3.49                 | 16.42 $\pm$ 2.98                 | 25.08 $\pm$ 3.44                 |
+|                         | GPf             | 58.52 $\pm$ 4.07                 | 43.55 $\pm$ 2.80                 | 67.67 $\pm$ 3.14                 | 21.73 $\pm$ 1.75                 | 23.98 $\pm$ 1.71                 |
+|                         | GPf-plus        | 52.24 $\pm$ 4.59                 | 38.47 $\pm$ 3.27                 | 64.30 $\pm$ 4.58                 | 21.03 $\pm$ 1.96                 | 25.32 $\pm$ 2.02                 |
+|                         | EdgePrompt      | 58.60 $\pm$ 4.46                 | 43.31 $\pm$ 3.23                 | <b>67.76<math>\pm</math>3.01</b> | 21.90 $\pm$ 1.71                 | 24.83 $\pm$ 2.78                 |
+|                         | EdgePrompt+     | <b>62.88<math>\pm</math>6.43</b> | <b>46.20<math>\pm</math>0.99</b> | 67.41 $\pm$ 5.25                 | <b>23.18<math>\pm</math>1.26</b> | 25.57 $\pm$ 3.04                 |
+| SimGRACE                | Classifier Only | 52.27 $\pm$ 2.74                 | 40.45 $\pm$ 3.55                 | 56.72 $\pm$ 3.80                 | 20.75 $\pm$ 2.92                 | 25.53 $\pm$ 3.98                 |
+|                         | GPPT            | 52.07 $\pm$ 7.65                 | 40.25 $\pm$ 3.29                 | 58.65 $\pm$ 5.12                 | 17.76 $\pm$ 1.80                 | 23.37 $\pm$ 4.66                 |
+|                         | GraphPrompt     | 51.42 $\pm$ 2.80                 | 41.74 $\pm$ 2.22                 | 55.98 $\pm$ 2.94                 | 20.48 $\pm$ 2.57                 | 25.88 $\pm$ 3.81                 |
+|                         | ALL-in-one      | 34.64 $\pm$ 4.06                 | 38.95 $\pm$ 2.35                 | 54.18 $\pm$ 4.70                 | 16.72 $\pm$ 2.90                 | 27.68 $\pm$ 4.58                 |
+|                         | GPf             | 58.23 $\pm$ 4.19                 | 44.87 $\pm$ 4.35                 | 61.55 $\pm$ 3.79                 | 21.86 $\pm$ 2.91                 | 26.51 $\pm$ 4.69                 |
+|                         | GPf-plus        | 52.27 $\pm$ 3.34                 | 41.02 $\pm$ 3.49                 | 56.95 $\pm$ 3.86                 | 21.44 $\pm$ 3.77                 | 28.35 $\pm$ 5.50                 |
+|                         | EdgePrompt      | 58.37 $\pm$ 4.51                 | 43.94 $\pm$ 4.15                 | 61.10 $\pm$ 3.69                 | 21.85 $\pm$ 2.54                 | <b>30.12<math>\pm</math>5.04</b> |
+|                         | EdgePrompt+     | <b>62.40<math>\pm</math>7.97</b> | <b>46.62<math>\pm</math>2.53</b> | <b>64.91<math>\pm</math>5.58</b> | <b>22.74<math>\pm</math>2.34</b> | 28.50 $\pm$ 4.08                 |
+| EP-GPPT                 | Classifier Only | 28.65 $\pm$ 4.82                 | 26.77 $\pm$ 2.03                 | 40.14 $\pm$ 5.69                 | 11.57 $\pm$ 1.91                 | 28.39 $\pm$ 7.44                 |
+|                         | GPPT            | 41.28 $\pm$ 6.92                 | 35.32 $\pm$ 1.27                 | 53.41 $\pm$ 3.99                 | 13.73 $\pm$ 1.16                 | 29.83 $\pm$ 3.73                 |
+|                         | GraphPrompt     | 31.65 $\pm$ 3.33                 | 26.98 $\pm$ 1.24                 | 44.18 $\pm$ 5.57                 | 11.31 $\pm$ 1.89                 | 26.02 $\pm$ 1.16                 |
+|                         | ALL-in-one      | 31.57 $\pm$ 2.16                 | 28.87 $\pm$ 2.57                 | 46.02 $\pm$ 4.23                 | 15.94 $\pm$ 0.75                 | 31.89 $\pm$ 1.14                 |
+|                         | GPf             | 37.56 $\pm$ 3.81                 | 29.74 $\pm$ 1.73                 | 48.86 $\pm$ 7.32                 | 16.95 $\pm$ 1.58                 | 29.68 $\pm$ 6.73                 |
+|                         | GPf-plus        | 28.87 $\pm$ 3.18                 | 26.65 $\pm$ 1.91                 | 40.32 $\pm$ 5.77                 | 11.78 $\pm$ 1.55                 | 29.41 $\pm$ 6.79                 |
+|                         | EdgePrompt      | 37.26 $\pm$ 4.53                 | 29.83 $\pm$ 1.01                 | 47.20 $\pm$ 7.06                 | 17.22 $\pm$ 1.31                 | 31.17 $\pm$ 6.58                 |
+|                         | EdgePrompt+     | <b>56.41<math>\pm</math>3.62</b> | <b>43.49<math>\pm</math>2.62</b> | <b>61.51<math>\pm</math>4.91</b> | <b>17.78<math>\pm</math>2.16</b> | <b>32.70<math>\pm</math>6.21</b> |
+| EP-GraphPrompt          | Classifier Only | 59.00 $\pm$ 5.74                 | 44.54 $\pm$ 4.44                 | 72.09 $\pm$ 5.70                 | 31.28 $\pm$ 1.50                 | 27.83 $\pm$ 4.77                 |
+|                         | GPPT            | 54.29 $\pm$ 7.90                 | 45.81 $\pm$ 3.54                 | 66.56 $\pm$ 4.06                 | 25.34 $\pm$ 1.85                 | 28.41 $\pm$ 3.68                 |
+|                         | GraphPrompt     | 60.22 $\pm$ 4.04                 | 47.07 $\pm$ 3.09                 | 73.13 $\pm$ 5.07                 | 32.40 $\pm$ 1.30                 | 28.10 $\pm$ 3.27                 |
+|                         | ALL-in-one      | 42.55 $\pm$ 2.99                 | 44.36 $\pm$ 2.52                 | 67.66 $\pm$ 6.38                 | 15.22 $\pm$ 3.94                 | 31.79 $\pm$ 6.19                 |
+|                         | GPf             | 62.62 $\pm$ 6.40                 | 49.02 $\pm$ 4.53                 | 73.62 $\pm$ 6.42                 | 31.88 $\pm$ 1.08                 | 28.98 $\pm$ 5.30                 |
+|                         | GPf-plus        | 58.23 $\pm$ 5.68                 | 44.60 $\pm$ 4.47                 | 72.15 $\pm$ 5.64                 | 31.58 $\pm$ 1.09                 | 28.96 $\pm$ 4.63                 |
+|                         | EdgePrompt      | 62.74 $\pm$ 6.77                 | 48.69 $\pm$ 4.36                 | 73.60 $\pm$ 5.14                 | <b>32.67<math>\pm</math>1.83</b> | 29.81 $\pm$ 3.59                 |
+|                         | EdgePrompt+     | <b>64.47<math>\pm</math>7.04</b> | <b>49.71<math>\pm</math>2.25</b> | <b>73.72<math>\pm</math>5.10</b> | 31.41 $\pm$ 1.88                 | <b>32.09<math>\pm</math>4.93</b> |
+
+tasks is linear probes for all the methods. We use an Adam optimizer (Kingma & Ba, 2015) with learning rates 0.001 for all the methods. The batch size is set as 32. The number of epochs is set to 200 for graph prompt tuning. The default number of anchor prompts at each GNN layer is 10 for node classification tasks and 5 for graph classification tasks. We use the 5-shot setting for node classification tasks and the 50-shot setting for graph classification tasks. We conduct experiments five times with different random seeds and report the average results in our experiments.
+
+### 5.2 MAIN RESULTS
+
+We first compare the overall performance of our proposed methods and other baselines. Table 2 reports the results of our method and six baselines on 5-shot node classification tasks over five datasets under four pre-training strategies. According to the table, we observe that our method can consistently achieve the best or most competitive performance among graph prompt tuning methods across different pre-training strategies. Generally, EdgePrompt+ has better performance than EdgePrompt, which is consistent with our analyses in Section 4.3 and validates the necessity of our design on customized edge prompts.
+
+In addition, we conduct experiments on 50-shot graph classification tasks over five datasets under four pre-training strategies and report the results in Table 3. According to the table, we observe that EdgePrompt+ can always get the best place or runner-up for every experimental setting, espe-
+
+{8}------------------------------------------------
+
+Table 3: Accuracy on 50-shot graph classification tasks over five datasets. The best-performing method is **bolded** and the runner-up underlined.
+
+| Pre-training Strategies | Tuning Methods  | ENZYMES                          | DD                               | NCII                             | NCII09                           | Mutagenicity                     |
+|-------------------------|-----------------|----------------------------------|----------------------------------|----------------------------------|----------------------------------|----------------------------------|
+| GraphCL                 | Classifier Only | 30.50 $\pm$ 1.16                 | 62.89 $\pm$ 2.19                 | 62.49 $\pm$ 1.95                 | 61.68 $\pm$ 0.93                 | 66.62 $\pm$ 1.87                 |
+|                         | GraphPrompt     | 27.83 $\pm$ 1.61                 | 64.33 $\pm$ 1.79                 | 63.19 $\pm$ 1.71                 | 62.18 $\pm$ 0.48                 | <b>67.62<math>\pm</math>0.65</b> |
+|                         | ALL-in-one      | 25.92 $\pm$ 0.55                 | 66.54 $\pm$ 1.82                 | 57.52 $\pm$ 2.61                 | 62.74 $\pm$ 0.78                 | 63.43 $\pm$ 2.53                 |
+|                         | GPF             | 30.08 $\pm$ 1.25                 | 64.54 $\pm$ 2.22                 | 62.66 $\pm$ 1.83                 | 62.29 $\pm$ 0.90                 | 66.54 $\pm$ 1.85                 |
+|                         | GPF-plus        | 31.00 $\pm$ 1.50                 | 67.26 $\pm$ 2.29                 | 64.56 $\pm$ 1.10                 | <u>62.84<math>\pm</math>0.22</u> | 66.82 $\pm$ 1.63                 |
+|                         | EdgePrompt      | 29.50 $\pm$ 1.57                 | 64.16 $\pm$ 2.13                 | 63.05 $\pm$ 2.11                 | 62.59 $\pm$ 0.93                 | 66.87 $\pm$ 1.88                 |
+|                         | EdgePrompt+     | <b>34.00<math>\pm</math>1.25</b> | <b>67.98<math>\pm</math>2.05</b> | <b>66.30<math>\pm</math>2.54</b> | <b>66.52<math>\pm</math>0.91</b> | <b>67.47<math>\pm</math>2.37</b> |
+| SimGRACE                | Classifier Only | 27.07 $\pm$ 1.04                 | 61.77 $\pm$ 2.40                 | 61.27 $\pm$ 3.64                 | 62.12 $\pm$ 1.10                 | 67.36 $\pm$ 0.71                 |
+|                         | GraphPrompt     | 26.87 $\pm$ 1.47                 | 62.58 $\pm$ 1.84                 | <u>62.45<math>\pm</math>1.52</u> | 62.41 $\pm$ 0.69                 | 68.03 $\pm$ 0.78                 |
+|                         | ALL-in-one      | 25.73 $\pm$ 1.18                 | 65.16 $\pm$ 1.47                 | 58.52 $\pm$ 1.59                 | 62.01 $\pm$ 0.66                 | 64.43 $\pm$ 1.00                 |
+|                         | GPF             | 28.53 $\pm$ 1.76                 | 65.64 $\pm$ 0.70                 | 61.45 $\pm$ 3.13                 | 61.90 $\pm$ 1.26                 | 67.19 $\pm$ 0.74                 |
+|                         | GPF-plus        | 27.33 $\pm$ 2.01                 | <u>67.20<math>\pm</math>1.56</u> | 61.61 $\pm$ 2.89                 | <u>62.84<math>\pm</math>0.23</u> | 67.69 $\pm$ 0.64                 |
+|                         | EdgePrompt      | 29.33 $\pm$ 2.30                 | 63.97 $\pm$ 2.14                 | 62.02 $\pm$ 3.02                 | 62.02 $\pm$ 1.03                 | 67.55 $\pm$ 0.85                 |
+|                         | EdgePrompt+     | <b>32.67<math>\pm</math>2.53</b> | <b>67.72<math>\pm</math>1.62</b> | <b>67.07<math>\pm</math>1.96</b> | <b>66.53<math>\pm</math>1.30</b> | <b>68.31<math>\pm</math>1.36</b> |
+| EP-GPPT                 | Classifier Only | 29.08 $\pm$ 1.35                 | 62.12 $\pm$ 2.82                 | 56.85 $\pm$ 4.35                 | 62.27 $\pm$ 0.78                 | 66.30 $\pm$ 1.78                 |
+|                         | GraphPrompt     | 26.67 $\pm$ 1.60                 | 61.61 $\pm$ 1.91                 | 58.77 $\pm$ 0.97                 | 62.16 $\pm$ 0.89                 | 66.37 $\pm$ 1.17                 |
+|                         | ALL-in-one      | 24.92 $\pm$ 1.33                 | 63.61 $\pm$ 2.12                 | 59.14 $\pm$ 2.12                 | 59.70 $\pm$ 1.37                 | 64.86 $\pm$ 1.60                 |
+|                         | GPF             | 28.33 $\pm$ 1.73                 | 63.48 $\pm$ 2.08                 | 58.14 $\pm$ 4.16                 | 62.52 $\pm$ 1.39                 | 66.10 $\pm$ 0.96                 |
+|                         | GPF-plus        | 29.25 $\pm$ 1.30                 | <b>66.92<math>\pm</math>2.34</b> | <u>62.93<math>\pm</math>3.23</u> | <u>64.13<math>\pm</math>1.42</u> | <u>67.57<math>\pm</math>1.45</u> |
+|                         | EdgePrompt      | 28.33 $\pm$ 3.41                 | 64.03 $\pm$ 2.26                 | 59.85 $\pm$ 3.15                 | 62.98 $\pm$ 1.44                 | 66.36 $\pm$ 1.22                 |
+|                         | EdgePrompt+     | <b>32.75<math>\pm</math>2.26</b> | <u>66.16<math>\pm</math>1.60</u> | <b>63.58<math>\pm</math>2.07</b> | <b>65.15<math>\pm</math>1.60</b> | <b>68.35<math>\pm</math>1.57</b> |
+| EP-GraphPrompt          | Classifier Only | 31.33 $\pm$ 3.22                 | 62.58 $\pm$ 2.40                 | 62.09 $\pm$ 2.31                 | 60.19 $\pm$ 1.71                 | 65.13 $\pm$ 0.81                 |
+|                         | GraphPrompt     | 30.20 $\pm$ 1.93                 | 64.72 $\pm$ 1.98                 | 62.57 $\pm$ 1.45                 | 62.32 $\pm$ 0.95                 | 65.85 $\pm$ 0.65                 |
+|                         | ALL-in-one      | 29.07 $\pm$ 1.16                 | 65.60 $\pm$ 2.38                 | 58.67 $\pm$ 2.42                 | 57.69 $\pm$ 1.08                 | 64.66 $\pm$ 0.76                 |
+|                         | GPF             | <u>30.93<math>\pm</math>1.76</u> | 66.21 $\pm$ 1.66                 | 61.80 $\pm$ 2.78                 | 62.27 $\pm$ 1.18                 | 65.61 $\pm$ 0.59                 |
+|                         | GPF-plus        | 30.67 $\pm$ 3.06                 | <b>67.50<math>\pm</math>2.45</b> | <u>62.59<math>\pm</math>2.09</u> | 61.98 $\pm$ 1.60                 | 65.51 $\pm$ 1.10                 |
+|                         | EdgePrompt      | 30.80 $\pm$ 2.09                 | 65.87 $\pm$ 1.35                 | 61.75 $\pm$ 2.49                 | <u>62.33<math>\pm</math>1.65</u> | 65.77 $\pm$ 0.90                 |
+|                         | EdgePrompt+     | <b>33.27<math>\pm</math>2.71</b> | <u>67.47<math>\pm</math>2.14</u> | <b>65.06<math>\pm</math>1.84</b> | <b>64.64<math>\pm</math>1.57</b> | <b>66.42<math>\pm</math>1.31</b> |
+
+cially over ENZYMES, NCII, and NCII09. In addition, we observe that GPF and EdgePrompt have relatively small performance gaps (always  $< 1.8\%$ ) in the table (we also observe this in node classification tasks). As indicated in Theorem 2, our proposed EdgePrompt has a comparable universal capability with GPF to achieve graph representations equivalent to any graph transformation. These observations effectively support our theoretical claim in this study.
+
+### 5.3 CONVERGENCE ANALYSIS
+
+In this subsection, we would like to investigate the convergence speeds of our method compared with baselines. Figure 2 illustrates the accuracy curves of our method and the baselines under two pre-training strategies. According to Figure 2, we can observe that EdgePrompt+ can generally converge faster than other methods.
+
+### 5.4 INFLUENCE OF PROMPT NUMBERS
+
+We conduct experiments to investigate the impact of different numbers of anchor prompts on model utility. Figure 3 and Figure 4 illustrate the performance of EdgePrompt+ with 1, 5, 10, 20, and 50 anchor prompts at each layer for node classification and graph classification tasks, respectively. Note that EdgePrompt+ will be degraded to EdgePrompt when we have only one anchor prompt at each GNN layer. From the two figures, we can conclude only one anchor prompt vector (i.e., EdgePrompt) is insufficient in most cases where each edge will learn a global prompt vector. In the meantime, EdgePrompt+ with too many anchor prompts (e.g., 50) may not further improve the performance. We recommend 5 or 10 as the initial number of anchor prompts.
+
+{9}------------------------------------------------
+
+![Figure 2: Convergence speeds of different methods. The figure contains eight subplots (a-h) showing Accuracy vs. Epochs (0 to 200). The methods compared are Classifier Only (blue), GPPT (orange), GraphPrompt (green), All-in-one (light blue), GPF (dark blue), GPFplus (light green), EdgePrompt (red), and EdgePrompt+ (dark red). The datasets used are (a) Cora with SimGRACE, (b) CiteSeer with SimGRACE, (c) PubMed with SimGRACE, (d) Flickr with SimGRACE, (e) Cora with EP-GPPT, (f) CiteSeer with EP-GPPT, (g) PubMed with EP-GPPT, and (h) ogbn-arxiv with EP-GPPT. In all cases, EdgePrompt+ shows the fastest convergence and highest accuracy.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 2: Convergence speeds of different methods. The figure contains eight subplots (a-h) showing Accuracy vs. Epochs (0 to 200). The methods compared are Classifier Only (blue), GPPT (orange), GraphPrompt (green), All-in-one (light blue), GPF (dark blue), GPFplus (light green), EdgePrompt (red), and EdgePrompt+ (dark red). The datasets used are (a) Cora with SimGRACE, (b) CiteSeer with SimGRACE, (c) PubMed with SimGRACE, (d) Flickr with SimGRACE, (e) Cora with EP-GPPT, (f) CiteSeer with EP-GPPT, (g) PubMed with EP-GPPT, and (h) ogbn-arxiv with EP-GPPT. In all cases, EdgePrompt+ shows the fastest convergence and highest accuracy.
+
+Figure 2: Convergence speeds of different methods.
+
+![Figure 3: Results of EdgePrompt+ with varying numbers of anchor prompts on node classification. The figure contains four bar charts (a-d) showing Accuracy for different datasets: (a) Cora, (b) CiteSeer, (c) PubMed, and (d) ogbn-arxiv. For each dataset, two methods are compared: GraphCL (blue) and EP-GraphPrompt (red). The number of anchor prompts used for EP-GraphPrompt varies: 1 (light blue), 5 (green), 10 (cyan), 20 (orange), and 50 (purple). In all datasets, EP-GraphPrompt with 50 anchor prompts achieves the highest accuracy, significantly outperforming GraphCL.](f519a5be118c846f631c992412353fb9_img.jpg)
+
+Figure 3: Results of EdgePrompt+ with varying numbers of anchor prompts on node classification. The figure contains four bar charts (a-d) showing Accuracy for different datasets: (a) Cora, (b) CiteSeer, (c) PubMed, and (d) ogbn-arxiv. For each dataset, two methods are compared: GraphCL (blue) and EP-GraphPrompt (red). The number of anchor prompts used for EP-GraphPrompt varies: 1 (light blue), 5 (green), 10 (cyan), 20 (orange), and 50 (purple). In all datasets, EP-GraphPrompt with 50 anchor prompts achieves the highest accuracy, significantly outperforming GraphCL.
+
+Figure 3: Results of EdgePrompt+ with varying numbers of anchor prompts on node classification.
+
+![Figure 4: Results of EdgePrompt+ with varying numbers of anchor prompts on graph classification. The figure contains four bar charts (a-d) showing Accuracy for different datasets: (a) ENZYMES, (b) DD, (c) NCII, and (d) Mutagenicity. For each dataset, two methods are compared: GraphCL (blue) and EP-GPPT (red). The number of anchor prompts used for EP-GPPT varies: 1 (light blue), 5 (green), 10 (cyan), 20 (orange), and 50 (purple). In all datasets, EP-GPPT with 50 anchor prompts achieves the highest accuracy, significantly outperforming GraphCL.](8ee3b76dd49f31624d287885bc2c81ee_img.jpg)
+
+Figure 4: Results of EdgePrompt+ with varying numbers of anchor prompts on graph classification. The figure contains four bar charts (a-d) showing Accuracy for different datasets: (a) ENZYMES, (b) DD, (c) NCII, and (d) Mutagenicity. For each dataset, two methods are compared: GraphCL (blue) and EP-GPPT (red). The number of anchor prompts used for EP-GPPT varies: 1 (light blue), 5 (green), 10 (cyan), 20 (orange), and 50 (purple). In all datasets, EP-GPPT with 50 anchor prompts achieves the highest accuracy, significantly outperforming GraphCL.
+
+Figure 4: Results of EdgePrompt+ with varying numbers of anchor prompts on graph classification.
+
+## 6 CONCLUSION
+
+Graph prompt tuning is an emerging technique to bridge the objective gap between pre-training and downstream tasks. Unlike previous studies focusing on designing prompts on nodes, we propose a simple yet effective method, EdgePrompt and its variant EdgePrompt+, that manipulates the input graph by adding extra learnable prompt vectors to edges and thereby obtaining a prompted graph suitable for downstream tasks. We provide comprehensive theoretical analyses of our method regarding its capability of handling node classification and graph classification. We conduct extensive experiments over ten graph datasets under four pre-training strategies. Experiment results demonstrate the superiority of our method compared with six baselines.
+
+## ACKNOWLEDGMENTS
+
+This work is supported in part by the National Science Foundation under grants IIS-2006844, IIS-2144209, IIS-2223769, IIS-2331315, CNS-2154962, BCS-2228534, and CMML-2411248, the Commonwealth Cyber Initiative Awards under grants VV-1Q24-011, VV-1Q25-004, and the iPRIME Fellowship Awards.
+
+ Rest of paper (reference and Appendix) is removed.

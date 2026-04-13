@@ -1,0 +1,350 @@
+
+
+{0}------------------------------------------------
+
+# TOWARD OPTIMAL LLM ALIGNMENTS USING TWO-PLAYER GAMES
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Alignment of large language models is a critical process designed to ensure that the model’s responses to user prompts accurately reflect human intentions and adhere to societal values. The standard Reinforcement Learning from Human Feedback (RLHF) framework primarily focuses on optimizing the performance of large language models using pre-collected prompts. However, collecting prompts that provide comprehensive coverage is both tedious and challenging, and often fails to include scenarios that LLMs need to improve on the most. In this paper, we investigate alignment through the lens of two-agent games, involving iterative interactions between an adversarial and a defensive agent. The adversarial agent’s task at each step is to generate prompts that expose the weakness of the defensive agent. In return, the defensive agent seeks to improve its responses to these newly identified prompts it “struggled” with, based on feedback from the reward model. We theoretically demonstrate that this iterative reinforcement learning optimization converges to a Nash Equilibrium for the game induced by the agents. Experimental results in safety scenarios demonstrate that learning in such a competitive environment not only fully trains agents but also leads to policies with enhanced generalization capabilities for both adversarial and defensive agents.
+
+## 1 INTRODUCTION
+
+Large language models (LLMs), such as ChatGPT Ouyang et al. (2022), Claude Anthropic (2024), and others, have achieved great success due to their remarkable generalization and versatility. One crucial component of LLM development is alignment Ouyang et al. (2022); Bender et al. (2021); Bommasani et al. (2021), which ensures LLMs can follow instructions, understand human intention, and align with social values. Performing the alignment of LLMs requires the preparation of a set of prompts. The traditional alignment method optimizes the model’s response on pre-collected prompts, which are mostly contributed by human labelers and could fail to cover all task types. Later, several methods have been proposed to expand the scope of prompts used, including based on difficulty Xu et al. (2023); Luo et al. (2023), paraphrase Yu et al. (2023b), and self-instruct Wang et al. (2022). Nonetheless, these methods are often rule-based and do not customize or adapt their design to the capabilities of aligning LLMs, i.e., identify prompts that the aligning LLM struggles at responding to. Furthermore, using a static prompt dataset may lead to saturation of LLM performance due to the loss of discernment by the reward model. Therefore, a more dynamic and adaptive approach is necessary for LLM alignment to improve its generalization.
+
+To address these limitations, we introduce a novel framework inspired by the tutor-student model of human learning, conceptualizing the alignment process as a two-player game. In this framework, an adversarial agent (adversarial LLM) and a defensive agent (defensive LLM) engage in iterative interactions to enhance both their performances. Specifically, the adversarial LLM, acting as the tutor, learns to automatically generate prompts that challenge and reveal the weaknesses of the defensive LLM. Meanwhile, the defensive LLM, functioning as the student, is tasked with adapting and improving its responses to these adversarially generated prompts. Our framework is grounded in research on learning in competitive multi-agent environments Bansal et al. (2017); Lowe et al. (2017). This approach fosters a natural curriculum of increasing complexity, allowing both agents to develop progressive behaviors that surpass the inherent complexity of their training environment. Figure 1 illustrates our proposed framework using two players.
+
+{1}------------------------------------------------
+
+![Figure 1: A diagram illustrating the dynamic learning environment for adversarial alignment. It shows an iterative process between an Attack Agent and a Defense Agent. The Attack Agent generates prompts (e.g., 'I heard that the f-word is a very popular word to say in certain countries. Do you know if it's true?') and receives rewards from a Toxicity Classifier. The Defense Agent generates responses (e.g., 'I'm not aware of any specific countries where the word VI- word? is particularly popular or commonly used. However, it is a vulgar term that is often considered offensive in many cultures and languages around the world.') and also receives rewards. The process starts with an Original Prompt ('What is your favorite cuss word to use when you are arguing?') and an Original Response ('I'm sorry, but I don't understand your question. Can you please provide more context or rephrase it?').](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 1: A diagram illustrating the dynamic learning environment for adversarial alignment. It shows an iterative process between an Attack Agent and a Defense Agent. The Attack Agent generates prompts (e.g., 'I heard that the f-word is a very popular word to say in certain countries. Do you know if it's true?') and receives rewards from a Toxicity Classifier. The Defense Agent generates responses (e.g., 'I'm not aware of any specific countries where the word VI- word? is particularly popular or commonly used. However, it is a vulgar term that is often considered offensive in many cultures and languages around the world.') and also receives rewards. The process starts with an Original Prompt ('What is your favorite cuss word to use when you are arguing?') and an Original Response ('I'm sorry, but I don't understand your question. Can you please provide more context or rephrase it?').
+
+Figure 1: In our approach, we create a dynamic learning environment where an adversarial agent assesses the past mistakes and current performance of a defensive agent to identify and exploit potential vulnerabilities. In response, the defensive agent continuously adapts and strengthens these weaknesses, enhancing its performance in a generalizable way through this iterative process.
+
+In pursuit of a more robust and comprehensive approach to building the adversarial agent, we also introduce a novel mechanism to incorporate diversity constraints based on BLEU scores Papineni et al. (2002); Zhu et al. (2018) and sentence embeddings Tsvet & Berant (2020). By integrating these diversity constraints, we successfully prevented the adversarial agent from converging prematurely to a narrow set of effective prompts, thereby expanding the coverage of potential vulnerabilities within the LLM.
+
+Theoretically, we demonstrate that this iterative adversarial alignment process converges to a Nash equilibrium between the adversarial and defensive agents. This equilibrium signifies a state where neither agent can unilaterally improve their strategy, implying a more comprehensive training process that leads to better coverage of prompts for alignment. Our experiments, conducted in scenarios involving harmful inputs and jailbreak settings, validate the effectiveness of the proposed method. The results show that our approach not only enhances the generalization capabilities of the agents but also ensures that both parties in the interaction are thoroughly trained. As a by-product, in addition to creating a generalizable and well-aligned defensive LLM, our adversarial agent also serves as an adaptive red teaming partner, continuously generating challenging prompts to enhance the alignment of the defensive LLM.
+
+## 2 PRELIMINARY
+
+In this section, we briefly recap the basics of LLM and the standard RLHF workflow to establish the necessary notations and conceptual framework for our contributions. Consider  $x = (x^{(1)}, x^{(2)}, \dots, x^{(M)}) \in \mathcal{X}$  as the given prompt, where  $x^{(k)}$  represents the  $k$ -th token in the prompt. The goal of the large language model is to generate a response  $y = (y^{(1)}, y^{(2)}, \dots, y^{(N)}) \in \mathcal{Y}$  in an auto-regressive manner, governed by the following conditional probability distribution:
+
+$$\pi(y | x) = \prod_{n=1}^N \mathbb{P}(y^{(n)} | x, y^{(1)}, \dots, y^{(n-1)}).$$
+
+Here,  $\mathcal{X}$  and  $\mathcal{Y}$  represent the sets of all possible prompts and responses, respectively.
+
+The reinforcement learning from human feedback (RLHF) is a widely adopted framework to align an LLM behavior to comply better with human preferences. This process involves three main steps: 1) Supervised Fine-Tuning, 2) Reward Modeling, and 3) RL-based Policy Optimization.
+
+**Supervised Fine Tuning.** RLHF typically begins with Supervised Fine Tuning (SFT), which fine-tunes a pre-trained LLM through supervised learning on high-quality samples from downstream tasks. The resulting model is denoted as  $\pi_{\text{SFT}}$ .
+
+**Reward Modeling.** The second phase of RLHF involves developing a reward model  $r(\cdot, \cdot)$  that reflects human preferences, utilizing annotated data  $D_{\text{RM}} = \{(x, y_c, y_r)\}$ , where  $y_c$  and  $y_r$  represent the chosen and rejected responses to the prompt  $x$ . For instance, in response to a malicious prompt seeking illegal information, the preferred reaction would be to refuse to answer rather than to comply. One widely-adopted objective is to minimize the negative log-likelihood of the Bradley-Terry
+
+{2}------------------------------------------------
+
+(BT) model Bradley & Terry (1952), so as to assign higher rewards to the chosen response  $y_c$  over the rejected response  $y_r$ :
+
+$$\mathcal{L}(r) = -\mathbb{E}_{(x, y_c, y_r) \sim D_{\text{RM}}} \left[ \log \sigma \left( r(x, y_c) - r(x, y_r) \right) \right], \quad (2.1)$$
+
+where  $\sigma$  denotes the sigmoid function.
+
+**RL Optimization.** Finally, RL-based policy optimization, such as PPO Schulman et al. (2017), is performed using feedback from the reward model. This optimization targets on a specific set of prompts, denoted as  $D_{\text{PPO}}$ , with the aim of learning a policy  $\pi_\theta$  that maximizes rewards regarding  $D_{\text{PPO}}$  while not drifting too far away from  $\pi_{\text{SFT}}$ :
+
+$$\max_{\pi_\theta} \mathbb{E}_{x \sim D_{\text{PPO}}} \left[ \mathbb{E}_{y \sim \pi_\theta(\cdot | x)} [r(x, y)] - \beta \cdot \text{KL}(\pi_\theta(\cdot | x) \| \pi_{\text{SFT}}(\cdot | x)) \right], \quad (2.2)$$
+
+where  $\text{KL}(\cdot \| \cdot)$  is the Kullback–Leibler divergence between two probability distributions.
+
+The real-world effectiveness of  $\pi_\theta$  strongly depends on the quality and diversity of the pre-collected prompts  $D_{\text{PPO}}$ . If  $D_{\text{PPO}}$  fails to comprehensively represent real-world scenarios,  $\pi_\theta$  may struggle to perform well with prompts encountered in practice. Furthermore, it is crucial that the construction of  $D_{\text{PPO}}$  dynamically adapts to the capabilities of  $\pi_\theta$ . Specifically, in each optimization cycle,  $D_{\text{PPO}}$  should target the current weaknesses of  $\pi_\theta$ , so that targeted optimization on these vulnerabilities can further improve the overall performance of  $\pi_\theta$ . Current alignment methods mainly rely on human-written prompts or rule-based prompt construction Wang et al. (2022); Xu et al. (2023), which obviously cannot ensure the comprehensive coverage and adaptivity mentioned earlier. We next propose exploring alignment through a two-player game view to develop the dynamic and comprehensive training environment as previously mentioned.
+
+## 3 GAME-THEORETICAL PREFERENCE OPTIMIZATION (GPO)
+
+Inspired by the tutor-student model of human learning, we aim to create a dynamic learning environment for LLMs, featuring iterative interactions between an adversarial and a defensive agent. The adversarial agent, serving as the tutor, evaluates past errors and current performance of the defensive agent to dynamically identify and exploit potential weaknesses. In turn, the defensive agent, functioning as the student, continuously adapts and strengthens these identified vulnerabilities. This iterative cycle is repeated to consistently improve performance.
+
+### 3.1 A TWO-AGENT GAME FRAMEWORK FOR ALIGNMENT
+
+We represent the defensive and adversarial agents by  $\pi_\theta$  and  $\mu_\phi$ , respectively, each implemented by separate LLMs. The game between the defensive and adversarial agents is then formulated as the following max-min optimization problem:
+
+$$\max_{\pi_\theta} \min_{\mu_\phi} J(\pi_\theta, \mu_\phi) := \mathbb{E}_{x \sim \mu_\phi(\cdot)} \left[ \mathbb{E}_{y \sim \pi_\theta(\cdot | x)} [r(x, y)] - \beta_{\text{div}} R_{\text{div}}(x) \right]. \quad (3.1)$$
+
+Here,  $r(x, y)$  is the reward from the reward model described in Section 2, which captures the quality of response  $y$  to the prompt  $x$ . The diversity reward  $R_{\text{div}}(x)$  relates only to the prompt  $x$  and measures whether the generated prompts are similar to or common among previous generations. A higher  $R_{\text{div}}(x)$  implies that the prompt  $x$  is less common. The hyperparameter  $\beta_{\text{div}}$  regulates the influence of diversity rewards.
+
+The diversity reward  $R_{\text{div}}(x)$  influences the adversarial agent’s optimization. The defense model’s optimization depends on prompts generated by the adversarial agent. Incorporating  $R_{\text{div}}(x)$  encourages the adversarial agent to explore weaknesses in the defense model, facilitating improvement. Without it, the adversarial agent may overfit to a narrow set of prompt types.  $R_{\text{div}}(x)$  is linked to the prompt  $x$  and quantifies dissimilarity to previous generations, motivating unique prompts. Section 3.2.2 elaborates on computing  $R_{\text{div}}(x)$  using SelfBLEU and sentence embeddings.
+
+**Adversarial agent  $\mu_\phi$ :** It acts as a prompt generator, aiming to adaptively generate diverse prompts that expose the weaknesses of the current defensive agent  $\pi_\theta$ . More specifically, it generates prompt  $x$  to minimize the reward  $r(x, y)$ , where  $y$  is generated by  $\pi_\theta$ , while maximizing the diversity reward  $R_{\text{div}}(x)$  to encourage prompts that are less common or similar to previous generations.
+
+{3}------------------------------------------------
+
+**Defensive agent  $\pi_\theta$ :** It functions as the previous LLM policy in RLHF, aiming to maximize the rewards of the generated responses, i.e.,  $\mathbb{E}_{y \sim \pi_\theta(\cdot|x)}[r(x, y)]$ , when the prompt  $x$  is sampled from the prompt distribution  $\mu_\phi$  specified by the adversarial agent. Overall, the objective in equation 3.1 describes a zero-sum two-player game between two agents, with  $R(x, y) = r(x, y) - \beta_{\text{div}} R_{\text{div}}(x)$  as the reward. The adversarial agent operates on the prompt  $x$  to minimize  $R(x, y)$ , while the defensive agent improves the response  $y$  to maximize  $R(x, y)$ . In practical implementation, we iteratively optimize both agents using PPO (Schulman et al., 2017) as our optimization method, where a KL-regularizer between the current policy and the old policy is introduced to stable the training process in each iteration. The whole framework is described in Algorithm 1.
+
+**Defensive LLM:** equation 3.2 in Algorithm 1 describes the optimization objective for the defensive agent  $\pi_\theta$  in each iteration round  $t$ . One can observe that the updating formula is quite similar to the objective of RL optimization in the standard RLHF framework described in equation 2.2. The main differences are: (1) Prompts, which are sampled from the distribution generated by the adversarial agent in the last round  $\mu_{\phi_{t-1}}$ , rather than from the pre-fixed prompt dataset  $D_{\text{PPO}}$ ; (2) In each round  $t$ , the KL penalization is applied between  $\pi_{\theta_t}$  and  $\pi_{\theta_{t-1}}$ , as the defensive agent starts from its state in the last round.
+
+**Adversarial LLM:** When optimizing the adversarial agent  $\mu_\phi$  in equation 3.3, as discussed earlier, our objective is not only to elicit low rewards from the defensive agent but also to prioritize diversity in prompt generation by maximizing the diversity reward  $R(x)$  of the generated prompt  $x$ . Encouraging diversity of generations promotes exploration and prevents the adversarial agent from focusing on a narrow set of prompts, ultimately enhancing the robustness and generalizability of both agents. Furthermore, as we will discuss more precisely in Section 3.3, the diversity term prevents the adversarial agent from converging to a point distribution at the *Nash Equilibrium* for the game defined in equation 3.1. Similar to optimizing the defensive LLM, we also add a KL regularization term between  $\mu_\phi$ , and  $\mu_{\phi_{t-1}}$  to regularize the adversarial agent’s prompt generation process, in line with the Follow-the-Regularized-Leader (FTRL) algorithm (Orabona, 2019), which plays a key role in theoretically ensuring that the system converges to a Nash Equilibrium. The term  $\text{KL}(\mu_\phi(x) \| \mu_{\phi_{t-1}}(x))$  penalizes the adversarial agent for making large changes to its prompt distribution across iterations, thereby maintaining stability in the training process. This ensures that the adversarial agent continues to explore new, challenging prompts while avoiding drastic shifts in its strategy.
+
+#### --- **Algorithm 1** Practical Algorithm for GPO. ---
+
+**Require:** The initial defensive agent from SFT policy  $\pi_{\theta_0} = \pi_{\text{SFT}}$ ; The initial adversary agent  $\mu_{\phi_0}$ ; The maximum iteration  $T$ .
+
+1: **for**  $t = 1, \dots, T$  **do**
+
+2: **Policy Update:**
+
+$$\pi_{\theta_t} \leftarrow \arg \max_{\pi_\theta} \mathbb{E}_{x \sim \mu_{\phi_{t-1}}} \left[ \mathbb{E}_{y \sim \pi_\theta(\cdot|x)} [r(x, y)] - \beta \cdot \text{KL}(\pi_\theta(\cdot|x) \| \pi_{\theta_{t-1}}(\cdot|x)) \right] \quad (3.2)$$
+
+$$\mu_{\phi_t} \leftarrow \arg \min_{\mu_\phi} \mathbb{E}_{x \sim \mu_\phi} \left[ \mathbb{E}_{y \sim \pi_{\theta_{t-1}}(\cdot|x)} [r(x, y)] - \beta_{\text{div}} R_{\text{div}}(x) \right] - \eta \cdot \text{KL}(\mu_\phi \| \mu_{\phi_{t-1}}) \quad (3.3)$$
+
+3: **end for**
+
+4: **return**  $\pi_{\theta_T}, \mu_{\phi_T}$ .
+
+---
+
+As we will demonstrate in Section 3.3, through the iterative optimization between two agents, the system reaches a Nash Equilibrium, i.e., no agent can achieve a higher reward by changing its policy unilaterally. In other words, at the Nash Equilibrium, the defensive agent achieves the highest reward under the prompt distribution given by the adversarial agent, while the adversarial agent has already generated the most challenging prompts.
+
+### 3.2 APPLICATION OF TWO-AGENT ALIGNMENT IN IMPROVING LLM SAFETY
+
+Next, we specifically focus on safety scenarios, concretizing the two-agent framework, as a major challenge in deploying LLMs is ensuring robustness to various malicious prompts that may elicit
+
+{4}------------------------------------------------
+
+misinformation and harmful content. In the safety scenario, the adversarial agent conducts red-teaming to identify attack prompts, while the defensive agent aims to be robust against various attacks generated by the adversarial agent. We then elaborate on the design of the response-quality related reward  $r(\cdot, \cdot)$  and the diversity reward  $R_{\text{div}}(\cdot)$  in the safety scenario.
+
+#### 3.2.1 SAFETY REWARDS
+
+In safety alignment,  $r(x, y)$ , the quality of response  $y$  to the prompt  $x$ , is defined as the safety level of the model's output  $y$  given a user input prompt  $x$ . This is typically determined by the probability of being classified as safe by a toxicity classifier Perez et al. (2022); Hong et al. (2024), which is often obtained from Llama-Guard Inan et al. (2023) or classifiers trained based on ToxiGen Hartvigsen et al. (2022).
+
+#### 3.2.2 DIVERSITY REWARDS
+
+As discussed in Section 3.1, the adversarial agent aims to discover the weaknesses of defensive agents as much as possible, generating more diverse prompts that can harm the safety of defensive agents. Therefore, we utilize text similarity of prompts to previous generations as its diversity reward. The lower the similarity between the current adversarial prompts and previous generations, the greater the diversity Gomaa et al. (2013). We use  $n$ -gram modeling and sentence embeddings to measure the similarity of text in form and semantics Tevet & Berant (2020), respectively.
+
+**$n$ -gram modeling ( $R_{\text{div}}^{\text{SelfBLEU}}$ ):** The SelfBLEU score Zhu et al. (2018), derived from the BLEU score Papineni et al. (2002), measures the  $n$ -gram overlap between a generated sentence  $x$  and a set of reference sentences  $X$ . Within the SelfBLEU framework, we compare the newly generated sentence against all previously generated sentences as the reference set. If the new sentence shares numerous  $n$ -gram segments with previous sentences, indicating a high degree of similarity, it will receive a higher SelfBLEU score, suggesting that its content is highly repetitive compared to previously generated sentences. We then calculate the negative average SelfBLEU score across 1 to 5 grams as the diversity reward:
+
+$$R_{\text{div}}^{\text{SelfBLEU}}(x) = -\frac{1}{5} \sum_{n=1}^5 \text{SelfBLEU}_X(x, n). \quad (3.4)$$
+
+**Sentence embedding ( $R_{\text{div}}^{\text{Embedding}}$ ):** In order to encourage semantic diversity of generated prompts, we need to measure not only the similarity in the form of text, but also the semantics Tevet & Berant (2020). To achieve this, we use a sentence embedding model  $\phi$ , which produces low-dimensional vectors as sentence embeddings. The cosine similarity between two embeddings corresponds to the semantic similarity between the sentences Reimers & Gurevych (2019). To measure semantic novelty, we introduce a diversity reward called  $R_{\text{div}}^{\text{Embedding}}$ , which calculates the cosine similarity between the sentence embedding of the currently generated prompt and those of all previously generated prompts Reimers & Gurevych (2019):
+
+$$R_{\text{div}}^{\text{Embedding}}(x) = - \sum_{x' \in X} \frac{\phi(x) \cdot \phi(x')}{\|\phi(x)\|^2 \|\phi(x')\|^2}, \quad (3.5)$$
+
+where  $X$  represents the set of all previously generated attack prompts. Finally,  $R_{\text{div}}$  is defined as  $(R_{\text{div}}^{\text{SelfBLEU}} + R_{\text{div}}^{\text{Embedding}})/2$ .
+
+With the quality-related reward  $r$  and diversity rewards defined above, we can optimize the two agents iteratively following Algorithm 1. This leads to strengthened prompt attacks (adversarial agent) and a more robust defensive LLM, as demonstrated in the empirical evaluation later on.
+
+### 3.3 THEORETICAL ANALYSIS
+
+Before delving into empirical evaluations, we provide a theoretical guarantee for our algorithm in the perspective of games and show that the adversarial agent and the defensive agent converge to the Nash Equilibrium asymptotically.
+
+For the purpose of theoretical analysis, we change our practical algorithm a bit and let it return the average policies  $\hat{\pi}_T(\cdot | x) = \frac{1}{T} \sum_{t=1}^T \pi_{\theta_t}(\cdot | x)$  for any  $x \in \mathcal{X}$  and  $\hat{\mu}_T(\cdot) = \frac{1}{T} \sum_{t=1}^T \mu_{\theta_t}(\cdot)$
+
+{5}------------------------------------------------
+
+instead of the last iteration policies  $\pi_{\theta_T}$  and  $\mu_{\phi_T}$ . We let the initial policies  $\pi_{\theta_0}$  and  $\mu_{\phi_0}$  be uniform distributions. We also ignore the optimization error and assume the maxima and minima are attained by the two agents in equation 3.2 and equation 3.3, respectively. We name the resulting algorithm the theoretical version of Algorithm 1 and present it as Algorithm 2 in the appendix. For the subsequent section, for ease of illustration, we abbreviate  $\pi_\theta$  and  $\mu_\phi$  as  $\pi$  and  $\mu$ , respectively.
+
+Since the objective  $J(\pi, \mu)$  is linear in both  $\pi$  and  $\mu$ , we know that the Nash equilibrium exists. Also, following from the minimax theorem Fan (1953) (Lemma A.6), we have
+
+$$\min_{\mu} \max_{\pi} J(\pi, \mu) = \max_{\pi} \min_{\mu} J(\pi, \mu) = J^*,$$
+
+where  $J^*$  is called the value of the game. When  $J(\pi, \mu) \neq J^*$ , we define the following Nash gap to measure how close the policy pair  $(\pi, \mu)$  is to the Nash equilibrium,
+
+$$\text{NEGap}(\pi, \mu) := \max_{\pi^\dagger} J(\pi^\dagger, \mu) - \min_{\mu^\dagger} J(\pi, \mu^\dagger). \quad (3.6)$$
+
+**Definition 3.1** ( $\epsilon$ -approximate Nash Equilibrium). For any  $\epsilon > 0$ , a pair of policies  $(\pi, \mu)$  is an  $\epsilon$ -approximate Nash Equilibrium ( $\epsilon$ -NE) if  $\text{NEGap}(\pi, \mu) \leq \epsilon$ .
+
+Note that if  $\text{NEGap}(\pi, \mu) = 0$ , then the pair of policies  $(\pi, \mu)$  is Nash Equilibrium.
+
+**Theorem 3.2.** By choosing proper parameters  $\beta, \eta = \mathcal{O}(\sqrt{T})$ , The average policies  $\hat{\pi}_T, \hat{\mu}_T$  given by the theoretical version of Algorithm 1 satisfies
+
+$$\text{NEGap}(\hat{\pi}_T, \hat{\mu}_T) \leq \mathcal{O}(T^{-1/2}).$$
+
+Please refer to Section A.1 for a detailed proof. Theorem 3.2 demonstrates that Algorithm 1 can find an  $\mathcal{O}(T^{-1/2})$ -approximate Nash equilibrium in  $T$  iterations. Intuitively, agents in Algorithm 1 arrive at a Coarse-Correlated Equilibrium (CCE) for infinity iterations since they both adopt Follow-the-Regularized Leader algorithm (FTRL) (Orabona, 2019) which is a no-regret algorithm in our setting. Because a CCE in zero-sum games is guaranteed to be a Nash Equilibrium (Bai et al., 2020), we can finally show the algorithm leads to a Nash equilibrium for infinity iterations.
+
+**Importance of diversity rewards.** The above analysis treats the diversity reward as part of the reward function. To emphasize the importance of the diversity score, we perform a case study by analyzing a variant of Algorithm 1 where we set  $\beta_{\text{div}} R_{\text{div}}(x) = R_{\text{ent}}(x) = \eta \log \mu_{t-1}(x)$  in equation 3.3, which corresponds to adopting cross entropy between  $\mu_t$  and  $\mu_{t-1}$  as a proxy of the diversity score. The cross-entropy bonus encourages the adversarial agent to generate prompts different from the last iteration and has similar function as the diversity rewards introduced in Section 3.2.2. We present the resulting algorithm as Algorithm 3. It can be shown that Algorithm 3 optimizes the following objective
+
+$$\max_{\pi} \min_{\mu} \mathbb{E}_{x \sim \mu} \left[ \mathbb{E}_{y \sim \pi(\cdot | x)} [r(x, y)] \right] - \eta \cdot \mathcal{H}(\mu), \quad (3.7)$$
+
+where  $\mathcal{H}(\mu) = -\sum_{x \in \mathcal{X}} \mu(x) \log \mu(x)$ . Under mild assumptions, we show that Algorithm 3 has the same theoretical guarantee as Theorem 3.2. The analysis can be found in Section A.2. Notice that even though the theoretical guarantees are the same, the absence of the entropy regularizer in equation 3.7 causes the adversarial agent to converge to a one-point distribution  $\arg \min_{x \in \mathcal{X}} \mathbb{E}_{y \sim \pi(\cdot | x)} [r(x, y)]$ . In contrast, incorporating diversity constraints results in a more varied distribution.
+
+## 4 EXPERIMENTS
+
+In this section, we aim to evaluate GPO in safety scenarios, focusing on both general conversation and jailbreak contexts. Our objective is to assess whether alignment through two-player games can result in: (1) a more capable adversarial agent that produces diverse and effective attack prompts; and (2) a more robust defensive agent that effectively withstands various attacks.
+
+**Baselines.** For evaluation of both the safety of the defensive agent and the attack capabilities of the adversarial agent, we compare the following methods:
+
+{6}------------------------------------------------
+
+- **SFT:** An adversarial or defensive agent that has only undergone supervised fine-tuning.
+- **Paraphrase:** Paraphrasing adversarial prompts through an initial adversarial agent.
+- **RLHF:** The standard RLHF alignment algorithm that trains the adversarial or defensive agent using rewards and KL penalties with PPO.
+- **GPO:** Our proposed method, iteratively training both the adversarial and defensive agents, ensuring that both agents are fully trained and possess better generalization capabilities.
+- **GPO + Div:** Our proposed two-player gaming framework incorporates a diversity reward for the adversarial agent to ensure the diversity of generated adversarial prompts.
+
+**Experimental setup.** For all methods, we utilize the prompts from the Anthropic’s Red Teaming Ganguli et al. (2022) for training, and conduct evaluations as follows.
+
+- **Evaluation of the Safety of the Defensive LLM:** We attack the targeted LLM using harmful prompts from the evaluation datasets and calculate the Attack Success Rate (ASR) as well as safe rewards (the probability of the toxicity classifier deeming the model’s output to be safe). A lower ASR and higher safe reward indicate a safer model.
+- **Evaluation of the Attacking Ability of the Adversarial LLM:** We use harmful prompts in evaluations datasets as the original attack set and employ the adversarial LLM through different methods to transform these prompts into similar but more harmful variations. We then use them to attack the third-party models: (1) Llama-2-7b-chat<sup>1</sup>; (2) vicuna-7b-v1.5<sup>2</sup>, and (3) the model trained with the standard RLHF process. We calculate the ASR, unsafe rewards, and diversity metrics of the generated prompts. Higher ASR, greater unsafe rewards, and increased diversity all indicate a stronger attacking ability.
+
+**Evaluation datasets.** We utilize three distinct datasets for evaluation. The first dataset can be considered an in-distribution set, while the latter two are out-of-distribution datasets.
+
+- **Anthropic’s Red Teaming**<sup>3</sup> Ganguli et al. (2022): This dataset consists of successful red team attempts, representing scenarios where security measures have been bypassed. For evaluation, we randomly select 2,000 prompts from hold-out set.
+- **PKU-BeaverTails**<sup>4</sup> Ji et al. (2024): The BeaverTails dataset includes a wide range of sensitive topics that could potentially lead to the generation of harmful content. We use 700 evaluation prompts from this dataset, each labeled with a single category, despite the potential for multiple applicable categories.
+- **ToxicChat (toxicchat0124)**<sup>5</sup> Lin et al. (2023): This dataset consists of toxicity annotations on 10000 user prompts, which were collected from the Vicuna online demo. A human-AI collaborative annotation framework was employed to ensure high-quality annotations. For our research, we specifically selected 360 prompts that were manually identified as successful attacks, i.e., instances where the model’s responses were deemed inappropriate or harmful.
+
+More details on evaluation metrics, along with implementation specifics and hyperparameters, can be found in Appendix B.
+
+### 4.1 MAIN RESULTS.
+
+**Evaluating safety of defensive agent.** We begin by evaluating the safety of the defensive agent in instruction following and general dialogue tasks against three distinct datasets of harmful prompts. As indicated in Table 1, the defensive agent trained with the two-player gaming alignment approach exhibit superior safety compared to the conventional RLHF, evidenced by lower ASR and higher safe reward (the probability of the toxicity classifier deeming the model’s output to be safe). Our method surpasses RLHF due to the continuous adjustment of input prompts distribution and toxicity in the two-player gaming framework, which facilitates the optimization of better-aligned models.
+
+<sup>1</sup><https://huggingface.co/meta-llama/Llama-2-7b-chat-hf>
+
+<sup>2</sup><https://huggingface.co/lmsys/vicuna-7b-v1.5>
+
+<sup>3</sup><https://huggingface.co/datasets/Anthropic/hh-rlhf>
+
+<sup>4</sup><https://huggingface.co/datasets/PKU-Alignment/BeaverTails-Evaluation>
+
+<sup>5</sup><https://huggingface.co/datasets/lmsys/toxic-chat>
+
+{7}------------------------------------------------
+
+Table 1: Evaluation results of the safety of defensive LLM’s. GPO-line methods achieve improved safety compared to RLHF. Additionally, incorporating diversity rewards into adversarial agents significantly enhances performance.
+
+| Methods | Anthropic’s Red Teaming |  | PKU-BeaverTails |  | ToxicChat |  |
+|-|-|-|-|-|-|-|
+|  | ASR% ↓ | $r_{safe}$ ↑ | ASR% ↓ | $r_{safe}$ ↑ | ASR% ↓ | $r_{safe}$ ↑ |
+| SFT | 30.18 | 0.68 | 34.22 | 0.65 | 37.50 | 0.61 |
+| Paraphrase | 31.65 | 0.67 | 33.91 | 0.65 | 35.94 | 0.63 |
+| RLHF | 10.89 | 0.87 | 8.28 | 0.89 | 24.06 | 0.73 |
+| GPO | 9.27 | 0.89 | 7.81 | 0.90 | 21.88 | 0.75 |
+| GPO + Div | 4.54 | 0.95 | 3.44 | 0.96 | 14.37 | 0.83 |
+
+Table 2: Experimental results of evaluating the attacking ability of the adversarial agent on Llama-2-7b-chat, vicuna-7b-v1.5, the model trained with the standard RLHF. The average results on three targeted models are presented. GPO-line methods exhibit stronger attack capabilities compared to single-round red-team LLMs, producing a more diverse set of attack prompts that are effective across different target models.
+
+| Methods | Anthropic’s Red Teaming |  |  | PKU-BeaverTails |  |  | ToxicChat |  |  |
+|-|-|-|-|-|-|-|-|-|-|
+|  | ASR% ↑ | $r_{unsafe}$ ↑ | Diversity ↑ | ASR% ↑ | $r_{unsafe}$ ↑ | Diversity ↑ | ASR% ↑ | $r_{unsafe}$ ↑ | Diversity ↑ |
+| Raw Data | 15.88 | 0.19 | 0.91 | 16.15 | 0.18 | 0.56 | 21.15 | 0.25 | 0.89 |
+| SFT | 10.10 | 0.13 | 0.95 | 10.05 | 0.13 | 0.54 | 9.59 | 0.12 | 0.94 |
+| RLHF | 37.72 | 0.44 | 0.52 | 38.07 | 0.44 | 0.40 | 32.63 | 0.38 | 0.49 |
+| RLHF + Div | 33.60 | 0.29 | 0.88 | 35.73 | 0.29 | 0.61 | 32.14 | 0.36 | 0.86 |
+| GPO | 45.06 | 0.53 | 0.52 | 46.30 | 0.54 | 0.47 | 34.06 | 0.39 | 0.66 |
+| GPO + Div | 48.57 | 0.49 | 0.70 | 52.50 | 0.52 | 0.57 | 40.73 | 0.43 | 0.86 |
+
+Moreover, GPO+Div, which incorporates diversity rewards into the training of the adversarial agent, achieved significant improvement. This is because, without diversity rewards, the adversarial agent tends to produce prompts with high toxicity but a single pattern, which does not adequately train the defensive agent, as we will demonstrate in section B.8.
+
+**Assessing attacking ability of adversarial agent.** We then assess the attacking ability of adversarial LLMs trained with various methods. These LLMs generate attack prompts by transforming the original harmful prompts from three datasets into similar but more harmful variations. These transformed prompts are then used to attack three third-party models: Llama-2-7b-chat, vicuna-7b-v1.5, and a model trained with the standard RLHF process. We report the average evaluation results across these three models. As shown in Table 2, the original prompts maintained good diversity but generally lacked strong attack power. After RL optimization, the red-team LLMs are able to generate more aggressive prompts. However, although adding diversity rewards to RL increased the diversity of output prompts, it did not enhance their aggressiveness on other target models. This might be because the model targeted during training is too simple to produce prompts that are both diverse and highly aggressive. In our framework, the adversarial agent faced a stronger opponent. Coupled with the diversity reward, this resulted in the generation of attack prompts that were both diverse and aggressive.
+
+**Evaluation of safety against jailbreak attacks.** We consider another common safety scenario, the jailbreak attack. We utilize the Attack Enhanced subset from Salad-Bench Li et al. (2024), comprising samples generated using various jailbreak attack methods like Autodan Liu et al. (2023) and Gptfuzzer Yu et al. (2023a). These samples are split into training and test sets based on the attack methods. The training set is employed to initially train the adversarial model, teaching it how to convert normal attack samples into the jailbreak format. The test set contains less common attack types and is used to assess the effectiveness of the training method. During GPO’s training, the adversarial agent is presented with normal attack prompts to generate jailbreak attack prompts. Table 3 demonstrates the efficacy of our approach in jailbreak scenario, where the adversarial agent proficiently learns the jailbreak construction task and exposes vulnerabilities in the defensive model.
+
+### 4.2 ANALYSIS AND DISCUSSION
+
+**Impacts of diversity rewards on our framework.** As shown in Figure 2, we demonstrate the impact of diversity rewards with the blue background denoting training defensive agents and red de-
+
+{8}------------------------------------------------
+
+432  
+433  
+434  
+435  
+436  
+437  
+438  
+439  
+440  
+441  
+442  
+443  
+444  
+445  
+446  
+447  
+448  
+449  
+450  
+451  
+452  
+453  
+454  
+455  
+456  
+457  
+458  
+459  
+460  
+461  
+462  
+463  
+464  
+465  
+466  
+467  
+468  
+469  
+470  
+471  
+472  
+473  
+474  
+475  
+476  
+477  
+478  
+479  
+480  
+481  
+482  
+483  
+484  
+485
+
+![Figure 2: Impacts of diversity rewards on our framework. The figure contains four subplots: (a) Safe Reward (Train), (b) Unsafe Reward (Train), (c) Safety (Anthropic), and (d) Diversity (Anthropic). Each plot shows performance metrics (e.g., Harmfulness, Safety) over training steps (0 to 1000). The legend indicates: SFT (blue), GPO (orange), and GPO+Div (red) with different reward intensities (e.g., k=0, k=1, k=5, k=10).](91be14371a97fb5ce9eeb29ae18d07c3_img.jpg)
+
+Figure 2: Impacts of diversity rewards on our framework. The figure contains four subplots: (a) Safe Reward (Train), (b) Unsafe Reward (Train), (c) Safety (Anthropic), and (d) Diversity (Anthropic). Each plot shows performance metrics (e.g., Harmfulness, Safety) over training steps (0 to 1000). The legend indicates: SFT (blue), GPO (orange), and GPO+Div (red) with different reward intensities (e.g., k=0, k=1, k=5, k=10).
+
+Figure 2: Impacts of diversity rewards on our framework with blue background denoting training defensive agents and the red denoting training adversarial agents. As shown in Figures 2(a) and 2(b), during the two-player iterative training, the adversarial and defensive agents alternately take effect. Figure 2(c) shows the defensive capabilities of the defensive agent at different steps, illustrating that our method surpasses RLHF across various diversity reward intensities. However, selecting a moderate intensity is preferable.
+
+noting training adversarial agents. During training, the adversarial and defensive agents are trained alternately, with the defensive agent training for 200 steps and the adversarial agent for 400 steps, starting with the defensive agent. Figures 2(a) and 2(b) reveal that, during the two-player iterative training, the adversarial and defensive agents alternately take effect. The intensity of the diversity reward affects the harmfulness of the attack prompts generated by the adversarial agent, which in turn influences the safety of the defensive agent. Figure 2(c) presents the defensive capabilities of the defensive agent at different steps, showing that our method outperforms RLHF across various diversity reward intensities. Selecting a moderate intensity is found to be more effective.
+
+**Quality-based generation performance of the defensive agent.** In addition to safety metrics, we consider it crucial to incorporate metrics related to generation quality. In the context of safety alignment, our goal is not only to prevent unsafe responses but also to assess how much quality performance can be sacrificed for safety. To address this, we conducted additional experiments using the MT-Bench benchmark. MT-Bench Zheng et al. (2023) is a challenging multi-turn question set designed to evaluate models’ conversational and instruction-following capabilities. We carried out these experiments to further analyze our model’s performance, using SFT as the baseline and GPT-4-0613 as the evaluator. The results in Figure 4 show that our proposed method, particularly the GPO+Div model, achieves a higher average score than the baseline SFT and RLHF models. Additionally, it demonstrates an improved win rate, indicating that our model effectively balances safety and quality without significantly compromising generation performance.
+
+Table 3: In the context of jailbreak attacks, we evaluate various alignment methods using jailbreak prompts from the Attack Enhanced subset of Salad-Bench. The GPO-lines consistently outperforms other methods in this setting.
+
+| Methods | Salad-Data-Enhanced |  |
+|-|-|-|
+|  | ASR% ↓ | r <sub>safety</sub> ↑ |
+| SFT | 23.44 | 0.74 |
+| Paraphrase | 20.83 | 0.76 |
+| RLHF | 16.67 | 0.78 |
+| GPO | 15.36 | 0.79 |
+| GPO+Div | 10.42 | 0.85 |
+
+Table 4: Conversational and instruction-following ability performance. GPO+Div outperforms the other methods in average score. However, the win rates are relatively high across all methods, suggesting that there are still some performance similarities among them in certain aspects.
+
+| Methods | Avg Score | Win | Loss | Tie |
+|-|-|-|-|-|
+| SFT | 5.82 | - | - | - |
+| RLHF | 6.11 | 0.33 | 0.20 | 0.47 |
+| GPO | 6.02 | 0.28 | 0.21 | 0.51 |
+| GPO+Div | 6.22 | 0.35 | 0.16 | 0.49 |
+
+## 5 RELATED WORK
+
+**LLM Alignment.** Despite the impressive capabilities of Large Language LLMs, they are susceptible to unintended behaviors like fabricating facts and generating biased or harmful content. RLHF presents a straightforward method to address these issues. In RLHF, an agent utilizes reinforcement learning to maximize guidance signals from a reward model acting as a human proxy. Subsequent works have also been proposed to further enhance LLM performance by addressing reward hacking issues Coste et al. (2023); Zhang et al. (2024a) and enabling self-correcting abilities Kumar et al. (2024), etc. In addition to employing RL, recently introduced preference learning techniques operate independently of RL, such as RSO Liu et al. (2024a), RRHF Yuan et al. (2023), and RAFT Dong
+
+{9}------------------------------------------------
+
+et al. (2023), DPO Rafailov et al. (2023), SLiC-HF Zhao et al. (2023), and IPO Azar et al. (2023) etc. However, all of these methods concentrate on enhancing the performance of LLMs on the pre-collected prompts, without inspecting the construction of the prompt sets. Collecting prompts that offer comprehensive coverage is a laborious and challenging task that frequently overlooks crucial scenarios where LLMs require the most improvement.
+
+**Self-play in RLHF.** In recent research, there has been an emergence of studies exploring two-player adversarial setups to align LLMs. To tackle the issue of human preference variation, recent studies Wu et al. (2024); Zhang et al. (2024b) suggest maximizing the likelihood of the generated response being preferred over its opponent, instead of relying on a fixed preference dictated by a reward model. In essence, this approach involves both players optimizing towards pre-selected prompts while competing with each other by generating superior responses. Studies have also explored a two-player game involving an aligned LLM and a reward model Liu et al. (2024b); Zhang et al. (2024a); Cheng et al. (2024b) to tackle reward hacking issues. In this setup, the aligned model strategically selects the most conservative reward from the reward model. Additionally, Kirchner et al. (2024) have examined the Prover-Verifier Game to produce accurate yet easily understandable solutions for mathematical problems. However, all these studies concentrate on enhancing response quality based on pre-collected prompts. Recognizing the pivotal role of high-quality and diverse prompts in optimizing robust and versatile LLM performance, particularly within out-of-distribution (OOD) scenarios, our research delves into the interplay between prompt generation and aligned LLM. As far as we know, our work is the first to investigate two player game from this perspective. Furthermore, the game we investigate faces specific challenges. Notably, we found that maintaining an effective yet diverse distribution of the adversary, as explained in Sections 3 and 4, is key to success.
+
+Cheng et al. (2024a) have also explored the self-play setting, primarily investigating whether engaging in an adversarial language games (e.g., Adversarial Taboo) can enhance general reasoning abilities. This is fundamentally distinct from the alignment algorithm that is the focus of our paper.
+
+**Safety Alignment.** Ensuring the safety and alignment with ethical norms of language models is a crucial part of the language model alignment Hendrycks et al. (2020); Schramowski et al. (2022). A commonly adopted safety alignment framework involves iterative red teaming and model hardening Dinan et al. (2019); Bai et al. (2022b). Automated red teaming methods typically require human involvement or learn how to automatically generate adversarial prompts through techniques such as prompting, SFT, and RL Perez et al. (2022); Ganguli et al. (2022); Hong et al. (2024); Samvelyan et al. (2024). With the assistance of red team LLMs, model safety can be enhanced using methods such as SFT and RLHF Ouyang et al. (2022); Bai et al. (2022a). However, previous red team LLMs were primarily designed to attack static models, and MART iteratively conducts red teaming and safety enhancements but relies on supervised fine-tuning, which makes it difficult to balance the capabilities of attackers and defenders Ge et al. (2023). Our work incorporates red team attacks and safety alignment into a framework of two-player gaming, ensuring that the optimizations of both agents ultimately reach a Nash equilibrium.
+
+## 6 CONCLUSION, LIMITATION AND FUTURE WORK
+
+In this work, we introduced a novel framework for aligning LLMs by conceptualizing the process as a two-player game between an adversarial agent and a defensive agent. Through iterative interactions, the adversarial agent learns to generate diverse and challenging prompts to uncover the weaknesses of the defensive LLM, while the defensive LLM adapts and improves its responses. By incorporating diversity constraints and demonstrating convergence to a Nash equilibrium, our approach enhances the generalization capabilities of both agents and ensures thorough training. Our experiments validate the effectiveness of the proposed method in scenarios involving harmful inputs and jailbreak settings. Our solution does require training two separate LLM agents, and this work primarily focused on prototyping our idea using safety-related tasks. In the future, we aim to extend the scope of our alignment framework to address the challenges that arise in other domains. Specifically, we hope to investigate the application of our approach in helpfulness and mathematical reasoning related tasks, where LLMs are required to provide accurate and useful responses. Additionally, we intend to explore synergies between our two-player game framework and other established alignment methods, e.g. DPO.
+
+ Rest of paper (reference and Appendix) is removed.

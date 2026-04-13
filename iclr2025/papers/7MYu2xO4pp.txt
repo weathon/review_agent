@@ -1,0 +1,295 @@
+
+
+{0}------------------------------------------------
+
+# GRADIENT-BASED INFERENCE OF TASK ABSTRACTIONS FOR GENERALIZATION IN NEURAL NETWORKS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Humans and many animals show remarkably adaptive behavior and can respond differently to the same input depending on their internal goals. The brain not only represents the intermediate abstractions needed to perform a computation but also actively maintains a representation of the computation itself (task abstraction). Such separation of the computation and its abstraction is associated with faster learning, flexible decision-making, and broad generalization capacity. We investigate if such benefits might extend to neural networks trained with task abstractions. For such benefits to emerge, one needs a task inference mechanism that possesses two crucial abilities: First, the ability to infer abstract task representations when no longer explicitly provided (task inference), and second, manipulate task representations to adapt to novel problems (task recomposition). To tackle this, we cast task inference as an optimization problem from a variational inference perspective and ground our approach in an expectation-maximization framework. We show that gradients backpropagated through a neural network to a task representation layer are an efficient heuristic to infer current task demands, a process we refer to as gradient-based inference (GBI). Further iterative optimization of the task representation layer allows for recomposing abstractions to adapt to novel situations. Using a toy example, a novel image classifier, and a language model, we demonstrate that GBI provides higher learning efficiency and generalization to novel tasks and limits forgetting. Moreover, we show that GBI has unique advantages such as preserving information for uncertainty estimation and detecting out-of-distribution samples.
+
+## 1 INTRODUCTION
+
+Cognitive science and neuroscience hold a prominent place for (top-down) abstract task representations in many accounts of advanced cognitive functions in animals, including humans (Niv, 2019). The brain not only represents the intermediate abstractions needed to perform a task but also actively maintains a representation of the task itself (i.e., task abstraction, (Mante et al., 2013; Rikhye et al., 2018; Zhou et al., 2019; Vaidya et al., 2021; Hummos et al., 2022)). Such separation of the computation and its abstraction is theorized to support learning efficiency, as well as adaptive behavior. First, regarding learning efficiency, task abstractions facilitate learning by organizing experiences collected (Yu et al., 2021). Human participants learn faster once they discover the underlying task structure (Badre et al., 2010; Collins, 2017; Vaidya et al., 2021; Castañón et al., 2021). In fact, humans have a bias to discover and use such latent task structures even when they do not exist or might hurt their performance (Gaißmaier & Schooler, 2008; Collins, 2017). Second, regarding adaptive behavior, previous work has shown that the brain updates these task abstractions to meet current task demands of the environment and (re)composes them to solve new problems (Miller & Cohen, 2001; Collins & Koechlin, 2012). Indeed, depending on the context, the brain is able to respond to the same sensory input in novel ways by composing an appropriate task abstraction that guides processing of the input (Rikhye et al., 2018; Tafazoli et al., 2024), supporting flexible decision making and generalization to novel situations (Collins & Koechlin, 2012; Vaidya et al., 2021).
+
+Traditional artificial neural networks (ANNs) architectures have a static computational graph that entangles input processing with task inference. For task-dependent computations in ANNs, one popular solution is to build task representations into the structure of the network by using modular networks; where each module could represent a given task (Andreas et al., 2016; Kirsch et al., 2018; Goyal et al., 2019). Alternatively, one could regularize the weight updates such as to maximize an
+
+{1}------------------------------------------------
+
+orthogonal computational space for each task (Kirkpatrick et al., 2017; Masse et al., 2018). Our framework is most related to models that add task encoding input layers, which provide information about the current task demands to the network (Yang et al., 2019; Hurtado et al., 2021; Wang & Zhang, 2022; Kumar et al., 2022; 2024).
+
+However, these previous models lack two important task inference features which we unpack in what follows and motivate our work. First, these models do not propose a mechanism to efficiently identify these tasks if they appear again in data, and thereby flexibly (re)adapt to the demands of previously encountered task. Second, and perhaps most importantly, these models lack a principled way of recomposing previously learned task abstractions, thereby minimizing the necessity for new learning (i.e. parameters update) to adapt to new situations (Lake et al., 2017). Importantly, neural systems impose a unique constraint on such task inference and recomposition mechanisms. As the neural system ‘learns’ through updating parameters, previous values in the task abstractions layer might become outdated. Thereby, the task inference mechanisms must be able to adjust dynamically to changes in neural parameters.
+
+To address the challenge of an efficient inference mechanism that can capture the two properties just described, and maintain alignment to neural parameters, we propose Gradient-Based Inference (GBI) of task abstractions. This solution is grounded in variational inference, offering a robust and flexible framework. For an intuitive example of this framework, we consider that during upbringing, we may observe situations where people’s feelings were labeled as sadness or as anxiety. As we interact with others we may try to infer their emotional states relying on subtle cues. We incrementally adjust our conclusions with every cue, moving closer to one emotion or the other, as make predictions and receive feedback during the interaction. If, by the end of the interaction, both emotions seem equally likely, then either the situation is uncertain or that the person is experiencing an emotion outside of those two. Another promising class of models used iterative optimization in task abstractions space to discover latent tasks and associate them with an internally generated task abstractions (Butz et al., 2019; Hummos, 2023; Sandbrink et al., 2024). While these models offered a solution for continual learning, they relied on rounds of iterative optimization in task abstractions space, and were based on a limited understanding of of gradient descent dynamics in this space. GBI tackles the computational efficiency by investigating a role for one-step gradients to infer task abstractions. Further, by using pre-defined human-labeled task abstractions we were able to assess the accuracy and uncertainty estimates of gradient-based inference in task abstraction space.
+
+Our findings confirm that empirical findings from cognitive science do indeed extend to neural networks. During training, providing task abstractions leads to **faster learning** (improved data-efficiency), and **limits forgetting** by inducing task-specific modules in the underlying neural network. During test, with weights frozen, models trained with task abstractions show **adequate task inference** through GBI, and can be adapted rapidly to produce different responses to the same input with **better capacity to generalize**. We first show these results in an intuitive contextual switching task for which we know the underlying Bayesian generative model. We then consider image classification datasets starting with MNIST and scaling up to CIFAR-100 (image generation, section 3.2). Further, this image generation framework allows us to test the capacity for the **detection of out-of-distribution (OOD) samples and estimating uncertainty**. In a third experiment (language experiment, section 3.3), we show that GBI is a domain-general method, and demonstrate several of these results in language modeling, specifically, task inference, data efficiency, and generalization.
+
+## 2 METHODS
+
+**Overview.** We assume a dataset is equipped with a task abstraction. Conceptually, a task abstraction groups data samples into conceptual categories defined across dataset samples rather than individual data points. Mathematically, we model this by a graphical model where the data point  $\mathbf{X}$  is generated from a task abstraction  $\mathbf{Z}$ . Now we use a neural network to model this graphical model with data  $\mathbf{X}$ , task abstraction  $\mathbf{Z}$  and unknown parameter  $\theta$ , our neural network model has the form of a joint likelihood function
+
+$$\mathcal{L}(\theta; \mathbf{X}, \mathbf{Z}) = p(\mathbf{X}, \mathbf{Z}|\theta). \quad (1)$$
+
+At the training phase, given a data point  $\mathbf{X}$  with the abstraction of interest  $\tilde{\mathbf{Z}}$  directly observed, we train the neural network by doing gradient descent on  $-\log \mathcal{L}(\theta; \mathbf{X}, \tilde{\mathbf{Z}})$  with respect to  $\theta$ .
+
+{2}------------------------------------------------
+
+At the test phase, we no longer assume access to task abstraction  $\mathbf{Z}$  and require the model to identify them in individual data points efficiently. Moreover, we require for our model a mechanism to manipulate the abstract representations to adapt to new unseen situations. Specifically, we update our  $\mathbf{Z}$  through gradient descent on  $-\log \mathcal{L}(\theta; \mathbf{X}, \mathbf{Z})$ .
+
+The prediction of the model with task abstraction  $\mathbf{Z}$  is
+
+$$\hat{\mathbf{X}} = \arg \max_{\mathbf{X}} \mathcal{L}(\theta; \mathbf{X}, \mathbf{Z}). \quad (2)$$
+
+**Connections to Expectation-Maximization algorithm.** Notice that this method has deep connections to the classical Expectation-Maximization (EM) algorithm. In the training phase, since  $\hat{\mathbf{Z}}$  is drawn from the distribution  $p_{\mathbf{Z}|\mathbf{X}}$ , the training attempts to find  $\hat{\theta}$  such that
+
+$$\hat{\theta} = \arg \max_{\theta} \mathbb{E}_{p_{\mathbf{Z}|\mathbf{X}}} [\log \mathcal{L}(\theta; \mathbf{X}, \mathbf{Z})]. \quad (3)$$
+
+Equation 3 is a compact way to write the classical EM algorithm where the expectation steps are replaced by direct observation. Let the probability distribution of  $\mathbf{Z}$  be  $q$ . We can write
+
+$$\log p(\mathbf{X}|\theta) = \mathbb{E}_q [\log p(\mathbf{X}|\theta)] \quad (4)$$
+
+$$= \mathbb{E}_q [\log p(\mathbf{X}, \mathbf{Z}|\theta) - \log p(\mathbf{Z}|\mathbf{X}, \theta)]. \quad (5)$$
+
+By adding and subtracting an entropy of  $q$ , we have
+
+$$= \mathbb{E}_q [\log p(\mathbf{X}, \mathbf{Z}|\theta)] + H(q) + KL(q||p_{\mathbf{Z}|\mathbf{X}}) \quad (6)$$
+
+where KL divergence  $KL(q||p)$  is defined as  $-\mathbb{E}_q [\log \frac{p}{q}]$  and the entropy  $H(q)$  is defined as  $-\mathbb{E}_q [\log q]$ . Now the expectation step corresponds to find  $q$  such that  $\mathbb{E}_q [\log p(\mathbf{X}, \mathbf{Z}|\theta)] + H(q)$  is maximized. Notice that this is equivalent to minimizing the KL divergence  $KL(q||p_{\mathbf{Z}|\mathbf{X}})$  and we know it is minimized at 0 when  $q = p_{\mathbf{Z}|\mathbf{X}}$ . In particular, we have  $\mathbb{E}_q [\log p(\mathbf{X}, \mathbf{Z}|\theta)] + H(q) = \log p(\mathbf{X}|\theta)$ .
+
+At the maximization step, we find  $\theta$  such that  $\mathbb{E}_q [\log p(\mathbf{X}, \mathbf{Z}|\theta)] + H(q)$  is maximized, but since  $H(q)$  does not depend on  $\theta$ , it is equivalent to maximize  $\mathbb{E}_q [\log p(\mathbf{X}, \mathbf{Z}|\theta)]$  and therefore it is exactly Equation 3.
+
+At our testing phase, since we are not able to access  $p_{\mathbf{Z}|\mathbf{X}}$  directly, we optimize  $q$  through gradient descent. Our objective is exactly the expectation step with the regularization term  $H(q)$  implemented as L2 regularization on  $\mathbf{Z}$ .
+
+There are different methods to optimize  $\mathbf{Z}$  and we discuss two methods we use in this paper, iterative optimization and one-step gradient update below to obtain gradient-based inference (GBI) estimates over latent variable values.
+
+**Iterative optimization of  $\mathbf{Z}$ .** One method for doing gradient descent on  $\mathbf{Z}$  is to iteratively optimize  $\mathbf{z}$  using the gradient  $\partial \mathcal{L} / \partial \mathbf{z}$ . We implement iterative optimization using Adam optimizer with a learning rate of 0.01 and L2 regularization scaled by 0.01. This method usually takes many iterations (Marino et al., 2018). Another method is to learn an update rule  $f_{\phi}(\cdot)$  that converts the gradient directly into an inferred  $\mathbf{z} \leftarrow f_{\phi}(\partial \mathcal{L} / \partial \mathbf{z})$  (Marino et al., 2018). This method allows for rapid inference during run time but requires training of the update rule (like other meta-learning methods).
+
+**One-step gradient update.** We explore an alternative that requires only one pass through the model by updating the gradient only once. Without iteratively optimizing  $\mathbf{Z}$  through gradient update, one-step gradient update usually heavily depends on the initialization: because if the initialization is far away from the optimal  $\mathbf{Z}$ , the local gradient information might not be informative of the global optimum. However, notice that in the expectation step, our goal is to find the probability distribution of  $\mathbf{Z}$ ,  $q$ , such that  $\mathbb{E}_q [\log p(\mathbf{X}, \mathbf{Z}|\theta)] + H(q)$  is maximized. We can consider an alternative objective function  $f_{\alpha}(q) = \mathbb{E}_q [\log p(\mathbf{X}, \mathbf{Z}|\theta)] + \alpha H(q)$  for some  $\alpha > 0$  and let  $q_{\alpha}^*$  be the point that maximizes this alternative objective function. Since entropy is concave, by increasing  $\alpha$  we make the function more concave and therefore the gradient is more informative of the actual optimum (Fig 1B). Furthermore,  $q_{\alpha}^*$  will also become closer to the maximal entropy point  $\bar{q} = \arg \max_q H(q)$ . Therefore we can choose our initialization point as the maximal entropy point and output  $\hat{q}$  using our one step gradient update rule:
+
+$$\hat{q} = \text{softmax}(\bar{q} + \nabla f_{\alpha}(\bar{q})). \quad (7)$$
+
+{3}------------------------------------------------
+
+![Figure 1: Schematics of the framework. A) Training and Testing/Generalization phases. B) Schematic of how regularization of Z shapes the task abstraction space.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 1 consists of two parts, A and B. Part A shows the training and testing phases of the framework. In the training phase, an LSTM cell takes input  $x_t$  and output  $x_{t+1}$ , with parameters  $\theta$  being trained. A latent variable  $Z$  is given, represented by a bar chart with four colored segments. The loss  $\mathcal{L}$  is calculated, and the parameters are updated by  $\Delta\theta = \frac{\partial \mathcal{L}}{\partial \theta}$ . In the testing/generalization phase, the same LSTM cell is used, but the parameters  $\theta$  are frozen. The latent variable  $Z$  is inferred, represented by a bar chart with four colored segments. The loss  $\mathcal{L}$  is calculated, and the latent variable is updated by  $\Delta Z = \frac{\partial \mathcal{L}}{\partial Z}$ . Part B is a schematic of the task abstraction space. The vertical axis is labeled 'Z entropy H(q)' and the horizontal axis is labeled 'Z space'. A green circle represents Task A at position [1, 0] and a red circle represents Task B at position [0, 1]. A blue circle represents the maximum entropy point  $\hat{q}$  at position [0.5, 0.5]. Arrows indicate the gradient descent process: a red arrow from  $\hat{q}$  to Task A labeled  $\partial \mathcal{L} / \partial Z$  and a blue arrow from  $\hat{q}$  to Task B labeled  $\partial H / \partial Z$ .
+
+Figure 1: Schematics of the framework. A) Training and Testing/Generalization phases. B) Schematic of how regularization of Z shapes the task abstraction space.
+
+Figure 1: Schematics of the framework. A) Schematic of training phase and testing/generalization phase. During training, ground truth  $Z$  provided to the model and neural parameters  $\theta$  are optimized. During testing,  $\theta$  remains fixed, while  $Z$  is inferred using gradient descent. B) Schematic of how regularization of  $Z$  during training shapes the task abstraction space.  $Z$  values for Task A and B are pushed towards the maximum entropy point in  $Z$ , and are organized on the entropy curvature around the max entropy points. Gradient steps from the max entropy points then push the model towards the  $Z$  values of the appropriate task representation.
+
+Here, we use a softmax function to project  $q$  back to the space of distribution. We implement this update using the SGD optimizer with learning rate 1 and no momentum terms. We reset our initialization point to maximal entropy to obtain  $\hat{q}$  for the next data point.
+
+In the following section, we implement these methods in a toy task (for comparison to Bayesian inference), an image generation and classification model, and finally, a simple language model. Code available at <https://anonymous4open.science/r/neuralbayes-F06F/>.
+
+## 3 EXPERIMENTS
+
+The experiments are organized as follows. In Section 3.1, we first investigate the properties of GBI on a simple synthetic dataset generated from a ground truth Bayesian model. We show that GBI displays better data-efficiency, generalizes better and forgets less, in addition to being able to pass neural gradients back to the Bayesian model to support Bayesian computations. Section 3.2 assesses the potential of GBI as a novel image classifier, the GBI ability to generate task samples, and to detect OOD samples. Finally, in Section 3.3, we demonstrate the abilities of GBI to recompile previously learned tasks, and thereby flexibly adapt to novel tasks using a language model.
+
+### 3.1 EXPERIMENT 1, TOY TASK: TASK ABSTRACTIONS REDUCE FORGETTING AND IMPROVE GENERALIZATION BY INDUCING TASK MODULES
+
+We begin with a simple dataset of one-dimensional observations unfolding in time,  $x_{0:t}$ . The observations are generated from two alternating Gaussian distributions with distinct means ( $\mathcal{N}(0.2, 0.1)$  or  $\mathcal{N}(0.8, 0.1)$ , Fig 6A, C). The ground truth generative causal model (Fig 6A) has the task node ( $z$ ) as a binary variable with values either  $z^1 = [0, 1]$  or  $z^2 = [1, 0]$ . Context node switched between those two values with a probability  $P_o = 0.005$ , but we enforced a minimum block length of 20 and a maximum of 50 (further details in Appendix B). Knowing the ground truth generative model, we can analytically calculate the likelihood of each  $z^s$  as  $p(x_t|z^s)$  and the posteriors  $p(z^s|x_{0:t})$  (Fig 6C).
+
+To estimate these Bayesian quantities from a neural network, we train a 100-unit LSTM (Hochreiter & Schmidhuber, 1997) to predict the next observation  $x_{t+1}$  given: (i) the five previous observations ( $\{x_t, \dots, x_{t-h}\}$ ,  $h = 5$ ) presented sequentially, and (ii) a task abstraction input which we set to the task  $z$  values, one-hot encoded with either  $[0, 1]$  or  $[1, 0]$  after passing through a softmax function. We name this model GBI-LSTM and train it on the task (training details in appendix B), and in the following sections, we compare its learning dynamics to an LSTM with no such task input.
+
+**GBI-LSTM is data efficient.** GBI-LSTM learns the task faster (i.e. better data efficiency) (Fig 2C,D). Example full runs in appendix B (Fig S9), (LSTM, Fig S8). On one hand, this seems obvious as the GBI-LSTM gets additional contextual information, but on the other hand, the task is simple enough that it is not clear that a 100-unit LSTM needs the additional information. To explain, we
+
+{4}------------------------------------------------
+
+![Figure 2: Training on a toy sequence prediction task with and without task abstractions input. The figure consists of five subplots: A and B show observed (Obs) and predicted (preds) data over 300 training time steps for GBL-LSTM and LSTM respectively. C and D show Mean Squared Error (MSE) over time steps and block numbers. E shows the ratio of shared units for LSTM and GBL-LSTM across binned training blocks.](e0d425c8e4eef259e4c52d81426d93fa_img.jpg)
+
+Figure 2: Training on a toy sequence prediction task with and without task abstractions input. The figure consists of five subplots: A and B show observed (Obs) and predicted (preds) data over 300 training time steps for GBL-LSTM and LSTM respectively. C and D show Mean Squared Error (MSE) over time steps and block numbers. E shows the ratio of shared units for LSTM and GBL-LSTM across binned training blocks.
+
+Figure 2: Training on a toy sequence prediction task with and without task abstractions input. One-dimensional data is generated from a Gaussian distribution that flips its mean every 20-50 timesteps (between  $\mu_1 = 0.2$  or  $\mu_2 = 0.8$ , with fixed standard deviation  $\sigma$  at 0.1). An example training data for A) an LSTM trained with task input (GBL-LSTM) and B) without task input (LSTM). C) We compare the training loss of GBL-LSTM and LSTM. Note the variability in these loss estimates despite the simulation run over 10 random seeds is due to the stochastic block transitions still coinciding frequently. D) We show the mean loss per block but exclude the initial 20 predictions in each block to exclude poor performance from either model limited to transitioning between tasks. E) We quantify the ratio of shared neurons active in the 0.2 blocks and the 0.8 blocks using ‘task variance’ to identify engaged neurons. We binned training blocks into groups of 5 to aggregate the data and increase accuracy.
+
+reasoned that the available task abstraction deeply influences what solutions the network learns and allows for modules to emerge for each task. We used ‘task variance’ to identify neurons active in each task, a measure used in neuroscience literature (Yang et al., 2019). We identify active neurons by selecting units with the highest variance across samples of inputs and outputs for a task. We see that neurons for each task overlap in the LSTM but separate into modules in the GBL-LSTM, throughout training (Fig 2E). At *inference time*, with weights frozen, the baseline LSTM handles task transitions efficiently (Fig S8). The GBL-LSTM has the weights frozen but we now iteratively optimize the task abstraction layer  $z$  using vanilla SGD optimizer with a learning rate of 0.5 and we see that it also transitions between tasks by updating its task abstraction input  $z$  (Fig 3A-C, Fig S9).
+
+**GBL-LSTM generalizes better and forgets less.** GBL-LSTM generalizes better to values outside of the training range (Fig 3D). By using iterative optimization, a gradient step in  $Z$  every time step, the GBL-LSTM can interpolate and better predict data points drawn from other distributions far from the two training distributions (Fig 3E). Moreover, we observe that the baseline LSTM already shows signs of catastrophic forgetting in this very simple setting. Testing MSE is worse around one of the two training means depending on which mean generated the last block of data during training. In figure 3D, we show the responses from runs where the last training block had the 0.2 Gaussian mean active. In contrast, as quantified in Table 1 the GBL-LSTM shows no signs such forgetting (Fig 3E).
+
+Table 1: Quantifying the generalization and forgetting on the toy task. Both models were trained on data generating means 0.2 and 0.8. We aggregate model prediction errors (mean MSE values  $\pm$  SEM) tested on data generated from means -0.2 through 1.2. We identified the data generating mean during the second last block of the training sequence to assess forgetting. 20 runs with different seeds.
+
+| Data range                                 | LSTM MSE        | GBL-LSTM MSE                      |
+|--------------------------------------------|-----------------|-----------------------------------|
+| Second last training block (0.2 or 0.8)    | $0.30 \pm 0.03$ | <b><math>0.24 \pm 0.02</math></b> |
+| Inside training range (0.3-0.7)            | $0.27 \pm 0.02$ | <b><math>0.25 \pm 0.01</math></b> |
+| Outside training range ( $<0.2$ & $>0.8$ ) | $0.35 \pm 0.06$ | <b><math>0.26 \pm 0.03</math></b> |
+
+**Bayesian properties of GBL-LSTM.** We can use our GBL-LSTM for inference, i.e. approximate Bayesian quantities such as the posterior and the likelihood function of  $z$ . We distinguish between two ways we can use the GBL-LSTM, first by taking one-step gradient updates from maximal entropy points (‘default state’ mode) and second is the iterative optimization of the task abstraction  $z$  at a lower learning rate (‘task-engaged’ mode) which we used above to perform the task and generalize to novel data. In the ‘default state’ mode, we set the task abstraction layer to its state of maximum
+
+{5}------------------------------------------------
+
+![Figure 3: Neural network trained with task abstractions can dynamically tune itself to incoming data and generalizes to novel data points. The figure consists of eight subplots (A-H) arranged in a 4x2 grid. A) 'Task engaged (Z iteratively optimized)' shows 'obs' (red dots) and 'preds' (blue line) over 60 time steps. B) 'z² grads' over time steps. C) 'Z values optim' over time steps. D) 'MSE' vs 'Gaussian mean' for LSTM (orange) and GBL-LSTM (blue). E) 'Predmean' vs 'Gaussian mean'. F) 'Default state (max entropy Z)' showing 'obs' and 'preds'. G) 'z² grads' for default state. H) 'Z values optim' for default state.](c54b3ca7603d65d4589151bc3a49d054_img.jpg)
+
+Figure 3: Neural network trained with task abstractions can dynamically tune itself to incoming data and generalizes to novel data points. The figure consists of eight subplots (A-H) arranged in a 4x2 grid. A) 'Task engaged (Z iteratively optimized)' shows 'obs' (red dots) and 'preds' (blue line) over 60 time steps. B) 'z² grads' over time steps. C) 'Z values optim' over time steps. D) 'MSE' vs 'Gaussian mean' for LSTM (orange) and GBL-LSTM (blue). E) 'Predmean' vs 'Gaussian mean'. F) 'Default state (max entropy Z)' showing 'obs' and 'preds'. G) 'z² grads' for default state. H) 'Z values optim' for default state.
+
+Figure 3: Neural network trained with task abstractions can dynamically tune itself to incoming data and generalizes to novel data points. A) Responses of the GBL-LSTM to sample data and B) the gradients of the prediction loss w.r.t. to the two Z units. C) Iteratively optimized Z values accumulating evidence dynamically. D) As a generalization test, while the network was trained on data from Gaussians with means 0.2 and 0.8, we test its responses to Gaussians between -0.2 to 1.2 (in 0.1 increments). We record the mean MSE values across 20 runs with different random seeds and compare to the baseline LSTM trained without task abstraction input. We only show runs where the last block of training was a 0.2 block, to highlight models behavior on that mean vs the other (0.8). E) The mean of the Gaussian data vs. the mean network predictions in each generalization block. These results are further quantified in Table 1. F-H) We show the other mode of using the same GBL-LSTM for gradient-based inference. We fix the task abstraction input Z to its state of maximum entropy (here [0.5, 0.5]) and take gradients from that point. While the network responds in the middle (F), the gradients w.r.t. to Z (G) or similarly, the one-step gradient descent Z values behave much like the likelihood function, c.f. values computed using a Bayesian graphical model 6C.
+
+entropy (here, the mean of the two values observed in training). For each time step, we take one step in z space to lower the prediction error, and then reset to max entropy for the next point. These one step z values (Fig 3H) behave much like the likelihoods of z computed through the ground truth causal model (See Fig S6 for a plot of the likelihoods and one gradient step z overlaid). Moreover, we see that these one step z can support Bayesian computations when used in lieu of the likelihood term in the Bayesian equation (previously calculated using the Gaussian probability distribution equation). i.e., we are able to pass one step z values to a Bayesian graphical model and Bayesian computations proceed normally (Fig S7).
+
+### 3.2 EXPERIMENT 2, IMAGE GENERATION: ONE-STEP GRADIENTS FOR ACCURATE TASK INFERENCE AND OOD DETECTION
+
+We next assess how accurate GBL is in inferring task abstractions in an image generation setup with more tasks. In addition, we show that GBL has more beneficial properties, such as better OOD detection, and uncertainty estimates that require no calibration.
+
+We train a convolutional autoencoder to reconstruct images. The decoder gets an additional input of a one-hot encoding of the image class in addition to the latent embedding from the encoder (Fig 4 Schematic). We train this structure for 4 epochs using an MSE reconstruction loss (full details in Appendix C). Confirming the results observed in the toy task, the network receiving additional image class trains faster compared with baseline autoencoder, (Fig S12).
+
+**One-step gradients infer task abstractions with sufficient accuracy.** At test time, we set the task abstraction (i.e., image class) input z to maximum entropy point and take one gradient step of the reconstruction loss with respect to the class inputs z, and directly interpret the resulting vector to infer the class label. We make two kinds of comparison, first to methods that used gradient-based inference, we refer to them as entropy-based (Wortsman et al., 2020) and norm-based inference (Roy et al., 2024) and we see that GBL outperforms previous gradient-based methods (Table 2, implementation details in appendix C). Second, we compare GBL with four canonical methods to infer class based on the same architecture, as follows: (i) a convolutional classifier of the same architecture as the encoder, as
+
+{6}------------------------------------------------
+
+a measure of what one might gain from a dedicated inference model that maps from inputs to task abstraction (in this case, image class). **(ii)** iteratively optimizing the latent following the traditional variational inference paradigm (VI), which is the same as our model, but increases the computational budget by taking many smaller steps of gradient descent in task abstraction space. **(iii)** evaluating the model’s MSE loss at each image one-hot encoding and selecting the one with lowest MSE loss, as a general representation of Bayesian methods that require evaluating a likelihood function over all hypotheses of interest. **(iv)** evaluating the model’s reconstruction MSE again, but in a purely generative model trained from task abstraction input to image reconstruction with no encoder, as an ablation to the separation of task input and task abstraction in our model. The goal: show that GBI suffers only a small drop in accuracy while offering a small computational budget and no added parameters. We see that GBI outperforms other gradient-based methods EBI and NBI, and show only a small drop in accuracy compared to canonical classifier (Table 2). We can also use our same model and increase the computational budget with iterative optimization or serial likelihood assessments when higher accuracy is required. More importantly, GBI, being a generative model, offers a set of unique advantages as we discuss next.
+
+**High OOD detection with GBI.** GBI retains many of the desirable properties of a generative model and thus can evaluate the probability of the data under the model. Therefore, we reasoned that GBI may estimate uncertainty accurately (Fig S10) giving it an advantage in detecting out-of-distribution (OOD) over traditional models. To test this, We compared a traditional convolutional classifier with GBI, both trained on MNIST digits and using fashionMNIST clothing items as the OOD dataset (Xiao et al., 2017). Using one gradient step task abstraction layer logits, GBI is superior at detecting OOD samples compared with the convolutional classifier (figure4). In comparing our OOD detection results to current state-of-the-art methods we noted that the standard setup in studying OOD detection does not involve normalizing the image brightness mean and variance, making it trivial to discriminate the in and out-of-distribution datasets. We compared our OOD results to the Likelihood Regret (LR) method for OOD detection in a generative model Xiao et al. (2020) (see supplementary material for implementation details). On unnormalized data samples, where detection methods can take advantage of differences in pixel intensities between the in and out-of-distribution samples, both GBI and LR perform high (Fig A14, Table A6). However, when data samples are normalized GBI shows a clear advantage over LR (table 3).
+
+Lastly, we provide an illustration of how the GBI framework enables adaptive behavior, where in response to the same input (image), changing the task abstraction (the image label) can lead to a different input-to-output transformation, allowing for an additional layer of flexibility in task selection (Fig S11).
+
+**CIFAR-100.** We apply GBI to the CIFAR-100 dataset, which features color images of vehicles, animals with diverse backgrounds. The GBI accuracy 18% well above that obtained from a pure generative model (Table 4) (i.e., a model to decode image class to image directly). This suggests a positive effect from the separation of visual input and task abstraction streams. We see only a small drop between evaluating the likelihood of each image class for each image (requires one for each of the 100 image classes, accuracy 21%) and GBI which requires only 1 run. However, GBI accuracy is rather low, suggesting that backpropagation found solutions that relies on the visual input features more than the image class input. This observation coupled with the overall low accuracy from the pure generative model suggests that image class input does not significantly reduce the variance seen in pixel space, leading the decoder to favor the visual features from the encoder. We anticipate that scaling to larger datasets will benefit from richer task abstractions. This highlights a role for algorithms that discover richer abstractions directly from data (Butz et al., 2019; Hummos, 2023).
+
+Table 3: One gradient step values in GBI trained MNIST show better OOD detection on fMNIST dataset compared to classifier logit and state-of-the-art likelihood regret method. AUCROC values averaged over 10 seeds with standard deviations. We examine the case when pixel intensity statistics were normalized so methods are not trivially detecting changes in brightness. Ensemble networks and Bayesian neural networks though perform better that likelihood regret in this setting. Unnormalized results in Tab S6
+
+| Method                   | AUCROC                 |
+|--------------------------|------------------------|
+| GBI                      | <b>0.89</b> $\pm$ 0.03 |
+| Classifier Softmax Maxes | 0.73 $\pm$ 0.08        |
+| Likelihood Regret        | 0.80 $\pm$ 0.06        |
+| Ensemble networks        | 0.809 $\pm$ 0.011      |
+| Bayesian Neural nets     | 0.859 $\pm$ 0.040      |
+
+{7}------------------------------------------------
+
+![Figure 4: Robust out-of-distribution (OOD) samples detection in a GBI autoencoder. The figure includes a diagram of the GBI architecture (Encoder, Decoder, latent, Classifier) and three plots: A) Histogram of GBI one-step grad max for MNIST (in-distribution) and OOD (out-of-distribution) samples. B) Histogram of Classifier logit max for MNIST and OOD samples. C) ROC curve comparing GBI one-step grad and Classifier max for OOD detection.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 4: Robust out-of-distribution (OOD) samples detection in a GBI autoencoder. The figure includes a diagram of the GBI architecture (Encoder, Decoder, latent, Classifier) and three plots: A) Histogram of GBI one-step grad max for MNIST (in-distribution) and OOD (out-of-distribution) samples. B) Histogram of Classifier logit max for MNIST and OOD samples. C) ROC curve comparing GBI one-step grad and Classifier max for OOD detection.
+
+Figure 4: Robust out-of-distribution (OOD) samples detection in a GBI autoencoder compared to a classifier. Both models were trained on MNIST digits, and tested on OOD dataset fashionMNIST. We take the A) max value of the task abstraction layer in GBI and for the B) logits in the classifier and consider how they are distributed for in-distribution samples and OOD samples. C) ROC curves show that GBI max values are more discriminative.
+
+### 3.3 EXPERIMENT 3, LANGUAGE: FASTER TRAINING AND ACCURATE TASK INFERENCE AND GENERALIZATION
+
+Next we consider language modeling for a self-supervised sequence modeling task. During training, we examine the effects of task abstractions on data-efficiency, and during testing, we evaluate ability to infer task abstractions and ability to generalize to unseen language datasets.
+
+**Method** We train an LSTM (with 2 layers, 200 units each) on word-level language prediction and compare an LSTM with our GBI-LSTM. To demonstrate the effectiveness of task abstractions in this setting, we represent each task abstraction as a one-hot encoded identifier of each training dataset. We use datasets included in the BabyLM challenge (Warstadt et al., 2023), which provides 10 datasets inspired by what language data children might be exposed to during development, including wikipedia dataset, movie subtitles, children stories, and adult conversations, amongst others (listed in Appendix E). We train the two models on 3 of these datasets in a setting analogous to the Bayesian model dataset described earlier with data in each batch randomly drawn from one of the three datasets (we vary the choice of the 3 training datasets across seeds). The GBI-LSTM receives additional input with a one-hot encoded dataset identifier during training concatenated to the input token at each time step.
+
+During testing, we use one-step gradients to infer the dataset from the text data provided as we assume no access to the dataset identifier at test time. We then use iterative optimization of the task abstraction input  $z$  to adapt the model to novel datasets by taking gradients steps on one batch of data and evaluating on the test set.
+
+**Results** First, we focus on the effect of task abstractions on data-efficiency. Compared with the LSTM, GBI-LSTM displays lower training and validation losses (Fig 5A, B). While the improvement is modest, we emphasize that we only had to add  $<1.6$  bits of information to obtain it.
+
+Table 4: GBI accuracy on CIFAR100 using a multiplicative task abstraction. The task abstraction is projected through a frozen embedding layer (Bernoulli distribution) then multiplies the visual information going to decoder.
+
+| Method                 | Test Accuracy (%) | Model runs |
+|------------------------|-------------------|------------|
+| Pure generative        | $9.57 \pm 0.19$   | 100        |
+| GBI                    | $18.52 \pm 0.38$  | 1          |
+| Iterative optimization | $18.53 \pm 0.38$  | 400        |
+| Likelihood             | $21.30 \pm 0.36$  | 100        |
+
+Table 2: GBI outperforms other gradient-based inference methods, and compares well to other canonical methods in ML (small drop in accuracy, but only one run through the neural network component). For iterative optimization, we further examine the relationship between optimization steps and accuracy in Fig S13.
+
+| Method                              | Accuracy (%)     | Runs |
+|-------------------------------------|------------------|------|
+| <b>Canonical methods</b>            |                  |      |
+| Classifier                          | $91.44 \pm 0.51$ | 1    |
+| Pure generative                     | $81.91 \pm 2.3$  | 10   |
+| <b>Ours</b>                         |                  |      |
+| GBI                                 | $85.46 \pm 3.60$ | 1    |
+| Iterative Optimization              | $88.51 \pm 3.42$ | 50   |
+| Likelihood (Recon MSE)              | $91.94 \pm 3.38$ | 10   |
+| <b>Other gradient-based methods</b> |                  |      |
+| EBI                                 | $27.37 \pm 2.22$ | 1    |
+| NBI                                 | $78.78 \pm 1.21$ | 10   |
+
+{8}------------------------------------------------
+
+![Figure 5: Better data-efficiency in an LSTM trained with task abstraction input (dataset ID one-hot) (GBI-LSTM) compared to training without such input (LSTM).](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 5 consists of four subplots (A, B, C, D) comparing GBI-LSTM (blue line) and LSTM (orange line) across different tasks and conditions. Shaded areas represent SEM.
+
+- A) Training Loss:** The y-axis ranges from 5 to 9, and the x-axis (Epoch) ranges from 0 to 10.0. GBI-LSTM shows a faster decrease in training loss compared to LSTM.
+- B) Test Loss:** The y-axis ranges from 5 to 9, and the x-axis (Epoch) ranges from 0 to 10.0. GBI-LSTM shows a faster decrease in test loss compared to LSTM.
+- C) Accuracy/identifying datasets:** The y-axis ranges from 0.0 to 1.0, and the x-axis (Number of words available as evidence) ranges from 0 to 30. A dashed line at 0.083 indicates chance level. GBI-LSTM (blue) reaches higher accuracy faster than LSTM (orange) as more words are available. Three datasets are shown: Switchboard (blue), Children Stories (orange), and AoChilDes (green).
+- D) Generalization Loss:** The y-axis ranges from 6.6 to 6.9, and the x-axis (Optimization steps) ranges from 0 to 100. GBI-LSTM (blue) shows a decrease in generalization loss, while LSTM (orange) remains relatively flat.
+
+Figure 5: Better data-efficiency in an LSTM trained with task abstraction input (dataset ID one-hot) (GBI-LSTM) compared to training without such input (LSTM).
+
+Figure 5: Better data-efficiency in an LSTM trained with task abstraction input (dataset ID one-hot) (GBI-LSTM) compared to training without such input (LSTM). Cross entropy loss for GBI-LSTM decreases faster for GBI-LSTM on the A) training set and B) testing set. Note that we train with a word-level tokenizer with a larger output dimension which has a high cross entropy loss upper bound (12). Each simulation run had three language datasets picked randomly from 10 datasets. 10 data set picks, each run for 3 random seeds, shaded area SEM. C) One-pass gradient-based inference can infer dataset ID accurately at test time needing only a few words. D) Iterative optimization can be used to adapt a GBI-LSTM to a novel dataset. We compare it to optimizing the inputs of an LSTM that was trained with no task provided to rule out any generic optimization effects. Due to the variability of loss values across datasets, for each choice of 3 training datasets (12 sets), we take the mean and SEM over 4 seeds and then aggregate the results from all 48 model runs.
+
+Second, we focus on task inference. We show that GBI can quickly and reliably infer the dataset at hand, and in fact, it takes a few words from the first batch to accurately infer the dataset (Fig 5C). Note that similar to likelihood functions, gradient inference can handle variable amounts of evidence, and the estimation accuracy scales with the amount of evidence available.
+
+Third, we focus on generalization. Our results show that task abstraction layers improves the model’s ability to generalize to novel tasks (Fig 5D), similar to the case in the synthetic Bayesian dataset (Fig 3D,E). We use a 4th dataset not seen during training, and we compare the GBI-LSTM and LSTM losses on this novel dataset. To allow gradient descent to compose the closest solution to the novel datasets, we optimize the task abstraction input nodes of the GBI-LSTM to lower its prediction loss and we see a decrease in loss as it adjusts to this new unseen dataset (Fig 5D) (See Appendix E for example run). Notably, the GBI-LSTM starts out at a higher loss, on average, highlighting that task-aware models require task inference.
+
+## 4 CONCLUSIONS AND FUTURE DIRECTIONS
+
+Overall we show that neural networks with access to task abstractions learn faster, forget less, adapt to changes in data distribution, and generalize to new situations. At the same time, we also provide tools for the networks to function independently infer their own task abstractions during testing. These task abstractions can be provided by humans, a trained teacher model, or inferred from data with no supervision (e.g. (Hummos, 2023)). Task-dependent networks require task inference and inferring an incorrect task impairs function. In animal brains, some computations that are frequently needed or are critical for survival might be better mapped to the default state of the brain. The brain shows distinct dynamics when not engaged in a specific task, the default mode, and we show previously unexplored connections between feedback signals in this default state and distributional inference signals that can support many probabilistic quantities such as uncertainty and surprise. We see future work addressing the limitation of relying on human-provided task abstractions as opposed to unsupervised discovery of richer multidimensional task representations along dimensions important for adaptation and generalization. Finally, while our method is theoretically motivated, we see future work extending these findings to larger datasets and more real-world applications.
+
+## REFERENCES
+
+- Moloud Abdar, Farhad Pourpanah, Sadiq Hussain, Dana Rezazadegan, Li Liu, Mohammad Ghavamzadeh, Paul Fieguth, Xiaochun Cao, Abbas Khosravi, U. Rajendra Acharya, Vladimir
+
+{9}------------------------------------------------
+
+- 486 Makarenkov, and Saeid Nahavandi. A review of uncertainty quantification in deep learning:  
+487 Techniques, applications and challenges. *Information Fusion*, 76:243–297, December 2021. ISSN  
+488 1566-2535. doi: 10.1016/j.inffus.2021.05.008. URL [https://www.sciencedirect.com/](https://www.sciencedirect.com/science/article/pii/S1566253521001081)  
+489 <science/article/pii/S1566253521001081>.
+- 490
+- 491 Ahmed Abdelali, Francisco Guzman, Hassan Sajjad, and Stephan Vogel. The AMARA Corpus:  
+492 Building Parallel Language Resources for the Educational Domain. January 2014. doi: 10.13140/  
+493 2.1.1806.2406.
+- 494
+- 495 Jacob Andreas, Marcus Rohrbach, Trevor Darrell, and Dan Klein. Neural module networks. In  
+496 *Proceedings of the IEEE conference on computer vision and pattern recognition*, pp. 39–48, 2016.
+- 497
+- 498 David Badre, Andrew S. Kayser, and Mark D’Esposito. Frontal cortex and the discovery of abstract  
+499 action rules. *Neuron*, 66(2):315–326, April 2010. ISSN 1097-4199. doi: 10.1016/j.neuron.2010.  
+03.025.
+- 500
+- 501 Charles Blundell, Julien Cornebise, Koray Kavukcuoglu, and Daan Wierstra. Weight Uncertainty  
+502 in Neural Network. In *Proceedings of the 32nd International Conference on Machine Learn-*  
+503 *ing*, pp. 1613–1622. PMLR, June 2015. URL [https://proceedings.mlr.press/v37/](https://proceedings.mlr.press/v37/blundell115.html)  
+504 <blundell115.html>. ISSN: 1938-7228.
+- 505
+- 506 Martin V. Butz, David Bilkey, Dania Humaidan, Alistair Knott, and Sebastian Otte. Learning,  
+507 planning, and control in a monolithic neural event inference architecture. *Neural Networks*, 117:  
+508 135–144, September 2019. ISSN 0893-6080. doi: 10.1016/j.neunet.2019.05.001. URL [https://](https://www.sciencedirect.com/science/article/pii/S0893608019301339)  
+509 <www.sciencedirect.com/science/article/pii/S0893608019301339>.
+- 510
+- 511 Santiago Herce Castaño, Pedro Cardoso-Leite, Irene Altarelli, C. Shawn Green, Paul Schrater, and  
+512 Daphne Bavelier. A mixture of generative models strategy helps humans generalize across tasks.  
+513 *bioRxiv*, pp. 2021.02.16.431506, January 2021. doi: 10.1101/2021.02.16.431506. URL [http://](http://biorexiv.org/content/early/2021/02/16/2021.02.16.431506.abstract)  
+514 <biorexiv.org/content/early/2021/02/16/2021.02.16.431506.abstract>.
+- 515
+- 516 Anne Collins and Etienne Koechlin. Reasoning, Learning, and Creativity: Frontal Lobe Function and  
+517 Human Decision-Making. *PLOS Biology*, 10(3):e1001293, March 2012. ISSN 1545-7885. doi:  
+518 10.1371/journal.pbio.1001293. URL [https://journals.plos.org/plosbiology/](https://journals.plos.org/plosbiology/article?id=10.1371/journal.pbio.1001293)  
+519 <article?id=10.1371/journal.pbio.1001293>. Publisher: Public Library of Science.
+- 520
+- 521 Anne G. E. Collins. The Cost of Structure Learning. *Journal of Cognitive Neuroscience*,  
+522 29(10):1646–1655, October 2017. ISSN 0898-929X. doi: 10.1162/jocn\_a\_01128. URL  
+523 [https://doi.org/10.1162/jocn\\_a\\_01128](https://doi.org/10.1162/jocn_a_01128). eprint: [https://direct.mit.edu/jocn/article-](https://direct.mit.edu/jocn/article-pdf/29/10/1646/1953060/jocn_a_01128.pdf)  
+524 [pdf/29/10/1646/1953060/jocn\\_a\\_01128.pdf](pdf/29/10/1646/1953060/jocn_a_01128.pdf).
+- 525
+- 526 Ethan Fetaya, Joern-Henrik Jacobsen, Will Grathwohl, and Richard Zemel. Understanding the Limita-  
+527 tions of Conditional Generative Models. In *International Conference on Learning Representations*,  
+528 2020. URL <https://openreview.net/forum?id=r1lPleBFvH>.
+- 529
+- 530 Wolfgang Gaissmaier and Lael J. Schoeler. The smart potential behind probability matching.  
+531 *Cognition*, 109(3):416–422, December 2008. ISSN 0010-0277. doi: 10.1016/j.cognition.2008.09.007.  
+532 URL [https://www.sciencedirect.com/science/article/pii/](https://www.sciencedirect.com/science/article/pii/S0010027708002151)  
+533 <S0010027708002151>.
+- 534
+- 535 Yarin Gal and Zoubin Ghahramani. Dropout as a Bayesian Approximation: Representing Model  
+536 Uncertainty in Deep Learning. In *Proceedings of The 33rd International Conference on Machine*  
+537 *Learning*, pp. 1050–1059. PMLR, June 2016. URL [https://proceedings.mlr.press/](https://proceedings.mlr.press/v48/gal16.html)  
+538 <v48/gal16.html>. ISSN: 1938-7228.
+- 539
+- 540 J.J. Godfrey, E.C. Holliman, and J. McDaniel. SWITCHBOARD: telephone speech corpus for  
+541 research and development. In *[Proceedings] ICASSP-92: 1992 IEEE International Conference*  
+542 *on Acoustics, Speech, and Signal Processing*, volume 1, pp. 517–520 vol.1, March 1992. doi:  
+543 10.1109/ICASSP.1992.225858. ISSN: 1520-6149.
+- 544
+- 545 Anirudh Goyal, Alex Lamb, Jordan Hoffmann, Shagun Sodhani, Sergey Levine, Yoshua Bengio, and  
+546 B. Schölkopf. Recurrent Independent Mechanisms. *ArXiv*, 2019.
+
+ Rest of paper (reference and Appendix) is removed.

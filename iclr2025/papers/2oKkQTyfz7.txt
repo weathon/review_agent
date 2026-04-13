@@ -1,0 +1,321 @@
+
+
+{0}------------------------------------------------
+
+# GENERAL SCENE ADAPTATION FOR VISION-AND-LANGUAGE NAVIGATION
+
+Haodong Hong<sup>1,2†</sup>, Yanyuan Qiao<sup>3</sup>, Sen Wang<sup>1</sup>, Jiajun Liu<sup>2,1</sup>, Qi Wu<sup>3\*</sup>
+
+<sup>1</sup>The University of Queensland, <sup>2</sup>CSIRO Data61, <sup>3</sup>The University of Adelaide  
+{haodong.hong, sen.wang}@uq.edu.au, jiajun.liu@csiro.au  
+{yanyuan.qiao, qi.wu01}@adelaide.edu.au
+
+## ABSTRACT
+
+Vision-and-Language Navigation (VLN) tasks mainly evaluate agents based on one-time execution of individual instructions across multiple environments, aiming to develop agents capable of functioning in any environment in a zero-shot manner. However, real-world navigation robots often operate in persistent environments with relatively consistent physical layouts, visual observations, and language styles from instructors. Such a gap in the task setting presents an opportunity to improve VLN agents by incorporating continuous adaptation to specific environments. To better reflect these real-world conditions, we introduce GSA-VLN (General Scene Adaptation for VLN), a novel task requiring agents to execute navigation instructions within a specific scene and simultaneously adapt to it for improved performance over time. To evaluate the proposed task, one has to address two challenges in existing VLN datasets: the lack of out-of-distribution (OOD) data, and the limited number and style diversity of instructions for each scene. Therefore, we propose a new dataset, GSA-R2R, which significantly expands the diversity and quantity of environments and instructions for the Room-to-Room (R2R) dataset to evaluate agent adaptability in both ID and OOD contexts. Furthermore, we design a three-stage instruction orchestration pipeline that leverages large language models (LLMs) to refine speaker-generated instructions and apply role-playing techniques to rephrase instructions into different speaking styles. This is motivated by the observation that each individual user often has consistent signatures or preferences in their instructions, taking the use case of home robotic assistants as an example. We conducted extensive experiments on GSA-R2R to thoroughly evaluate our dataset and benchmark various methods, revealing key factors enabling agents to adapt to specific environments. Based on our findings, we propose a novel method, Graph-Retained DUET (GR-DUET), which incorporates memory-based navigation graphs with an environment-specific training strategy, achieving state-of-the-art results on all GSA-R2R splits. The dataset and code are available at <https://github.com/honghd16/GSA-VLN>.
+
+## 1 INTRODUCTION
+
+Vision-and-Language Navigation (VLN) (Anderson et al., 2018b) aims to enable agents to navigate to a specific destination following language instructions. Traditional VLN researches (Qi et al., 2020; Thomason et al., 2020) mainly focus on evaluating agents using strictly unseen instructions and environments to assess their generalization capabilities. This “unseen” criterion applies not only to the data between training and evaluation phases, but also to individual evaluation instances, where agents are tested on each instruction-trajectory pair without prior knowledge of the environment.
+
+However, this setting diverges from practical navigation situations. In real-world applications, such as indoor household robots, agents actually operate in a consistent environment over time. As they execute more instructions, the working environment generally transitions from “unseen” to “seen” and agents become increasingly familiar with the environment. This leaves room for agents to adapt and improve their performance through environmental adaptation, which can significantly
+
+<sup>†</sup>Corresponding author. <sup>‡</sup>Work done during internship at Australian Institute for Machine Learning (AIML).
+
+{1}------------------------------------------------
+
+![Figure 1: Comparison between the traditional VLN task and the proposed GSA-VLN task. The diagram shows a robot in a 'Lab' environment. On the left, 'Traditional VLN' shows the robot receiving fixed instructions: 'Walk past the table and turn right. Walk past the doorway and turn right. Stop in front of the sink.' The robot looks confused with a question mark above its head and a speech bubble saying 'I'm as clueless as the first time I was here.' On the right, 'GSA-VLN' shows the robot receiving more detailed instructions: 'Proceed forward, circumventing the workstation with the utmost care, and execute a 90-degree rightward rotation. Then continue your passage through the doorway, maintaining a steadfast rightward trajectory. Upon completing this, come to a halt precisely in front of the stainless-steel sink.' The robot is more confident and has a speech bubble saying 'I grow more familiar with the Lab and Dr. Cooper's communication style each day!!!'. A 'Memory Bank' is shown in the center, with 'SAVE' and 'LOAD' arrows. Below the Memory Bank, there are icons for 'Frozen' (snowflake) and 'Trainable' (flame).](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 1: Comparison between the traditional VLN task and the proposed GSA-VLN task. The diagram shows a robot in a 'Lab' environment. On the left, 'Traditional VLN' shows the robot receiving fixed instructions: 'Walk past the table and turn right. Walk past the doorway and turn right. Stop in front of the sink.' The robot looks confused with a question mark above its head and a speech bubble saying 'I'm as clueless as the first time I was here.' On the right, 'GSA-VLN' shows the robot receiving more detailed instructions: 'Proceed forward, circumventing the workstation with the utmost care, and execute a 90-degree rightward rotation. Then continue your passage through the doorway, maintaining a steadfast rightward trajectory. Upon completing this, come to a halt precisely in front of the stainless-steel sink.' The robot is more confident and has a speech bubble saying 'I grow more familiar with the Lab and Dr. Cooper's communication style each day!!!'. A 'Memory Bank' is shown in the center, with 'SAVE' and 'LOAD' arrows. Below the Memory Bank, there are icons for 'Frozen' (snowflake) and 'Trainable' (flame).
+
+Figure 1: Comparison between the traditional VLN task and the proposed GSA-VLN task. Traditional VLN agents can only execute fixed-style instructions with frozen parameters, remaining unfamiliar with the environment like the laboratory even after extended use. In contrast, GSA-VLN enables agents to dynamically update parameters, leverage long-term history from the memory bank, and quickly adapt to both the environment and varying instruction styles from different users.
+
+enhance the agent performance of existing VLN methods. IVLN (Krantz et al., 2023) emphasizes the persistent environment problem by linking paths of each scan into long-horizon tours, but the limited number of paths (6-100) restricts its applicability to optimization-based methods like Test-time Adaptation (TTA) (Liang et al., 2024) and fails to replicate real-world usage scenarios.
+
+Therefore, we propose a novel task called General Scene Adaptation for VLN (GSA-VLN). As shown in Fig. 1, in this task, agents are required to maintain long-term memory and continuously update their model parameters to improve performance over time while executing navigation instructions in a specific scene throughout their lifetime. Externally, the agent behaves the same as traditional VLN settings. However, internally, it evolves during this process by adapting to the working environment without additional feedback or assistance, a process known as unsupervised learning, making our task both practical and realistic.
+
+Although GSA-VLN focuses on environment-specific adaptation, the agent must also be general enough to adapt to a diverse range of scenes as its target environment, given the wide variety of real-world settings. However, the limited number and diversity of environments and instructions in existing VLN datasets raise concerns about whether the trained agents can be deployed across various real-world situations. Currently, all indoor VLN tasks are built on the Matterport3D dataset (Chang et al., 2017) with fewer than 30 evaluation buildings, most of which are residential. While some works expand the scope by incorporating additional datasets (Chen et al., 2022b; Wang et al., 2023b) or generating synthetic ones (Li et al., 2022; Li & Bansal, 2024), they are only used for training rather than evaluation. Moreover, instructions in these tasks are typically concise and simplistic, lacking personal characteristics or distinctive language habits that reflect real-world user interactions. Since both the environment and instructions are in-distribution (ID) with the training data, it is essential to evaluate agents on out-of-distribution (OOD) data to ensure broader generalization.
+
+To this end, we introduce the GSA-R2R dataset, which provides a comprehensive collection of environments and instructions for evaluating agent performance in both ID and OOD contexts within a single scene. We incorporate buildings from the Habitat-Matterport3D (HM3D) dataset (Ramakrishnan et al., 2021), which offers a broader range and greater number of photorealistic environments compared to the MP3D dataset, supporting more general evaluation. Since most training environments are residential, we categorize residential buildings as ID data and conduct building-scale classification to identify non-residential structures, such as cinemas and shops, as OOD data, resulting in a diverse set of 150 evaluation buildings with various layouts and structures.
+
+Besides visual environments, instruction variety is a crucial factor in scene adaptation, as instructions for a specific environment are often consistent in style, reflecting the unique speaking patterns of the instructors. For example, household agents are typically instructed by homeowners, while school-based agents are primarily used by teachers and students. These instructions are delivered in a consistent style, reflecting either personal speaking habits or the professional language associated with the roles in the building. However, this aspect has been largely overlooked in current VLN research. To address this, we develop a three-stage instruction orchestration pipeline to pro-
+
+{2}------------------------------------------------
+
+duce abundant and diverse instruction-trajectory pairs for each environment. Initially, we use a trained speaker model (Tan et al., 2019) to produce noisy instructions, which are then refined by large Vision-Language Models (VLMs)(Achiam et al., 2023) with path visualizations, and finally rephrased by Large Language Models (LLMs)(Achiam et al., 2023) to simulate diverse instructional styles of specific characters or typical users of the building type. As a result, each environment is equipped with 600 instructions across multiple speaking styles, providing a more realistic and valuable resource for future VLN research.
+
+We conduct a comprehensive evaluation of our generated data using both automatic metrics and human studies to validate its quality and diversity. We also test various existing adaptation methods, revealing that unsupervised training approaches are ineffective in our setting, while explicitly maintaining the memory of previous visual and textual information shows promise in improving agent performance in GSA-R2R. Based on these findings, we propose a novel method called Graph-Retained DUET (GR-DUET), which continuously updates an overall topological graph for each environment to preserve historical information in both training and evaluation. This method achieves an 8% improvement in Success Rate (SR) compared to the vanilla DUET (Chen et al., 2022c) and produces state-of-the-art results across all splits.
+
+## 2 RELATED WORK
+
+**Vision-and-Language Navigation (VLN).** VLN tasks involve agents following natural language instructions to reach a specified target (Gu et al., 2022; Zhang et al., 2024), a challenge first introduced with the Room-to-Room (R2R) dataset (Anderson et al., 2018b). Since then, numerous indoor VLN datasets emerged (Krantz et al., 2020; Jain et al., 2019), which mainly focus on varying the textual inputs, such as high-level object-oriented instructions (Qi et al., 2020; Zhu et al., 2021), multilingual instructions (Ku et al., 2020), and multi-modal instructions (Hong et al., 2024). However, they are all based on the same scenarios from the Matterport3D dataset (Chang et al., 2017). Many works propose to introduce novel scenarios by incorporating other datasets (Chen et al., 2022b; Wang et al., 2023b) or utilizing web data (Lin et al., 2023). However, all these methods are only used as additional training data with evaluations still being conducted on the original splits with limited diversity. In contrast, we include diverse environments and instructions in the evaluation splits to fully evaluate agent adaptability in both ID and OOD contexts.
+
+**Adaptation Methods in VLN.** Although no prior works in VLN have addressed the problem of single-scene adaptation, some studies offer potential solutions, such as the pre-explore setting (Wang et al., 2019). We categorize them into two kinds. The first is optimization-based methods, where the parameters of the navigation model are updated within the target environment. TTA methods like TENT (Wang et al., 2021) and SAR (Niu et al., 2023) further optimize the model parameters with the objective of entropy minimization, while Back-Translation (Wang et al., 2020) uses a trained speaker to generate instructions for imitation learning. The second is memory-based methods, which explicitly store information about seen places and instructions to help decision-making, as seen in methods of IVLN (Zhao et al., 2024) and RREx-BoT (Sigurdsson et al., 2023). For example, TourHMT (Krantz et al., 2023) incorporates previous episodes as additional history embeddings, while OVER-NAV (Zhao et al., 2024) detects keywords from instructions within observations and stores the results in an Omnigraph to assist navigation. Similarly, SG-Nav (Yin et al., 2024) constructs consistent 3D scene graphs to represent environments, offering a powerful approach for recording and utilizing historical information. Recently, LLM-based VLN methods, such as InstructNav (Long et al., 2024) and NavCoT (Lin et al., 2024), have demonstrated strong zero-shot navigation performance, highlighting their potential to address the scene adaptation problem.
+
+**Persistent Environments in VLN.** The concept of agents operating in persistent environments has led to several popular tasks in embodied AI, such as multi-object navigation (Wani et al., 2020) and multi-target embodied QA (Yu et al., 2019). Iterative VLN (IVLN) (Krantz et al., 2023) introduces this idea to VLN by organizing all instructions in sequence to form a long-horizon tour and enable memory throughout the tour. Our task differs from IVLN in two key aspects. First, while both tasks focus on enhancing agent performance within a single environment, IVLN emphasizes long-horizon navigation with a single tour per environment, whereas our GSA-VLN focuses on enabling agents to adapt to each environment from a diverse range of visual buildings and instruction types. Second, IVLN only includes a limited number of trajectory-instruction pairs for each environment, making it not suitable for optimization-based ones.
+
+{3}------------------------------------------------
+
+## 3 TASKS AND DATASETS
+
+### 3.1 PRELIMINARIES
+
+In VLN task, the agent is required to follow a given natural language instruction  $X = (x_1, x_2, \dots, x_L)$  consisting of  $L$  words to navigate to the target destination. Specifically, the agent is initially placed at the start node  $v_0$ . At each time step  $t$ , the agent predicts an action  $a_t$  to move to one of the neighboring nodes in the connectivity graph  $\mathcal{G}$  of the environment, guided by the visual observation  $O_t$ , the language instruction  $X$ , and the history of previous steps  $H_t = \{O_0, a_0, O_1, a_1, \dots, O_{t-1}, a_{t-1}\}$ . Typically, the observation  $O_t$  is represented as a panorama composed of  $N = 36$  discrete views  $O_t = \{o_t^i\}_{i=1}^N$ . This process continues until the agent either reaches the predefined step limit or selects the special [STOP] action.
+
+### 3.2 THE GSA-VLN TASK
+
+Most VLN tasks evaluate each instruction independently, initializing the history as empty ( $H_0 = \emptyset$ ) and keeping the model parameters fixed ( $\theta = \theta_0$ ). While this setting effectively assesses the agent’s ability to interpret and follow isolated instructions, it fails to capture the continuity and adaptation required in real-world navigation scenarios. In practical applications, both environments and instruction styles remain consistent over time, enabling agents to accumulate and leverage contextual knowledge to enhance performance. To address this limitation, we propose the GSA-VLN task to introduce the challenge of single-scene adaptation, enabling agents to continuously improve as they execute instructions in previously unseen environments.
+
+Specifically, GSA-VLN introduces an environment-specific memory bank  $\mathcal{M}_E$ , which stores historical information from all executed episodes within a given environment  $E$ . This memory bank dynamically expands as the agent executes instructions, capturing four key components: visual observations ( $\mathbf{O}$ ), the instructions ( $X$ ), selected actions ( $\mathbf{A}$ ), and trajectory paths ( $\mathbf{P}$ ). For example, after executing  $k$  instructions in environment  $E$ , the memory bank is updated as follows:
+
+$$\mathcal{M}_E = \{X^{1:k}, \mathbf{O}^{1:k}, \mathbf{A}^{1:k}, \mathbf{P}^{1:k}\} \quad (1)$$
+
+Externally, agents in GSA-VLN behave similarly to those in standard VLN tasks when executing instructions. However, internally, the agent can leverage the memory bank to adapt to the current working environment for better performance, depending on the method employed. The stored memories in the memory bank represent the execution history of agents, although there may exist misalignment between instructions and paths due to navigation errors, all the memories are treated as unlabeled data and are primarily used for unsupervised learning techniques.
+
+There are two primary distinctions between GSA-VLN and standard VLN tasks. First, the agent can access the memory bank to retrieve long-term history,  $H_0 = \mathcal{M}'_E \subseteq \mathcal{M}_E$ , instead of beginning each navigation episode without prior knowledge:
+
+$$a_0 = \pi(O_0, X, H_0; \theta) \quad (2)$$
+
+Second, the parameters of agents can be updated during the navigation process by employing unsupervised learning techniques on data from the memory bank:
+
+$$\theta' = \theta - \alpha \nabla_{\theta} \mathcal{L}(\mathcal{M}_E, \theta), \quad (3)$$
+
+where  $\theta$  denotes the parameters of the navigation model. Notably, While GSA-VLN aims to develop environment-specific agents  $\theta'$ , the initial model  $\theta_0$  should be general enough to be applied to various environments, maintaining a level of environment-agnosticism:
+
+$$\max_{\theta_0} \mathbb{E}_{E \sim \mathcal{E}} [\mathcal{P}(E; \theta'(\theta_0))] \quad (4)$$
+
+where  $\mathcal{E}$  represents the environment distribution, and  $\mathcal{P}(E; \theta'(\theta_0))$  denotes the agent performance in environment  $E$  with updated parameters  $\theta'$ , which are adapted from the initial parameters  $\theta_0$ .
+
+We address differences between GSA-VLN and the related areas. Unlike lifelong learning (Liu, 2017), which focuses on acquiring multiple skills over time, our work emphasizes repeated mastery of the same navigation skill within a scene-specific context. While TTA (Gao et al., 2024) adapt an agent during inference without supervision, our approach extends TTA by integrating a dynamically updating memory bank, enabling fixed-parameter adaptation with varying inputs.
+
+{4}------------------------------------------------
+
+![Figure 2: Left: Building type counts in R2R and GSA-R2R. Right: Comparison of buildings in R2R and GSA-R2R.](e0d425c8e4eef259e4c52d81426d93fa_img.jpg)
+
+Figure 2 consists of two parts. The left part shows two pie charts comparing building type counts. The R2R chart shows a high concentration in 'house' (blue), while the GSA-R2R chart shows a much more diverse distribution across various building types including office, restaurant, cinema, shop, salon, and laboratory. The right part shows a grid of building images. The 'Train Scenes' and 'R2R Eval Scenes' columns show mostly residential buildings, while the 'GSA-R2R Eval Scenes' column shows a variety of non-residential buildings like offices, restaurants, and laboratories.
+
+Figure 2: Left: Building type counts in R2R and GSA-R2R. Right: Comparison of buildings in R2R and GSA-R2R.
+
+Figure 2: **Left:** Building type counts in R2R and GSA-R2R. **Right:** Comparison of buildings in R2R and GSA-R2R. Unlike R2R, where evaluation scenes are similar to the training set, GSA-R2R includes a more diverse mix of both in-distribution (ID) and out-of-distribution (OOD) data.
+
+### 3.3 THE GSA-R2R DATASET
+
+The limited number and diversity of existing VLN datasets make them unsuitable for the GSA-VLN task. For instance, the most widely used VLN dataset, R2R (Anderson et al., 2018b), includes 90 building-scale scenes from the Matterport3D (MP3D) dataset (Chang et al., 2017), with only 29 scenes for evaluation and most of them are residential houses. Each building contains a limited number of paths, ranging from a maximum of 100 to as few as 6, with each path paired with three natural language instructions that share a similar concise and plain style. Therefore, we propose the GSA-R2R dataset, which not only provides sufficient data to allow continuous agent optimization to test their **specialization**, but also includes a diverse range of building types and instruction types to evaluate the agent **generalization** to various application scenarios.
+
+#### 3.3.1 ENVIRONMENT
+
+The Habitat-Matterport3D (HM3D) dataset (Ramakrishnan et al., 2021) has 800 photorealistic buildings with more diverse building types and structures compared to MP3D. Therefore, we choose to incorporate HM3D environments into agent evaluation to assess whether agents can adapt to more diverse settings. We categorize the buildings into two types: residential and non-residential, with the former as ID data and the latter as OOD data since the training data are most residential ones.
+
+Specifically, we collect and manually refine 187 building types from the OpenStreetMap website<sup>1</sup>, which provides crowd-sourced building tags worldwide. For each environment, we use GPT-4 (Achiam et al., 2023) to predict the building type from these categories based on three types of image prompts: an overview of the building, top-down views of each floor, and panoramas selected using spectral clustering (Ng et al., 2001) on the graph nodes to capture representative visual observations. For non-residential results, we manually verify and correct the predictions and apply two filtering rules. First, we exclude environments in the R2R training set to avoid data leakage, ensuring that existing VLN models could be directly evaluated using our dataset. Second, we remove scans with fewer than 600 potential paths to ensure a sufficient number of paths per scan. In total, we identify 75 non-residential buildings across 19 different types with 70 from HM3D and 5 from MP3D. To balance the dataset, we sample
+
+![Figure 3: The generation procedure of the GSA-R2R dataset. Up: environment selection. Bottom: the three-stage instruction orchestration pipeline.](d980a3f9608055996a07f31788baf827_img.jpg)
+
+Figure 3 illustrates the generation procedure. The top part, 'Environments', shows a flow from 'HM3D & MP3D Environments' through 'Spectral Clustering' to 'Representative Nodes', then to 'VLM' for 'Textual Prompts' and 'Building Types'. A 'Filtering' step follows, leading to 'Residential' (1 house, 1 office, 1 cinema) and 'Non-residential' (1 house, 1 office, 1 cinema) categories. The bottom part, 'Instructions', shows a three-stage pipeline: 1) 'GSA-R2R Environments' to 'Graph' to 'Speaker' to 'Initial Instructions'; 2) 'Navigation Model' to 'Success?' to 'Textual Prompts' to 'VLM' to 'Basic Instructions'; 3) 'Residential'/'Non-residential' to 'Character Profiles & Dialogs'/'Building-Type-Based Prompts' to 'LLM' to 'Scene Instructions'/'Core Instructions'.
+
+Figure 3: The generation procedure of the GSA-R2R dataset. Up: environment selection. Bottom: the three-stage instruction orchestration pipeline.
+
+Figure 3: The generation procedure of the GSA-R2R dataset. **Up:** environment selection. **Bottom:** the three-stage instruction orchestration pipeline.
+
+<sup>1</sup><https://taginfo.openstreetmap.org/keys/building>
+
+{5}------------------------------------------------
+
+Table 1: Compared to the evaluation part of existing datasets in embodied navigation tasks. <sup>†</sup>: TouchDown is an outdoor dataset in New York City, which makes it hard to define scene types.
+
+| Dataset                                    | Source             | Scenes |      | Path   |        | Instructions |       | Vocab Size |        |
+|--------------------------------------------|--------------------|--------|------|--------|--------|--------------|-------|------------|--------|
+|                                            |                    | Num    | Type | Num    | Type   | Num          | Type  | All        | Unseen |
+| R2R (Anderson et al., 2018b)               | MP3D               | 29     | 6    | 2,174  | 6,522  | 1            | 1,946 | 545        |        |
+| R4R (Jain et al., 2019)                    | MP3D               | 29     | 6    | 5,026  | 45,234 | 1            | 1,230 | 221        |        |
+| RxR-en (Ku et al., 2020)                   | MP3D               | 29     | 6    | 4,201  | 8,636  | 1            | 4,789 | 1,387      |        |
+| CVVDN (Thomason et al., 2020)              | MP3D               | 29     | 6    | 2,741  | 2,741  | 1            | 1,559 | 490        |        |
+| TouchDown <sup>†</sup> (Chen et al., 2019) | Google Street View | 1      | -    | 2,800  | 2,800  | 1            | 3,104 | 759        |        |
+| RobustNav (Chattopadhyay et al., 2021)     | ROBOTHOR           | 15     | 1    | 1,800  | -      | -            | -     | -          | -      |
+| PASTURE (Gadre et al., 2023)               | ROBOTHOR           | 15     | 1    | 2,520  | 2,520  | 1            | 123   | 111        |        |
+| GSA-R2R (Ours)                             | MP3D & HM3D        | 150    | 20   | 90,000 | 90,000 | 7            | 4,337 | 2,905      |        |
+
+an equivalent number of residential buildings and classify them into three categories based on the number of levels. For each category, we use K-Means clustering to select 25 scans based on meta-data such as room count and navigable areas to cover a diverse set of layouts and structures within the 75 residential buildings, with 65 from HM3D and 10 from MP3D, as shown in Fig. 2.
+
+#### 3.3.2 INSTRUCTION
+
+With the selected environments, we employ the navigation graphs from ScaleVLN (Wang et al., 2023b) and randomly sample 600 paths for each environment. To simulate the diverse speaking styles in real-world scenarios, we develop a three-stage instruction orchestration pipeline to produce three types of instructions for these sampled paths, as illustrated in Fig. 3.
+
+In the first stage, we employ the EnvDrop speaker (Tan et al., 2019) trained on R2R to generate initial instructions <sup>2</sup>. However, some of these instructions contain noise and inaccuracies, requiring further refinement. Therefore, in the second stage, we utilize a navigation model trained on the unselected paths from the 150 environments to identify incorrect instructions by using successful execution as an indicator of instruction feasibility. For failed instructions, we leverage GPT-4 to detect misalignments between trajectories and instructions, and correct them using specialized path visualization prompts, resulting in refined “*Basic*” instructions. Building on the “*Basic*” instructions, we further rephrase them in the third stage to reflect distinct speaking styles. For non-residential buildings, we use an LLM to select a potential user identity based on the scene type and rephrase the instructions into “*Scene*” style. We further create a “*User*” style for all scenes by simulating specific characters from TV series using their role profiles and dialogues (Wang et al., 2023a). We select five diverse characters from the SummScreen dataset (Chen et al., 2022a) to generate instructions with unique speaking styles, including a generalized child-speaking style due to the absence of actual child characters. We provide a comparison of different instructions in the appendix.
+
+#### 3.3.3 SPLIT AND STATISTICS
+
+Since our focus is on scene adaptation after the training phase, we include only evaluation splits and use the training split of R2R for the GSA-R2R dataset. Given the two general building types (residential and non-residential) and three types of instructions, we design five splits for both validation and testing, with their details in the appendix. The splits are named using the format “Val/Test-R/N-Basic/Scene/User”, where “R” denotes residential and “N” represents non-residential scenes. We exclude the val seen split, as adapting to a previously trained environment is unnecessary; thus, all environments in GSA-R2R are considered unseen. We compare GSA-R2R with other embodied navigation datasets in Tab. 1, demonstrating that GSA-R2R has the greatest number and diversity of scenes, paths, and instructions. Notably, we are the first to incorporate various speaking styles to address OOD instructions, as evidenced by the highest proportion of unseen vocabulary size.
+
+#### 3.3.4 DATASET EVALUATION
+
+**Reliability.** Since our goal is to generate instructions with distinct styles and OOD characteristics, which intentionally diverge from the training data, traditional linguistic metrics such as BLEU (Papineni et al., 2002) or ROUGE (Lin, 2004) are not appropriate for evaluation. These metrics assess word-level alignment with ground truth instructions, whereas our instructions should align with the path observations. However, there is currently no automatic
+
+<sup>2</sup>We include the evaluation splits in the training of EnvDrop to improve quality.
+
+{6}------------------------------------------------
+
+method to evaluate this alignment. Therefore, we conducted a user study to invite 15 participants to evaluate 20 randomly selected instructions from GSA-R2R. They judged whether the instructions accurately described the path and whether they exhibited a distinct speaking style. The results in Tab. 2 demonstrate around 80% alignment and a high proportion of distinct speaking styles, proving the reliability of our data. User instructions are judged as less styled, likely because their word-level changes are less noticeable when viewed individually.
+
+**Diversity.** We provide a t-SNE analysis to compare the instructions from R2R and GSA-R2R, as shown in Fig. 4. Specifically, we use BERT (Devlin, 2018) to obtain embeddings for all instructions from these two datasets and then use t-SNE (Van der Maaten & Hinton, 2008) to project them into a 2D space for visualization. For clarity, we only display the results for the User Sheldon here; the results for other characters are presented in the appendix. The left image of Fig. 4 shows that the evaluation instructions in R2R are all ID data, sharing the same distribution as the training instructions.
+
+In contrast, our Scene and User instructions exhibit a distinctly different distribution from the training data, demonstrating the diversity of our dataset. Since the Basic instructions consist of speaker-generated and LLM-refined components, their cluster overlaps with the training cluster, which we still consider as ID data.
+
+Table 2: Human evaluation of various GSA-R2R instructions. *Matching*: percentage of instructions that accurately describe the path. *Style*: percentage of instructions with a clear speaking style.
+
+| Type    | Matching <sup>†</sup> | Style <sup>†</sup> |
+|---------|-----------------------|--------------------|
+| EnvDrop | 52.2                  | 13.0               |
+| Basic   | 80.0                  | 14.7               |
+| Scene   | 76.6                  | <b>96.1</b>        |
+| User    | <b>83.3</b>           | 57.6               |
+
+## 4 EXPERIMENTS
+
+### 4.1 GR-DUET
+
+Although TourHAMB incorporates history information as additional input, its performance degrades for two reasons. First, representing each step with a single history embedding fails to capture the necessary spatial correlations for modeling visited nodes, especially when the history is extensive. Second, it only fine-tunes the model with new history embedding compositions, leading to a significant input distribution shift between pretraining and fine-tuning. To address these issues, we propose a novel memory-based method, graph-retained dual-scale graph transformer (GR-DUET), where the extended history embeddings are replaced by a global topological graph that retains information across episodes, ensuring comprehensive awareness of visited nodes.
+
+Specifically, during inference, instead of maintaining separate graphs  $\{\mathcal{G}_1, \mathcal{G}_2, \dots, \mathcal{G}_m\}$  for each episode  $\{EP_1, EP_2, \dots, EP_m\}$ , our agent maintains a single global graph  $\mathcal{G}_g$  to continuously update the topological map while preserving observations at each node throughout the evaluation. At the start  $t = 0$  of episode  $k$ , we utilize the data from the memory bank  $\mathcal{M}_E$  to build the topological graph with all previously visited nodes  $\mathcal{G}_g = \{\mathcal{G}_1, \mathcal{G}_2, \dots, \mathcal{G}_{k-1}\}$ . Each node represents a visited location, with node information including positions  $\{x, y, z\}$  for spatial alignment and the visual observations  $\mathbf{O}$  at that node. We reset the visited status of all nodes at the beginning of each episode to enable agents to only choose unvisited nodes as the next step for efficiency. By utilizing this global graph across episodes, GR-DUET can more effectively leverage historical information, enabling a deeper understanding of the environment and facilitating longer-term action planning, particularly after executing numerous instructions.
+
+However, directly applying this mechanism in evaluation leads to the same distribution shift issue. Therefore, we modify the pretraining and fine-tuning stages to align the input distribution between training and inference. During pretraining, we provide the model with the complete ground truth
+
+![Figure 4: Two t-SNE plots comparing instruction distributions. The left plot for R2R shows a single dense cluster of orange points (R2R Eval) overlapping with green points (Train). The right plot for GSA-R2R shows multiple distinct clusters: green (Train), blue (GSA-R2R Basic), pink (GSA-R2R Scene), and orange (GSA-R2R User), demonstrating greater diversity.](ab9eb65dcbc2696ec77b66f70f9e0e91_img.jpg)
+
+Figure 4: Two t-SNE plots comparing instruction distributions. The left plot for R2R shows a single dense cluster of orange points (R2R Eval) overlapping with green points (Train). The right plot for GSA-R2R shows multiple distinct clusters: green (Train), blue (GSA-R2R Basic), pink (GSA-R2R Scene), and orange (GSA-R2R User), demonstrating greater diversity.
+
+Figure 4: The t-SNE analysis of instructions from R2R (left) and GSA-R2R (right). Our instructions demonstrate significantly greater diversity compared to R2R and include OOD data.
+
+{7}------------------------------------------------
+
+Table 3: Navigation performance of different VLN models in the test splits of R2R and GSA-R2R. †: Data leakage exists since ScaleVLN uses HM3D as training data.
+
+| Methods                        | Test-R-Basic |      | Test-N-Basic |      | Test-R-User |      | Test-N-User |      | Test-N-Scene |      | R2R-Test |      |
+|--------------------------------|--------------|------|--------------|------|-------------|------|-------------|------|--------------|------|----------|------|
+|                                | SR†          | SPL† | SR†          | SPL† | SR†         | SPL† | SR†         | SPL† | SR†          | SPL† | SR†      | SPL† |
+| HAMT (Chen et al., 2021)       | 48           | 44   | 42           | 38   | 46          | 42   | 38          | 34   | 34           | 30   | 65       | 60   |
+| DUET (Chen et al., 2022c)      | 58           | 47   | 48           | 37   | 55          | 45   | 44          | 34   | 40           | 30   | 69       | 59   |
+| BEVBert (An et al., 2023)      | 58           | 45   | 46           | 35   | 55          | 43   | 44          | 33   | 39           | 27   | 73       | 62   |
+| ScaleVLN (Wang et al., 2023b)† | 79           | 67   | 71           | 58   | 71          | 59   | 61          | 48   | 55           | 43   | 77       | 68   |
+| NavGPT-2 (Zhou et al., 2024)   | 58           | 45   | 48           | 35   | 56          | 45   | 45          | 33   | 44           | 58   | 72       | 60   |
+
+topological map of the current environment to enable them to utilize the most abundant information. For fine-tuning, we adopt an environment-specific training strategy to assign individual graphs to each training environment. We set a threshold  $\alpha$  as the maximum number of episodes to be included in the graph. Once  $\alpha$  is reached, the graph is re-initialized to avoid constant prediction under a fully populated graph. To enhance graph coverage and path diversity, we further incorporate the PREVALENT dataset (Hao et al., 2020) as augmented data.
+
+### 4.2 EXPERIMENTAL SETUP
+
+**Baseline Methods** We include two types of baseline methods. One is adaptation-based methods, including **TENT** (Wang et al., 2021), **SAR** (Niu et al., 2023), Back-Translation (**BT**), and proxy tasks (**MLM** (Devlin, 2018) & **MRC** (Lu et al., 2019)). The other is memory-based methods, including TourHAMT (Krantz et al., 2023) and OVER-NAV (Zhao et al., 2024). More details are provided in the appendix.
+
+**Evaluation Metrics.** We use the following metrics to evaluate the navigation performance: (1) Trajectory Length (**TL**): the total navigation distance in meters; (2) Navigation Error (**NE**): the distance between the stop location and the target; (3) Success Rate (**SR**): the ratio of agents stopping within 3 meters of the target; (4) Success rate weighted by Path Length (**SPL**) (Anderson et al., 2018a): SR normalized by the ratio between the shortest path length and the predicted path length. (5) Normalized Dynamic Time Warping (**nDTW**) (Ilharco et al., 2019): a measure of instruction fidelity by computing the similarity between the reference path and the predicted path.
+
+**Implementation Details.** We use GPT-4o from OpenAI’s official API as the LLM for generating Scene and User instructions. All prompt templates are provided in the appendix. For baseline methods, we follow the implementation details in their official repositories, with two modifications. First, we use CLIP-ViT/B-16 (Radford et al., 2021) as the visual feature extractor for both the navigation and speaker models for fair comparison. Second, all models are evaluated using a batch size of 1 in an online manner during evaluation. In GR-DUET, we set the maximum number of episodes  $\alpha = 50$ . The best model is selected based on the average SPL across all validation splits. For each adaptation method, we conduct the evaluation three times with randomly sequenced instructions and report the mean and standard error for each metric.
+
+### 4.3 MAIN RESULTS
+
+In this section, we benchmark existing VLN methods and adaptation methods to show their performance for the GSA-VLN task.
+
+#### 4.3.1 HOW DO CURRENT VLN METHODS PERFORM IN GSA-R2R?
+
+Various techniques have been incorporated into current VLN methods to achieve human-like performance in R2R, demonstrating their strong reasoning capabilities. We evaluate these methods without adaptation techniques to determine whether they can maintain the same performance in our diverse environments and instructions, as shown in Tab. 3. Except for the data leakage in ScaleVLN<sup>3</sup>, the performance of other baselines in GSA-R2R is significantly lower than their performance in R2R, highlighting the challenges of our task. When comparing different environments, agents are better at residential scenes than non-residential ones due to the biased distribution of the training data. For different instruction types, all models perform best on Basic instructions, followed by User instruc-
+
+<sup>3</sup>ScaleVLN uses all buildings from HM3D as augmented data for agent training, which includes the environments in GSA-R2R and a portion of the Basic instructions.
+
+{8}------------------------------------------------
+
+Table 4: Comparison of different adaptation methods in GSA-R2R with basic instructions.
+
+| Methods                           | Test-R-Basic |           |            |            |            | Test-N-Basic |           |            |            |            |
+|-----------------------------------|--------------|-----------|------------|------------|------------|--------------|-----------|------------|------------|------------|
+|                                   | TL           | NEL       | SR†        | SPL†       | nDTW†      | TL           | NEL       | SR†        | SPL†       | nDTW†      |
+| <i>Baseline</i>                   |              |           |            |            |            |              |           |            |            |            |
+| DUET (Chen et al., 2022c)         | 13.1         | 4.2       | 57.7       | 47.0       | 55.6       | 14.8         | 5.3       | 48.1       | 37.3       | 45.9       |
+| <i>Optimization-Based Methods</i> |              |           |            |            |            |              |           |            |            |            |
+| +MLM (Devlin, 2018)               | 13.1 ± 0.1   | 4.1 ± 0.1 | 57.9 ± 0.2 | 47.3 ± 0.1 | 55.9 ± 0.2 | 13.1 ± 0.2   | 5.3 ± 0.1 | 48.3 ± 0.5 | 38.8 ± 0.5 | 48.4 ± 0.3 |
+| +MRC (Lu et al., 2019)            | 13.1 ± 0.1   | 4.2 ± 0.1 | 57.7 ± 0.1 | 47.0 ± 0.1 | 55.6 ± 0.1 | 14.7 ± 0.1   | 5.3 ± 0.1 | 48.1 ± 0.1 | 37.3 ± 0.1 | 45.9 ± 0.1 |
+| +BT (Wang et al., 2020)           | 8.0 ± 0.1    | 3.8 ± 0.1 | 61.3 ± 0.6 | 57.7 ± 0.3 | 70.1 ± 0.3 | 7.9 ± 0.0    | 3.2 ± 0.1 | 49.5 ± 0.6 | 46.0 ± 0.8 | 59.4 ± 0.9 |
+| +TENT (Wang et al., 2021)         | 14.6 ± 0.0   | 4.2 ± 0.0 | 57.2 ± 0.4 | 44.2 ± 0.4 | 52.9 ± 0.1 | 16.2 ± 0.1   | 5.4 ± 0.1 | 46.5 ± 0.9 | 33.7 ± 0.2 | 42.6 ± 0.3 |
+| +SAR (Niu et al., 2023)           | 13.8 ± 0.8   | 4.0 ± 0.1 | 57.6 ± 0.2 | 44.6 ± 0.2 | 53.0 ± 0.2 | 16.5 ± 0.0   | 5.4 ± 0.0 | 44.6 ± 1.5 | 31.5 ± 1.6 | 40.6 ± 1.3 |
+| <i>Memory-Based Methods</i>       |              |           |            |            |            |              |           |            |            |            |
+| TourHAMT (Krantz et al., 2023)    | 11.6 ± 0.1   | 7.4 ± 0.1 | 14.9 ± 0.1 | 12.2 ± 0.1 | 34.7 ± 0.1 | 9.4 ± 0.1    | 7.7 ± 0.1 | 11.0 ± 0.2 | 8.6 ± 0.2  | 32.2 ± 0.2 |
+| OVER-NAV (Zhao et al., 2024)      | 14.1 ± 0.1   | 6.7 ± 0.0 | 22.3 ± 0.3 | 16.8 ± 0.2 | 37.1 ± 0.1 | 11.4 ± 0.1   | 7.1 ± 0.1 | 16.6 ± 0.2 | 13.0 ± 0.1 | 35.0 ± 0.2 |
+| GR-DUET (ours)                    | 9.4 ± 0.0    | 3.1 ± 0.0 | 69.3 ± 0.2 | 64.3 ± 0.1 | 71.4 ± 0.1 | 8.9 ± 0.0    | 4.4 ± 0.0 | 56.6 ± 0.1 | 51.5 ± 0.1 | 61.0 ± 0.1 |
+
+Table 5: Comparison of different adaptation methods in GSA-R2R with User instructions.
+
+| Methods                           | Child      |            | Keith      |            | Moira      |            | Rachel     |            | Sheldon    |            |
+|-----------------------------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|------------|
+|                                   | SR†        | SPL†       | SR†        | SPL†       | SR†        | SPL†       | SR†        | SPL†       | SR†        | SPL†       |
+| <i>Baseline</i>                   |            |            |            |            |            |            |            |            |            |            |
+| DUET                              | 54.3       | 44.1       | 56.0       | 46.3       | 52.3       | 43.3       | 56.3       | 46.4       | 54.0       | 44.4       |
+| <i>Optimization-Based Methods</i> |            |            |            |            |            |            |            |            |            |            |
+| +MLM                              | 54.5 ± 0.2 | 44.7 ± 0.2 | 56.4 ± 0.3 | 46.8 ± 0.3 | 53.8 ± 0.3 | 43.6 ± 0.4 | 56.8 ± 0.5 | 46.6 ± 0.6 | 54.5 ± 0.4 | 44.2 ± 0.3 |
+| +MRC                              | 54.4 ± 0.2 | 44.2 ± 0.1 | 56.0 ± 0.1 | 46.3 ± 0.1 | 52.3 ± 0.2 | 43.3 ± 0.1 | 56.0 ± 0.1 | 46.2 ± 0.2 | 53.7 ± 0.2 | 44.2 ± 0.4 |
+| +BT                               | 57.5 ± 0.7 | 54.0 ± 0.9 | 61.2 ± 0.3 | 57.9 ± 0.1 | 57.3 ± 0.5 | 54.0 ± 0.6 | 61.6 ± 0.8 | 58.1 ± 0.7 | 57.6 ± 0.5 | 54.3 ± 0.5 |
+| +TENT                             | 54.3 ± 0.2 | 41.7 ± 0.1 | 55.4 ± 0.2 | 43.8 ± 0.2 | 51.7 ± 0.2 | 41.0 ± 0.1 | 55.0 ± 0.2 | 43.2 ± 0.2 | 53.0 ± 0.2 | 41.9 ± 0.1 |
+| +SAR                              | 54.5 ± 0.5 | 41.5 ± 0.4 | 54.9 ± 0.3 | 43.1 ± 0.2 | 51.0 ± 0.4 | 40.3 ± 0.6 | 55.3 ± 0.5 | 43.0 ± 0.6 | 52.9 ± 0.2 | 41.4 ± 0.4 |
+| <i>Memory-Based Methods</i>       |            |            |            |            |            |            |            |            |            |            |
+| TourHAMT                          | 14.6 ± 0.2 | 12.0 ± 0.2 | 15.1 ± 0.2 | 12.3 ± 0.1 | 13.9 ± 0.1 | 11.3 ± 0.1 | 15.3 ± 0.1 | 12.5 ± 0.1 | 14.4 ± 0.1 | 11.8 ± 0.1 |
+| OVER-NAV                          | 20.9 ± 0.1 | 16.1 ± 0.2 | 20.5 ± 0.1 | 16.4 ± 0.1 | 19.5 ± 0.2 | 15.4 ± 0.2 | 20.6 ± 0.3 | 16.2 ± 0.2 | 20.5 ± 0.1 | 16.2 ± 0.1 |
+| GR-DUET (ours)                    | 65.2 ± 0.1 | 59.7 ± 0.1 | 66.7 ± 0.1 | 62.0 ± 0.1 | 60.9 ± 0.2 | 56.2 ± 0.2 | 67.1 ± 0.1 | 62.2 ± 0.1 | 63.9 ± 0.1 | 58.9 ± 0.1 |
+
+tions, and finally Scene instructions. This aligns with the cluster distance from the training data observed in Fig. 4, emphasizing the importance of studying the OOD problem in VLN.
+
+#### 4.3.2 HOW DO ADAPTATION METHODS PERFORM IN GSA-R2R?
+
+**Environment Adaptation.** We first test the adaptation methods with different environments using Basic instructions, as shown in Tab. 4. Among the optimization-based methods, TTA techniques like TENT and SAR perform worse than vanilla DUET. This is because entropy-based methods assume a positive correlation between confidence and accuracy. However, in sequential decision-making processes like VLN, errors accumulate over time, making entropy measures meaningless after an incorrect step. The Back-Translation (BT) method shows improvement as the Basic instructions closely resemble the authentic data from the speaker. For proxy tasks, MRC performs similarly to DUET, as this coarse-grained task is not beneficial once the agent already has robust representations through extensive training, which is also observed in ScaleVLN (Wang et al., 2023b). MLM provides marginal improvement. While it helps learn better textual features, it is not optimized together with action prediction, preventing the model from leveraging these improved language features. For memory-based methods, both TourHAMT and OVER-NAV performed significantly worse than even vanilla HAMT. This is due to the larger number of instructions in GSA-R2R compared to their training data, resulting in excessively long history embeddings as input, which confuses the model. In contrast, GR-DUET achieves the best performance in both Residential (R) and Non-residential (N) splits, with an 11.6% and 8.5% SR increase, respectively. This demonstrates its effectiveness in helping agents adapt to both ID and OOD environments.
+
+Table 6: Comparison of different adaptation methods in GSA-R2R with Scene instructions.
+
+| Methods                           | Test-N-Scene |           |            |            |            |
+|-----------------------------------|--------------|-----------|------------|------------|------------|
+|                                   | TL           | NEL       | SR†        | SPL†       | nDTW†      |
+| <i>Baseline</i>                   |              |           |            |            |            |
+| DUET                              | 14.9         | 6.4       | 39.6       | 30.1       | 40.9       |
+| <i>Optimization-Based Methods</i> |              |           |            |            |            |
+| +MLM                              | 14.3 ± 0.1   | 6.5 ± 0.1 | 39.8 ± 0.1 | 30.5 ± 0.1 | 41.1 ± 0.1 |
+| +MRC                              | 14.9 ± 0.1   | 6.4 ± 0.1 | 39.7 ± 0.1 | 30.2 ± 0.1 | 40.9 ± 0.1 |
+| +BT                               | 8.4 ± 0.0    | 6.3 ± 0.2 | 41.2 ± 1.5 | 38.2 ± 1.2 | 51.3 ± 1.2 |
+| +TENT                             | 16.4 ± 0.1   | 6.3 ± 0.1 | 40.6 ± 0.2 | 28.9 ± 0.2 | 38.9 ± 0.2 |
+| +SAR                              | 16.3 ± 0.5   | 6.0 ± 0.2 | 41.4 ± 0.6 | 29.1 ± 0.3 | 39.0 ± 0.3 |
+| <i>Memory-Based Methods</i>       |              |           |            |            |            |
+| TourHAMT                          | 7.3 ± 0.1    | 8.1 ± 0.1 | 9.7 ± 0.1  | 8.0 ± 0.1  | 32.3 ± 0.1 |
+| OVER-NAV                          | 11.8 ± 0.1   | 7.6 ± 0.2 | 16.7 ± 0.4 | 12.6 ± 0.2 | 34.6 ± 0.3 |
+| GR-DUET (ours)                    | 10.1 ± 0.0   | 5.5 ± 0.0 | 48.1 ± 0.1 | 42.8 ± 0.1 | 53.7 ± 0.1 |
+
+**Instruction Adaptation.** We also evaluate these methods across different instruction styles. Tab. 5 shows the results for User instructions from the five characters, while Tab. 6 presents their performance on Scene instructions. The performance of DUET suggests that different speaking styles
+
+{9}------------------------------------------------
+
+Table 7: Ablation study on the pretraining and augmented data in GR-DUET.
+
+| Pretrain | Aug. | Test-R-Basic                     |                                  | Test-N-Basic                     |                                  | Test-N-Scene                     |                                  |
+|----------|------|----------------------------------|----------------------------------|----------------------------------|----------------------------------|----------------------------------|----------------------------------|
+|          |      | SR $\uparrow$                    | SPL $\uparrow$                   | SR $\uparrow$                    | SPL $\uparrow$                   | SR $\uparrow$                    | SPL $\uparrow$                   |
+| ×        | ×    | 56.8 $\pm$ 0.1                   | 47.5 $\pm$ 0.1                   | 45.4 $\pm$ 0.1                   | 35.3 $\pm$ 0.1                   | 38.2 $\pm$ 0.0                   | 28.9 $\pm$ 0.0                   |
+| ×        | ✓    | 54.0 $\pm$ 0.1                   | 41.4 $\pm$ 0.1                   | 43.0 $\pm$ 0.0                   | 30.9 $\pm$ 0.1                   | 35.9 $\pm$ 0.4                   | 27.4 $\pm$ 0.1                   |
+| ✓        | ×    | 59.9 $\pm$ 0.1                   | 48.2 $\pm$ 0.1                   | 47.9 $\pm$ 0.1                   | 35.3 $\pm$ 0.1                   | 43.7 $\pm$ 0.2                   | 33.6 $\pm$ 0.0                   |
+| ✓        | ✓    | <b>69.3 <math>\pm</math> 0.2</b> | <b>64.3 <math>\pm</math> 0.1</b> | <b>56.6 <math>\pm</math> 0.1</b> | <b>51.5 <math>\pm</math> 0.1</b> | <b>48.1 <math>\pm</math> 0.1</b> | <b>42.8 <math>\pm</math> 0.1</b> |
+
+Table 8: Ablation study on different graph construction mechanisms in GR-DUET.
+
+| Method     | $\alpha$ | Test-R-Basic                     |                                  | Test-N-Basic                     |                                  | Test-N-Scene                     |                                  |
+|------------|----------|----------------------------------|----------------------------------|----------------------------------|----------------------------------|----------------------------------|----------------------------------|
+|            |          | SR $\uparrow$                    | SPL $\uparrow$                   | SR $\uparrow$                    | SPL $\uparrow$                   | SR $\uparrow$                    | SPL $\uparrow$                   |
+| Proportion | 0.25     | 61.2 $\pm$ 0.1                   | 53.3 $\pm$ 0.1                   | 50.9 $\pm$ 0.1                   | 39.2 $\pm$ 0.1                   | 41.4 $\pm$ 0.2                   | 30.6 $\pm$ 0.1                   |
+|            | 0.50     | 64.8 $\pm$ 0.1                   | 56.8 $\pm$ 0.1                   | 50.8 $\pm$ 0.1                   | 40.4 $\pm$ 0.1                   | 37.8 $\pm$ 0.0                   | 29.4 $\pm$ 0.0                   |
+|            | 0.75     | 57.7 $\pm$ 0.1                   | 48.7 $\pm$ 0.0                   | 48.3 $\pm$ 0.2                   | 37.5 $\pm$ 0.1                   | 40.7 $\pm$ 0.1                   | 28.7 $\pm$ 0.1                   |
+|            | 1.00     | 66.2 $\pm$ 0.3                   | 58.5 $\pm$ 0.2                   | 55.7 $\pm$ 0.2                   | 46.0 $\pm$ 0.1                   | 47.5 $\pm$ 0.2                   | 40.9 $\pm$ 0.1                   |
+| Buffer     | 1        | 57.6 $\pm$ 0.1                   | 35.1 $\pm$ 0.1                   | 45.1 $\pm$ 0.1                   | 24.9 $\pm$ 0.0                   | 36.9 $\pm$ 0.1                   | 20.6 $\pm$ 0.1                   |
+|            | 50       | 69.3 $\pm$ 0.2                   | <b>64.3 <math>\pm</math> 0.1</b> | <b>56.6 <math>\pm</math> 0.1</b> | <b>51.5 <math>\pm</math> 0.1</b> | <b>48.1 <math>\pm</math> 0.1</b> | <b>42.8 <math>\pm</math> 0.1</b> |
+|            | 100      | <b>69.7 <math>\pm</math> 0.1</b> | 63.2 $\pm$ 0.1                   | 56.1 $\pm$ 0.1                   | 48.5 $\pm$ 0.1                   | 47.9 $\pm$ 0.2                   | 37.1 $\pm$ 0.1                   |
+|            | 150      | 67.5 $\pm$ 0.0                   | 59.3 $\pm$ 0.0                   | 54.8 $\pm$ 0.2                   | 44.6 $\pm$ 0.1                   | 46.2 $\pm$ 0.1                   | 37.9 $\pm$ 0.1                   |
+
+introduce varying levels of difficulty for VLN models in interpreting instructions. Most results are consistent with those from the environment adaptation results, with two notable exceptions. First, TTA methods achieve 1% SR increase in Scene instructions, but this advantage disappears in User instructions. We attribute this to their different language patterns. Scene instructions tend to include conversational fillers, which is a noticeable pattern that optimization-based methods can capture. In contrast, User instructions focus on word variations, which is much more challenging. Second, the improvement from Back-Translation diminishes due to the domain shift between the authentic and evaluation instructions, indicating that this method is effective for environment adaptations but not for instruction adaptations. Lastly, Our GR-DUET again achieves significant performance improvements with a maximum SR increase of 11% across all splits, demonstrating its general applicability to both types of adaptations.
+
+### 4.4 ABLATION STUDY
+
+We conduct two ablation studies on our GR-DUET. Tab. 7 proves that only adding PREVALENT is detrimental due to the introduced instruction noises and only incorporating full graphs during pre-training is limited by the lack of path diversity during fine-tuning. Combining both approaches leads to significant improvements, demonstrating the effectiveness of this strategy. In Tab. 8, we experiment with two strategies to simulate the graph construction process in fine-tuning. The “proportion” method randomly provides a specific proportion of ground-truth graphs to agents while the “memory” method is the realization in GR-DUET with a maximum capacity for memorizing episodes. For simplicity, we use the same symbol,  $\alpha$ , to represent both the proportion and buffer size. The results prove that memory methods outperform proportion methods, as they more closely align with the gradual expansion of the global graph during inference. For memory methods, performance initially improves with increasing buffer size, then declines. This trend is expected as a small buffer cannot cover graphs adequately, while an excessively large buffer leads to inefficiencies.
+
+## 5 CONCLUSION
+
+In this paper, we introduce the GSA-VLN task to highlight the challenges faced by VLN agents operating in persistent environments, where long-term memory and model updates are required to adapt to specific settings. To thoroughly evaluate agent adaptability, we create the GSA-R2R dataset, which significantly expands the quantity and diversity of environments and instructions, including both ID and OOD data for evaluation. We benchmark popular VLN models and adaptation methods on GSA-R2R and propose GR-DUET, a novel model that integrates global graphs with an environment-specific training strategy, achieving state-of-the-art results. In the future, we aim to explore more unsupervised learning approaches to further enhance agent performance in GSA-R2R.
+
+ Rest of paper (reference and Appendix) is removed.

@@ -1,0 +1,278 @@
+
+
+{0}------------------------------------------------
+
+# CONFIG: TOWARDS CONFLICT-FREE TRAINING OF PHYSICS INFORMED NEURAL NETWORKS
+
+Qiang Liu<sup>1</sup>, Mengyu Chu<sup>2</sup> & Nils Thuerer<sup>1</sup>
+
+School of Computation, Information and Technology <sup>1</sup>  
+ Technical University of Munich  
+ Garching, DE 85748  
+ {qiang7.liu, nils.thuerer}@tum.de
+
+SKL of General AI <sup>2</sup>  
+ Peking University  
+ Beijing, CN 100871  
+ mchu@pku.edu.cn
+
+## ABSTRACT
+
+The loss functions of many learning problems contain multiple additive terms that can disagree and yield conflicting update directions. For Physics-Informed Neural Networks (PINNs), loss terms on initial/boundary conditions and physics equations are particularly interesting as they are well-established as highly difficult tasks. To improve learning the challenging multi-objective task posed by PINNs, we propose the ConFIG method, which provides conflict-free updates by ensuring a positive dot product between the final update and each loss-specific gradient. It also maintains consistent optimization rates for all loss terms and dynamically adjusts gradient magnitudes based on conflict levels. We additionally leverage momentum to accelerate optimizations by alternating the back-propagation of different loss terms. We provide a mathematical proof showing the convergence of the ConFIG method, and it is evaluated across a range of challenging PINN scenarios. ConFIG consistently shows superior performance and runtime compared to baseline methods. We also test the proposed method in a classic multi-task benchmark, where the ConFIG method likewise exhibits a highly promising performance. Source code is available at <https://tum-pbs.github.io/ConFIG>
+
+## 1 INTRODUCTION
+
+Efficiently solving partial differential equations (PDEs) is crucial for various scientific fields such as fluid dynamics, electromagnetics, and financial mathematics. However, the nonlinear and high-dimensional PDEs often present significant challenges to the stability and convergence of traditional numerical methods. With the advent of deep learning, there is a strongly growing interest in using this technology to solve PDEs (Han et al., 2018; Beck et al., 2023). In this context, Physics Informed Neural Networks (PINNs) (Raissi et al., 2019; Cuomo et al., 2022) leverage networks as a continuous and differentiable ansatz for the underlying physics.
+
+PINNs use auto-differentiation of coordinate-based neural networks, i.e., implicit neural representation (INR), to approximate PDE derivatives. The residuals of the PDEs, along with boundary and initial conditions, are treated as loss terms and penalized during training to achieve a physically plausible solution. Despite their widespread use, training PINNs is a well-recognized challenge (Cuomo et al., 2022; Lino et al., 2023; Wang et al., 2021; Krishnapriyan et al., 2021; Wang et al., 2022) due to several possible factors like unbalanced back-propagated gradients from numerical stiffness (Wang et al., 2021), different convergence rates among loss terms (Wang et al., 2022), PDE-based soft constraints (Krishnapriyan et al., 2021), poor initialization (Wong et al., 2024), and suboptimal sampling strategies (Daw et al., 2023). Traditional methods to improve PINN training typically involve adjusting the weights for PDE residuals and loss terms for initial/boundary conditions (Liu & Wang, 2021; McClenny & Braga-Neto, 2023; Son et al., 2023). However, although these methods claim to have better solution accuracy, there is currently no consensus on the optimal weighting strategy.
+
+Meanwhile, methods manipulating the gradient of each loss term have become popular in Multi-Task Learning (MTL) and Continual Learning (CL) (Riemer et al., 2019; Farajtabar et al., 2020; Yu et al., 2020) to address *conflicts* between loss-specific gradients that induce negative transfer (Long et al., 2017) and catastrophic forgetting (Kirkpatrick et al., 2017). Unlike weighting strategies that
+
+{1}------------------------------------------------
+
+adjust the final update direction solely by modifying each loss-specific gradient’s magnitude, these methods take greater flexibility and often alter the directions of loss-specific gradients. We notice that similar conflicts between gradients also arise in the training of PINNs. First, the gradient magnitude of PDE residuals typically surpasses that of initial/boundary conditions (Wang et al., 2021), causing the final update gradient to lean heavily towards the residual term. Additionally, PDE residuals often have many local minima due to the infinite number of PDE solutions without prescribed initial/boundary conditions (Daw et al., 2023). Consequently, when the optimization process approaches local minima of the PDE residual, the combined update conflicts with the gradient of initial/boundary conditions, severely impeding learning progress.
+
+To illustrate gradient conflicts in PINNs, we show a toy case in Fig. 1 where  $\mathcal{L}_1$  has smaller gradients and  $\mathcal{L}_2$  has larger gradients but multiple minima. Training with  $\mathcal{L}_1 + \lambda\mathcal{L}_2$  using suboptimal  $\lambda$  values (e.g.,  $\lambda = 1$ ) leads to gradient conflicts and the convergence to a local minima of  $\mathcal{L}_2$ .
+
+In the following, we propose the **Conflict-Free Inverse Gradients (ConFIG)** method to mitigate the conflicts of loss-specific gradients during PINNs training. Our approach provides an update gradient  $g_{\text{ConFIG}}$  that reduces all loss terms to prevent the optimization from being stuck in the local minima of a specific loss term. With the ConFIG method, the optimization in Fig. 1 converges to the shared minimum for both losses. Our method is provably convergent, and characterized by the following properties:
+
+- The final update direction does not conflict with any loss-specific gradients.
+- The projection length of the final gradient on each loss-specific gradient is uniform, ensuring that all loss terms are optimized at the same rate.
+- The length of the final gradient is adaptively scaled based on the degree of conflict between loss-specific gradients. This prevents the optimization from stalling in the local minima of any specific loss term in high-conflict scenarios.
+
+In addition, we introduce a momentum-based approach to expedite optimization. By leveraging momentum, we eliminate the need to compute all gradients via backpropagation at each training iteration. In contrast, we evaluate alternating loss-specific gradients, which significantly decreases the computational cost and leads to more accurate solutions within a given computational budget.
+
+## 2 RELATED WORK
+
+**Weighting Strategies for PINNs’ Training** Some intuitive weighting strategies come from the penalty method of constrained optimization problems, where higher weights are assigned to less-optimized losses (Liu & Wang, 2021; Son et al., 2023). McClellan & Braga-Neto (2023) extended this idea by directly setting weights to sample points with soft attention masks. On the contrary, Bischof & Kraus (2021) advocated equalizing the reduction rates of all loss terms as it guides training toward Pareto optimal solutions from an MTL perspective. Meanwhile, Wang et al. (2021) addressed numerical stiffness issues by determining the weight according to the magnitude of each loss-specific gradient. Wang et al. (2022) explored training procedures via the Neural Tangent Kernel (NTK) perspective, adaptively setting weights based on NTK eigenvalues. Xiang et al. (2022) instead employed Gaussian probabilistic models for uncertainty quantification, estimating weights through maximum likelihood estimation. Others have pursued specialized approaches. E.g., van der Meer et al. (2022) derived optimal weight parameters for specific problems and devised heuristics for general problems. de Wolff et al. (2022) use an evolutionary multi-objective algorithm to find the trade-offs between individual loss terms in PINNs training. Shin et al. (2020) conducted convergence analyses for PINNs solving linear second-order elliptic and parabolic type PDEs, employing Lipschitz regularized loss. In contrast to adaptive methods, Wight & Zhao (2021) proposed
+
+![Figure 1: Visualization of toy example showing the conflict between different losses during optimization. The figure includes a legend for Adam (blue squares) and Adam + ConFIG (red circles). It shows three plots: L1 (a smooth landscape), L2 (a landscape with many local minima), and L1 + L2 (the combined landscape). The Adam path (blue) gets stuck in a local minimum of L2, while the Adam + ConFIG path (red) converges to the shared minimum. Two vector diagrams on the right show the conflict between gradients g1 and g2, and how the ConFIG method resolves this conflict by producing a new gradient g_ConFIG.](1ac0e11d90bece49015adc89be472a39_img.jpg)
+
+Figure 1: Visualization of toy example showing the conflict between different losses during optimization. The figure includes a legend for Adam (blue squares) and Adam + ConFIG (red circles). It shows three plots: L1 (a smooth landscape), L2 (a landscape with many local minima), and L1 + L2 (the combined landscape). The Adam path (blue) gets stuck in a local minimum of L2, while the Adam + ConFIG path (red) converges to the shared minimum. Two vector diagrams on the right show the conflict between gradients g1 and g2, and how the ConFIG method resolves this conflict by producing a new gradient g\_ConFIG.
+
+Figure 1: Visualization of toy example showing the conflict between different losses during optimization.
+
+{2}------------------------------------------------
+
+a fixed weighting strategy for phase field models. They artificially elevated weights for the loss term associated with initial conditions.
+
+**Gradient Improvement Strategies in MTL and CL.** Gradient improvement strategies in MTL and CL focus on understanding and resolving conflicts between loss-specific gradients. Riemer et al. (2019) and Du et al. (2018) proposed using the dot product (cosine similarity) of two gradient vectors to assess whether updates will conflict with each other. Riemer et al. (2019) introduced an additional term in the loss to modify the gradient direction, maximizing the dot product of the gradients. Conversely, Du et al. (2018) chose to discard gradients of auxiliary tasks if they conflict with the main task. Another intuitive method to resolve conflicts is orthogonal projection. Farajtabar et al. (2020) proposed the Orthogonal Gradient Descent (OGD) method for continual learning, projecting gradients from new tasks onto a subspace orthogonal to the previous task. Chaudhry et al. (2020) proposed learning tasks in low-rank vector subspaces that are kept orthogonal to minimize interference. Yu et al. (2020) introduced the PCGrad method that projects a task’s gradient onto the orthogonal plane of other gradients. Liu et al. (2021b) designed the IMTL-G method to ensure that the final gradient has the same projection length on all other vectors. Dong et al. (2022) utilized the Singular Value Decomposition (SVD) on gradient vectors to obtain an orthogonal basis. Javaloy & Valera (2022) introduces a method that jointly homogenizes gradient magnitudes and directions for MTL. Quinton & Rey (2024) propose a Jacobian descent method with an aggregation step, which constrains the update gradient into the positive cone in the parameter space to avoid conflicts during training. Few studies in the PINN community have utilized gradient-based improvement strategies. Zhou et al. (2023) introduced the PCGrad method to PINN training for reliability assessment of multi-state systems. Yao et al. (2023) developed a MultiAdam method where they apply Adam optimizer for each loss term separately. Concurrent work from Hwang & Lim (2024) proposed a dual cone gradient descent method to mitigate gradient conflict when training PINNs.
+
+## 3 METHOD
+
+### 3.1 CONFLICT-FREE INVERSE GRADIENTS METHOD
+
+Generically, we consider an optimization procedure with a set of  $m$  individual loss functions, i.e.,  $\{\mathcal{L}_1, \mathcal{L}_2, \dots, \mathcal{L}_m\}$ . Let  $\{g_1, g_2, \dots, g_m\}$  denote the individual gradients corresponding to each of the loss functions. A gradient-descent step with gradient  $g_c$  will conflict with the decrease of  $\mathcal{L}_i$  if  $g_i^\top g_c$  is negative (Riemer et al., 2019; Du et al., 2018). Thus, to ensure that all losses are decreasing simultaneously along  $g_c$ , all  $m$  components of  $[g_1, g_2, \dots, g_m]^\top g_c$  should be positive. This condition is fulfilled by setting  $g_c = [g_1, g_2, \dots, g_m]^\top w$ , where  $w = [w_1, w_2, \dots, w_m]$  is a vector with  $m$  positive components and  $M^\top$  is the pseudoinverse of the transposed matrix  $M^\top$ .
+
+Although a positive  $w$  vector guarantees a conflict-free update direction for all losses, the specific value of  $w_i$  further influences the exact direction of  $g_c$ . To facilitate determining  $w$ , we reformulate  $g_c$  as  $g_c = k[\mathcal{U}(g_1), \mathcal{U}(g_2), \dots, \mathcal{U}(g_m)]^\top \hat{w}$ , where  $\mathcal{U}(g_i) = g_i / (|g_i| + \varepsilon)$  is a normalization operator and  $k > 0$ . Now,  $k$  controls the length of  $g_c$  and the ratio of  $\hat{w}$ ’s components corresponds to the ratio of  $g_c$ ’s projections onto each loss-specific  $g_i$ , i.e.,  $|g_c| \mathcal{S}_c(g, g_i)$ , where  $\mathcal{S}_c(g_i, g_j) = g_i^\top g_j / (|g_i||g_j| + \varepsilon)$  is the operator for cosine similarity:
+
+$$\frac{|g_c| \mathcal{S}_c(g_c, g_i)}{|g_c| \mathcal{S}_c(g_c, g_j)} = \frac{\mathcal{S}_c(g_c, g_i)}{\mathcal{S}_c(g_c, g_j)} = \frac{\mathcal{S}_c(g_c, k\mathcal{U}(g_i))}{\mathcal{S}_c(g_c, k\mathcal{U}(g_j))} = \frac{[k\mathcal{U}(g_i)]^\top g_c}{[k\mathcal{U}(g_j)]^\top g_c} = \frac{\hat{w}_i}{\hat{w}_j} \quad \forall i, j \in [1, m]. \quad (1)$$
+
+We call  $\hat{w}$  the *direction weight*. The projection length of  $g_c$  on each loss-specific gradient serves as an effective “learning rate” for each loss. Here, we choose  $\hat{w}_i = \hat{w}_j \forall i, j \in [1, m]$  to ensure a uniform decrease rate of all losses, as it was shown to yield a weak form of Pareto optimality for multi-task learning (Bischof & Kraus, 2021).
+
+Meanwhile, we introduce an adaptive strategy for the length of  $g_c$  rather than directly setting a fixed value of  $k$ . We notice that the length of  $g_c$  should increase when all loss-specific gradients point nearly in the same direction since it indicates a favorable direction for optimization. Conversely, when loss-specific gradients are close to opposing each other, the magnitude of  $g_c$  should decrease. We realize this by rescaling the length of  $g_c$ , to the sum of the projection lengths of each loss-specific gradient on it, i.e.,  $|g_c| = \sum_{i=1}^m |g_i| \mathcal{S}_c(g_i, g_c)$ .
+
+{3}------------------------------------------------
+
+The procedures above are summarized in the *Conflict-Free Inverse Gradients (ConFIG)* operator  $G$  and we correspondingly denote the final update gradient  $g_v$  with  $g_{\text{ConFIG}}$ :
+
+$$g_{\text{ConFIG}} = \mathcal{G}(g_1, g_1, \dots, g_m) := \left( \sum_{i=1}^m g_i^\top g_u \right) g_u, \quad (2)$$
+
+$$g_u = \mathcal{U} [ [\mathcal{U}(g_1), \mathcal{U}(g_2), \dots, \mathcal{U}(g_m)]^{-\top} \mathbf{1}_m ]. \quad (3)$$
+
+Here,  $\mathbf{1}_m$  is a unit vector with  $m$  components. A mathematical proof of ConFIG's convergence in convex and non-convex landscapes can be found in Appendix A.1. The ConFIG method utilizes the pseudoinverse of the gradient matrix to obtain a conflict-free direction. In Appendix A.3, we prove that such an inverse operation is always feasible as long as the dimension of parameter space is larger than the number of losses. Besides, while calculating the pseudoinverse numerically could involve additional computational cost, it is not significant compared to the cost of back-propagation for each loss term. A detailed breakdown of the computational cost can be found in Appendix A.6.
+
+### 3.2 TWO TERM LOSSES AND POSITIONING W.R.T. EXISTING APPROACHES
+
+For the special case of only two loss terms, there is an equivalent form of ConFIG that does not require a pseudoinverse:
+
+$$\mathcal{G}(g_1, g_2) = (g_1^\top g_v + g_2^\top g_v) g_v \quad (4)$$
+
+$$g_v = \mathcal{U} [\mathcal{U}(\mathcal{O}(g_1, g_2)) + \mathcal{U}(\mathcal{O}(g_2, g_1))] \quad (5)$$
+
+where  $\mathcal{O}(g_1, g_2) = g_2 - \frac{g_1^\top g_2}{|g_1|^2} g_1$  is the orthogonality operator. It returns a vector orthogonal to  $g_1$  from the plane spanned by  $g_1$  and  $g_2$ . The proof of equivalence is shown in Appendix A.4.
+
+PCGrad (Yu et al., 2020) and IMTL-G (Liu et al., 2021b) methods from multi-task learning studies also have a similar simplified form for the two-loss scenario. PCGrad projects loss-specific gradients onto the normal plane of others if their cosine similarity is negative, while IMTL-G rescales loss-specific gradients to equalize the final gradient's projection length on each loss-specific gradient, as illustrated in Fig. 2a and 2b. Our ConFIG method in Fig. 2c employs orthogonal components of each loss-specific gradient, akin to PCGrad. Meanwhile, it also ensures the same decrease rate of all losses, similar to IMTL-G. As a result, these three methods share an identical update direction but a different update magnitude in the two-loss scenario. This provides a valuable opportunity to evaluate our adaptive magnitude strategy: for two losses, the PCGrad and IMTL-G methods can be viewed as ConFIG variants with different magnitude rescaling strategies.
+
+The above similarity between these three methods only holds for the two-loss scenario. With more losses involved, the differences between them are more evident. In fact, the inverse operation in Eq. 3 makes the ConFIG approach the only method that maintains a conflict-free direction when the number of loss terms exceeds two. Detailed discussion can be found in A.2
+
+### 3.3 CONFIG WITH MOMENTUM ACCELERATION
+
+Gradient-based methods like PCGrad, IMTL-G, and the proposed ConFIG method require separate backpropagation steps to compute the gradient for each loss term. In contrast, conventional weighting strategies only require a single backpropagation for the total loss. Thus, gradient-based methods
+
+![Figure 2: Sketch of PCGrad (a), IMTL-G (b), and our ConFIG (c) method with two loss terms. (a) PCGrad: Shows two vectors g1 and g2. g2 is projected onto the plane orthogonal to g1, resulting in g_PCGrad. The projection is labeled O(g1, g2). (b) IMTL-G: Shows two vectors g1 and g2. g2 is rescaled by a factor alpha_2/g2 to become g_IMTL-G. The rescaling is labeled alpha_2 g2 / |g2|. (c) ConFIG: Shows two vectors g1 and g2. g2 is projected onto the plane orthogonal to g1, resulting in g_ConFIG. The projection is labeled O(g1, g2). The final update direction is shown as a vector g_v, which is the sum of the projections of g1 and g2 onto the plane orthogonal to each other, labeled U(O(g1, g2)) + U(O(g2, g1)).](0bd48c1eecb2ba5149750173c9cb1138_img.jpg)
+
+Figure 2: Sketch of PCGrad (a), IMTL-G (b), and our ConFIG (c) method with two loss terms. (a) PCGrad: Shows two vectors g1 and g2. g2 is projected onto the plane orthogonal to g1, resulting in g\_PCGrad. The projection is labeled O(g1, g2). (b) IMTL-G: Shows two vectors g1 and g2. g2 is rescaled by a factor alpha\_2/g2 to become g\_IMTL-G. The rescaling is labeled alpha\_2 g2 / |g2|. (c) ConFIG: Shows two vectors g1 and g2. g2 is projected onto the plane orthogonal to g1, resulting in g\_ConFIG. The projection is labeled O(g1, g2). The final update direction is shown as a vector g\_v, which is the sum of the projections of g1 and g2 onto the plane orthogonal to each other, labeled U(O(g1, g2)) + U(O(g2, g1)).
+
+Figure 2: Sketch of PCGrad (a), IMTL-G (b), and our ConFIG (c) method with two loss terms. The PCGrad method directly sums two orthogonal components, and the IMTL-G method rescales the two vectors to the same magnitude. Our ConFIG method sums the unit vector of the orthogonal components and adjusts its magnitude with the projection length of each loss-specific gradient.
+
+{4}------------------------------------------------
+
+#### **Algorithm 1** M-ConFIG
+
+---
+
+```
+
+Require:  $\theta_0$  (network weights),  $\gamma$  (learning rate),  $\beta_1, \beta_2, \epsilon$  (Adam coefficient),  $\mathbf{m}_{g_0}$  (Pseudo first momentum),
+ $[\mathbf{m}_{g_{1,0}}, \mathbf{m}_{g_{2,0}}, \dots, \mathbf{m}_{g_{m,0}}] \leftarrow [0, 0, \dots, 0]$  (First momentum),  $\mathbf{v}_0 \leftarrow 0$  (Second momentum),
+ $[t_{g_1}, t_{g_2}, \dots, t_{g_m}] \leftarrow [0, 0, \dots, 0]$ , All operations on vectors are element-wise except  $\mathcal{G}$ .
+for  $t = 1$  to  $\dots$  do
+   $i = t\%m + 1$ 
+   $t_{g_i} \leftarrow t_{g_i} + 1$ 
+   $\mathbf{m}_{g_i, t_{g_i}} \leftarrow \beta_1 \mathbf{m}_{g_i, t_{g_i}-1} + (1 - \beta_1) \nabla_{\theta_{i-1}} \mathcal{L}_i$  ▷ Update the first momentum of  $\mathbf{g}_i$ 
+   $[\tilde{\mathbf{m}}_{g_1}, \tilde{\mathbf{m}}_{g_2}, \dots, \tilde{\mathbf{m}}_{g_m}] \leftarrow [\frac{\mathbf{m}_{g_1, t_{g_1}}}{1 - \beta_1^{t_{g_1}}}, \frac{\mathbf{m}_{g_2, t_{g_2}}}{1 - \beta_1^{t_{g_2}}}, \dots, \frac{\mathbf{m}_{g_m, t_{g_m}}}{1 - \beta_1^{t_{g_m}}}]$  ▷ Bias corrections for first momentum terms
+   $\tilde{\mathbf{m}}_g \leftarrow \mathcal{G}(\tilde{\mathbf{m}}_{g_1}, \tilde{\mathbf{m}}_{g_2}, \dots, \tilde{\mathbf{m}}_{g_m})$  ▷ ConFIG update of momentums
+   $\mathbf{g}_c \leftarrow [\tilde{\mathbf{m}}_g(1 - \beta_1^t) - \beta_1 \mathbf{m}_{t-1}] / (1 - \beta_1)$  ▷ Obtain the estimated gradient
+   $\mathbf{m}_t \leftarrow \beta_1 \mathbf{m}_{t-1} + (1 - \beta_1) \mathbf{g}_c$  ▷ Update the pseudo first momentum
+   $\mathbf{v}_t \leftarrow \beta_2 \mathbf{v}_{t-1} + (1 - \beta_2) \mathbf{g}_c^2$  ▷ Update the second momentum
+   $\tilde{\mathbf{v}} \leftarrow \mathbf{v}_t / (1 - \beta_2^t)$  ▷ Bias correction for the second momentum
+   $\theta_i \leftarrow \theta_{i-1} - \gamma \tilde{\mathbf{m}}_g / (\sqrt{\tilde{\mathbf{v}}_g} + \epsilon)$  ▷ Update weights of the neural network
+end for
+
+```
+
+---
+
+are usually  $r = \sum_i^m \mathcal{T}_b(\mathcal{L}_i) / \mathcal{T}_b(\sum_i^m \mathcal{L}_i)$  times more computationally expensive than weighting methods, where  $\mathcal{T}_b$  is the computational cost of backpropagation. To address this issue, we introduce an accelerated momentum-based variant of ConFIG: *M-ConFIG*. Our core idea is to leverage the momentum of the gradient for the ConFIG operation and update momentum in an alternating fashion to avoid backpropagating all losses in a single step. In each iteration, only a single momentum is updated with its corresponding gradient, while the others are carried over from previous steps. This reduces the computational cost of the M-ConFIG method to  $1/m$  of the ConFIG method.
+
+Algorithm 1 details the entire procedure of M-ConFIG. It aligns with the fundamental principles of the Adam algorithm, where the first momentum averages the local gradient, and the second momentum adjusts the magnitude of each parameter. In this approach, we calculate only a single second momentum using an estimated gradient based on the output of the ConFIG operation. An alternative could involve calculating the second momentum for every loss term, similar to the MultiAdam method (Yao et al., 2023). However, we found this strategy to be inaccurate and numerically unstable compared to Algorithm 1. A detailed discussion and comparison can be found in the Appendix 1.
+
+Surprisingly, M-ConFIG not only catches up with the training speed of regular weighting strategies but typically yields an even lower average computational cost per iteration. This stems from the fact that backpropagating a sub-loss  $\mathcal{L}_i$  is usually faster than backpropagating the total loss  $\sum_i^m \mathcal{L}_i$ . Thus,  $r$  is usually smaller than  $m$  and  $r/m < 1$ . This is especially obvious for PINN training, where a reduced number of sampling points are used for boundary/initial terms and are faster to evaluate than the residual term. In our experiments, we observed an average value of  $r = 1.67$  and a speed-up of  $1.67/3 \approx 0.56$  per iteration for PINNs trained with three losses using M-ConFIG.
+
+## 4 EXPERIMENTS
+
+In this section, we employ the proposed methods for training PINNs on several challenging PDEs. We also explore the application of our method on a classical Multi-Task Learning (MTL) benchmark
+
+![Figure 3: Examples of PINN predictions and squared error (SE) distributions on the test PDEs. The figure is a 2x4 grid. The top row shows 'Prediction' for four PDEs: Burgers, Schrödinger, Kovasznay, and Beltrami. The bottom row shows 'SE' (Squared Error) for the same four PDEs. Each plot includes a color bar indicating the magnitude of the prediction or error. The Burgers plot shows a shock wave. The Schrödinger plot shows a wave packet. The Kovasznay plot shows a complex flow field. The Beltrami plot shows a 3D visualization of a flow field.](bc04d002fc79e8a3637b1552ac3361e6_img.jpg)
+
+Figure 3: Examples of PINN predictions and squared error (SE) distributions on the test PDEs. The figure is a 2x4 grid. The top row shows 'Prediction' for four PDEs: Burgers, Schrödinger, Kovasznay, and Beltrami. The bottom row shows 'SE' (Squared Error) for the same four PDEs. Each plot includes a color bar indicating the magnitude of the prediction or error. The Burgers plot shows a shock wave. The Schrödinger plot shows a wave packet. The Kovasznay plot shows a complex flow field. The Beltrami plot shows a 3D visualization of a flow field.
+
+Figure 3: Examples of PINN predictions and squared error (SE) distributions on the test PDEs.
+
+{5}------------------------------------------------
+
+as an outlook. Unless mentioned otherwise, every result is computed via averaging three training runs initialized with different random seeds, each using the model with the best test performance during the training. For detailed numerical values and standard deviations of the result in each experiment, please refer to the Appendix A.9 and A.10. Training configurations and hyper-parameters of each experiment can be found in the Appendix A.12. An additional ablation study on training hyperparameters can be found in the Appendix A.13. It shows that the gains from ConFIG are robust w.r.t. hyperparameter changes.
+
+### 4.1 PHYSICS INFORMED NEURAL NETWORKS
+
+**Preliminaries of PINNs.** Consider the initial boundary value problem of a general PDE for a scalar function  $u(\mathbf{x}, t): \mathbb{R}^{d+1} \rightarrow \mathbb{R}$  given by
+
+$$\mathcal{N}[u(\mathbf{x}, t), \mathbf{x}, t] := N[u(\mathbf{x}, t), \mathbf{x}, t] + f(\mathbf{x}, t) = 0, \quad \mathbf{x} \in \Omega, t \in (0, T], \quad (6)$$
+
+$$\mathcal{B}[u(\mathbf{x}, t), \mathbf{x}, t] := B[u(\mathbf{x}, t), \mathbf{x}, t] + g(\mathbf{x}, t) = 0, \quad \mathbf{x} \in \partial\Omega, t \in (0, T], \quad (7)$$
+
+$$\mathcal{I}[u(\mathbf{x}, 0), \mathbf{x}, 0] := u(\mathbf{x}, 0) + h(\mathbf{x}, 0) = 0, \quad \mathbf{x} \in \bar{\Omega}. \quad (8)$$
+
+Here,  $\Omega \subset \mathbb{R}^d$  is a spatial domain with  $\partial\Omega$  and  $\bar{\Omega}$  denotes its boundary and closure, respectively.  $N$  and  $B$  are spatial-temporal differential operators, and  $f$ ,  $g$  and  $h$  are source functions. To solve this initial boundary value problem, PINNs introduce a neural network  $\hat{u}(\mathbf{x}, t, \boldsymbol{\theta})$  for the target function  $u(\mathbf{x}, t)$ , where  $\boldsymbol{\theta}$  are the weights of the neural networks. Then, spatial and temporal differential operators can be calculated efficiently with auto-differentiation of  $N[\hat{u}(\mathbf{x}, t, \boldsymbol{\theta}), \mathbf{x}, t]$  and  $B[\hat{u}(\mathbf{x}, t, \boldsymbol{\theta}), \mathbf{x}, t]$ . Solving Eq. 6-8 turns to the training of neural networks with a loss function of
+
+$$\mathcal{L}(\boldsymbol{\theta}) = \underbrace{\sum_{i=1}^{n_N} \mathcal{N}[\hat{u}(\mathbf{x}_i, t_i, \boldsymbol{\theta}), \mathbf{x}_i, t_i]}_{\mathcal{L}_N} + \underbrace{\sum_{i=1}^{n_B} \mathcal{B}[\hat{u}(\mathbf{x}_i, t_i, \boldsymbol{\theta}), \mathbf{x}_i, t_i]}_{\mathcal{L}_B} + \underbrace{\sum_{i=1}^{n_I} \mathcal{I}[\hat{u}(\mathbf{x}_i, 0, \boldsymbol{\theta}), \mathbf{x}_i, 0]}_{\mathcal{L}_T}, \quad (9)$$
+
+where  $(\mathbf{x}_i, t_i)$  are the spatial-temporal coordinates for the data samples in the  $\mathbb{R}^{d+1}$  domain,  $\mathcal{L}_N$ ,  $\mathcal{L}_B$  and  $\mathcal{L}_T$  are the loss functions for the PDE residual, spatial and initial boundaries, respectively. These three loss terms give us three corresponding gradients for optimization:  $\mathbf{g}_N$ ,  $\mathbf{g}_B$ , and  $\mathbf{g}_T$ . In the experiments, we consider four cases with three different PDEs: 1D unsteady Burgers equation, 1D unsteady Schrödinger equation, 2D Kovasznay flow (Navier-stokes equations), and 3D unsteady Beltrami flow (Navier-stokes equations). Fig. 3 shows examples of the solution domain of each PDEs. A more detailed illustration and discussion of the PDEs and corresponding solution domains can be found in Appendix A.7 and A.8, respectively.
+
+**Focusing on two loss terms.** As detailed above, the similarity between our ConFIG method and the PCGrad/IMTL-G methods in the two-loss scenario offers a valuable opportunity to evaluate the proposed strategy for adapting the magnitude of the update. Therefore, we begin with a two-loss scenario where we introduce a new composite gradient,  $\mathcal{L}_{BZ}$ , which aggregates the contributions from both the boundary ( $\mathcal{L}_B$ ) and initial ( $\mathcal{L}_T$ ) conditions. This setup also provides better insights into the conflicting updates between PDE residuals and other loss terms.
+
+Fig. 4 compares the performance of PINNs trained with our ConFIG method and other existing approaches. Specifically, we compare to PCGrad (Yu et al., 2020) and the IMTL-G method (Liu
+
+![Bar chart showing Relative Improvements (RI%) of PINNs trained with two loss terms using different methods across four PDEs: Burgers, Schrödinger, Kovasznay, and Beltrami. The methods compared are ConFIG(Ours), M-ConFIG(Ours), PCGrad, IMTL-G, MinMax, ReLoBRLo, and LRA. ConFIG(Ours) and M-ConFIG(Ours) show the highest relative improvements across all PDEs, while LRA shows negative improvements.](096d7a8a21933900dad68d82ae8a97fb_img.jpg)
+
+| PDE         | ConFIG(Ours) | M-ConFIG(Ours) | PCGrad | IMTL-G | MinMax | ReLoBRLo | LRA   |
+|-------------|--------------|----------------|--------|--------|--------|----------|-------|
+| Burgers     | ~18%         | ~15%           | ~12%   | ~10%   | ~8%    | ~5%      | ~-10% |
+| Schrödinger | ~85%         | ~75%           | ~45%   | ~35%   | ~25%   | ~15%     | ~-15% |
+| Kovasznay   | ~95%         | ~90%           | ~25%   | ~20%   | ~15%   | ~10%     | ~-10% |
+| Beltrami    | ~45%         | ~40%           | ~35%   | ~30%   | ~25%   | ~20%     | ~-10% |
+
+Bar chart showing Relative Improvements (RI%) of PINNs trained with two loss terms using different methods across four PDEs: Burgers, Schrödinger, Kovasznay, and Beltrami. The methods compared are ConFIG(Ours), M-ConFIG(Ours), PCGrad, IMTL-G, MinMax, ReLoBRLo, and LRA. ConFIG(Ours) and M-ConFIG(Ours) show the highest relative improvements across all PDEs, while LRA shows negative improvements.
+
+Figure 4: Relative improvements of PINNs trained with two loss terms using different methods.
+
+{6}------------------------------------------------
+
+![Figure 5: Training losses of PINNs trained with Adam baselines and ConFIG using two loss terms. The figure contains four subplots for Burgers, Schrödinger, Kovasznay, and Beltrami problems. Each plot shows loss L on a log scale vs Epoch. Legend: Adam L_N (solid black), ConFIG L_N (solid pink), Adam L_BZ (dashed black), ConFIG L_BZ (dashed pink).](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+Figure 5: Training losses of PINNs trained with Adam baselines and ConFIG using two loss terms. The figure contains four subplots for Burgers, Schrödinger, Kovasznay, and Beltrami problems. Each plot shows loss L on a log scale vs Epoch. Legend: Adam L\_N (solid black), ConFIG L\_N (solid pink), Adam L\_BZ (dashed black), ConFIG L\_BZ (dashed pink).
+
+Figure 5: Training losses of PINNs trained with Adam baselines and ConFIG using two loss terms.
+
+![Figure 6: Relative improvements of PINNs trained with three loss terms using different methods. A bar chart shows R(%) for Burgers, Schrödinger, and Beltrami problems. Legend: ConFIG(Ours) (pink), M-ConFIG(Ours) (orange), PCGrad (green), IMTL-G (light blue), MinMax (teal), ReLoBRLo (dark blue), LRA (dark blue).](a6a8016b231533e7f34b550f4676afc6_img.jpg)
+
+Figure 6: Relative improvements of PINNs trained with three loss terms using different methods. A bar chart shows R(%) for Burgers, Schrödinger, and Beltrami problems. Legend: ConFIG(Ours) (pink), M-ConFIG(Ours) (orange), PCGrad (green), IMTL-G (light blue), MinMax (teal), ReLoBRLo (dark blue), LRA (dark blue).
+
+Figure 6: Relative improvements of PINNs trained with three loss terms using different methods.
+
+et al., 2021b) from MTL studies as well as the LRA method (Wang et al., 2021), MinMax (Liu & Wang, 2021), and ReLoBRLo (Bischof & Kraus, 2021) as established weighting methods for PINNs. The accuracy metric is the MSE between the predictions and the ground truth value on the new data points sampled in the computational domain that differ from the training data points. As the central question for all these methods is how much improvement they yield in comparison to the standard training configuration with Adam, we show the *relative improvement* (in percent) over the Adam baseline. Thus, +50 means half, -100 twice the error of Adam, respectively. (Absolute metrics are given in the Appendix A.9)
+
+The findings reveal that only our ConFIG and PCGrad consistently outperform the Adam baseline. In addition, the ConFIG method always performs better than PCGrad. While the IMTL-G method performs slightly better than our methods in the Kovasznay and Beltrami flow cases, it performs worse than the Adam baseline in the Schrödinger case. Fig. 5 compares the training loss of our ConFIG method with the Adam baseline approach. The results indicate that ConFIG successfully mitigates the training bias towards the PDE residual term. It achieves an improved overall test performance by significantly decreasing the boundary/initial loss while sacrificing the PDE residual loss slightly. This indicates that ConFIG succeeds in finding one of the many minima of the residual loss that better adheres to the boundary conditions, i.e., it finds a better overall solution for the PDE.
+
+![Figure 7: Training losses of the Adam baseline, PCGrad, and ConFIG with three loss terms. The figure contains three subplots for Burgers, Schrödinger, and Beltrami problems. Each plot shows loss L on a log scale vs Epoch. Legend: Adam L_N (solid black), Adam L_I (dotted black), Adam L_B (dashed black), ConFIG (Ours) L_B (dashed pink), ConFIG (Ours) L_N (solid pink), ConFIG (Ours) L_I (dotted pink), PCGrad L_N (solid green), PCGrad L_I (dotted green), PCGrad L_B (dashed green).](84e2ac543ffc4145dc85b05a48ec62e3_img.jpg)
+
+Figure 7: Training losses of the Adam baseline, PCGrad, and ConFIG with three loss terms. The figure contains three subplots for Burgers, Schrödinger, and Beltrami problems. Each plot shows loss L on a log scale vs Epoch. Legend: Adam L\_N (solid black), Adam L\_I (dotted black), Adam L\_B (dashed black), ConFIG (Ours) L\_B (dashed pink), ConFIG (Ours) L\_N (solid pink), ConFIG (Ours) L\_I (dotted pink), PCGrad L\_N (solid green), PCGrad L\_I (dotted green), PCGrad L\_B (dashed green).
+
+Figure 7: Training losses of the Adam baseline, PCGrad, and ConFIG with three loss terms.
+
+{7}------------------------------------------------
+
+![Figure 8: Relative improvements of the ConFIG method with different direction weights. (a) Two-loss scenario. (b) Three-loss scenario. The figure contains two bar charts, (a) and (b), showing the Relative Improvement (RI) in percentage for four different weighting strategies: Equal_{(durs)} (pink), MinMax (teal), ReLoBRaLo (blue), and LRA (dark blue). The x-axis for both charts lists four flow scenarios: Burgers, Schrödinger, Kovaszny, and Beltrami. The y-axis represents RI(%) on a logarithmic scale from -10^2 to 100. In chart (a) for the two-loss scenario, ConFIG (pink) consistently shows positive RI across all scenarios, while other methods show mixed results. In chart (b) for the three-loss scenario, the performance of the methods is more varied, with ConFIG (pink) still generally outperforming the baselines.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 8: Relative improvements of the ConFIG method with different direction weights. (a) Two-loss scenario. (b) Three-loss scenario. The figure contains two bar charts, (a) and (b), showing the Relative Improvement (RI) in percentage for four different weighting strategies: Equal\_{(durs)} (pink), MinMax (teal), ReLoBRaLo (blue), and LRA (dark blue). The x-axis for both charts lists four flow scenarios: Burgers, Schrödinger, Kovaszny, and Beltrami. The y-axis represents RI(%) on a logarithmic scale from -10^2 to 100. In chart (a) for the two-loss scenario, ConFIG (pink) consistently shows positive RI across all scenarios, while other methods show mixed results. In chart (b) for the three-loss scenario, the performance of the methods is more varied, with ConFIG (pink) still generally outperforming the baselines.
+
+Figure 8: Relative improvements of the ConFIG method with different direction weights. (a) Two-loss scenario. (b) Three-loss scenario.
+
+![Figure 9: Relative improvements of the PINNs trained with different methods with the same wall time. (a) Two-loss scenario. (b) Three-loss scenario. The figure contains two bar charts, (a) and (b), comparing the Relative Improvement (RI) of ConFIG (pink) against several other PINN training methods: M-ConFIG_{(ours)} (orange), PCGrad (green), IMTL-G (light blue), MinMax (teal), ReLoBRaLo (blue), and LRA (dark blue). The x-axis lists the same four flow scenarios: Burgers, Schrödinger, Kovaszny, and Beltrami. The y-axis is the same RI(%) scale as in Figure 8. In chart (a) for the two-loss scenario, ConFIG (pink) and M-ConFIG_{(ours)} (orange) show the highest RI, while PCGrad (green) shows lower RI in the Burgers and Schrödinger cases. In chart (b) for the three-loss scenario, ConFIG (pink) and M-ConFIG_{(ours)} (orange) again show high RI, while PCGrad (green) shows a significant drop in RI for the Burgers and Schrödinger scenarios.](d864789b0d8384da1d22fd6a5d76bbdf_img.jpg)
+
+Figure 9: Relative improvements of the PINNs trained with different methods with the same wall time. (a) Two-loss scenario. (b) Three-loss scenario. The figure contains two bar charts, (a) and (b), comparing the Relative Improvement (RI) of ConFIG (pink) against several other PINN training methods: M-ConFIG\_{(ours)} (orange), PCGrad (green), IMTL-G (light blue), MinMax (teal), ReLoBRaLo (blue), and LRA (dark blue). The x-axis lists the same four flow scenarios: Burgers, Schrödinger, Kovaszny, and Beltrami. The y-axis is the same RI(%) scale as in Figure 8. In chart (a) for the two-loss scenario, ConFIG (pink) and M-ConFIG\_{(ours)} (orange) show the highest RI, while PCGrad (green) shows lower RI in the Burgers and Schrödinger cases. In chart (b) for the three-loss scenario, ConFIG (pink) and M-ConFIG\_{(ours)} (orange) again show high RI, while PCGrad (green) shows a significant drop in RI for the Burgers and Schrödinger scenarios.
+
+Figure 9: Relative improvements of the PINNs trained with different methods with the same wall time. (a) Two-loss scenario. (b) Three-loss scenario.
+
+**Scenarios with three loss terms.** Fig. 6 compares the performance for all three loss terms. While the general trend persists, with ConFIG and PCGrad outperforming the other methods, these cases highlight interesting differences between these two methods. As PCGrad performs better for the Burgers and Schrödinger case, while ConFIG is better for the Beltrami flow, we analyze the training losses of both methods in comparison to Adam in Fig. 7. In the Burgers and Schrödinger equation experiment, ConFIG notably reduces the loss associated with initial conditions while the loss of boundary conditions exhibits negligible change. Similarly, for PCGrad, minimal changes are observed in boundary conditions. Furthermore, owing to PCGrad’s bias towards optimizing in the direction of larger gradient magnitudes, i.e., the direction of the PDE residual, the reduction in its PDE residual term is modest, leading to a comparatively slower decrease in the loss of initial conditions compared to ConFIG. In the case of the Beltrami flow, our ConFIG method effectively reduces both boundary and initial losses, whereas the PCGrad method slightly improves boundary and initial losses. These results underscore the intricacies of PINN training, where PDE residual terms also play a pivotal role in determining the final test performance. In scenarios where the PDE residual does not significantly conflict with one of the terms, an increase in the PDE residual ultimately reduces the benefits from the improvement on the boundary/initial conditions, resulting in a better performance for PCGrad in the Burgers and Schrödinger scenario.
+
+**Adjusting direction weights.** In our ConFIG method, we set equal components for the direction weights  $\hat{w} = 1_m$  to ensure a uniform decrease rate across all loss terms. In the following experiments, we use the different weighting methods discussed above to calculate the components of  $\hat{w}$  and compare the results with our ConFIG method. As demonstrated in Fig. 8, only our default strategy (equal weights) and the ReLoBRaLo weights get better performance than the Adam baseline. Moreover, our equal setup consistently outperforms the ReLoBRaLo method, except for a slight inferiority in the Kovaszny flow scenario with two losses. These results further validate that the equal weighting strategy is a good choice.
+
+{8}------------------------------------------------
+
+**Evaluation of Runtime Performance** While the evaluations in Fig. 4 and 6 have focused on accuracy after a given number of training epochs, a potentially more important aspect for practical applications is the accuracy per runtime. This is where the M-ConFIG method can show its full potential, as its slight approximations of the update direction come with a substantial reduction in terms of computational resources (we quantify the gains per iteration in A.6). Fig. 9 compares the test MSE for M-ConFIG and other methods with a constant budget in terms of wall-clock time. Here, M-ConFIG outperforms all other methods, even PCGrad and the regular ConFIG method which yielded a better per-iteration accuracy above. This is apparent for all cases under consideration.
+
+To shed more light on its behavior, Fig. 10 shows the test MSE of Adam, ConFIG, and M-ConFIG for the most challenging scenario, the 3D unsteady Beltrami flow, with an extended training run. It shows that the advantage of M-ConFIG does not just stem from a quick late or early decrease but rather is the result of a consistently improved convergence throughout the full training. This graph additionally highlights that the regular ConFIG method, i.e., without momentum, still outperforms Adam despite its higher computational cost for each iteration.
+
+![Figure 10: A line graph showing Test MSE (log scale) versus t_wall (wall time). The y-axis ranges from 10^-4 to 10^-1. The x-axis ranges from 0 to 10000. Three methods are compared: Adam (black line), ConFIG (pink line), and M-ConFIG (orange line). All methods show a rapid decrease in MSE initially. M-ConFIG (orange) maintains the lowest MSE throughout the training, followed by ConFIG (pink), and Adam (black) has the highest MSE. Horizontal dashed lines indicate final MSE values at different epoch counts: Epoch=191213 (M-ConFIG), Epoch=171026 (ConFIG), and Epoch=500000 (Adam).](bedcca5cdf168e3508ef511d94ec514c_img.jpg)
+
+Figure 10: A line graph showing Test MSE (log scale) versus t\_wall (wall time). The y-axis ranges from 10^-4 to 10^-1. The x-axis ranges from 0 to 10000. Three methods are compared: Adam (black line), ConFIG (pink line), and M-ConFIG (orange line). All methods show a rapid decrease in MSE initially. M-ConFIG (orange) maintains the lowest MSE throughout the training, followed by ConFIG (pink), and Adam (black) has the highest MSE. Horizontal dashed lines indicate final MSE values at different epoch counts: Epoch=191213 (M-ConFIG), Epoch=171026 (ConFIG), and Epoch=500000 (Adam).
+
+Figure 10: Test MSE of Adam baseline, ConFIG, and M-ConFIG as functions of wall time.
+
+**Additional Tests on Challenging PDEs** Recently, several benchmark problems have been proposed as challenging tasks for training PINNs (Hao et al., 2023). We have also tested our ConFIG and M-ConFIG methods together with other methods on these challenging tasks. The results are summarized in Appendix. A.11. They show that, although our methods do not resolve all inherent difficulties of PINN training, our methods still consistently outperform the other methods. These results show the general appeal of the proposed methods for challenging, and high-dimensional training scenarios.
+
+### 4.2 MULTI-TASK LEARNING
+
+While PINNs represent a highly challenging and relevant case, we also evaluate our ConFIG method for traditional Multi-Task Learning (MTL) as an outlook. We employ the widely studied CelebA dataset (Liu et al., 2015), comprising 200,000 face images annotated with 40 facial binary attributes, making it suitable for MTL with  $m = 40$  loss terms. Unlike PINNs, where each sub-task (loss term) carries distinct significance, and the final test loss may not reflect individual subtask performance, the CelebA experiment allows us to use the same metric to evaluate the performance for all tasks.
+
+We compared the performance of our ConFIG method with ten popular MTL baselines. Besides PCGrad and IMTL-G from before, we also compare to Linear scalarization baseline (LS) (Caruana, 1997), Uncertainty Weighting (UW) (Cipolla et al., 2018), Dynamic Weight Average (DWA) (Liu et al., 2019), Gradient Sign Dropout (GradDrop) (Chen et al., 2020), Conflict-Averse Gradient Descent (CAGrad) (Liu et al., 2021a), Random Loss Weighting (RLW) (Lin et al., 2022), Nash bargaining solution for MTL (Nash-MTL) (Navon et al., 2022), and Fast Adaptive Multitask Optimization (FAMO) (Liu et al., 2023). We use two metrics to measure the performance of different methods: the mean rank metric ( $MR$ , lower ranks being better) (Navon et al., 2022; Liu et al., 2023), represents the average rank of across all tasks. An  $MR$  of 1 means consistently outperforming all others. In addition, we consider the average F1 score ( $\overline{F_1}$ , larger is better) to measure the average performance on all tasks.
+
+Fig. 11 presents a partial summary of the results. Our ConFIG method or M-ConFIG method emerges as the top-performing method for both  $MR$  and  $\overline{F_1}$  metric. Unlike the PINN study, we update 30 momentum variables rather than a single momentum variable for the M-ConFIG method, as indicated by the subscript ‘30.’ This adjustment is necessary because a single update step is insufficient to achieve satisfactory results in the challenging MTL experiments involving 40 tasks.
+
+**Varying Number of Tasks** Fig. 12 illustrates how the performance of the M-ConFIG method varies with different numbers of tasks and momentum-update steps in the CelebA MTL experiments. The performance of M-ConFIG tends to degrade as the number of tasks increases. This
+
+{9}------------------------------------------------
+
+![Figure 11: Test evaluation in terms of F1 and MR for the CelebA experiments. The figure contains two bar charts. The left chart shows F1 scores for various methods, with ConFIG and M-ConFIG 30 at the top. The right chart shows MR scores, where ConFIG and M-ConFIG 30 are also at the top. A legend on the right lists the methods: ConFIG, M-ConFIG 30, IMTL-G, MASH-MTL, FAMO, RW, PCGrad, GradDrop, CAGrad, DWA, LS, and UW.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 11: Test evaluation in terms of F1 and MR for the CelebA experiments. The figure contains two bar charts. The left chart shows F1 scores for various methods, with ConFIG and M-ConFIG 30 at the top. The right chart shows MR scores, where ConFIG and M-ConFIG 30 are also at the top. A legend on the right lists the methods: ConFIG, M-ConFIG 30, IMTL-G, MASH-MTL, FAMO, RW, PCGrad, GradDrop, CAGrad, DWA, LS, and UW.
+
+Figure 11: Test evaluation in terms of  $\overline{F}_1$  and  $MR$  for the CelebA experiments. ConFIG and M-ConFIG 30 yield the best performance for both metrics, each of them favoring a different metric.
+
+![Figure 12: The relative F1 value and training time of the M-ConFIG method with a varying number of tasks and gradient update steps in the CelebA experiment. The figure contains two bar charts. The left chart shows the relative F1 value (left y-axis, 0.00 to 1.00) and training time (right y-axis, 0.0 to 0.3) for n_tasks (5, 10, 20, 30, 40). The right chart shows the same metrics for n_updates (1, 5, 10, 20, 30, 40). In both charts, the relative F1 value is shown in dark blue bars and training time in red bars.](f519a5be118c846f631c992412353fb9_img.jpg)
+
+Figure 12: The relative F1 value and training time of the M-ConFIG method with a varying number of tasks and gradient update steps in the CelebA experiment. The figure contains two bar charts. The left chart shows the relative F1 value (left y-axis, 0.00 to 1.00) and training time (right y-axis, 0.0 to 0.3) for n\_tasks (5, 10, 20, 30, 40). The right chart shows the same metrics for n\_updates (1, 5, 10, 20, 30, 40). In both charts, the relative F1 value is shown in dark blue bars and training time in red bars.
+
+Figure 12: The relative  $\overline{F}_1$  value and **training time** of the M-ConFIG method with a varying number of tasks and gradient update steps in the CelebA experiment.
+
+decline is attributed to longer intervals between momentum updates for each gradient, making it difficult for the momentum to accurately capture changes in the gradient. When the number of tasks becomes sufficiently large, this performance loss outweighs the benefits of M-ConFIG’s faster training speed. In our experiments, when the number of tasks reaches 10, the  $\overline{F}_1$  score of the ConFIG method (0.635) already surpasses that of M-ConFIG (0.536) with the same training time. However, increasing the number of gradient update can effectively mitigate this performance degradation. In the standard 40-task MTL scenario, increasing the number of gradient update steps per iteration to 20 allows M-ConFIG to achieve a performance level comparable to ConFIG while reducing the training time to only 56% of that required by ConFIG. Notably, alternating momentum updates can sometimes even outperform the ConFIG method with the same number of training epochs, as seen in the  $n_{updates} = 30$  case in the MTL experiment, as well as in the Burgers and Kovasznay cases in the two-loss PINNs experiment.
+
+**Limitations** A potential limitation of the proposed method is the potential performance degradation of the M-ConFIG method as the number of loss terms increases. Additionally, the memory consumption required to store the momentum for each gradient grows with both the size of the parameter space and the number of loss terms. As discussed in the MTL experiment, one approach to mitigate the performance degradation is to update not just a single gradient but a stochastic subset of gradients during each iteration, albeit at the cost of an increased computational budget. Nonetheless, further investigation and improvement of the M-ConFIG method’s performance in scenarios with a large number of loss terms is a promising direction for future research, aiming to broaden the applicability of the ConFIG approach. Meanwhile, we also notice that there are still many challenges in the training of PINNs, e.g., chaotic problems, that can not be addressed by eliminating the conflicts between different loss terms during the training. Future efforts, like improved network structures and imposed causality, will be required to further improve PINN training.
+
+## 5 CONCLUSIONS
+
+In this study, we have presented ConFIG, a method designed to alleviate training conflicts between loss terms with distinct behavior. The ConFIG method achieves conflict-free training by ensuring a positive dot product between the final gradient and each loss-specific gradient. Additionally, we introduce a momentum-based approach, replacing the gradient with alternately updated momentum for highly efficient iterations. In our experiments the proposed methods have shown superior performance compared with a wide range of existing training strategies for PINNs. The config variants even outperform SOTA methods for challenging MTL scenarios.
+
+ Rest of paper (reference and Appendix) is removed.

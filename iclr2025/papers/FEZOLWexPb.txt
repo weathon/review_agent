@@ -1,0 +1,325 @@
+
+
+{0}------------------------------------------------
+
+# MAESTRO: MASKED ENCODING SET TRANSFORMER WITH SELF-DISTILLATION
+
+Matthew E. Lee<sup>1,2,3</sup>, Jaesik Kim<sup>1,2</sup>, Matei Ionita<sup>1</sup>, Jonghyun Lee<sup>1,2</sup>, Michelle McKeague<sup>1</sup>, Yonghyun Nam<sup>1,2</sup>, Irene Khavin<sup>1</sup>, Yidi Huang<sup>1,2</sup>, Victoria Fang<sup>1,3</sup>, Sokratis Apostolidis<sup>1</sup>, Divij Mathew<sup>1,3</sup>, Shwetank<sup>1</sup>, Ajinkya Pattekar<sup>1</sup>, Zahabia Rangwala<sup>1</sup>, Amit Bar-Or<sup>1</sup>, Benjamin A. Fensterheim<sup>1</sup>, Benjamin Abramoff<sup>1</sup>, Rennie Rhee<sup>1</sup>, Damian Maseda<sup>1</sup>, Allison R. Greenplate<sup>1,\*</sup>, E. John Wherry<sup>1,3,\*</sup>, Dokyoon Kim<sup>1,2,\*</sup>
+
+<sup>1</sup>Institute for Immune Health and Immunology
+
+<sup>2</sup>Department of Biostatistics Epidemiology and Informatics
+
+<sup>3</sup>Department of Systems Pharmacology & Translational Therapeutics
+
+University of Pennsylvania  
+Philadelphia, PA 19104, USA  
+{matthew.lee1}@pennmedicine.upenn.edu
+
+## ABSTRACT
+
+The immune system is a complex network of cells, orchestrating coordinated responses throughout the human body over a person’s lifetime. Cytometry enables profiling of this network, but current approaches focus on enumerating and phenotyping immune cells, failing to quantify the system as a whole. We present MAESTRO, a self-supervised set representation learning model that generates vector representations of set-structured data, which we apply to learn immune profile representations. Unlike previous studies that learn cell-level representations, MAESTRO uses all of a sample’s cells to learn a set representation. MAESTRO leverages attention mechanisms to handle sets of variable number of cells and ensure permutation invariance, coupled with a self-distillation framework. It is capable of reconstructing immune profiles (cells) even when 90% are hidden as its training objective. We benchmark our model against existing cytometry approaches and other existing machine learning methods that have never been applied in cytometry. Our model outperforms existing approaches in retrieving cell-type distributions and capturing clinically relevant features for downstream tasks such as disease diagnosis, age, sex. Code available: <https://github.com/matthew-lee1/MAESTRO>
+
+## 1 INTRODUCTION
+
+Cytometry, a single-cell technology, has revolutionized biomedical research by enabling high-dimensional profiling of individual cells within biological systems (Bendall et al., 2011). Cytometry provides information about cell-types, states, and functions, which is crucial for understanding immune responses, disease mechanisms, and therapeutic interventions (Spitzer & Nolan, 2016). One of the primary challenges in analyzing cytometry data is the number of cells and features of the data (Wang et al., 2023). Hundreds of thousands of cells are collected for each sample, where each cell is characterized by measurements across tens of proteins, resulting in complex datasets that are difficult to process and interpret using conventional methods. Processing large-scale single-cell datasets demands substantial resources and efficient algorithms capable of scaling to millions of cells without compromising performance (Kimball et al., 2018). Variable set sizes—due to differences in the number of cells collected from each sample—complicate the application of traditional deep learning models that expect fixed-size inputs. Previous methods mitigate this issue by randomly sampling cells to a fixed number, limiting the use of all available data (Hu et al.). Furthermore, cytometry data exhibits permutation invariance, meaning the ordering of cells within a sample is arbitrary and carries no intrinsic information. Models must be robust to such permutations to avoid
+
+\*These authors contributed equally to this work.
+
+{1}------------------------------------------------
+
+![Diagram of the MAESTRO Architecture showing Teacher and Student models for cell representation learning.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+The diagram illustrates the MAESTRO architecture. On the left, 'N Cells' are shown as a vertical stack of orange rectangles. A 'Random Sample' is indicated by a downward arrow from the N Cells to a 'Masked Input' section. The 'Full Set Input' (all N cells) is fed into the 'Teacher' model (top right). The Teacher model consists of a 'Linear' layer, followed by three 'SAB' (Set Attention Block) blocks, and a 'PMA' (Permutation-Invariant Attention) block, leading to a 'Projection Head' which outputs a representation  $Z_{teacher}$ . The 'Masked Input' section shows a 'Mask Rate A, B, C' being applied to the N Cells to create a 'Masked Input' (a grid of yellow and green rectangles). This is fed into the 'Student' model (bottom right). The Student model also has a 'Linear' layer, three 'SAB' blocks, and a 'PMA' block, leading to a 'Projection Head' which outputs a representation  $Z_{student}$ . A 'Predicted Reconstruction' is shown between the Masked Input and the Student model. The total loss is given as  $L_{Total} = L_{SinkhornOT} + L_{Self-Distillation}$ . The  $L_{Self-Distillation}$  loss is visualized as a graph showing the distribution of  $Z_{teacher}$  and  $Z_{student}$  representations.
+
+Diagram of the MAESTRO Architecture showing Teacher and Student models for cell representation learning.
+
+Figure 1: **MAESTRO Architecture.** N cells are sampled due to computational constraints. The sampled subset is fed into a student model, while the full set is fed to a teacher model. The teacher model only requires an encoder to provide a stable target of the full input set for the student model. The teacher encoder parameters are the exponential moving average of the student’s, therefore it does not have the same computational constraints. For the student model, we apply masking at various rates to promote diverse learning and use a Set Transformer backbone for encoding, followed by a permutation-invariant decoding and reconstruction mechanism. We use non-linear projection heads on the latent embeddings to align representations of the full set from the teacher and the masked subset from the student. ISAB, PMA, and SAB blocks are defined in 3.1.
+
+spurious correlations. Existing methods may fail under these demands, highlighting the need for more scalable solutions.
+
+Self-supervised learning (SSL) is a powerful paradigm for learning representations of large, high-dimensional datasets (Chen et al., 2020; Radford et al., 2021; Kramer, 1991). In single-cell analysis, SSL methods have demonstrated success in capturing cellular states, trajectories, and functional characteristics, outperforming traditional gating methods, dimensionality reduction techniques, supervised approaches, and standard statistical modeling (Cui et al., 2024; De Donno et al., 2023; Bunne et al., 2024). Although current SSL models excel at understanding individual cells, there is a significant gap in their application to cell populations, as previous methods were designed for individual cells without incorporating sample membership information, resulting in the loss of cell population-level insights. This limitation hinders the extraction of meaningful, compact, and computationally practical representations of the entire cellular milieu in samples, making the discovery of multicellular interactions difficult. Consequently, set representation learning approaches are needed to effectively encode and represent cell populations.
+
+Current set representation learning methods are inadequate for cytometry data because they either struggle to manage the number of cells inherent to such datasets, or rely on supervised learning approaches instead of self-supervised methods requiring extensive labels (Van Gassen et al., 2016). Specifically, some approaches maintain permutation invariance but struggle with the size of cytometry data, limiting their effectiveness (Lee et al., 2019; Mialon et al., 2022). Conversely, other methods can handle the size of cytometry, but do not preserve permutation invariance, making their representations sensitive to the ordering of cells within data matrices (Lecun et al., 2015). Additionally, many existing techniques are supervised, requiring labeled data, which is often scarce in single-cell studies and restricts their ability to leverage large, unlabeled datasets effectively (Hu et al.). These combined limitations prevent current set representation learning methods from effectively processing and representing cytometry data in single-cell analyses.
+
+We propose MAESTRO (Masked Encoding Set TRansformer with Self-DistillatiOn), a self-supervised architecture for generating vector representations of set-structured data (see Figure 1). MAESTRO employs attention mechanisms tailored for sets, including multi-head attention pooling (Lee et al., 2019), to handle large, variable-sized datasets while ensuring permutation invariance. By integrating a masked encoding strategy and a self-distillation framework, it learns informative rep-
+
+{2}------------------------------------------------
+
+representations without extensive labels. We validate MAESTRO through experiments on both global (set-level) and local (element-level) representations, demonstrating its ability to encode sample-wide features and individual elements that distinguish phenotypes (Chan et al., 2021). Using linear probing, we predict sample-level features like disease phenotypes from the embeddings and assess cell-level representations by retrieving cell-type distributions without labels. This showcases MAESTRO’s proficiency in encoding fine-grained, high-dimensional cellular information relevant to immune profiles.
+
+To the best of our knowledge, MAESTRO is the first attention-based self-supervised set representation learning architecture capable of handling sets on the order of hundreds of thousands of elements and variable-sized sets in the context of single-cell data. Our key contributions are as follows:
+
+- We introduce MAESTRO, a self-supervised set representation learning architecture that effectively generates vector representations of immune profiles from cytometry data.
+- We developed MAESTRO that addresses the size of biological datasets that were previously too large to handle. Our method works with sets containing hundreds of thousands of elements, expanding what’s possible in machine learning and data analysis.
+- We evaluate MAESTRO against the state-of-the-art cytometry analysis method, manual gating, as well as against novel approaches like Deep Sets, Set Transformer, and OTKE (mentioned below) that have not previously been applied to cytometry data.
+
+## 2 RELATED WORK
+
+Current methods for analyzing cytometry data as a set include manual gating, DeepCyTOF, and clustering algorithms to identify cell populations (Mathew et al., 2020; Hu et al.; Van Gassen et al., 2015). Manual gating is a method where experts visually identify and select cell populations of interest on scatter plots or histograms based on their characteristic protein expressions. Manual gating is labor intensive and subject to operator bias due to manual thresholding of expression levels. DeepCyTOF uses a 1-dimensional convolutional neural network with pooling, which, due to architecture design is effectively equivalent to Deep Sets (Zaheer et al., 2017). Automated clustering methods offer scalability, but may not capture complex cellular heterogeneity (Van Gassen et al., 2015; Traag et al., 2019) and are sensitive to parameter settings, such as the number of clusters (Pierson & Yau, 2015). For immunology research, manual gating is the state-of-the-art for analyzing cytometry data at the cellular level as demonstrated by ground truth labels in (Kim et al., 2024; Cheng et al., 2022; Arvaniti & Claassen, 2017). There are no un/self-supervised methods that exist beyond manual gating and clustering to represent cytometry set data as a compact vector, therefore these stand as state-of-the-art for set representation.
+
+Recent machine learning models designed for set data address permutation invariance and variable set sizes inherent in single-cell datasets. **Deep Sets** (Zaheer et al., 2017) made foundational contributions to set representation learning by introducing a permutation-invariant architecture capable of handling unordered sets. They established a universal approximation theorem for set functions, demonstrating that any permutation-invariant function can be represented by applying a function to each element individually followed by an aggregation step, such as summation. The **Set Transformer** (Lee et al., 2019) incorporates attention mechanisms designed to process unordered sets. Empirically, we find that size is still too large and other mechanisms must also be incorporated alongside ISAB. The **Optimal Transport Kernel Embedding** (OTKE) (Mialon et al., 2022) introduces a novel approach by aligning set representations through optimal transport distances while embedding them into a feature space using kernel techniques. OTKE ensures permutation invariance by treating sets as distributions, enabling robust and meaningful comparisons regardless of element order. The **Differentiable Expectation-Maximization** (DIEM) (Kim, 2022) integrates the Expectation-Maximization (EM) algorithm into a differentiable framework, enabling end-to-end training of neural networks on set-structured data. Although the previously mentioned methods lay the foundational framework for MAESTRO, they have not been applied to cytometry data and present limitations. Deep Sets and Set Transformer are supervised approaches, restricting their use to labeled datasets. Deep Sets and Set Transformer struggle to manage the number of cells in cytometry data. OTKE requires fixed-size input sets and similarly cannot handle the size of cytometry data. Lastly, DIEM is constrained by the absence of a public codebase.
+
+{3}------------------------------------------------
+
+In self-supervised learning, methods like **Masked Autoencoders (MAE)**, **DINO**, and **iBOT** have achieved remarkable success, particularly in computer vision tasks (He et al., 2022; Caron et al., 2021; Zhou et al., 2022). MAE learns representations by reconstructing masked portions of input data, capturing essential features without relying on explicit labels. DINO employs a student-teacher framework for self-distillation, where the student model learns from the teacher’s outputs to achieve high performance, enhancing the efficiency of representation learning. iBOT extends these ideas by introducing an online tokenizer, facilitating the learning of meaningful token-based representations. By drawing on the strengths of these frameworks, MAESTRO addresses the unique challenges of set representation learning in cytometry data.
+
+## 3 METHOD
+
+Let  $\mathcal{S}$  be a set in the form of a matrix of cytometry data (where rows are single cells and columns are features of cells). We aim to learn a function from the set of all finite sets of cells to  $\mathbb{R}^D$ , mapping variable-sized input sets to fixed-dimensional representations. Standard transformers are unsuitable for unordered sets due to their reliance on positional information. To overcome this, we employ specialized attention blocks lacking positional encodings, ensuring permutation invariance and accommodating variable cardinality. The initial layers use *permutation equivariant* operations to compute attention and extract features elementwise, allowing the attention mechanism to adjust appropriately with any input order. Finally, we apply pooling by attention to aggregate set information into a permutation invariant output. We take advantage of an online tokenizer teacher model to provide an encoded target of the full set of cells for a student model that encodes a masked subset of cells, thereby learning a representation of all cells in a set.
+
+### 3.1 PRELIMINARIES - TRANSFORMER ATTENTION BLOCKS
+
+#### 3.1.1 MULTI-HEAD ATTENTION BLOCK
+
+The core component of our model is the Multi-Head Attention (MHA) mechanism (Vaswani et al., 2017), which enables the model to attend to information from multiple representation subspaces simultaneously. Given an input set  $\mathcal{S} = \{x_1, x_2, \dots, x_n\}$  where each  $x_i \in \mathbb{R}^d$ , we first project  $\mathcal{S}$  into queries  $Q$ , keys  $K$ , and values  $V$  using learnable weight matrices  $W_Q$ ,  $W_K$ , and  $W_V$  respectively:  $Q = SW_Q$ ,  $K = SW_K$ , and  $V = SW_V$ . The attention mechanism for a single head is defined as
+
+$$\text{Attention}(Q, K, V) = \text{softmax} \left( \frac{QK^\top}{\sqrt{d_k}} \right) V, \text{ where } d_k = \text{dimensionality of } K \quad (1)$$
+
+To capture diverse features, MHA employs  $H$  parallel attention heads, each computing its own attention output:  $\text{head}_h = \text{Attention}(Q_h, K_h, V_h)$  for  $h \in \{1, \dots, H\}$ . These outputs are concatenated and projected through a linear transformation with weight matrix  $W_O \in \mathbb{R}^{Hd_o \times d}$ :
+
+$$\text{MHA}(Q, K, V) = \text{Concat}(\text{head}_1, \dots, \text{head}_H)W_O, \text{ where } \text{head}_j = \text{Attention}(Q_j, K_j, V_j) \quad (2)$$
+
+The Multi-Head Attention Block (MAB) integrates the MHA with additional components such as a cell level feed-forward neural network denoted by FF to enhance cell-level representations. Specifically, given set  $\mathcal{S}_0$  and set  $\mathcal{S}_1$ , the MAB is defined as:
+
+$$\text{MAB}(\mathcal{S}_0, \mathcal{S}_1) = \text{LayerNorm}(H + \text{FF}(H)) \quad (3)$$
+
+where,
+
+$$H = \text{LayerNorm}(\mathcal{S}_0 + \text{MHA}(\mathcal{S}_0, \mathcal{S}_1, \mathcal{S}_1)) \quad (4)$$
+
+**Permutation Properties of MHA.** The Multi-Head Attention (MHA) mechanism exhibits different permutation properties depending on which of its inputs are permuted, crucial for understanding how our model handles shuffled input data.
+
+**Theorem 1** (Permutation Properties of MHA). *Let  $Q, K, V$  be the query, key, and value matrices respectively, and  $P_Q, P_{KV}$  be permutation matrices. The Multi-Head Attention mechanism satisfies:*
+
+$$\text{MHA}(P_Q Q, P_{KV} K, P_{KV} V) = P_Q \text{MHA}(Q, K, V).$$
+
+*Proof.* See Appendix B.1. □
+
+{4}------------------------------------------------
+
+#### 3.1.2 INDUCED SET-ATTENTION BLOCK
+
+The **Induced Set-Attention Block (ISAB)** extends the MAB to efficiently handle large input sets. Based on our own studies, ISAB’s alone are insufficient for the number of cells in cytometry data. Given an input set  $\mathcal{S} \in \mathbb{R}^{n \times d}$  and a set of learnable inducing points  $I \in \mathbb{R}^{m \times d}$ , where  $n$  is the number of elements in a set,  $m$  is the number of inducing points, and  $m \ll n$ , the ISAB is formally defined as a two-step process:
+
+$$\text{ISAB}_m(\mathcal{S}) = \text{MAB}(\mathcal{S}, H) \in \mathbb{R}^{n \times d}, \text{ where } H = \text{MAB}(I, \mathcal{S}) \in \mathbb{R}^{m \times d} \quad (5)$$
+
+The first step transforms  $I$  into  $H$  by attending to the input set  $\mathcal{S}$ . The second step uses  $H$ , which encodes information about  $\mathcal{S}$ , to produce the final output. This structure reduces the computational complexity from  $\mathcal{O}(n^2)$  to  $\mathcal{O}(nm)$ , where  $n$  is the size of the input set. This formulation enables efficient processing of large sets assisting in the processing of large cytometry data sets. We find that ISAB’s are also permutation equivariant:
+
+**Theorem 2** (Permutation Equivariance of ISAB). *The Induced Set-Attention Block  $\text{ISAB}_m(\mathcal{S})$  is permutation equivariant. Formally, for any permutation matrix  $P$ , it holds that:*
+
+$$\text{ISAB}_m(P\mathcal{S}) = P \text{ISAB}_m(\mathcal{S}).$$
+
+*Proof.* See Appendix B.2. □
+
+#### 3.1.3 POOLING BY MULTIHEAD ATTENTION
+
+The **Pooling by Multihead Attention (PMA)** block provides a learnable aggregation mechanism for set-structured data. Given a set of input elements  $\mathcal{S} = \{\mathbf{x}_1, \mathbf{x}_2, \dots, \mathbf{x}_n\}$  where each  $\mathbf{x}_i \in \mathbb{R}^d$ , and a learnable token  $\mathbf{s} \in \mathbb{R}^d$ , the PMA is formally defined as:
+
+$$\text{PMA}(\mathcal{S}) = \text{MAB}(\mathbf{s}, \mathcal{S}) \quad (6)$$
+
+This attention-based pooling allows the model to assign varying importance to different set elements during aggregation, which is beneficial for identifying and focusing on the most relevant cell populations or features in cytometry data. This module is crucial to the permutation invariance property of MAESTRO, allowing for the collapse of hundreds of thousands of cells into a single, learnable token.
+
+**Theorem 3** (Permutation Invariance of PMA). *The Pooling by Multihead Attention operation  $\text{PMA}(\mathcal{S})$  is permutation invariant. Formally, for any permutation  $\pi$  of the input set  $\mathcal{S}$ , it holds that:*
+
+$$\text{PMA}(\pi(\mathcal{S})) = \text{PMA}(\mathcal{S})$$
+
+*Proof.* See Appendix B.3. □
+
+#### 3.1.4 SELF-ATTENTION BLOCK
+
+The **Self-Attention Block (SAB)** is a specialization of the MAB where the input set attends to itself. Given an input set  $\mathcal{S} = \{x_1, x_2, \dots, x_n\}$  where each  $x_i \in \mathbb{R}^d$ , the SAB is formally defined as:
+
+$$\text{SAB}(\mathcal{S}) := \text{MAB}(\mathcal{S}, \mathcal{S}) \quad (7)$$
+
+The SAB performs self-attention among the elements in the set, attending to itself, resulting in an output set of the same size as the input. This operation captures pairwise interactions between set elements, and stacking multiple SABs allows the model to encode higher-order interactions.
+
+**Theorem 4** (Permutation Equivariance of SAB). *The Self-Attention Block  $\text{SAB}(\mathcal{S})$  is permutation equivariant. Formally, for any permutation matrix  $P$ , it holds that:*
+
+$$\text{SAB}(P\mathcal{S}) = P \text{SAB}(\mathcal{S}).$$
+
+*Proof.* See Appendix B.4. □
+
+### 3.2 MAESTRO ARCHITECTURE
+
+#### 3.2.1 NON-RANDOM BLOCK MASKING
+
+{5}------------------------------------------------
+
+We introduce Non-Random Block Masking (NRBM), a technique designed to enhance the model’s learning of meaningful patterns by considering semantic relationships within the input data. Given an input set  $\mathcal{S} = \{\mathbf{x}_1, \dots, \mathbf{x}_n\}$  with  $\mathbf{x}_i \in \mathbb{R}^d$  and a desired mask ratio  $\rho \in [0, 1]$ , NRBM first randomly selects a reference element  $\mathbf{r}$  from  $\mathcal{S}$ . It then computes cosine similarities between  $\mathbf{r}$  and all other elements, sorting the elements based on these similarities. This ordering ensures that semantically related elements are grouped together. A block mask is then created, with  $\lfloor n\rho \rfloor$  masked elements in contiguous blocks within this ordered set. The mask is applied by replacing masked elements with a special token  $\mathbf{t}$ . Finally, to maintain the model’s permutation invariance, the resulting set is randomly shuffled. This approach destroys uninformative relationships due to redundant elements, challenging the model to infer broader patterns and ensures the model doesn’t rely on any particular ordering of the input. We outline NRBM in Algorithm 0. For a detailed formulation of the NRBM process, including the specific steps and equations, please refer to Appendix C.1.
+
+#### 3.2.2 ENCODER AND DECODER
+
+The encoder  $f$  is defined as a series of nested operations, starting with a linear layer, followed by three consecutive ISABs (3.1.2), and ending with a PMA (3.1.3) operation:
+
+$$f(\mathcal{S}) = \text{PMA}(\text{ISAB}_2(\text{ISAB}_1(\text{ISAB}_0(\text{Linear}(\mathcal{S})))))) = \mathbf{z} \quad (8)$$
+
+where  $\mathbf{z} = f(\mathcal{S}) \in \mathbb{R}^D$  is the latent representation.
+
+The decoder  $g$  takes the latent representation  $\mathbf{z}$  and applies a PMA (3.1.3) to unpool the vector  $\mathbf{z}$  to the size of  $\mathcal{S}$ , this is followed by three consecutive SAB (3.1.4) operations and a linear layer to reduce the dimensionality back to the original size.
+
+$$g(\mathbf{z}) = \text{Linear}(\text{SAB}_2(\text{SAB}_1(\text{SAB}_0(\text{PMA}(\mathbf{z})))))) = \hat{\mathcal{S}} \quad (9)$$
+
+where  $\hat{\mathcal{S}}$  is the reconstructed set.
+
+**Reconstruction Loss** We employ a method called Sinkhorn Optimal Transport (SOT) for reconstruction loss (Cuturi). This approach allows us to compare the original and reconstructed sets without relying on a specific ordering of elements. We can think of this method as finding the best way to "match" elements from the original set to elements in the reconstructed set. The Sinkhorn-Knopp algorithm iteratively calculates this matching. Algorithm 2 describes the distance calculation from input to output. We define our reconstruction loss using the Sinkhorn Distance:
+
+$$\mathcal{L}_{\text{rec}} = \text{SinkhornDistance}(\mathcal{S}, \hat{\mathcal{S}}) \quad (10)$$
+
+where  $\mathcal{S} = \{\mathbf{x}_1, \dots, \mathbf{x}_n\}$  is the original set and  $\hat{\mathcal{S}} = \{\hat{\mathbf{x}}_1, \dots, \hat{\mathbf{x}}_n\}$  is the reconstructed set.
+
+This loss function ensures that the reconstruction quality is evaluated in a permutation-invariant manner, as it only depends on how well we can match the original and reconstructed sets, not their order. For a more detailed mathematical formulation of the SOT and the reconstruction loss, refer to Appendix C.2.
+
+##### Algorithm 1 Non-Random Block Masking (NRBM)
+
+**Input:** Set  $\mathcal{S} = \{\mathbf{x}_1, \dots, \mathbf{x}_n\} \subset \mathbb{R}^d$ , mask ratio  $\rho \in [0, 1]$
+
+**Output:** Masked set  $\mathcal{S}'$ , mask vector  $\mathbf{M}$
+
+1. Select random reference  $\mathbf{x}_r$  from  $\mathcal{S}$
+2. Compute similarities:  $s_i = \text{sim}(\mathbf{x}_i, \mathbf{x}_r)$  for all  $\mathbf{x}_i \in \mathcal{S}$
+3. Sort  $\mathcal{S}$  by descending  $s_i$  to get  $\mathcal{S}_{\text{sorted}}$
+4. Compute mask size:  $k = \lfloor n\rho \rfloor$
+5. Create  $\mathcal{S}'$  by masking  $k$  contiguous elements in  $\mathcal{S}_{\text{sorted}}$
+6. Shuffle  $\mathcal{S}'$
+7. Generate mask vector  $\mathbf{M}$  corresponding to  $\mathcal{S}'$
+
+**Return:**  $\mathcal{S}', \mathbf{M}$
+
+##### Algorithm 2 Sinkhorn Optimal Transport Distance
+
+**Input:** Sets  $\mathcal{S}, \hat{\mathcal{S}}$ , Iterations  $T$
+
+**Output:** Sinkhorn Distance  $d$
+
+1. Compute pairwise distance matrix  $D_{ij} = \text{distance}(\mathbf{x}_i \in \mathcal{S}, \hat{\mathbf{x}}_j \in \hat{\mathcal{S}})$
+2. Initialize  $A_{ij} = \frac{1}{n}$  for all  $i, j$ , where  $A$  is an  $n \times n$  matrix
+3. for  $t = 1$  to  $T$  do
+4.   Normalize each row of  $A$  such that  $\sum_j A_{ij} = 1$
+5.   Normalize each column of  $A$  such that  $\sum_i A_{ij} = 1$
+6.   Update  $A_{ij} = A_{ij} \cdot e^{-D_{ij}}$
+7.   Compute  $d = \sum_{i,j} A_{ij} \cdot D_{ij}$
+
+**Return:**  $d$
+
+{6}------------------------------------------------
+
+#### 3.2.3 ONLINE TOKENIZER VIA SELF-DISTILLATION
+
+MAESTRO employs a self-distillation framework with an online tokenizer to tackle the computational challenges of encoding large cytometry datasets. In this context, the teacher model acts as an online tokenizer, providing a token distribution target of the full set of cells (elements) for the student model, which operates on a masked subset. Let  $\mathcal{S} = \{\mathbf{x}_1, \mathbf{x}_2, \dots, \mathbf{x}_n\}$  be the input set of cells, where each  $\mathbf{x}_i \in \mathbb{R}^d$  represents a cell's high-dimensional measurement. We define the student model  $f_s$  and the teacher model  $f_t$  using the encoder structure:
+
+$$f_s(\mathcal{S}_m) = f(\text{NRBM}(\mathcal{S}_m), \rho) \quad (11)$$
+
+$$f_t(\mathcal{S}) = f(\mathcal{S}) \quad (12)$$
+
+where  $\rho$  is the masking rate and  $\mathcal{S}_m \subset \mathcal{S}$  is a subset of size  $m \ll n$ .
+
+The teacher's parameters  $\theta_t$  are an exponential moving average (EMA) of the student's parameters  $\theta_s$ :
+
+$$\theta_t = \alpha\theta_t + (1 - \alpha)\theta_s \quad (13)$$
+
+where  $\alpha$  is the EMA decay rate. The online tokenizer (teacher) provides a stable target for the student model. The self-distillation process is achieved by minimizing the KL divergence between the softmax distributions of the latent representations produced by the student and teacher models:
+
+$$\mathcal{L}_{\text{SD}} = \frac{1}{m} \sum_{i=1}^m \text{KL}(\text{softmax}(f_s(\mathbf{x}_i)/\tau) \parallel \text{softmax}(f_t(\mathbf{x}_i)/\tau)) \quad (14)$$
+
+where  $\tau$  is a temperature parameter that controls the softness of the probability distributions, and  $\mathbf{x}_i \in \mathcal{S}_m$  are the elements of the masked subset. This loss encourages the student model to produce latent representations that are similar to those of the teacher model, effectively distilling the knowledge from the full dataset into the student model that only sees a masked subset. Notably, this approach is feasible because the teacher model, operating on the full set, does not require back-propagation or gradient calculations, which would be computationally prohibitive for large datasets. The student model, working on a smaller subset, can perform gradient calculations and back-propagation, enabling it to learn and update its parameters.
+
+#### 3.2.4 OVERALL
+
+Using all of the above components, we describe the MAESTRO algorithm here:
+
+##### --- Algorithm 3 MAESTRO Model Overview ---
+
+**Input:** Input set  $\mathcal{S}$ , mask ratio  $\rho$ , EMA decay rate  $\alpha$ , temperature  $\tau$
+
+**Output:** Reconstructed set  $\hat{\mathcal{S}}$
+
+1. **Initialize** student parameters  $\theta_s$  and teacher parameters  $\theta_t \leftarrow \theta_s$
+ 2. **Randomly sample** subset  $\mathcal{S}_M \subset \mathcal{S}$
+ 3. **Apply NRBM** to  $\mathcal{S}_M$  to obtain masked set  $\mathcal{S}'$  and mask vector  $\mathbf{M}$ :  $(\mathcal{S}', \mathbf{M}) = \text{NRBM}(\mathcal{S}_M, \rho)$
+ 4. **Encode masked set** using student encoder:  $\mathbf{z}_s = f_s(\mathcal{S}'; \theta_s)$
+ 5. **Decode latent representation** to reconstruct the set:  $\hat{\mathcal{S}} = g(\mathbf{z}_s; \theta_s)$
+ 6. **Encode original set** using teacher encoder:  $\mathbf{z}_t = f_t(\mathcal{S}; \theta_t)$
+ 7. **Compute reconstruction loss:**  $\mathcal{L}_{\text{rec}} = \text{SinkhornDistance}(\mathcal{S}_M, \hat{\mathcal{S}})$
+ 8. **Compute self-distillation loss:**  $\mathcal{L}_{\text{SD}} = \frac{1}{|\mathcal{S}_M|} \sum_{i=1}^{|\mathcal{S}_M|} \text{KL} \left( \text{softmax} \left( \frac{\mathbf{z}_s^i}{\tau} \right) \parallel \text{softmax} \left( \frac{\mathbf{z}_t^i}{\tau} \right) \right)$
+ 9. **Compute total loss:**  $\mathcal{L} = \mathcal{L}_{\text{rec}} + \mathcal{L}_{\text{SD}}$
+ 10. **Update student parameters:**  $\theta_s \leftarrow \theta_s - \eta \nabla_{\theta_s} \mathcal{L}$
+ 11. **Update teacher parameters** using EMA:  $\theta_t \leftarrow \alpha\theta_t + (1 - \alpha)\theta_s$
+ 12. **Return** reconstructed set  $\hat{\mathcal{S}}$
+-
+
+{7}------------------------------------------------
+
+## 4 EXPERIMENT
+
+To evaluate the effectiveness of MAESTRO in representing and analyzing cytometry set data, we conducted experiments using a large cohort of cytometry samples. We assessed the model’s performance in reconstructing masked cells, latent embedding representativeness, and linear probing tasks to evaluate the effectiveness of embedding important immunological concepts in the representation.
+
+### 4.1 DATA
+
+We utilized a dataset of 1,514 whole blood cytometry samples spanning 14 cohorts and 11 phenotypes (Appendix E.1). Data were generated at three locations over various time points (Appendix E.2), with raw data showing batch effects (Appendix E.3.1). We employed the technical control sample BatchControlHD2, which exhibits minimal batch effects in learned representations (Figure 3) compared to raw data (Appendix E.3.2). Disease diagnostic and meta data were provided by the primary clinician teams for each study. Appendix E.1 displays the distribution of cell counts per sample (minimum=11,829; maximum=1,386,520), highlighting dataset variability. Each sample is represented as a matrix with cells as rows and proteins as columns. Notably, cell types obtained through manual gating are used only to evaluate the representations learned by MAESTRO.
+
+### 4.2 PRE-TRAINING: RECONSTRUCTION OF MASKED CELLS
+
+![Figure 2: Set reconstruction. A 4x8 grid of UMAP plots. The rows are labeled 'All', 'Unmasked Input Cells', 'Masked Cells', and 'Predicted Cells'. The columns represent eight different random held-out test samples. The 'All' row shows the full dataset in blue. The 'Unmasked Input Cells' row shows yellow cells with some missing (dotted boxes). The 'Masked Cells' row shows the missing cells in red. The 'Predicted Cells' row shows the reconstructed cells in blue, which closely match the original unmasked cells. The axes are labeled UMAP1 and UMAP2.](27b22513fc27a0ff5f230b062ad3112f_img.jpg)
+
+Figure 2: Set reconstruction. A 4x8 grid of UMAP plots. The rows are labeled 'All', 'Unmasked Input Cells', 'Masked Cells', and 'Predicted Cells'. The columns represent eight different random held-out test samples. The 'All' row shows the full dataset in blue. The 'Unmasked Input Cells' row shows yellow cells with some missing (dotted boxes). The 'Masked Cells' row shows the missing cells in red. The 'Predicted Cells' row shows the reconstructed cells in blue, which closely match the original unmasked cells. The axes are labeled UMAP1 and UMAP2.
+
+Figure 2: **Set reconstruction.** UMAP of the unmasked input cells (yellow, row two), the original masked cells (red, row three), and the predicted cells (blue, row four). The top row shows all of these overlaid. Each column represents a random held-out test sample. Dotted boxes highlight areas where very few or no cells exist in the unmasked input set but are still reconstructed by MAESTRO.
+
+To demonstrate MAESTRO’s capability in accurately reconstructing masked cells, one of the objectives during training, Figure 2 showcases the reconstruction results for eight randomly selected samples from a held-out test set during pre-training. In these plots, the unmasked input cells are depicted in yellow (row two), the original masked cells in red (row three), and the predicted reconstructions by MAESTRO are shown in blue (row four). The visualization shows a projection of the cells onto a two-dimensional space using Uniform Manifold Approximation and Projection (UMAP) (McInnes et al., 2022). The close alignment between the original and reconstructed cells indicates that MAESTRO effectively captures the underlying structure of the data. Due to the NRBMs procedure, there are certain regional islands (as denoted by black, dashed boxes) of the UMAP where few or no unmasked input cells exist, but are still accurately reconstructed. This demonstrates the model’s ability to infer complex patterns and relationships within the data, even for cells that are distinct from other input populations. Pre-training details and implementation including runtime and memory usage can be found in Appendix F.2.
+
+{8}------------------------------------------------
+
+### 4.3 VECTORIZED IMMUNE PROFILES
+
+We evaluated the quality of MAESTRO’s latent representations by projecting the 1,024-dimensional embeddings into two dimensions using UMAP for visualization, colored by each sample’s diagnosis (Figure 3). The resulting plot shows that samples cluster by diagnosis, indicating that MAESTRO effectively captures meaningful patterns related to disease phenotypes. Samples denoted as BatchControlHD2 are technical controls used in our data generation process, which we see cluster among themselves despite exhibiting batch effects in the raw data E.3.2. We quantitatively assessed the representations by generating a contingency table of nearest neighbor diagnosis proportions (Figure 3). This reveals that many samples have nearest neighbors with matching diagnoses, as shown by the high values along the diagonal, supporting the model’s ability to represent meaningful information.
+
+![Figure 3: Vectorized immune profiles. a) UMAP plot of sample-level latent embeddings colored by diagnosis. b) Heatmap of nearest neighbor label matching proportions.](bedcca5cdf168e3508ef511d94ec514c_img.jpg)
+
+Figure 3 consists of two panels. Panel (a) is a UMAP plot showing sample-level latent embeddings projected into two dimensions (UMAP1 and UMAP2). Points are colored by diagnosis, showing distinct clusters for different diagnoses. Panel (b) is a heatmap titled 'Nearest Neighbor Label Matching'. The y-axis is labeled 'True Diagnosis' and the x-axis is labeled 'Nearest Neighbor Diagnosis'. The color scale ranges from 0.0 (blue) to 1.0 (red). The diagonal line of bright red squares indicates that many samples have nearest neighbors with matching diagnoses.
+
+Figure 3: Vectorized immune profiles. a) UMAP plot of sample-level latent embeddings colored by diagnosis. b) Heatmap of nearest neighbor label matching proportions.
+
+Figure 3: **Vectorized immune profiles.** a) Sample-level (set) latent embeddings projected into a low-dimensional space. Each diagnosis has a unique shape-color combination for its point. Samples tend to cluster by diagnosis. b) The y-axis is true diagnosis of each point, the x-axis is the diagnosis of each point’s nearest neighbor. We show the proportion of nearest neighbor diagnosis to each point’s true diagnosis. High values along the diagonal demonstrate the majority of samples have a nearest neighbor with matching diagnosis.
+
+### 4.4 LINEAR PROBING
+
+To evaluate the discriminative power of the learned representations, we performed a linear probing task where we used the latent representations as inputs to a basic regression model for predicting diagnosis, age, and sex. Figure 4 summarizes the performance of MAESTRO compared to other methods (see Appendix D for tabular performance metrics). We compare MAESTRO to manual gating and clustering which are the gold standard for sample representations in biomedical research due to the lack of set representation methods that can handle the idiosyncrasies of cytometry data. We also provide benchmarks against previously mentioned methods (Deep Sets, Set Transformer, and OTKE) that have never been used on cytometry data before and are suitable for set analysis. These methods are unable to handle the number of cells in a sample or require a fixed size input (further highlighting MAESTRO’s capabilities), so we have a random subset of 10,000 cells as input for these models. Details on implementations for each of these methods can be found in Appendix F.3. MAESTRO achieved superior accuracy, area under receiver operator curve, and F1 score in classifying diagnosis and sex, and achieved the lowest MAE and highest R-squared values for age regression. This indicates that the representations learned by our model are more informative to downstream prediction tasks. Lastly, we perform an ablation study on the same task using our MAESTRO architecture, indicating the importance of various design choices (Table 1). The proposed MAESTRO model outperforms other variants of the same model.
+
+![Figure 4: Linear probe. Bar charts showing classification and regression performance for various methods.](e8ff6e66c77a8e96203c9f8db8f0986f_img.jpg)
+
+Figure 4 contains two bar charts. The left chart, titled 'Classification (Diagnosis and Sex)', shows 'Metric Value' on the y-axis (0.0 to 1.0) for six methods: Manual Gating, Kmeans (k = 1024), OTKE (k = 1024), Deep Sets (supervised), Set Transformer (supervised), and MAESTRO (ours). The right chart, titled 'Regression (Age)', shows 'Mean Absolute Error (MAE)' on the y-axis (0 to 25) for the same six methods. In both charts, MAESTRO (ours) is represented by a blue bar, while other methods are represented by orange bars. In the classification chart, MAESTRO shows the highest metric value. In the regression chart, MAESTRO shows the lowest MAE.
+
+Figure 4: Linear probe. Bar charts showing classification and regression performance for various methods.
+
+Figure 4: **Linear probe.** Classification and regression benchmark of sample diagnosis, sex, and age. MAESTRO outperforms all benchmarked methods across all metrics. Our study provides benchmarks against OTKE, DeepSets, and Set Transformer. These methods are suitable for set representation learning but have never been applied to cytometry.
+
+{9}------------------------------------------------
+
+| Model | Accuracy | AUROC | F1 |
+|-|-|-|-|
+| Random Masking | $0.887 \pm 0.029$ | $0.987 \pm 0.007$ | $0.837 \pm 0.052$ |
+| + Multi-rate Masking | $0.898 \pm 0.023$ | $0.987 \pm 0.004$ | $0.861 \pm 0.036$ |
+| + Block Masking | $0.900 \pm 0.025$ | $0.991 \pm 0.004$ | $0.873 \pm 0.042$ |
+| + Self-Distillation (full model) | <b><math>0.923 \pm 0.014</math></b> | <b><math>0.992 \pm 0.003</math></b> | <b><math>0.897 \pm 0.029</math></b> |
+| - Random Masking | $0.721 \pm 0.023$ | $0.955 \pm 0.014$ | $0.485 \pm 0.029$ |
+
+Table 1: **Ablation study.** Each subsequent row builds upon the module of previous rows above denoted by +/- . Notably, the masked modelling and self-distillation modules are imperative aspects to the performance of the model. The removal of masked modelling has a major impact on the performance of the model. Details of ablation implementation can be found in Appendix F.4.
+
+### 4.5 RETRIEVAL OF CELL-TYPE DISTRIBUTIONS
+
+Many SSL studies that operate at the cell-level aim to predict cell-type or use it as a metric for evaluation (Cui et al., 2024; Kim et al., 2024). Our study operates at the sample-level, therefore we predict entire cell-type distributions, a much harder task. Accurately predicting cell-type distributions of samples is of significant biological importance, as it can provide insight into the immune landscape and disease mechanisms. We assessed MAESTRO’s ability to retrieve these distributions by using the latent representations as input to a single-layer neural network to predict known cell-type distributions obtained through traditional manual gating. Figure 5 benchmarks MAESTRO’s performance in predicting cell-type distributions averaged across all cells (Figure 5a) and against 16 individual cell-types (Figure 5b). We benchmark MAESTRO against k-means clustering, OTKE, Deep Sets, and Set Transformer. Details on each implementation can be found in F.5. MAESTRO outperforms all benchmarks methods, suggesting that MAESTRO not only captures global patterns pertinent to diagnosis, sex, and age but also encodes local, cell-level information critical for understanding cellular heterogeneity.
+
+![Figure 5: Cell-type distribution retrieval. a) Bar chart showing CellType Averaged (MAE) for various models. b) Radar plot showing CellType Stratified (MAE) for 16 cell types across different models.](8ee3b76dd49f31624d287885bc2c81ee_img.jpg)
+
+Figure 5 consists of two plots. Plot (a) is a bar chart titled 'CellType Averaged (MAE)' showing the Mean Absolute Error for 16 cell types across different models. The y-axis ranges from 0.000 to 0.175. The models compared are MAESTRO, k-means, OTKE, Deep Sets, and Set Transformer. MAESTRO consistently shows the lowest MAE across all cell types. Plot (b) is a radar chart titled 'CellType Stratified (MAE)' showing the performance of 5 models (MAESTRO, k-means, OTKE, Deep Sets, Set Transformer) across 16 cell types. The cell types are: Natural Killer Cell, T Cell, B Cell (CD4), B Cell (CD8), Monocyte, Neutrophil, Eosinophil, Basophil, Mast Cell, Dendritic Cell, Macrophage, Treg, Th1, Th2, Th17, and Tfh. Each spoke represents a cell type, and the distance from the center indicates the MAE. MAESTRO’s performance is represented by a large, shaded area, indicating high performance (low MAE) across all cell types.
+
+Figure 5: Cell-type distribution retrieval. a) Bar chart showing CellType Averaged (MAE) for various models. b) Radar plot showing CellType Stratified (MAE) for 16 cell types across different models.
+
+Figure 5: **Cell-type distribution retrieval.** Color scheme is shared between plot a and b. a) From each sample representation we predict the distribution of 16 various cell-types. We average across all 16 cell-types to show general performance by mean absolute error (MAE). b) Radar plot showing the performance of each model in predicting 16 different cell-types. Each line-color represents a different model, each cell-type is represented by a spoke, values denote MAE. As we move away from the center the MAE gets higher, less coverage across the map means lower error.
+
+## 5 CONCLUSION
+
+MAESTRO is a learning architecture that generates representations of immune profiles from high-dimensional cytometry data — a clinically relevant modality due to its direct measurement of protein expression on immune cells, providing more immediate functional insights. MAESTRO effectively handles variable set sizes, permutation invariance, and computational constraints in single-cell datasets. It produces holistic sample representations that contain immunologically meaningful information, complementing the standard manual gating approach, as demonstrated by probe experiments evaluating age, sex, and strong diagnosis predictions, highlighting their clinical and immunological relevance. Additionally, the ability to infer cell type distributions from embeddings shows that the embeddings contain biologically meaningful information. MAESTRO’s holistic representation of the immune system is essential for predicting outcomes, identifying health trajectories, and advancing precision medicine—capabilities that are difficult to achieve with previous approaches. Further potential applications include treatment response prediction, early disease detection, differentiating vaccine response across diseases, assessing patient protection levels from vaccines at specific time-points, and disease subtyping. Limitations, such as single-sample batch processing and challenges in detecting rare populations, are discussed in Appendix F.6. Future applications include adapting MAESTRO to other single-cell modalities, computational histopathology, and multi-modal representations to further advance biomedical and immunological discoveries.
+
+ Rest of paper (reference and Appendix) is removed.

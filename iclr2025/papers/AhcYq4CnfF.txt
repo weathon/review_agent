@@ -1,0 +1,354 @@
+
+
+{0}------------------------------------------------
+
+# DIFFGAD: A DIFFUSION-BASED UNSUPERVISED GRAPH ANOMALY DETECTOR
+
+Jinghan Li<sup>1</sup>, Yuan Gao<sup>1†</sup>, Jinda Lu<sup>1</sup>, Junfeng Fang<sup>1</sup>, Congcong Wen<sup>2</sup>, Hui Lin<sup>3†</sup>, Xiang Wang<sup>1</sup>
+
+<sup>1</sup>University of Science and Technology of China, <sup>2</sup>New York University,
+
+<sup>3</sup>China Academy of Electronics and Information Technology
+
+{lijh111, lujd, fjfj}@mail.ustc.edu.cn
+
+{426.yuan, xiangwang1223}@gmail.com
+
+linhui@whu.edu.cn, wenc@nyu.edu
+
+<sup>†</sup>Corresponding author.
+
+## ABSTRACT
+
+Graph Anomaly Detection (GAD) is crucial for identifying abnormal entities within networks, garnering significant attention across various fields. Traditional unsupervised methods, which decode encoded latent representations of unlabeled data with a reconstruction focus, often fail to capture critical discriminative content, leading to suboptimal anomaly detection. To address these challenges, we present a *Diffusion-based Graph Anomaly Detector* (DiffGAD). At the heart of DiffGAD is a novel latent space learning paradigm, meticulously designed to enhance the model’s proficiency by guiding it with discriminative content. This innovative approach leverages diffusion sampling to infuse the latent space with discriminative content and introduces a content-preservation mechanism that retains valuable information across different scales, significantly improving the model’s adeptness at identifying anomalies with limited time and space complexity. Our comprehensive evaluation of DiffGAD, conducted on six real-world and large-scale datasets with various metrics, demonstrated its exceptional performance. Our code is available at: <https://github.com/fortunato-all/DiffGAD>.
+
+## 1 INTRODUCTION
+
+Graph structure has garnered significant attention from both academia (Gao et al., 2023c; Roy et al., 2023; Gao et al., 2023a; Fang et al., 2024b) and industry (Breuer et al., 2020; Li et al., 2023; Yin et al., 2024), with its potential to represent relationships and structures. Among its wide applications, graph anomaly detection (GAD) has evolved as a popular research topic, aiming to detect abnormal targets (nodes, edges, subgraphs, et al.) from the normal.
+
+Existing research can be categorized into two branches: the semi-supervised learning branch (Dou et al., 2020; Gao et al., 2023b; 2024b) and the unsupervised learning branch (Hamilton et al., 2017; Chen et al., 2020; Peng et al., 2018). Semi-supervised learning approaches utilize a small subset of labeled data to discern patterns of anomalies, enabling the prediction of labels for the remaining unlabeled dataset. However, human annotation is often time-consuming and labor-intensive, which limits the application of semi-supervised methods.
+
+As alternative, unsupervised strategies (Ding et al., 2019; Fan et al., 2020; Sakurada & Yairi, 2014) directly capture node characteristics and local structures without the need for annotation. Specifically, these approaches are on the assumption that *anomalous entities exhibit more complex distributions and are significantly more difficult to reconstruct* (Ding et al., 2019; Fan et al., 2020; Sakurada & Yairi, 2014). Consequently, they utilize Autoencoder (AE) to first map the graph data into latent embeddings (Kingma & Welling, 2014; Kipf & Welling, 2017a; Velickovic et al., 2018) and then decoding, wherein those exhibiting high reconstruction errors are deemed more likely to be anomalies. However, these methods grapple with limitations in their discriminative capability, which results in suboptimal performance. As outlined in (Dou et al., 2020; Liu et al., 2020), abnormal users often deliberately camouflage themselves among normal users. Consequently, they frequently exhibit a significant overlap in common attributes (e.g. age, occupation, length and frequency of reviews, etc.) with normal users. This behavior enables these anomalies to divert the focus of
+
+{1}------------------------------------------------
+
+![Figure 1: Three diagrams (a, b, c) illustrating different latent space constructions. (a) Original: shows overlapping normal (blue) and abnormal (red) distributions. (b) Discriminative: shows the distributions separated by a dashed line. (c) Multi-Content: shows the distributions separated by a dashed line, with arrows indicating preserved general content. A legend at the bottom defines the symbols: yellow oval for Latent Space, blue circle for Normal Distribution, blue dot for Normal Nodes, pink oval for Abnormal Distribution, and red dot for Abnormal Nodes.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 1: Three diagrams (a, b, c) illustrating different latent space constructions. (a) Original: shows overlapping normal (blue) and abnormal (red) distributions. (b) Discriminative: shows the distributions separated by a dashed line. (c) Multi-Content: shows the distributions separated by a dashed line, with arrows indicating preserved general content. A legend at the bottom defines the symbols: yellow oval for Latent Space, blue circle for Normal Distribution, blue dot for Normal Nodes, pink oval for Abnormal Distribution, and red dot for Abnormal Nodes.
+
+Figure 1: Given several normal and abnormal nodes, the data space is constructed by different methods. Specifically, (a) represents the latent space constructed by current reconstruction-based methods, (b) denotes the latent space learned by our discriminative guidance, (c) is the latent space constructed by introducing the preserved general content on (b).
+
+reconstruction-based models towards overlapping common content, reducing the models’ ability to discern truly discriminative features (such as transaction information for fraud detection (Dou et al., 2019)). As a result, anomalous entities are difficult to identify by reconstruction error with such a trivial framework. As illustrated in Figure 1 (a), all data points in the latent space are equally distributed in the learned latent space, without preserving sufficient discriminative content, leading to the overlapping distribution space.
+
+Furthermore, we find that the latent space constructed by the AE-based method (Ding et al., 2019) tends to represent all samples for the Books dataset (Sánchez et al., 2013) into the same point, which is misguided by the huge common content. In addition to the aforementioned issue, the well-known Variational Autoencoder (VAE) based method (Kipf & Welling, 2016) faces a notable challenge: it constructs the latent space within a constrained distribution (e.g., the Gaussian distribution), leading to a uniform latent distribution. This limits the model’s expressive capacity, consequently making it challenging to distinguish between abnormal and normal samples. To tackle this issue, we propose to enhance the latent space learning process by incorporating discriminative content. Drawing inspiration from the potent generative capabilities of Diffusion Models (DMs) (Ho et al., 2020; Rombach et al., 2022; Nichol et al., 2022; Dhariwal & Nichol, 2021), we introduce a diffusion-based detection approach, termed DiffGAD. Specifically, our DiffGAD tackles the issue from two aspects:
+
+### Discriminative Distillation to distill discriminative content (Section 3.5).
+
+Discriminative content is hard to capture due to the sparsity of anomalies, however, shared content is much easier to acquire. Hence we implicitly capture this discriminative information: Initially, we train an unconditional DM to focus on constructing features that encapsulate both discriminative and common elements, referred to as *general content*. Subsequently, a second DM is trained by conditioning on a common feature to learn the latent distribution inclusive of *common content*, where the common feature is constructed by adaptively filtering out potential anomalies in the unconditional DM reconstructed space. By differentiating the general content from this commonality, we isolate the discriminative content. This content is then integrated into the latent space through the application of classifier-free guidance across both trained DMs. As illustrated in Figure 1 (b), this process allows the latent space to segregate normal and abnormal distributions within overlapping areas, thereby enabling the differentiation between abnormal and normal samples.
+
+### General Content Preservation to preserve different scale general content (Section 3.3).
+
+Given that anomaly detection based on reconstruction error fundamentally aligns more with classification than generation, we introduce slight modifications to the diffusion model to better suit this task. Specifically, during the sampling stage, rather than initiating from a Gaussian distribution, we introduce minor corruptions to the given sample  $x$  by adding noises for a small timestep  $t < T$ , and subsequently denoise it to generate a reconstructed sample  $\hat{x}$ . Throughout this process, we argue that the general content could be preserved across different scales (reflecting by timestep  $t$ ) to further bolster the model’s discriminative power with confidence. In detail, noise at smaller  $t$  values preserves large-scale general content, whereas larger  $t$  values maintain more localized general
+
+{2}------------------------------------------------
+
+content. As illustrated in Figure 1 (c), by preserving this content, the constructed latent space becomes adept at accurately representing data points. This enhancement effectively widens the distributional discrepancy between anomalous and normal entities, resulting in a robust and discriminative latent space that fosters confident representations.
+
+To summarize, we have the following contributions:
+
+- To the best of our knowledge, we make the first attempt to transfer the diffusion model (DM) from the generation task to a detector in the GAD task and propose a DM-based Graph Anomaly Detector, namely DiffGAD.
+- Our DiffGAD enhances the discriminative ability from two aspects: a discriminative content-guided generation paradigm to distill the discriminative content in latent space; and a content-preservation strategy to enhance the confidence of the guidance process.
+- Extensive experiments over six real-world and large-scale datasets demonstrate our effectiveness. Theoretical and Empirical computational analysis illustrate our efficiency.
+
+## 2 BACKGROUND
+
+In this section, we revisit some background. Specifically, we first introduce the preliminaries of the Graph Anomaly Detection (GAD) task and then describe the diffusion model in latent space.
+
+### 2.1 TASK FORMULATION
+
+In this work, we focus on unsupervised node-level GAD over static attributed graphs, and each node is associated with an anomaly score, where top-ranked nodes (with large scores) are always indicated as anomalies. In reconstruction-based methods, the anomaly score is reconstruction error. Meanwhile, the data structure can be formalized as an attribute graph  $\mathbf{G} = \{\mathcal{V}, \mathbf{X}, \mathcal{E}, \mathbf{A}\} \in \mathcal{G}$ , where  $\mathcal{V}$ ,  $\mathbf{X}$ ,  $\mathcal{E}$ ,  $\mathbf{A}$  denotes nodes, node attributes, edges, and adjacency matrix, specifically.
+
+### 2.2 DIFFUSION MODEL IN LATENT SPACE
+
+The Latent Diffusion Model (Latent DM) is composed of a pair of forward and reverse diffusion processes based on the unified formulation of Stochastic Differential Equation (SDE) (Song et al., 2021). Concretely, given a latent variable  $\mathbf{z}$ , the SDE can be formalized as:
+
+$$d\mathbf{z} = \mathbf{f}(\mathbf{z}, t)dt + g(t)d\mathbf{w}_t, \quad (1)$$
+
+where  $\mathbf{f}(\cdot)$  and  $g(\cdot)$  are the drift and diffusion functions, respectively, and  $\mathbf{f}(\cdot)$  can also be expressed in the form of  $\mathbf{f}(\mathbf{z}, t) = \mathbf{f}(\mathbf{t})\mathbf{z}$ . Then we define the forward, backward, and training process as:
+
+**Forward Process.** Given the latent variable  $\mathbf{z}$ , the forward process transforms  $\mathbf{z}$  with noises to construct a sequence of step-dependent variables  $\{\mathbf{z}_t\}_{t=0}^T$ , where  $\mathbf{z}_0 = \mathbf{z}$  is the initial point of this process. Specifically, with SDE, the diffusion kernel is denoted as a conditional distribution of  $\mathbf{z}_t$ :
+
+$$p(\mathbf{z}_t | \mathbf{z}_0) = \mathcal{N}(s(t)\mathbf{z}_0, s^2(t)\sigma^2(t)\mathbf{I}), \quad (2)$$
+
+where  $s(t)$  and  $\sigma(t)$  are step-dependent to control the noise level. We follow an efficient design (Karras et al., 2022; Zhang et al., 2023a) to simplify the diffusion kernel, where we set  $s(t) = 1$  and  $\sigma(t) = t$  in this work. Therefore, the forward process can be formulated as:
+
+$$\mathbf{z}_t = \mathbf{z}_0 + \sigma(t)\varepsilon, \text{ where } \varepsilon \sim \mathcal{N}(\mathbf{0}, \mathbf{I}). \quad (3)$$
+
+**Reverse Process.** The reverse process reconstructs the latent variable  $\mathbf{z}$  by predicting and removing the added noises. Specifically, with SDE and our diffusion kernel simplification (Karras et al., 2022), the reverse process can be derived as:
+
+$$d\mathbf{z} = -2\dot{\sigma}(t)\sigma(t)\nabla_{\mathbf{z}} \log p_t(\mathbf{z})dt + \sqrt{2\dot{\sigma}(t)\sigma(t)}d\mathbf{w}_t, \quad (4)$$
+
+where  $\nabla_{\mathbf{z}} \log p_t(\mathbf{z})$  is the score function of  $\mathbf{z}$ , and  $\dot{\sigma}(t)$  is the first order derivative of  $\sigma(t)$ .
+
+{3}------------------------------------------------
+
+![Figure 2: An overview of DiffGAD. The diagram illustrates the workflow: a graph G is encoded by an encoder Φ into a latent space, then processed by DiffGAD, and finally decoded by a decoder Ψ into a reconstructed graph. The DiffGAD module consists of three main steps: (1) DM Training, (2) Conditional DM Training, and (3) Sampling. Step (1) shows a forward process from z0 to zT with noise εθ. Step (2) shows a conditional forward process from z0 to zT with noise εθ(z_t, c, t). Step (3) shows a reverse process from zT to z0 with guidance and added t-step noises. A legend defines the symbols: ⊖ for subtraction, Φ for encoder, Ψ for decoder, c for common feature, ](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 2: An overview of DiffGAD. The diagram illustrates the workflow: a graph G is encoded by an encoder Φ into a latent space, then processed by DiffGAD, and finally decoded by a decoder Ψ into a reconstructed graph. The DiffGAD module consists of three main steps: (1) DM Training, (2) Conditional DM Training, and (3) Sampling. Step (1) shows a forward process from z0 to zT with noise εθ. Step (2) shows a conditional forward process from z0 to zT with noise εθ(z\_t, c, t). Step (3) shows a reverse process from zT to z0 with guidance and added t-step noises. A legend defines the symbols: ⊖ for subtraction, Φ for encoder, Ψ for decoder, c for common feature,
+
+Figure 2: An overview of DiffGAD. Given a graph, we first encode it into latent space, and we then reconstruct it with both unconditioned and conditioned diffusion models to distill the discriminative content. Finally, we decode the reconstructed latent embedding for anomaly detection.
+
+**Training Process.** The training process matches the noises in the forward and reverse processes, which can be achieved by denoising score matching (Song et al., 2021) as:
+
+$$\mathcal{L}_{\text{DM}} = \mathbb{E}_{z_0 \sim p(z)} \mathbb{E}_{z_t \sim p(z_t|z_0)} \|\epsilon_\theta(z_t, t) - \epsilon\|_2^2, \quad (5)$$
+
+where  $\epsilon_\theta$  is the neural network. After training, the diffusion model can be applied for further generation by the reverse process with the score function as  $\nabla_z \log p_t(z) = -\epsilon_\theta/\sigma(t)$  in Eq. 4.
+
+## 3 METHODOLOGY
+
+In this section, we illustrate DiffGAD in detail.
+
+### 3.1 OVERVIEW
+
+Figure 2 overviews our proposed DiffGAD, which functions primarily within the latent space. Upon receiving a graph, our methodology initiates by mapping it into the latent space, as detailed in §3.2. Within this transformed domain, we employ a dual Diffusion Model (DM) approach. The first DM is tasked with encapsulating the general content, as elaborated in §3.3, while the second DM targets the extraction of common content, described in §3.4. Herein, the discriminative content is identified by the disparities between these two DM-captured representations. Inspired by (Ho & Salimans, 2022), the concurrent sampling of the two DMs can be enabled by controlling a simple hyper-parameter. It is worth noting that our model’s foundation is rooted in a well-established hypothesis, supported by works such as (Ding et al., 2019; Fan et al., 2020; Sakurada & Yairi, 2014), which posits that anomalous entities exhibit more complex distributions and are significantly more difficult to reconstruct. Consequently, nodes with higher reconstruction error are more likely to be anomalies. To facilitate this detection mechanism, our framework requires the original samples with their respective reconstructed counterparts, a process systematically described in §3.3.
+
+### 3.2 LATENT SPACE PROJECTION
+
+In this work, we leverage an encoder to map graph features into a latent representation space, a pivotal step that precedes the detailed exposition of diffusion models in our work. Thus, it is essential to first delineate the methodology employed in projecting graph characteristics into this latent space.
+
+More formally, for a given graph  $\mathbf{G}$ , we utilize the Graph Autoencoder (AE) framework as delineated in (Ding et al., 2019) to facilitate its transformation into the latent space. The architecture of the Graph AE comprises two primary components: an encoder, denoted as  $\Phi$ , and a decoder, denoted
+
+{4}------------------------------------------------
+
+---
+
+**Algorithm 1** The training and inference procedure of DiffGAD.
+
+---
+
+**Input:** An attribute graph  $\mathbf{G} = \{\mathcal{V}, \mathbf{X}, \mathcal{E}, \mathbf{A}\}$ ,
+
+**Output:** The detection scores of each node in  $\mathbf{G}$ .
+
+- 1: Train Graph AE  $\{\Phi, \Psi\}$  by Eq. 12.
+  - 2: Extract latent embedding  $\mathbf{z}$  by Eq. 6.
+  - 3: Initialize common feature  $c_0$  as the mean of  $\mathbf{z}$  and set  $c_{\text{current}} = c_0$ .
+  - 4: **while** Training unconditional DM  $\epsilon_\theta(\mathbf{z}_t, t)$  **do**
+  - 5:   Update  $\epsilon_\theta(\mathbf{z}_t, t)$  by Eq. 5.
+  - 6:   Update common feature  $c_{\text{next}}$  by Eq. 9 and Eq. 10.
+  - 7:   Set  $c_{\text{current}} = c_{\text{next}}$ .
+  - 8: **end while**
+  - 9: Set  $c = c_{\text{next}}$ .
+  - 10: Train conditional DM  $\epsilon_\theta(\mathbf{z}_t, c, t)$  by Eq. 13.
+  - 11: Add  $t$ -step noises to latent embedding  $\mathbf{z}$  by Eq. 3.
+  - 12: Reconstruct the noisy embedding with the modified score in Eq. 11.
+  - 13: Decode the reconstructed embedding by Eq. 7.
+  - 14: Calculate detection scores between  $\mathbf{G}$  and the decoded graph by Eq. 12.
+- 
+
+as  $\Psi$ . The encoder function,  $\Phi$ , is designed to process the node feature matrix  $\mathbf{X} \in \mathbb{R}^{n \times d}$  and the adjacency matrix  $\mathbf{A} \in \mathbb{R}^{n \times n}$ , thereby yielding latent feature embedding  $\mathbf{z}$ , computed as:
+
+$$\mathbf{z} = \Phi(\mathbf{X}, \mathbf{A}), \quad (6)$$
+
+wherein  $\Phi$  incorporates a Graph Convolutional Network (GCN) (Kipf & Welling, 2017a) as its underlying mechanism for aggregating information from node features  $\mathbf{X}$  into latent embedding  $\mathbf{z}$ , with  $\mathbf{z} \in \mathbb{R}^{n \times k}$  and  $k$  representing the dimensionality of the latent space.
+
+Subsequently, the decoder component is tasked with the reconstruction of the node feature matrix and adjacency matrix from the latent embedding  $\mathbf{z}$ , expressed through the equations:
+
+$$\begin{cases} \tilde{\mathbf{X}} = \Psi_{\text{feat}}(\mathbf{z}, \mathbf{A}), \\ \tilde{\mathbf{A}} = \Psi_{\text{stru}}(\mathbf{z}\mathbf{z}^T), \end{cases} \quad (7)$$
+
+in which  $\Psi_{\text{feat}}$  and  $\Psi_{\text{stru}}$  are specifically designed for the prediction of node features and graph structure (edges), respectively. This meticulous elaboration of the latent space projection methodology set the stage for a comprehensive understanding of our novel DiffGAD framework.
+
+### 3.3 GENERAL CONTENT PRESERVATION
+
+Once the latent space is ready, the reconstruction error by DM acts as a proxy of the anomaly score associated with individual nodes. To achieve this, pairs of original and reconstructed samples are necessary (Gao et al., 2024a). Our general content preservation aims to adapt the DM architecture to the reconstruction error-based anomaly detection task. Unlike traditional DMs, which samples random Gaussian noise to generate  $\tilde{\mathbf{z}}_0$ , our approach perturbs original latent embedding  $\mathbf{z}_0$  by mixing random noises from different scales as the initial points for sampling. Concretely, following the work in Ho et al. (2020), we categorize the noises into 500 different scales, and we add noises at each scale by the following equation:
+
+$$\mathbf{z}_t = \frac{t}{T} \mathbf{z}_0 + \frac{T-t}{T} \epsilon \quad (8)$$
+
+where  $\epsilon$  is a random noise, and  $\epsilon \in \mathcal{N}(0, 1)$ , this corrupted embedding  $\mathbf{z}_t$  is then used to generate reconstructed sample  $\tilde{\mathbf{z}}_0$  with the aim of preserving the general content. The benefit of this process are threefolds: (1) It facilitates the computation of reconstruction error by aligning original and reconstructed sample; (2) By modulating  $t$ , the extent of preserved general content can be controlled; a lower  $t$  value results in a reconstruction that is closer to the original content, thereby retaining more of the general content. (3) As the DM functions without explicit conditioning, it inherently associates with the general content, which lays the groundwork for the introduction of discriminative content.
+
+{5}------------------------------------------------
+
+### 3.4 COMMON FEATURE CONSTRUCTION
+
+In this study, we treat divergence of unconditional and conditional DMs as the discriminative content of interest. Besides unconditional DM, our approach also necessitates the incorporation of a conditional DM. This subsection is dedicated to elucidating the conditioning mechanism construction.
+
+Consider the latent embedding  $\mathbf{z} = \{\mathbf{z}^v\}_{v=1}^n$ , where each  $\mathbf{z}^v \in \mathbb{R}^k$  denotes the embedding of the  $v$ -th node. We initialize the common feature  $c_0$  as the mean value over all latent node embeddings, capturing a global perspective of the node distribution and setting a prior for their generative process. This feature acts as the conditioning and is not fixed during the training of DM, next we demonstrate the adaptive refinement of this feature in depth.
+
+During the training phase of the unconditional DM, which we represent as  $\epsilon_\theta(\mathbf{z}_t, t)$ , the conditioning undergoes iterative updates. To illustrate, we identify the common feature conditioning at any training iteration as  $c_{\text{current}}$ . The feature update is governed by:
+
+$$c_{\text{next}} = \sum_{v \in \mathcal{V}} \omega_v \cdot \mathbf{z}^v, \quad (9)$$
+
+where  $c_{\text{next}}$  is the updated common feature for the next training iteration, and  $\omega_v$  is the weighting vector to control the update process. We obtain  $\omega_v$  by similarity calculation between the reconstructed node embedding  $\mathbf{z}^v$  and current common feature  $c_{\text{current}}$ , which can be formalized as:
+
+$$\omega_v = \frac{\exp(\bar{\omega}_v/\tau)}{\sum \exp(\bar{\omega}_v/\tau)}, \text{ where } \bar{\omega}_v = \cos(\mathbf{z}^v, c_{\text{current}}), \quad (10)$$
+
+where  $\tau$  is the temperature parameter to control the smoothness of weights,  $\cos(\cdot, \cdot)$  denotes the cosine similarity. The update of the common feature involves aggregating the contribution of all nodes, weighted by their respective  $\omega_v$  values. A larger  $\omega_v$  indicates a more significant contribution of the current  $\mathbf{z}^v$  to the update process. Notably, nodes that significantly deviate from the current common feature,  $c_{\text{current}}$ , are assigned with lower weights during the update. The underlying rationale is to mitigate the impact of potential anomalies and to derive a comprehensive common feature. Upon completing this iteration,  $c_{\text{next}}$  is designated as the new current common feature  $c_{\text{current}}$  for the forthcoming update cycle. Furthermore, we establish the final common feature  $c$  which corresponds to  $c_{\text{next}}$  from the last training iteration. This finalized feature remains static during the detection phase. This approach ensures that the common feature is reflective of the dataset's core attributes, which leads us to the discriminative content calculation.
+
+### 3.5 DISCRIMINATIVE CONTENT DISTILLATION
+
+Leveraging the unconditional DM,  $\epsilon_\theta(\mathbf{z}_t, t)$ , and the common feature  $c$ , our approach is able to extract the discriminative content through discriminative content distillation. Specifically, we first train a conditional DM as  $\epsilon_\theta(\mathbf{z}_t, c, t)$ , which aims to learn the common knowledge by reconstructing latent embedding  $\mathbf{z} = \{\mathbf{z}^v\}_{v=1}^n$  with common feature  $c$  as conditional information.
+
+Inspired by the idea of classifier-free guidance (Ho & Salimans, 2022), we distill the discriminative content by performing a linear combination of the unconditional and conditional DMs. Differently, our unconditional DM  $\epsilon_\theta(\mathbf{z}_t, t)$  contains both discriminative and common content, and the conditional DM  $\epsilon_\theta(\mathbf{z}_t, c, t)$  captures the common content, which describes that "what most of the reconstructed nodes focus on". Thus, the discriminative content is achieved by subtracting the general content from the common content learned from the unconditional DM and conditional DM, respectively. Specifically, the modified score can be denoted as:
+
+$$\begin{aligned} \tilde{\epsilon}_\theta(\mathbf{z}_t, c, t) &= (1+\lambda)\epsilon_\theta(\mathbf{z}_t, t) - \lambda\epsilon_\theta(\mathbf{z}_t, c, t), \\ \nabla_{\mathbf{z}} \log p_t(\mathbf{z}) &= -\tilde{\epsilon}_\theta(\mathbf{z}_t, c, t) / \sigma(t), \end{aligned} \quad (11)$$
+
+where  $\lambda$  is the hyperparameter to regulate the strength. By utilizing the modified score for the sampling process, we distill the discriminative content into the latent space, and then obtain the discriminative latent embeddings.
+
+{6}------------------------------------------------
+
+Table 1: The ROC-AUC performance with different components of our method.
+
+| Method         | Weibo                            | Reddit                           | Disney                           | Books                            | Enron                            | Avg                              |
+|----------------|----------------------------------|----------------------------------|----------------------------------|----------------------------------|----------------------------------|----------------------------------|
+| AE             | 92.0 $\pm$ 0.1                   | 56.1 $\pm$ 0.0                   | 40.3 $\pm$ 6.7                   | 59.1 $\pm$ 2.5                   | 59.1 $\pm$ 1.6                   | 61.3 $\pm$ 2.2                   |
+| Diff           | 91.6 $\pm$ 0.5                   | 55.8 $\pm$ 0.1                   | 49.1 $\pm$ 0.3                   | 58.3 $\pm$ 2.5                   | 57.7 $\pm$ 1.8                   | 62.5 $\pm$ 1.0                   |
+| Cond-Diff      | 91.4 $\pm$ 0.5                   | 55.9 $\pm$ 0.1                   | 49.2 $\pm$ 0.4                   | 58.8 $\pm$ 1.8                   | 57.6 $\pm$ 1.9                   | 62.6 $\pm$ 0.9                   |
+| <b>DiffGAD</b> | <b>93.4 <math>\pm</math> 0.3</b> | <b>56.3 <math>\pm</math> 0.1</b> | <b>54.5 <math>\pm</math> 0.2</b> | <b>66.4 <math>\pm</math> 1.8</b> | <b>71.6 <math>\pm</math> 7.0</b> | <b>68.4 <math>\pm</math> 1.9</b> |
+
+### 3.6 TRAINING AND INFERENCE
+
+**Training Stage.** In the training stage, given an attribute graph  $\mathbf{G} = \{\mathcal{V}, \mathbf{X}, \mathcal{E}, \mathbf{A}\}$ , we firstly train the Graph AE by the following objective:
+
+$$\mathcal{L}_{\text{AE}} = \alpha \cdot \|\mathbf{X} - \hat{\mathbf{X}}\|_2 + (1 - \alpha) \cdot \|\mathbf{A} - \hat{\mathbf{A}}\|_2, \quad (12)$$
+
+where  $\|\cdot\|_2$  denotes the L2 norm, and  $\alpha$  is a hyper-parameter to balance the effect of feature and structural reconstruction. Then we train the unconditional DM  $\epsilon_\theta(z_t, t)$  by the training objective as in Eq. 5, meanwhile, we obtain the common feature  $c$ . Finally, we train the conditional DM  $\epsilon_\theta(z_t, c, t)$  by the following equation:
+
+$$\mathcal{L}_{\text{Cond}} = \mathbb{E}_{z_0 \sim p(z)} \mathbb{E}_{z_t \sim p(z_t|z_0, c)} \|\epsilon_\theta(z_t, c, t) - \epsilon\|_2^2. \quad (13)$$
+
+**Inference Stage.** In the inference stage, given attribute graph  $\mathbf{G}$ , we first transform it into latent space by well-trained encoder  $\Phi$ . Second, we add  $t$ -step noises ( $t < T$ ) on the extracted latent embedding to preserve the general content. Then, we discriminatively sample from both unconditional DM  $\epsilon_\theta(z_t, t)$  and conditional DM  $\epsilon_\theta(z_t, c, t)$  with Eq. 11 as scores. Finally, we transform the reconstructed embedding into graph space by decoder  $\Psi$  for reconstruction error calculation.
+
+## 4 EXPERIMENT
+
+In this section, we conduct experiments to validate the effectiveness of our DiffGAD. Specifically, we first introduce the experimental settings, and next, we analyze the ablation studies, finally, we describe the comparison results with the state-of-the-art methods.
+
+### 4.1 EXPERIMENTAL SETTINGS
+
+**Datasets.** Following the work in (Liu et al., 2022b) we employ 13 baselines as benchmarks on 6 real-world datasets (Weibo (Zhao et al., 2020), Reddit (Kumar et al., 2019; Wang et al., 2021), Disney (Sánchez et al., 2013), Books (Sánchez et al., 2013), Enron (Sánchez et al., 2013)), including a large-scale dataset Dgraph (Huang et al., 2022) for evaluation.
+
+**Metrics.** Following the extensive literature in GAD (Liu et al., 2022b; Ding et al., 2019; Kipf & Welling, 2016), we compressively evaluate the performance of DiffGAD with the representative ROC-AUC (Receiver Operating Characteristic Area Under Curve), AP (Average Precision), Recall@k, and the AUPRC (Area Under the Precision and Recall Curve) metrics.
+
+**Comparisons.** Following the work in (Liu et al., 2022b), we report the average performance with std results over 20 trials for a fair comparison. Moreover, we re-implement current methods for all datasets with (Liu et al., 2022a), and observe a large performance gap for the ROC-AUC in Enron, while other datasets are similar (as the official GitHub issue mentioned in <sup>1</sup>). Therefore, to prevent ambiguity, we use the re-implemented ROC-AUC results on the Enron dataset and follow the results of other datasets and metrics in (Liu et al., 2022b).
+
+### 4.2 ABLATION STUDIES
+
+**The effects of discriminative content distillation.** We conduct experiments over various  $\lambda$  in Eq. 11, and the experimental results are shown in Figure 3. Specifically, we list the AUC performance with the conditional DM  $\epsilon_\theta(z_t, c, t)$  as  $\lambda = -1.0$  (only common content), with the unconditional DM  $\epsilon_\theta(z_t, t)$  as  $\lambda = 0.0$  (only general content), and with different values of  $\lambda$  ranging from 0.2 to 2.0
+
+<sup>1</sup><https://github.com/pygod-team/pygod>
+
+{7}------------------------------------------------
+
+![Figure 3: ROC-AUC performance of 3 representative datasets under different scales of lambda. (a) Books: ROC-AUC starts at ~60.5 for lambda=0.0, dips to ~56.5 at lambda=0.4, and rises to ~61.5 at lambda=2.0. (b) Disney: ROC-AUC is relatively flat around 49.5-50.0 until lambda=1.6, then rises to ~51.0 at lambda=2.0. (c) Enron: ROC-AUC starts at ~54.5, peaks at ~56.5 at lambda=0.4, dips to ~55.5 at lambda=0.8, and rises to ~61.5 at lambda=2.0.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 3: ROC-AUC performance of 3 representative datasets under different scales of lambda. (a) Books: ROC-AUC starts at ~60.5 for lambda=0.0, dips to ~56.5 at lambda=0.4, and rises to ~61.5 at lambda=2.0. (b) Disney: ROC-AUC is relatively flat around 49.5-50.0 until lambda=1.6, then rises to ~51.0 at lambda=2.0. (c) Enron: ROC-AUC starts at ~54.5, peaks at ~56.5 at lambda=0.4, dips to ~55.5 at lambda=0.8, and rises to ~61.5 at lambda=2.0.
+
+Figure 3: The ROC-AUC performance of 3 representative datasets under the different scale of the control of  $\lambda$ , where  $x$  axis represents the variance of  $\lambda$ , and  $y$  axis is the ROC-AUC results.
+
+![Figure 4: ROC-AUC performance of different timesteps t over 3 representative datasets. (a) Books: ROC-AUC fluctuates between 52.5 and 61.5 across timesteps 1 to 500. (b) Disney: ROC-AUC starts at ~44.0 at t=1, peaks at ~53.5 at t=250, and ends at ~51.0 at t=500. (c) Weibo: ROC-AUC starts at ~93.5 at t=1, peaks at ~93.8 at t=100, and ends at ~91.5 at t=500.](d864789b0d8384da1d22fd6a5d76bbdf_img.jpg)
+
+Figure 4: ROC-AUC performance of different timesteps t over 3 representative datasets. (a) Books: ROC-AUC fluctuates between 52.5 and 61.5 across timesteps 1 to 500. (b) Disney: ROC-AUC starts at ~44.0 at t=1, peaks at ~53.5 at t=250, and ends at ~51.0 at t=500. (c) Weibo: ROC-AUC starts at ~93.5 at t=1, peaks at ~93.8 at t=100, and ends at ~91.5 at t=500.
+
+Figure 4: The ROC-AUC performance of different timesteps  $t$  over 3 representative datasets, where  $x$  axis represents different timesteps  $t$ , and  $y$  axis is the ROC-AUC results.
+
+over the Books, Disney, and Enron datasets. From Figure 3, we find that different datasets have distinct sensitivities of  $\lambda$ , and the performance on Books and Enron are sensitive to the various  $\lambda$ . Moreover, we can observe that the best results are achieved with large  $\lambda$  ( $\lambda = 2.0$ ) for all 3 datasets, which not only demonstrates the effectiveness of our discriminative content distillation but also shows that the discriminative content is hard to mine for those datasets.
+
+**The influences of general content preservation.** We conduct experiments over various timestep  $t$  in Sec. 3.3 to preserve general content from different scales, and the experimental results are illustrated in Figure 4. Specifically, we list the AUC performance with timestep varies from 1 to 500 over the Books, Disney, and Weibo datasets. The full diffusion timestep is 500, where  $t = 1$  means sampling from large-scale general content, and  $t = 500$  implies sampling from the noise. Specifically, from Figure 4, we can find that (1) general content from different scales is required for different datasets, where Weibo requires more general content (small  $t$ ), and less general content is needed for Books and Disney (large  $t$ ), and (2) compared with sampling from the noises ( $t = 500$ ), our general content preservation improves over all datasets (various  $t$ ), which demonstrates our effectiveness.
+
+**The effects of different components.** We conduct experiments with different components such as the Autoencoder (“AE”), the unconditional DM (“Diff”), and the conditional DM (“Cond-Diff”), the experimental results are shown in Table 1, where “DiffGAD” is our method. Specifically, we can find that: (1) applying the DM over the AE model achieves marginal performance gains (“Diff” vs “AE”), which demonstrates that simply utilizing DM can’t tackle the lack of discriminative content issue. (2) the conditional DM and the unconditional DM obtain similar results (“Diff” vs “Cond-Diff”), which proves our hypothesis, that in the general content, the huge common content prioritizes the discriminative. (3) our method attains significant improvements over different components (“DiffGAD” vs others), this proves our effectiveness, which could distill the discriminative
+
+![Figure 5: Average ROC-AUC performance over 5 datasets for various methods. The methods are LOF, IRE, SCAN, READER, GCNS, DOMINANT, ADVE, ANOMALY, GAN, COND, and DiffGAD. The y-axis shows ROC-AUC from 40 to 100. The x-axis labels are rotated. A color bar on the right indicates average AUC from 50 to 65. DiffGAD has the highest median ROC-AUC (~65), while LOF has the lowest (~45).](643d86ebba41e16a88461bfcb3741de6_img.jpg)
+
+Figure 5: Average ROC-AUC performance over 5 datasets for various methods. The methods are LOF, IRE, SCAN, READER, GCNS, DOMINANT, ADVE, ANOMALY, GAN, COND, and DiffGAD. The y-axis shows ROC-AUC from 40 to 100. The x-axis labels are rotated. A color bar on the right indicates average AUC from 50 to 65. DiffGAD has the highest median ROC-AUC (~65), while LOF has the lowest (~45).
+
+Figure 5: Average ROC-AUC performance over 5 datasets, where the color represents the average AUC, and the central line is the median (Many methods for Dgraph encounter OOM and TLM restriction, thus Dgraph is omitted).
+
+{8}------------------------------------------------
+
+Table 2: Performance comparison (**ROC-AUC**) among 13 algorithms on 6 datasets, where we show the *avg perf.*  $\pm$  the *std of perf.* of each method. The best results of all methods are indicated in boldface, and the second best results are underlined. OOM refers to out-of-memory with CPU. TLE denotes time limit of 24 hours exceeded. We list the Avg result over 5 datasets, due to the unavailable Dgraph results with OOM and TLE for many methods, we omit Dgraph.
+
+| Algorithm                   | Weibo                            | Reddit                           | Disney                           | Books                            | Enron                            | Avg                              | Dgraph                           |
+|-----------------------------|----------------------------------|----------------------------------|----------------------------------|----------------------------------|----------------------------------|----------------------------------|----------------------------------|
+| <i>graph-agnostic</i>       |                                  |                                  |                                  |                                  |                                  |                                  |                                  |
+| LOF                         | $56.5 \pm 0.0$                   | <b><math>57.2 \pm 0.0</math></b> | $47.9 \pm 0.0$                   | $36.5 \pm 0.0$                   | $46.4 \pm 0.0$                   | $48.9 \pm 0.0$                   | TLE                              |
+| IF                          | $53.5 \pm 2.8$                   | $45.2 \pm 1.7$                   | <b><math>57.6 \pm 2.9</math></b> | $43.0 \pm 1.8$                   | $40.1 \pm 1.4$                   | $47.9 \pm 2.1$                   | <b><math>60.9 \pm 0.7</math></b> |
+| MLPAE                       | $82.1 \pm 3.6$                   | $50.6 \pm 0.0$                   | $49.2 \pm 5.7$                   | $42.5 \pm 5.6$                   | $44.6 \pm 7.1$                   | $53.8 \pm 4.4$                   | $37.0 \pm 1.9$                   |
+| <i>classical algorithms</i> |                                  |                                  |                                  |                                  |                                  |                                  |                                  |
+| SCAN                        | $63.7 \pm 5.6$                   | $49.9 \pm 0.3$                   | $50.5 \pm 4.0$                   | $49.8 \pm 1.7$                   | $52.8 \pm 3.4$                   | $53.3 \pm 3.0$                   | TLE                              |
+| Radar                       | <b><math>98.9 \pm 0.1</math></b> | $54.9 \pm 1.2$                   | $51.8 \pm 0.0$                   | $52.8 \pm 0.0$                   | $54.1 \pm 10.1$                  | $62.5 \pm 2.3$                   | OOM                              |
+| ANOMALOUS                   | <b><math>98.9 \pm 0.1</math></b> | $54.9 \pm 5.6$                   | $51.8 \pm 0.0$                   | $52.8 \pm 0.0$                   | $55.0 \pm 9.8$                   | <u><math>62.7 \pm 3.1</math></u> | OOM                              |
+| <i>deep algorithms</i>      |                                  |                                  |                                  |                                  |                                  |                                  |                                  |
+| GCNAE                       | $90.8 \pm 1.2$                   | $50.6 \pm 0.0$                   | $42.2 \pm 7.9$                   | $50.0 \pm 4.5$                   | $38.2 \pm 6.5$                   | $54.4 \pm 4.0$                   | $40.9 \pm 0.5$                   |
+| DOMINANT                    | $85.0 \pm 14.6$                  | $56.0 \pm 0.2$                   | $47.1 \pm 4.5$                   | $50.1 \pm 5.0$                   | $53.7 \pm 4.2$                   | $58.4 \pm 5.7$                   | OOM                              |
+| DONE                        | $85.3 \pm 4.1$                   | $53.9 \pm 2.9$                   | $41.7 \pm 6.2$                   | $43.2 \pm 4.0$                   | $46.7 \pm 6.1$                   | $54.2 \pm 4.7$                   | OOM                              |
+| AdONE                       | $84.6 \pm 2.2$                   | $50.4 \pm 4.5$                   | $48.8 \pm 5.1$                   | $53.6 \pm 2.0$                   | $44.5 \pm 2.9$                   | $56.4 \pm 3.3$                   | OOM                              |
+| AnomalyDAE                  | $91.5 \pm 1.2$                   | $55.7 \pm 0.4$                   | $48.8 \pm 2.2$                   | <u><math>62.2 \pm 8.1</math></u> | $54.3 \pm 11.2$                  | $62.5 \pm 4.6$                   | OOM                              |
+| GAAN                        | $92.5 \pm 0.0$                   | $55.4 \pm 0.4$                   | $48.0 \pm 0.0$                   | $54.9 \pm 5.0$                   | <u><math>59.3 \pm 0.2</math></u> | $62.0 \pm 1.1$                   | OOM                              |
+| CONAD                       | $85.4 \pm 14.3$                  | $56.1 \pm 0.1$                   | $48.0 \pm 3.5$                   | $52.2 \pm 6.9$                   | $51.6 \pm 4.3$                   | $58.7 \pm 5.8$                   | $34.7 \pm 1.2$                   |
+| <b>DiffGAD</b>              | <u><math>93.4 \pm 0.3</math></u> | <u><math>56.3 \pm 0.1</math></u> | <u><math>54.5 \pm 0.2</math></u> | <b><math>66.4 \pm 1.8</math></b> | <b><math>71.6 \pm 7.0</math></b> | <b><math>68.4 \pm 1.9</math></b> | <u><math>52.4 \pm 0.0</math></u> |
+
+content and further boost the detection performance. Moreover, we also visualize the reconstructed distribution by different components in Appendix B.
+
+### 4.3 COMPARISON WITH SOTA METHODS.
+
+In this subsection, we comprehensively compare our method with various state-of-the-art algorithms, ranging from graph-agnostic algorithms LOF (Breunig et al., 2000), MLPAE (Sakurada & Yairi, 2014), IF (Liu et al., 2012), and classical algorithms Rador (Li et al., 2017), ANOMALOUS (Peng et al., 2018), SCAN (Xu et al., 2007), to deep algorithms GAAN (Chen et al., 2020), DOMINANT (Ding et al., 2019), GCNAE (Kipf & Welling, 2016), DONE (Bandyopadhyay et al., 2020), CONAD (Xu et al., 2022), and the comparison results are reported in Table 2. Moreover, we also show the average of AUC results with standard deviation ( denoted as “Avg”) in the table, and then present a box chart to show the average AUC results of 5 datasets in Figure 5.
+
+Specifically, we draw the following observations: **(1)** DiffGAD achieves “an outlier node detection method that works universally well on all datasets”. It obtains top-2 AUC results over all datasets and significantly outperforms current methods with a large margin in average AUC with more than 9% average AUC (compared with the second Average AUC results in ANOMALOUS). **(2)** DiffGAD demonstrates robustness and stability across different datasets, it attains small *std* results over different datasets. **(3)** DiffGAD outperforms other deep-based algorithms by a large margin. Specially, the best improvement is for the Enron dataset, compared with the GAAN method, our DiffGAD attains more than 20.7% AUC gains. These achieved performances are significant, and this can be attributed to the enhancement of discriminative ability. More detailed analysis is in Appendix C.1.
+
+## 5 TIME AND COMPUTATIONAL ANALYSIS
+
+In this study, we analyze the time and computational analysis from theoretical and empirical views.
+
+### 5.1 THEORETICAL ANALYSIS
+
+**(1)** Graph AutoEncoder. We analyze the complexity according to (Liu et al., 2022b). Specifically, we utilize the Graph convolutional network as our backbone, whose complexity is linear to the edge numbers. For each layer, the convolution operation is  $\tilde{D}^{-\frac{1}{2}} \tilde{A} \tilde{D}^{-\frac{1}{2}} XW$ , and thus the complexity is  $\mathcal{O}(mdh)$  (Kipf & Welling, 2017b), where  $\tilde{A}X$  can be implemented efficiently with sparse-dense matrix multiplication. For  $\mathcal{O}(mdh)$ ,  $m$  is the number of non-zero elements in matrix  $A$ ,  $d$  is the feature dimensions for the attributed network, and  $h$  is the number of feature maps of the weight
+
+{9}------------------------------------------------
+
+Table 3: **Wall-clock running time (s)** among deep algorithms on five different numbers of epochs, where the experiments are conducted on the *gen\_time* dataset by BOND (Liu et al., 2022b).
+
+| Algorithm                                      | 10   | 100         | 200  | 300  | 400   |
+|------------------------------------------------|------|-------------|------|------|-------|
+| GCNAE                                          | 0.27 | 2.40        | 4.46 | 6.80 | 10.95 |
+| DOMINANT                                       | 0.10 | 0.59        | 1.35 | 1.90 | 2.40  |
+| DONE                                           | 0.11 | 0.75        | 1.61 | 2.26 | 3.18  |
+| AdONE                                          | 0.14 | 1.11        | 2.55 | 4.12 | 5.30  |
+| AnomalyDAE                                     | 0.11 | 0.70        | 1.12 | 1.71 | 2.04  |
+| GAAN                                           | 0.09 | 0.61        | 1.17 | 1.44 | 1.89  |
+| CONAD                                          | 0.17 | 1.23        | 2.40 | 3.49 | 4.59  |
+| <b>DiffGAD (AE <math>\alpha \neq 1</math>)</b> | 0.07 | 0.65        | 1.26 | 1.91 | 2.55  |
+| <b>DiffGAD (AE <math>\alpha = 1</math>)</b>    | 0.07 | 0.51        | 0.97 | 1.48 | 1.96  |
+| <b>DiffGAD (Diff)</b>                          | 0.03 | 0.42        | 0.81 | 1.21 | 1.63  |
+| <b>DiffGAD (Cond-Diff)</b>                     | 0.03 | 0.45        | 0.91 | 1.35 | 1.80  |
+| <b>DiffGAD (Sample)</b>                        |      | <b>0.17</b> |      |      |       |
+
+matrix. Moreover, to capture graph topological content, we devise a link prediction layer to reconstruct the original topological structure, and thus the overall complexity is  $\mathcal{O}(mdH + n^2)$ , where  $H$  is the summation of all feature maps across different layers, and  $n$  is the number of nodes.
+
+(2) Latent Diffusion Models. We employ an MLP as the denoising function by following (Karras et al., 2022; Zhang et al., 2023a). Specifically, during the training phase, a random timestep is sampled for each epoch to train the latent node embeddings. The time complexity of this process is  $\mathcal{O}(end'H')$ , where  $e$  denotes the number of training epochs,  $H'$  is the number of feature maps for MLP,  $d'$  is the input dimension for DM, which is also the feature map dimension of AE, since we adopt the output of AE as the input of DM. During the inference phase, similarly, the time complexity is  $\mathcal{O}(tnd'H')$ , where  $t$  represents the number of sampling timesteps in the denoising process. The combined time complexity of both training and inference phases remains  $\mathcal{O}((e + t)nd'H')$ .
+
+### 5.2 EMPIRICAL DISCUSSION
+
+Following (Liu et al., 2022b), we employ the Wall-Clock time and GPU memory for empirical comparisons, and the experimental results are listed in Table 3 and Table 4, respectively. The whole testing is conducted on a Linux server with a 2.90GHz Intel(R) Xeon(R) Platinum 8268 CPU, 1T RAM, and 1 Nvidia 2080 Ti GPU with 11GB memory.
+
+We can observe that DiffGAD is efficient in terms of both time and memory usage. Specifically, benefiting from the advancements in diffusion acceleration, we adopt a more efficient EDM sampler (Karras et al., 2022) within latent space and utilize 50 sampling steps. From Table 4, we can observe that the sampling time of DiffGAD is quite short, only 0.17 seconds. Moreover, we also list the Autoencoder with  $\alpha = 1$  in Eq. 7. Denoted as **DiffGAD (AE  $\alpha = 1$ )**, which omits the topology reconstruction, and reduces AE costs to  $\mathcal{O}(mdH)$ . We can observe that the running time of AE  $\alpha = 1$  and diffusion model are comparable.
+
+Furthermore, as the size of the graph scales to real-world proportions, the overall time complexity of DM simplifies to  $\mathcal{O}(n)$  as we discuss in 5.1. This indicates that the complexity  $\mathcal{O}(n^2)$  of AutoEncoder dominates the whole complexity, while the time required for diffusion model who adding and removing noise in latent space can be neglected.
+
+## 6 CONCLUSION
+
+In this work, we make the first effort to transfer the diffusion model from generation task to a detector and propose a diffusion-based unsupervised graph anomaly detector, namely DiffGAD. Specifically, (1) a discriminative content-guided generation paradigm is proposed to capture the discriminative content and then distill it into the latent space, and (2) a content-preservation strategy is designed to enhance the confidence of the aforementioned guidance process, and (3) extensive experiments on 6 real-world and large-scale datasets with different metrics demonstrate the effectiveness of our method, and (4) comprehensive time and computational analysis demonstrate our efficiency.
+
+**Limitation and Future Work.** The expressiveness of latent embeddings might be limited by graph encoder, we will explore some encoder-free strategies in the future.
+
+Table 4: **GPU Memory Consumption (MB)** among deep algorithms on five different graph sizes (nodes), where the experiments are conducted on the *gen* dataset by BOND (Liu et al., 2022b).
+
+| Algorithm      | 100        | 500        | 1000       | 5000       | 10000       |
+|----------------|------------|------------|------------|------------|-------------|
+| GCNAE          | 180        | 200        | 200        | 200        | 262         |
+| DOMINANT       | 218        | 224        | 240        | 750        | 2194        |
+| DONE           | 218        | 226        | 264        | 900        | 2610        |
+| AdONE          | 220        | 260        | 292        | 904        | 2592        |
+| AnomalyDAE     | 218        | 228        | 262        | 1032       | 3756        |
+| GAAN           | 220        | 228        | 270        | 1032       | 3358        |
+| CONAD          | 218        | 226        | 246        | 864        | 2578        |
+| <b>DiffGAD</b> | <b>220</b> | <b>228</b> | <b>246</b> | <b>830</b> | <b>2532</b> |
+
+ Rest of paper (reference and Appendix) is removed.

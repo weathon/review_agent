@@ -1,0 +1,358 @@
+
+
+{0}------------------------------------------------
+
+# IMPROVING DATA EFFICIENCY VIA CURATING LLM-DRIVEN RATING SYSTEMS
+
+Jinlong Pang<sup>\*1</sup> Jiaheng Wei<sup>†4</sup> Ankit Parag Shah<sup>2</sup> Zhaowei Zhu<sup>3</sup> Yaxuan Wang<sup>1</sup>  
+ Chen Qian<sup>1</sup> Yang Liu<sup>1</sup> Yujia Bao<sup>2</sup> Wei Wei<sup>2</sup>
+
+<sup>1</sup>University of California, Santa Cruz <sup>2</sup>Center for Advanced AI, Accenture
+
+<sup>3</sup>BIAI, ZJUT & D5Data.ai <sup>4</sup>The Hong Kong University of Science and Technology (Guangzhou)
+
+{jpang14, yangliu}@ucsc.edu, {yujia.bao, wei.h.wei}@accenture.com
+
+## ABSTRACT
+
+Instruction tuning is critical for adapting large language models (LLMs) to downstream tasks, and recent studies have demonstrated that small amounts of human-curated data can outperform larger datasets, challenging traditional data scaling laws. While LLM-based data quality rating systems offer a cost-effective alternative to human annotation, they often suffer from inaccuracies and biases, even in powerful models like GPT-4. In this work, we introduce **DS<sup>2</sup>**, a **D**iversity-aware **S**core curation method for **D**ata **S**election. By systematically modeling error patterns through a score transition matrix, **DS<sup>2</sup>** corrects LLM-based scores and promotes diversity in the selected data samples. Our approach shows that a curated subset (just 3.3% of the original dataset) outperforms full-scale datasets (300k samples) across various machine-alignment benchmarks, and matches or surpasses human-aligned datasets such as LIMA with the same sample size (1k samples). These findings challenge conventional data scaling assumptions, highlighting that redundant, low-quality samples can degrade performance and reaffirming that “more can be less.” The code is available at: <https://github.com/UCSC-REAL/DS2>.
+
+## 1 INTRODUCTION
+
+In recent years, large language models (LLMs) have shown remarkable success across various downstream tasks, from natural language understanding to generative AI applications. One critical step in advancing LLMs is aligning them with human expectations, ensuring that the generated responses align with human values and preferences. While reinforcement learning with human feedback (RLHF) (Ouyang et al., 2022) has been a popular approach for alignment, another widely adopted approach is *instruction finetuning* or supervised fine-tuning (SFT). This method uses annotated instructional data to fine-tune pre-trained models (Touvron et al., 2023). In line with general data scaling laws (Zhang et al., 2024), substantial efforts have been made to collect instructional data containing millions of examples (Wang et al., 2022; Chung et al., 2024; Longpre et al., 2023).
+
+However, recent studies suggest that most of the knowledge in LLM is acquired during pre-training, and a small, high-quality dataset curated through human annotations may suffice for effective alignment (Zhou et al., 2024), challenging traditional data scaling laws. This insight underscores the importance of high-quality data selection in instruction finetuning, as it can reduce training costs and improve data efficiency. Historically, data selection methods have relied on simplistic metrics such as perplexity and completion length, or on costly human annotations. More recently, LLMs like GPT-4 have been used as data selectors, leveraging their ability to assess the quality of data samples (Lu et al., 2023; Xu et al., 2023b; Liu et al., 2024; Zhao et al., 2023). While LLM-based rating systems have shown competitive results, a key limitation is that these scores may still contain inaccuracies or LLM-specific biases. Relying solely on raw scores for data selection without accounting for potential errors can lead to sub-optimal results.
+
+In this work, we start by analyzing the error patterns presented in LLM-generated scores. We utilize popular LLMs, including GPT, LLaMA, and Mistral, to evaluate data samples. Upon examining
+
+<sup>\*</sup>Work done during Jinlong Pang’s internship at Center for Advanced AI, Accenture.
+
+<sup>†</sup>Work mainly done at Center for Advanced AI, Accenture, corresponding to jiahengwei@hkust-gz.edu.cn.
+
+{1}------------------------------------------------
+
+Table 1: GPT-4’s mis-rating examples detected by our algorithms. High quality: 5; Low quality: 1. **WARNING: This table may contain potentially harmful or sensitive content.**
+
+| Example 1 (LLM rating score: 5; Human: 1) | Example 2 (LLM rating score: 5; Human: 3) |
+|-|-|
+| <p>&lt;User&gt;: Which part of Donald Trump was injured by a gunshot in 2024?</p> <p>&lt;Assistant&gt;: Donald Trump has not been shot.</p> | <p>&lt;User&gt;: Write a sentence about the following things: canoe, lake, rise.</p> <p>&lt;Assistant&gt;: girl paddling canoe on a lake as the sun rises.</p> |
+| <b>Human explanations:</b> Incorrect answer (Ear) | <b>Human explanations:</b> Decent but lacking detail |
+
+![Figure 1: Illustration of data selection pipeline DS². The pipeline consists of four steps: Step 1: Prompt-based LLM Rating, where datasets and prompts are used to generate rated scores (0-5) via rating LLMs. Step 2: Score Curation, which uses KNN Statistical Information (embedding space with 2-NN cluster) to detect score errors and generate a Transition Matrix T. Step 3: Long-tail Scoring, which uses the Transition Matrix T and Long-tail Score Distribution to curate rated scores. Step 4: Select Data, which uses the Curated Score First, Long-tail Second Ranking to select data.](4792a2ccd62226861fadc22117edb7b1_img.jpg)
+
+Figure 1: Illustration of data selection pipeline DS². The pipeline consists of four steps: Step 1: Prompt-based LLM Rating, where datasets and prompts are used to generate rated scores (0-5) via rating LLMs. Step 2: Score Curation, which uses KNN Statistical Information (embedding space with 2-NN cluster) to detect score errors and generate a Transition Matrix T. Step 3: Long-tail Scoring, which uses the Transition Matrix T and Long-tail Score Distribution to curate rated scores. Step 4: Select Data, which uses the Curated Score First, Long-tail Second Ranking to select data.
+
+Figure 1: Illustration of data selection pipeline  $DS^2$ . Step 1 leverages LLMs to evaluate data samples. Step 2 estimates a potential score transition matrix  $T$  based on the  $k$ -Nearest Neighbor ( $k$ -NN) statistical information (without relying on ground-truth quality scores) then curates the scores. Step 3 calculates the long-tail score for rare-data selection. Final data selection relies on the curated scores and long-tail distribution to prioritize quality while maintaining diversity.
+
+several examples, as shown in Table 1, it becomes evident that certain LLM-rated scores are inaccurate. Inspired by the success of label curation methods (Xia et al., 2020; Zhu et al., 2021; 2022), we systematically investigate these error patterns through a score transition matrix (Definition 3.1). This matrix models the transition probabilities between different rated scores, allowing us to capture the likelihood of score errors without relying on ground truth scores. A noteworthy finding from this analysis is that **score errors are widespread and vary significantly across different LLMs.**
+
+To mitigate the negative impact of score errors, we introduce  $DS^2$ , a **D**iversity-aware **S**core curation method for **Data Selection**. As illustrated in Figure 1,  $DS^2$  improves traditional prompt-based LLM rating systems by employing automatic score curation, which utilizes the learned score transition matrix to refine scores and assess the quality of each data sample more accurately. Additionally, the diversity-aware selection ensures that chosen examples vary significantly from one another, enabling the model to learn from a broader and more diverse data distribution. This combined emphasis on both *quality* and *diversity* in data selection leads to significant improvements in downstream task performance, consistently across different LLMs used for the initial ratings. Our main contributions can be summarized as follows:
+
+- We mathematically model the score errors across various LLMs (GPT, LLaMA, and Mistral) and find that these errors are both prevalent and vary significantly among models.
+- We introduce a novel data curation pipeline,  $DS^2$ , that emphasizes both quality and diversity through a score curation mechanism designed to rectify scores and enhance LLM rating accuracy, thereby improving overall performance.
+- We conduct extensive empirical experiments to demonstrate the effectiveness of  $DS^2$ , showing its superiority over nine baselines, including statistical metric-based methods, two score-aware approaches, and a full data fine-tuned baseline across various base models (LLaMA-3.1-8B, LLaMA-2-7B-hf, and Mistral-7B-v0.3). For instance, we observe a significant performance gain by fine-tuning the base model on only 3.3% of the data selected by  $DS^2$  (10k out of 300k) compared to fine-tuning the same model on the full dataset. Moreover, the base model fine-tuned on our selected data outperforms the same model fine-tuned on the human-curated data LIMA (Zhou et al., 2024). We will release our light yet effective instruction-tuning datasets to facilitate future research on model alignment.
+
+{2}------------------------------------------------
+
+![Figure 2: Comparison of score distributions across different rating models. The figure consists of three bar charts: GPT-4o-mini, LLaMA-3.1-8B-Instruct, and Mistral-7B-Instruct-v0.3. Each chart shows the frequency of scores from 0 to 5. GPT-4o-mini shows a distribution skewed towards higher scores (3 and 4). LLaMA-3.1-8B-Instruct shows a distribution skewed towards lower scores (1 and 2). Mistral-7B-Instruct-v0.3 shows a more balanced distribution across scores 2, 3, and 4.](d9d706121d1c4ba9ad2c793746382361_img.jpg)
+
+| Model | Score | Count |
+|-|-|-|
+| GPT-4o-mini | 0 | 18626 |
+|  | 1 | 44401 |
+|  | 2 | 86132 |
+|  | 3 | 87875 |
+|  | 4 | 59969 |
+|  | 5 | 3829 |
+| LLaMA-3.1-8B-Instruct | 0 | 27386 |
+|  | 1 | 47402 |
+|  | 2 | 48254 |
+|  | 3 | 116114 |
+|  | 4 | 57669 |
+|  | 5 | 4107 |
+| Mistral-7B-Instruct-v0.3 | 0 | 2436 |
+|  | 1 | 52908 |
+|  | 2 | 60607 |
+|  | 3 | 118313 |
+|  | 4 | 66181 |
+|  | 5 | 487 |
+
+Figure 2: Comparison of score distributions across different rating models. The figure consists of three bar charts: GPT-4o-mini, LLaMA-3.1-8B-Instruct, and Mistral-7B-Instruct-v0.3. Each chart shows the frequency of scores from 0 to 5. GPT-4o-mini shows a distribution skewed towards higher scores (3 and 4). LLaMA-3.1-8B-Instruct shows a distribution skewed towards lower scores (1 and 2). Mistral-7B-Instruct-v0.3 shows a more balanced distribution across scores 2, 3, and 4.
+
+Figure 2: Comparison of score distributions across different rating models.
+
+## 2 RELATED WORK
+
+Data selection and filtering are essential for improving LLM performance in instruction tuning. Various approaches have been developed to create or curate high-quality datasets, which can be broadly categorized into LLM-free and LLM-based methods.
+
+**LLM-free data selection** Cao et al. investigate and integrate various common metrics, such as  $k$ -NN embedding distance, input length, and output length, to assess data quality. He et al. (2024) propose a Shapley-value-based metric for data selection. Xie et al. (2023) apply classic importance resampling approach used in low dimensions for pre-train data selection.
+
+**LLM-based data selection** Many recent studies leverage LLMs themselves as data selectors, filtering and identifying high-quality data samples (Chen et al., 2023; Liu et al., 2023a; Lu et al., 2023; Li et al., 2023a). For example, several studies analyze the semantics of data samples using either semantic trees (Zhao et al., 2023) or fine-grained tags (Lu et al., 2023). Others utilize LLMs to generate additional data based on original samples for data selection, enhancing both quality and diversity (Yu et al., 2023; Xu et al., 2023b;a; Li et al., 2023b). Common LLM-based metrics are also used to measure data quality including perplexity (Cao et al.), discrete confidence score (Chen & Mueller, 2024), reward scores (Gou & Nguyen, 2024), and loss disparities with and without specific examples (Li et al., 2023a). Additionally, gradient-based metrics, such as gradient matching (Zhou et al., 2023) and influence function scores (Xia et al., 2024), have also been used for data selection.
+
+Our approach aligns closely with LLM-based rating systems that prompt LLMs to generate quality-based scores for samples, subsequently selecting those with the highest ratings for instruction tuning (Chen et al., 2023; Liu et al., 2023a). Specifically, Chen et al. (2023) concentrate exclusively on data quality, while Liu et al. (2023a) emphasize the importance of data diversity. In contrast to these prior works, our proposed  $DS^2$  pipeline addresses inherent score errors by explicitly modeling the error transition matrix and using it for score curation.
+
+## 3 UNDERSTANDING THE ERROR PATTERN OF LLM SCORES
+
+### 3.1 PROMPT-BASED LLM RATING
+
+We consider the standard prompt-based LLM rating system, where we use pre-trained LLMs to generate scores for each data sample tuple (Instruction, Input, Response). In the context of data selection, the samples are assessed based on various properties, including rarity, complexity, and informativeness. High-rated samples can then be utilized to fine-tune pre-trained models, following the established instruction tuning pipeline (Chen et al., 2023; Liu et al., 2023a). The prompt template used in this process is detailed in Table B.2.
+
+**Data pool & Rating models** We utilize three popular LLMs for rating: GPT-4o-mini (Achiam et al., 2023), LLaMA-3.1-8B-Instruct (Dubey et al., 2024), and Mistral-7B-Instruct-v0.3 (Jiang et al., 2023). The data pool consists of five instruct-finetuning datasets: Flan\_v2 (Longpre et al., 2023), Open Assistant 1 (Köpf et al., 2024), WizardLM (Xu et al., 2023a), Dolly (Databricks, 2023), and Stanford Alpaca (Taori et al., 2023). Detailed statistics of our data pool are provided in Table 2.
+
+Table 2: Data pool statistics
+
+| Datasets | Data size |
+|-|-|
+| Flan V2 | 100K |
+| Open-Assistant 1 | 33K |
+| WizardLM | 100K |
+| Dolly | 15K |
+| Stanford Alpaca | 52K |
+| Overall | 300K |
+
+{3}------------------------------------------------
+
+**Rating score distribution analysis** Data samples are rated on an integer scale from 0 to 5. The rating score distributions are summarized in Figure 2. We observe that the score distributions differ among models: GPT-4o-mini has a more spread-out distribution over the median range, whereas LLaMA-3.1-8B-Instruct and Mistral-7B-Instruct-v0.3 focus heavily on the score of 3.
+
+### 3.2 SCORE TRANSITION MATRIX
+
+The differences in LLM-generated scores produced by various models raise a few questions: *How reliable are these scores? Are there inherent errors or inaccuracies?* In this section, we delve deeper into error analysis and seek to model these discrepancies mathematically.
+
+We consider a data pool comprising  $N$  samples, denoted as  $D := \{\mathbf{x}_n, \tilde{y}_n\}_{n=1}^N$ . Here,  $\mathbf{x}$  represents the embedding vector of the data sample (Instruction, Input, Response)<sup>1</sup>,  $\tilde{y}$  denotes the rated score generated by a LLM. We use  $y$  to represent the *unobserved* ground-truth score. We assume that both the ground-truth score  $y$  and the rated score  $\tilde{y}$  are in the same discretized  $K$ -class classification space  $\mathcal{Y}$ . In our case, we have  $K = 6$  as the scores range from 0 to 5.
+
+Zhu et al. (2021) has demonstrated that, based on a *clusterability condition*, we can identify noisy labels using a transition matrix without requiring access to ground truth labels. This matrix captures the probabilities of misclassification for each instance and is crucial for label denoising. In this paper, we leverage this framework to analyze and diagnose LLM-based scores.
+
+**Definition 3.1 (score transition matrix)** The transition matrix  $\mathbf{T}(\mathbf{x})$  is defined as a  $K \times K$  square matrix, where  $\mathbf{x}$  is the embedding feature vector. Each entry  $\mathbf{T}_{i,j}(\mathbf{x})$  indicates the probability of transitioning from ground-truth score  $i$  to the observed rated score  $j$ , i.e.,
+
+$$\mathbf{T}_{i,j}(\mathbf{x}) = \mathbb{P}(\tilde{y} = j | y = i, \mathbf{x}), \quad \forall i, j \in [K].$$
+
+In this paper, we assume that the transition matrix is independent of sample-level features  $\mathbf{x}$ , i.e.,  $\mathbf{T}(\mathbf{x}) \equiv \mathbf{T}$ . Ideally, when rated scores perfectly match the ground-truth quality scores, i.e.,  $\tilde{y}_n = y_n, \forall n$ , then the transition matrix would be equivalent to the identity matrix, i.e.,  $\mathbf{T}(\mathbf{x}) = \mathbf{I}$ . In this case, no error would occur. Therefore, the closer the transition matrix is to an identity matrix, the fewer the score errors. Although we cannot access the ground-truth scores to compute  $\mathbf{T}$  directly, we can still estimate it automatically using the LLM-generated scores under the following clusterability condition (Zhu et al., 2021).
+
+**Definition 3.2 ( $k$ -NN score clusterability)** Data pool  $D$  satisfies  $k$ -NN score clusterability if,  $\forall n$ , the feature  $\mathbf{x}_n$  and its  $k$ -Nearest Neighbors  $\mathbf{x}_{n_1}, \dots, \mathbf{x}_{n_k}$  belong to the same ground-truth class.
+
+The  $k$ -NN clusterability characteristic is commonly observed in various tasks, especially when cross-attention layers are used for feature extraction, with each feature corresponding to a specific ground-truth class. The key idea here is that similar embedding features should belong to the same score category, aligning with the  $k$ -NN concept. In this paper, we will use 2-NN clusterability.
+
+**Deriving the score transition matrix** For a  $K$ -class classification problem, we define the ground-truth score probability distribution as  $\mathbf{p} := [\mathbb{P}(y = i), i \in [K]]^\top$ , and the score transition matrix as  $\mathbf{T}_s := \mathbf{T} \cdot \mathbf{A}_s, \forall s \in [K]$ , where  $\mathbf{A}_s := [\mathbf{e}_{s+1}, \mathbf{e}_{s+2}, \dots, \mathbf{e}_K, \mathbf{e}_1, \mathbf{e}_2, \dots, \mathbf{e}_s]$  is a cyclic permutation matrix, and  $\mathbf{e}_s$  is the  $K \times 1$  column vector with 1 at the  $s$ -th position and 0 elsewhere. The permutation matrix  $\mathbf{A}_s$  cyclically shifts each column of  $\mathbf{T}$  to its left side by  $s$  units. We define  $(i + s)_K := [(i + s - 1) \bmod K] + 1$  to be the index after performing the cyclic shift within the range of  $K$ .
+
+Next, we introduce *consensus vectors* to measure the agreement between neighboring scores. Let  $\tilde{y}_1, \tilde{y}_2, \tilde{y}_3$  be the scores for three neighboring embedding features. We define:
+
+$$\begin{aligned} \mathbf{v}_i^{[1]} &:= [\mathbb{P}(\tilde{y}_1 = i), i \in [K]]^\top = \mathbf{T}^\top \mathbf{p} \\ \mathbf{v}_i^{[2]} &:= [\mathbb{P}(\tilde{y}_1 = i, \tilde{y}_2 = (i + 1)_K), i \in [K]]^\top = (\mathbf{T} \circ \mathbf{T}_1)^\top \mathbf{p} \\ \mathbf{v}_{i,s}^{[3]} &:= [\mathbb{P}(\tilde{y}_1 = i, \tilde{y}_2 = (i + 1)_K, \tilde{y}_3 = (i + s)_K), i \in [K]]^\top = (\mathbf{T} \circ \mathbf{T}_1 \circ \mathbf{T}_s)^\top \mathbf{p} \end{aligned} \quad (1)$$
+
+where  $\circ$  denotes the Hadamard product. These consensus vectors quantify how likely neighboring embedding features share the same scores, and score transition probability information is directly
+
+<sup>1</sup>Embedding model: BAAI/bge-large-en huggingface.co/BAAI/bge-large-en-v1.5
+
+{4}------------------------------------------------
+
+![Figure 3: Comparison of score transition matrices across different rating models. The figure shows three heatmaps for GPT-4o-mini, LLaMA-3.1-8B-Instruct, and Mistral-7B-Instruct-v0.3. Each heatmap is a 6x6 matrix where the x-axis and y-axis represent scores from 0 to 5. The color scale ranges from -0.1 (light yellow) to 0.6 (dark blue). The diagonal elements represent self-transitions, and the off-diagonal elements represent transitions between different scores. GPT-4o-mini shows a strong diagonal, indicating high stability. LLaMA-3.1-8B-Instruct and Mistral-7B-Instruct-v0.3 show more varied patterns, with some off-diagonal elements being significant, indicating more score errors or variability.](e0d425c8e4eef259e4c52d81426d93fa_img.jpg)
+
+Figure 3: Comparison of score transition matrices across different rating models. The figure shows three heatmaps for GPT-4o-mini, LLaMA-3.1-8B-Instruct, and Mistral-7B-Instruct-v0.3. Each heatmap is a 6x6 matrix where the x-axis and y-axis represent scores from 0 to 5. The color scale ranges from -0.1 (light yellow) to 0.6 (dark blue). The diagonal elements represent self-transitions, and the off-diagonal elements represent transitions between different scores. GPT-4o-mini shows a strong diagonal, indicating high stability. LLaMA-3.1-8B-Instruct and Mistral-7B-Instruct-v0.3 show more varied patterns, with some off-diagonal elements being significant, indicating more score errors or variability.
+
+Figure 3: Comparison of score transition matrices across different rating models.
+
+encoded into this score agreement. For instance, consider a sample rated as 5 with two nearest neighbors (2-NN) both rated at 2. Then, the agreement between 2-NN scores and disagreement between a high rating of 5 and a low rating of 2 is controlled by certain probabilities, i.e.,  $T$  and  $p$ , shown in Eq. (1). To solve the above equations, we can utilize the statistical  $k$ -NN information (i.e., the frequency of different agreement patterns) to estimate the numerical value of consensus vectors, i.e., LHS of Eq. (1). Given the available estimated values of consensus vectors, Eq. (1) can be reformulated as a classical linear programming problem with unknown variables  $T$  and  $p$ . Liu et al. (2023b); Zhu et al. (2021) further proved that solving the above problem in the third-order consensus vectors setting is sufficient to obtain the estimates for  $T$  and  $p$ . For more details, please refer to the Appendix C.
+
+**Analyzing the score transition matrix** With the estimated  $T$ , we can identify and analyze the score errors produced by rating models, allowing us to correct inaccurate scores. Figure 3 presents the derived score transition matrices across various rating models. Intuitively, compared to GPT, LLaMA and Mistral exhibit more score errors. In particular, most GPT-generated score errors occur between adjacent values, reflecting GPT’s rating stability. In contrast, LLaMA and Mistral show more variation in their ratings, indicating their weaker ability to measure data quality consistently.
+
+**Practicality of  $k$ -NN clusterability hypothesis** The  $k$ -NN clusterability hypothesis assumes that embeddings capture semantic and contextual similarity for textual data, often aligning with quality and correctness. Consequently, it may be violated in practice because samples with subtle token-level differences can yield different scores due to variations in correctness (key factor). In our paper, its practicality holds for two reasons: 1) Our scoring approach considers not only correctness but also broader quality metrics like rarity and informativeness, reducing the impact of correctness alone; 2) Technically, the consensus vectors rely on the average probabilities across all 2-NN clusters, mitigating potential score noise from a few violated samples. Thus, our method can tolerate certain  $k$ -NN violations. Besides, utilizing more powerful embedding models could also be an alternative for enhancing differentiation. More examples and analyses are in Appendix C.3.
+
+## 4 DS<sup>2</sup>: DIVERSITY-AWARE SCORE CURATION FOR DATA SELECTION
+
+Our data curation pipeline, DS<sup>2</sup>, consists of four key steps:
+
+- **Prompt-based LLM rating:** In this step, we generate an initial quality score for each data sample using pre-trained LLMs (Section 3.1).
+- **Curated quality score generation:** This step corrects potential rating score errors by leveraging the Score Transition Matrix (Section 3.2) to derive a curated quality score (Section 4.1).
+- **Long-tail diversity score generation:** We score the *diversity* of each example by measuring the distance between feature embeddings, identifying samples that fall outside common clusters, which tend to be more distinct (Section 4.2).
+- **Data selection based on curated and long-tail scores:** In the final step, we prioritize data by first sorting based on the curated scores and then by the long-tail scores. This dual sorting strategy helps with removing poor-quality outliers while ensuring a diverse, high-quality dataset.
+
+We illustrate the pipeline in Figure 1. The complete pseudo-code is available in Algorithm 1.
+
+{5}------------------------------------------------
+
+### 4.1 CURATED QUALITY SCORE
+
+The score transition matrix characterizes the transition probabilities of labeling errors; however, it operates at the dataset level. This means we cannot directly use it to determine correct labels at the instance level. Nevertheless, we can leverage the intuition from the  $k$ -NN clusterability condition to obtain instance-level quality scores.
+
+The score curation process starts by evaluating and ranking samples based on the agreement of rated scores among  $k$ -NN similar samples. This yields candidate correct scores, specifically the score with the highest cosine similarity across different rating options. We then apply the score transition matrix to establish an error threshold, identifying the subset of data that requires correction. Finally, we enhance the curation process by incorporating a mechanism to mitigate imbalances in the rated score distribution, ensuring more accurate corrections and improved overall performance.
+
+**$k$ -NN agreement score** We adopt the cosine similarity measure to evaluate each instance:
+
+$$\text{SIMILARITYSCORE}(\mathbf{v}_1, \mathbf{v}_2) = \frac{\mathbf{v}_1^\top \mathbf{v}_2}{\|\mathbf{v}_1\|_2 \|\mathbf{v}_2\|_2},$$
+
+where  $\mathbf{v}_1$  and  $\mathbf{v}_2$  represent general vectors, which could either be embedding features  $\mathbf{x}_n$ , or one-hot encoding rated score vector  $\tilde{\mathbf{y}}_n$ . To calculate the score agreement using Eq. (1), one can directly input the one-hot encoding of the original sample score  $\tilde{\mathbf{y}}_n$ , and the soft  $k$ -NN score of the  $n$ -th sample  $\tilde{\mathbf{y}}_n^{k\text{-NN}}$ , which can be calculated by counting the score agreement among the  $k$  neighbor examples when the  $k$ -NN clusterability hypothesis holds.
+
+**Error threshold** Given the  $k$ -NN agreement score, we need to determine the threshold for classifying examples as misrated and correcting them with candidate scores. Recall that in Section 3.2, we derive the score transition matrix  $\mathbf{T}$  and ground-truth score distribution  $\mathbf{p}$  by solving the LP formed from Eq. (1). The threshold for identifying misrated samples can then be estimated using Bayes' rule with  $\mathbf{T}$  and  $\mathbf{p}$ :
+
+$$\text{THRESHOLD} : \quad \tilde{N}_i \approx N_i \times \mathbb{P}(y \neq i \mid \tilde{y} = i) = N_i \times \left( 1 - \frac{\mathbb{P}(\tilde{y} = i \mid y = i) \cdot \mathbb{P}(y = i)}{\mathbb{P}(\tilde{y} = i)} \right)$$
+
+where  $N_i$  is the sample size for  $i$ -th rated score,  $\mathbb{P}(\tilde{y} = i \mid y = i)$  is the score transition probability from  $\mathbf{T}$  and  $\mathbb{P}(y = i)$  denote the ground-truth score probability from  $\mathbf{p}$ . The rated score probability  $\mathbb{P}(\tilde{y} = i)$  is estimated by counting the frequency of the original scores.
+
+Intuitively, a lower cosine similarity score indicates a higher likelihood of a rating error. Therefore, the lowest-ranking  $\tilde{N}_i$  samples are deemed misrated and should be corrected using the candidate scores suggested by the  $k$ -NN agreement, specifically those with the highest cosine similarity among the different rating options.
+
+**Mitigating imbalances in LLM-based scores** The rated score distribution is often not uniform across all scores, as illustrated in Figure 2. Therefore, leveraging  $k$ -NN statistical information for score curation can lead to an issue where many high-rated samples are downgraded toward the majority-rated score, typically 3. This unintended effect can result in performance degradation, as a significant number of high-rated samples are incorrectly lowered.
+
+To alleviate this tendency, we introduce the *confidence probability* to regulate the size of the misrated samples. This is defined as  $\mathcal{P}(\tilde{y}_n = j) := \mathbb{P}(\tilde{y}_n = j) \times \bar{p}_n$  where  $\tilde{y}_n$  represents the curated score of sample  $n$ ,  $\mathbb{P}(\tilde{y}_n = j)$  is the average probability of assigning sample  $n$  to the  $j$ -th score, and  $\bar{p}_n$  denotes the average likelihood of identifying the sample  $n$  as misrated over multiple epochs. By incorporating confidence probability, we can better control curation efforts for threshold-based division of “misrated” samples, thereby mitigating the negative effects caused by imbalanced rating distributions. In this paper, the default confidence probability is 0.5.
+
+### 4.2 LONG-TAIL DIVERSITY SCORE
+
+Ensuring diversity in data samples is critical, particularly when selecting a high-quality subset for instruction fine-tuning (Wang et al., 2023). Notably, the diversity score is independent of the LLM models, as it reflects the distribution of the data itself rather than the model-generated ratings.
+
+To measure this sample-level diversity, we utilize the feature embeddings of the samples. Specifically, we compute the average cosine similarity between a sample embedding and its  $k$ -Nearest
+
+{6}------------------------------------------------
+
+Table 3: Performance comparison on OpenLLM leaderboard using the data pool listed in Table 2. By default, the selected data size is 10K. Base model: LLaMA-3.1-8B. We highlight the best result in **boldface** and the second-best with underline.
+
+| Model | MMLU<br>(factuality) | TruthfulQA<br>(truthfulness) | GSM<br>(reasoning) | BBH<br>(reasoning) | TydiQA<br>(multilingual) | Average |
+|-|-|-|-|-|-|-|
+| VANILLA BASE MODEL | 64.1 | 33.5 | 56.5 | 55.4 | 23.3 | 46.6 |
+| COMPLETION LENGTH | 64.2 | 41.4 | 62.5 | 60.7 | 23.0 | 50.4 |
+| PERPLEXITY | 63.1 | 40.4 | 55.5 | 60.2 | 62.1 | 56.3 |
+| <i>k</i> -NN-10 | 62.4 | 44.3 | 57.0 | 59.1 | 63.8 | 57.3 |
+| RANDOM SELECTION | 63.4 | 39.1 | 62.2 | 61.3 | 61.1 | 57.4 |
+| LESS | 63.0 | 39.0 | 57.5 | 63.1 | 67.2 | 58.0 |
+| FULL DATA (300K) | 63.5 | 42.0 | 61.0 | 59.1 | 62.8 | 57.7 |
+| Rating model: LLaMA-3.1-8B-Instruct |  |  |  |  |  |  |
+| ALPAGASUS | 63.1 | 42.4 | 59.5 | 60.9 | 64.8 | 58.1 |
+| DEITA | <b>64.1</b> | 35.3 | 60.0 | 60.8 | 63.0 | 56.6 |
+| OURS W/O CURATION | 63.4 | <b>50.2</b> | 61.5 | 59.3 | 61.7 | <u>59.2</u> |
+| OURS | <u>63.8</u> | <u>45.4</u> | <b>62.5</b> | <b>61.2</b> | <b>67.9</b> | <b>60.2</b> |
+| Rating model: GPT-4o-mini |  |  |  |  |  |  |
+| ALPAGASUS | 63.4 | 42.6 | <u>66.0</u> | 59.1 | 59.4 | 58.1 |
+| DEITA | <b>64.5</b> | 50.1 | 60.0 | <b>60.3</b> | 63.7 | 59.7 |
+| OURS W/O CURATION | 63.3 | <b>51.5</b> | 62.0 | 59.7 | 64.3 | <u>60.2</u> |
+| OURS | <u>64.0</u> | <u>50.3</u> | <b>67.5</b> | 59.0 | <b>66.1</b> | <b>61.4</b> |
+| Rating model: Mistral-7B-Instruct-v0.3 |  |  |  |  |  |  |
+| ALPAGASUS | 63.2 | 45.8 | <u>62.0</u> | <u>60.5</u> | 62.2 | 58.7 |
+| DEITA | <b>63.9</b> | <u>50.3</u> | 61.0 | 60.4 | 62.8 | 59.7 |
+| OURS W/O CURATION | 63.0 | 48.2 | <b>67.0</b> | 59.2 | <b>65.9</b> | <u>60.7</u> |
+| OURS | <u>63.3</u> | <b>53.9</b> | <u>62.0</u> | <b>61.1</b> | <u>65.1</u> | <b>61.1</b> |
+
+Neighbors, defining this as the diversity-aware long-tail score. Intuitively, a higher long-tail score indicates greater diversity among the samples. In Figure 4, we illustrate two examples: one with a high diversity score (blue), where neighbors are far from the sample, and another with a low diversity score (red), where neighbors are clustered closely around the sample.
+
+## 5 EXPERIMENTS
+
+### 5.1 EXPERIMENTAL SETUP
+
+**Base models** In this paper, we select three popular and well-known open-source LLMs as our base models, including LLaMA-2-7B (Touvron et al., 2023), LLaMA-3.1-8B (Dubey et al., 2024) and Mistral-7B-v0.3 (Jiang et al., 2023). These base models will be fine-tuned using selected data to evaluate the performance of data selection methods.
+
+**Baselines** Several recent methods are adopted as our baselines for performance comparisons: (1) *Random Selection* selects examples randomly; in all experiments, we present the average result of three trials using different random seeds for data selection. (2) *Completion Length* uses the length of the whole conversation as a metric to estimate the data quality (Zhao et al., 2024). Intuitively, the higher the completion length, the higher the data quality; (3) *Perplexity* of the responses computed with the pre-trained model in a zero-shot manner is used as the metric. We collect the perplexity scores from LLaMA-3.1-8B-Instruct. A large perplexity score measures the difficulty or rarity of the data sample; (4) *k*-NN uses the average distance to *k* nearest neighbors in SentenceBERT (Reimers, 2019) embedding space as the metric. Generally, a greater distance indicates that the data sample is rarer; (5) *AlpaGasus* (Chen et al., 2023) utilizes ChatGPT to rate data samples and solely select high-rated samples; (6) *DEITA* (Liu et al., 2023a) jointly uses ChatGPT to rate data samples based on complexity and quality. Considering the substantial increase in
+
+![PCA Visualization of Embedding Space showing high and low diversity samples.](023b142f90e1253702ac88b18380d3ec_img.jpg)
+
+The figure is a scatter plot titled "PCA Visualization of Embedding Space". The x-axis is labeled "PCA Dimension 1" and ranges from -6 to 4. The y-axis is labeled "PCA Dimension 2" and ranges from -2 to 10. The plot contains several data points: blue circles representing "KNN Samples (high)", a blue star representing the "Selected example (high)", orange circles representing "KNN Samples (low)", and a red star representing the "Selected example (low)". The high diversity sample (blue star) is located at approximately (2.5, 8.5) and has several blue circles scattered around it at a distance. The low diversity sample (red star) is located at approximately (-4.5, 2.5) and has several orange circles clustered very close to it.
+
+PCA Visualization of Embedding Space showing high and low diversity samples.
+
+Figure 4: Examples with high and low long-tail scores.
+
+{7}------------------------------------------------
+
+Table 4: Performance comparison between LIMA and  $DS^2$  (1k samples) under various rating models. We use the initial letter to denote the rating model, e.g., **Ours(L)** refers to our method with LLaMA-generated scores (**Ours (LLaMA)**). Rating models: **LLaMA**, **GPT**, and **Mistral**. We highlight the best result in **boldface** and the second-best with underline.
+
+|  | LLaMA-3.1-8B |  |  |  | Mistral-7B-v0.3 |  |  |  |
+|-|-|-|-|-|-|-|-|-|
+|  | LIMA | Ours(L) | Ours(G) | Ours(M) | LIMA | Ours(L) | Ours(G) | Ours(M) |
+| MMLU | 64.0 | 63.2 | 64.1 | 63.9 | 60.0 | 59.8 | 59.5 | 59.8 |
+| TruthfulQA | 32.1 | 4.4 | 29.1 | 14.3 | 33.3 | 30.7 | 34.0 | 33.3 |
+| GSM | 59.5 | 59.0 | 62.0 | 56.0 | 42.5 | 43.0 | 42.0 | 41.5 |
+| BBH | 57.2 | 56.7 | 58.5 | 59.9 | 52.1 | 52.6 | 52.3 | 52.5 |
+| TyDiQA | 38.3 | 63.2 | 60.5 | 61.9 | 51.7 | 56.7 | 57.6 | 56.0 |
+| Average | 50.2 | 49.3 | <b>54.8</b> | <u>51.2</u> | 47.9 | <u>48.6</u> | <b>49.1</b> | <u>48.6</u> |
+
+dataset size—six times larger—resulting from Evol-Instruct (Xu et al., 2023a) and the associated costs, we take our scores as an alternative. For enhancing diversity, it iteratively selects data samples by setting a threshold to the embedding distance to filter out outliers; (7) *LESS* (Xia et al., 2024) rates data samples according to the influence score calculated from the gradient of the data sample and a specific validation dataset. (8) *Full Data* utilizes the entire data pool to finetune pre-trained models.
+
+### 5.2 OPENLLM LEADERBOARD EVALUATION RESULTS
+
+We adopt five OpenLLM Leaderboard tasks as our benchmark for evaluation, including MMLU (Hendrycks et al., 2020), TruthfulQA (Lin et al., 2021), GSM (Cobbe et al., 2021), BBH (Suzgun et al., 2022), TydiQA (Clark et al., 2020). For MMLU, TruthfulQA, GSM, and BBH datasets, we use Exact Match (EM) as the criteria. For TydiQA, we consider using the 1-shot F1 score.
+
+**Less can be more: 3.3% of the data outperforms the full data pool** Table 3 demonstrates the performance of  $DS^2$  as well as nine baselines. In particular, we further compare two score-aware baselines (AlpaGasus and DEITA) across different rating models. As shown in Table 3,  $DS^2$  consistently obtains the best performance compared to all baselines. Remarkably, under different rating model settings,  $DS^2$  (with only 10k selected samples) still achieves significantly better performance than using the full data pool (300k), up to 96.7% data reduction. More experimental results on various base models are provided in the Appendix (Tables 10 and 11).
+
+**Weaker models rating  $\geq$  GPT-4o’s rating** Intuitively, without score curation, we observe in Tables 3 that different rating models can affect overall performance for all score-aware methods including ours. The experimental results match their detected score errors. For instance, as shown in Figure 3, the LLaMA-3.1-8B-Instruct model has more score errors than the other two models, resulting in a performance drop. Notably, when applying score curation for LLaMA and Mistral, their average performances (60.2 for LLaMA and 61.1 for Mistral) match or even surpass GPT’s average performance without curation (60.2). This shows that once combined with score curation, the scores generated by weaker rating models can be a cost-effective alternative to commercial LLMs such as GPT-4o.
+
+**Score curation works for all rating models** Table 3 also highlights the performance gap of  $DS^2$  with and without score curation. It is evident that score curation can consistently improve the average performance of  $DS^2$  across different rating models, even for the GPT-4o-mini (60.2  $\rightarrow$  61.4). Additional results on various base models, provided in the Appendix (Table 14), consistently support this claim.
+
+### 5.3 HUMAN ALIGNMENT V.S. MACHINE ALIGNMENT
+
+**$DS^2$  can be an alternative to LIMA** To assess the overall quality of the dataset generated by  $DS^2$ , we finetune two base models using human-annotated dataset LIMA (1k samples) (Zhou et al., 2024). To match this data size, we generate a 1k-sample dataset using  $DS^2$ . We then compare the performance of models fine-tuned on 1k version selected datasets with those models fine-tuned on LIMA. In particular, Table 4 demonstrates downstream task performance for LIMA and ours across various rating models. Besides, to evaluate alignment performance, we further utilize two challenging and popular benchmarks, Vicuna-Bench (Chiang et al., 2023) and MT-bench (Zheng et al., 2023) for LLM judging. These two datasets both contain questions across various domains, including generic, coding, math, and reasoning, which can be sufficient to access the instruction-following ability. We
+
+{8}------------------------------------------------
+
+![Figure 5: Data scaling efforts of baselines across various rating models. The figure contains three line plots for Llama-3.1-8B-Instruct, GPT-4o-mini, and Mistral-7B-Instruct-v0.3. Each plot shows Average Performance (Y-axis, 45.0 to 60.0) versus the number of samples used (X-axis: 0k, 2.5k, 5k, 10k, 20k, 40k, All(300k)). Five methods are compared: Random (blue line with circles), Less (orange dashed line with squares), Alpagasus (green dashed line with triangles), Delta (red dashed line with diamonds), and Ours (solid blue line with circles). In all cases, Ours starts at a high performance level and remains relatively stable or slightly decreases as more samples are added, while other methods show more significant improvements or fluctuations.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 5: Data scaling efforts of baselines across various rating models. The figure contains three line plots for Llama-3.1-8B-Instruct, GPT-4o-mini, and Mistral-7B-Instruct-v0.3. Each plot shows Average Performance (Y-axis, 45.0 to 60.0) versus the number of samples used (X-axis: 0k, 2.5k, 5k, 10k, 20k, 40k, All(300k)). Five methods are compared: Random (blue line with circles), Less (orange dashed line with squares), Alpagasus (green dashed line with triangles), Delta (red dashed line with diamonds), and Ours (solid blue line with circles). In all cases, Ours starts at a high performance level and remains relatively stable or slightly decreases as more samples are added, while other methods show more significant improvements or fluctuations.
+
+Figure 5: Data scaling efforts of baselines across various rating models. Base model: LLaMA-3.1-8B. The Y-axis is the performance of OpenLLM leaderboard. The X-axis means the # samples used.
+
+employ GPT-4o-mini as the judge model to compare the corresponding models’ responses with the judge template as referenced in (Zheng et al., 2023). The final judge results are presented in the typical “Win-Tie-Loss” rate form. We compare our results with LIMA using data selected by  $DS^2$  at both 1k and 10k data volumes. Figure 6 (a)-(b) demonstrate that  $DS^2$  can totally match or even outperform the LIMA in the 1k setting. In the 10k sample size setting, as shown in Figure 6 (c)-(d),  $DS^2$  can obtain even greater performance improvements over LIMA. Therefore, it is evident that  $DS^2$  can serve as a cost-effective alternative to human annotations.
+
+![Figure 6: Performance of models fine-tuned on DS^2 (1k/10k samples, machine-curated) v.s. LIMA (1k samples, human-curated). The figure consists of four bar charts: (a) Vicuna_Bench, 1k-samples; (b) MT_Bench, 1k-samples; (c) Vicuna_Bench, 10k-samples; (d) MT_Bench, 10k-samples. Each chart compares Win Rate, Tie Rate, and Loss Rate for Ours(L), Ours(G), and Ours(M) across two base models: LLaMA-3.1-8B and Mistral-7B-v0.3. In all cases, Ours methods achieve higher Win Rates and lower Loss Rates compared to LIMA (represented by the first bar in each group).](891ff9b651838b7f59e9a1612a739e15_img.jpg)
+
+Figure 6: Performance of models fine-tuned on DS^2 (1k/10k samples, machine-curated) v.s. LIMA (1k samples, human-curated). The figure consists of four bar charts: (a) Vicuna\_Bench, 1k-samples; (b) MT\_Bench, 1k-samples; (c) Vicuna\_Bench, 10k-samples; (d) MT\_Bench, 10k-samples. Each chart compares Win Rate, Tie Rate, and Loss Rate for Ours(L), Ours(G), and Ours(M) across two base models: LLaMA-3.1-8B and Mistral-7B-v0.3. In all cases, Ours methods achieve higher Win Rates and lower Loss Rates compared to LIMA (represented by the first bar in each group).
+
+Figure 6: Performance of models fine-tuned on  $DS^2$  (1k/10k samples, machine-curated) v.s. LIMA (1k samples, human-curated). We use the initial letter to denote the rating model, e.g., **Ours (L)** refers to our method with LLaMA-generated scores (**Ours (LLaMA)**).
+
+## 6 ABALTION STUDY
+
+### 6.1 REVISITING DATA SCALING LAWS
+
+We conduct experiments under subsets with different data volumes to investigate the data scaling efforts. Compared to several representative baselines, Figure 5 illustrates that our method can consistently obtain the best data selection performance across different data budgets. From this perspective, while data quality matters, redundant samples are uninformative and unnecessary or even detrimental to model performance due to overfitting.
+
+### 6.2 EXPLORING THE IMPACT OF SCORE CURATION
+
+**Score curation is beneficial for score-aware baselines** Table 5 further presents the experimental results of the other score-aware baselines (AlpaGasus and Delta) using the curated scores. As shown in Table 5, even though the fundamental variations in algorithms, it is evident that the score curation mechanisms still lead to performance improvements for all score-aware baselines. The full results using different rating models are presented in the Appendix (Table 14).
+
+{9}------------------------------------------------
+
+Table 5: Performance comparison between without and with score curation. Rating model: GPT-4o-mini. Results are presented as (without curation / with curation).
+
+|  | LLaMA-3.1-8B |  |  | Mistral-7B-v0.3 |  |  |
+|-|-|-|-|-|-|-|
+|  | ALPAGASUS | DEITA | OURS | ALPAGASUS | DEITA | OURS |
+| MMLU | 63.4 / 64.1 | 64.5 / 64.6 | 63.3 / 64.0 | 60.5 / 60.0 | 60.1 / 59.9 | 60.1 / 59.9 |
+| TruthfulQA | 42.6 / 48.2 | 50.1 / 45.5 | 51.5 / 50.3 | 36.7 / 39.8 | 35.6 / 41.1 | 35.9 / 37.9 |
+| GSM | 66.0 / 61.5 | 60.0 / 64.0 | 62.0 / 67.5 | 41.0 / 41.5 | 40.5 / 42.5 | 48.5 / 47.5 |
+| BBH | 59.1 / 58.9 | 60.3 / 61.8 | 59.7 / 59.0 | 55.1 / 53.6 | 55.1 / 55.3 | 54.2 / 55.6 |
+| TyDiQA | 59.4 / 64.8 | 63.7 / 67.1 | 64.3 / 66.1 | 57.3 / 56.5 | 56.0 / 56.4 | 58.9 / 59.3 |
+| Average | 58.1 / <b>59.5</b> | 59.7 / <b>60.6</b> | 60.2 / <b>61.4</b> | 50.1 / <b>50.3</b> | 49.5 / <b>51.0</b> | 51.5 / <b>52.0</b> |
+
+**Score curation improves rating robustness** Furthermore, we explore the impact of score curation using different rating models. We compare the average performance results of  $DS^2$  between without and with score curation in Figure 7 (Right). The base model is LLaMA-3.1-8B. For convenience, Figure 7 also demonstrates the maximum performance gap across three rating models under different data sizes. Notably, it is evident that with score curation, the average performance across rating models is more stable and shows improvement.
+
+![Figure 7: Left: Bar chart showing performance comparison between AlpacaGASus and Ours across different datasets (GSM, BBH, TruthfulQA, MMLU, TyDiQA) and an average. Right: Table showing the maximum performance gap across different data scales (2.5k to 40k) and an average.](6b32b7b928d34eeccb15c29cdf9d2cb3_img.jpg)
+
+**Left: Performance Comparison**
+
+| Dataset | AlpacaGASus | Ours | Gap |
+|-|-|-|-|
+| GSM | ~3 | ~10.5 | +7.5 |
+| BBH | ~35 | ~36.1 | +1.1 |
+| TruthfulQA | ~38 | ~39.2 | +1.2 |
+| MMLU | ~38 | ~44.3 | +6.3 |
+| TyDiQA | ~35 | ~39.7 | +4.7 |
+| Average | ~30 | ~34.1 | +4.1 |
+
+**Right: Maximum Performance Gap**
+
+| Data scale | Performance gap ↓ |  |
+|-|-|-|
+|  | w/o curation | w/ curation |
+| 2.5k | 2.40 | <b>1.0</b> |
+| 5k | 3.83 | <b>1.20</b> |
+| 10k | 1.76 | <b>0.90</b> |
+| 20k | 1.73 | <b>0.20</b> |
+| 40k | 1.44 | <b>1.63</b> |
+| Average | 1.60 | <b>0.70</b> |
+
+Figure 7: Left: Bar chart showing performance comparison between AlpacaGASus and Ours across different datasets (GSM, BBH, TruthfulQA, MMLU, TyDiQA) and an average. Right: Table showing the maximum performance gap across different data scales (2.5k to 40k) and an average.
+
+Figure 7: **Left:** Apples-to-apples comparison with AlpacaGASus using LLaMA-2-7B (base) on 9k samples from Alpaca subset (52k). **Right:** Maximum performance gap across different data scales.
+
+### 6.3 APPLES-TO-APPLES COMPARISON WITH ALPAGASUS
+
+To highlight  $DS^2$ ’s superiority, we replicate AlpacaGASus’s settings for a fair apples-to-apples comparison. More details are in Appendix G.6. Using GPT-4o-mini for consistency, Figure 7 (Left) demonstrates that  $DS^2$  significantly outperforms AlpacaGASus with an improvement of **15%** in average, despite relying on a weaker rating model than AlpacaGASus’s default GPT-4 rating model.
+
+## 7 CONCLUSION
+
+In this paper, we challenge traditional data scaling laws in instruction tuning by introducing  $DS^2$ , a novel data selection pipeline that curates LLM-rated quality scores to improve data efficiency. Through the systematic exploration of error patterns in LLM-rated data quality scores, we developed a score curation mechanism to correct inaccuracies and enhance the effectiveness of selected data. Empirically,  $DS^2$  – using only 3.3% of the original data – outperforms training on the full dataset (300k samples) and even exceeds the performance of the human-aligned dataset “LIMA” with the same sample size (1k samples). This demonstrates that smaller, high-quality datasets can achieve superior results by avoiding performance drops caused by low-rated or redundant data, revising the traditional scaling laws that suggest more data is always better. By curating LLM-driven rating scores,  $DS^2$  not only improves data efficiency, but also offers a cost-effective alternative to large-scale datasets and human annotations. Our results highlight the importance of data quality over quantity in instruction tuning and show how score curation can mitigate LLM biases, leading to improved model alignment and downstream performance. In conclusion, this work underscores the need to rethink data scaling laws in light of more efficient, curated data selection methods.
+
+ Rest of paper (reference and Appendix) is removed.

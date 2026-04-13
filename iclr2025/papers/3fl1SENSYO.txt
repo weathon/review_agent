@@ -1,0 +1,325 @@
+
+
+{0}------------------------------------------------
+
+# DIFFPUTER: EMPOWERING DIFFUSION MODELS FOR MISSING DATA IMPUTATION
+
+Hengrui Zhang<sup>1</sup> Liancheng Fang<sup>1</sup> Qitian Wu<sup>2</sup> Philip S. Yu<sup>1\*</sup>
+
+<sup>1</sup>Computer Science Department, University of Illinois at Chicago
+
+<sup>2</sup>Eric and Wendy Schmidt Center, Broad Institute of MIT and Harvard
+
+{hzhan55, lfang87, psyu}@uic.edu
+
+wuqitian@broadinstitute.org
+
+## ABSTRACT
+
+Generative models play an important role in missing data imputation in that they aim to learn the joint distribution of full data. However, applying advanced deep generative models (such as Diffusion models) to missing data imputation is challenging due to 1) the inherent incompleteness of the training data and 2) the difficulty in performing conditional inference from unconditional generative models. To deal with these challenges, this paper introduces DIFFPUTER, a tailored diffusion model combined with the Expectation-Maximization (EM) algorithm for missing data imputation. DIFFPUTER iteratively trains a diffusion model to learn the joint distribution of missing and observed data and performs an accurate conditional sampling to update the missing values using a tailored reversed sampling strategy. Our theoretical analysis shows that DIFFPUTER’s training step corresponds to the maximum likelihood estimation of data density (M-step), and its sampling step represents the Expected A Posteriori estimation of missing values (E-step). Extensive experiments across ten diverse datasets and comparisons with 17 different imputation methods demonstrate DIFFPUTER’s superior performance. Notably, DIFFPUTER achieves an average improvement of 6.94% in MAE and 4.78% in RMSE compared to the most competitive existing method.
+
+## 1 INTRODUCTION
+
+In the field of data science and machine learning, missing data in tabular datasets is a common issue that can severely impair the performance of predictive models and the reliability of statistical analysis. Missing data can result from various factors, including data entry errors, non-responses in surveys, and system errors during data collection (Barnard & Meng, 1999; Lillard et al., 1986; Eckert et al., 2020). Properly handling missing data is essential, as improper treatment can lead to biased estimates, reduced statistical power, and invalid conclusions.
+
+A plethora of work proposed over the past decades has propelled the development of missing data imputation research. Early classical methods often relied on partially observed statistical features to impute missing values or were based on conventional machine learning techniques, such as KNN (Pujianto et al., 2019), or simple parametric models, such as Bayesian models (Ma & Chen, 2018) or Gaussian Mixture Models (García-Laencina et al., 2010). With the advent of deep learning, recent research has primarily focused on predictive (Stekhoven & Bühlmann, 2012; Van Buuren & Karin, 2011; Kyono et al., 2021) or generative deep models (Yoon et al., 2018; Mattei & Frellsen, 2019; Richardson et al., 2020) for missing data imputation. Predictive models learn to predict the target entries conditioned on other observed entries, guided by masking mechanisms (Du et al., 2024) or graph regularization techniques (You et al., 2020; Zhong et al., 2023). By contrast, generative methods learn the joint distribution of missing entries and observed entries and aim to impute the missing data via conditional sampling (Richardson et al., 2020; Nazabal et al., 2020b; Mattei & Frellsen, 2019; Yoon et al., 2018; Ouyang et al., 2023; Zheng & Charoenphakdee, 2022). However, generative imputation methods still fall short compared to predictive methods even when employing state-of-the-art generative models (Kingma & Welling, 2013; Rezende & Mohamed,
+
+\*Corresponding author.
+
+{1}------------------------------------------------
+
+2015; Goodfellow et al., 2014; Ho et al., 2020). We think this is primarily due to the **incomplete likelihood** nature issue in missing data imputation: generative models need to estimate the joint distribution of missing data and observed data. However, since the missing data itself is unknown, there is an inherent error in the estimated data density. The classical Expectation-Maximization (EM) algorithm (Dempster et al., 1977) offers an elegant route to handle this issue, being capable of addressing the incomplete likelihood issue by iteratively refining the values of the missing data.
+
+Integrating EM algorithms with generative models has been extensively studied (Richardson et al., 2020), however, its combination with Diffusion models (Ho et al., 2020), currently the most powerful generative models, is still unexplored. In the M-step, the diffusion models have been shown able to faithfully reconstruct the ground-truth distribution. However, in the E-step, it is usually considered challenging to utilize them to perform condition inference (e.g., predicting missing entries based on observed entries). This is because diffusion models directly model and generate the complete joint distribution of data across all dimensions simultaneously, lacking the flexibility found in VAE and GAN-based approaches (Ma et al., 2020; Peis et al., 2022b; Ma et al., 2018).
+
+This paper introduces DIFFPUTER, a principled generative method for missing data imputation. DIFFPUTER explores a path that makes diffusion models compatible with the EM framework, allowing both E-step and M-step to be effective. Specifically: 1) In the M-step, DIFFPUTER employs a diffusion model to learn the joint distribution of the missing and observed data. With the powerful ability of diffusion models to learn tabular data distributions, in the M-step, DIFFPUTER learns a parameterized distribution that faithfully recovers the joint distribution of observed and missing entries. 2) In the E-step, DIFFPUTER uses the learned diffusion model to perform flexible and accurate conditional sampling by mixing the forward process for observed entries with the reverse process for missing entries. Theoretically, we show that DIFFPUTER’s M-step corresponds to the maximum likelihood estimation of the data density, while its E-step represents the *Expected A Posteriori* (EAP) estimation of the missing values, conditioned on the observed values.
+
+We conduct experiments<sup>1</sup> on nine benchmark tabular datasets containing both continuous and discrete features under various missing data scenarios. We compare the performance of DIFFPUTER with 17 competitive imputation methods from different categories. Experimental results demonstrate the superior performance of DIFFPUTER across all settings and on almost all datasets.
+
+## 2 RELATED WORKS
+
+**Iterative Methods for Missing Data Imputation.** Iterative imputation is a widely used approach due to its ability to continuously refine predictions of missing data, resulting in more accurate imputation outcomes. This iterative process is especially crucial for methods requiring an initial estimation of the missing data. The Expectation-Maximization (EM) algorithm (Dempster et al., 1977), a classical method, can be employed for missing data imputation. However, earlier applications often assume simple data distributions, such as mixtures of Gaussians for continuous data or Bernoulli and multinomial densities for discrete data (García-Laencina et al., 2010). These assumptions limit the imputation capabilities of these methods due to the restricted density estimation of simple distributions. The integration of EM with deep generative models remains underexplored. A closely related approach is MCFlow (Richardson et al., 2020), which iteratively imputes missing data using normalizing flows (Rezende & Mohamed, 2015). However, MCFlow focuses on recovering missing data through maximum likelihood rather than expectation, and its conditional imputation is achieved through soft regularization instead of precise sampling based on the conditional distribution. Beyond EM, the concept of iterative training is prevalent in state-of-the-art deep learning-based imputation methods. For instance, IGRM (Zhong et al., 2023) constructs a graph from all dataset samples and introduces the concept of friend networks, which are iteratively updated during the imputation learning process. HyperImpute (Jarrett et al., 2022) proposes an AutoML imputation method that iteratively refines both model selection and imputed values.
+
+**Diffusion Models for Missing Data Imputation.** We are not the first to utilize diffusion models for missing data imputation. In computer vision, diffusion models have been widely applied in image inpainting, either in the data space (Lugmayr et al., 2022) or the latent space (Corneanu et al., 2024). In the tabular data area, TabCSDI (Zheng & Charoenphakdee, 2022) employs a conditional diffusion
+
+<sup>1</sup>The code is available at <https://github.com/hengruizhang98/DiffPuter>.
+
+{2}------------------------------------------------
+
+model to learn the distribution of masked observed entries conditioned on the unmasked observed entries. MissDiff (Ouyang et al., 2023) uses a diffusion model to learn the density of tabular data with missing values by masking the observed entries. Although MissDiff was not originally intended for imputation, it can be easily adapted for this task. Other methods, despite claiming applicability for imputation, are trained on complete data and evaluated on incomplete testing data (Zhang et al., 2024; Jolicœur-Martineau et al., 2024). This approach contradicts the focus of this study, where the training data itself contains missing values. Additionally, all the aforementioned methods use one-step imputations, which overlook the issue that missing data in the training set can lead to inaccurate data density estimation. By contrast, the proposed DIFFPUTER is the first to integrate a diffusion-based generative model into the EM framework. Additionally, we achieved accurate conditional sampling by mixing the forward and reverse processes of diffusion and demonstrated the effectiveness of this approach through theoretical analysis.
+
+## 3 PRELIMINARIES
+
+### 3.1 MISSING VALUE IMPUTATION FOR INCOMPLETE DATA
+
+This paper addresses the missing value imputation task for incomplete data, where only partial data entries are observable during the training process. Formally, let the complete  $d$ -dimensional data be denoted as  $\mathbf{x} \sim p_{\text{data}}(\mathbf{x}) \in \mathbb{R}^d$ . For each data sample,  $\mathbf{x}$ , there is a binary mask  $\mathbf{m} \in \{0, 1\}^d$  indicating the location of missing entries for  $\mathbf{x}$ . Let the subscript  $k$  denote the  $k$ -th entry of a vector, then  $m_k = 1$  stands for missing entries while  $m_k = 0$  stands for observable entries.
+
+We further use  $\mathbf{x}^{\text{obs}}$  and  $\mathbf{x}^{\text{mis}}$  to denote the observed data and missing data, respectively (i.e.,  $\mathbf{x} = (\mathbf{x}^{\text{obs}}, \mathbf{x}^{\text{mis}})$ ). Note that  $\mathbf{x}^{\text{obs}}$  is the fixed ground-truth observation, while  $\mathbf{x}^{\text{mis}}$  is conceptual and unknown, and we aim to estimate it. The missing value imputation task aims to predict the missing entries  $\mathbf{x}^{\text{mis}}$  based on the observed entries  $\mathbf{x}^{\text{obs}}$ .
+
+**In-sample vs. Out-of-sample imputation.** The missing data imputation task can be categorized into two types: in-sample and out-of-sample. In-sample imputation means that the model only has to impute the missing entries in the training set, while out-of-sample imputation requires the model's capacity to generalize to the unseen data records without fitting its parameters again. Not all imputation methods can generalize to out-of-sample imputation tasks. For example, methods that directly treat the missing values as learnable parameters (Muzellec et al., 2020; Zhao et al., 2023) are hard to apply to unseen records. A desirable imputation method is expected to perform well on both in-sample and out-of-sample imputation tasks, and this paper studies both of the two settings.
+
+### 3.2 FORMULATING MISSING DATA IMPUTATION WITH EXPECTATION-MAXIMIZATION
+
+Treating  $\mathbf{x}^{\text{obs}}$  as observed variables and  $\mathbf{x}^{\text{mis}}$  as latent variables, with the estimated density of the complete data distribution parameterized as  $p_{\theta}(\mathbf{x})$ , we can formulate the missing value imputation problem using the Expectation-Maximization (EM) algorithm. Specifically, when the complete data distribution  $p_{\theta}(\mathbf{x})$  is available, the optimal estimation of missing values is given by  $\mathbf{x}^{\text{mis}*} = \mathbb{E}_{\mathbf{x}^{\text{mis}}} p(\mathbf{x}^{\text{mis}} | \mathbf{x}^{\text{obs}}, \theta)$ . Conversely, when the missing entries  $\mathbf{x}^{\text{mis}}$  are known, the density parameters can be optimized via maximum likelihood estimation:  $\theta^* = \arg \max_{\theta} p(\mathbf{x} | \theta)$ . Consequently, with the initial estimation of missing values  $\mathbf{x}^{\text{mis}}$ , the model parameters  $\theta$  and the missing value  $\mathbf{x}^{\text{mis}}$  can be optimized by iteratively applying M-step and E-step:
+
+- Maximization-step: Fix  $\mathbf{x}^{\text{mis}}$ , update  $\theta^* = \arg \max_{\theta} p(\mathbf{x} | \theta) = \arg \max_{\theta} p_{\theta}(\mathbf{x}^{\text{obs}}, \mathbf{x}^{\text{mis}})$ .
+- Expectation-step: Fix  $\theta$ , update  $\mathbf{x}^{\text{mis}*} = \mathbb{E}_{\mathbf{x}^{\text{mis}}} p(\mathbf{x}^{\text{mis}} | \mathbf{x}^{\text{obs}}, \theta)$ .
+
+## 4 METHODOLOGY
+
+In this section, we introduce DIFFPUTER- Iterative Missing Data Imputation with Diffusion. Based on the Expectation-Maximization (EM) algorithm, DIFFPUTER updates the density parameter  $\theta$  and hidden variables  $\mathbf{x}^{\text{mis}}$  in an iterative manner. Fig. 1 shows the overall architecture and training
+
+{3}------------------------------------------------
+
+![Figure 1: Overview of the DIFFPUTER architecture. The diagram shows the flow from input data x to the final imputation result x*. The process starts with input x, which is one-hot encoded and then base mean imputed to produce x*. The EM algorithm iterates between the M-step (Diffusion Model: p_theta(x)) and the E-step (Diffusion Model: p_theta(x)). In the M-step, x^mis is fixed and theta is estimated. In the E-step, theta is fixed and x^mis is estimated. The final result x* is returned from the E-step of the last iteration.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+The diagram illustrates the DIFFPUTER architecture. It begins with input  $\mathbf{x}$  (age, edu1, edu2, edu3, income) with missing values (NaN). This is processed through 'One-hot encoding' and 'Base mean imputation' to produce  $\mathbf{x}^*$ . The EM algorithm then iterates: the 'M-step' uses a 'Diffusion Model:  $p_\theta(\mathbf{x})$ ' to fix  $\mathbf{x}^{\text{mis}}$  and estimate  $\theta$ , while the 'E-step' uses the same model to fix  $\theta$  and estimate  $\mathbf{x}^{\text{mis}}$ . The process repeats for  $K$  iterations, with synchronization of parameters between steps. The final output is  $\mathbf{x}^*$ .
+
+Figure 1: Overview of the DIFFPUTER architecture. The diagram shows the flow from input data x to the final imputation result x\*. The process starts with input x, which is one-hot encoded and then base mean imputed to produce x\*. The EM algorithm iterates between the M-step (Diffusion Model: p\_theta(x)) and the E-step (Diffusion Model: p\_theta(x)). In the M-step, x^mis is fixed and theta is estimated. In the E-step, theta is fixed and x^mis is estimated. The final result x\* is returned from the E-step of the last iteration.
+
+Figure 1: An overview of the architecture of the proposed DIFFPUTER. DIFFPUTER utilizes one-hot encoding to transform discrete variables into continuous ones and use the mean of observed values to initialize the missing entries. The EM algorithm alternates the process of 1) fixing  $\mathbf{x}^{\text{mis}}$  and estimate diffusion model parameter  $\theta$ , 2) fixing  $\theta$  and estimate  $\mathbf{x}^{\text{mis}}$ , for  $K$  iterations. The final imputation result  $\mathbf{x}^*$  is returned from the E-step of the last iteration.
+
+process of DIFFPUTER: 1) The M-step fixes the missing entries  $\mathbf{x}^{\text{mis}}$ , then a diffusion model is trained to estimate the density of the complete data distribution  $p_\theta(\mathbf{x}) = p_\theta(\mathbf{x}^{\text{obs}}, \mathbf{x}^{\text{mis}})$ ; 2) The E-step fixes the model parameters  $\theta$ , then we update the missing entries  $\mathbf{x}^{\text{mis}}$  via the reverse process of the learned diffusion model  $p_\theta(\mathbf{x})$ . The above two steps are executed iteratively until convergence. The following sections introduce the M-step and E-step of DIFFPUTER, respectively. To avoid confusion, we use  $\mathbf{x}, \mathbf{x}_t, \mathbf{x}^{\text{obs}}$ , etc. to denote samples from real data,  $\tilde{\mathbf{x}}, \tilde{\mathbf{x}}_t, \tilde{\mathbf{x}}^{\text{obs}}$ , etc. to denote samples obtained by the model  $\theta$ , while  $\hat{\mathbf{x}}, \hat{\mathbf{x}}_t, \hat{\mathbf{x}}^{\text{obs}}$ , etc. to denote the specific values of variables.
+
+### 4.1 M-STEP: DENSITY ESTIMATION WITH DIFFUSION MODELS
+
+Given an estimation of complete data  $\mathbf{x} = (\mathbf{x}^{\text{obs}}, \mathbf{x}^{\text{mis}})$ , M-step aims to learn the density of  $\mathbf{x}$ , parameterized by model  $\theta$ , i.e.,  $p_\theta(\mathbf{x})$ . Inspired by the impressive generative modeling capacity of diffusion models (Song et al., 2021b; Karras et al., 2022), DIFFPUTER learns  $p_\theta(\mathbf{x})$  through a diffusion process, which consists of a forward process that gradually adds Gaussian noises of increasing scales to  $\mathbf{x}$ , and a reverse process that recovers the clean data from the noisy one:
+
+$$\mathbf{x}_t = \mathbf{x}_0 + \sigma(t)\varepsilon, \quad \varepsilon \sim \mathcal{N}(\mathbf{0}, \mathbf{I}), \quad (\text{Forward Process}) \quad (1)$$
+
+$$d\mathbf{x}_t = -2\tilde{\sigma}(t)\sigma(t)\nabla_{\mathbf{x}_t} \log p(\mathbf{x}_t)dt + \sqrt{2\tilde{\sigma}(t)\sigma(t)}d\omega_t, \quad (\text{Reverse Process}) \quad (2)$$
+
+In the forward process,  $\mathbf{x}_0 = \mathbf{x} = (\mathbf{x}^{\text{obs}}, \mathbf{x}^{\text{mis}})$  is the currently estimated data at time 0, and  $\mathbf{x}_t$  is the diffused data at time  $t$ .  $\sigma(t) = t$  is the noise level (and  $\tilde{\sigma}(t)$  is its derivative w.r.t.  $t$ ), i.e., the standard deviation of Gaussian noise, at time  $t$ . The forward process has defined a series of data distribution  $p(\mathbf{x}_t) = \int_{\mathbf{x}_0} p(\mathbf{x}_t|\mathbf{x}_0)p(\mathbf{x}_0)d\mathbf{x}_0$ , and  $p(\mathbf{x}_0) = p(\mathbf{x})$ . Note that when restricting the mean of  $\mathbf{x}_0$  to 0 and keeping the variance of  $\mathbf{x}_0$  small (e.g., via standardization),  $p(\mathbf{x}_t)$  approaches a tractable prior distribution  $\pi(\mathbf{x})$  at  $t = T$  when  $\sigma(T)$  is large enough, meaning  $p(\mathbf{x}_T) \approx \pi(\mathbf{x})$  (Song et al., 2021a). In our formulation in Eq. 1,  $p(\mathbf{x}_T) \approx \pi(\mathbf{x}) = \mathcal{N}(\mathbf{0}, \sigma^2(T)\mathbf{I})$ .
+
+In the reverse process,  $\nabla_{\mathbf{x}_t} \log p(\mathbf{x}_t)$  is the gradient of  $\mathbf{x}_t$ 's log-probability w.r.t. to  $\mathbf{x}_t$ , and is also known as the *score function*.  $\omega_t$  is the standard Wiener process. The model is trained by (conditional) score matching (Song et al., 2021b), which utilizes a neural network  $\epsilon_\theta(\mathbf{x}_t, t)$  (called denoising/score network) to approximate the conditional score-function  $\nabla_{\mathbf{x}_t} \log p(\mathbf{x}_t|\mathbf{x}_0)$ , which in expectation approximates  $\nabla_{\mathbf{x}_t} \log p(\mathbf{x}_t)$ :
+
+$$\mathcal{L}_{\text{SM}} = \mathbb{E}_{\mathbf{x}_0 \sim p(\mathbf{x}_0)} \mathbb{E}_{t \sim p(t)} \mathbb{E}_{\varepsilon \sim \mathcal{N}(\mathbf{0}, \mathbf{I})} \|\epsilon_\theta(\mathbf{x}_t, t) - \nabla_{\mathbf{x}_t} \log p(\mathbf{x}_t|\mathbf{x}_0)\|_2^2, \quad \text{where } \mathbf{x}_t = \mathbf{x}_0 + \sigma(t)\varepsilon. \quad (3)$$
+
+Since the score of conditional distribution has analytical solutions, i.e.,  $\nabla_{\mathbf{x}_t} \log p(\mathbf{x}_t|\mathbf{x}_0) = \frac{\nabla_{\mathbf{x}_t} p(\mathbf{x}_t|\mathbf{x}_0)}{p(\mathbf{x}_t|\mathbf{x}_0)} = -\frac{\mathbf{x}_t - \mathbf{x}_0}{\sigma^2(t)} = -\frac{\varepsilon}{\sigma(t)}$ , Eq. 3 can be interpreted as training a neural network  $\epsilon_\theta(\mathbf{x}_t, t)$  to
+
+{4}------------------------------------------------
+
+approximate the scaled noise. Therefore,  $\epsilon_\theta(\mathbf{x}_t, t)$  is also known as the denoising function, and in this paper, it is implemented as a five-layer MLP (see Appendix D.4).
+
+**Remark 1.** Starting from the prior distribution  $\mathbf{x}_T \sim \pi(\mathbf{x})$ , and apply the reverse process in Eq. 2 with  $\nabla_{\mathbf{x}_t} \log p(\mathbf{x}_t)$  replaced with  $\epsilon_\theta(\mathbf{x}_t, t)$ , we obtain a series of distributions  $p_\theta(\mathbf{x}_t), \forall t \in [0, T]$
+
+**Remark 2.** (Corollary 1 in (Song et al., 2021a)) Let  $p(\mathbf{x}) = p(\mathbf{x}_0)$  be the data distribution, and  $p_\theta(\mathbf{x}) = p_\theta(\mathbf{x}_0)$  be the marginal data distribution obtained from the reverse process, then the score-matching loss function in Eq. 3 is an upper bound of the negative-log-likelihood of real data  $\mathbf{x} \sim p(\mathbf{x})$  over  $\theta$ . Formally,
+
+$$-\mathbb{E}_{\mathbf{x}(\mathbf{x})}[\log p_\theta(\mathbf{x})] \leq \mathcal{L}_{\text{SM}}(\theta) + \text{Const}, \quad (4)$$
+
+where *Const* is a constant independent of  $\theta$ .
+
+Remark 2 indicates that the  $\theta$  optimized by Eq. 3 approximates the maximum likelihood estimation of data distribution  $p(\mathbf{x})$ . Consequently,  $p_\theta(\mathbf{x})$  approximates  $p(\mathbf{x})$  accurately with enough capacity. The algorithmic illustration of DIFFPUTER's M-step is summarized in Algorithm 1.
+
+### 4.2 E-STEP: MISSING DATA IMPUTATION WITH A LEARNED DIFFUSION MODEL
+
+Given the current estimation of data distribution  $p_\theta(\mathbf{x})$ , the E-step aims to obtain the distribution of complete data, conditional on the observed values, i.e.,  $p_\theta(\mathbf{x}|\mathbf{x}^{\text{obs}})$ , such that the estimated complete data  $\mathbf{x}^*$  can be updated by taking the expectation, i.e.,  $\mathbf{x}^* = \mathbb{E}_{\mathbf{x}} p_\theta(\mathbf{x}|\mathbf{x}^{\text{obs}})$ .
+
+When there is an explicit density function for  $p_\theta(\mathbf{x})$ , or when the conditional distribution  $p_\theta(\mathbf{x}|\mathbf{x}^{\text{obs}})$  is tractable (e.g., can be sampled), computing  $\mathbb{E}_{\mathbf{x}} p(\mathbf{x}|\mathbf{x}^{\text{obs}}, \theta)$  becomes feasible. While most deep generative models such as VAEs and GANs support convenient unconditional sampling from  $p_\theta(\mathbf{x})$ , they do not naturally support conditional sampling, e.g.,  $\tilde{\mathbf{x}} \sim p_\theta(\mathbf{x}|\mathbf{x}^{\text{obs}})$ . Luckily, since the diffusion model preserves the size and location of features in both the forward diffusion process and the reverse denoising process, it offers a convenient and accurate solution to perform conditional sampling  $p_\theta(\mathbf{x}|\mathbf{x}^{\text{obs}})$  from an unconditional model  $p_\theta(\mathbf{x}) = p_\theta(\mathbf{x}^{\text{obs}}, \mathbf{x}^{\text{mis}})$ .
+
+Specifically, let  $\mathbf{x}$  be the data to impute,  $\mathbf{x}^{\text{obs}} = \tilde{\mathbf{x}}^{\text{obs}}$  be the values of observed entries,  $\mathbf{m}$  be the 0/1 indicators of the location of missing entries, and  $\tilde{\mathbf{x}}_t$  be the imputed data at time  $t$ . Then, we can obtain the imputed data at time  $t - \Delta t$  via combining the observed entries from the forward process on  $\mathbf{x}_0 = \mathbf{x}$ , and the missing entries from the reverse process on  $\tilde{\mathbf{x}}_t$  from the prior step  $t$  (Lugmayr et al., 2022; Song et al., 2021b):
+
+$$\mathbf{x}_{t-\Delta t}^{\text{forward}} = \mathbf{x} + \sigma(t - \Delta t) \cdot \varepsilon, \text{ where } \varepsilon \sim \mathcal{N}(\mathbf{0}, \mathbf{I}), \quad (\text{Forward for observed entries}) \quad (5)$$
+
+$$\mathbf{x}_{t-\Delta t}^{\text{reverse}} = \tilde{\mathbf{x}}_t + \int_t^{t-\Delta t} d\tilde{\mathbf{x}}_t, \text{ where } d\tilde{\mathbf{x}}_t \text{ is defined in Eq. 2} \quad (\text{Reverse for missing entries}) \quad (6)$$
+
+$$\tilde{\mathbf{x}}_{t-\Delta t} = (1 - \mathbf{m}) \odot \mathbf{x}_{t-\Delta t}^{\text{forward}} + \mathbf{m} \odot \mathbf{x}_{t-\Delta t}^{\text{reverse}}. \quad (\text{Merging}) \quad (7)$$
+
+Based on the above process, starting at a random noise from the maximum time  $T$ , i.e.,  $\tilde{\mathbf{x}}_T \sim \mathcal{N}(\mathbf{0}, \sigma^2(T)\mathbf{I})$ , we can obtain a reconstructed  $\tilde{\mathbf{x}}_0$ , such that the observed entries of  $\tilde{\mathbf{x}}_0$  are the same as those of  $\mathbf{x}_0$ , i.e.,  $\tilde{\mathbf{x}}_0^{\text{obs}} = \mathbf{x}_0^{\text{obs}}$ . In Theorem 1, we prove that via the algorithm above, the obtained  $\tilde{\mathbf{x}}_0$  is sampled from the desired conditional distribution, i.e.,  $\tilde{\mathbf{x}}_0 \sim p_\theta(\mathbf{x}|\mathbf{x}^{\text{obs}} = \tilde{\mathbf{x}}_0^{\text{obs}})$ .
+
+**Theorem 1.** Let  $\tilde{\mathbf{x}}_T$  be a sample from the prior distribution  $\pi(\mathbf{x}) = \mathcal{N}(\mathbf{0}, \sigma^2(T)\mathbf{I})$ ,  $\mathbf{x}$  be the data to impute, and the known entries of  $\mathbf{x}$  are denoted by  $\mathbf{x}^{\text{obs}} = \tilde{\mathbf{x}}_0^{\text{obs}}$ . The score function  $\nabla_{\mathbf{x}_t} \log p(\mathbf{x}_t)$  is approximated by neural network  $\epsilon_\theta(\mathbf{x}_t, t)$ . Applying Eq. 5, Eq. 6, and Eq. 7 iteratively from  $t = T \gg 0$  until  $t = 0$  with  $\Delta t \rightarrow 0$ , then  $\tilde{\mathbf{x}}_0$  is a sample from  $p_\theta(\mathbf{x})$ , under the condition that its observed entries  $\tilde{\mathbf{x}}_0^{\text{obs}} = \mathbf{x}_0^{\text{obs}}$ . Formally,
+
+$$\tilde{\mathbf{x}}_0 \sim p_\theta(\mathbf{x}|\mathbf{x}^{\text{obs}} = \tilde{\mathbf{x}}_0^{\text{obs}}) \quad (8)$$
+
+See proof in Appendix B.1. Theorem 1 demonstrates that with a learned diffusion model  $\theta$ , we are able to obtain samples exactly from the conditional distribution  $p_\theta(\mathbf{x}|\mathbf{x}^{\text{obs}})$  through the aforementioned imputation process. For inference, we use Monte Carlo estimation to compute the expectation of the missing values, i.e.,  $\mathbf{x}^* = \mathbb{E}_{\mathbf{x}} p_\theta(\mathbf{x}|\mathbf{x}^{\text{obs}}) \approx \sum_{j=1}^N \tilde{\mathbf{x}}_0^{(j)} / N$ .
+
+{5}------------------------------------------------
+
+**Discretization.** The above imputing process involves recovering  $\tilde{\mathbf{x}}_t$  continuously from  $t = T$  to  $t = 0$ , which is infeasible in practice. In implementation, we discretize the process via  $M + 1$  discrete descending timesteps  $t_M, t_{M-1}, \dots, t_i, \dots, t_0$ , where  $t_M = T, t_0 = 0$ . Therefore, starting from  $\tilde{\mathbf{x}}_{t_M} \sim p_\theta(\mathbf{x}_{t_M} | \mathbf{x}^{\text{obs}} = \tilde{\mathbf{x}}_0^{\text{obs}})$ , we obtain  $p_\theta(\mathbf{x}_{t_i} | \mathbf{x}^{\text{obs}} = \tilde{\mathbf{x}}_0^{\text{obs}})$  from  $i = M - 1$  to  $i = 0$ .
+
+#### **Algorithm 1:** M-step: Density Estimation using Diffusion Model
+
+**Input:** Data samples from  $p(\mathbf{x})$ .  
+**Output:** Score network  $\epsilon_\theta$
+
+```
+
+1 while not converging do
+2   Sample  $\mathbf{x} \sim p(\mathbf{x}) \in \mathbb{R}^d$ 
+3   Sample  $t \sim p(t)$ 
+4   Sample  $\varepsilon \sim \mathcal{N}(\mathbf{0}, \mathbf{I}) \in \mathbb{R}^d$ 
+5    $\mathbf{x}_0 = \mathbf{x}$ 
+6    $\mathbf{x}_t = \mathbf{x}_0 + \sigma(t) \cdot \varepsilon$ 
+7    $\ell(\theta) = \|\epsilon_\theta(\mathbf{x}_t, t) - \frac{\varepsilon}{\sigma(t)}\|_2^2$ 
+8   Update  $\theta$  via Adam optimizer
+
+```
+
+#### **Algorithm 2:** E-step: Missing Data Imputation
+
+**Input:** Score network  $\epsilon_\theta(\mathbf{x}_t, t)$ . Data with missing values  $\mathbf{x} \in \mathbb{R}^d$ , mask  $\mathbf{m} \in \{0, 1\}^d$ . Number of samples  $N$ , Number of sampling steps  $M$ .  
+**Output:** Imputed data  $\mathbf{x}^*$
+
+```
+
+1 for  $j \leftarrow 1$  to  $N$  do
+2   Sample  $\tilde{\mathbf{x}}_M^{(j)} \sim \mathcal{N}(\mathbf{0}, \sigma^2(t_M)\mathbf{I})$ 
+3   for  $i \leftarrow M - 1$  to  $0$  do
+4      $\mathbf{x}_{t_{i-1}}^{\text{forward},(j)} = \mathbf{x} + \sigma(t_{i-1}) \cdot \varepsilon$ 
+5      $\tilde{\mathbf{x}}_{t_{i-1}}^{\text{reverse},(j)} = \tilde{\mathbf{x}}_t^{(j)} + \int_{t_i}^{t_{i-1}} d\tilde{\mathbf{x}}_t^{(j)}$ 
+6      $\tilde{\mathbf{x}}_{t_{i-1}}^{(j)} = \mathbf{m} \odot \mathbf{x}_{t_{i-1}}^{\text{forward},(j)} + (1 - \mathbf{m}) \odot \mathbf{x}_{t_{i-1}}^{\text{reverse},(j)}$ 
+7  $\mathbf{x}^* = \sum_{j=1}^N \tilde{\mathbf{x}}_0^{(j)} / N = \sum_{j=1}^N \tilde{\mathbf{x}}_0^{(j)} / N$ 
+
+```
+
+Since the desired imputed data  $\mathbf{x}^{\text{mis*}}$  is the expectation, i.e.,  $\mathbf{x}^{\text{mis*}} = \mathbb{E}_{\mathbf{x}^{\text{mis}}} p(\mathbf{x}^{\text{mis}} | \mathbf{x}^{\text{obs}} = \tilde{\mathbf{x}}_0^{\text{obs}})$ , we sample  $\tilde{\mathbf{x}}_0^{\text{mis}}$  for  $N$  times, and take the average value as the imputed  $\mathbf{x}^{\text{mis*}}$ . The algorithmic illustration of DIFFPUTER’s E-step is summarized in Algorithm 2.
+
+### 4.3 IMPLEMENTATIONS
+
+**Data Processing.** Diffusion models are inherently suited for continuous data but not for discrete data. Given that real-world tabular data often contains both types of data, we use one-hot encoding to convert each dimension of discrete data into multi-dimensional 0/1 encoding, thereby treating it as continuous data. After that, we perform standardization on each column of data, ensuring that it has a mean of 0 and a variance of 1. The final imputation performance is measured by the difference between the predicted value and the ground-truth missing value **after standardization**.
+
+**Initialization of Missing Data.** The execution of the EM algorithm requires the initialized values of missing entries  $\mathbf{x}^{\text{mis}(0)}$ , which might have a huge impact on the model’s convergence. For simplicity, we initialize the missing entries of each column to be the mean of the column’s observed values, equivalent to setting  $\mathbf{x}^{\text{mis}(0)} = 0$  everywhere (since the data has been standardized).
+
+**Training.** To obtain a more accurate estimation of complete data  $\mathbf{x}$ , DIFFPUTER iteratively executes the M-step and E-step. To be specific, let  $\mathbf{x}^{(k)} = (\mathbf{x}^{\text{obs}(k)}, \mathbf{x}^{\text{obs}(k)}) = (\mathbf{x}^{\text{obs}}, \mathbf{x}^{\text{obs}(k)})$  be the estimation of complete data at  $k$ -th iteration,  $\theta^{(k)}$  be the diffusion model’s parameters at  $k$ -th iteration, we write  $\theta^{(k+1)}$  as a function of  $\mathbf{x}^{(k)}$ , i.e.,  $\theta^{(k+1)} = \text{M-step}(\mathbf{x}^{(k)})$ , and  $\mathbf{x}^{(k+1)}$  as a function of  $\theta^{(k+1)}$  and  $\mathbf{x}^{(k)}$ , i.e.,  $\mathbf{x}^{(k+1)} = \text{E-step}(\mathbf{x}^{(k)}, \theta^{(k+1)})$ . Therefore, with the initialized  $\mathbf{x}^{(0)}$  and the maximum iteration  $K$ , we are able to obtain  $\mathbf{x}^{(k)}$  from  $k = 1$  to  $K$ .
+
+**Inference.** For in-sample imputation, the imputed values are obtained iteratively during the training process. For out-of-sample imputation, with the observed incomplete data  $\mathbf{x}$ , the mask  $\mathbf{m}$ , and the trained score network  $\epsilon_\theta$ , we directly apply the E-step once in Algorithm 2 to obtain the imputation values  $\mathbf{x}^*$ .
+
+## 5 EXPERIMENTS
+
+In this section, we conduct experiments to study the efficacy of the proposed DIFFPUTER in missing data imputation tasks.
+
+{6}------------------------------------------------
+
+### 5.1 EXPERIMENTAL SETTINGS
+
+**Datasets.** We evaluate the proposed DIFFPUTER on ten public real-world datasets of varying scales. We consider five datasets of only continuous features: California, Letter, Gesture, Magic, and Bean, and four datasets of both continuous and discrete features: Adult, Default, Shoppers, and News. The detailed information of these datasets is presented in Appendix D.2. Following previous works (Muzellec et al., 2020; Zhao et al., 2023), we study three missing mechanisms: MCAR, MAR, and MNAR. Differences between the three settings are in Appendix D.3. In this section, we only report the performance in the MCAR setting, while the results of the other two settings are in Appendix E. In the main experiments, we set the missing rate as  $r = 30\%$ . For each dataset, we generate 10 masks according to the missing mechanism and report the mean and standard deviation of the imputing performance.
+
+**Baselines.** We compare DIFFPUTER with 16 powerful imputation methods from different categories: 1) Distribution-matching methods based on optimal transport, including TDM (Zhao et al., 2023) and MOT (Muzellec et al., 2020). 2) Graph-based imputation methods, including GRAPE (You et al., 2020): a pure bipartite graph-based framework for data imputation, and IGRM (Zhong et al., 2023): a graph-based imputation method that iteratively reconstructs the friendship network. 3) Iterative methods, including EM with multivariate Gaussian priors (García-Laencina et al., 2010), MICE (Van Buuren & Karin, 2011), MIRACLE (Kyono et al., 2021), SoftImpute (Hastie et al., 2015), and MissForest (Stekhoven & Bühlmann, 2012). 4) Deep generative models, including MIWAE (Mattei & Frellsen, 2019), GAIN (Yoon et al., 2018), MCFlow (Richardson et al., 2020), MissDiff (Ouyang et al., 2023) and TabCSDI (Zheng & Charoenphakdee, 2022). It is worth noting that MissDiff and TabCSDI are also based on diffusion. We also compare with two recent SOTA imputing methods ReMasker (Du et al., 2024) and HyperImpute (Jarrett et al., 2022).
+
+**Evaluation Protocols.** For each dataset, we use 70% as the training set, and the remaining 30% as the testing set. All methods are trained on the training set. The imputation is applied to both the missing values in the training set and the testing set. Consequently, the imputation of the training set is the 'in-sample' setting, while imputing the testing set is the 'out-of-sample' setting. The performance of DIFFPUTER is evaluated by the divergence between the predicted values and ground-truth values of missing entries. For continuous features, we use Mean Absolute Error (MAE) and Root Mean Squared Error (RMSE), while for discrete features, we use Accuracy. Note that both the MAE and RMSE are calculated based on the input data after standardization (zero mean and unit variance). The implementation details and hyperparameter settings are presented in Appendix D.4.
+
+### 5.2 MAIN RESULTS (MASK COMPLETELY AT RANDOM)
+
+We first evaluate DIFFPUTER’s performance in the in-sample imputation task. Figure 2 compares the performance of different imputation methods regarding continuous columns using MAE and RMSE. Table 1 compares the performance of different methods regarding discrete columns using accuracy. Our observations on these experimental results are summarized as follows.
+
+**Superior performance of DIFFPUTER.** Across all datasets, DIFFPUTER provides high-quality imputation results, matching the best methods on some datasets and significantly outperforming the second-best methods on the remaining datasets. Compared with the other two diffusion-based methods, MissDiff and TabCSDI, the substantial performance advantage of DIFFPUTER convincingly demonstrates the correctness and superiority of combining the EM algorithm with Diffusion.
+
+**Traditional machine learning methods are still powerful imputors.** A well-recognized claim in tabular data machine learning is that traditional machine learning methods can sometimes be better than deep learning methods (Lalande & Doya, 2022; Suh & Song, 2023; Jolicoeur-Martineau et al., 2024), and we have similar observations in missing data imputation. For example, the simple EM algorithm under the mixture-Gaussian assumption and the KNN algorithm give decent imputation performance and outperform a lot of early deep generative imputation methods.
+
+**The preference of different types of algorithms for heterogeneous tabular data.** Another interesting finding is that discriminative methods (e.g., Remasker, GRAPE, MOT) and generative methods (e.g., DIFFPUTER) have different preferences for continuous data and discrete data. Overall, generative models appear to be more effective at imputing continuous columns. As shown in Figure 2, our model significantly outperforms these discriminative models. Conversely, discriminative models
+
+{7}------------------------------------------------
+
+![Figure 2: MCAR, In-sample imputation performance on continuous columns. The figure consists of two bar charts. The top chart shows MAE (Mean Absolute Error) for 17 methods across 9 datasets (California, Letter, Gesture, Magic, Bean, Adult, Default, Shoppers, News) plus an Average. The bottom chart shows RMSE (Root Mean Square Error) for the same methods and datasets. DiffPuter (red) consistently outperforms the baselines across all datasets and metrics.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 2: MCAR, In-sample imputation performance on continuous columns. The figure consists of two bar charts. The top chart shows MAE (Mean Absolute Error) for 17 methods across 9 datasets (California, Letter, Gesture, Magic, Bean, Adult, Default, Shoppers, News) plus an Average. The bottom chart shows RMSE (Root Mean Square Error) for the same methods and datasets. DiffPuter (red) consistently outperforms the baselines across all datasets and metrics.
+
+Figure 2: MCAR, In-sample imputation performance on **continuous columns**: Comparing DIFFPUTER with **17 baselines** on imputing continuous data on all the **nine datasets**. A blank column indicates that the method fails or gets out-of-memory for that dataset. DIFFPUTER outperforms the most competitive baseline method by 6.94% (MAE score) and 4.78% (RMSE score) by average. The circled number after the model name denotes its ranking among all methods.
+
+![Figure 3: Impacts of the number of EM iterations. The figure shows six line plots for datasets California, Letter, Gesture, Adult, Default, and Shoppers. Each plot shows MAE (red line) and RMSE (blue line) decreasing as the number of iterations k increases from 0 to 6. The performance improves steadily with more iterations.](d864789b0d8384da1d22fd6a5d76bbdf_img.jpg)
+
+Figure 3: Impacts of the number of EM iterations. The figure shows six line plots for datasets California, Letter, Gesture, Adult, Default, and Shoppers. Each plot shows MAE (red line) and RMSE (blue line) decreasing as the number of iterations k increases from 0 to 6. The performance improves steadily with more iterations.
+
+Figure 3: Impacts of the number of EM iterations. DIFFPUTER’s performance steadily improves as the number of EM interactions increases.
+
+![Figure 4: Impacts of the number of sampled imputations per iteration. The figure shows four line plots for datasets California, Letter, Adult, and Default. Each plot shows MAE (blue line) and RMSE (orange line) decreasing as the number of samples N increases from 5 to 20. Performance improves with more samples per iteration.](7ff005f9556dc6518981bb92091d36ab_img.jpg)
+
+Figure 4: Impacts of the number of sampled imputations per iteration. The figure shows four line plots for datasets California, Letter, Adult, and Default. Each plot shows MAE (blue line) and RMSE (orange line) decreasing as the number of samples N increases from 5 to 20. Performance improves with more samples per iteration.
+
+Figure 4: Impacts of the number of sampled imputations per iteration. A very small  $N$  leads to poor performance and large variance.
+
+are more proficient at imputing discrete data: in Table 1, the best discriminative model, Remasker, can achieve results comparable to our method on almost all datasets.
+
+Next, we compare the performance in the out-of-sample imputation tasks. Noting that some imputation methods are specifically designed for in-sample imputation and cannot be applied to the out-of-sample setting, the number of baselines in this task is significantly reduced. Table 6 in Appendix E.1 compares the MAEs and RMSEs in the OOS imputation task. Comparing it with the results of in-sample imputation, we can easily observe that some methods exhibit significant performance differences between the two settings. For example, graph-based methods GRAPE and IGRM perform well in in-sample imputation, but their performance degrades significantly in out-of-sample imputation. IGRM even fails on all datasets in the out-of-sample imputation setting. In contrast, our DIFFPUTER demonstrates excellent performance in both in-sample and out-of-sample imputation. This highlights DIFFPUTER’s superior performance and robust generalization capabilities.
+
+### 5.3 ABLATION STUDIES
+
+**Impacts of the number of EM iterations.** In Fig. 3, we present the performance of DIFFPUTER’s imputation results from increasing EM iterations. Note that  $k = 0$  represents the imputation result of a randomly initialized denoising network, and  $k = 1$  represents the performance of a pure diffusion model without iterative refinement. It is clearly observed that a single diffusion imputation achieves only suboptimal performance, while DIFFPUTER’s performance steadily improves as the number of
+
+{8}------------------------------------------------
+
+Table 1: MCAR, In-sample imputation performance on **discrete columns**. Comparison of the imputation accuracy on discrete columns on five datasets. DIFFPUTER ranks the first among **19** imputation methods. Mean/Median/MF means using the mean/median/most frequent value as the imputation, which will give the same imputation result in this case.
+
+| Method                                  | Adult                            | Default                          | Shoppers                | News                             | Average      | Rank       |
+|-----------------------------------------|----------------------------------|----------------------------------|-------------------------|----------------------------------|--------------|------------|
+| <i>Statistical</i>                      |                                  |                                  |                         |                                  |              |            |
+| Mean/Median/MF                          | 55.20 $\pm$ 0.02                 | 53.37 $\pm$ 0.11                 | 50.60 $\pm$ 0.29        | 18.60 $\pm$ 0.14                 | 44.44        | (15)       |
+| <i>Traditional iterative</i>            |                                  |                                  |                         |                                  |              |            |
+| EM (García-Laencina et al., 2010)       | 61.27 $\pm$ 0.12                 | 57.80 $\pm$ 0.22                 | 50.94 $\pm$ 0.27        | 39.37 $\pm$ 0.06                 | 52.35        | (10)       |
+| MICE (Van Buuren & Karin, 2011)         | 50.31 $\pm$ 0.21                 | 51.88 $\pm$ 0.30                 | 43.43 $\pm$ 0.19        | 30.05 $\pm$ 1.17                 | 43.92        | (16)       |
+| MIRACLE (Kyonso et al., 2021)           | 62.28 $\pm$ 0.21                 | 55.79 $\pm$ 1.52                 | 45.74 $\pm$ 0.69        | 39.33 $\pm$ 0.27                 | 50.79        | (12)       |
+| SoftImpute (Hastie et al., 2015)        | 56.18 $\pm$ 0.08                 | 56.01 $\pm$ 0.07                 | 50.94 $\pm$ 0.27        | 18.70 $\pm$ 0.05                 | 45.46        | (14)       |
+| MissForest (Stekhoven & Bühlmann, 2012) | 63.51 $\pm$ 0.31                 | 56.97 $\pm$ 0.23                 | 51.10 $\pm$ 0.61        | 37.55 $\pm$ 0.84                 | 52.28        | (11)       |
+| <i>Dist. match</i>                      |                                  |                                  |                         |                                  |              |            |
+| MOT (Muzellec et al., 2020)             | 63.85 $\pm$ 0.16                 | 71.95 $\pm$ 0.06                 | 56.91 $\pm$ 0.11        | 38.62 $\pm$ 0.20                 | 57.83        | (5)        |
+| TDM (Zhao et al., 2023)                 | 62.64 $\pm$ 1.36                 | 63.41 $\pm$ 7.16                 | 55.00 $\pm$ 0.46        | 30.62 $\pm$ 1.22                 | 52.92        | (8)        |
+| <i>GNN</i>                              |                                  |                                  |                         |                                  |              |            |
+| GRAPE (You et al., 2020)                | 69.84 $\pm$ 0.25                 | 73.85 $\pm$ 0.01                 | 57.32 $\pm$ 0.15        | 40.83 $\pm$ 0.44                 | 60.46        | (3)        |
+| IGRM (Zhong et al., 2023)               | 69.21 $\pm$ 0.29                 | OOM                              | 57.45 $\pm$ 0.16        | OOM                              | -            | -          |
+| <i>Generative models</i>                |                                  |                                  |                         |                                  |              |            |
+| MIWAE (Mattei & Frellsen, 2019)         | 51.33 $\pm$ 0.08                 | 48.11 $\pm$ 0.02                 | 49.23 $\pm$ 0.61        | 17.32 $\pm$ 0.01                 | 41.50        | (18)       |
+| GAIN (Yoon et al., 2018)                | 53.73 $\pm$ 0.38                 | 54.49 $\pm$ 1.80                 | 47.25 $\pm$ 0.95        | 34.20 $\pm$ 0.06                 | 47.42        | (13)       |
+| MCFlow (Richardson et al., 2020)        | 60.31 $\pm$ 0.18                 | 68.36 $\pm$ 0.9                  | 52.73 $\pm$ 0.29        | 30.08 $\pm$ 3.01                 | 52.87        | (9)        |
+| TabCSDI (Zheng & Charoenphakdee, 2022)  | 58.72 $\pm$ 0.25                 | 50.57 $\pm$ 0.02                 | 43.24 $\pm$ 0.05        | 17.49 $\pm$ 0.14                 | 42.51        | (17)       |
+| MissDiff (Ouyang et al., 2023)          | 57.39 $\pm$ 7.34                 | 66.01 $\pm$ 1.88                 | 48.10 $\pm$ 1.86        | 41.39 $\pm$ 0.59                 | 53.22        | (7)        |
+| <i>Other</i>                            |                                  |                                  |                         |                                  |              |            |
+| KNN (Pujianto et al., 2019)             | 63.28 $\pm$ 0.52                 | 71.64 $\pm$ 0.34                 | 53.93 $\pm$ 0.28        | 38.59 $\pm$ 0.17                 | 56.86        | (6)        |
+| Remask (Du et al., 2024)                | 69.18 $\pm$ 0.08                 | 76.88 $\pm$ 0.62                 | 57.86 $\pm$ 0.09        | 44.33 $\pm$ 0.08                 | 62.06        | (2)        |
+| HyperImpute (Jarrett et al., 2022)      | 64.99 $\pm$ 0.06                 | 74.39 $\pm$ 2.07                 | <b>59.19</b> $\pm$ 0.04 | 40.29 $\pm$ 0.96                 | 59.72        | (4)        |
+| <b>DIFFPUTER</b>                        | <b>70.12<math>\pm</math>0.17</b> | <b>77.64<math>\pm</math>0.32</b> | 58.82 $\pm$ 0.09        | <b>44.69<math>\pm</math>0.13</b> | <b>62.82</b> | <b>(1)</b> |
+
+![Figure 5: Impacts of sampling steps on the training time and imputation performance (MAE). The figure contains two line plots. The left plot shows 'Total Training Time (s)' on the y-axis (1400 to 1800) against 'California: Sampling Step' on the x-axis (20 to 40). A blue line for 'Training Time' increases linearly, while a red line for 'MAE' decreases slightly. The right plot shows 'MAE' on the y-axis (0.40 to 0.60) against 'Adult: Sampling Step' on the x-axis (20 to 40). A blue line for 'Training Time' increases linearly, while a red line for 'MAE' decreases slightly.](bedcca5cdf168e3508ef511d94ec514c_img.jpg)
+
+Figure 5: Impacts of sampling steps on the training time and imputation performance (MAE). The figure contains two line plots. The left plot shows 'Total Training Time (s)' on the y-axis (1400 to 1800) against 'California: Sampling Step' on the x-axis (20 to 40). A blue line for 'Training Time' increases linearly, while a red line for 'MAE' decreases slightly. The right plot shows 'MAE' on the y-axis (0.40 to 0.60) against 'Adult: Sampling Step' on the x-axis (20 to 40). A blue line for 'Training Time' increases linearly, while a red line for 'MAE' decreases slightly.
+
+Figure 5: Impacts of sampling steps on the training time and imputation performance (MAE). Reducing diffusion sampling steps greatly reduces the training time at the cost of a slight performance drop.
+
+![Figure 6: Impacts of extremely large missing ratios. The figure contains two line plots. The left plot shows 'MAE' on the y-axis (0.60 to 0.90) against 'California: Observed ratio' on a logarithmic x-axis (10^-2 to 10^-5). A blue line for 'Mean Impute' starts high and drops sharply, while a red line for 'DiffPuter' remains relatively flat. The right plot shows 'MAE' on the y-axis (0.600 to 0.900) against 'Adult: Observed ratio' on a logarithmic x-axis (10^-2 to 10^-5). A blue line for 'Mean Impute' starts high and drops sharply, while a red line for 'DiffPuter' remains relatively flat.](925f55ce69802b9d3b00546382663ee2_img.jpg)
+
+Figure 6: Impacts of extremely large missing ratios. The figure contains two line plots. The left plot shows 'MAE' on the y-axis (0.60 to 0.90) against 'California: Observed ratio' on a logarithmic x-axis (10^-2 to 10^-5). A blue line for 'Mean Impute' starts high and drops sharply, while a red line for 'DiffPuter' remains relatively flat. The right plot shows 'MAE' on the y-axis (0.600 to 0.900) against 'Adult: Observed ratio' on a logarithmic x-axis (10^-2 to 10^-5). A blue line for 'Mean Impute' starts high and drops sharply, while a red line for 'DiffPuter' remains relatively flat.
+
+Figure 6: Impacts of extremely large missing ratios. The performance of DIFFPUTER is upper-bounded by the initialized missing values via mean imputation
+
+iterations increases. Additionally, we observe that DIFFPUTER does not require a large number of iterations to converge. In fact, 4 to 5 iterations are sufficient for DIFFPUTER to converge to a stable and satisfying state.
+
+**Impacts of the number of sampled imputations per iteration.** To obtain the expected value of missing entries, we have to sample a number of examples from the conditional distribution (via the reverse diffusion process). Therefore, the number  $N$  should have a huge impact on DIFFPUTER’s performance. In Figure 4, we study the impacts of the number of samples on the imputation results. As expected, a very small  $N$  leads to poor performance and large variance, while increasing the sampling number consistently improves the performance and reduces the variance. An optimal and stable performance can be achieved at  $N \geq 10$ . Since the sampling time is linear w.r.t. to the sample number, we use  $N = 10$  by default.
+
+**Impacts of the number of sampling steps in diffusion.** Another hyperparameter impacting the performance and training speed is the number of sampling steps  $M$  in the reverse process of diffusion.
+
+{9}------------------------------------------------
+
+Table 2: Comparison of the real training time on an Nvidia RTX 4090 GPU. DIFFPUTER has a similar training cost to SOTA methods, yet brings from 8% to 25% performance improvement.
+
+| Datasets                   | MOT     | TDM     | GRAPE   | IGRM    | HyperImpute | Remasker | DIFFPUTER |
+|----------------------------|---------|---------|---------|---------|-------------|----------|-----------|
+| Time: <b>California</b>    | 446.47s | 216.91s | 635.7s  | 1267.5s | 1277.3s     | 1320.1s  | 1927.2s   |
+| Time: <b>Adult</b>         | 396.68s | 514.56s | 2347.1s | 3865.1s | 1806.9s     | 1902.4s  | 2142.9s   |
+| DIFFPUTER’s perf. improve. | 21.47%  | 21.37%  | 25.94%  | 20.97%  | 8.44%       | 10.65%   | -         |
+
+By default, DIFFPUTER set  $M = 50$ , and we study the impact of reducing  $M$  in Figure 5. As demonstrated, reducing the diffusion sampling steps can greatly reduce the training time at the cost of only a slight performance drop. More detailed, reducing the sampling step from 50 to 20 reduces about 25% of training time cost, with only 3% performance drop. Therefore, when time costs are high, and precision requirements are not stringent, the training speed can be further increased by reducing the sampling steps.
+
+**Impacts of large missing ratios.** In Figure 6, we study the performance of DIFFPUTER with missing ratio from 30% to 99% (observed ratio from 70% to 1%). Consistent with the intuition, when the observed ratio decreases (i.e., missing ratio increases), there is a significant increase in the imputation MAE score, indicating that the imputation performance becomes increasingly worse. However, we can observe a clear performance lower bound when the missing ratio approaches 99%, which is close to the performance of directly imputing using the mean of observed values. This is because, in DIFFPUTER’s first E-step, each column’s missing values are always initialized as the mean of the observed ones. Therefore, DIFFPUTER can still give a reasonable imputation result even if the missing ratio is extremely large.
+
+**Comparison of Training Time.** Intuitively, the training of DIFFPUTER would be very time-consuming, as it requires iteratively alternating between the training and sampling processes of the diffusion model. However, in practice, DIFFPUTER’s training efficiency is significantly improved through the following design: 1) light-weighted MLP-architected denoising function; 2) reduced number of sampling steps ( $M = 50 \ll 1000$  in traditional diffusion methods). To demonstrate this, we compare the training time of DIFFPUTER with other SOTA imputation methods. As demonstrated in Table 2, DIFFPUTER has similar training cost (similar scale) to these representative SOTA methods, yet brings from 8% to 25% performance improvement, which is acceptable.
+
+**Incorporating EM with other DGMs.** Finally, we try to combine EM algorithms with other deep generative models that are easy to perform conditional sampling, including MIWAE (Mattei & Frellsen, 2019), HIWAE (Nazabal et al., 2020a), VAEM (Ma et al., 2020) and HH-VAEM (Peis et al., 2022a). Based on Table 3, our experimental results demonstrate that combining EM with other Deep Generative Models leads to performance improvements. However, it’s noteworthy that despite these improvements, our proposed DIFFPUTER still outperforms all combinations, achieving superior results, where lower scores indicate better performance. This demonstrates the effectiveness and robustness of our approach compared to existing methods, even when they are enhanced through combination with EM.
+
+Table 3: Effects of combining EM with other Deep Generative Models.
+
+| Methods      | Adult         | Default       | Shoppers      | News          |
+|--------------|---------------|---------------|---------------|---------------|
+| MIWAE        | 0.5763        | 0.5194        | 0.5047        | 0.6349        |
+| HIWAE        | 0.6155        | 0.3989        | 0.4707        | 0.5032        |
+| VAEM         | 0.5568        | 0.4292        | 0.4626        | 0.5204        |
+| HH-VAEM      | 0.5673        | -             | 0.4589        | -             |
+| EM + MIWAE   | 0.5661        | 0.4993        | 0.4554        | 0.4171        |
+| EM + HIWAE   | 0.5974        | 0.4314        | 0.4961        | 0.5222        |
+| EM + VAEM    | 0.5492        | 0.4121        | 0.4362        | 0.5045        |
+| EM + HH-VAEM | 0.5402        | -             | 0.4262        | -             |
+| DIFFPUTER    | <b>0.3425</b> | <b>0.2661</b> | <b>0.3485</b> | <b>0.2855</b> |
+
+## 6 CONCLUSIONS
+
+In this paper, we have proposed DIFFPUTER for missing data imputation. DIFFPUTER is an iterative method that combines the Expectation-Maximization algorithm and diffusion models, where the diffusion model serves as both the density estimator and missing data imputer. We demonstrate theoretically that the training and sampling process of a diffusion model precisely corresponds to the M-step and E-step of the EM algorithm. Therefore, we can iteratively update the density of the complete data and the values of the missing data. Extensive experiments have demonstrated the efficacy of the proposed method.
+
+ Rest of paper (reference and Appendix) is removed.

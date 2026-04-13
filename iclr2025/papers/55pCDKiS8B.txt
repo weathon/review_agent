@@ -1,0 +1,307 @@
+
+
+{0}------------------------------------------------
+
+# ELUCIDATING THE PRECONDITIONING IN CONSISTENCY DISTILLATION
+
+Kaiwen Zheng<sup>†1</sup>, Guande He<sup>†1</sup>, Jianfei Chen<sup>1</sup>, Fan Bao<sup>12</sup>, Jun Zhu<sup>‡123</sup>
+
+<sup>1</sup>Dept. of Comp. Sci. & Tech., Institute for AI, BNRist Center, THBI Lab
+
+<sup>1</sup>Tsinghua-Bosch Joint ML Center, Tsinghua University, Beijing, China
+
+<sup>2</sup>Shengshu Technology, Beijing <sup>3</sup>Pazhou Lab (Huangpu), Guangzhou, China  
+ zkwthu@gmail.com; guande.he17@outlook.com;  
+ fan.bao@shengshu.ai; {jianfeic, dcszj}@tsinghua.edu.cn
+
+## ABSTRACT
+
+Consistency distillation is a prevalent way for accelerating diffusion models adopted in consistency (trajectory) models, in which a student model is trained to traverse backward on the probability flow (PF) ordinary differential equation (ODE) trajectory determined by the teacher model. Preconditioning is a vital technique for stabilizing consistency distillation, by linear combining the input data and the network output with pre-defined coefficients as the consistency function. It imposes the boundary condition of consistency functions without restricting the form and expressiveness of the neural network. However, previous preconditionings are hand-crafted and may be suboptimal choices. In this work, we offer the first theoretical insights into the preconditioning in consistency distillation, by elucidating its design criteria and the connection to the teacher ODE trajectory. Based on these analyses, we further propose a principled way dubbed *Analytic-Precond* to analytically optimize the preconditioning according to the consistency gap (defined as the gap between the teacher denoiser and the optimal student denoiser) on a generalized teacher ODE. We demonstrate that *Analytic-Precond* can facilitate the learning of trajectory jumpers, enhance the alignment of the student trajectory with the teacher’s, and achieve  $2\times$  to  $3\times$  training acceleration of consistency trajectory models in multi-step generation across various datasets.
+
+## 1 INTRODUCTION
+
+Diffusion models are a class of powerful deep generative models, showcasing cutting-edge performance in diverse domains including image synthesis (Dhariwal & Nichol, 2021; Karras et al., 2022), speech and video generation (Chen et al., 2021; Ho et al., 2022), controllable image manipulation (Nichol et al., 2022; Ramesh et al., 2022; Rombach et al., 2022; Meng et al., 2022b), density estimation (Song et al., 2021b; Kingma et al., 2021; Lu et al., 2022a; Zheng et al., 2023b) and inverse problem solving (Chung et al., 2022; Kawar et al., 2022). Compared to their generative counterparts like variational auto-encoders (VAEs) (Kingma & Welling, 2014) and generative adversarial networks (GANs) (Goodfellow et al., 2014), diffusion models excel in high-quality generation while circumventing issues of mode collapse and training instability. Consequently, they serve as the cornerstone of next-generation generative systems like text-to-image (Rombach et al., 2022) and text-to-video (Gupta et al., 2023; Bao et al., 2024) synthesis.
+
+The primary bottleneck for integrating diffusion models into downstream tasks lies in their slow inference processes, which gradually remove noise from data with hundreds of network evaluations. The sampling process typically involves simulating the probability flow (PF) ordinary ODE backward in time, starting from noise (Song et al., 2021c). To accelerate diffusion sampling, various training-free samplers have been proposed as specialized solvers of the PF-ODE (Song et al., 2021a; Zhang & Chen, 2022; Lu et al., 2022b), yet they still require over 10 steps to generate satisfactory samples due to the inherent discretization errors present in all numerical ODE solvers.
+
+<sup>\*</sup>Work done during an internship at Shengshu;
+
+<sup>†</sup>Equal contribution;
+
+<sup>‡</sup>The corresponding author.
+
+{1}------------------------------------------------
+
+![Diagram illustrating consistency distillation with preconditioning coefficients. A 'Data' image (0, x_0) is transformed into a 'Noise' image (T, x_T) via a 'Teacher PF-ODE' trajectory. A 'Consistency Function f_theta (Student)' is shown, which takes the data (s, x_s) and noise (t, x_t) as inputs. The function is parameterized by a 'Neural Network F_theta' and preconditioning coefficients alpha_{s,t} and beta_{s,t}. The equation for the consistency function is f_theta(x_t, t, s) = alpha_{s,t} F_theta(x_s, t, s) + beta_{s,t} x_t.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+The diagram illustrates the consistency distillation process. On the left, a 'Data' image labeled  $(0, x_0)$  is shown. An orange curved arrow points from this data to a 'Noise' image labeled  $(T, x_T)$ , which is associated with a 'Teacher PF-ODE' box. Along this trajectory, two intermediate points are marked:  $(s, x_s)$  and  $(t, x_t)$ . A dashed box labeled 'Consistency Function  $f_\theta$  (Student)' contains a 'Neural Network  $F_\theta$ ' block. The inputs  $(s, x_s)$  and  $(t, x_t)$  are processed by this network. The output is then combined with  $x_t$  through a summation node (indicated by a circle with a plus sign). This combination is weighted by preconditioning coefficients  $\alpha_{s,t}$  and  $\beta_{s,t}$ , as shown by the labels  $\times \alpha_{s,t}$  and  $\times \beta_{s,t}$  next to the summation node. To the right of the box, the mathematical formulation of the consistency function is given:  $f_\theta(x_t, t, s) = \alpha_{s,t} F_\theta(x_s, t, s) + \beta_{s,t} x_t$ .
+
+Diagram illustrating consistency distillation with preconditioning coefficients. A 'Data' image (0, x\_0) is transformed into a 'Noise' image (T, x\_T) via a 'Teacher PF-ODE' trajectory. A 'Consistency Function f\_theta (Student)' is shown, which takes the data (s, x\_s) and noise (t, x\_t) as inputs. The function is parameterized by a 'Neural Network F\_theta' and preconditioning coefficients alpha\_{s,t} and beta\_{s,t}. The equation for the consistency function is f\_theta(x\_t, t, s) = alpha\_{s,t} F\_theta(x\_s, t, s) + beta\_{s,t} x\_t.
+
+Figure 1: Consistency distillation with *preconditioning* coefficients  $\alpha, \beta$ .
+
+Recent advancements in few-step or even single-step generation of diffusion models are concentrated on distillation methods (Luhman & Luhman, 2021; Salimans & Ho, 2022; Meng et al., 2022a; Song et al., 2023; Kim et al., 2023; Sauer et al., 2023). Particularly, consistency models (CMs) (Song et al., 2023) have emerged as a prominent method for diffusion distillation and successfully been applied to various data domains including latent space (Luo et al., 2023), audio (Ye et al., 2023) and video (Wang et al., 2023). CMs consider training a student network to map arbitrary points on the PF-ODE trajectory to its starting point, thereby enabling one-step generation that directly maps noise to data. A follow-up work named consistency trajectory models (CTMs) (Kim et al., 2023) extends CMs by changing the mapping destination to encompass not only the starting point but also intermediate ones, facilitating unconstrained backward jumps on the PF-ODE trajectory. This design enhances training flexibility and permits the incorporation of auxiliary losses.
+
+In both CMs and CTMs, the mapping function (referred to as the consistency function) must adhere to certain constraints. For instance, in CMs, there exists a boundary condition dictating that the starting point maps to itself. Consequently, the consistency functions are parameterized as a linear combination of the input data and the network output with pre-defined coefficients. This approach ensures that boundary conditions are naturally satisfied without constraining the form or expressiveness of the neural network. We term this parameterization technique *preconditioning* in consistency distillation (Figure 1), aligning with the terminology in EDM (Karras et al., 2022). The preconditionings in CMs and CTMs are intuitively crafted but may be suboptimal. Besides, despite efforts, CTMs have struggled to identify any distinct preconditionings that outperform the original one.
+
+In this work, we take the first step towards designing and enhancing preconditioning in consistency distillation to learn better “trajectory jumpers”. We elucidate the design criteria of preconditioning by linking it to the discretization of the teacher ODE trajectory. We further convert the teacher PF-ODE into a generalized form involving free parameters, which induces a novel family of preconditionings. Through theoretical analyses, we unveil the significance of the consistency gap (referring to the gap between the teacher denoiser and the optimal student denoiser) in achieving good initialization and facilitating learning. By minimizing a derived bound of the consistency gap, we can optimize the preconditioning within our proposed family. We name the optimal preconditioning under our principle as *Analytic-Precond*, as it can be analytically computed according to the teacher model without manual design or hyperparameter tuning. Moreover, the computation is efficient with less than 1% time cost of the training process.
+
+We demonstrate the effectiveness of Analytic-Precond by applying it to CMs and CTMs on standard benchmark datasets, including CIFAR-10, FFHQ  $64 \times 64$  and ImageNet  $64 \times 64$ . While the vanilla preconditioning closely approximates Analytic-Precond and yields similar results in CMs, Analytic-Precond exhibits notable distinctions from its original counterpart in CTMs, particularly concerning intermediate jumps on the trajectory. Remarkably, Analytic-Precond achieves  $2 \times$  to  $3 \times$  training acceleration in CTMs in multi-step generation.
+
+## 2 BACKGROUND
+
+### 2.1 DIFFUSION MODELS
+
+Diffusion models (Song et al., 2021c; Sohl-Dickstein et al., 2015; Ho et al., 2020) transform a  $d$ -
+
+{2}------------------------------------------------
+
+dimensional data distribution  $q_0(\mathbf{x}_0)$  into Gaussian noise distribution through a forward stochastic differential equation (SDE) starting from  $\mathbf{x}_0 \sim q_0$ :
+
+$$d\mathbf{x}_t = f(t)\mathbf{x}_t dt + g(t)d\mathbf{w}_t, \quad (1)$$
+
+where  $t \in [0, T]$  for some finite horizon  $T$ ,  $f, g : [0, T] \rightarrow \mathbb{R}$  is the scalar-valued drift and diffusion term, and  $\mathbf{w}_t \in \mathbb{R}^d$  is a standard Wiener process. The forward SDE is accompanied by a series of marginal distributions  $\{q_t\}_{t=0}^T$  of  $\{\mathbf{x}_t\}_{t=0}^T$ , and  $f, g$  are properly designed so that the terminal distribution is approximately a pure Gaussian, i.e.,  $q_T(\mathbf{x}_T) \approx \mathcal{N}(\mathbf{0}, \sigma_T^2 \mathbf{I})$ . An intriguing characteristic of this SDE lies in the presence of the probability flow (PF) ODE (Song et al., 2021c)  $d\mathbf{x}_t = [f(t)\mathbf{x}_t - \frac{1}{2}g^2(t)\nabla_{\mathbf{x}_t} \log q_t(\mathbf{x}_t)]dt$  whose solution trajectories at time  $t$ , when solved backward from time  $T$  to time 0, are distributed exactly as  $q_t$ . The only unknown term  $\nabla_{\mathbf{x}_t} \log q_t(\mathbf{x}_t)$  is the *score function* and can be learned by denoising score matching (DSM) (Vincent, 2011).
+
+A prevalent noise schedule  $f = 0, g = \sqrt{2t}$  is proposed by EDM (Karras et al., 2022) and followed in recent text-to-image generation (Esser et al., 2024), video generation (Blattmann et al., 2023), as well as consistency distillation. In this case, the forward transition kernel of the forward SDE (Eqn. (1)) owns a simple form  $q(\mathbf{x}_t|\mathbf{x}_0) = \mathcal{N}(\mathbf{x}_0, t^2 \mathbf{I})$ , and the terminal distribution  $q_T \approx \mathcal{N}(\mathbf{0}, T^2 \mathbf{I})$ . Besides, the PF-ODE can be represented by the *denoiser function*  $\mathbf{D}_\phi(\mathbf{x}_t, t)$ :
+
+$$\frac{d\mathbf{x}_t}{dt} = \frac{\mathbf{x}_t - \mathbf{D}_\phi(\mathbf{x}_t, t)}{t}, \quad (2)$$
+
+where the denoiser function is trained to predict  $\mathbf{x}_0$  given noisy data  $\mathbf{x}_t = \mathbf{x}_0 + t\epsilon, \epsilon \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$  at any time  $t$ , i.e., minimizing  $\mathbb{E}_{\mathbf{x}_t} \mathbb{E}_{p_{\text{data}}(\mathbf{x}_0)q(\mathbf{x}_t|\mathbf{x}_0)} [w(t) \|\mathbf{D}_\phi(\mathbf{x}_t, t) - \mathbf{x}_0\|_2^2]$  for some weighting  $w(t)$ . This denoising loss is equivalent to the DSM loss (Song et al., 2021c). In EDM, another key insight is to employ preconditioning by parameterizing  $\mathbf{D}_\phi$  as  $\mathbf{D}_\phi(\mathbf{x}, t) = c_{\text{skip}}(t)\mathbf{x} + c_{\text{out}}(t)\mathbf{F}_\phi(\mathbf{x}, t)^1$ , where
+
+$$c_{\text{skip}}(t) = \frac{\sigma_{\text{data}}^2}{\sigma_{\text{data}}^2 + t^2}, \quad c_{\text{out}}(t) = \frac{\sigma_{\text{data}}t}{\sqrt{\sigma_{\text{data}}^2 + t^2}}, \quad (3)$$
+
+$\mathbf{F}_\phi$  is a free-form neural network and  $\sigma_{\text{data}}^2$  is the variance of the data distribution.
+
+### 2.2 CONSISTENCY DISTILLATION
+
+Denote  $\phi$  as the parameters of the teacher diffusion model, and  $\theta$  as the parameters of the student network. Given a trajectory  $\{\mathbf{x}_t\}_{t=\epsilon}^T$  with a fixed initial timestep  $\epsilon$  of a teacher PF-ODE<sup>2</sup>, consistency models (CMs) (Song et al., 2023) aim to learn a *consistency function*  $\mathbf{f}_\theta : (\mathbf{x}_t, t) \mapsto \mathbf{x}_\epsilon$  which maps the point  $\mathbf{x}_t$  at any time  $t$  on the trajectory to the initial point  $\mathbf{x}_\epsilon$ . The consistency function is forced to satisfy the *boundary condition*  $\mathbf{f}_\theta(\mathbf{x}, \epsilon) = \mathbf{x}$ . To ensure unrestricted form and expressiveness of the neural network,  $\mathbf{f}_\theta$  is parameterized as
+
+$$\mathbf{f}_\theta(\mathbf{x}, t) = \frac{\sigma_{\text{data}}^2}{\sigma_{\text{data}}^2 + (t - \epsilon)^2} \mathbf{x} + \frac{\sigma_{\text{data}}(t - \epsilon)}{\sqrt{\sigma_{\text{data}}^2 + t^2}} \mathbf{F}_\theta(\mathbf{x}, t), \quad (4)$$
+
+which naturally satisfies the boundary condition for any free-form network  $\mathbf{F}_\theta(\mathbf{x}_t, t)$ . We refer to this technique as *preconditioning* in consistency distillation, aligning with the terminology in EDM. The student  $\theta$  can be distilled from the teacher by the training objective:
+
+$$\mathbb{E}_{t \in [\epsilon, T], s \in [\epsilon, t]} \mathbb{E}_{q_0(\mathbf{x}_0)q(\mathbf{x}_t|\mathbf{x}_0)} [w(t)d(\mathbf{f}_\theta(\mathbf{x}_t, t), \mathbf{f}_{\text{sg}}(\text{Solver}_\phi(\mathbf{x}_t, t, s), s))], \quad (5)$$
+
+where  $w(\cdot)$  is a positive weighting function,  $d(\cdot, \cdot)$  is a distance metric,  $\text{sg}$  is the (exponential moving average) stop-gradient and  $\text{Solver}_\phi$  is any numerical solver for the teacher PF-ODE.
+
+Consistency trajectory models (CTMs) (Kim et al., 2023) extend CMs by changing the mapping destination to not only the initial point but also any intermediate ones, enabling unconstrained backward jumps on the PF-ODE. Specifically, the consistency function is instead defined as  $\mathbf{f}_\theta : (\mathbf{x}_t, t, s) \mapsto \mathbf{x}_s$ , which maps the point  $\mathbf{x}_t$  at time  $t$  on the trajectory to the point  $\mathbf{x}_s$  at any
+
+<sup>1</sup>More precisely,  $\mathbf{D}_\phi(\mathbf{x}, t) = c_{\text{skip}}(t)\mathbf{x} + c_{\text{out}}(t)\mathbf{F}_\phi(c_{\text{in}}(t)\mathbf{x}, c_{\text{noise}}(t))$ . Since  $c_{\text{in}}(t)$  and  $c_{\text{noise}}(t)$  take effects inside the network, we absorb them into the definition of  $\mathbf{F}_\phi$  for simplicity.
+
+<sup>2</sup>In EDM, the range of timesteps is typically chosen as  $\epsilon = 0.002, T = 80$ .
+
+{3}------------------------------------------------
+
+previous time  $s < t$ . The boundary condition is  $f_\theta(\mathbf{x}, t, t) = \mathbf{x}$ , which is forced by the following preconditioning:
+
+$$f_\theta(\mathbf{x}, t, s) = \frac{s}{t}\mathbf{x} + \left(1 - \frac{s}{t}\right)D_\theta(\mathbf{x}, t, s) \quad (6)$$
+
+where  $D_\theta(\mathbf{x}_t, t, s) = c_{\text{skip}}(t)\mathbf{x} + c_{\text{out}}(t)F_\theta(\mathbf{x}, t, s)$  is the student denoiser function, and  $F_\theta(\mathbf{x}, t, s)$  is a free-form network with an extra timestep input  $s$ . The student network is trained by minimizing
+
+$$\mathbb{E}_{t \in [\mathcal{I}_t], s \in [\mathcal{I}_t], u \in [s, t]} \mathbb{E}_{\mathbf{x}_0 \sim q(\mathbf{x}_t | \mathbf{x}_0)} [w(t)d(f_{\text{sg}}(\theta)(f_\theta(\mathbf{x}_t, t, s), s, \epsilon), f_{\text{sg}}(\theta)(\text{SolveX}_\phi(\mathbf{x}_t, t, u), u, s), s, \epsilon))] \quad (7)$$
+
+An important property of CTM's preconditioning is that when  $s \rightarrow t$ , the optimal denoiser satisfies  $D_{\theta^*}(\mathbf{x}, t, s) \rightarrow D_\phi(\mathbf{x}_t, t)$ , i.e., the diffusion denoiser. Consequently, the DSM loss in diffusion models can be incorporated to regularize the training of  $\theta$ , which enhances the sample quality as the number of sampling steps increases, enabling speed-quality trade-off.
+
+## 3 METHOD
+
+Beyond the hand-crafted preconditionings outlined in Eqn. (4) and Eqn. (6), we seek a general paradigm of preconditioning design in consistency distillation. We first analyze their key ingredients and relate them to the discretization of the teacher ODE. Then we derive a generalized ODE form, which can induce a novel family of preconditionings. Finally, we propose a principled way to analytically obtain optimized preconditioning by minimizing the consistency gap.
+
+### 3.1 ANALYZING THE PRECONDITIONING IN CONSISTENCY DISTILLATION
+
+We examine the form of consistency function  $f_\theta(\mathbf{x}, t, s)$  in CTMs, wherein it subsumes CMs as a special case by setting the jumping destination  $s$  as the initial timestep  $\epsilon$ . Assume  $f_\theta$  is parameterized as the following form of skip connection:
+
+$$f_\theta(\mathbf{x}, t, s) = f(t, s)\mathbf{x} + g(t, s)D_\theta(\mathbf{x}, t, s) \quad (8)$$
+
+where  $D_\theta(\mathbf{x}, t, s) = c_{\text{skip}}(t)\mathbf{x} + c_{\text{out}}(t)F_\theta(\mathbf{x}, t, s)$  represents the student denoiser function in alignment with EDM, and  $f(t, s), g(t, s)$  are coefficients that linearly combine  $\mathbf{x}$  and  $D_\theta$ . We identify two essential constraints on the coefficients  $f$  and  $g$ .
+
+**Boundary Condition** For any free-form network  $F_\theta$  or  $D_\theta$ , the consistency function  $f_\theta$  must adhere to  $f_\theta(\mathbf{x}, t, t) = \mathbf{x}$  (in-place jumping retains the original data point). Therefore,  $f$  and  $g$  should meet the conditions  $f(t, t) = 1$  and  $g(t, t) = 0$  for any time  $t$ .
+
+**Alignment with the Denoiser** Denote the optimal consistency function that precisely follows the teacher PF-ODE trajectory as  $f_{\theta^*}(\mathbf{x}, t, s)$ , and the optimal denoiser as  $D_{\theta^*}(\mathbf{x}, t, s) = \frac{f_{\theta^*}(\mathbf{x}, t, s) - f(t, s)\mathbf{x}}{g(t, s)}$  according to Eqn. (8). In CTMs,  $f$  and  $g$  are properly designed so that the limit  $D_{\theta^*}(\mathbf{x}, t, t) = \lim_{s \rightarrow t} \frac{f_{\theta^*}(\mathbf{x}, t, s) - f(t, s)\mathbf{x}}{g(t, s)} = D_\phi(\mathbf{x}, t)$ . Thus, the student denoiser at  $s = t$ , i.e.  $D_\theta(\mathbf{x}, t, t)$ , ideally aligns with the teacher denoiser  $D_\phi$ . This alignment offers two advantages: (1)  $D_\phi(\mathbf{x}_t, t)$  acts as a valid diffusion denoiser and is amenable to regularization with the DSM loss. (2) The teacher model  $D_\phi$  serves as an effective initializer of the student  $D_\theta$  at  $s = t$ , implying that  $D_\theta$  solely at  $s < t$  is suboptimal and requires further optimization.
+
+Preconditionings satisfying these constraints can be derived by discretizing the teacher PF-ODE. Suppose the discretization from time  $t$  to time  $s$  is expressed as  $\mathbf{x}_s = f(t, s)\mathbf{x}_t + g(t, s)D_\phi(\mathbf{x}_t, t)$ , then  $f, g$  naturally satisfy the conditions: the discretization from  $t$  to  $t$  must be  $\mathbf{x}_t = \mathbf{x}_t$ ; as  $s \rightarrow t$ , the discretization error tends to 0, and the optimal student for conducting infinitesimally small jumps is just  $D_\phi(\mathbf{x}_t, t)$ . For instance, applying Euler method to the PF-ODE in Eqn. (2) yields:
+
+$$\mathbf{x}_s - \mathbf{x}_t = (s - t) \frac{\mathbf{x}_t - D_\phi(\mathbf{x}_t, t)}{t} \Rightarrow \mathbf{x}_s = \frac{s}{t}\mathbf{x}_t + \left(1 - \frac{s}{t}\right)D_\phi(\mathbf{x}_t, t) \quad (9)$$
+
+which exactly matches the preconditioning used in CTMs by replacing  $D_\phi(\mathbf{x}_t, t)$  with  $D_\theta(\mathbf{x}_t, t, s)$ . Elucidating preconditioning as ODE discretization also closely approximates CMs' choice in
+
+{4}------------------------------------------------
+
+Eqn. (4). For  $t \gg \epsilon$ , we have  $t - \epsilon \approx t$ , therefore  $f_\theta$  in Eqn. (4) approximately equals the denoiser  $D_\theta$ . On the other hand, as  $\frac{\epsilon}{t} \approx 0$ , CTMs' choice in Eqn. (6) also indicates  $f_\theta \approx D_\theta$ . Therefore, CMs' preconditioning is only distinct from ODE discretization when  $t$  is close to  $\epsilon$ , which is not the case in one-step or few-step generation.
+
+### 3.2 INDUCED PRECONDITIONING BY GENERALIZED ODE
+
+Based on the analyses above, the preconditioning can be induced from ODE discretization. Drawing inspirations from the dedicated ODE solvers in diffusion models (Lu et al., 2022b; Zheng et al., 2023a), we consider a generalized representation of the teacher ODE in Eqn. (2), which can give rise to alternative preconditionings that satisfy the restrictions.
+
+Firstly, we modulate the ODE with a continuous function  $L_t$  to transform it into an ODE with respect to  $L_t x_t$  rather than  $x_t$ . Leveraging the chain rule of derivatives, we obtain  $\frac{d(L_t x_t)}{dt} = L_t \frac{dx_t}{dt} + \frac{dL_t}{dt} x_t$ , where  $\frac{dx_t}{dt}$  can be substituted by the original teacher ODE, resulting in
+
+$$\frac{d(L_t x_t)}{dt} = \frac{L_t}{t} \left[ \left( 1 + \frac{d \log L_t}{dt} t \right) x_t - D_\phi(x_t, t) \right] \quad (10)$$
+
+By changing the time variable from  $t$  to  $\lambda_t = -\log t$ , the ODE can be further simplified to
+
+$$\frac{d(L_t x_t)}{d\lambda_t} = L_t g_\phi(x_t, t), \quad g_\phi(x_t, t) := D_\phi(x_t, t) - (1 - l_t) x_t \quad (11)$$
+
+where we denote  $l_t := \frac{d \log L_t}{d\lambda}$ , and  $t_\lambda = e^{-\lambda}$  is the inverse function of  $\lambda_t$ . Moreover,  $L_t$  can be represented by  $l_t$  as  $L_t = e^{\int_{\lambda_t}^{\lambda_s} l_{t_\lambda} d\lambda}$ . Secondly, instead of using  $t$  or  $\lambda_t$  as the time variable in the ODE (i.e., formulate the ODE as  $\frac{d(\cdot)}{dt}$  or  $\frac{d(\cdot)}{d\lambda_t}$ ), we can employ a generalized time representation  $\eta_t = \int_{\lambda_t}^{\lambda_s} L_{t_\lambda} S_{t_\lambda} d\lambda$ , where  $S_t$  is any positive continuous function. This transformation ensures that  $\eta$  monotonically increases with respect to  $\lambda$ , enabling one-to-one inverse mappings  $t_{t_\eta}, \lambda_{t_\eta}$ . To align with  $L_t$ , we express  $S_t$  as  $e^{\int_{\lambda_t}^{\lambda_s} s_{t_\lambda} d\lambda}$ , where we denote  $s_t := \frac{d \log S_t}{d\lambda}$ . Using  $\eta_t$  as the new time variable, we have  $d\eta = L_{t_\lambda} S_{t_\lambda} d\lambda$ , and the ODE in Eqn. (11) is further generalized to
+
+$$\frac{d(L_t x_t)}{d\eta_t} = \frac{g_\phi(x_t, t)}{S_t} \quad (12)$$
+
+The final generalized ODE in Eqn. (12) is theoretically equivalent to the original teacher PF-ODE in Eqn. (2), albeit with a set of introduced free parameters  $\{l_t, s_t\}_{t=\epsilon}^T$ . Applying the Euler method leads to different discretizations from Eqn. (9):
+
+$$L_s x_s - L_t x_t = (\eta_s - \eta_t) \frac{g_\phi(x_t, t)}{S_t} \quad (13)$$
+
+which can be rearranged as
+
+$$x_s = \frac{L_t S_t + (l_t - 1)(\eta_s - \eta_t)}{L_s S_t} x_t + \frac{\eta_s - \eta_t}{L_s S_t} D_\phi(x_t, t) \quad (14)$$
+
+Hence, the induced preconditioning can be expressed by Eqn. (8) with a novel set of coefficients  $f(t, s) = \frac{L_t S_t + (l_t - 1)(\eta_s - \eta_t)}{L_s S_t}, g(t, s) = \frac{\eta_s - \eta_t}{L_s S_t}$ . Originating from the Euler discretization of an equivalent teacher ODE, these coefficients adhere to the constraints outlined in Section 3.1 under any parameters  $\{l_t, s_t\}_{t=\epsilon}^T$ , thus opening avenues for further optimization. The induced preconditioning can also degenerate to CTM's case  $f(t, s) = \frac{s}{t}, g(t, s) = 1 - \frac{s}{t}$  under specific selections  $l_t = 0, s_t = -1$  for  $t \in [\epsilon, T]$ .
+
+### 3.3 PRINCIPLES FOR OPTIMIZING THE PRECONDITIONING
+
+Derived from the generalized teacher ODE presented in Eqn. (12), a range of preconditionings is now at our disposal with coefficients  $f, g$  from Eqn. (14), governed by the free parameters  $\{l_t, s_t\}_{t=\epsilon}^T$ . Our aim is to establish guiding principles for discerning the optimal sets of  $\{l_t, s_t\}_{t=\epsilon}^T$ , thereby attaining superior preconditioning compared to the original one in Eqn. (6).
+
+{5}------------------------------------------------
+
+Table 1: Comparison between different preconditionings used in consistency distillation.
+
+| Method               | CM (Song et al., 2023)                                                                                    | BCM (Li & He, 2024)                                                                  | CTM (Kim et al., 2023)                                                               | Analytic-Precond (Ours)                                        |  |
+|----------------------|-----------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------|----------------------------------------------------------------|--|
+| Free-form Network    | $F_\phi(\mathbf{x}_t, t)$                                                                                 |                                                                                      |                                                                                      |                                                                |  |
+| Denoiser Function    | $D_\phi(\mathbf{x}_t, t, s) = c_{\text{skip}}(t)\mathbf{x} + c_{\text{cat}}(t)F_\phi(\mathbf{x}_t, t, s)$ |                                                                                      |                                                                                      |                                                                |  |
+| Consistency Function | $f_\phi(\mathbf{x}_t, t) = f(t, c)\mathbf{x} + g(t, c)F_\phi(\mathbf{x}_t, t)$                            | $f_\phi(\mathbf{x}_t, t, s) = f(t, s)\mathbf{x} + g(t, s)F_\phi(\mathbf{x}_t, t, s)$ | $f_\phi(\mathbf{x}_t, t, s) = f(t, s)\mathbf{x} + g(t, s)D_\phi(\mathbf{x}_t, t, s)$ |                                                                |  |
+| $f(t, s)$            | $\frac{\sigma_{\text{data}}^2}{\sigma_{\text{data}}^2 + (t - s)^2}$                                       | $\frac{\sigma_{\text{data}}^2 + ts}{\sigma_{\text{data}}^2 + t^2}$                   | $\frac{s}{t}$                                                                        | $\frac{L_t S_s}{L_s S_s + (1 - l_s)(\eta_s - \eta_t)}$         |  |
+| $g(t, s)$            | $\frac{\sigma_{\text{data}}(t - s)}{\sqrt{\sigma_{\text{data}}^2 + t^2}}$                                 | $\frac{\sigma_{\text{data}}(t - s)}{\sqrt{\sigma_{\text{data}}^2 + t^2}}$            | $1 - \frac{s}{t}$                                                                    | $\frac{\eta_s - \eta_t}{L_s S_s + (1 - l_s)(\eta_s - \eta_t)}$ |  |
+
+Firstly, drawing from the insights of Rosenbrock-type exponential integrators and their relevance in diffusion models (Hochbruck & Ostermann, 2010; Hochbruck et al., 2009; Zheng et al., 2023a), it is suggested that the parameter  $l_t$  be chosen to restrict the gradient of Eqn. (12)’s right-hand side term with respect to  $\mathbf{x}_t$ . This choice ensures the robustness of the resulting ODE against errors in  $\mathbf{x}_t$ . An analytical solution for  $l_t$  is derived as follows:
+
+$$l_t = \operatorname{argmin}_l \mathbb{E}_{q(\mathbf{x}_t)} [\|\nabla_{\mathbf{x}_t} g_\phi(\mathbf{x}_t, t)\|_F] \Rightarrow l_t = 1 - \frac{\mathbb{E}_{q(\mathbf{x}_t)} [\operatorname{tr}(\nabla_{\mathbf{x}_t} D_\phi(\mathbf{x}_t, t))]}{d} \quad (15)$$
+
+where  $d$  is the data dimensionality,  $\|\cdot\|_F$  denotes the Frobenius norm and  $\operatorname{tr}(\cdot)$  represents the trace of a matrix. Secondly, to determine the optimal value of  $s_t$ , we dive deeper into the relationship between the teacher denoiser  $D_\phi(\mathbf{x}_t, t)$  and the student denoiser  $D_\phi(\mathbf{x}_t, t, s)$ . As elucidated in Section 3.1, the preconditioning is properly crafted to ensure that the optimal student denoiser satisfies  $D_{\phi^*}(\mathbf{x}_t, t, t) = D_\phi(\mathbf{x}_t, t)$ . We further explore the scenario where  $s < t$  by examining the gap  $\|D_{\phi^*}(\mathbf{x}_t, t, s) - D_\phi(\mathbf{x}_t, t)\|_2$ , which we refer to as the *consistency gap*. Minimizing this gap extends the alignment of  $D_\phi$  and  $D_{\phi^*}$  to cases where  $s < t$ , ensuring that the teacher denoiser also serves as a good trajectory jumper. In the subsequent proposition, we derive a bound depicting the asymptotic behavior of the consistency gap:
+
+**Proposition 3.1** (Bound for the Consistency Gap, proof in Appendix A.1). *Suppose there exists some constant  $C > 0$  so that the parameters  $\{l_t, s_t\}_{t=\tau}^t$  are bounded by  $|l_t|, |s_t| \leq C$ , then the optimal student denoiser function  $D_{\phi^*}$  under the preconditioning  $f(t, s) = \frac{L_t S_s + (l_t - 1)(\eta_s - \eta_t)}{L_s S_t}$ ,  $g(t, s) = \frac{\eta_s - \eta_t}{L_s S_t}$  satisfies*
+
+$$\|D_{\phi^*}(\mathbf{x}_t, t, s) - D_\phi(\mathbf{x}_t, t)\|_2 \leq \frac{(t/s)^{3C} - 1}{3C} \max_{s \leq \tau \leq t} \left\| \frac{dg_\phi(\mathbf{x}_\tau, \tau)}{d\lambda_\tau} - s_\tau g_\phi(\mathbf{x}_\tau, \tau) \right\|_2 \quad (16)$$
+
+The proposition conforms to the constraint  $D_{\phi^*}(\mathbf{x}_t, t, t) = D_\phi(\mathbf{x}_t, t)$  when  $s = t$ . Moreover, considering  $s$  in a local neighborhood of  $t$ , by Taylor expansion we have  $\frac{(t/s)^{3C} - 1}{3C} = \frac{e^{3C(\log t - \log s)} - 1}{3C} = 1 + \mathcal{O}(\log t - \log s)$ . Therefore, the consistency gap for  $s \in (t - \delta, t)$ , when  $\delta$  is small, is roughly  $\max_{s \leq \tau \leq t} \left\| \frac{dg_\phi(\mathbf{x}_\tau, \tau)}{d\lambda_\tau} - s_\tau g_\phi(\mathbf{x}_\tau, \tau) \right\|_2$ . Minimizing this yields an analytic solution for  $s_t$ :
+
+$$s_t = \operatorname{argmin}_s \mathbb{E}_{q(\mathbf{x}_t)} \left[ \left\| \frac{dg_\phi(\mathbf{x}_t, t)}{d\lambda_t} - s_t g_\phi(\mathbf{x}_t, t) \right\|_2 \right] \Rightarrow s_t = \frac{\mathbb{E}_{q(\mathbf{x}_t)} \left[ g_\phi(\mathbf{x}_t, t)^\top \frac{dg_\phi(\mathbf{x}_t, t)}{d\lambda_t} \right]}{\mathbb{E}_{q(\mathbf{x}_t)} [\|g_\phi(\mathbf{x}_t, t)\|_2^2]} \quad (17)$$
+
+We term the resulting preconditioning as *Analytic-Precond*, as  $l_t, s_t$  are analytically determined by the teacher  $\phi$  using Eqn. (15) and Eqn. (17). Though  $l_t, s_t$  are defined over continuous timesteps, we can compute them on hundreds of discretized ones, while obtaining reasonable estimations of their related terms  $L_t, S_t, \eta_t$ . The computation is highly efficient utilizing automatic differentiation in modern deep learning frameworks, requiring less than 1% of the total training time (Appendix B.1).
+
+**Backward Euler Method for Training Stability** Despite the approximation  $\frac{(t/s)^{3C} - 1}{3C} \approx 1$  holding true in local neighborhoods of  $t$ , the coefficient  $\frac{(t/s)^{3C} - 1}{3C}$  in the bound exhibits exponential
+
+{6}------------------------------------------------
+
+![Figure 2: Training curves for single-step generation, and visualization of preconditionings for single-step jump on CIFAR-10 (conditional). (a) CM: Plot of FID-50k vs Training iterations (x10000). CM (blue line) starts at ~6.0 and decreases to ~4.0. CM + Ours (orange line) starts at ~6.0 and decreases to ~4.0. (b) CTM: Plot of FID-50k vs Training iterations (x10000). CTM (blue line) starts at ~4.6 and decreases to ~3.6. CTM + Ours (orange line) starts at ~4.6 and decreases to ~3.6. (c) Coefficients f(t, epsilon), g(t, epsilon): Plot of coefficients vs log t. f(t, epsilon) (CM) (blue line) starts at ~0.9 and decreases to ~0.1. f(t, epsilon) (CTM) (orange line) starts at ~0.9 and decreases to ~0.1. f(t, epsilon) (Ours) (green line) starts at ~0.9 and decreases to ~0.1. g(t, epsilon) (CM) (red line) starts at ~0.1 and increases to ~0.9. g(t, epsilon) (CTM) (purple line) starts at ~0.1 and increases to ~0.9. g(t, epsilon) (Ours) (brown line) starts at ~0.1 and increases to ~0.9.](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+Figure 2: Training curves for single-step generation, and visualization of preconditionings for single-step jump on CIFAR-10 (conditional). (a) CM: Plot of FID-50k vs Training iterations (x10000). CM (blue line) starts at ~6.0 and decreases to ~4.0. CM + Ours (orange line) starts at ~6.0 and decreases to ~4.0. (b) CTM: Plot of FID-50k vs Training iterations (x10000). CTM (blue line) starts at ~4.6 and decreases to ~3.6. CTM + Ours (orange line) starts at ~4.6 and decreases to ~3.6. (c) Coefficients f(t, epsilon), g(t, epsilon): Plot of coefficients vs log t. f(t, epsilon) (CM) (blue line) starts at ~0.9 and decreases to ~0.1. f(t, epsilon) (CTM) (orange line) starts at ~0.9 and decreases to ~0.1. f(t, epsilon) (Ours) (green line) starts at ~0.9 and decreases to ~0.1. g(t, epsilon) (CM) (red line) starts at ~0.1 and increases to ~0.9. g(t, epsilon) (CTM) (purple line) starts at ~0.1 and increases to ~0.9. g(t, epsilon) (Ours) (brown line) starts at ~0.1 and increases to ~0.9.
+
+Figure 2: Training curves for single-step generation, and visualization of preconditionings for single-step jump on CIFAR-10 (conditional).
+
+behavior when  $\frac{t}{s} \gg 1$ . In practice, directly applying the preconditioning derived from Eqn. (14) may cause training instability, especially on long jumps with large step sizes. Drawing inspiration from the stability of the backward Euler method, known for its efficacy in handling stiff equations without step size restrictions, we propose a backward rewriting of Eqn. (14) from  $s$  to  $t$  as  $\mathbf{x}_t = \hat{f}(s, t)\mathbf{x}_s + \hat{g}(s, t)\mathbf{D}_\phi$ , where  $\hat{f}, \hat{g}$  are the original coefficients from Eqn. (14). Rearranging this equation yields  $\mathbf{x}_s = \frac{1}{\hat{f}(s, t)}\mathbf{x}_t - \frac{\hat{g}(s, t)}{\hat{f}(s, t)}\mathbf{D}_\phi$ , giving rise to the *backward coefficients*  $f(t, s) = \frac{1}{\hat{f}(s, t)}, g(t, s) = -\frac{\hat{g}(s, t)}{\hat{f}(s, t)}$ .
+
+We summarize different preconditionings in Table 1, where we also included a concurrent work called bidirectional consistency models (BCMs) (Li & He, 2024) which proposed an alternative preconditioning to CTMs.
+
+## 4 RELATED WORK
+
+**Fast Diffusion Sampling** Fast sampling of diffusion models can be categorized into training-free and training-based methods. The former typically seek implicit sampling processes (Song et al., 2021a; Zheng et al., 2024a;b) or dedicated numerical solvers to the differential equations corresponding to diffusion generation, including Heun’s methods (Karras et al., 2022), splitting numerical methods (Wizadwongsa & Suwajanakorn, 2022), pseudo numerical methods (Liu et al., 2021) and exponential integrators (Zhang & Chen, 2022; Lu et al., 2022b; Zheng et al., 2023a; Gonzalez et al., 2023). They typically require around 10 steps for high-quality generation. In contrast, training-based methods, particularly adversarial distillation (Sauer et al., 2023) and consistency distillation (Song et al., 2023; Kim et al., 2023), have gained prominence for their ability to achieve high-quality generation with just one or two steps. While adversarial distillation proves its effectiveness in one-step generation of text-to-image diffusion models (Sauer et al., 2024), it is theoretically less transparent than consistency distillation due to its reliance on adversarial training. Diffusion models can also be accelerated using quantized or sparse attention (Zhang et al., 2025a; 2024; 2025b).
+
+**Parameterization in Diffusion Models** Parameterization is vital in efficient training and sampling of diffusion models. Initially, the practice involved parameterizing a noise prediction network (Ho et al., 2020; Song et al., 2021c), which outperformed direct data prediction. A notable subsequent enhancement is the introduction of “v” prediction (Salimans & Ho, 2022), which predicts the velocity along the diffusion trajectory, and is proven effective in applications like text-to-image generation (Esser et al., 2024) and density estimation (Zheng et al., 2023b). EDM (Karras et al., 2022) further advances the field by proposing a preconditioning technique that expresses the denoiser function as a linear combination of data and network, yielding state-of-the-art sample quality alongside other techniques. However, the parameterization in consistency distillation remains unexplored.
+
+## 5 EXPERIMENTS
+
+In this section, we demonstrate the impact of Analytic-Precond when applied to consistency distillation. Our experiments encompass various image datasets, including CIFAR-10 (Krizhevsky, 2009), FFHQ (Karras et al., 2019) 64×64, and ImageNet (Deng et al., 2009) 64×64, under both uncon-
+
+{7}------------------------------------------------
+
+![Figure 3: Training curves for two-step generation. The figure contains four subplots (a, b, c, d) showing FID-50k vs. Training iterations (x10000). Each plot compares CTM (blue line) and CTM + Ours (orange line). (a) CIFAR-10 (Unconditional): CTM + Ours shows a 2x speedup. (b) CIFAR-10 (Conditional): CTM + Ours shows a 2.8x speedup. (c) FFHQ 64x64 (Unconditional): CTM + Ours shows a 2x speedup. (d) ImageNet 64x64 (Conditional): CTM + Ours shows a 2x speedup. In all cases, CTM + Ours achieves lower FID-50k faster than CTM.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 3: Training curves for two-step generation. The figure contains four subplots (a, b, c, d) showing FID-50k vs. Training iterations (x10000). Each plot compares CTM (blue line) and CTM + Ours (orange line). (a) CIFAR-10 (Unconditional): CTM + Ours shows a 2x speedup. (b) CIFAR-10 (Conditional): CTM + Ours shows a 2.8x speedup. (c) FFHQ 64x64 (Unconditional): CTM + Ours shows a 2x speedup. (d) ImageNet 64x64 (Conditional): CTM + Ours shows a 2x speedup. In all cases, CTM + Ours achieves lower FID-50k faster than CTM.
+
+Figure 3: Training curves for two-step generation.
+
+ditional and class-conditional settings. We deploy Analytic-Precond across two paradigms: consistency models (CMs) (Song et al., 2023) and consistency trajectory models (CTMs) (Kim et al., 2023), wherein we solely substitute the preconditioning while retaining other training procedures. For further experiment details, please refer to Appendix B.
+
+Our investigation aims to address two primary questions:
+
+- Can Analytic-Precond yield improvements over the original preconditioning of CMs and CTMs, across both single-step and multi-step generation?
+- How does Analytic-Precond differ from prior preconditioning across datasets, concerning the coefficients  $f(t, s)$  and  $g(t, s)$ ?
+
+### 5.1 TRAINING ACCELERATION
+
+**Effects on CMs and Single-Step CTMs** We first apply Analytic-Precond to CMs, where the consistency function  $f_\theta(x_t, t)$  is defined to map  $x_t$  on the teacher ODE trajectory to the starting point  $x_\epsilon$  at fixed time  $\epsilon$ . The models are trained with the consistency loss defined in Eqn. (5) and on the CIFAR-10 dataset, with class labels as conditions. As depicted in Figure 2 (a), we observe that Analytic-Precond yields training curves similar to original CM, measured by FID. Since multi-step consistency sampling in CMs only involves evaluating  $f_\theta(x_t, t)$  multiple times, the results remain comparable even with an increase in sampling steps. Similar phenomena emerge in CTMs with single-step generation, as illustrated in Figure 2 (b). The commonality between these two scenarios lies in the utilization of only the jumping destination at  $\epsilon$ . To investigate further, we plot the preconditioning coefficients  $f(t, \epsilon)$  and  $g(t, \epsilon)$  in CMs, CTMs and Analytic-Precond as a function of  $\log t$ , as illustrated in Figure 2 (c). It is evident that across varying  $t$ , different preconditioning coefficients  $f$  and  $g$  exhibit negligible discrepancies when  $s$  is fixed to  $\epsilon$ . This elucidates the rationale behind the comparable performance, suggesting that the original preconditionings for  $t \rightarrow \epsilon$  are already quite optimal with minimal room for further optimization.
+
+**Effects on Two-Step CTMs** We further track sample quality during the training process on CTMs, particularly focusing on two-step generation where an intermediate jump is involved ( $T \rightarrow t_0 \rightarrow \epsilon$ ). The models are training with both the consistency trajectory loss in Eqn. (7) and the denoising score matching (DSM) loss  $\mathbb{E}_t \mathbb{E}_{p_{\text{data}}(x_0) q(x_t | x_0)} [w(t) \|D_\theta(x_t, t, t) - x_0\|_2^2]$ , following CTMs<sup>3</sup>. As shown in Figure 3, across diverse datasets, Analytic-Precond enjoys superior initialization and up to  $3\times$  training acceleration compared to CTM’s preconditioning. This observation indicates the suboptimality of the original intermediate trajectory jumps  $t \rightarrow s > \epsilon$ . We provided the generated samples in Appendix C.
+
+### 5.2 GENERATION WITH MORE STEPS
+
+Apart from the superiority of CTMs over CMs in single-step generation (Figure 2), another notable advantage of CTMs is the regularization effects of the DSM loss. This ensures that  $D_\theta(x_t, t, t)$  functions as a valid denoiser in diffusion models, facilitating sample quality enhancement with additional sampling steps. To evaluate the effectiveness of Analytic-Precond with more steps, we
+
+<sup>3</sup>CTMs also propose to combine the GAN loss for further enhancing quality, which we will discuss later.
+
+{8}------------------------------------------------
+
+![Figure 4: Visualizations of the preconditioning coefficient g(t, s) for CTM, and for Analytic-Precond under different datasets. The figure contains four 3D surface plots labeled (a) CTM, (b) CIFAR-10, (c) FFHQ 64x64, and (d) ImageNet 64x64. Each plot shows a smooth, bell-shaped surface over a grid of log t and log s axes, with a color scale from 0.2 to 1.0.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 4: Visualizations of the preconditioning coefficient g(t, s) for CTM, and for Analytic-Precond under different datasets. The figure contains four 3D surface plots labeled (a) CTM, (b) CIFAR-10, (c) FFHQ 64x64, and (d) ImageNet 64x64. Each plot shows a smooth, bell-shaped surface over a grid of log t and log s axes, with a color scale from 0.2 to 1.0.
+
+Figure 4: Visualizations of the preconditioning coefficient  $g(t, s)$  for CTM, and for Analytic-Precond under different datasets.
+
+Table 2: FID results in multi-step generation with different number of function evaluations (NFEs).
+
+| FID        | NFE                          |      |      |      |      |                                  |      |      |      |      |
+|------------|------------------------------|------|------|------|------|----------------------------------|------|------|------|------|
+|            | 2                            | 3    | 5    | 8    | 10   | 2                                | 3    | 5    | 8    | 10   |
+|            | CIFAR-10 (Unconditional)     |      |      |      |      | CIFAR-10 (Conditional)           |      |      |      |      |
+| CTM        | 3.83                         | 3.58 | 3.43 | 3.33 | 3.22 | 3.00                             | 2.82 | 2.59 | 2.67 | 2.56 |
+| CTM + Ours | 3.77                         | 3.54 | 3.38 | 3.30 | 3.25 | 2.92                             | 2.75 | 2.62 | 2.60 | 2.65 |
+|            | FFHQ 64 × 64 (Unconditional) |      |      |      |      | ImageNet 256 × 256 (Conditional) |      |      |      |      |
+| CTM        | 5.96                         | 5.80 | 5.53 | 5.39 | 5.23 | 5.95                             | 6.16 | 5.43 | 5.44 | 5.98 |
+| CTM + Ours | 5.71                         | 5.56 | 5.47 | 5.31 | 5.12 | 5.73                             | 5.67 | 5.34 | 5.43 | 5.70 |
+
+employ the deterministic procedure in CTMs, which employs the consistency function to jump on consecutively decreasing timesteps from  $T$  to  $\epsilon$ . As shown in Table 2, Analytic-Precond brings consistent improvement over CTMs as the number of steps increases, indicating better alignment between the consistency function and the denoiser function.
+
+### 5.3 ANALYSES AND DISCUSSIONS
+
+**Visualizations** To intuitively understand the distinctions between Analytic-Precond and the original preconditioning in CTMs, we investigate the variations in coefficients  $f(t, s), g(t, s)$ . We find that Analytic-Precond yields  $f(t, s)$  close to that of CTMs, denoted as  $f^{\text{CTM}}(t, s)$ , with  $|f^{\text{CTM}}(t, s) - f(t, s)| < 0.03$  across various  $t$  and  $s$ . However,  $g(t, s)$  produced by Analytic-Precond tends to be smaller, with disparities of up to 0.25 compared to  $g^{\text{CTM}}(t, s)$ . This distinction is visually demonstrated in Figure 4, where we depict  $g(t, s)$  as a binary function of  $\log t$  and  $\log s$ . Notably, the distinction is more pronounced for short jumps  $t \rightarrow s$  where  $|t - s|/t$  is small.
+
+**Comparison to BCMs** In a concurrent work called bidirectional consistency models (BCMs) (Li & He, 2024), a novel preconditioning is derived from EDM’s first principle (specified in Table 1). BCM’s preconditioning also accommodates flexible transitions from  $t$  to  $s$  along the trajectory. However, as shown in Figure 5, replacing CTM’s preconditioning with BCM’s fails to bring improvements in both one-step and two-step generation.
+
+**Compatibility with GAN loss** CTMs introduce GAN loss to further enhance the one-step generation quality, employing a discriminator and adopting an alternative optimization approach akin to GANs. As shown in Figure 6, when GAN loss is incorporated on CIFAR-10, Analytic-Precond demonstrates comparable performance. However, in this scenario, the consistency function no longer faithfully adheres to the teacher ODE trajectory, and one-step generation is even better than two-step, deviating from our theoretical foundations. Nevertheless, the utilization of Analytic-Precond does not lead to performance degradation.
+
+![Figure 5: Effects of BCM's preconditioning on CTMs. A line plot showing Inception Score (IS) on the y-axis (ranging from 4.0 to 6.5) versus Training Iterations (x10000) on the x-axis (ranging from 0 to 16). Four curves are shown: CTM (NFE=1) in blue dashed, CTM (NFE=2) in blue solid, CTM + BCM (NFE=1) in orange dashed, and CTM + BCM (NFE=2) in orange solid. The CTM (NFE=1) curve starts at ~6.0 and drops to ~4.8. The CTM (NFE=2) curve starts at ~5.0 and drops to ~4.2. The CTM + BCM (NFE=1) curve starts at ~5.5 and drops to ~4.5. The CTM + BCM (NFE=2) curve starts at ~4.8 and drops to ~4.0.](4495fbec19aac6861f1a0b35c4dc38bc_img.jpg)
+
+Figure 5: Effects of BCM's preconditioning on CTMs. A line plot showing Inception Score (IS) on the y-axis (ranging from 4.0 to 6.5) versus Training Iterations (x10000) on the x-axis (ranging from 0 to 16). Four curves are shown: CTM (NFE=1) in blue dashed, CTM (NFE=2) in blue solid, CTM + BCM (NFE=1) in orange dashed, and CTM + BCM (NFE=2) in orange solid. The CTM (NFE=1) curve starts at ~6.0 and drops to ~4.8. The CTM (NFE=2) curve starts at ~5.0 and drops to ~4.2. The CTM + BCM (NFE=1) curve starts at ~5.5 and drops to ~4.5. The CTM + BCM (NFE=2) curve starts at ~4.8 and drops to ~4.0.
+
+Figure 5: Effects of BCM’s preconditioning on CTMs.
+
+![Figure 6: Effects of Analytic-Precond with GAN loss. A line plot showing Inception Score (IS) on the y-axis (ranging from 2.8 to 3.2) versus Training Iterations (x10000) on the x-axis (ranging from 0 to 16). Four curves are shown: CTM + GAN (NFE=1) in blue dashed, CTM + GAN (NFE=2) in blue solid, CTM + GAN + Ours (NFE=1) in orange dashed, and CTM + GAN + Ours (NFE=2) in orange solid. All curves start between 3.0 and 3.2 and decrease to around 2.2-2.4. The CTM + GAN + Ours (NFE=1) curve (orange dashed) shows the lowest IS, while the CTM + GAN (NFE=2) curve (blue solid) shows the highest IS.](ca5f2304ffe22946414ffab54cd3fd93_img.jpg)
+
+Figure 6: Effects of Analytic-Precond with GAN loss. A line plot showing Inception Score (IS) on the y-axis (ranging from 2.8 to 3.2) versus Training Iterations (x10000) on the x-axis (ranging from 0 to 16). Four curves are shown: CTM + GAN (NFE=1) in blue dashed, CTM + GAN (NFE=2) in blue solid, CTM + GAN + Ours (NFE=1) in orange dashed, and CTM + GAN + Ours (NFE=2) in orange solid. All curves start between 3.0 and 3.2 and decrease to around 2.2-2.4. The CTM + GAN + Ours (NFE=1) curve (orange dashed) shows the lowest IS, while the CTM + GAN (NFE=2) curve (blue solid) shows the highest IS.
+
+Figure 6: Effects of Analytic-Precond with GAN loss.
+
+{9}------------------------------------------------
+
+![Figure 7: Visualizations of the trajectory alignment, comparing teacher and 3-step student. The figure consists of three subplots: (a) Teacher, (b) CTM's, and (c) Ours. Each subplot shows a distribution of trajectories (lines) and a density plot (shaded area). In (a), the trajectories are red and the density is red. In (b), the trajectories are blue and the density is green. In (c), the trajectories are blue and the density is green, with a more concentrated distribution.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 7: Visualizations of the trajectory alignment, comparing teacher and 3-step student. The figure consists of three subplots: (a) Teacher, (b) CTM's, and (c) Ours. Each subplot shows a distribution of trajectories (lines) and a density plot (shaded area). In (a), the trajectories are red and the density is red. In (b), the trajectories are blue and the density is green. In (c), the trajectories are blue and the density is green, with a more concentrated distribution.
+
+Figure 7: Visualizations of the trajectory alignment, comparing **teacher** and 3-step **student**.
+
+**Enhancement of the Trajectory Alignment** We observe that our method also leads to lower mean square error (MSE) in the multi-step generation of CTM, when compared to the teacher diffusion model under the same initial noise, indicating enhanced fidelity to the teacher’s trajectory. To better illustrate the effect of Analytic-Precond in improving trajectory alignment, we adopt a toy example where the data distribution is a simple 1-D Gaussian mixture  $\frac{1}{3}\mathcal{N}(-2, 1) + \frac{2}{3}\mathcal{N}(1, 0.25)$ . In this case, we can analytically derive the optimal denoiser and visualize the ground-truth teacher trajectory. We initialize the consistency function with the optimal denoiser and apply different preconditionings. As shown in Figure 7, our preconditioning produces few-step trajectories that better align with the teacher’s and yields a more accurate final distribution.
+
+## 6 CONCLUSION
+
+In this work, we elucidate the design criteria of the preconditioning in consistency distillation for the first time and propose a novel and principled preconditioning that accelerates the training of CTMs in multi-step generation by  $2\times$  to  $3\times$ . The crux of our approach lies in our theoretical insights, connecting preconditioning to ODE discretization, and emphasizing the alignment between the consistency function and the denoiser function. Minimizing the consistency gap fosters coordination between the consistency loss and the denoising score-matching loss, thereby facilitating speed-quality trade-offs. Our method provides the first guidelines for designing improved trajectory jumpers on the diffusion ODE, with potential applications in other types of ODE trajectories such as the dynamics of control systems or robotic path planning.
+
+**Limitations and Broader Impact** Despite notable training acceleration in multi-step generation, the final FID improvement is relatively insignificant. Besides, Analytic-Precond fails to differ from previous preconditionings on long jumps, resulting in comparable performance in single-step generation. Achieving accelerated distillation in generative modeling may also raise concerns about the potential misuse for generating fake and malicious media content. Furthermore, it may amplify undesirable social bias that could already exist in the training dataset.
+
+## ACKNOWLEDGMENTS
+
+This work was supported by the National Natural Science Foundation of China (Nos. 62350080, 62106120, 92270001), Tsinghua Institute for Guo Qiang, and the High Performance Computing Center, Tsinghua University; J. Zhu was also supported by the XPlorer Prize.
+
+## REFERENCES
+
+- Fan Bao, Chendong Xiang, Gang Yue, Guande He, Hongzhou Zhu, Kaiwen Zheng, Min Zhao, Shilong Liu, Yaole Wang, and Jun Zhu. Vidu: a highly consistent, dynamic and skilled text-to-video generator with diffusion models. *arXiv preprint arXiv:2405.04233*, 2024.
+- Andreas Blattmann, Tim Dockhorn, Sumith Kulal, Daniel Mendelevitch, Maciej Kilian, Dominik Lorenz, Yam Levi, Zion English, Vikram Voleti, Adam Letts, et al. Stable video diffusion: Scaling latent video diffusion models to large datasets. *arXiv preprint arXiv:2311.15127*, 2023.
+
+ Rest of paper (reference and Appendix) is removed.

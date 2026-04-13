@@ -1,0 +1,377 @@
+
+
+{0}------------------------------------------------
+
+# RETHINKING AND RED-TEAMING PROTECTIVE PERTURBATION IN PERSONALIZED DIFFUSION MODELS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Personalized diffusion models (PDMs) have become prominent for adapting pre-trained text-to-image models to generate images of specific subjects using minimal training data. However, PDMs are susceptible to minor adversarial perturbations, leading to significant degradation when fine-tuned on corrupted datasets. These vulnerabilities are exploited to create protective perturbations that prevent unauthorized image generation. Existing purification methods attempt to [red-team the protective perturbation to break the protection](#) but often over-purify images, resulting in information loss. In this work, we conduct an in-depth analysis of the fine-tuning process of PDMs through the lens of shortcut learning. We hypothesize and empirically demonstrate that adversarial perturbations induce a latent-space misalignment between images and their text prompts in the CLIP embedding space. This misalignment causes the model to erroneously associate noisy patterns with unique identifiers during fine-tuning, resulting in poor generalization. Based on these insights, we propose a systematic [red-teaming](#) framework that includes data purification and contrastive decoupling learning. We first employ off-the-shelf image restoration techniques to realign images with their original semantic meanings in latent space. Then, we introduce contrastive decoupling learning with noise tokens to decouple the learning of personalized concepts from spurious noise patterns. Our study not only uncovers fundamental shortcut learning vulnerabilities in PDMs but also provides a comprehensive evaluation framework for developing stronger protection. Our extensive evaluation demonstrates its superiority over existing purification methods and stronger robustness against adaptive perturbation.
+
+## 1 INTRODUCTION
+
+The rapid advancements in text-to-image diffusion models, such as DALL-E 2 (Ramesh et al., 2022), Stable Diffusion (Rombach et al., 2022), and MidJourney (mid), have revolutionized the field of image generation. These models can generate highly realistic and diverse images based on textual descriptions, enabling a wide range of applications in creative industries, entertainment, and beyond. However, the capability to fine-tune these models for personalized generation using a small set of reference images has raised concerns about their potential misuse, such as generating misleading or harmful content targeting individuals (Van Le et al., 2023; Salman et al., 2023) or threatening the livelihood of artists by mimicking unique artistic styles without compensation (Shan et al., 2023).
+
+To address these issues, several [protective perturbation](#) methods have been proposed to protect user images from unauthorized personalized synthesis (Šarčević et al., 2024; Deng et al., 2024a; Wang et al., 2024a). These methods aim to proactively make images resistant to AI-based manipulation by crafting adversarial perturbations (Salman et al., 2023; Liang et al., 2023), applying subtle style-transfer cloaks (Shan et al., 2023), or crafting misleading perturbation that causes model’s overfitting (Liu et al., 2024b). The model trained on perturbed data will generate images that are poor in quality, and thus, the unauthorized fine-tuning fails. Despite the protection effectiveness, different from the [protective perturbation](#) crafted for fixed and off-the-shelf diffusion models, where the protection against unauthorized editing (Liang et al., 2023) can be well explained by the adversarial vulnerability of neural networks (Ilyas et al., 2019), and the sharpness of the latent space of VAE (Kingma & Welling, 2013; Guo et al., 2023; Xue et al., 2023), *the underlying mechanism for how protective perturbation disturbs the fine-tuning of the personalized diffusion model has not been explored yet.*
+
+{1}------------------------------------------------
+
+![Figure 1: Diagram illustrating the finetuning and inference stages of a Personalized LDM. The finetuning stage shows a clean image being perturbed with noise to create a 'Protected Image'. This image is then processed by a 'Latent Diffusion Model' using a concept class token 'A photo of SKS person'. The model learns a 'Visual-textual Latent Mismatch' between the image and the prompt. The inference stage shows the 'Personalized LDM' generating a 'Corrupted Output' when given the same prompt, as it has learned the wrong concept mapping.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+The diagram is divided into two main sections: 'Finetuning Personalized LDM on Protected Images' and 'Inference Stage of Personalized LDM'.
+
+**Finetuning Stage:** A 'Clean image' of a woman is shown. A 'Protective Perturbation' (a square of noise) is added to it to create a 'Protected Image'. This protected image is input into a 'Latent Diffusion Model'. The model also takes a 'Concept Class Token' 'A photo of SKS person' as input. The output of the model is processed by a 'CLIP Image Encoder' and a 'Text Encoder'. The 'Text Encoder' output is compared with the 'CLIP Image Encoder' output, and a 'Visual-textual Latent Mismatch' is identified. The model is trained to map the protected image to the concept class token.
+
+**Inference Stage:** The 'Personalized LDM' is shown. It takes a prompt 'A photo of SKS person' as input. The model generates a 'Corrupted Output' image. The diagram also shows a 'Wrong Concept Mapping' (a square of noise) and a 'Prior Preserving' (a square of noise) being used to correct the mapping. The final output is a 'dsir photo of SKS person'.
+
+Figure 1: Diagram illustrating the finetuning and inference stages of a Personalized LDM. The finetuning stage shows a clean image being perturbed with noise to create a 'Protected Image'. This image is then processed by a 'Latent Diffusion Model' using a concept class token 'A photo of SKS person'. The model learns a 'Visual-textual Latent Mismatch' between the image and the prompt. The inference stage shows the 'Personalized LDM' generating a 'Corrupted Output' when given the same prompt, as it has learned the wrong concept mapping.
+
+Figure 1: We observe that protective perturbation for personalized diffusion models creates a latent mismatch in the image-prompt pair. Fine-tuning on such perturbed data tricks the models, learning the wrong concept mapping. Thus, model generations suffer from severe degradation in quality.
+
+Moreover, to systematically examine the practical performance of existing protection methods in the wild, purification studies (Cao et al., 2024; Zhao et al., 2024a) have been proposed with more advanced data purification process to further re-evaluate and red-teaming these protection methods. As demonstrated in Van Le et al. (2023), most of the protection methods lack resilience against simple purification like Gaussian smoothing. However, these traditional transformations also come with severe data quality degradation after purifying. Compared to these deterministic purifications, diffusion-based purification shows a stronger capacity to denoise the images and yield high-quality output by leveraging the distribution modeling ability of diffusion models. Based on the observation that clean images have better consistency upon reconstruction, IMPRESS (Cao et al., 2024) proposes optimization on the protected images to impose reconstruction consistency with visual LPIPS similarity constraints (Zhang et al., 2018). Despite effectiveness, IMPRESS is inefficient and requires a tremendous amount of time due to the iterative nature of the proposed optimization. On the other line, GrIDPure (Zheng et al., 2023) leverage pixel-space diffusion models to denoise the images by conducting an SDEdit process (Meng et al., 2021; Nie et al., 2022) that first converts the perturbed images into a slightly noisy state with a diffusion forward process and then denoise them back with a reverse process. To further improve visual consistency, GrIDPure divides the images into smaller grids with a small-step diffusion process. However, GrIDPure still yields unfaithful content that causes great change in identity due to the generative nature of the diffusion model. How to design an effective, efficient, and faithful purification approach is still an open question.
+
+To gain better understanding, we first take a closer look at the fine-tuning process of PDMs through the lens of causal analysis and shortcut learning (Geirhos et al., 2020). We first build the underlying causal graph of learning on protected images, where we found protective perturbation manipulates the learning process by reinforcing the shortcut path from personalized identifier to injected noise. Furthermore, we found that existing effective protective perturbation introduces a latent-space misalignment between images and the textual prompts, where the perturbed images largely deviate from their original semantic concepts. This misalignment triggers the model to learn a shortcut connection between the identifier and more high-frequency and easy-to-learn noise patterns.
+
+Based on these insights, we propose a systematic red-teaming framework motivated by causal intervention to empower robust PDMs against protective perturbations. Our approach conducts comprehensive purification from three perspectives, including input purification, contrastive decoupling learning and sampling. Compared to existing purification methods that are only limited to image purification, the advantages of our framework are three folds: i) efficiency and faithfulness: we conduct efficient one-shot image purification by using super-resolution and image restoration models that convert low-quality, noisy images into high-quality, purified ones; ii) robustness and once-for-all: we demonstrate that contrastive decoupling learning itself works alone and contributes
+
+{2}------------------------------------------------
+
+in robustness against adaptive perturbations crafted against our pipeline; iii) *system-level red-teaming*: not only limited to the input image, we propose systematic red-teaming strategies covering three stages including data purification, model training, and sampling strategy, offering a comprehensive evaluation on the effectiveness of future protection. We summarize our contributions as below:
+
+- We uncover and empirically validate that *protective perturbations work by exploiting the shortcut learning in PDMs with latent-space image-prompt misalignment from causal analysis*.
+- We propose a systematic red-teaming framework based on causal analysis that effectively mitigates these vulnerabilities through data purification and contrastive decoupled learning and sampling.
+- We demonstrate the effectiveness, efficiency, and faithfulness of our approach through extensive experiments across 7 protections, showing significant improvements over existing methods. Our study provides a more systematic evaluation framework for future research on protective perturbations.
+
+## 2 RELATED WORKS
+
+**Data Poisoning as Protection against Unauthorized Training with LDMs.** Latent Diffusion Models (LDMs) (Rombach et al., 2022) have become dominant in various generative tasks, including text-to-image synthesis. To meet the demand for personalized generation, methods like DreamBooth (Ruiz et al., 2023) have been proposed, which fine-tune LDMs using a small set of reference images to learn specific concepts. However, these advancements have raised concerns about potential misuse, such as generating misleading content targeting individuals (Van Le et al., 2023; Salman et al., 2023) and threatening the livelihood of professional artists through style mimicking (Shan et al., 2023). To address these issues, several data-poisoning-based methods have been proposed to protect user images from unauthorized personalized synthesis by injecting adversarial perturbations through minimizing adversarial target loss in image encoder or UNet denoiser (Salman et al., 2023), or denoising-loss maximization (Liang et al., 2023; Van Le et al., 2023; Liu et al., 2024b) or in opposite direction, denoising-loss minimization (Xue et al., 2023), or cross-attention loss maximization (Xu et al., 2024). Despite its effectiveness, the underlying mechanism of protection against diffusion model fine-tuning has not yet been explored well. To the best of our knowledge, Zhao et al. (2024a) is the only work that attempts to investigate the underlying mechanism. However, it is only limited to the vulnerability of the text encoder. *In this work, we provide a more comprehensive explanation from the view of latent mismatch and shortcut learning.*
+
+**Data Purification that Further Breaks Protection.** Despite promising protection performance, studies (Van Le et al., 2023; An et al., 2024; Liu et al., 2024b) suggest that these perturbations without advanced transformation loss (Athalye et al., 2018) are brittle and can be easily removed under simple rule-based transformations. Among all types of transformation, state-of-the-art adversarial purification leverages diffusion models as purifiers to perturb images back to their clean distributions. In the classification scenario, DiffPure (Nie et al., 2022) is a mainstream approach for adversarial purification by applying SDEdit (Meng et al., 2021) on the poison with an off-the-shelf diffusion model. For purification against protective perturbation, GrDPure (Lee & Chang, 2022) further adapts iterative DiffPure with small steps on multi-grid spitted image to preserve the original resolution and structure. However, due to their generative nature, these SDEdit-based purifications have limitations in yielding unfaithful content, where the purified images fail to preserve the original identity. Observing the perceptible inconsistency between the perturbed images and the diffusion-reconstructed ones, IMPRESS (Cao et al., 2024) conducts the purification via minimizing the consistency loss with constraints on the maximum LPIPS-based (Zhang et al., 2018) similarity change on pixel space. While it manages to preserve similarity, IMPRESS suffers from the inefficiency issue due to its iterative process and is ineffective under stronger protections like Liu et al. (2024b); Mi et al. (2024).
+
+**Shortcut Learning and Causal Analysis.** Shortcut learning occurs when models exploit spurious correlations in training data, leading to poor generalization (Geirhos et al., 2020). The causal analysis provides a framework for addressing this by modeling cause-effect relationships (Pearl, 2009; Schölkopf et al., 2021). It helps identify true causal factors, distinguishing them from spurious correlations. In computer vision, models may incorrectly focus on background textures instead of object features (Brendel & Bethge, 2019). Techniques like Invariant Risk Minimization (Arjovsky et al., 2019) and Counterfactual Data Augmentation (Teney et al., 2021) leverage causal principles to improve robustness. In PDMs, *protective* perturbations can introduce spurious correlations between noise patterns and identifiers during fine-tuning. *Our work explores how to restore correct causal relationships when learning PDMs on perturbed data, which is under-explored in existing works.*
+
+{3}------------------------------------------------
+
+## 3 PRELIMINARY
+
+**Personalized Latent Diffusion Models (LDMs) via DreamBooth Fine-tuning.** LDMs (Rombach et al., 2022) are generative models that perform diffusion processes in a lower-dimensional latent space, enhancing training and inference efficiency compared to pixel-space diffusion models (Ho et al., 2020). By conditioning on additional embeddings such as text prompts, LDMs can generate or edit images guided by these prompts. Specifically, an image encoder  $\mathcal{E}$  maps an image  $\mathbf{x}_0$  to a latent representation  $\mathbf{z}_0 = \mathcal{E}(\mathbf{x}_0)$ . A text encoder  $\tau_\theta$  produces a text embedding  $\mathbf{c} = \tau_\theta(c)$  for a given prompt  $c$ . The model trains a conditional noise estimator  $\epsilon_\theta$ , typically a UNet (Ronneberger et al., 2015), to predict the Gaussian noise added at each timestep  $t$ , using the loss:
+
+$$\mathcal{L}_{\text{denoise}}(\mathbf{x}_0, \mathbf{c}; \theta) = \mathbb{E}_{\mathbf{z}_0 \sim \mathcal{E}(\mathbf{x}_0), \epsilon, t} \left[ \|\epsilon - \epsilon_\theta(\mathbf{z}_0, t, \mathbf{c})\|_2^2 \right]. \quad (1)$$
+
+During inference, the model starts from random noise  $\mathbf{z}_T \sim \mathcal{N}(0, \mathbf{I})$  and iteratively denoises it to obtain a latent  $\tilde{\mathbf{z}}_0$ , which is then decoded to generate the image  $\tilde{\mathbf{x}}_0 = \mathcal{D}(\tilde{\mathbf{z}}_0)$ . DreamBooth (Ruiz et al., 2023) fine-tunes a pre-trained LDM to generate images of specific concepts by introducing a unique identifier that links subject concepts and employing a class-specific prior-preserving loss to mitigate overfitting and language drift. The fine-tuning utilizes an instance dataset  $\mathcal{D}_{\mathbf{z}_0} = \{(\mathbf{z}_0^i, \mathbf{c}^{i*})\}_i$ , and a class dataset  $\mathcal{D}_{\tilde{\mathbf{z}}_0} = \{(\tilde{\mathbf{x}}_0^i, \tilde{\mathbf{c}}^i)\}_i$ , where  $\mathbf{x}_0$  are subject images and  $\tilde{\mathbf{x}}_0$  are class images. The class-specific prompt  $\tilde{\mathbf{c}}$  is set as “a photo of a [class noun]”, and the instance prompt  $\mathbf{c}^{i*}$  is “a photo of  $\mathcal{V}^*$  [class noun]”, where  $\mathcal{V}^*$  specifies the subject and “[class noun]” denotes the object category (e.g., “person”). The instance dataset contains the subject-specific images we want the model to learn, while the class dataset contains diverse images from the same category to prevent language drift. The fine-tuning process on these two datasets optimizes a weighted sum of the instance denoising loss and the prior-preservation loss:
+
+$$\mathcal{L}_{db}(\mathbf{x}_0, \mathbf{c}^{i*}, \tilde{\mathbf{x}}_0, \tilde{\mathbf{c}}; \theta) = \mathcal{L}_{\text{denoise}}(\mathbf{x}_0, \mathbf{c}^{i*}) + \lambda \mathcal{L}_{\text{denoise}}(\tilde{\mathbf{x}}_0, \tilde{\mathbf{c}}), \quad (2)$$
+
+where  $\lambda$  balances the two terms. With approximately 1k training steps and around four subject images, DreamBooth can generate vivid, personalized subject images (von Platen et al., 2022). **Protective Perturbation against Personalized LDMs.** Recent studies suggest that minor adversarial perturbation to clean images can significantly disturb the learning of customized diffusion and also prevent image editing with an off-the-shelf diffusion model by greatly degrading the quality of the generated image. Existing protective perturbation can be classified into two categories: perturbation crafted with fixed diffusion models and perturbation crafted with noise-model alternative updating. In this paper, we focus on the second category since they are more effective in the fine-tuning setting. The general framework of these protective perturbation methods is to craft noise that maximizes an adversarial loss  $\mathcal{L}_{adv}$  that is typically designed as the denoising loss  $\mathcal{L}_{\text{denoise}}$  and also alternatively update the noise generator surrogates  $\theta'$  can be a single model (Van Le et al., 2023) or an ensemble of models (Liu et al., 2024b)) or the attention modules (Xu et al., 2024). Formally, at the  $j$ -th alternative step, the noise surrogate  $\theta'_j$  and perturbation  $\delta^{(j)}$  are updated via solving,
+
+$$\theta'_j \leftarrow \arg \min_{\theta'_{j-1}} \sum_x \mathcal{L}_{db}(\mathbf{x} + \delta^{(j-1)}, \mathbf{c}^{i*}, \tilde{\mathbf{x}}, \tilde{\mathbf{c}}; \theta'_{j-1}); \delta^{(j)} \leftarrow \arg \max_{\|\delta^{(j-1)}\|_\infty \leq r} \mathcal{L}_{adv}(\mathbf{x} + \delta^{(j-1)}, \tilde{\mathbf{c}}; \theta'_j). \quad (3)$$
+
+To solve this, standard Gradient Descent is performed on the model parameter while the images are updated via Project Gradient Descent (PGD) (Madry et al., 2018) to satisfy the  $\ell_\infty$ -ball perturbation budget constraint with radius  $r$ ,
+
+$$\theta_i \leftarrow \theta_{i-1} - \beta \nabla_{\theta_{i-1}} \mathcal{L}_{db}; \quad \mathbf{x}^{k+1} \leftarrow \Pi_{B_\infty(\mathbf{x}^0, r)}[\mathbf{x}^k + \eta \cdot \text{sign} \nabla_{\mathbf{x}^k} \mathcal{L}_{adv}(\mathbf{x}^k)], \quad (4)$$
+
+where  $\Pi_{B_\infty(\mathbf{x}^0, r)}(\cdot)$  is a projection operator on the  $\ell_\infty$  ball that ensures  $\mathbf{x}^k \in B_p(\mathbf{x}^0, r) = \{\mathbf{x}' : \|\mathbf{x}' - \mathbf{x}^0\|_\infty \leq r\}$ ,  $\eta$  denotes the PGD step size and the total PGD step is  $K$ .
+
+**Causal Analysis and Structural Causal Model.** Causal analysis models cause-and-effect relationships between variables (Pearl, 2009), helping identify spurious correlations and mitigate shortcut learning Geirhos et al. (2020). A Structural Causal Model (SCM) uses structural equations and a directed acyclic graph to represent causal relationships. It comprises endogenous variables  $\mathbf{V}$ , exogenous variables  $\mathbf{U}$ , and structural equations  $f_i$ , where each  $V_i \in \mathbf{V}$  is defined as  $V_i = f_i(\text{Pa}(V_i), U_i)$ . By intervening on spurious correlations, causal analysis helps models focus on true causal relationships rather than superficial patterns. For more details, see Pearl (2009); Geirhos et al. (2020).
+
+{4}------------------------------------------------
+
+![Figure 2: (a) Original Causal Graph and (b) Intervened Causal Graph. (a) shows nodes V*, X0, C, V, X'0, and Delta with edges between them. Red arrows indicate shortcut paths. (b) shows the same nodes with additional orange arrows indicating imposed paths for decoupling noise. To the right, a grid of images shows concept extraction from trained PDM, with columns for 'A photo of a V*' and 'A photo of a V* Person'.](690fce4fb5c9cbb8beb560cb2a3fcbeb_img.jpg)
+
+216  
+217  
+218  
+219  
+220  
+221  
+222  
+223  
+224  
+225  
+226  
+227  
+228  
+229  
+230  
+231
+
+232
+
+Figure 2: (a) Original Causal Graph and (b) Intervened Causal Graph. (a) shows nodes V\*, X0, C, V, X'0, and Delta with edges between them. Red arrows indicate shortcut paths. (b) shows the same nodes with additional orange arrows indicating imposed paths for decoupling noise. To the right, a grid of images shows concept extraction from trained PDM, with columns for 'A photo of a V\*' and 'A photo of a V\* Person'.
+
+233  
+234  
+235  
+236  
+237
+
+Figure 2: (a) The original causal graph representing the variable relationships in personalized diffusion model learning. Red arrows indicate the **shortcut path** introduced by **protective** perturbation. (b) Intervened causal graph with our proposed CDL. Orange arrows indicate **our imposed path for decoupling noise** after the intervention. With concept extraction, we examine that CDL alone helps the model learn the right correlations for linking identifier  $V^*$  and personalized concept  $X_0$ .
+
+## 4 METHODOLOGY
+
+### 4.1 PROTECTIVE PERTURBATION CAUSES LATENT-SPACE IMAGE-PROMPT MISMATCH
+
+238  
+239  
+240  
+241  
+242  
+243  
+244  
+245
+
+We first derive the formulation of learning personalized diffusion models on perturbed data. For the case of data poisoning, the instance data is perturbed by some adversarial noise  $\delta$ , and the personalized diffusion models optimize the following loss,
+
+$$246 \quad 247 \quad \mathcal{L}_{\text{cdlv}}^{\text{adv}}(\mathbf{x}_0, \mathbf{c}^{V^*}, \bar{\mathbf{x}}_0, \bar{\mathbf{c}}; \theta) = \mathcal{L}_{\text{denoise}}(\mathbf{x}_0 + \delta, \mathbf{c}^{V^*}) + \lambda \mathcal{L}_{\text{denoise}}(\bar{\mathbf{x}}_0, \bar{\mathbf{c}}). \quad (5)$$
+
+248  
+249  
+250  
+251  
+252  
+253  
+254  
+255  
+256  
+257  
+258  
+259  
+260
+
+Based on the adversarial loss in Eq. 5, with annotation of  $\mathbf{c}^{V^*} = \bar{\mathbf{c}} \oplus V^*$  where  $V^*$  denotes the embedding of the unique identifier, we build the underlying causal graph (Pearl, 2009) in (a) of Fig. 2 (See App. C.1 on the construction details) to represent the learning process of the personalized diffusion model for linking personalized identifier to instance concept. **We use the upper letter to represent random variables and the lower letter to represent the value instance.** From this graph, we found that there is **an unintended association** (colored in red) derived from the instance condition  $V^*$  to the injected noise variable  $\Delta$ . In an ideal scenario, the **protective** perturbation represents a completely relevant concept and should be independent of both the class-prior prompt  $\bar{\mathbf{c}}$  and the unique identifier  $V^*$ . However, during training, the model observes pairs of perturbed images  $\mathbf{x}_0 + \delta$  and instance prompts  $\mathbf{c}^{V^*}$ , leading to unintended associations between  $\Delta$  and  $V^*$  **in the causal graph**. To validate this, we prompt the model trained on perturbed data to generate images on two different prompts, “a photo of  $V^*$ ” and “a photo of  $V^*$  Person”. As we can see from Fig. 2, the model erroneously attributes the noise patterns to  $V^*$  and thus generates noisy portraits for “ $V^*$  Person”.
+
+261  
+262  
+263  
+264  
+265  
+266  
+267  
+268  
+269
+
+**We defined the path  $V^* \rightarrow \Delta$  as identifier-noise shortcut for the following analysis.** To establish and reinforce **this shortcut path**, we found that one important property that effective perturbation methods should have is the ability to cause **latent-space image-prompt mismatch**. That is, the images and their corresponding prompts are not semantically aligned in the latent space after the perturbation. Then thus, when learning on such pairs, it will create contradiction and force the models to dump that chaotic perturbation pattern into the rarely-appeared identifier token  $V^*$  instead of learning the clean identity behind  $\mathbf{x}_0$ . We infer it based on two empirical observations: i) random perturbation with the same strength does not affect the learning performance of the personalized diffusion model; ii) the generated portraits using the perturbed diffusion model usually have lower quality and larger image distortion than the slightly perturbed input images. The first observation justifies that if the
+
+{5}------------------------------------------------
+
+perturbation does not cause a significant latent shift, then the learning of the personalized diffusion model will not be affected, while the second observation suggests that the perturbed model learns more abstract noise concepts instead of just the noise pattern in the input pixel space. We further validate this through the following experiments of latent-mismatch visualization and concept interpretation.
+
+Specifically, using the paired CLIP encoders, we first embed the latent of clean and perturbed images and also embed the textual concept of a person concept, such as “a photo of person’s face”. Then, we leverage three distinct 2D visualization techniques, including TSNE (Maaten & Hinton, 2008), Truncated-SVD (Halko et al., 2011), and UMAP (McInnes et al., 2018) on image-prompt embedding pairs. The results in Fig. 3 suggest that *protective* perturbation indeed significantly shifts the portrait latent from its original region of the “person” concept. Moreover, we precisely split the latent space into two regions with a zero-shot CLIP-based classifier, where we find that the perturbed images have a higher probability of being classified into the “noise” region instead of the “person” region in latent space. [Please refer to Fig. 7 and Fig. 9 in the App. B.2](#) for more interpretation and visualization experiments.
+
+These findings indicate *protective* perturbation indeed leads to latent mismatch. This latent mismatch creates an opportunity for shortcut learning (Geirhos et al., 2020; Hermann et al., 2023), where models optimize for easily accessible features rather than robust predictive patterns. In our case, PDMs face a binary choice: linking the unique identifier  $V^*$  either to the noise  $\Delta$  or to the person identity concept  $X_0$ . From the perspective of loss minimization efficiency, PDMs naturally gravitate toward learning the high-frequency noise patterns rather than the more complex and desired person identity concept  $X_0$ , as this provides a computationally easier path to reduce training loss.
+
+![Figure 3: Latent 2D visualization and concept classification of images using CLIP encoders. The figure shows three 2D plots (TSNE, Truncated-SVD, UMAP) comparing Clean (blue) and Perturbed (red) images. A bar chart on the right shows Prediction Probability for 'Person' and 'Noise' labels.](ac99eff233b8fe51d30f499e7413c345_img.jpg)
+
+The figure consists of three 2D scatter plots (TSNE, Truncated-SVD, UMAP) and a bar chart. The scatter plots show the distribution of clean (blue) and perturbed (red) images in latent space. The bar chart shows the prediction probability for 'Person' and 'Noise' labels. For 'Person', the clean probability is high (~70%) and perturbed is low (~30%). For 'Noise', the clean probability is low (~30%) and perturbed is high (~70%).
+
+| Label Name | Clean (%) | Perturbed (%) |
+|-|-|-|
+| Person | ~70 | ~30 |
+| Noise | ~30 | ~70 |
+
+Figure 3: Latent 2D visualization and concept classification of images using CLIP encoders. The figure shows three 2D plots (TSNE, Truncated-SVD, UMAP) comparing Clean (blue) and Perturbed (red) images. A bar chart on the right shows Prediction Probability for 'Person' and 'Noise' labels.
+
+Figure 3: Latent 2D visualization and concept classification of images using CLIP encoders.
+
+### 4.2 TRAINING CLEAN PDMs ON PERTURBED DATA WITH SYSTEMATIC RED-TEAMING
+
+To address this shortcut learning issue, we propose a systematic *red-teaming* framework inspired by causal intervention (Geirhos et al., 2020), which is a widely used technique to mitigate shortcut learning in traditional machine learning tasks. Causal intervention (Kaddour et al., 2022) usually involves data argumentation or modifying the training process to disrupt spurious correlations. To mitigate shortcut learning in PDMs, we propose two key strategies: (i) *Removing Noise Variables* through image restoration techniques to eliminate adversarial noise and realign images with their true semantic representations; and (ii) *Weakening Spurious Paths and Strengthening Causal Paths* via Contrastive Decoupling Learning, which disentangles personalized concepts from noise patterns by incorporating noise tokens into prompts and leveraging clean prior data. We detail these approaches below and summarize our framework in Algorithm 1. [Please refer to the App. C.2](#) for more details.
+
+**Image Purification via Image Restoration.** An intuitive and effective approach to removing the direct influence of adversarial noise is to purify the input images using image restoration techniques. We view the perturbed images as degraded images in the image restoration domain (Wang et al., 2021) and leverage off-the-shelf image restoration models to convert low-quality, noisy images into high-quality, purified ones. Specifically, we use a face-oriented model named CodeFormer (Liu et al., 2023), which is trained on facial data to restore images based on latent code discretization. To further enhance the purification of non-face regions, we employ an additional diffusion-based super-resolution (SR) model. Compared to previous state-of-the-art optimization-based purification methods (Cao et al., 2024) and diffusion-based purification methods (Zhao et al., 2024a), this simple yet effective pipeline yields faithful purified images with better efficiency since it only requires a single inference pass. We term this module *CodeSR* as it combines CodeFormer and SR in sequence.
+
+**Contrastive Decoupling Learning (CDL).** To further mitigate shortcut learning, we introduce Contrastive Decoupling Learning, which aims to disentangle the learning of desired personalized concepts from undesired noise patterns. We achieve this by augmenting the prompts with additional tokens related to the noise pattern, denoted as  $V_N^*$ , such as “XX noisy pattern”. Ideally, these newly
+
+{6}------------------------------------------------
+
+#### **Algorithm 1** Training Clean Personalized LDMs on Perturbed Data with Systematic Red-Teaming
+
+**Input:** Corrupted training set  $X'_0$ , pre-trained LDM  $\theta_0$ , CodeFormer  $\phi = \{\mathcal{E}_\phi, \mathcal{D}_\phi, \mathcal{T}_\phi, \mathcal{C}\}$ , SR model  $\psi$ , prior data  $\tilde{X}_0$ , noise token  $\mathcal{V}_N^*$ , personalized identifier  $\mathcal{V}^*$ , instance prompt  $c^{\mathcal{V}^*}$ , class prompt  $c$ , number of generations  $N_{\text{gen}}$
+
+**Output:** Personalized diffusion model with clean-level generation performance  $\theta_T$
+
+- 1: **Step 1: Input Purification with CodeFormer and Super-resolution Model**
+- 2: *CodeFormer:* Predict code  $\tilde{Z}_c = \mathcal{T}_\phi(\mathcal{E}_\phi(X'_0), \mathcal{C})$ ; obtain high-quality restoration  $\tilde{X}_0 = \mathcal{D}_\phi(\tilde{Z}_c)$
+- 3: *Super-resolution:* Resize  $\tilde{X}_0$  to  $128 \times 128$ ; apply SR model  $\psi$  to obtain  $\tilde{X}_0^{\text{purified}}$  at  $512 \times 512$
+- 4: **Step 2: Contrastive Decoupling Learning**
+- 5: **for**  $i = 1$  **to**  $T$  training steps **do**
+- 6:   Sample instance data  $x_i$  from  $\tilde{X}_0^{\text{purified}}$ , and class-prior data  $\tilde{x}_0$  from  $\tilde{X}_0$
+- 7:   Craft decoupled instance prompt  $c_{\text{dec}}^{\mathcal{V}^*} = \text{concat}(c^{\mathcal{V}^*}, \mathcal{V}_N^*)$  and class-prior prompt  $c_{\text{dec}} = \text{concat}(c, \text{"without"}, \mathcal{V}_N^*)$
+- 8:   Optimize the LDM  $\theta_i$  with standard DreamBooth loss  $\mathcal{L}_{\text{db}}$  ▷ Following Eq. 2
+- 9:    $\mathcal{L}_{\text{db}}(x_i, c_{\text{dec}}^{\mathcal{V}^*}, \tilde{x}_0, c_{\text{dec}}; \theta_i) = \mathcal{L}_{\text{denoise}}(x_i, c_{\text{dec}}^{\mathcal{V}^*}) + \lambda \mathcal{L}_{\text{denoise}}(\tilde{x}_0, c_{\text{dec}})$
+- 10:   Update LDM  $\theta_i$  with  $\nabla_{\theta_i} \mathcal{L}_{\text{db}}$  using AdamW optimizer on UNet Denoiser and Text Encoder
+- 11: **end for**
+- 12: **Inference:** Perform decoupled sampling  $\{X_{\text{gen}}^j\}_{j=1}^{N_{\text{gen}}}$  with the trained PDM ▷ Following Eq. 6
+
+added tokens absorb all the noise components in the image, leaving the clean, personalized concept associated with the personalized identifier  $\mathcal{V}^*$ . During training, we insert  $\mathcal{V}_N^*$  into the prompt of instance data with the suffix “with XX noisy pattern”, and include the “inverse” of  $\mathcal{V}_N^*$  in the prompt of class-prior data with the suffix “without XX noisy pattern”. This contrastive prompt design encourages the model to distinguish between the instance concept and noise patterns, thus weakening spurious correlations. During inference, we add the suffix “without XX noisy pattern” to the prompt input to guide the model in disregarding the learned patterns associated with  $\mathcal{V}_N^*$ , thereby generating images that focus on the personalized concept. Furthermore, by using classifier-free guidance (Ho & Salimans, 2022) with a negative prompt  $c_{\text{neg}} = \text{"noisy, abstract, pattern, low quality"}$ , we can further guide the trained model to generate high-quality images related to the learned concept. Specifically, given timestamp  $t$ , we perform sampling using the linear combination of the good-quality and bad-quality conditional noise estimates with guidance weight  $w^{\text{neg}} = 7.5$ :
+
+$$\tilde{\epsilon}_\theta(\mathbf{z}_t, \mathbf{c}) = (1 + w^{\text{neg}})\epsilon_\theta(\mathbf{z}_t, \mathbf{c}^{\mathcal{V}^*}, \mathcal{V}_N^*) - w^{\text{neg}}\epsilon_\theta(\mathbf{z}_t, \mathbf{c}_\theta(c_{\text{neg}})) \quad (6)$$
+
+## 5 EXPERIMENTS
+
+### 5.1 EXPERIMENTAL SETUP
+
+**Datasets and Metrics.** Our experiments are mainly performed on the VGGFace2 (Cao et al., 2018) face dataset following (Van Le et al., 2023; Liu et al., 2024b). Four identities are selected from each dataset, and we randomly pick eight images from each individual and split those images into two subsets for image protection and reference. Moreover, we also visually demonstrate the purification ability of our approach on samples from an artwork painting dataset, WikiArt (Saleh & Elgammal, 2015), and the CelebA (Liu et al., 2015). For the metric, we evaluate the generated images in terms of their *semantic-related quality* and *graphical aesthetic quality*. For the semantic-related score, we compute the cosine similarity between the embedding of generated images and reference images, which we term the Identity Matching Similarity (IMS) score. We reported the weighted averaged IMS score by employing two face embedding extractors, including *antelopev2* model from InsightFace library (Deng et al., 2020) following IP-adaptor (Ye et al., 2023) and *VGG-Net* (Simonyan & Zisserman, 2014) from Deepface library (Taigman et al., 2014) following (Van Le et al., 2023). The IMS score is computed via a weighted sum:  $\text{IMS} = \lambda \text{IMS}_{\text{IP}} + (1 - \lambda) \text{IMS}_{\text{VGG}}$ , where  $\lambda$  is set as 0.7. For the graphical quality  $Q$ , we report the average of two metrics: i) *LIQE* (Zhang et al., 2023a) (with re-normalization to  $[-1, +1]$ ); ii) *CLIP-IQAC* following (Liu et al., 2024b), which is based on CLIP-IQA (Wang et al., 2023a) with class label. See App. A.1 for details.
+
+**Purification Baselines and Perturbation Methods.** For *purification baselines*, we consider both model-free and diffusion-based approaches. The model-free methods include ❶ Gaussian Filtering,
+
+{7}------------------------------------------------
+
+Table 1: Results of different purification methods under different protective perturbations. The best performances are in **bold**, and second runners are shaded in gray. \* denotes significant improvement that passes the Wilcoxon signed-rank significance test with  $p \leq 0.01$ .
+
+| Methods | Clean |  | FSMG |  | ASPL |  | EASPL |  | MetaCloak |  | AdvDM |  | PhotoGuard |  | Glaze |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  | IMS $\uparrow$ | Q $\uparrow$ | IMS $\uparrow$ | Q $\uparrow$ | IMS $\uparrow$ | Q $\uparrow$ | IMS $\uparrow$ | Q $\uparrow$ | IMS $\uparrow$ | Q $\uparrow$ | IMS $\uparrow$ | Q $\uparrow$ | IMS $\uparrow$ | Q $\uparrow$ | IMS $\uparrow$ | Q $\uparrow$ |
+| Clean | <b>-0.13</b> | <b>0.15</b> | -0.13 | 0.15 | -0.13 | 0.15 | -0.13 | 0.15 | -0.13 | 0.15 | -0.13 | 0.15 | -0.13 | 0.15 | -0.13 | 0.15 |
+| Perturbed | - | - | -0.43 | -0.54 | -0.67 | -0.52 | -0.62 | -0.50 | -0.35 | -0.53 | -0.27 | -0.36 | -0.18 | -0.24 | -0.28 | -0.28 |
+| Gaussian $\mathcal{N}$ | <b>-0.23</b> | <b>-0.52</b> | -0.19 | -0.55 | -0.20 | -0.57 | -0.17 | -0.58 | <b>-0.07</b> | <b>-0.63</b> | -0.11 | -0.57 | -0.23 | -0.53 | -0.18 | -0.54 |
+| JPEG | <b>-0.15</b> | <b>-0.13</b> | -0.15 | -0.41 | -0.21 | -0.52 | -0.27 | -0.50 | -0.34 | -0.38 | -0.15 | -0.62 | -0.13 | 0.07 | -0.19 | -0.03 |
+| TVM | <b>-0.34</b> | <b>-0.60</b> | -0.41 | -0.57 | -0.43 | -0.54 | -0.57 | -0.61 | -0.28 | -0.58 | -0.40 | -0.55 | -0.25 | -0.55 | -0.41 | -0.59 |
+| PxDiffPure $\dagger$ | <b>-0.24</b> | <b>-0.16</b> | -0.07 | -0.47 | -0.36 | -0.59 | -0.22 | -0.49 | -0.52 | -0.43 | -0.55 | -0.24 | -0.12 | -0.40 | -0.38 | -0.42 |
+| LDiffPure | <b>-0.28</b> | <b>-0.21</b> | -0.25 | -0.45 | -0.31 | -0.61 | -0.30 | -0.46 | -0.31 | -0.51 | -0.57 | -0.30 | -0.25 | -0.47 | -0.41 | -0.47 |
+| DDSPure | <b>-0.25</b> | <b>-0.38</b> | -0.15 | -0.34 | <b>-0.05</b> | <b>-0.38</b> | <b>-0.08</b> | <b>-0.39</b> | <b>-0.16</b> | <b>-0.49</b> | <b>-0.19</b> | <b>-0.43</b> | <b>-0.12</b> | <b>-0.37</b> | <b>-0.22</b> | <b>-0.41</b> |
+| GrDPure | <b>-0.46</b> | <b>-0.17</b> | <b>-0.10</b> | <b>-0.20</b> | <b>-0.21</b> | <b>-0.16</b> | <b>-0.13</b> | <b>-0.25</b> | <b>-0.23</b> | <b>-0.25</b> | <b>-0.09</b> | <b>-0.18</b> | <b>-0.03</b> | <b>-0.22</b> | <b>-0.24</b> | <b>-0.13</b> |
+| IMPRESS | <b>-0.02</b> | <b>-0.18</b> | <b>-0.15</b> | <b>-0.53</b> | <b>-0.16</b> | <b>-0.49</b> | <b>-0.29</b> | <b>-0.64</b> | <b>-0.34</b> | <b>-0.29</b> | <b>-0.34</b> | <b>-0.34</b> | <b>-0.16</b> | <b>-0.21</b> | <b>-0.10</b> | <b>-0.43</b> |
+| Ours | <b>0.14*</b> | <b>0.54*</b> | <b>0.23*</b> | <b>0.65*</b> | <b>0.09</b> | <b>0.62*</b> | <b>0.09*</b> | <b>0.63*</b> | <b>0.38*</b> | <b>0.58*</b> | <b>0.29*</b> | <b>0.67*</b> | <b>0.24*</b> | <b>0.63*</b> | <b>0.31*</b> | <b>0.66*</b> |
+
+which reduces noise and detail using a Gaussian kernel; ❷ Total Variation Minimization (TVM), which reconstructs images by minimizing the difference between original and reconstructed images while enforcing smoothness; and ❸ JPEG Compression, which reduces image file size by transforming images into a compressed format. The diffusion-based methods include ❹ (Pixel)DiffPure (Nie et al., 2022), which leverages pretrained pixel-space diffusion models to smooth adversarial noise with small-step SDEdit process (Meng et al., 2021); ❺ LatentDiffPure, which is developed in the paper similar as DiffPure but with LDM as a purifier (two variants w/ and w/o prompting); ❻ DDSPure (Carlini et al., 2022), which finds an optimal timestamp for adversarial purification with SDEdit process; ❼ GrDPure (Zheng et al., 2023), which further conducts iterative DiffPure with small steps with grid-based splitting to improve structure similarity; and ❽ IMPRESS (Cao et al., 2024), which purifies by optimizing latent consistency with visual similarity constraints. For *protective perturbation*, we consider six of existing SoTA approaches, including perturbation crafted with bi-level optimization, such as *FSMG*, *ASPL*, *EASPL* (Van Le et al., 2023), *MetaCloak* (Liu et al., 2024b), and perturbations crafted with adversarial perturbation with fixed models, such as *AdvDM* (Liang et al., 2023), *PhotoGuard* (Salman et al., 2023), and *Glaze* (Shan et al., 2023). For each setting, we set the perturbation to be ASPL by default. We set the  $\ell_\infty$  radius to 11/255 with a six-step PGD step size of 1/255 by default following (Van Le et al., 2023). See App. A.2 for more details.
+
+### 5.2 EFFECTIVENESS, EFFICIENCY, AND FAITHFULNESS
+
+**Effectiveness Comparison.** We present the effectiveness of different purification across seven perturbation methods in Tab. 1. From the table, we can see that compared to the clean case, training on perturbing data causes severe model degradation from both identity similarity and image quality. Across all perturbations, ASPL causes the most severe degradation under the setting without purification, while MetaCloak performs more robustly under rule-based purification. Compared to rule-based purification, diffusion-based approaches achieve better performance in improving both identity similarity and image quality in most settings. Among them, GrDPure yields relatively better purification performance since it considers the structure consistency, which suppresses the generative nature during the purification. However, there are still gaps in the IMS score compared to the clean case, and most of the quality scores after conducting GrDPure purification are still negative. Compared to these baselines, our method closes the gap by further improving the IMS and quality scores, which are even higher than the clean training case in all the settings. The reasons are twofold: first, we use image-restoration-based approaches, which preserve the image structure well; furthermore, our CDL module contributes significantly to quality improvement. Please refer to the App. B for the full comparison results with standard deviations.
+
+**Efficiency and Faithfulness of Purification.** We present the evaluation of time cost and purification faithfulness compared to all other diffusion-based purification approaches in Tab. 2. The time cost is measured in seconds per sample with consideration of model loading. Compared to other methods, our purification has the lowest time cost and is  $10\times$  faster than the previous SoTA method, IMPRESS. The reason behind this is that we leverage the super-resolution module, which empowers the usage of skip-step sampling to boost the generation time. Moreover, we test the purification faithfulness of each method in terms of LPIPS loss (Zhang et al., 2018), a common metric measuring the visual
+
+{8}------------------------------------------------
+
+432  
+433  
+434  
+435  
+436  
+437  
+438  
+439  
+440  
+441  
+442  
+443  
+444  
+445  
+446  
+447  
+448  
+449  
+450  
+451  
+452  
+453  
+454  
+455  
+456  
+457  
+458  
+459  
+460  
+461  
+462  
+463  
+464  
+465  
+466  
+467  
+468  
+469  
+470  
+471  
+472  
+473  
+474  
+475  
+476  
+477  
+478  
+479  
+480  
+481  
+482  
+483  
+484  
+485
+
+![Figure 4: Visualization of purified images. The figure is a 3x7 grid of images. The first column shows the original perturbed images. The subsequent columns show the results of different purification methods: LatentDiffPure-0, LatentDiffPure, DDSPure, GrIDPure, IMPRESS, and Ours. The rows represent different subjects: a woman's face, a man's face, and a potted plant. The 'Ours' column shows the highest quality and faithfulness, while other methods show various artifacts or identity changes.](0ba998c66ef6a980bac9c0c12e9452bf_img.jpg)
+
+Figure 4: Visualization of purified images. The figure is a 3x7 grid of images. The first column shows the original perturbed images. The subsequent columns show the results of different purification methods: LatentDiffPure-0, LatentDiffPure, DDSPure, GrIDPure, IMPRESS, and Ours. The rows represent different subjects: a woman's face, a man's face, and a potted plant. The 'Ours' column shows the highest quality and faithfulness, while other methods show various artifacts or identity changes.
+
+Figure 4: Visualization of purified images that were originally protected by MetaCloak. Our method shows high faithfulness and high quality, while others fail to effectively purify the perturbation.
+
+perception distance of two images. From Tab. 2, we can see that our method achieves the lowest LPIPS loss. To visually validate this, we additionally present the purified images in Fig. 4. From the figure, we can see that other diffusion-based approaches have limitations in hallucinating the content, introducing severe artifacts, or not having enough purification strength. In particular, we observed that LatentDiffPure causes a great change in identity during the purification, which might be attributed to the semantic distortion during the purification process in latent space. On the other hand, GrIDPure (Zhao et al., 2024a) brings some artifacts to the purified image, which indicates that the underlying unconditional diffusion model pre-trained on ImageNet might not be suitable for general domain purification. In comparison, our purification method significantly enhances faithfulness by leveraging off-the-shelf image restoration models. These models are designed to preserve the structural integrity of the input, resulting in output images that closely maintain the original composition while effectively removing perturbations. This approach ensures that the purified images retain the essential features and identity of the original subjects, while successfully mitigating unwanted artifacts or noise.
+
+Table 2: Faithfulness and efficiency of different diffusion-based purifications.
+
+| Methods | LPIPS ↓ | Time Cost↓(s) |
+|-|-|-|
+| IMPRESS | 0.451 | 675 |
+| PixelDiffPure | 0.495 | 102 |
+| DDSPure | 0.384 | 122.5 |
+| GrIDPure | 0.429 | 92.75 |
+| LatentDiffPure | 0.453 | 63.75 |
+| LatentDiffPure-0 | 0.450 | 63.25 |
+| <b>Ours</b> | <b>0.271</b> | <b>51</b> |
+
+Table 3: Effectiveness of different model variants against Adaptive Attacks (AA).
+
+| Modules | CDL | Before AA |  |  | After AA |  |  | E[Avg.] |
+|-|-|-|-|-|-|-|-|-|
+|  |  | IMS | Q | Avg. | IMS | Q | Avg. |  |
+| CodeSR | ✓ | 0.256 | <b>0.514</b> | <b>0.385</b> | 0.116 | <b>-0.070</b> | 0.023 | <b>0.204</b> |
+|  | ✗ | -0.215 | 0.028 | -0.094 | -0.313 | -0.533 | -0.423 | -0.259 |
+| Code | ✓ | <b>0.294</b> | 0.385 | 0.339 | 0.138 | -0.104 | 0.017 | 0.178 |
+|  | ✗ | -0.336 | 0.020 | -0.158 | -0.382 | -0.474 | -0.428 | -0.293 |
+| SR | ✓ | 0.190 | 0.260 | 0.225 | <b>0.249</b> | -0.182 | <b>0.034</b> | 0.130 |
+|  | ✗ | -0.059 | -0.439 | -0.249 | -0.114 | -0.616 | -0.365 | -0.307 |
+
+### 5.3 RESILIENCE AGAINST ADAPTIVE PERTURBATIONS
+
+DNN-based purification is prone to further adaptive attacks due to the non-smoothness in terms of latent representation space (Guo et al., 2023) and also the vulnerability by exploiting adversarial examples (Ilyas et al., 2019). To validate whether our framework can still work upon [adaptive](#) adversarial perturbation with new knowledge of our pipeline, we additionally conduct experiments on evaluations of different variants of our approach before and after the adaptive perturbation crafted against the image purification part. The adversarial perturbation is crafted following AdvDM with consideration of the CFG (Ho & Salimans, 2022) sampling trajectory with a large perturbation budget of  $r = 16/255$ . For the model variants, we consider the full variant with both modules turned on, as well as the ablated versions with one of them turned off. From Tab. 3, we can see that the full variant with CDL is robust to the adaptive attack across other variants in terms of performance drop.
+
+{9}------------------------------------------------
+
+Furthermore, we notice that the variant with both SR and CDL yields a slightly better average score than the CodeSR configuration after the attack. This indicates that the CodeFormer module might be more susceptible to the adaptive attack while the SR module is more robust. However, using SR with CDL solely in case cases gives sub-optimal purification results. Our CodeSR configuration with CDL gives a better expected overall performance under mixed perturbation scenarios with  $P(\text{AA})=50\%$ .
+
+### 5.4 ABLATION STUDY AND SENSITIVITY ANALYSIS
+
+**Contribution of Individual Modules.** We present ablations on the three modules in our method in Tab. 4. From the table, our method works best under the full setting. When turning off any of the modules, the average performance degrades, with turning off CDL suffers the most. On the other hand, if we only turn on one of the modules, we find that CDL is still the most important one that retains higher generation performance. Furthermore, if we only do input purification without CDL, the generation quality is not as good as the full setting with CDL. This indicates that CDL is crucial for the performance of our method. Surprisingly, when only enabling the SR module, the IMS score is relatively good but with bad quality. While turning on the CodeFormer module alone, the boost is more on the quality score side. The settings that enable these two modules together yield a higher average score. These indicate that SR and CodeFormer modules are complementary to each other. Furthermore, for the settings that only allow two modules enabled, we found that the combination of CodeFormer and CDL yields the best performance compared to the other two combinations. Furthermore, we visualize the quality-score curve of identifier  $V^*$  that shows consistent improvement during training in the App. B.1. In conclusion, the results suggest that all modules contribute to the learning performance gain in both IMS and quality scores.
+
+![Figure 5: A grid of 12 face images arranged in three columns: 'Clean Gen.', 'Perturbed Gen.', and 'Our Gen.'. Each column contains two rows of four images. The 'Clean Gen.' column shows clear, high-quality face images. The 'Perturbed Gen.' column shows the same face images but heavily distorted with noise and artifacts. The 'Our Gen.' column shows the face images after being processed by the proposed defense method, resulting in significantly improved quality and restored facial features compared to the perturbed versions.](e9b30aeb317ed964fa6de36804acf24c_img.jpg)
+
+Figure 5: A grid of 12 face images arranged in three columns: 'Clean Gen.', 'Perturbed Gen.', and 'Our Gen.'. Each column contains two rows of four images. The 'Clean Gen.' column shows clear, high-quality face images. The 'Perturbed Gen.' column shows the same face images but heavily distorted with noise and artifacts. The 'Our Gen.' column shows the face images after being processed by the proposed defense method, resulting in significantly improved quality and restored facial features compared to the perturbed versions.
+
+Figure 5: Generations from models trained on: (left) clean data, (middle) perturbed data without defense, and (right) purified data using our defense approach. The results demonstrate that our defense method significantly enhances generation quality, bringing it closer to clean data levels.
+
+#### Generation Visualization and Sensitivity Test.
+
+We further visualize the generation of models trained in three cases, including clean, perturbed, and purified in Fig. 5. The visualization demonstrates that our defense greatly helps retain clean-level generation quality. Additionally, we find that the concept learned associated with  $V^*$  under perturbed case matches the noise concept learned using CDL alone, indicating the CDL successfully decouples the learning of noise patterns (refer to the App. B.2). The sensitivity analysis of noise tokens is provided in App. B.3.
+
+Table 4: Ablation study on individual modules.
+
+| Settings |  |  | Metrics |  |  |
+|-|-|-|-|-|-|
+| CodeF. | SR | CDL | IMS $\downarrow$ | Q $\uparrow$ | Avg. $\uparrow$ |
+| ✓ | ✓ | ✓ | 0.256 | <b>0.514</b> | <b>0.385</b> |
+| ✓ | ✓ | ✗ | -0.215 | 0.028 | -0.094 |
+| ✓ | ✗ | ✓ | <b>0.294</b> | 0.385 | 0.339 |
+| ✗ | ✓ | ✓ | 0.190 | 0.260 | 0.225 |
+| ✓ | ✗ | ✗ | -0.336 | 0.020 | -0.158 |
+| ✗ | ✓ | ✗ | -0.059 | -0.439 | -0.249 |
+| ✗ | ✗ | ✓ | 0.160 | 0.038 | 0.099 |
+| ✗ | ✗ | ✗ | -0.271 | -0.425 | -0.348 |
+
+## 6 CONCLUSION
+
+In this paper, we dive into the underlying mechanism behind the effectiveness of existing protective perturbation approaches against the unauthorized fine-tuning of personalized diffusion models. Motivated by the latent mismatch observation, we propose to use super-resolution and image restoration models for latent realignment. Furthermore, we propose contrastive decoupling learning with quality-enhanced sampling based on the analysis from the shortcut learning perspective. Extensive experiments demonstrate the effectiveness, efficiency, and faithfulness of our method. Despite being mainly tested on facial data, our framework can generalize to other domains beyond the facial domain. Future work could optimize module combinations for balanced utility and robustness (in Sec. 5.3), and develop stronger protection methods based on our framework’s robustness-effectiveness trade-off.
+
+ Rest of paper (reference and Appendix) is removed.

@@ -1,0 +1,346 @@
+
+
+{0}------------------------------------------------
+
+# TULiP: TEST-TIME UNCERTAINTY ESTIMATION VIA LINEARIZATION AND WEIGHT PERTURBATION
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+A reliable uncertainty estimation method is the foundation of many modern out-of-distribution (OOD) detectors, which are critical for safe deployments of deep learning models in the open world. In this work, we propose TULiP, a theoretically-driven post-hoc uncertainty estimator for OOD detection. Our approach considers a hypothetical perturbation applied to the network before convergence. Based on linearized training dynamics, we bound the effect of such perturbation, resulting in an uncertainty score computable by perturbing model parameters. [Ultimately, our approach computes uncertainty from a set of sampled predictions, thus not limited to classification problems.](#) We visualize our bound on synthetic regression and classification datasets. Furthermore, we demonstrate the effectiveness of TULiP using large-scale OOD detection benchmarks for image classification. Our method exhibits state-of-the-art performance, particularly for near-distribution samples.
+
+## 1 INTRODUCTION
+
+An important safety component for deep neural networks (NNs) in real-world environments is the awareness of their uncertainty upon receiving unknown or corrupted inputs. Such capability enables systems to fall back to conservative decision-making or defer to human judgments when faced with unfamiliar scenarios, which is imperative in safety-critical domains, such as autonomous driving (Atakishiyev et al., 2024) and medical applications (Esteva et al., 2017). The problem is often framed as **Out-Of-Distribution (OOD)** detection, which has witnessed significant growth in recent years (Yang et al., 2024).
+
+Theoretically, this issue directly relates to quantifying epistemic uncertainty (Hora, 1996), which measures the lack of knowledge in a fitted model due to insufficient training data. The training process is typically modelled as a Bayesian optimization process (Wang & Yeung, 2020) with approximations for practical use (Gal & Ghahramani, 2016; Daxberger et al., 2021). More generally, epistemic uncertainty [could](#) be formalized by the variance of a trained ensemble of networks  $\phi(\mathbf{x}; \boldsymbol{\theta})$ :
+
+$$\text{Var}_{\boldsymbol{\theta}_{\text{Init}}} [\phi(\mathbf{x}; \boldsymbol{\theta}_{\text{Train}})], \quad (1)$$
+
+where  $\boldsymbol{\theta}_{\text{Train}}$  are parameters trained by some learning algorithm from random initialization  $\boldsymbol{\theta}_{\text{Init}}$ . [Intuitively, higher prediction variance corresponds to inputs  \$\mathbf{x}\$  further from training set \(OOD\), as there lack enough training data to eliminate model disagreements via training, hence epistemic.](#)
+
+Many works redesign the network or training process to be uncertainty-aware (DeVries & Taylor, 2018; Huang & Li, 2021). However, these are often impractical due to heavy computational costs, especially for large datasets. Instead, *post-hoc* methods (Liang et al., 2018; Liu et al., 2020; Hendrycks et al., 2022; Djuricic et al., 2023) are generally preferred. These approaches can be easily integrated into pre-trained models without interfering with the trained backbones, significantly enhancing their versatility (Yang et al., 2022). Nevertheless, they often lack a direct theoretical link to the training process, which weakens their theoretical foundation and necessitates extensive empirical validation.
+
+Therefore, it is desirable to develop a post-hoc OOD method with direct theoretical justifications regarding the training process. Recent analysis of NN optimizations reveals that gradient descent can be seen as its first-order approximations (Jacot et al., 2018; Lee et al., 2019), termed *lazy* training, under specific conditions (Geiger et al., 2020). This enabled direct (but costly) computation of equation 1, as well as rigorous analysis (Kobayashi et al., 2022) and methods (He et al., 2020) on model uncertainty, even beyond the lazy regime (Chen et al., 2020).
+
+{1}------------------------------------------------
+
+Inspired by this series of work, we present **TULiP** (Test-time Uncertainty by Linearized fluctuations via weight Perturbation), a post-hoc uncertainty estimator for OOD detection. Our method considers hypothetical fluctuations of the lazy training dynamics, which can be bounded under certain assumptions and efficiently estimated via weight perturbation. In practice, we found our method works well even beyond the ideal regime. Our contribution is threefold:
+
+- (i) We provide a simple, versatile theoretical framework for analyzing epistemic uncertainty at inference time in the lazy regime, which is empirically verified;
+- (ii) Based on our theory, we propose TULiP, an efficient and effective post-hoc OOD detector that does not require access to original training data;
+- (iii) We test TULiP extensively using OpenOOD (Zhang et al., 2023), a large, transparent, and unified OOD benchmark for image classifications. We show that TULiP consistently improves previous state-of-the-art methods across various settings.
+
+The outline is as follows. Sec. 2 provides a summary of related works, Sec. 3 presents theoretical derivations, and Sec. 4 bridges theory to the implementation of TULiP. Sec. 5 reports the effectiveness of TULiP via empirical studies.
+
+## 2 RELATED WORKS
+
+**Uncertainty Quantification (UQ)** As being discussed in Sec. 1, theoretically-driven methods often estimates epistemic uncertainty from a Bayesian perspective. This includes, notably, Variational Inference (Blundell et al., 2015a). Gal & Ghahramani (2016) connects Bayesian inference and the usage of Dropout layers, led their method, Monte Carlo (MC) Dropout, widely adopted in practice due to its simplicity and effectiveness. Moreover, Daxberger et al. (2021) approximates the posterior via Taylor approximation and Lakshminarayanan et al. (2017) directly used independently trained deep models as an ensemble.
+
+**Post-hoc OOD Detectors** For post-hoc methods, the baseline method using maximum softmax probability (MSP) was first introduced by Hendrycks & Gimpel (2017). ODIN (Liang et al., 2018) applies input preprocessing on top of temperature scaling (Guo et al., 2017a) to enhance MSP. Liu et al. (2020) proposes a simple score based on energy function (EBO). Hendrycks et al. (2022) uses maximum logits (MLS) for efficient detection on large datasets. GEN (Liu et al., 2023) adopts the generalization of Shannon Entropy, while ASH (Djurisic et al., 2023) prunes away samples’ activation at later layers and simplifies the rest. Some methods also access the training set for additional information, as MDS (Lee et al., 2018b) used Mahalanobis distance with class-conditional Gaussian distributions, and ViM (Wang et al., 2022b) computes the norm of the feature residual on the principal subspace for OOD detection.
+
+Due to the nature of post-hoc setting, most methods such as EBO, ODIN and MLS compute OOD score solely from trained models, overlooking the training process. In contrast, as previously stated, inspired by the more theoretically-aligned UQ methods, TULiP addresses the problem with regard to the training process from a theoretical aspect. In practice, TULiP works by a series of carefully constructed weight perturbations, ultimately yielding a set of model predictions, which can be seen as surrogates to posterior samples for OOD detections. Our contribution is orthogonal to methods working with logits and predictive probabilities, such as GEN, as they can work on top of TULiP outputs. In such an aspect, TULiP shares the similar plug-and-play versatility as seen in recent works, such as ReAct (Sun et al., 2021) and RankFeat (Song et al., 2022).
+
+## 3 THEORETICAL FRAMEWORK
+
+### 3.1 PRELIMINARIES: LINEARIZED TRAINING DYNAMICS
+
+Jacot et al. (2018) introduced the Neural Tangent Kernel with linearization of neural networks. More importantly, they have shown that under an infinite width (lazy) limit, network parameters and hence the gradients barely change across the whole training process, justifying the linearization of the training process. Lee et al. (2019) extends the result by examining them in the parameter space, with a formal result equalizing linearized networks and empirical ones under mild assumptions.
+
+{2}------------------------------------------------
+
+Let  $f_{\text{True}}(\mathbf{x}; \boldsymbol{\theta}) : \mathbb{R}^d \rightarrow \mathbb{R}^o$  be a neural network parameterized by parameters  $\boldsymbol{\theta}$ . The Jacobian (gradient) evaluated at  $\mathbf{x}$  is written as  $\nabla_{\boldsymbol{\theta}} f_{\text{True}}(\mathbf{x}) \in \mathbb{R}^{o \times |\boldsymbol{\theta}|}$ , where  $|\boldsymbol{\theta}|$  is the cardinality of  $\boldsymbol{\theta}$ , i.e., the number of parameters in the network.
+
+Let  $f(\mathbf{x}; \boldsymbol{\theta})$  denote the network linearized at  $\boldsymbol{\theta}^*$ :
+
+$$f(\mathbf{x}; \boldsymbol{\theta}) := f_{\text{Init}}(\mathbf{x}) + \nabla_{\boldsymbol{\theta}} f_{\text{True}}(\mathbf{x})|_{\boldsymbol{\theta}=\boldsymbol{\theta}^*} \cdot (\boldsymbol{\theta} - \boldsymbol{\theta}^*), \quad (2)$$
+
+where  $f_{\text{Init}}(\mathbf{x})$  is the initial network function. Typically, the network is linearized at initialization  $\boldsymbol{\theta}^* = \boldsymbol{\theta}_{\text{Init}}$ . Here, we treat it as a linear approximation to the true training dynamics. For our convenience, we will interchangeably use  $\nabla_{\boldsymbol{\theta}} f(\mathbf{x})$  as  $\nabla_{\boldsymbol{\theta}} f_{\text{True}}(\mathbf{x})|_{\boldsymbol{\theta}=\boldsymbol{\theta}^*}$ .
+
+We consider the training data  $\mathbf{x}$  within an empirical dataset  $X$ . For a twice-differentiable loss function  $\ell(f(\mathbf{x}); y(\mathbf{x}))$  with target  $y(\mathbf{x})$ , we write it's gradient w.r.t.  $f(\mathbf{x})$  as  $\ell'(f(\mathbf{x}); y(\mathbf{x}))$  (or simply  $\ell'(f(\mathbf{x}))$ ). Then, following Lee et al. (2019),  $f$  is trained on  $X$  following the gradient flow:
+
+$$\partial_t f_t(\mathbf{x}) = -\eta \mathbb{E}_{\mathbf{x}'} [\Theta(\mathbf{x}, \mathbf{x}') \ell'(f_t(\mathbf{x}'); y(\mathbf{x}'))], \quad (3)$$
+
+where  $\mathbb{E}_{\mathbf{x}'}$  is the expectation w.r.t. the empirical distribution for  $\mathbf{x}' \in X$ ,  $\eta$  is the learning rate and  $f_t$  denotes the network  $f$  at time  $t \in [0, T]$ . Given inputs  $\mathbf{x}, \mathbf{x}'$ , The Neural Tangent Kernel (NTK)  $\Theta(\mathbf{x}, \mathbf{x}') \in \mathbb{R}^{o \times o}$  defined as  $\Theta(\mathbf{x}, \mathbf{x}') := \nabla_{\boldsymbol{\theta}} f(\mathbf{x}) \nabla_{\boldsymbol{\theta}} f(\mathbf{x}')^\top$  governs the linearized training equation 3. Under the lazy limit, the NTK  $\Theta(\mathbf{x}, \mathbf{x}')$  stays constant across the training process and hence is independent of  $t$ . Hereon, we assume the unique existence of the solution to equation 3.
+
+**Notations** Let  $\mathbf{z} \in \mathbb{R}^d$  be an arbitrary test point. Let  $\|\cdot\|$  denote the Euclidean norm and induced 2-norm for vectors and matrices. Let  $\|\cdot\|_F$  denote the matrix Frobenius norm. We also denote  $\|\cdot\|_X := \mathbb{E}_{\mathbf{x}} [\|\cdot\|^2]^{1/2}$  the data-dependent norm through out the following descriptions. Finally, let  $f(\mathbf{z}) \lesssim g(\mathbf{z})$  indicate  $f(\mathbf{z}) \leq Kg(\mathbf{z}) + M$ , up to some constant  $K, M$  independent of  $\mathbf{z}$ .
+
+### 3.2 MODELING UNCERTAINTY
+
+Under our problem setting, neither the distribution of initialized models nor the training process is accessible, which renders a significant difficulty for the direct computation of the uncertainty shown in equation 1. Instead, we choose to intuitively model it by considering a perturbation applied towards the network function  $f(\mathbf{x})$ , at a time  $t = t_s$  before the training terminates at  $t = T$ . This perturbation prior to convergence is *hypothetical*, as it is inaccessible in our post-hoc setting, and we will only use it to establish our theoretical framework.
+
+Formally, consider a perturbation to  $f_{t_s}$  at  $t = t_s$  as  $\hat{f}_{t_s}(\mathbf{x}) = f_{t_s}(\mathbf{x}) + \Delta f(\mathbf{x})$ . After the perturbation, the perturbed network  $\hat{f}(\mathbf{x})$  will be trained following the same dynamics as equation 3:
+
+$$\partial_t \hat{f}_t(\mathbf{x}) = -\eta \mathbb{E}_{\mathbf{x}'} [\Theta(\mathbf{x}, \mathbf{x}') \ell'(\hat{f}_t(\mathbf{x}'); y(\mathbf{x}'))], \quad (4)$$
+
+until termination time  $T$ .
+
+Under such a perturb-then-train process, we model the epistemic uncertainty as the difference between converged networks, reads  $\|f_T(\mathbf{z}) - \hat{f}_T(\mathbf{z})\|$ . It measures the fluctuation of the training process, capturing the sensitivity of training w.r.t. noise. Indeed, by applying a perturbation at  $t = 0$ , we essentially perturb  $f_{\text{Init}}$ , which can be seen as a sampling process from some model prior (Appendix A.7). Therefore,  $\hat{f}_T(\mathbf{z})$  can be interpreted as samples from the trained ensemble as in equation 1, where their variance reflects epistemic uncertainty.
+
+However, as stated above, in practice we only know the trained network  $f_T$  at  $t = T$ . It would be impractical to recover the full training trajectory, apply the perturbation at  $t = t_s$  and then retrain the network. Therefore, in the following, we will come up with a bound of  $\|f_T(\mathbf{z}) - \hat{f}_T(\mathbf{z})\|$  given the strength of the perturbation  $\Delta f$ , which can be evaluated at  $\mathbf{z}$  without actually retrain the network. Thus, the perturbation is *hypothetical*, as it has never been applied in our practice.
+
+We first present this bound, then we examine a method to estimate the bound without explicit access to training data.
+
+### 3.3 BOUNDING LINEARIZED TRAINING FLUCTUATIONS
+
+We shall introduce the following assumptions:
+
+{3}------------------------------------------------
+
+- A1. (Boundedness) For  $t \in [0, T]$ ,  $f(\mathbf{x})$ ,  $\nabla_{\theta} f(\mathbf{x})$ ,  $\ell$  and  $\ell'$  stay bounded, uniformly on  $\mathbf{x}$ .
+- A2. (Smoothness) Gradient  $\ell'$  of loss function  $\ell$  is Lipschitz continuous:  $\forall \mathbf{x} \in X; \|\ell'(\hat{y}; y(\mathbf{x})) - \ell'(\hat{y}'; y(\mathbf{x}))\| \leq L\|\hat{y} - \hat{y}'\|$ .
+- A3. (Perturbation) The perturbation  $\Delta f$  can be uniformly bounded by a constant  $\alpha$ , that is, for all  $\mathbf{x}$  (not limited to the support of training data), i.e.,  $\forall \mathbf{x} \in \mathbb{R}^d; \|\Delta f(\mathbf{x})\| \leq \alpha$ .
+- A4. (Convergence) Finally, for the original network trained via equation 3 and the perturbed network trained via equation 4, we assume *near-perfect convergence* on the training set  $\mathbf{x}$  at termination time  $t = T$ , i.e.,  $\exists \beta \in \mathbb{R}, \forall \mathbf{x} \in X; \|f_T(\mathbf{x}) - \hat{f}_T(\mathbf{x})\| \leq \beta$ .
+
+Under reasonable conditions, it has been shown both empirically (Zhang et al., 2017) and theoretically (Du et al., 2019) that overparameterized NNs trained via SGD is able to achieve near-zero training loss on almost arbitrary training sets. To nice loss functions as  $\ell(\mathbf{y}; \mathbf{y}') = 0$  implies  $\mathbf{y} = \mathbf{y}'$ , this implies A4.
+
+Jacot et al. (2018) connected lazy NNs trained with mean square error (MSE) loss and kernel ridge regression. Essentially, it hints that under such a setup, an NN embeds datapoints  $\mathbf{x}$  into gradients  $\nabla_{\theta} f(\mathbf{x})$ . Indeed, for a general class of loss functions, it is possible to show that:
+
+**Theorem 3.1.** *Under assumptions A1-A4, for a network  $f$  trained with equation 3 and a perturbed network  $\hat{f}$  trained with equation 4, the perturbation applied at time  $t_s = T - \Delta T$  bounded by  $\alpha$ , we have*
+
+$$\|f_T(\mathbf{z}) - \hat{f}_T(\mathbf{z})\| \leq \inf_{\mathbf{x} \in X} C \|\nabla_{\theta} f(\mathbf{z}) - \nabla_{\theta} f(\mathbf{x})\|_F + 2\alpha + \beta, \quad (5)$$
+
+where  $C = \frac{\alpha \bar{\Theta}_X^{1/2}}{\lambda_{\max}} (e^{(T-t_s)L\lambda_{\max}} - 1)$ ,  $\bar{\Theta}_X^{1/2} := \|\nabla_{\theta} f(\mathbf{x})\|_X$  is average gradient norm over training data, and  $\lambda_{\max} := \frac{1}{\sqrt{N}} \|G\|$  for a generalized Gram matrix  $G_{i,j} := \|\Theta(x_i, x_j)\|$  of dataset  $X = \{x_1, x_2, \dots, x_N\}$ .
+
+*Proof.* With an arbitrarily chosen pivot point  $\mathbf{x}^*$  from the training set, it is possible to bound  $\|f(\mathbf{z}) - f(\mathbf{x}^*)\|$  and  $\|\hat{f}(\mathbf{z}) - \hat{f}(\mathbf{x}^*)\|$  by bounding the fluctuations on the training set. The theorem then follows from assumption A4. Please check Sec. A.3 for details.  $\square$
+
+We see that the bound on the training fluctuation is dominated by the distance from test point  $\mathbf{z}$  to the training set  $X$  in the “embedding space” of gradients. Expanding it with  $\|\mathbf{A}\|_F = (\text{Tr}(\mathbf{A}\mathbf{A}^\top))^{1/2}$  (detailed in Sec A.3), we can observe its connection with the NTK  $\Theta$ :
+
+$$\inf_{\mathbf{x} \in X} \|\nabla_{\theta} f(\mathbf{z}) - \nabla_{\theta} f(\mathbf{x})\|_F = \inf_{\mathbf{x} \in X} [\text{Tr}(\Theta(\mathbf{z}, \mathbf{z}) + \Theta(\mathbf{x}, \mathbf{x}) - 2\Theta(\mathbf{z}, \mathbf{x}))]^{1/2}. \quad (6)$$
+
+### 3.4 ESTIMATING THE BOUND WITHOUT TRAINING DATA
+
+However, given no access to training data, the term  $\nabla_{\theta} f(\mathbf{x})$  is intractable. Moreover, even with full access, computing the minimum of equation 6 requires significant computational effort. A typical training dataset often contains millions of data points. Besides, given the size of the network, storing the full gradient for a single data point may already require significant memory.
+
+Fortunately, we might be able to recover some information about the training dataset  $\mathbf{x}$  from the parameters  $\theta_T$  and  $\theta_{t_s}$ , given them being trained on the dataset via lazy gradient descent:
+
+**Lemma 3.2.** *We assume the lazy regime for the training process, i.e., the NTK,  $\Theta(\mathbf{z}, \mathbf{x})$ , does not depend on the parameter  $t \in [t_s, T]$ . Under assumption A1, with the model parameters  $\theta_T$  trained from  $\theta_{t_s}$  with equation 3 over the training set  $\mathbf{x}$  and  $t_s < T$ , we have:*
+
+$$\|\nabla_{\theta} f_T(\mathbf{z})(\theta_T - \theta_{t_s})\| \leq K \cdot \mathbb{E}_{\mathbf{x}} [\|\Theta_T(\mathbf{z}, \mathbf{x})\|], \quad (7)$$
+
+for some  $K$  independent of  $\mathbf{z}$ .  $|\Theta_T(\mathbf{z}, \mathbf{x})|$  is defined as the unique symmetric positive semi-definite solution of  $|\Theta_T(\mathbf{z}, \mathbf{x})|^2 = \Theta_T(\mathbf{z}, \mathbf{x})^\top \Theta_T(\mathbf{z}, \mathbf{x})$ . It is an extension of absolute values to matrices.
+
+*Proof.* We prove the lemma under the weakly lazy regime, i.e., we allow the weak dependency of  $\Theta_t$  on  $t$ . The consequence follows from the Hölder’s inequality. Please check Sec. A.4 for details.  $\square$
+
+{4}------------------------------------------------
+
+We further introduce an assumption on the closeness between the test point  $\mathbf{z}$  and the dataset  $X$ , such that equation 6 can be bounded by
+
+$$\inf_{\mathbf{x} \in X} \text{Tr}(\Theta(\mathbf{z}, \mathbf{z}) + \Theta(\mathbf{x}, \mathbf{x}) - 2\Theta(\mathbf{z}, \mathbf{x})) \leq \text{Tr}(\Theta(\mathbf{z}, \mathbf{z}) + \mathbb{E}_{\mathbf{x}}[\Theta(\mathbf{x}, \mathbf{x})] - 2\mathbb{E}_{\mathbf{x}}[\Theta(\mathbf{z}, \mathbf{x})]). \quad (8)$$
+
+Intuitively, if across all  $\mathbf{x} \in X$ ,  $\text{Tr}(\Theta(\mathbf{z}, \mathbf{x}))$  only attains a small negative value within a limited subset of  $\mathbf{x}$ , and  $\sup_{\mathbf{x} \in X} \text{Tr}(\Theta(\mathbf{z}, \mathbf{x}))$  is largely positive ( $\mathbf{z}$  is close to  $\mathbf{x}$  in the sense of  $\Theta$ ), equation 8 holds. Fig. 1 d) provides empirical justifications for this closeness assumption.
+
+With the closeness assumption, we can then derive a bound on equation 5 using Lemma 3.2:
+
+**Proposition 3.3.** *Given  $\mathbf{z}$  and  $\mathbf{x}$  satisfies equation 8, equation 5 can be further upper-bounded by:*
+
+$$\|f_T(\mathbf{z}) - \hat{f}_T(\mathbf{z})\| \lesssim [\text{Tr}(\Theta(\mathbf{z}, \mathbf{z}) + \mathbb{E}_{\mathbf{x}}[\Theta(\mathbf{x}, \mathbf{x})]) - 2K \|\nabla_{\theta} f_T(\mathbf{z})(\theta_T - \theta_{t_s})\|]^{1/2}, \quad (9)$$
+
+for some  $K$  independent from  $\mathbf{z}$  (that may differ from the one in Lemma 3.2).  $\square$
+
+Given test point  $\mathbf{z}$  and parameters  $\theta_T, \theta_{t_s}$ , equation 9 provides a tractable bound for equation 5.
+
+**Network Ensemble** We close this section by the fact that
+
+$$\text{Tr}(\text{Var}_{\Delta f}[\hat{f}_T(\mathbf{z})]) \leq \mathbb{E}_{\Delta f}[\|\hat{f}_T(\mathbf{z}) - f_T(\mathbf{z})\|^2], \quad (10)$$
+
+which can be then bounded by equation 9. As we stated before,  $\hat{f}_T(\mathbf{z})$  can be seen as samples from the trained ensemble as in equation 1. In practice, it is often beneficial to obtain such samples. In the next section, we will present a heuristic method to estimate  $\hat{f}_T(\mathbf{z})$  by matching variances.
+
+## 4 IMPLEMENTATION
+
+In this section, we present the key implementation strategies that enhance the practical effectiveness of our method, TULiP, summarized in Alg. 1. We elaborate on its design in the following subsections by referring to lines in Alg. 1.
+
+In contrast to the linearized network  $f(\mathbf{x}; \theta)$ , let  $f_t^{\text{emp}}(\mathbf{x}; \theta)$  denote a network trained empirically. Intuitively, trajectories of  $f_t(\mathbf{x}; \theta)$  and  $f_t^{\text{emp}}(\mathbf{x}; \theta)$  is similar when  $\theta^* = \theta_{\text{init}}$  with a small learning-rate (Lee et al., 2019; Geiger et al., 2020). Under a post-hoc setting, as only converged models are available, we take  $t_s = 0$  and substitute  $\theta_{t_s}$  with  $\mathbb{E}[\theta_0] = \mathbf{0}$  (or other mean specified by initialization schemes) in our implementation.
+
+We first introduce how we estimate equation 9 using  $f_T^{\text{emp}}$  at  $t = T$ . Then, we introduce the construction of surrogate posterior samples that greatly enhance our method.
+
+### 4.1 LAYER-WISE SCALING (LINE 2 - 6)
+
+Lazy training often fails to capture the full characteristics of practically trained neural networks (Selenzova & Kutyniok, 2022). In our experiments, we have observed significant changes in the empirical NTK throughout the training process. Therefore, to better capture a full picture of the whole training trajectory with only  $f_T^{\text{emp}}$ , we propose to use a reweighted empirical NTK to approximate the kernel  $\Theta$  used for linearization in equation 3 and beyond:
+
+$$\nabla_{\theta} f_T^{\text{emp}}(\mathbf{z}) \Gamma^2 \nabla_{\theta} f_T^{\text{emp}}(\mathbf{x})^{\top} \approx \Theta(\mathbf{z}, \mathbf{x}), \quad (11)$$
+
+where  $\Gamma$  is a diagonal matrix of size  $|\theta| \times |\theta|$  that shares the same value for parameters within the same layer. Similarly,  $\nabla_{\theta} f_T^{\text{emp}}(\mathbf{z}) \Gamma \approx \nabla_{\theta} f(\mathbf{z})$ .
+
+This reweighting is applied as a layer-wise scaling over the empirical NTK evaluated at convergence. Given layer  $l$  with parameters  $\theta_l$ , we scale them as
+
+$$\Gamma_l := (1/\sqrt{|\theta_l|}) \cdot I, \quad (12)$$
+
+where  $\Gamma_l$  the diagonal entries in  $\Gamma$  corresponds to  $\theta_l$ . We note that such scaling is highly heuristic, and we adopted it for its simplicity (further discussed in Appendix C.2). For converged networks, such scaling could potentially recover an earlier network state, which is more representative of the training trajectory as the majority of training has been done in this stage (in the sense of raw performance, e.g., accuracy). We demonstrate this effect empirically in Fig. 1.
+
+In practice, to apply layer-wise scaling, we can simply multiply  $\Gamma$  to the perturbations introduced below.
+
+{5}------------------------------------------------
+
+---
+
+**Algorithm 1** TULiP for Classifiers.  $\circ$ : Elementwise product
+
+---
+
+**Input:** Input  $z \in \mathbb{R}^d$ , trained parameters  $\theta_T$ , network  $f^{emp}(z; \theta)$
+
+**Parameter:** Perturbation strength  $\epsilon, \delta$ ; Parameter  $\lambda$ ; Number of posterior samples  $M$
+
+**Output:** Uncertainty score  $U$
+
+```
+
+1:  $\theta_{i_s} \leftarrow 0$ 
+2: for all Layer  $l$  of  $f^{emp}$  do ▷ Layer-wise scaling
+3:    $\theta_l \leftarrow$  parameters of layer  $l$  from  $\theta_T$ 
+4:    $\Gamma_l \leftarrow 1(1/\sqrt{|\theta_l|})$  ▷ Vector of length  $|\theta_l|$ 
+5: end for
+6:  $\Gamma \leftarrow$  Concatenate( $\Gamma_l$ )
+7: for  $i = 1, \dots, M$  do
+8:   Sample  $v_i \in \mathbb{R}^{|\theta|}$  from  $\mathcal{N}(0, \epsilon^2 \mathbf{I})$ 
+9:    $\tilde{f}_i^{raw}(z) \leftarrow f^{emp}(z; \theta_T + \Gamma \circ v_i)$ 
+10: end for
+11:  $\hat{\Theta}_{Tr}(z, z) \leftarrow \frac{1}{M} \sum_i \|\tilde{f}_i^{raw}(z) - f^{emp}(z; \theta_T)\|^2$  ▷ Estimation of  $\text{Tr } \Theta(z, z)$ 
+12:  $D \leftarrow \|f^{emp}(z; \theta_T + \epsilon \Gamma \circ (\theta_T - \theta_{i_s})) - f^{emp}(z; \theta_T)\|$ 
+13:  $S \leftarrow \frac{\hat{\Theta}_{Tr}(z, z) - \lambda D}{D}$  ▷ Estimation of equation 9 up to  $\mathbb{E}_x[\Theta(x, x)]$  and square root
+14:  $\gamma \leftarrow \sqrt{\max(S, 0)/\hat{\Theta}_{Tr}(z, z)}$ 
+15: for  $i = 1, \dots, M$  do ▷ Surrogate posterior samples
+16:    $\tilde{f}_i(z) \leftarrow (1 - \gamma)f^{emp}(z; \theta_T) + \gamma \tilde{f}_i^{raw}(z)$ 
+17: end for
+18:  $U \leftarrow \mathbb{H}_y(\frac{1}{M} \sum_i \text{softmax}(\tilde{f}_i(z)))$ 
+
+```
+
+---
+
+### 4.2 ESTIMATION OF JACOBIAN (LINE 7 - 13)
+
+Estimating gradients explicitly is both time and memory-consuming, especially for networks with large output dimensions. Fortunately, for Jacobian-vector products as in equation 9, we may use a first-order approximation to avoid computing the gradients with a backward pass:
+
+$$\lim_{\delta \rightarrow 0} \frac{1}{\delta} \left( f^{emp}(z; \theta_T + \delta \Gamma \tilde{\theta}) - f^{emp}(z; \theta_T) \right) \approx \nabla_{\theta} f_T(z) \tilde{\theta}. \quad (13)$$
+
+We use it in line 12 of Alg. 1 to estimate  $\|\nabla_{\theta} f_T(z) (\theta_T - \theta_{i_s})\|$  with  $D$  up to multiplications.
+
+For  $\text{Tr } \Theta(z, z)$ , we could estimate its value with Hutchinson’s Trace Estimator (Avron & Toledo, 2011) (line 7-11).
+
+**Proposition 4.1.** Suppose that  $f^{emp}$  is  $\gamma$ -smooth w.r.t.  $\theta$ , i.e.,
+
+$$\|\nabla_{\theta} f^{emp}(z; \theta) - \nabla_{\theta} f^{emp}(z; \theta')\|_F \leq \gamma \|\theta - \theta'\|.$$
+
+Let  $\mathbf{v}$  be a random variable such that  $\mathbb{E}_{\mathbf{v}}[\mathbf{v}] = 0$ ,  $\mathbb{E}_{\mathbf{v}}[\mathbf{v}\mathbf{v}^T] = \epsilon^2 \mathbf{I}$  and  $\mathbb{E}_{\mathbf{v}}[\|\mathbf{v}\|^k] \leq C_k \epsilon^k$  for  $k = 3, 4$ , where  $C_k$  is a constant depending on  $k$  and the dimension of  $\mathbf{v}$ . Then, under A1, it holds that
+
+$$\lim_{\epsilon \rightarrow 0} \frac{1}{\epsilon^2} \mathbb{E}_{\mathbf{v}} [\|f^{emp}(z; \theta_T + \Gamma \mathbf{v}) - f^{emp}(z; \theta_T)\|^2] = \text{Tr} (\nabla_{\theta} f^{emp}(z; \theta_T) \Gamma^2 \nabla_{\theta} f^{emp}(z; \theta_T)^T). \quad (14)$$
+
+Note that the multi-dimensional normal distribution with mean zero and variance-covariance matrix  $\epsilon^2 \mathbf{I}$  agrees to the condition of  $\mathbf{v}$ . Proposition 4.1 and the approximation equation 11 ensures that  $\text{Tr } \Theta(z, z)$  is approximated by  $\epsilon^{-2} \mathbb{E}_{\mathbf{v}} [\|f^{emp}(z; \theta_T + \Gamma \mathbf{v}) - f^{emp}(z; \theta_T)\|^2]$  with a small  $\epsilon$ .
+
+*Proof.* Please check Sec. A.5 for details. □
+
+From above,  $z$ -relevant terms in equation 9 can be approximated while avoiding explicit computation of  $\nabla_{\theta} f(z)$ . Specifically, in line 13,  $S$  provides an estimation of the upper-bound equation 9 up to  $\mathbb{E}_x[\Theta(x, x)]$ , square root and multiplicative constants. Here, the hyper-parameter  $\lambda$  acts as a proxy to the constant  $K$  in Lemma 3.2. Such approximation is implemented by perturbations to  $\theta$ , thus compatible with mini-batching, enabling fast computation with  $\mathcal{O}(M)$  forward passes.
+
+{6}------------------------------------------------
+
+![Figure 1: Empirical justifications for the layer-wise scaling scheme. (a) Plot of Jacobian magnitude vs. time vs. validation accuracy for different conv layers. (b) Scatter plot of Jacobian ratio vs. |theta_T|^{-1/2}. (c) Inset scatter plot showing the relationship at t=200. (d) Verification of equation 8 for ID and OOD datasets.](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+Figure 1: Empirical justifications for the layer-wise scaling scheme. (a) Plot of Jacobian magnitude vs. time vs. validation accuracy for different conv layers. (b) Scatter plot of Jacobian ratio vs. |theta\_T|^{-1/2}. (c) Inset scatter plot showing the relationship at t=200. (d) Verification of equation 8 for ID and OOD datasets.
+
+Figure 1: **a) b) c)** Empirical justifications for the layer-wise scaling scheme. We trained a ResNet-18 on CIFAR-10 dataset with SGD-momentum for 400 epochs. **a)** Average magnitude of Jacobian entries for different *conv* layers (solid) vs. time vs. validation accuracy (dashed). Layers with more parameters (lower) train slower compared to layers with fewer parameters (upper). **b)** The ratio between Jacobian norm at  $t = \text{Epoch } 20$  and  $T = \text{Epoch } 400$  vs. our scaling equation 11. A proportional relationship (dashed) supports such scaling in recovering an early NTK critical to training. **c)** Such relationship disappears at  $t = \text{Epoch } 200$ . **d)** Verification for equation 8 (detailed setups in Sec. 5). ID Dataset: ImageNet-1K. OOD Datasets: ImageNet-C, ImageNet-R, SSB-Hard (Vaze et al., 2022), iNaturalist (Van Horn et al., 2018), Textures (Cimpoi et al., 2014).
+
+### 4.3 SURROGATE NETWORK ENSEMBLE (LINE 14 - 18)
+
+As stated in Sec. 3, the bound in equation 5 or 9 is insufficient to capture a full picture – for example, a well-trained classifier can be certain that a test data belongs to neither class, in a sense that an evaluation of equation 9 yields a small value, but their prediction (i.e., it belongs to neither classes)  $\hat{f}_T(z)$  indicates OOD input. Informally yet intuitively,  $\hat{f}_T(z)$  can also be seen as predictions of models sampled from some model posterior.
+
+To this end, we propose to approximate  $\hat{f}_T(z)$  by constructing  $\tilde{f}(z)$ , via the process described in line 14-18 of Alg. 1. In short, we squeeze the perturbed predictions  $\tilde{f}_i^{raw}(z)$ , producing  $\tilde{f}(z)$ , so that their variance matches equation 10, which is an upper bound of the variance of true perturbed predictions  $\text{Tr}(\text{Var}_{\Delta_T}[\hat{f}_T(z)])$ .
+
+From line 16, it is possible to show
+
+$$\text{Tr}(\text{Var}_i[\tilde{f}_i(z)]) \approx \gamma^2 \cdot \text{Tr}(\text{Var}_i[\tilde{f}_i^{raw}(z)]) = S, \quad (15)$$
+
+for a positive  $S$  and small  $\epsilon$  such that  $\mathbb{E}_i[\tilde{f}_i^{raw}(z)] \approx f^{emp}(z; \theta_T)$ . Note that  $\gamma$  is given in line 14 of Alg. 1, and  $S$  is an estimation of equation 9 as stated in the previous subsection. Sec. A.6 provides additional derivations to clarify their relationships.
+
+For classification problems, after obtaining  $\tilde{f}(z)$ , it is then able to combine the epistemic uncertainty and model prediction. One common approach is the Information Entropy  $\mathbb{H}$  (Shannon, 1948) of the mean prediction:  $\mathbb{H}_y[\tilde{f}(z)] := -\sum_{y=1}^o \mathbb{E}[\sigma(\tilde{f}(z))_y \log \mathbb{E}[\sigma(\tilde{f}(z))_y]]$ , where  $\sigma$  is the softmax operation producing the class probabilities and  $[\cdot]_y$  takes the  $y$ -th component from a vector. Other methods, such as GEN (Liu et al., 2023), can also be naturally incorporated to TULiP by replacing line 18 in Alg. 1.
+
+Yet, significant simplifications have been made for computational clarity. For example,  $\mathbb{E}_x[\Theta(x, \mathbf{x})]$  has been omitted as it is intractable and irrelevant to  $\mathbf{z}$ . Empirically we have found that our method is effective despite such simplifications, which will be demonstrated in the next section. We choose to simplify this for clarity, avoiding the introduction of new hyper-parameters to TULiP.
+
+Alg. 1 summarizes TULiP, our proposed uncertainty estimator for OOD detection. Although Alg. 1 gives TULiP for classification, it naturally generalizes to non-classification problems as TULiP constructs surrogate posterior samples.
+
+{7}------------------------------------------------
+
+![Figure 2: Verification of Thm. 3.1 with synthetic data. The figure consists of three subplots. The left subplot shows a regression on splines with a light orange shaded region (bound equation 5), a dark orange shaded region (ground-truth ensemble), and black dots (training data). The middle subplot shows a binary classification on two moons with a heatmap of prediction variance. The right subplot shows the same classification with a heatmap of the evaluation of equation 5.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 2: Verification of Thm. 3.1 with synthetic data. The figure consists of three subplots. The left subplot shows a regression on splines with a light orange shaded region (bound equation 5), a dark orange shaded region (ground-truth ensemble), and black dots (training data). The middle subplot shows a binary classification on two moons with a heatmap of prediction variance. The right subplot shows the same classification with a heatmap of the evaluation of equation 5.
+
+Figure 2: Verification of Thm. 3.1 with synthetic data. From left to right, **a)**: Regression on Splines. Light shade: the bound equation 5, heavy shade: Ground-truth ensemble (equation 1), black dots: training data. **b)**: Binary classification on Two-Moons. The brighter colour indicates larger values across the input space. **b)**: Prediction variance of 20 simulated runs, **c)**: Evaluation of equation 5.
+
+## 5 EXPERIMENTS
+
+### 5.1 EMPIRICAL VALIDATION FOR SECTION 3
+
+**Synthetic Datasets** We begin this section by validating the original bound presented in equation 5. Two types of artificial datasets have been considered: namely *Splines* for regression and *Two-Moons* for classification problems. A 3-layer infinite-wide feed-forward neural network is used and we solved the lazy training dynamics over the dataset using the *neural-tangents* library (Novak et al., 2020). For Splines, we used MSE loss and computed the exact Gaussian ensemble (Lee et al., 2019). For Two-Moons, we used binary cross-entropy loss and numerically simulated the lazy gradient descent for 20 runs. Results are shown in Fig. 2. It suggests that our bound equation 5 based on training fluctuations is able to capture the true epistemic uncertainty as in equation 1, justifies further developments of our method.
+
+**Closeness Condition** We proceed by presenting empirical justifications for equation 8 in Fig. 1 d). We used a ResNet18 (He et al., 2016) pre-trained on ImageNet-1K (Russakovsky et al., 2015), computed equation 8 by 256 samples from the ID dataset (ImageNet-1K) and 128 samples per OOD dataset. The scaled empirical NTK as in equation 11 is used in this experiment. Clearly, we see that equation 8 is satisfied by a large margin under this practical setting.
+
+### 5.2 OUT-OF-DISTRIBUTION DETECTION
+
+In this subsection, we demonstrate the effectiveness of our method for OOD detection in real-world scenarios by comparing TULiP with state-of-the-art OOD detectors.
+
+**Experiment Setup** We evaluate the performance of TULiP with OOD detection tasks based on manually defined ID-OOD dataset pairs (Zhang et al., 2023). For TULiP, we use  $M = 10$  surrogate posterior samples with  $\epsilon = 2.0$ ,  $\delta = 2$  and  $\lambda = \sqrt{o}$  where  $o$  is the number of output dimensions. Only weights in the convolutional and fully connected layers are being perturbed, while biases are ignored. Following Zhang et al. (2023), we conduct a hyper-parameter search on a small validation set whenever possible, within a reasonable range of  $\epsilon \in \{0.1, 0.5, 1.5, 2.0\}$ ,  $\delta \in \{2, 5, 8\}$  and  $\lambda \in \{\sqrt{o}, 3\sqrt{o}\}$ . We explain our choice for hyper-parameters in Sec. B.2. We consider two OOD scenarios, namely Semantic-Shift OOD (SS-OOD) and Covariate-Shift OOD (CS-OOD) (Yang et al., 2024). The fundamental difference between them is that SS-OOD considers distributional shift on both input  $x$  and label  $y$ , often with unseen classes. CS-OOD considers distributional shift solely on input  $x$ . Recently, Yang et al. (2021) raised concerns regarding the negligible covariate shifts between ID and OOD data with same labels. Our setup does not contradict with this work as overlapping classes have been removed from our SS-OOD experiments, following (Yang et al., 2022). Instead, we believe the CS-OOD setting is also significant for practical use. For instance, one may wish to distinguish real-world images from AI-generated ones (Zhang et al., 2024), or identify images that are severely contaminated due to environmental factors or sensor malfunctions (Baek et al., 2024). We present details of all datasets in Sec. B.1 and provide additional experimental results as well as details of reported results in Sec. C.
+
+{8}------------------------------------------------
+
+Table 1: Results on OpenOOD benchmark, averaged from 3 runs. The top results for each category are marked in bold, with the second-best result in underlined. We include baseline results from Zhang et al. (2023), and reproduced the results for MC-Dropout (MCD). A dagger symbol † indicates direct access to training data or processes. Results are averaged separately for *near* / *far*-OOD sets.
+
+| Method | CIFAR-10 |  | CIFAR-100 |  | ImageNet-200 |  | ImageNet-1K |  |
+|-|-|-|-|-|-|-|-|-|
+|  | FPR@95 ↓ | AUROC ↑ | FPR@95 ↓ | AUROC ↑ | FPR@95 ↓ | AUROC ↑ | FPR@95 ↓ | AUROC ↑ |
+| MCD † | 53.54/31.43 | 87.68/91.00 | 54.73/59.08 | 80.42/77.58 | 55.25/35.48 | 83.30/90.20 | 65.68/51.45 | 76.02/85.23 |
+| MDS † | 49.90/32.22 | 84.20/89.72 | 83.53/72.26 | 58.69/69.39 | 79.11/61.66 | 61.93/74.72 | 85.45/62.92 | 55.44/74.25 |
+| ViM † | 44.84/25.05 | 88.68/ <b>93.48</b> | 62.63/ <b>50.74</b> | 74.98/ <b>81.70</b> | 59.19/ <b>27.20</b> | 78.68/91.26 | 71.35/ <u>24.67</u> | 72.08/ <u>92.68</u> |
+| ODIN | 76.19/57.62 | 82.87/87.96 | 57.91/58.86 | 79.90/79.28 | 66.76/34.23 | 80.27/91.71 | 72.50/43.96 | 74.75/89.47 |
+| EBO | 61.34/41.69 | 87.58/91.21 | 55.62/56.59 | 80.91/79.77 | 60.24/34.86 | 82.50/90.86 | 68.56/38.39 | 75.89/89.47 |
+| MLS | 61.32/41.68 | 87.52/91.10 | 55.47/56.73 | 81.05/79.67 | 59.76/34.03 | 82.90/91.11 | 51.35/63.60 | 76.44/89.57 |
+| ASH | 86.78/79.03 | 75.27/78.49 | 65.71/59.20 | 78.20/80.58 | 64.89/27.29 | 82.38/ <b>93.90</b> | 63.32/ <b>19.49</b> | <b>78.17/95.74</b> |
+| GEN | 53.67/47.03 | 88.20/91.35 | <b>54.42/56.71</b> | <b>81.31/79.68</b> | 55.20/32.10 | 83.68/91.36 | 65.32/35.61 | 76.85/89.76 |
+| TULiP | <b>33.80/24.43</b> | <b>89.67/92.55</b> | 55.07/58.17 | 81.29/79.63 | <b>54.51/33.94</b> | <b>83.84/91.03</b> | 64.96/48.01 | 77.52/88.03 |
+| TULiP+GEN | <u>35.67/23.51</u> | <u>90.04/93.33</u> | <u>54.63/55.48</u> | 81.14/80.55 | 57.04/34.26 | 82.87/90.63 | 62.97/36.90 | 77.62/89.53 |
+
+**Baseline Methods** We consider various baselines for comparison, including the MC-Dropout (MCD), post-hoc OOD methods without training data ODIN, EBO, MLS, ASH and GEN; and finally, MDS and ViM with access to training data. Please refer to Sec. 2 for a brief introduction.
+
+**Semantic Shift OOD** We report the performance of TULiP on OpenOOD v1.5 benchmark (Zhang et al., 2023) in Table 1. Following their setup, we use the same pre-trained ResNet-18 (He et al., 2016) for CIFAR-10 & 100 (Krizhevsky, 2009) and ImageNet-200 (Zhang et al., 2023) ID datasets, and ResNet-50 for ImageNet-1K (Russakovsky et al., 2015). OOD data range across a collection of diverse image datasets (Cimpoi et al., 2014; Vaze et al., 2022; Van Horn et al., 2018; Bitterwolf et al., 2023; Le & Yang, 2015; Zhou et al., 2018; Kuznetsova et al., 2020), categorized into *near* and *far* OOD sets (Yang et al., 2022), where near is more similar to ID and therefore more difficult to distinguish. We also included a variant of TULiP+GEN as we substitute line 18 of Alg. 1 by GEN with  $\gamma = 0.3$  and  $M = 100$  to better demonstrate the effect of incorporating existing methods with TULiP. TULiP achieves remarkable performance in near-OOD settings with either top-1 or top-2 AUROC scores across all datasets. Indeed, as suggested by equation 8, better performance on near-ID scenarios is expected. On the far-OOD side, TULiP also performs consistently well. We note that methods significantly outperform TULiP on far-OOD either access the training dataset (ViM and MDS) or completely lack theoretical explanation (ASH). In ImageNet-1K (ResNet-50) AUROC, despite being outperformed by ASH, TULiP still outperforms other baselines by a large margin, with a slightly higher FPR. ASH is effective when the representation is redundant, as simplifying them does not significantly impact ID accuracy (Djurisic et al., 2023). ResNet-50, compared to ResNet-18 used otherwise, is more likely to have redundant representations due to its increased expressive power. In such cases, particularly in near-OOD scenarios, one may expect high performance for ASH when pruning parameters are appropriately tuned. On the other hand, TULiP demonstrates relatively consistent and high performance across all datasets. This indicates that properly evaluating uncertainty is fundamentally important, and our method achieves this goal to a considerable extent. Notably, ASH failed when using a different set of weights on ImageNet-1K (Appendix C.3). In contrast, TULiP, without access to training information, performs consistently well with theoretical foundations.
+
+**Covariate Shift OOD** We test TULiP on the covariate shift setting with Blurred ImageNet, ImageNet-C (Hendrycks & Dietterich, 2019), ImageNet-R (Hendrycks et al., 2021) and ImageNet-ES (Baek et al., 2024) as OOD data. A description of these datasets can be found in Sec. B.1. For this experiment, the ImageNet validation set with blur is used for the hyper-parameter grid search. Table 2 reports the results. TULiP achieves top performance on ImageNet-C except for methods that require training data (MCD, MDS, ViM). This usually leads to longer evaluation time. For instance, ViM takes more than 30 minutes just to extract ID information using a recent GPU machine. In contrast, a typical full evaluation of TULiP on test split takes  $3\times$  less time. On the other hand, ImageNet-R contains images that are less similar to ImageNet-1K (i.e. further from ID). When tuned on a near validation set like Blur-ImageNet, TULiP tends to favour near OOD by trading off the far ones. This is consistent with Table 1 and equation 8. Such phenomena are further demonstrated in Fig. 4.
+
+{9}------------------------------------------------
+
+![Figure 4: Results by varying epsilon and lambda on ImageNet-200 ID. The figure contains four subplots: a) lambda vs. near-AUROC, b) lambda vs. far-AUROC, c) epsilon vs. near-AUROC, and d) epsilon vs. far-AUROC. Each subplot shows two data series for epsilon = 0.5 (blue diamonds) and epsilon = 1.5 (orange circles). In (a) and (b), the x-axis is lambda (0 to 2) and the y-axis is AUROC (83 to 91). In (c) and (d), the x-axis is epsilon (0.5 to 1.5) and the y-axis is AUROC (83 to 90).](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 4: Results by varying epsilon and lambda on ImageNet-200 ID. The figure contains four subplots: a) lambda vs. near-AUROC, b) lambda vs. far-AUROC, c) epsilon vs. near-AUROC, and d) epsilon vs. far-AUROC. Each subplot shows two data series for epsilon = 0.5 (blue diamonds) and epsilon = 1.5 (orange circles). In (a) and (b), the x-axis is lambda (0 to 2) and the y-axis is AUROC (83 to 91). In (c) and (d), the x-axis is epsilon (0.5 to 1.5) and the y-axis is AUROC (83 to 90).
+
+Figure 4: Results by varying  $\epsilon$  and  $\lambda$  on ImageNet-200 ID. The value of  $\lambda$  in either the horizontal axis or legend should be read as, e.g.,  $\lambda = 1.5/\sqrt{e}$ .
+
+**Network Architecture Choice** To verify TULiP across different network architectures, we conduct experiments with various networks on semantic-shift OOD with ImageNet-1K. The pre-trained models and weights are collected directly from *torchvision* (maintainers & contributors, 2016), and we only consider methods that work without additional modifications for compatibility. Results are shown in Fig. 3. TULiP relies on assumptions of the training process, which could be potentially violated by different training protocols and architectures. Nevertheless, TULiP still outperforms baseline methods consistently across the board, comparable to Table 1. Such results further suggest the effectiveness and versatility of TULiP.
+
+Table 2: CS OOD results by averaging 3 runs. Results are in AUROC (higher is better).
+
+| Method | Blur | ImNet-C | ImNet-R | ImNet-ES |
+|-|-|-|-|-|
+| MCD † | 69.90 | 77.06 | 80.52 | 79.98 |
+| MDS † | 55.02 | 70.94 | 69.62 | 49.66 |
+| VIM † | 73.88 | <b>83.93</b> | <b>87.92</b> | 82.54 |
+| ODIN | <u>79.43</u> | 77.48 | 85.35 | 81.94 |
+| EBO | 74.41 | 81.21 | <u>87.05</u> | <u>84.41</u> |
+| MLS | 74.23 | 81.06 | 86.72 | 84.17 |
+| ASH | 78.42 | 82.18 | 85.24 | 84.22 |
+| <b>TULiP</b> | <b>85.34</b> | <b>82.91</b> | <b>82.07</b> | <b>85.91</b> |
+
+**Ablation Study and Hyper-parameters** We conduct experiments on semantic-shifted ImageNet-200 to analyze the effect of hyper-parameters. Results are shown in Fig. 4, where we observe a trade-off in near and far OOD performance. It is also clear from the results that  $\lambda$  and Lemma 3.2 boosts the performance and hyper-parameter stability (mainly to  $\epsilon$ ) of TULiP. In practice,  $\epsilon$  controls the **overall** strength of weight perturbation and, hence, the most important hyper-parameter of TULiP. Our method failed to achieve consistent performance across various datasets without layer-wise scaling, potentially due to its increased vulnerability to hyper-parameters and training setups. Please refer to Sec. C for more details.
+
+![Figure 3: ImageNet-1K OpenOOD benchmarks on different network architectures: MobileNet V3 Large (MbNet), VGG 16 (Simonyan & Zisserman, 2015), and RegNet Y 16GF (Radosavovic et al., 2020). The figure contains two subplots: Near OOD and Far OOD. Each subplot shows AUROC (%) for three methods: TULiP (red star), MLS (blue circle), and ODIN (green diamond) for MbNet, VGG, and RegNet architectures. TULiP consistently outperforms the other methods across all architectures and OOD types.](7c2f0efb2c5d10a52ce19ba33d9d3cec_img.jpg)
+
+Figure 3: ImageNet-1K OpenOOD benchmarks on different network architectures: MobileNet V3 Large (MbNet), VGG 16 (Simonyan & Zisserman, 2015), and RegNet Y 16GF (Radosavovic et al., 2020). The figure contains two subplots: Near OOD and Far OOD. Each subplot shows AUROC (%) for three methods: TULiP (red star), MLS (blue circle), and ODIN (green diamond) for MbNet, VGG, and RegNet architectures. TULiP consistently outperforms the other methods across all architectures and OOD types.
+
+Figure 3: ImageNet-1K OpenOOD benchmarks on different network architectures: MobileNet V3 Large (MbNet) (Howard et al., 2019), VGG 16 (Simonyan & Zisserman, 2015), RegNet Y 16GF (Radosavovic et al., 2020).
+
+## 6 CONCLUSION
+
+In this study, we present TULiP, an uncertainty estimator for OOD detection. Our method is driven by the fluctuations under linearized training dynamics and excels in practical experiments. However, there are some limitations and future works remaining. Theoretically, our framework only considers functional perturbation. The perturbation on the NTK is also important (Kobayashi et al., 2022) and could be integrated into the estimator in the future. Furthermore, the layer-wise scaling scheme deserves more exploration as being discussed in Appendix C.2. Empirically, TULiP does not achieve state-of-the-art performance when the OOD data is far from ID (far-OOD). Such tradeoff in Fig. 4 hints at the inconsistency of best hyper-parameters for different setups. Future works may improve upon these aspects, covering a wider range of OOD data by examining the network parameters and refining weight perturbations. As shown in Appendix C.4, it is also beneficial to further develop TULiP for networks other than convolutional ones, such as transformers. In a broader aspect, exploring TULiP in other learning paradigms, such as Active Learning (Wang et al., 2022a) or Reinforcement Learning (Szepesvari, 2010) will be valuable.
+
+ Rest of paper (reference and Appendix) is removed.

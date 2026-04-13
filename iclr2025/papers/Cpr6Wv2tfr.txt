@@ -1,0 +1,412 @@
+
+
+{0}------------------------------------------------
+
+# OPTAMI: GLOBAL SUPERLINEAR CONVERGENCE OF HIGH-ORDER METHODS
+
+Dmitry Kamzolov<sup>1,2,\*</sup>, Artem Agafonov<sup>1,3</sup>, Dmitry Pasechnyuk<sup>1</sup>,
+
+Alexander Gasnikov<sup>4,3,5</sup>, Martin Takáč<sup>1</sup>
+
+<sup>1</sup> Mohamed bin Zayed University of Artificial Intelligence, Abu Dhabi, UAE
+
+<sup>2</sup> Toulouse School of Economics, Toulouse, France
+
+<sup>3</sup> Moscow Institute of Physics and Technology, Dolgoprudny, Russia
+
+<sup>4</sup> Innopolis University AI Research Center, Kazan, Russia
+
+<sup>5</sup> Institute for System Programming RAS, Moscow, Russia
+
+## ABSTRACT
+
+Second-order methods for convex optimization outperform first-order methods in terms of theoretical iteration convergence, achieving rates up to  $O(k^{-5})$  for highly-smooth functions. However, their practical performance and applications are limited due to their multi-level structure and implementation complexity. In this paper, we present new results on high-order optimization methods, supported by their practical performance. First, we show that the basic high-order methods, such as the Cubic Regularized Newton Method, exhibit global superlinear convergence for  $\mu$ -strongly star-convex functions, a class that includes  $\mu$ -strongly convex functions and some non-convex functions. Theoretical convergence results are both inspired and supported by the practical performance of these methods. Secondly, we propose a practical version of the Nesterov Accelerated Tensor method, called NATA. It significantly outperforms the classical variant and other high-order acceleration techniques in practice. The convergence of NATA is also supported by theoretical results. Finally, we introduce an open-source computational library for high-order methods, called OPTAMI. This library includes various methods, acceleration techniques, and subproblem solvers, all implemented as PyTorch optimizers, thereby facilitating the practical application of high-order methods to a wide range of optimization problems. We hope this library will simplify research and practical comparison of methods beyond first-order.
+
+## 1 INTRODUCTION
+
+In this paper, we consider the following unconstrained optimization problem:
+
+$$\min_{x \in \mathbb{E}} f(x), \quad (1)$$
+
+where  $\mathbb{E}$  is a  $d$ -dimensional real value space and  $f(x)$  is a highly-smooth function
+
+**Definition 1.1** *Function  $f$  has  $L_p$ -Lipschitz-continuous  $p$ -th derivative, if*
+
+$$\|D^p f(x) - D^p f(y)\|_{op} \leq L_p \|x - y\| \quad \forall x, y \in \mathbb{E}, \quad (2)$$
+
+where  $D^p f(x)$  is a  $p$ -th order derivative, and  $\|\cdot\|_{op}$  is an operator norm.
+
+In the paper, we primarily focus on three main cases:  $p = \{1; 2; 3\}$ . We assume that the function  $f$  is convex, although for some results, we relax this assumption to star-convexity. By  $x^*$  we denote the minimum of  $f$ .
+
+Second-order methods are widely used in optimization, finding applications in diverse fields such as machine learning, statistics, control, and economics (Polyak, 1987; Boyd & Vandenberghe, 2004; Nocedal & Wright, 1999; Nesterov, 2018). Historically, much of the research on second-order methods has focused on their local quadratic convergence. A well-known method achieving this rapid local rate is the classical Newton method (Newton, 1687; Raphson, 1697; Kantorovich, 1948b). However, it can diverge if the starting point is far from the solution (Nesterov, 1983, Example 1.2.3). To address this divergence issue, the Damped Newton method introduces a step-size (damping
+
+\*Corresponding author. e-mail: kamzolov.opt@gmail.com
+
+{1}------------------------------------------------
+
+coefficient) to ensure global convergence. However, the best-known global rate for the Damped Newton method is  $O(T^{-1/3})$  (Berahas et al., 2022), which is slower than the gradient method’s convergence  $O(T^{-1})$ . The Cubic Regularized Newton (CRN) method, introduced by Nesterov & Polyak (2006), was the first second-order method with a proper global convergence rate  $O(T^{-2})$ , outperforming the gradient method. Additionally, for strongly convex functions, it retains a quadratic local convergence rate, similar to the Newton method (Doikov & Nesterov, 2022). The introduction of CRN represented a significant milestone in the advancement of second-order optimization methods.
+
+**Hessian approximations.** In large-scale optimization problems, computing the (inverse) Hessian or solving a linear system can be computationally expensive. Thus, it is natural to consider inexact or stochastic algorithms to reduce these overheads. In convex optimization, several studies have explored globally convergent second-order methods with inexact Hessians (Ghadimi et al., 2017), higher-order methods with inexact and stochastic derivatives (Agafonov et al., 2024a;b), and adaptive stochastic methods (Antonakopoulos et al., 2022). Recently, Quasi-Newton (QN) Hessian approximations have been integrated into global second-order methods, resulting in algorithms that outperform first-order methods — even when relying solely on first-order information (Kamzolov et al., 2023b; Jiang et al., 2023; Scieur, 2023; Jiang et al., 2024). Furthermore, numerous second-order approximation techniques have been developed for training neural networks, often surpassing state-of-the-art first-order methods. Notable examples include Shampoo (Gupta et al., 2018), SOAP (Vyas et al., 2025), and SOPHIA (Liu et al., 2024), which showcase the effectiveness of second-order approaches in practical applications and benchmarks<sup>1</sup> (Dahl et al., 2023). Such potential motivates us to study second-order methods.
+
+**Accelerations.** The Cubic Regularized Newton is the basic method in the line-up of second-order methods. There are two main directions for its improvement: accelerated second-order methods, including Nesterov-type acceleration (Nesterov, 2008; 2021b), near-optimal acceleration Monteiro & Svaiter (2013); Gasnikov et al. (2019b), and optimal acceleration Kovalev & Gasnikov (2022); Carmon et al. (2022); and third-order methods with superfast subsolver, which allows making a third-order step without computation of third-order derivative (Nesterov, 2021b;c;a; Kamzolov, 2020).
+
+### 1.1 OPTAMI: PRACTICAL PERFORMANCE OF HIGH-ORDER METHODS
+
+The theoretical results mentioned above highlight the significant potential of second-order methods in optimization. However, their practical adoption remains limited due to the computational cost of calculating second derivatives, the variety of acceleration techniques, and the use of different Hessian approximation methods to reduce iteration costs. To address these challenges, we introduce OPTAMI<sup>2</sup>, a unified library implemented in PyTorch for second-order and higher-order optimization methods.
+
+One particular goal of this library is a direct *comparison of a wide variety of acceleration techniques*, which include Nesterov acceleration (Nesterov, 2021b) with a rate  $O(T^{-(p+1)})$ ; Near-Optimal Monteiro-Svaiter Acceleration (Monteiro & Svaiter, 2013; Bubeck et al., 2019; Gasnikov et al., 2019b; Kamzolov, 2020) with a rate  $\tilde{O}(T^{-(3p+1)/2})$ ; Near-Optimal Proximal-Point Acceleration (Nesterov, 2021a) with the rate  $\tilde{O}(T^{-(3p+1)/2})$ ; Optimal Acceleration (Kovalev & Gasnikov, 2022; Carmon et al., 2022) with a rate  $O(T^{-(3p+1)/2})$  and more Nesterov (2023). Despite the theoretical advancements in these methods, the literature lacks a comprehensive practical comparison, especially for higher-order methods with  $p = 3$ . In the process of developing the library, we encountered several open challenges.
+
+**Methods exceed linear convergence in practice.** We observed in experiments that second-order and third-order methods often achieve superlinear convergence rates for  $\mu$ -strongly convex functions (Figure 1). From a theoretical standpoint, this is surprising. The lower bound is
+
+![Figure 1: A line graph titled 'Nesterov 3-rd order Lower-bound Function, mu = 0.001'. The y-axis is labeled 'f(x_t) - f(x^*)' and is on a logarithmic scale from 10^-3 to 10^0. The x-axis is labeled 'Iterations, t' and ranges from 0 to 500. Three curves are shown: a green dashed line for 'Gradient Descent, L_1 = 10.0' which decreases linearly on the log scale; a blue dashed line for 'Cubic Newton, L_2 = 10.0' which drops sharply around iteration 300; and a red solid line for 'Basic Tensor Method, L_3 = 10.0' which drops sharply around iteration 200. All three curves eventually reach a horizontal dashed green line at the bottom of the graph, representing the optimal convergence rate.](1ac0e11d90bece49015adc89be472a39_img.jpg)
+
+Figure 1: A line graph titled 'Nesterov 3-rd order Lower-bound Function, mu = 0.001'. The y-axis is labeled 'f(x\_t) - f(x^\*)' and is on a logarithmic scale from 10^-3 to 10^0. The x-axis is labeled 'Iterations, t' and ranges from 0 to 500. Three curves are shown: a green dashed line for 'Gradient Descent, L\_1 = 10.0' which decreases linearly on the log scale; a blue dashed line for 'Cubic Newton, L\_2 = 10.0' which drops sharply around iteration 300; and a red solid line for 'Basic Tensor Method, L\_3 = 10.0' which drops sharply around iteration 200. All three curves eventually reach a horizontal dashed green line at the bottom of the graph, representing the optimal convergence rate.
+
+Figure 1: Third-order Nesterov’s lower-bound function. Cubic Newton and Basic Tensor method converge *superlinearly*. In contrast, GD demonstrates *linear* rate.
+
+<sup>1</sup><https://mlcommons.org/benchmarks/algorithms/>
+
+<sup>2</sup><https://github.com/OPTAMI/OPTAMI>
+
+{2}------------------------------------------------
+
+$$\Omega \left( \left( \frac{L_2 D}{\mu} \right)^{2/7} + \log \log \left( \frac{\mu^2}{L_2^2 \varepsilon} \right) \right) \text{ for } \varepsilon \leq c_1 \frac{\mu^3}{L_2^2} = c_1 r \text{ as established by Arjevani et al. (2019),}$$
+
+where  $r$  is the radius of quadratic convergence  $\{x \in \mathbb{E} : f(x) - f^* \leq c_2 r = c_2 \frac{\mu^3}{L_2^2}\}$  and  $c_1, c_2$  are universal constants. The power  $2/7$  corresponds to the optimal accelerated method. However, this lower bound applies only when  $\varepsilon \leq c_1 r$ , which corresponds to small values of  $\varepsilon$ . In the case when  $\varepsilon > c_1 r$ , meaning the desired accuracy exceeds the radius of the quadratic convergence region, it may be possible to achieve faster global rates of Cubic Regularized Newton method than linear convergence.
+
+**Practical performance of accelerated methods.** We also observed that the Nesterov Accelerated Tensor Method (Nesterov, 2021b) performs worse or on par with its non-accelerated counterpart in practice. This contrasts with first-order methods, where acceleration is typically beneficial. These practical limitations lead to the method being underutilized (Scieur, 2023; Carmon et al., 2022; Antonakopoulos et al., 2022).
+
+In our work, alongside introducing the OPTAMI library, we aim to address these open challenges from both theoretical and practical perspectives.
+
+**Contributions.** We summarize our key contributions as follows:
+
+- 1. Global Superlinear Convergence of Second and High-order methods.** Our main contribution is providing theoretical guarantees for *global superlinear convergence* of the Cubic Regularized Newton Method and the Basic Tensor Methods for  $\mu$ -strongly star-convex functions. These theoretical results are validated by practical performance. These results are a significant improvement over the current state-of-the-art in second-order methods.
+- 2. Nesterov Accelerated Tensor Method with  $A_t$ -Adaptation (NATA).** We propose a new practical variant of the Nesterov Accelerated Tensor Method, called NATA. This method addresses the practical limitations of the classical version of acceleration for high-order methods. We demonstrate the superior performance of NATA compared to both the classical Nesterov Accelerated Tensor Method and Basic Tensor Method for  $p = 2$  and  $p = 3$ . We also prove a convergence theorem for NATA that matches the classical convergence rates.
+- 3. Comparative Analysis of High-Order Acceleration Methods.** We provide a practical comparison of state-of-the-art (SOTA) acceleration techniques for high-order methods, with a focus on the cases  $p = 2$  and  $p = 3$ . Our experiments show that the proposed NATA method consistently outperforms all SOTA acceleration techniques, including both optimal and near-optimal methods.
+- 4. Open-Source Computational Library for Optimization Methods (OPTAMI).** We introduce *OPTAMI*, an open-source library for high-order optimization methods. It facilitates both practical research and applications in this field. Its modular architecture supports various combinations of acceleration techniques with basic methods and their solvers. All methods are implemented as PyTorch optimizers. This allows for seamless application of high-order methods to a wide range of optimization problems, including neural networks.
+
+## 2 METHODS AND NOTATION
+
+**Notation.** In the paper, we consider a  $d$ -dimensional real value space  $\mathbb{E}$ .  $\mathbb{E}^*$  is a dual space, composed of all linear functionals on  $\mathbb{E}$ . For a functional  $g \in \mathbb{E}^*$ , we denote by  $\langle g, x \rangle$  its value at  $x \in \mathbb{E}$ . For  $p \geq 1$ , we define  $D^p f(x)[h_1, \dots, h_p]$  as a directional  $p$ -th order derivative of  $f$  along  $h_i \in \mathbb{E}$ ,  $i = 1, \dots, p$ . If all  $h_i = h$  we simplify  $D^p f(x)[h_1, \dots, h_p]$  as  $D^p f(x)[h]^p$ . So, for example,  $D^1 f(x)[h] = \langle \nabla f(x), h \rangle$  and  $D^2 f(x)[h]^2 = \langle \nabla^2 f(x)h, h \rangle$ . Note, that  $\nabla f(x) \in \mathbb{E}^*$ ,  $\nabla^2 f(x)h \in \mathbb{E}^*$ . Now, we introduce different norms for spaces  $\mathbb{E}$  and  $\mathbb{E}^*$ . For a self-adjoint positive-definite operator  $B : \mathbb{E} \rightarrow \mathbb{E}^*$ , we can endow these spaces with conjugate Euclidian norms:
+
+$$\|x\| = \langle Bx, x \rangle^{1/2}, \quad x \in \mathbb{E}, \quad \|g\|_* = \langle g, B^{-1}g \rangle^{1/2}, \quad g \in \mathbb{E}^*.$$
+
+So, for an identity matrix  $B = I$ , we get the classical 2-norm  $\|x\|_2 = \|x\|_I = \langle x, x \rangle^{1/2}$ . We denote  $\mathbf{e} \in \mathbb{R}^d$  as a vector of all ones and  $\mathbf{0} \in \mathbb{R}^d$  as a vector of all zeroes.
+
+![Figure 2: Comparison of Basic Methods vs Nesterov Accelerated Methods. The plot shows the function value difference f(x_t) - f(x^*) on a logarithmic y-axis (from 10^-4 to 10^0) against iterations t (from 0 to 250). Four curves are shown: Cubic Newton, L2 = 0.1 (blue dashed line); Nesterov Accelerated Cubic, L2 = 0.1 (red dashed line); Basic Tensor Method, L3 = 0.1 (green dashed line); and Nesterov Accelerated Tensor, L3 = 0.1 (orange dashed line). The Cubic Newton method shows the fastest convergence, reaching the lowest function value difference. The Nesterov Accelerated Tensor method shows the slowest convergence, remaining above the other methods.](2b37b4c11c25b2f26358c3d686ed3441_img.jpg)
+
+Figure 2: Comparison of Basic Methods vs Nesterov Accelerated Methods. The plot shows the function value difference f(x\_t) - f(x^\*) on a logarithmic y-axis (from 10^-4 to 10^0) against iterations t (from 0 to 250). Four curves are shown: Cubic Newton, L2 = 0.1 (blue dashed line); Nesterov Accelerated Cubic, L2 = 0.1 (red dashed line); Basic Tensor Method, L3 = 0.1 (green dashed line); and Nesterov Accelerated Tensor, L3 = 0.1 (orange dashed line). The Cubic Newton method shows the fastest convergence, reaching the lowest function value difference. The Nesterov Accelerated Tensor method shows the slowest convergence, remaining above the other methods.
+
+Figure 2: Comparison of Basic Methods vs Nesterov Accelerated Methods
+
+{3}------------------------------------------------
+
+We introduce two types of distance measures between the starting point and the solution: for non-accelerated methods, we consider the diameter of the level set  $\mathcal{L} = \{x \in \mathbb{E} : f(x) \leq f(x_0)\}$
+
+$$D = \max_{x \in \mathcal{L}} \|x - x^*\|; \quad (3)$$
+
+and for accelerated methods, we use the Euclidean distance given by
+
+$$R = \|x_0 - x^*\|. \quad (4)$$
+
+### 2.1 METHODS IN OPTAMI LIBRARY
+
+In this subsection, we present a detailed overview of the core methods implemented in the OPTAMI library. Second-order methods have a more complicated structure. The library's design is structured into three hierarchical levels: basic methods, subsolvers, and accelerations. This modular architecture ensures flexibility, extensibility, and adaptability to a variety of optimization tasks. It allows users to combine multiple basic methods with various accelerations and subsolvers without the need to implement entire methods from scratch. We leave technical details of the subsolvers to Appendix C.
+
+**BASIC METHODS.** The Basic methods are the foundational building blocks of the library. These monotone, non-accelerated methods form the backbone for constructing more sophisticated accelerated algorithms. Below, we outline the primary basic methods available in the library.
+
+**Newton method.** The classical (Damped) Newton method is defined as follows:
+
+$$x_{t+1} = x_t - \gamma_t [\nabla^2 f(x_t)]^{-1} \nabla f(x_t), \quad (5)$$
+
+where  $\gamma_t \in \mathbb{R}_+$  is a step-size or damping coefficient. The Newton step originates from the second-order Taylor expansion  $\Phi_2(x, x_t)$ :
+
+$$x_{t+1} = \operatorname{argmin}_{x \in \mathbb{E}} \{ \Phi_2(x, x_t) = f(x_t) + \langle \nabla f(x_t), x - x_t \rangle + \langle \nabla^2 f(x_t)(x - x_t), x - x_t \rangle \}. \quad (6)$$
+
+The solution of this problem corresponds to (5) with  $\gamma_t = 1$ . The Newton method lacks global convergence, while the Damped Newton method exhibits a slow global convergence rate of  $O(T^{-1/3})$ . This is because the approximation  $\Phi_2(x, x_t)$  is not guaranteed to be an upper bound for  $f$ , meaning it is possible that  $f(x) > \Phi_2(x, x_t)$ .
+
+**Cubic Regularized Newton method.** To address this issue, the Cubic Regularized Newton (CRN) method was proposed
+
+$$x_{t+1} = \operatorname{argmin}_{y \in \mathbb{E}} \{ \Omega_{M_2}(x, x_t) = \Phi_2(x, x_t) + \frac{M_2}{6} \|x - x_t\|^3 \}. \quad (7)$$
+
+For the function  $f(x)$  with  $L_2$ -Lipschitz Hessian, the model  $\Omega_{M_2}(y, x_t)$  is an upper bound of the function  $f(x)$  for  $M_2 \geq L_2$ ; hence  $\Omega_{M_2}(x, x_t) \geq f(x)$ . This method is the first second-order method with a global convergence rate of  $O\left(\frac{M_2 D^3}{L_2}\right)$ , which is faster than the Gradient Method (GM).
+
+**Basic Tensor method.** High-order Taylor approximation of a function  $f$  can be written as follows:
+
+$$\Phi_{x,p}(y) = f(x) + \sum_{k=1}^p \frac{1}{k!} D^k f(x) [y - x]^k, \quad x, y \in \mathbb{E}, \quad (8)$$
+
+where, for  $p = 1$ , we simplify notation to  $\Phi_x(y)$ . From (2), we can get the next upper-bound of the function  $f(x)$  (Nesterov, 2018; 2021b)
+
+$$|f(y) - \Phi_{x,p}(y)| \leq \frac{L_p}{(p+1)!} \|y - x\|^{p+1}, \quad (9)$$
+
+which leads us to the high-order model
+
+$$\Omega_{x, M_p}(y) = \Phi_{x,p}(y) + \frac{M_p}{(p+1)!} \|y - x\|^{p+1}. \quad (10)$$
+
+Now, we can formulate the Basic Tensor method
+
+$$x_{t+1} = \operatorname{argmin}_{y \in \mathbb{E}} \{ \Omega_{x_t, M_p}(y) \}, \quad (11)$$
+
+where  $M_p \geq pL_p$ . For  $p = 1$  and  $M_1 \geq L_1$ , it is the gradient descent step  $x_{t+1} = x_t - \frac{1}{M_1} \nabla f(x_t)$  with the convergence rate  $O\left(\frac{M_1 R^2}{L_1}\right)$  for convex functions. For  $p = 2$  and  $M_2 \geq L_2$ , it is a CRN Method from (7). For  $p = 3$  and  $M_3 \geq 3L_3$ , it is a Basic Third-order Method (Nesterov, 2021b):
+
+$$x_{t+1} = x_t + \operatorname{argmin}_{h \in \mathbb{E}} \left\{ f(x_t) + \nabla f(x_t) [h] + \frac{1}{2} \nabla^2 f(x_t) [h]^2 + \frac{1}{6} D^3 f(x_t) [h]^3 + \frac{M_3}{24} \|h\|^4 \right\}, \quad (12)$$
+
+with the convergence rate  $O\left(\frac{M_3 D^4}{L_3}\right)$ . The step (12) can be performed with almost the same computational complexity (up to a logarithmic factor) by using the Bregman Distance Gradient Method as a subsolver (Nesterov, 2021b;c). The details are written in the Appendix C.1.
+
+**ACCELERATIONS.** Compared to first-order methods, second-order and higher-order methods achieve three types of acceleration rates: Nesterov-type acceleration with the rate  $O(T^{-(p+1)})$ , nearly-optimal acceleration  $\tilde{O}(T^{-(3p+1)/2})$ , and optimal one  $O(T^{-(3p+1)/2})$ , where  $\tilde{O}(\cdot)$  means up to a logarithmic factor. OPTAMI library includes four key variants of acceleration techniques:
+
+{4}------------------------------------------------
+
+- Nesterov Accelerated Tensor Method (Algorithm 1) with a rate  $O(T^{-(p+1)})$  (Nesterov, 2021b);
+- Near-Optimal Tensor Acceleration (Algorithm 5) with a rate  $\tilde{O}(T^{-(3p+1)/2})$  (Bubeck et al., 2019; Gasnikov et al., 2019b; Kamzolov, 2020);
+- Near-Optimal Proximal-Point Acceleration Method with Segment Search (Algorithm 6) with the rate  $\tilde{O}(T^{-(3p+1)/2})$  (Nesterov, 2021a);
+- Optimal Acceleration (Algorithm 7) with a rate  $O(T^{-(3p+1)/2})$  (Kovalev & Gasnikov, 2022).
+
+These methods are presented in detail in Section 3.1 for Nesterov acceleration, and in Appendix D for the remaining algorithms.
+
+## 3 IMPROVING PRACTICAL PERFORMANCE OF ACCELERATED METHODS
+
+While accelerated second-order and higher-order methods provide provable theoretical advancements over their non-accelerated counterparts, a detailed comparison of their practical performance seems to be underexplored in the literature. Notably, techniques like Nesterov acceleration, which are highly effective for first-order methods, can slow down second-order and higher-order methods, particularly in the initial stages (Scieur, 2023; Carmon et al., 2022; Antonakopoulos et al., 2022). To illustrate this, we present a practical example using the logistic regression problem (Figure 2). The accelerated versions appear slower, which contradicts the theoretical expectations.
+
+In this section, we first introduce a novel algorithm, NATA, that enhances the practical performance of the Nesterov Accelerated Tensor Method while maintaining the same theoretical guarantees. We then provide a comprehensive computational comparison of five different acceleration techniques for second-order and higher-order optimization.
+
+### 3.1 NESTEROV ACCELERATED TENSOR METHOD WITH $A_t$ -ADAPTATION (NATA)
+
+#### Algorithm 1 Nesterov Accelerated Tensor Method
+
+- 1: **Input:**  $x_0 = v_0$  is starting point, constant  $M_p$ ,  $\psi_0(z) = \frac{1}{p+1}\|z - x_0\|^{p+1}$ , total number of iterations  $T$ , and sequence  $A_t$ .
+- 2: **for**  $t \geq 0$  **do**
+- 3:    $a_{t+1} = A_{t+1} - A_t$
+- 4:    $y_t = \frac{A_t}{A_{t+1}}x_t + \frac{a_{t+1}}{A_{t+1}}v_t$
+- 5:    $x_{t+1} = \operatorname{argmin}_{y \in \{\Omega_{y_t, M_p}(y)\}}$
+- 6:    $\psi_{t+1}(z) = \psi_t(z) + a_{t+1}f(x_{t+1}) + \langle \nabla f(x_{t+1}), z - x_{t+1} \rangle$
+- 7:    $v_{t+1} = \operatorname{argmin}_{x \in \psi_{t+1}(z)}$
+- 8: **end for**
+- 9: **return**  $x_{T+1}$
+
+In this subsection, we investigate the causes of the underperformance of Nesterov Accelerated Tensor method and propose a solution. We begin by revisiting Algorithm 1, with further details provided in Appendix D.1. According to the theoretical convergence result  $f(x_t) - f(x^*) \leq \frac{\|x^* - x_0\|^{p+1}}{(p+1)A_t}$  from (Nesterov, 2021c, Theorem 2.3), the sequence  $A_t$  is directly connected with the method’s performance - the larger the  $A_t$ , the faster the convergence. Therefore, our goal is to maximize  $A_t$ . Theoretically,  $A_t$  should be defined as  $A_t = \frac{1}{t_p} t^{p+1}$ , where  $\nu_2 = \frac{1}{24}$  for  $M_2 = L_2$  and  $\nu_3 = \frac{5}{3024}$  for  $M_3 = 6L_3$ . However, the values of  $\nu_p$  appear to be quite small, which limits the speed of convergence. Can these values be increased? The answer is yes. We propose the Nesterov Accelerated Tensor Method with  $A_t$ -Adaptation, which selects these parameters more aggressively, leading to faster convergence.
+
+**Theorem 3.1** For convex function  $f$  with  $L_p$ -Lipschitz-continuous  $p$ -th derivative, to find  $x_T$  such that  $f(x_T) - f(x^*) \leq \varepsilon$ , it suffices to perform no more than  $T \geq 1$  iterations of the Nesterov Accelerated Tensor Method with  $A_t$ -Adaptation (NATA) with  $M_p \geq pL_p$  (Algorithm 2), where
+
+$$T = O\left(\left(\frac{M_p R^{p+1}}{\varepsilon}\right)^{\frac{1}{p+1}} + \log_\theta\left(\frac{\nu^{\max}}{\nu^{\min}}\right)\right). \quad (13)$$
+
+![Figure 3: A log-linear plot titled 'a9a, Logistic Regression, L2 = L3 = 0.1'. The x-axis is 'Hessian computations' ranging from 0 to 250. The y-axis is '||f(x_t) - f(x^*)||' on a logarithmic scale from 10^-10 to 10^0. The plot compares several methods: Cubic Nesterov (green dashed line), Nesterov Accelerated Cubic (blue dashed line), Cubic NATA with adaptive nu (blue solid line), Cubic NATA with tuned nu = 1.0 (red dashed line), Basic Tensor Method (orange dashed line), Nesterov Accelerated Tensor (red solid line), and Tensor NATA with tuned nu = 0.5 (orange solid line). The NATA methods (solid lines) show significantly faster convergence (lower error) than their non-adaptive counterparts (dashed lines) and the basic tensor method.](867fce43c58fda6178b06e454b4ed73a_img.jpg)
+
+Figure 3: A log-linear plot titled 'a9a, Logistic Regression, L2 = L3 = 0.1'. The x-axis is 'Hessian computations' ranging from 0 to 250. The y-axis is '||f(x\_t) - f(x^\*)||' on a logarithmic scale from 10^-10 to 10^0. The plot compares several methods: Cubic Nesterov (green dashed line), Nesterov Accelerated Cubic (blue dashed line), Cubic NATA with adaptive nu (blue solid line), Cubic NATA with tuned nu = 1.0 (red dashed line), Basic Tensor Method (orange dashed line), Nesterov Accelerated Tensor (red solid line), and Tensor NATA with tuned nu = 0.5 (orange solid line). The NATA methods (solid lines) show significantly faster convergence (lower error) than their non-adaptive counterparts (dashed lines) and the basic tensor method.
+
+Figure 3: Basic and Nesterov Accelerated Methods vs new NATA Methods.
+
+{5}------------------------------------------------
+
+#### **Algorithm 2** Nesterov Accelerated Tensor Method with $A_t$ -Adaptation (NATA)
+
+---
+
+```
+
+1: Input:  $x_0 = v_0$  is starting point,  $\psi_0(z) = \frac{1}{p+1} \|z - x_0\|^{p+1}$ , constant  $M_p$ , total number of iterations  $T$ ,  $\tilde{A}_0 = 0$ ,  $\nu^{\min} = \nu_p$ ,  $\nu^{\max} \geq \nu_p$  is a maximal value of  $\nu$ ,  $\theta > 1$  is a scaling parameter for  $\nu$ , and  $\nu_0 \leq \nu^{\max}$  is a starting value of  $\nu$ .
+2: for  $t \geq 0$  do
+3:    $\nu^t = \nu^t \theta$ 
+4:   repeat
+5:      $\nu^t = \max \left\{ \frac{\nu^t}{\theta}, \nu^{\min} \right\}$ 
+6:      $\tilde{a}_{t+1} = \frac{\nu^t}{M_p} ((t+1)^{p+1} - t^{p+1})$  and  $\tilde{A}_{t+1} = \tilde{A}_t + \tilde{a}_{t+1}$ 
+7:      $y_t = \frac{\tilde{A}_t}{A_{t+1}} x_t + \frac{\tilde{a}_{t+1}}{A_{t+1}} v_t$ 
+8:      $x_{t+1} = \operatorname{argmin}_{y \in \mathbb{E}} \{ \Omega_{y_t, M_p}(y) \}$ 
+9:      $\psi_{t+1}(z) = \psi_t(z) + \tilde{a}_{t+1} [f(x_{t+1}) + \langle \nabla f(x_{t+1}), z - x_{t+1} \rangle]$ 
+10:     $v_{t+1} = \operatorname{argmin}_{z \in \mathbb{E}} \psi_{t+1}(z)$ 
+11:    until  $\psi_{t+1}(v_{t+1}) < \tilde{A}_{t+1} f(x_{t+1})$ 
+12:     $\nu^{t+1} = \min \{ \nu^t \theta, \nu^{\max} \}$ 
+13: end for
+14: return  $x_{T+1}$ 
+
+```
+
+---
+
+The proof is presented in the Appendix D.2. The established convergence rate of NATA matches the original method, with an additional factor of  $\log_\theta \left( \frac{\nu^{\max}}{\nu^{\min}} \right)$  accounting for the adaptation of  $\nu_t$ . Next, we demonstrate the practical improvements of NATA compared to the classical methods. As shown in Figure 3, one can see that the Cubic and Tensor variants of NATA significantly outperform the classical Basic and Nesterov Accelerated Methods. We also included versions of Cubic and Tensor NATA with fixed  $\nu^t = 10$  and  $\nu^t = 0.5$ , respectively, where  $\nu^t$  is an additional tunable hyperparameter. This more aggressive variant of NATA can exhibit even faster practical performance, though it may diverge if  $\nu^t$  is not chosen carefully.
+
+### 3.2 COMPUTATIONAL COMPARISON OF ACCELERATION METHODS
+
+We now present a practical comparison of various acceleration techniques for tensor methods in convex optimization, including Nesterov acceleration, near-optimal and optimal accelerations, as well as the newly proposed algorithm, NATA. Specifically, our experiments focus on logistic regression, defined as:
+
+$$f(x) = \frac{1}{n} \sum_{i=1}^n \log(1 + e^{-b_i \langle a_i, x \rangle}) + \frac{\mu}{2} \|x\|_2^2, \quad (14)$$
+
+where  $a_i \in \mathbb{R}^d$  are data features and  $b_i \in \{-1; 1\}$  are data labels for  $i = 1, \dots, n$ . We evaluate performance on the a9a dataset in Figure 4 with regularizer  $\mu = 0$  and  $\mu = 10^{-4}$  in Figure 5.
+
+![Figure 4: Comparison of different cubic and tensor acceleration methods on Logistic Regression for a9a dataset. The figure contains two subplots, a9a and a9b, both showing the function value f(x_t) - f(x^*) on a logarithmic y-axis (from 10^-10 to 10^0) versus Hessian computations on the x-axis (from 0 to 250). Both plots compare several methods: Cubic Newton (dashed green), Nesterov Accelerated Cubic (dashed blue), Cubic NATA with adaptive nu^t (solid blue), Cubic NATA with tuned nu^t = 10.0 (solid red), Near-Optimal Cubic (dashed orange), Cubic Prox. Point Segment Search (dashed yellow), and Optimal Cubic (solid red). In both plots, the Cubic NATA variants (solid blue and solid red) show the fastest convergence, reaching the lowest function values. The Optimal Cubic method (solid red) also performs well. The other methods converge more slowly.](80530169c7b6298ce012a85b906caeb3_img.jpg)
+
+Figure 4: Comparison of different cubic and tensor acceleration methods on Logistic Regression for a9a dataset. The figure contains two subplots, a9a and a9b, both showing the function value f(x\_t) - f(x^\*) on a logarithmic y-axis (from 10^-10 to 10^0) versus Hessian computations on the x-axis (from 0 to 250). Both plots compare several methods: Cubic Newton (dashed green), Nesterov Accelerated Cubic (dashed blue), Cubic NATA with adaptive nu^t (solid blue), Cubic NATA with tuned nu^t = 10.0 (solid red), Near-Optimal Cubic (dashed orange), Cubic Prox. Point Segment Search (dashed yellow), and Optimal Cubic (solid red). In both plots, the Cubic NATA variants (solid blue and solid red) show the fastest convergence, reaching the lowest function values. The Optimal Cubic method (solid red) also performs well. The other methods converge more slowly.
+
+Figure 4: Comparison of different cubic and tensor acceleration methods on Logistic Regression for a9a dataset from the starting point  $x_0 = 3\mathbf{e}$ , where  $\mathbf{e}$  is a vector of all ones.
+
+Let us now discuss the performance of the methods. The new NATA acceleration outperforms all other methods. We attribute this to NATA’s strategy of maximizing  $\tilde{a}_t$  and  $\tilde{A}_t$ , which enables even faster convergence in the later stages. The second-best performer is the Near-Optimal Acceleration method. Although it struggles initially due to a large number of line-search iterations per step, it
+
+{6}------------------------------------------------
+
+gradually requires fewer line-search iterations — less than two per step on average — as parameters from previous line-search steps become well-suited for the current iteration. With fewer line-search iterations, the method accelerates and outpaces the remaining competitors. A promising direction for improving this method would be to refine the line-search process through an advanced line-search strategy. Next, the Nesterov Accelerated method starts off slower than the basic method without acceleration. Eventually, the method accelerates and overtakes the basic version but only for the Cubic version, as  $\nu_3$  is too small for tensor methods. Near-Optimal Proximal-Point Acceleration Method with Segment Search performs very similarly to Basic Methods with only improvement in strongly convex case. It has much fewer iterations, but it does a safe segment search with an average of 3 Basic steps per search. Lastly, the Optimal Acceleration method performs the worst in practice. We believe the main issue lies in the internal parameters, which need tuning and adaptation, as we used the theoretical parameters in our implementation. This leads to many inner iterations without significant global progress. Improving these parameters presents an open question for future research. More details can be found in the Appendix E.
+
+In Figure 5, both basic optimization methods and certain accelerated variants appear to exhibit *global superlinear convergence*, accelerating with each iteration even when far from the solution. This observation naturally raises an important question: Can we theoretically prove that second-order methods achieve *global superlinear convergence*? We address this question in the following section.
+
+![Figure 5: Comparison of different cubic and tensor acceleration methods on regularized Logistic Regression for a9a dataset. The figure contains two plots. The left plot shows the function value f(x_t) - f(x^*) on a log scale (10^-7 to 10^0) versus Hessian computations (0 to 300) for L2 regularization with mu = 0.0001. The right plot shows the same for L3 regularization with mu = 0.1. Both plots compare Cubic Newton, Accelerated Cubic Newton, Cubic NATA with adaptive nu, Cubic NATA with tuned nu = 8.0, Near-Optimal Cubic, Cubic Prox. Point Segment Search, and Optimal Cubic (left) against their tensor counterparts (Tensor Method, Nesterov Accelerated Tensor, Tensor NATA with adaptive nu, Tensor NATA with tuned nu = 1, Near-Optimal Tensor, Tensor Prox. Point Segment Search, Optimal Tensor).](a6a8016b231533e7f34b550f4676afc6_img.jpg)
+
+Figure 5: Comparison of different cubic and tensor acceleration methods on regularized Logistic Regression for a9a dataset. The figure contains two plots. The left plot shows the function value f(x\_t) - f(x^\*) on a log scale (10^-7 to 10^0) versus Hessian computations (0 to 300) for L2 regularization with mu = 0.0001. The right plot shows the same for L3 regularization with mu = 0.1. Both plots compare Cubic Newton, Accelerated Cubic Newton, Cubic NATA with adaptive nu, Cubic NATA with tuned nu = 8.0, Near-Optimal Cubic, Cubic Prox. Point Segment Search, and Optimal Cubic (left) against their tensor counterparts (Tensor Method, Nesterov Accelerated Tensor, Tensor NATA with adaptive nu, Tensor NATA with tuned nu = 1, Near-Optimal Tensor, Tensor Prox. Point Segment Search, Optimal Tensor).
+
+Figure 5: Comparison of different cubic and tensor acceleration methods on regularized Logistic Regression for a9a dataset and  $\mu = 10^{-4}$  from the starting point  $x_0 = 3e$ .
+
+## 4 GLOBAL SUPERLINEAR CONVERGENCE OF HIGH-ORDER METHODS FOR STRONGLY STAR-CONVEX FUNCTIONS
+
+In this section, we establish the global superlinear convergence of high-order methods for strongly star-convex functions. We begin by defining global superlinear convergence.
+
+**Definition 4.1** A method is said to exhibit a *global superlinear convergence rate* with respect to the functional gap if there exists a sequence  $\zeta_t$  for all  $t \in \{0, \dots, T\}$  such that
+
+$$\frac{f(x_{t+1}) - f^*}{f(x_t) - f^*} \leq \zeta_t, \quad 1 > \zeta_t > \zeta_{t+1} \quad \forall t \in \{0, \dots, T\}, \quad \text{and} \quad \zeta_t \rightarrow 0 \text{ for } t \rightarrow +\infty. \quad (15)$$
+
+The essence of this definition lies in the fact that the scaling coefficient  $\zeta_t$  decreases with each iteration. If  $\zeta_t$  remains constant, the method achieves linear convergence. Conversely, if  $\zeta_t$  increases over time (i.e.,  $\zeta_t < \zeta_{t+1}$ ), the convergence becomes sublinear. Additionally, we introduce the values  $\alpha_t = 1 - \frac{f(x_{t+1}) - f^*}{f(x_t) - f^*} \leq 1$ , which typically represent the per-iteration convergence rate from  $f(x_{t+1}) - f^* \leq (1 - \alpha_t)(f(x_t) - f^*)$ . The larger  $\alpha_t$ , means faster convergence. As for constant  $\alpha \leq \alpha_t$ , the method takes a total number of  $T = O\left(\alpha^{-1} \log\left(\frac{f(x_0) - f^*}{\varepsilon}\right)\right)$  iterations to reach  $\varepsilon$ -solution, where  $f(x_{T+1}) - f^* \leq \varepsilon$ . For example, gradient descent exhibits global linear convergence for strongly convex functions with  $\zeta_t = 1 - \alpha = 1 - \frac{\mu}{L_1 + \mu}$ .
+
+![Figure 6: Comparison of Cubic Newton and Basic Tensor methods on regularized Logistic Regression for a9a dataset with mu = 0.0001. The plot shows the function value f(x_t) - f(x^*) on a log scale (10^-7 to 10^0) versus Iterations, t (0 to 300). It compares Gradient Descent (L1 = 0.25), Cubic Newton (L2 = 0.25), and Basic Tensor Method (L3 = 0.25). The Basic Tensor Method shows a much faster convergence rate than Gradient Descent, reaching a lower function value in fewer iterations.](112f3fc5dde002caf1c91da443844204_img.jpg)
+
+Figure 6: Comparison of Cubic Newton and Basic Tensor methods on regularized Logistic Regression for a9a dataset with mu = 0.0001. The plot shows the function value f(x\_t) - f(x^\*) on a log scale (10^-7 to 10^0) versus Iterations, t (0 to 300). It compares Gradient Descent (L1 = 0.25), Cubic Newton (L2 = 0.25), and Basic Tensor Method (L3 = 0.25). The Basic Tensor Method shows a much faster convergence rate than Gradient Descent, reaching a lower function value in fewer iterations.
+
+Figure 6: Cubic Newton and Basic Tensor method have areas of *superlinear* convergence. In contrast, GD demonstrates *linear* rate.
+
+Now, to get some intuition on the performance of the methods, we begin with two simple and classical examples: the  $l_2$ -regularized logistic regression problem and the  $l_2$ -regularized Nesterov’s
+
+{7}------------------------------------------------
+
+lower-bound function. The  $L_2$ -regularized third order Nesterov's lower-bound function from Nesterov (2021b) has the next form
+
+$$f(x) = \frac{1}{4} \sum_{i=1}^{d-1} (x_i - x_{i+1})^4 - x_1 + \frac{\mu}{2} \|x\|_2^2. \quad (16)$$
+
+Figures 1, 6 illustrate that both the Cubic Newton method and Basic Tensor method have areas of superlinear convergence where the graphics are going down faster with each iteration (concave downward). In contrast, gradient descent demonstrates linear convergence. To verify the behavior of these methods, we plot the values  $\alpha_t = 1 - \frac{f(x_{t+1}) - f^*}{f(x_t) - f^*} \leq 1$ .
+
+![Figure 7: Comparison of the basic methods by the relative value 1 - (f(x_{t+1}) - f^*) / (f(x_t) - f^*). The figure contains two subplots. The left subplot, titled 'a9a, Logistic Regression, mu = 0.0001', shows the convergence of three methods: Gradient Descent (green dashed line), Cubic Newton (blue dashed line), and Basic Tensor Method (red solid line). The right subplot, titled 'Nesterov 3-rd order Lower-bound Function, mu = 0.001', shows the same three methods. Both plots have 'Iterations, t' on the x-axis (0 to 500) and the relative value on the y-axis (logarithmic scale from 10^-2 to 10^0). In both cases, Gradient Descent shows linear convergence, while Cubic Newton and Basic Tensor Method show superlinear convergence, with the latter two methods converging faster than Gradient Descent.](ecb25d766719ce041cf4cc390791a098_img.jpg)
+
+Figure 7: Comparison of the basic methods by the relative value 1 - (f(x\_{t+1}) - f^\*) / (f(x\_t) - f^\*). The figure contains two subplots. The left subplot, titled 'a9a, Logistic Regression, mu = 0.0001', shows the convergence of three methods: Gradient Descent (green dashed line), Cubic Newton (blue dashed line), and Basic Tensor Method (red solid line). The right subplot, titled 'Nesterov 3-rd order Lower-bound Function, mu = 0.001', shows the same three methods. Both plots have 'Iterations, t' on the x-axis (0 to 500) and the relative value on the y-axis (logarithmic scale from 10^-2 to 10^0). In both cases, Gradient Descent shows linear convergence, while Cubic Newton and Basic Tensor Method show superlinear convergence, with the latter two methods converging faster than Gradient Descent.
+
+(a) Logistic Regression for a9a dataset starting from the point  $x_0 = 3e$  with  $\mu = 10^{-4}$  regularizer.
+
+(b) Third-order Nesterov's lower-bound function starting from the point  $x_0 = \mathbf{0}$  with  $\mu = 10^{-3}$  regularizer.
+
+Figure 7: Comparison of the basic methods by the relative value  $1 - \frac{f(x_{t+1}) - f^*}{f(x_t) - f^*}$ .
+
+In Figure 7, we observe that at the beginning, all methods slow down for both cases. This phase corresponds to the region where the function's decrease guarantee for (star-)convex functions outperforms the function's decrease guarantee for strongly (star-)convex functions. For example, in the case of gradient descent, this occurs when the guarantee  $f(x_{t+1}) \leq f(x_t) - \frac{1}{2L_1} \|\nabla f(x_{t+1})\|^2$  is better than  $f(x_{t+1}) - f^* \leq \left(1 - \frac{\mu}{\mu + L_1}\right) (f(x_t) - f^*)$ . Despite this region, gradient descent still has global linear convergence for strongly (star-)convex function. As iterations proceed, gradient descent stabilizes around  $\alpha_t = 10^{-3}$ , which corresponds to the theoretical convergence rate  $\kappa$ . The Cubic Newton method and the Basic Tensor method, however, start to accelerate and switch to a superlinear convergence rate. This practical performance gives the intuition for the global superlinear convergence of high-order methods.
+
+Now, we present the theoretical results demonstrating that basic high-order methods indeed have a global superlinear convergence for  $\mu$ -strongly star-convex functions.
+
+**Definition 4.2** Let  $x^*$  be a minimizer of the function  $f$ . For  $q \geq 2$  and  $\mu_q \geq 0$ , the function  $f$  is  $\mu_q$ -uniformly star-convex of degree  $q$  with respect to  $x^*$  if for all  $x \in \mathbb{R}^d$  and  $\forall \alpha \in [0, 1]$
+
+$$f(\alpha x + (1 - \alpha)x^*) \leq \alpha f(x) + (1 - \alpha)f(x^*) - \frac{\alpha(1 - \alpha)\mu_q}{q} \|x - x^*\|^q. \quad (17)$$
+
+If  $q = 2$  then the function  $f$  is  $\mu$ -strongly star-convex with respect to  $x^*$ . If  $\mu_q = 0$  then the function  $f$  is star-convex with respect to  $x^*$ . From this definition, we can additionally get the next useful inequality sometimes called  $q$ -order growth condition
+
+$$\frac{\mu_q}{q} \|x - x^*\|^q \leq f(x) - f(x^*). \quad (18)$$
+
+We start with a simplified version of the theorem which includes the linear convergence and then we present the full version.
+
+**Theorem 4.3** For  $\mu$ -strongly star-convex (17) function  $f$  with  $L_2$ -Lipschitz-continuous Hessian (2), Cubic Regularized Newton Method from (7) with  $M_2 \geq L_2$  converges with the rate
+
+$$f(x_{t+1}) - f^* \leq (1 - \alpha_t) (f(x_t) - f^*), \quad (19)$$
+
+$$\text{for all } \alpha_t \in [0; \alpha_t^*], \text{ where } \alpha_t^* = \frac{-1 + \sqrt{1 + 4\kappa_t}}{2\kappa_t} \text{ and } \kappa_t = \frac{(M_2 + L_2) \|x_t - x^*\|}{3\mu}. \quad (20)$$
+
+This range includes the classical linear rate
+
+$$f(x_t) - f(x^*) \leq (1 - \alpha^{\text{low}})^t (f(x_0) - f(x^*)) \quad \text{for } \alpha^{\text{low}} = \min \left\{ \frac{1}{2}; \sqrt{\frac{3\mu}{4(M_2 + L_2)D}} \right\} \quad (21)$$
+
+{8}------------------------------------------------
+
+*Proof.* We start the proof by using an upper-bound (9)
+
+$$\begin{aligned}
+ f(x_{t+1}) &\stackrel{(9)}{\leq} \Phi_{x_t, 2}(x_{t+1}) + \frac{L_6}{6} \|x_{t+1} - x_t\|^3 \stackrel{(7)}{\leq} \min_{y \in \mathbb{R}^n} \left\{ \Phi_{x_t, 2}(y) + \frac{M_6}{6} \|y - x_t\|^3 \right\} \\
+ &\stackrel{(9)}{\leq} \min_{y \in \mathbb{R}^n} \left\{ f(y) + \frac{M_2 + L_2}{6} \|y - x_t\|^3 \right\} \stackrel{y=x_t + \alpha_t(x^* - x_t)}{\leq} f((1 - \alpha_t)x_t + \alpha_t x^*) + \alpha_t^3 \frac{M_2 + L_2}{6} \|x^* - x_t\|^3 \\
+ &\stackrel{(17)}{\leq} (1 - \alpha_t)f(x_t) + \alpha_t f(x^*) - \frac{\alpha_t(1 - \alpha_t)\mu}{2} \|x_t - x^*\|^2 + \alpha_t^3 \frac{M_2 + L_2}{6} \|x_t - x^*\|^3.
+ \end{aligned}$$
+
+From the second inequality, we get that the method is monotone and  $f(x_{t+1}) \leq f(x_t)$ . Now, by subbing  $f(x^*)$  from both sides, we get
+
+$$f(x_{t+1}) - f(x^*) \leq (1 - \alpha_t)(f(x_t) - f(x^*)) - \frac{\alpha_t}{2} \|x_t - x^*\|^2 \left( (1 - \alpha_t)\mu - \alpha_t^2 \frac{M_2 + L_2}{3} \|x_t - x^*\| \right),$$
+
+By choosing  $\alpha_t$  such that
+
+$$\alpha_t^2 \frac{M_2 + L_2}{3} \|x_t - x^*\| + \mu\alpha_t - \mu \leq 0, \quad (22)$$
+
+we get (19). By solving the quadratic inequality (22), we get that the method (7) converges with the rate (19) for all (20). Next, we present Lemma 4.4 with the useful properties of  $\alpha_t^*$  from (20). The more general Lemma B.2 with the detailed proof is in Appendix B.
+
+**Lemma 4.4** For  $z > 0$ , the function
+
+$$\alpha^*(z) = \frac{-1 + \sqrt{1 + 4z}}{2z} \quad (23)$$
+
+is bounded by the following lower and upper bounds
+
+$$\min \left\{ 1, \frac{1}{\sqrt{z}} \right\} > \alpha^*(z) > \min \left\{ \frac{1}{2}, \frac{1}{2\sqrt{z}} \right\}, \quad (24)$$
+
+and it is monotonically decreasing
+
+$$\forall z, y > 0 : \quad z < y \quad \Rightarrow \quad \alpha^*(z) > \alpha^*(y). \quad (25)$$
+
+The convergence rate is well-defined as  $0 < \alpha_t^* \leq 1$  from (24). As  $\|x_t - x^*\| \leq D$  from (3) and  $\alpha^{\text{low}} \leq \alpha^*$  by (24), we get the linear convergence rate (21).  $\square$
+
+Now, we move to the second theorem and prove the global superlinear convergence. The main idea of the proof is to observe that  $\|x_t - x^*\|$  in (20) decreases for  $\mu$ -strongly star-convex functions. This property allows us to show that  $\kappa_t$  is decreasing, and hence  $\alpha_t^*$  is increasing from (25), leading to superlinear convergence.
+
+**Theorem 4.5** For  $\mu$ -strongly star-convex (17) function  $f$  with  $L_2$ -Lipschitz-continuous Hessian (2), Cubic Regularized Newton Method from (7) with  $M_2 \geq L_2$  converges globally superlinearly as defined in (15) with  $\zeta_t = 1 - \alpha_t^{\text{sl}}$
+
+$$f(x_{t+1}) - f^* \leq (1 - \alpha_t^{\text{sl}})(f(x_t) - f^*), \quad (26)$$
+
+where
+
+$$\alpha_t^{\text{sl}} = \frac{-1 + \sqrt{1 + 4\kappa_t^{\text{sl}}}}{2\kappa_t^{\text{sl}}} \quad \text{for} \quad \kappa_t^{\text{sl}} = \frac{(M_2 + L_2)\sqrt{2}}{3\mu^{3/2}} (1 - \alpha^{\text{low}})^{t/2} (f(x_0) - f(x^*))^{1/2}. \quad (27)$$
+
+The aggregated convergence rate for  $T \geq 1$  equals to
+
+$$f(x_T) - f(x^*) \leq (f(x_0) - f(x^*)) \prod_{t=1}^T (1 - \alpha_t^{\text{sl}}). \quad (28)$$
+
+*Proof.* From  $\mu$ -strongly star-convexity (17), we can upper-bound  $\|x_t - x^*\|$  in (20) by
+
+$$\|x_t - x^*\| \leq \left( \frac{2}{\mu} (f(x_t) - f(x^*)) \right)^{1/2} \stackrel{(21)}{\leq} \left( \frac{2}{\mu} ((1 - \alpha^{\text{low}})^t (f(x_0) - f(x^*))) \right)^{1/2}.$$
+
+So, we get that  $\|x_t - x^*\|$  is linearly decreasing to zero. From that, we get a new superlinear  $\alpha_t^{\text{sl}} \leq \alpha_t^*$  from (27). As  $\kappa_t^{\text{sl}}$  is getting smaller within each iteration  $\kappa_t^{\text{sl}} > \kappa_{t+1}^{\text{sl}}$ , we get that  $\alpha(\kappa_t^{\text{sl}}) < \alpha(\kappa_{t+1}^{\text{sl}})$  from (25). Finally, for  $\zeta_t = 1 - \alpha(\kappa_t^{\text{sl}})$ , we get  $\zeta_t > \zeta_{t+1}$  in (26). This finishes the proof of global superlinear convergence. The aggregated convergence rate is equal to (28).  $\square$
+
+Similar results hold for Basic Tensor methods from (11) in general for  $p \geq 2$ . Next, we present the theorem for global superlinear convergence of Basic Tensor methods.
+
+{9}------------------------------------------------
+
+**Theorem 4.6** For  $\mu_q$ -uniformly star-convex (17) function  $f$  of degree  $q \geq 2$  with  $L_p$ - Lipschitz-continuous  $p$ -th derivative ( $p \geq q \geq 2$ ) (2), Basic Tensor Method from (11) with  $M_p \geq pL_p$  converges globally superlinearly as defined in (15) with  $\zeta_{t,p} = 1 - \alpha_{t,p}^{\text{sl}}$
+
+$$f(x_{t+1}) - f^* \leq (1 - \alpha_{t,p}^{\text{sl}})(f(x_t) - f^*), \quad (29)$$
+
+where  $\alpha_{t,p}^{\text{sl}}$  is such that
+
+$$h_{\kappa_{t,p}^{\text{sl}}}(\alpha_{t,p}^{\text{sl}}) = 0, \quad \text{where } h_{\kappa}(\alpha) = \alpha^p \kappa + \alpha - 1, \quad \alpha_p^{\text{low}} = \min \left\{ \frac{1}{2}, \frac{1}{2} \left( \frac{(p+1)\mu}{q(M_p+L_p)D^{p-q+1}} \right)^{1/p} \right\}$$
+
+$$\text{and } \kappa_{t,p}^{\text{sl}} = \frac{(M_p+L_p)q^{(q+1)/q}}{(p+1)\mu^{(q+1)/q}} (1 - \alpha_p^{\text{low}})^{t/q} (f(x_0) - f(x^*))^{1/q}. \quad (30)$$
+
+The aggregated convergence rate for  $T \geq 1$  equals to
+
+$$f(x_T) - f(x^*) \leq (f(x_0) - f(x^*)) \prod_{t=1}^T (1 - \alpha_{t,p}^{\text{sl}}). \quad (31)$$
+
+To sum up, we present a unified table for  $\mu$ -strongly (star-)convex functions.
+
+| Method | Per-Iteration Rate $\alpha_t$ | Glob. Superlinear |
+|-|-|-|
+| Gradient Descent (Nesterov, 2004) | $\frac{\mu}{L_1}$ | $\times$ |
+| Cubic Newton Method (Nesterov, 2008) | $\left( \frac{\mu}{L_2 D} \right)^{1/2}$ | $\times$ |
+| Basic Tensor Method (Doikov & Nesterov, 2022) | $\left( \frac{\mu}{L_p D^{p-1}} \right)^{1/(p+1)}$ | $\times$ |
+| Cubic Newton Method (NEW) | $\frac{\mu^{3/4}}{L_2^{1/2}} \left( 1 - \left( \frac{\mu}{L_2 D} \right)^{1/2} \right)^{-t/4} \Delta_0^{-1/4}$ | $\checkmark$ |
+| Basic Tensor Method (NEW) | $\frac{\mu^{3/2p}}{L_2^{1/p}} \left( 1 - \left( \frac{\mu}{L_p D^{p-1}} \right)^{1/p} \right)^{-t/2p} \Delta_0^{-1/2p}$ | $\checkmark$ |
+
+Table 1: Comparison of per-iteration convergence for different basic methods, where  $\Delta_0 = f(x_0) - f(x^*)$ . To enhance clarity and simplicity, we removed universal constants and simplified (27) and (30) for the case where  $\kappa_t \geq 1$ .
+
+We established the global superlinear convergence of Cubic Regularized Newton Method for  $\mu$ -strongly star-convex functions, as well as Basic Tensor Method for  $\mu_q$ -uniformly star-convex functions. Comprehensive details and proofs are provided in Appendix B.
+
+## 5 CONCLUSION
+
+**Limitations.** This paper primarily focuses on high-order methods which come with certain limitations. First of all, they have computational and memory limitations in high-dimensional spaces, due to the need for Hessian calculations. There are, however, approaches to overcome this, such as using first-order subsolvers or inexact Hessian approximations like Quasi-Newton approximations (BFGS, L-SR1). In this paper, we focus on the exact Hessian to analyze methods' peak performance.
+
+Another limitation arises from the specific function classes and the theoretical results considered. Nonetheless, many of the proposed methods can be practically applied to a broader set of problems. For instance, the CRN performs competitively from general non-convex to strongly convex functions.
+
+**Conclusion and Future work.** In the paper, we introduced *OPTAMI*, an open-source library designed to make high-order optimization methods more accessible and easier to experiment with. We plan to expand this library to cover a wider range of settings and optimization methods in the future.
+
+In the first part of the paper, we proposed NATA, a practical acceleration technique. NATA employs a more aggressive schedule adaptation for  $A_t$ , enabling faster convergence. Our experimental results show that NATA significantly outperforms both basic and accelerated methods, including near-optimal and optimal methods. This opens up another interesting question: *Could other high-order methods be optimized by addressing practical issues that arise due to overly conservative theoretical guarantees?* Finally, we demonstrated that the basic high-order methods exhibit *global superlinear convergence* for  $\mu$ -strongly star-convex functions. This result is significant because it shows that high-order methods accelerate with each iteration, in stark contrast to first-order methods, which typically have a steady linear convergence rate. This raises intriguing questions: *Can global superlinear convergence be established for accelerated high-order methods as well? What is the best possible global per-iteration decrease that we can theoretically guarantee?*
+
+ Rest of paper (reference and Appendix) is removed.

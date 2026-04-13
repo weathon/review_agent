@@ -1,0 +1,328 @@
+
+
+{0}------------------------------------------------
+
+# CUT YOUR LOSSES IN LARGE-VOCABULARY LANGUAGE MODELS
+
+Erik Wijmans\* Brody Huval Alexander Hertzberg Vladlen Koltun Philipp Krähenbühl
+
+Apple
+
+## ABSTRACT
+
+As language models grow ever larger, so do their vocabularies. This has shifted the memory footprint of LLMs during training disproportionately to one single layer: the cross-entropy in the loss computation. Cross-entropy builds up a logit matrix with entries for each pair of input tokens and vocabulary items and, for small models, consumes an order of magnitude more memory than the rest of the LLM combined. We propose Cut Cross-Entropy (CCE), a method that computes the cross-entropy loss without materializing the logits for all tokens into global memory. Rather, CCE only computes the logit for the correct token and evaluates the log-sum-exp over all logits on the fly. We implement a custom kernel that performs the matrix multiplications and the log-sum-exp reduction over the vocabulary in flash memory, making global memory consumption for the cross-entropy computation negligible. This has a dramatic effect. Taking the Gemma 2 (2B) model as an example, CCE reduces the memory footprint of the loss computation from 24 GB to 1 MB, and the total training-time memory consumption of the classifier head from 28 GB to 1 GB. To improve the throughput of CCE, we leverage the inherent sparsity of softmax and propose to skip elements of the gradient computation that have a negligible (i.e., below numerical precision) contribution to the gradient. Experiments demonstrate that the dramatic reduction in memory consumption is accomplished without sacrificing training speed or convergence.
+
+<https://github.com/apple/ml-cross-entropy>
+
+## 1 INTRODUCTION
+
+Progress in large language models (LLMs) has been fueled in part by an increase in parameter count, context length, and vocabulary size (the number of tokens that can be used to represent the input). As LLMs grew, so did the associated infrastructure. Large mini-batch gradient descent (Goyal et al., 2017) combined with data-parallelism (Hillis & Steele, 1986) enabled the harnessing of increasing computational power. ZeRO (Rajbhandari et al., 2020) broke the dependence between the number of GPUs and the memory used for model parameters, gradients, and optimizer state. Activation checkpointing (Chen et al., 2016) reduced the amount of memory used for activations, supporting the development of deeper models. FlashAttention (Dao et al., 2022) reduced the memory used in self-attention from  $O(N^2)$  to  $O(N)$ , thereby supporting longer context windows. These improvements gradually shifted the memory consumption of LLM training to one single layer – the cross-entropy loss, whose memory footprint grows with the product of vocabulary size and number of tokens per batch. The cross-entropy loss is responsible for up to 90% of the memory footprint of modern LLM training (see Fig. 1a). The problem grows only more acute with time, since even the largest contemporary vocabularies (e.g., 256K tokens) may benefit from further expansion (Tao et al., 2024).
+
+We propose a cross-entropy implementation, Cut Cross-Entropy (CCE), that has a negligible memory footprint and scales to arbitrarily large vocabularies. Our key insight is that computation of the loss and its gradient only depends on a single log-probability, that of the ground-truth label. With an arithmetic reformulation, we decompose the cross-entropy loss into an index matrix multiplication over a single ground-truth label and a log-sum-exp operation over all vocabulary entries for each token. Each operation has small and well-defined inputs – the network embeddings and classifier
+
+\*Corresponding author: ewijmans@apple.com
+
+{1}------------------------------------------------
+
+![Figure 1: Memory use and maximum attainable batch size for various frontier models. (a) Regular cross-entropy: Max batch size (M Tokens) ranges from 0 to 6. (b) Cut cross-entropy (ours): Max batch size (M Tokens) ranges from 0 to 70. Models include Gemma 2 2B, Llama 3.1 8B, Gemma 2 27B, Phi 3 Medium, Mistral 8x7B, Phi 1.5, Llama 2 13B, Llama 2 7B, GPT Neo 2.7B, GPT Neo 1.3B, and GPT 2. Legend: Log Probabilities (green), Weights + Optimizer + Gradients (blue), Activation Checkpoints (grey).](49ad3a646d84bcfeac02bdf2b3792a3e_img.jpg)
+
+Figure 1: Memory use and maximum attainable batch size for various frontier models. (a) Regular cross-entropy: Max batch size (M Tokens) ranges from 0 to 6. (b) Cut cross-entropy (ours): Max batch size (M Tokens) ranges from 0 to 70. Models include Gemma 2 2B, Llama 3.1 8B, Gemma 2 27B, Phi 3 Medium, Mistral 8x7B, Phi 1.5, Llama 2 13B, Llama 2 7B, GPT Neo 2.7B, GPT Neo 1.3B, and GPT 2. Legend: Log Probabilities (green), Weights + Optimizer + Gradients (blue), Activation Checkpoints (grey).
+
+Figure 1: Memory use and maximum attainable batch size (in millions of tokens) for a variety of frontier models on a 16-GPU (80 GB each) fully-sharded data-parallel setup (Rajbhandari et al., 2020) with activation checkpointing (Chen et al., 2016) and a mixed-precision 16-bit (fp16/bf16) AdamW optimizer (Kingma & Ba, 2015; Loshchilov & Hutter, 2019). For each model, we break its memory use down into weights and optimizer states, activation checkpoints, and the log-probabilities computed by the cross-entropy loss layer. Our Cut Cross-Entropy (CCE) enables increasing the batch size by 1.5x (Llama 2 13B) to 10x (GPT 2, Gemma 2 2B), with no sacrifice in speed or convergence. Exact values in Table A4.
+
+matrix – and a single scalar output per token. Both operations do, however, rely on a large intermediate logit matrix that computes the score for each token and potential vocabulary entry. We show that there is no need to materialize this logit matrix in GPU memory. Instead, we compute logits as needed in SRAM in a series of custom CUDA kernels. The result is a cross-entropy computation that has negligible memory footprint, with no detrimental effect on latency or convergence. See Fig. 1b for a breakdown of memory savings and consequent batch size increases afforded by CCE.
+
+## 2 RELATED WORK
+
+**Attention mechanisms.** The effectiveness of transformers (Vaswani et al., 2017) in modeling language has drawn attention to their compute and memory requirements. Multiple works have proposed alternatives to scaled dot-product attention that reduce transformers’ computation and memory (Kitae et al., 2020; Wang et al., 2020; Choromanski et al., 2021). Other model classes, such as structured state-space models (Gu et al., 2022; Gu & Dao, 2023), have also shown promising results. We study a different part of the model – its classifier head – that is not considered in these works.
+
+**Attention implementations.** In addition to alternative attention mechanisms, the community has also tackled the daunting memory consumption of LLMs via efficient implementations. Rabe & Staats (2021) developed a self-attention implementation that makes use of chunking. Chen et al. (2023) proposed an implementation that broke the operation into two stages, reduction and matrix multiplication. This makes efficient use of GPU memory and registers but requires recomputation in the forward pass. FlashAttention (Dao et al., 2022) uses an online softmax (Milakov & Gimelshein, 2018) and, like CCE, materializes blocks of the  $N^2$ -sized self-attention matrix in on-chip SRAM rather than slower global DRAM. This is one of the key ideas that CCE builds on to develop a memory-efficient cross-entropy formulation.
+
+**Vocabulary reduction.** One way to minimize the amount of memory used by the log-probabilities over the tokens is to reduce the number of ‘active’ tokens in the vocabulary. Grave et al. (2017) proposed to use a vocabulary with a hierarchical structure, thereby requiring the log-probabilities for only a subset of the vocabulary at any given time. Yu et al. (2023) explore tokenization-free byte-level models that operate on dramatically smaller vocabularies.
+
+**Sequence and model parallelism.** Sequence parallelism (Jacobs et al., 2023; Li et al., 2023) enables training very large models (with large vocabularies) by splitting an individual input sequence across
+
+{2}------------------------------------------------
+
+multiple GPUs. Various model parallelism techniques (Huang et al., 2019; Narayanan et al., 2019; Shoeybi et al., 2019) achieve the same goal of training very large models (with large vocabularies) by distributing the computation and memory consumption of different pieces across multiple GPUs.
+
+**Efficient cross-entropy implementations.** A number of recent implementations use chunking to reduce the memory usage of the cross-entropy layer. Yet chunking induces a trade-off. Memory footprint is minimized when the number of chunks is high, but latency is minimized when the number of chunks is low. CCE utilizes only on-chip SRAM and minimizes both memory footprint and latency. Liger Kernels (Hsu et al., 2024) make efficient use of the GPU via chunking and by computing the loss+gradient simultaneously. The latter requires that any transform applied to the loss (such as masking) is implemented in the kernel itself. CCE has separate forward and backward stages, enabling user-defined transformations on the loss.
+
+## 3 PRELIMINARIES
+
+Let  $P(x) = \prod_{i=1}^N P(x_i | x_1 \dots x_{i-1})$  be a Large Language Model (LLM) over a vocabulary  $V$ . The LLM parameterizes an autoregressive distribution over all possible tokens  $x_i \in V$  given the preceding  $N - 1$  tokens. Specifically, this distribution is the combination of a backbone network  $f : x_1 \dots x_{i-1} \rightarrow \mathbb{R}^D$  and a linear classifier  $C \in \mathbb{R}^{D \times |V|}$ :
+
+$$P(x_i | x_1 \dots x_{i-1}) = \text{softmax}_{x_i}(C^\top f(x_1 \dots x_{i-1})), \quad (1)$$
+
+$$\text{softmax}_k(\mathbf{v}) = \frac{\exp(v_k)}{\sum_j \exp(v_j)}. \quad (2)$$
+
+The backbone network  $f(x_1, \dots, x_{i-1}) \in \mathbb{R}^D$  encodes a token sequence in the  $D$ -dimensional feature vector. The linear classifier  $C \in \mathbb{R}^{D \times |V|}$  projects the embedding into an output space of the vocabulary  $V$ . The  $\text{softmax}_k(\mathbf{v})$  produces the probability over all vocabulary entries from the unnormalized log probabilities (logits) produced by  $C^\top f(x_1 \dots x_{i-1})$ .
+
+### 3.1 VOCABULARY
+
+LLMs represent their input (and output) as a set of tokens in a vocabulary  $V$ . The vocabulary is typically constructed by a method such as Byte Pair Encoding (BPE) (Gage, 1994). BPE initializes the vocabulary with all valid byte sequences from a standard text encoding, such as utf-8. Then, over a large corpus of text, BPE finds the most frequent pair of tokens and creates a new token that represents this pair. This continues iteratively until the maximum number of tokens is reached.
+
+Large vocabularies enable a single token to represent multiple characters. This reduces the length of both input and output sequences, compresses larger and more diverse documents into shorter context windows, thus improving the model’s comprehension while reducing computational demands.
+
+### 3.2 INFERENCE AND TRAINING
+
+Even with a large vocabulary, sampling from an LLM is memory-efficient at inference time. Specifically, the LLM produces one token at a time, computing  $P(x_i | x_1 \dots x_{i-1})$  and sampling from this distribution (Kwon et al., 2023). Because the distribution over the vocabulary is only needed for a single token at a time, the memory footprint is independent of sequence length.
+
+At training time, the LLM maximizes the log-likelihood of the next token:
+
+$$\ell(\tilde{\mathbf{x}}) = \sum_{i=1}^N \log P(\hat{x}_i | \hat{x}_1, \dots, \hat{x}_{i-1}). \quad (3)$$
+
+Due to the structure of most backbones (Vaswani et al., 2017; Gu et al., 2022; Gu & Dao, 2023),  $f(x_1), f(x_1, x_2), \dots, f(x_1, \dots, x_N)$  is efficiently computed in parallel. However, activations for non-linear layers have to be saved for the backward pass, consuming significant memory. Most LLM training frameworks make use of aggressive activation checkpointing (Chen et al., 2016), sharding (Rajbhandari et al., 2020), and specialized attention implementations (Dao et al., 2022) to keep this memory footprint manageable.
+
+{3}------------------------------------------------
+
+![Figure 2: Access patterns and computation of blockwise (a) indexed matrix multiplication, (b) linear-log-sum-exp forward pass, and (c) linear-log-sum-exp backward pass. (a) shows an indexed load from a matrix C^T to a vector C_x, followed by a dot product with an embedding E_x. (b) shows a blockwise linear-log-sum-exp forward pass where a matrix A_m is processed with LSE_m and exp(LSE_m) to produce a vector S_m. (c) shows the backward pass where the vector S_m is used to compute the gradient of the LSE_m term.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 2: Access patterns and computation of blockwise (a) indexed matrix multiplication, (b) linear-log-sum-exp forward pass, and (c) linear-log-sum-exp backward pass. (a) shows an indexed load from a matrix C^T to a vector C\_x, followed by a dot product with an embedding E\_x. (b) shows a blockwise linear-log-sum-exp forward pass where a matrix A\_m is processed with LSE\_m and exp(LSE\_m) to produce a vector S\_m. (c) shows the backward pass where the vector S\_m is used to compute the gradient of the LSE\_m term.
+
+Figure 2: Access patterns and computation of blockwise (a) indexed matrix multiplication, (b) linear-log-sum-exp forward pass, and (c) linear-log-sum-exp backward pass. See Algorithms 1 to 3 for the corresponding algorithms.
+
+With the aforementioned optimizations, the final (cross-entropy loss) layer of the LLM becomes by far the biggest memory hog. For large vocabularies, the final cross-entropy layer accounts for the majority of the model’s memory footprint at training time (Fig. 1a). For example, the log-probabilities materialized by the cross-entropy layer account for 40% of the memory consumption of Phi 3.5 (Mini) (Abdin et al., 2024) ( $|V| = 32,064$ ), 65% of the memory consumption of Llama 3 (8B) (Dubey et al., 2024) ( $|V| = 128,000$ ), and 89% of the memory consumption of Gemma 2 (2B) (Rivière et al., 2024) ( $|V| = 256,128$ ). In fact, the log-probabilities of Gemma 2 (2B) for a single sequence  $\mathbf{x}$  with length  $N = 80,000$  use the entire available memory of an 80 GB H100 GPU. (The sequence length is a factor due to the use of teacher forcing for parallelism.)
+
+We show that a reformulation of the training objective leads to an implementation that has negligible memory consumption above what is required to store the loss and the gradient.
+
+## 4 CUT CROSS-ENTROPY
+
+Consider the cross-entropy loss  $\ell_i$  over a single prediction of the next token  $P(x_i|x_1 \dots x_{i-1})$ :
+
+$$\ell_i(\mathbf{x}) = \log \text{softmax}_{x_i} \left( \mathbf{C}^T E_i \right) = \mathbf{C}_{x_i}^T E_i - \log \sum_j \exp \left( \mathbf{C}_j^T E_i \right).$$
+
+Here the first term is a vector product over  $D$ -dimensional embeddings  $E_i = f(x_1 \dots x_{i-1})$  and a classifier  $\mathbf{C}$ . The second term is a log-sum-exp operation and is independent of the next token  $x_i$ . During training, we optimize all next-token predictions  $\ell = [\ell_1 \dots \ell_N]$  jointly using teacher forcing:
+
+$$\ell = \left( \mathbf{C}^T \mathbf{E} \right)_{\mathbf{x}} - \log \sum_j \exp \left( \mathbf{C}_j^T \mathbf{E} \right), \quad (4)$$
+
+where  $\mathbf{E} = [E_1 \dots E_N]$  and  $\left( \mathbf{C}^T \mathbf{E} \right)_{\mathbf{x}} = [\mathbf{C}_{x_1}^T E_1 \dots \mathbf{C}_{x_N}^T E_N]$ . The first term in Equation (4) is a combination of an indexing operation and matrix multiplication. It has efficient forward and backward passes, in terms of both compute and memory, as described in Section 4.1. The second term in Equation (4) is a joint log-sum-exp (LSE) and matrix multiplication operation. Section 4.2 describes how to compute the forward pass of this linear-log-sum-exp operation efficiently using a joint matrix multiplication and reduction kernel. Section 4.3 describes how to compute its backward pass efficiently by taking advantage of the sparsity of the gradient over a large vocabulary. Putting all the pieces together yields a memory-efficient low-latency cross-entropy loss.
+
+### 4.1 MEMORY-EFFICIENT INDEXED MATRIX MULTIPLICATION
+
+A naive computation of indexed matrix multiplication involves either explicit computation of the logits  $\mathbf{C}^T \mathbf{E}$  with an  $O(N|V|)$  memory cost, or indexing into the classifier  $\mathbf{C}_{\mathbf{x}} = [\mathbf{C}_{x_1} \dots \mathbf{C}_{x_N}]$  with
+
+{4}------------------------------------------------
+
+#### **Algorithm 1** Memory-efficient indexed matrix multiplication
+
+---
+
+**Inputs:**  $\mathbf{E} \in \mathbb{R}^{D \times N}$ ,  $\mathbf{C} \in \mathbb{R}^{D \times |V|}$ ,  $\mathbf{x} \in \mathbb{R}^N$ .  
+Block sizes  $N_B$  and  $D_B$ .
+
+**Outputs:**  $\mathbf{o} = (\mathbf{C}^\top \mathbf{E})_{\mathbf{x}} \in \mathbb{R}^N$
+
+---
+
+```
+
+for blocks  $\mathbf{E}_n, \mathbf{x}_n$  do       $\triangleright$  Divide  $\mathbf{E}$  and  $\mathbf{x}$  into blocks of size  $D \times N_B$  and  $N_B$ , respectively
+   $\mathbf{o}_n = \mathbf{0}_{N_B}$               $\triangleright$  Zero vector of size  $N_B$  in on-chip SRAM
+  for blocks  $\mathbf{E}_{n,d}$  do       $\triangleright$  Divide  $\mathbf{E}_n$  into blocks of size  $D_B \times N_B$ 
+     $\mathbf{c} = \mathbf{C}_{\mathbf{x}_n,d}$            $\triangleright$  Indexed load into on-chip SRAM
+     $\mathbf{o}_n += \mathbf{E}_{n,d} \cdot \mathbf{c}$ 
+     $\triangleright$  Column-wide dot product
+  end for
+  write  $\mathbf{o}_n$                 $\triangleright$  From on-chip SRAM to main GPU memory
+end for
+
+```
+
+---
+
+an  $O(ND)$  memory cost. Our implementation fuses the classifier indexing  $\mathbf{C}_{\mathbf{x}}$  with the consecutive dot product between columns  $\mathbf{C}_{x_i}$  and  $\mathbf{E}_i$  in a single CUDA/Triton kernel (Tillet et al., 2019). Our kernel retrieves the value  $x_i$ , the  $x_i$ -th column from  $\mathbf{C}$ , and the  $i$ -th column from  $\mathbf{E}$ , and stores them in on-chip shared memory (SRAM). It then performs a dot product between  $\mathbf{C}_{x_i}$  and  $\mathbf{E}_i$  and writes the result into global memory. The kernel uses only on-chip SRAM throughout and does not allocate any GPU memory. For efficiency, we perform all operations blockwise to make the best use of GPU cache structure. Algorithm 1 and Fig. 2a summarize the computation and access patterns.
+
+### 4.2 MEMORY-EFFICIENT LINEAR-LOG-SUM-EXP, FORWARD PASS
+
+Implementing a serial memory-efficient linear-log-sum-exp is fairly straightforward: use a triple for-loop. The innermost loop computes the dot product between  $\mathbf{C}_v$  and  $\mathbf{E}_n$  for the  $v$ -th token and the  $n$ -th batch element. The middle loop iterates over the vocabulary, updating the log-sum-exp (LSE) along the way. Finally, the outermost loop iterates over all batch elements. Parallelizing over the outermost loop is trivial and would expose enough work to saturate the CPU due to the number of tokens in training batches (commonly in the thousands). Parallelization that exposes enough work to saturate the GPU is more challenging.
+
+Let us first examine how efficient matrix multiplication between the batch of model output embeddings  $\mathbf{E} \in \mathbb{R}^{D \times N}$  and the classifier  $\mathbf{C} \in \mathbb{R}^{D \times |V|}$  is implemented on modern GPUs (Kerr et al., 2017). A common method is to first divide the output  $\mathbf{O} = \mathbf{C}^\top \mathbf{E} \in \mathbb{R}^{|V| \times N}$  into a set of blocks of size  $V_B \times N_B$ . Independent CUDA blocks retrieve the corresponding parts  $\mathbf{E}_n$  of  $\mathbf{E}$  with size  $D \times N_B$  and blocks  $\mathbf{C}_m$  of  $\mathbf{C}$  with size  $D \times V_B$ , and perform the inner product  $\mathbf{O}_{nm} = \mathbf{C}_m^\top \mathbf{E}_n$  along the  $D$  dimension. Due to limited on-chip SRAM, most implementations use a for-loop for large values of  $D$ . They loop over smaller size  $D_B \times N_B$  and  $D_B \times V_B$  blocks and accumulate  $\mathbf{O}_{nv} = \sum_d \mathbf{C}_{vd}^\top \mathbf{E}_{nd}$  in SRAM. Each CUDA block then writes  $\mathbf{O}_{nm}$  back into global memory. This method exposes enough work to the GPU and makes efficient use of SRAM and L2 cache.
+
+To produce log-sum-exp( $\mathbf{C}^\top \mathbf{E}$ ), we use the same blocking and parallelization strategy as matrix multiplication. Each block first computes a matrix multiplication, then the log-sum-exp along the vocabulary dimension  $m$  for its block, and finally updates LSE with its result.
+
+Note that multiple CUDA blocks are now all writing to the same location of LSE. This includes blocks in the same input range  $n$  but different vocabulary ranges  $m$ . We use a spin-lock on an atomic operation in global memory to synchronize the updates by different CUDA blocks as this is simple to implement in our Triton framework and incurs little overhead. Alternative methods, such as an atomic compare-and-swap loop, may perform better when implementing in CUDA directly.
+
+Algorithm 2 and Fig. 2b summarize the computation and access patterns.
+
+### 4.3 MEMORY-EFFICIENT LINEAR-LOG-SUM-EXP, BACKWARD PASS
+
+The backward pass needs to efficiently compute two gradient updates:
+
+$$\nabla \mathbf{E} = \lambda^\top \frac{\partial}{\partial \mathbf{E}} \log \sum \exp(\mathbf{C}^\top \mathbf{E}) \quad \text{and} \quad \nabla \mathbf{C} = \lambda^\top \frac{\partial}{\partial \mathbf{C}} \log \sum \exp(\mathbf{C}^\top \mathbf{E})$$
+
+{5}------------------------------------------------
+
+#### **Algorithm 2** Memory-efficient linear-log-sum-exp, forward pass
+
+---
+
+**Inputs:**  $\mathbf{E} \in \mathbb{R}^{D \times N}$  and  $\mathbf{C} \in \mathbb{R}^{D \times |V|}$ .  
+Block sizes  $N_B$ ,  $V_B$ , and  $D_B$ .  
+**Outputs:**  $\text{LSE} = \log \sum_j \exp(C_j^\top \mathbf{E}) \in \mathbb{R}^N$
+
+---
+
+```
+
+LSE =  $-\infty_N$                                       $\triangleright -\infty$  vector of size  $N$  in main GPU memory
+for all pairs of blocks  $\mathbf{E}_n$ ,  $\mathbf{C}_v$  do  $\triangleright$  Divide  $\mathbf{E}$  and  $\mathbf{C}$  into blocks of size  $D \times N_B$  and  $D \times V_B$ 
+   $\mathbf{A}_{nv} = \mathbf{0}_{V_B \times N_B}$                               $\triangleright$  Zero matrix of size  $V_B \times N_B$  in on-chip SRAM
+  for blocks  $\mathbf{E}_{n,d}$ ,  $\mathbf{C}_{v,d}$  do  $\triangleright$  Divide  $\mathbf{E}_n$  and  $\mathbf{C}_v$  into blocks of  $D_B \times N_B$  and  $D_B \times V_B$ 
+     $\mathbf{A}_{nv} += \mathbf{C}_{v,d}^\top \cdot \mathbf{E}_{n,d}$                       $\triangleright$  Blockwise matrix multiplication
+  end for
+   $\text{LSE}_{nv} = \log \sum \exp(\mathbf{A}_{nv}^\top)$                   $\triangleright$  Numerically stable implementation with max
+   $\text{LSE}_n = \log(\exp(\text{LSE}_n) + \exp(\text{LSE}_{nv}))$   $\triangleright$  Locking thread-safe log-add-exp
+end for
+
+```
+
+---
+
+for a backpropagated gradient  $\lambda = \nabla \text{LSE}$ . Formally, the gradient is defined as
+
+$$\nabla \mathbf{E}^\top = (\mathbf{S} \cdot \nabla \text{LSE}) \mathbf{C} \quad \text{and} \quad \nabla \mathbf{C}^\top = (\mathbf{S} \cdot \nabla \text{LSE})^\top \mathbf{E}$$
+
+where  $\mathbf{S} = \text{softmax}(\mathbf{C}^\top \mathbf{E})$  and  $\cdot$  refers to the row-by-row elementwise multiplication of the softmax  $\mathbf{S}$  and the gradient  $\nabla \text{LSE}$ :  $\hat{\mathbf{S}} = \mathbf{S} \cdot \nabla \text{LSE}$ .
+
+Computationally, the backward pass is a double matrix multiplication  $\mathbf{C}^\top \mathbf{E}$  and  $\hat{\mathbf{S}} \mathbf{C}$  or  $\hat{\mathbf{S}}^\top \mathbf{E}$  with intermediate matrices  $\mathbf{S}$  and  $\hat{\mathbf{S}}$  that do not fit into GPU memory and undergo a non-linear operation. We take a similar approach to the forward pass, recomputing the matrix  $\mathbf{C}^\top \mathbf{E}$  implicitly in the GPU’s shared memory. For the backward pass, we do not need to compute the normalization constant of the softmax, since  $\mathbf{S} = \text{softmax}(\mathbf{C}^\top \mathbf{E}) = \exp(\mathbf{C}^\top \mathbf{E} - \text{LSE})$ . This allows us to reuse the global synchronization of the forward pass, and compute  $\mathbf{S}$  efficiently in parallel.
+
+We implement the second matrix multiplication in the main memory of the GPU, as a canonical blockwise implementation would require storing or synchronizing  $\mathbf{S}$ . Algorithm 3 and Fig. 2c summarize the computation and access patterns. A naive implementation of this algorithm requires zero additional memory but is slow due to repeated global memory load and store operations. We use two techniques to improve the memory access pattern: gradient filtering and vocabulary sorting.
+
+**Gradient filtering.** By definition, the softmax  $\mathbf{S}$  sums to one over the vocabulary dimension. If stored in bfloat16 with a 7-bit fraction, any value below  $\varepsilon = 2^{-12}$  will likely be ignored due to truncation in the summation or rounding in the normalization.<sup>1</sup> This has profound implications for the softmax matrix  $\mathbf{S}$ : For any column, at most  $\frac{1}{\varepsilon} = 4096$  entries have non-trivial values and contribute to the gradient computation. All other values are either rounded to zero or truncated. In practice, the sparsity of the softmax matrix  $\mathbf{S}$  is much higher: empirically, in frontier models we evaluate, less than 0.02% of elements are non-zero. Furthermore, the sparsity of the softmax matrix grows as vocabulary size increases. In Algorithm 3, we take advantage of this sparsity and skip gradient computation for any block whose corresponding softmax matrix  $S_{nm}$  has only negligible elements. We chose the threshold  $\varepsilon = 2^{-12}$  to be the smallest bfloat16 value that is not truncated. In practice, this leads to a 3.5x speedup without loss of precision in any gradient computation. See Section 5 for a detailed analysis.
+
+The efficiency of gradient filtering is directly related to the block-level sparsity of the softmax matrix. We cannot control the overall sparsity pattern without changing the output. However, we can change the order of the vocabulary to create denser local blocks for more common tokens.
+
+**Vocabulary sorting.** Ideally the vocabulary would be ordered such that all tokens with non-trivial gradients would be contiguously located. This reduces the amount of computation wasted by partially populated blocks – ideally blocks would either be entirely empty (and thus skipped) or entirely populated. We heuristically group the non-trivial gradients by ordering the tokens by their average logit. Specifically, during the forward pass (described in Section 4.2) we compute the average logit
+
+<sup>1</sup>The 5 extra bits above the fractional size (7) account for rounding rules, and the consideration that small but not tiny values will likely not get truncated due to the blocking strategies used to compute a sum.
+
+{6}------------------------------------------------
+
+#### **Algorithm 3** Memory-efficient linear-log-sum-exp, backward pass
+
+---
+
+**Inputs:**  $\mathbf{E} \in \mathbb{R}^{D \times N}$ ,  $\mathbf{C} \in \mathbb{R}^{D \times |V|}$ ,  $\mathbf{LSE} \in \mathbb{R}^N$ , and  $\nabla \mathbf{LSE} \in \mathbb{R}^N$ .  
+Block sizes  $N_B$ ,  $V_B$ , and  $D_B$ .  
+Accuracy threshold  $\varepsilon$ .
+
+**Outputs:**  $\nabla \mathbf{E} \in \mathbb{R}^{D \times N}$ ,  $\nabla \mathbf{C} \in \mathbb{R}^{D \times |V|}$
+
+---
+
+```
+
+for all pairs of blocks  $\mathbf{E}_n$ ,  $\mathbf{C}_v$  do       $\triangleright$  Divide  $\mathbf{E}$  and  $\mathbf{C}$  into blocks of size  $D \times N_B$  and  $D \times V_B$ 
+   $\mathbf{A}_{nv} = \mathbf{0}_{V_B \times N_B}$                   $\triangleright$  Zero matrix of size  $V_B \times N_B$  in on-chip SRAM
+  for blocks  $\mathbf{E}_{n,d}$ ,  $\mathbf{C}_{v,d}$  do           $\triangleright$  Divide  $\mathbf{E}_n$  and  $\mathbf{C}_v$  into blocks of  $D_B \times N_B$  and  $D_B \times V_B$ 
+     $\mathbf{A}_{nv} += \mathbf{C}_{v,d}^\top \cdot \mathbf{E}_{n,d}$          $\triangleright$  Blockwise matrix multiplication
+  end for
+   $\mathbf{S}_{nv} = \exp(\mathbf{A}_{nv} - \mathbf{LSE}_n)$          $\triangleright$  Compute the softmax
+  if all( $\mathbf{S}_{nv} < \varepsilon$ ) then
+    skip                                $\triangleright$  Skip computation if below desired numerical precision
+  end if
+  for blocks  $\mathbf{E}_{n,d}$ ,  $\mathbf{C}_{v,d}$  do           $\triangleright$  Divide  $\mathbf{E}_n$  and  $\mathbf{C}_m$  into blocks of  $D_B \times N_B$  and  $D_B \times V_B$ 
+     $\nabla \mathbf{E}_{n,d}^\top += (\mathbf{S}_{nv} \cdot \nabla \mathbf{LSE}_n) \mathbf{C}_{v,d}$   $\triangleright$  Locking thread-safe gradient update
+     $\nabla \mathbf{C}_{v,d}^\top += (\mathbf{S}_{nv} \cdot \nabla \mathbf{LSE}_n)^\top \mathbf{E}_{n,d}$   $\triangleright$  Locking thread-safe gradient update
+  end for
+end for
+
+```
+
+---
+
+per token using an atomic addition. For the backward pass, we divide the vocabulary dimension  $|V|$  into blocks with similar average logit instead of arbitrarily. This requires a temporary buffer of size  $O(|V|)$ , about 1 MB for the largest vocabularies in contemporary LLMs (Rivière et al., 2024).
+
+Putting all the pieces together, we arrive at forward and backward implementations of cross-entropy that have a negligible incremental memory footprint without sacrificing speed. Note that in practice, we found it to be easier and more memory-efficient to merge the indexed matrix-multiplication backward implementation with the backward pass of the linear-log-sum-exp operator (Algorithm 3). The two operations share much of the computation and memory access pattern, see Algorithm 4.
+
+## 5 ANALYSIS
+
+### 5.1 RUNTIME AND MEMORY
+
+First we examine the runtime and memory of various implementations of the cross-entropy loss  $\log \text{softmax}_x(\mathbf{C}^\top \mathbf{E})$ . We consider a batch of 8,192 tokens with a vocabulary size of 256,000 and hidden dimension 2,304. This corresponds to Gemma 2 (2B) (Rivière et al., 2024). We use the Alpaca dataset (Taori et al., 2023) for inputs and labels and Gemma 2 (2B) Instruct weights to compute  $\mathbf{E}$  and for  $\mathbf{C}$ . The analysis is summarized in Table 1.
+
+The baseline implements the loss directly in PyTorch (Paszke et al., 2019). This is the default in popular frameworks such as Torch Tune (Torch Tune Team, 2024) and Transformers (Wolf et al., 2019). This method has reasonable throughput but a peak memory usage of 28,000 MB of GPU memory to compute the loss+gradient (Table 1 row 5). Due to memory fragmentation, just computing the loss+gradient for the classifier head requires an 80 GB GPU. torch.compile (Ansel et al., 2024) is able to reduce memory usage by 43% and computation time by 33%, demonstrating the effectiveness of kernel fusion (Table 1 row 4 vs. 5). Torch Tune (Torch Tune Team, 2024) includes a method to compute the cross-entropy loss that divides the computation into chunks and uses torch.compile to save memory. This reduces memory consumption by 65% vs. Baseline and by 40% vs. torch.compile (to 9,631 MB, see Table 1 row 3 vs. 4 and 5). Liger Kernels (Hsu et al., 2024) provide a memory-efficient implementation of the cross-entropy loss that, like Torch Tune, makes uses of chunked computation to reduce peak memory usage. While very effective at reducing the memory footprint, using 95% less memory than Baseline, it has a detrimental effect on latency, more than doubling the wall-clock time for the computation (Table 1, row 2 vs. 4). The memory
+
+---
+
+<sup>2</sup>The gradient and loss are computed simultaneously, not in separate forward/backward passes.
+
+{7}------------------------------------------------
+
+| Method | Loss |  | Gradient |  | Loss+Gradient |  |
+|-|-|-|-|-|-|-|
+|  | Memory | Time | Memory | Time | Memory | Time |
+| Lower bound | 0,004 MB |  | 1,161 MB |  | 1,161 MB |  |
+| 1) CCE (Ours) | <b>1 MB</b> | <b>46 ms</b> | <b>1,163 MB</b> | 100 ms | <b>1,164 MB</b> | 145 ms |
+| 2) Liger Kernels (Hsu et al., 2024) <sup>2</sup> | 1,474 MB | 304 ms |  |  | 1,474 MB | 304 ms |
+| 3) Torch Tune Team (2024) (8 chunks) | 8,000 MB | 55 ms | 1,630 MB | 115 ms | 9,631 MB | 169 ms |
+| 4) torch.compile | 4,000 MB | 49 ms | 12,000 MB | <b>92 ms</b> | 16,000 MB | <b>143 ms</b> |
+| 5) Baseline | 24,000 MB | 82 ms | 16,000 MB | 122 ms | 28,000 MB | 208 ms |
+| 6) CCE (No Vocab Sorting) | 0.09 MB | 45 ms | 1,162 MB | 115 ms | 1,162 MB | 159 ms |
+| 7) CCE (No Grad. Filter) | 0.09 MB | 45 ms | 1,163 MB | 314 ms | 1,162 MB | 357 ms |
+| 8) CCE-Kahan | 1 MB | 47 ms | 2,325 MB | 114 ms | 2,326 MB | 160 ms |
+| 9) CCE-Kahan-FullC | 1 MB | 47 ms | 2,326 MB | 268 ms | 2,326 MB | 313 ms |
+| 10) CCE-Kahan-FullE | 1 MB | 47 ms | 2,326 MB | 247 ms | 2,326 MB | 292 ms |
+
+Table 1: Peak memory footprint and time to compute the loss, its gradient, and their combination. Note that intermediate buffers can often (but not always) be reused between the loss and gradient computation, resulting in lower peak memory consumption than the sum of the parts. Batch of 8,192 tokens with a vocabulary size of 256,000 and hidden dimension 2304. Embedding and classifier matrix taken during Gemma 2 (2B) training on Alpaca. Measured on an A100-SXM4 GPU with 80 GB of RAM, PyTorch 2.4.1, CUDA 12.4, rounded to closest MB. Some numbers are multiples of 1,000 due to dimensions chosen and PyTorch’s allocation strategy. ‘Lower bound’ is the amount of memory required for the output buffer(s), i.e.,  $\nabla \mathbf{E}$  and  $\nabla \mathbf{C}$ , this is the lower bound for the memory footprint of any method. Results averaged over 5 seeds.
+
+usage of CCE grows with  $O(N+|V|)$ , as opposed to  $O(N \times |V|)$  for Baseline, torch.compile, and Torch Tune, and  $O(N \times D)$  for Liger Kernels. In practice, CCE has a negligible memory footprint regardless of vocabulary size or sequence length.
+
+Compared to the fastest method, torch.compile, CCE computes the loss slightly faster (5%, 4ms, Table 1 row 1 vs. 4). This is because CCE does not write all the logits to global memory. CCE computes the loss+gradient slightly slower (6%, 2ms). While CCE needs to recompute  $\mathbf{C}^\top \mathbf{E}$ , it is able to save time in other parts of the computation. See Appendix C.1 for a breakdown of the backwards pass of CCE and Baseline. This increase is largely negligible as the forward+backward pass for even a small LLM (2B parameters) is on the order of seconds.
+
+The performance of CCE is enabled several factors. Without vocabulary sorting CCE takes 15% (23 ms) longer (Table 1 row 1 vs. 6) and without gradient filtering it is 3.4x (356 ms) longer (row 1 vs. 7). CCE utilizes the final gradient floating point type (typically bf16) for summation in global memory. For increased numerical stability, we experiment with Kahan summation (Kahan, 1965) with a higher time and memory cost (Table 1 row 1 vs. 8). We can further increase the numerical stability by selectively applying gradient filtering to just  $\nabla \mathbf{E}$  and  $\nabla \mathbf{C}$ . When combined with Kahan summation, removing gradient filtering from either  $\nabla \mathbf{C}$  or  $\nabla \mathbf{E}$  results in a similar decrease of performance (Table 1 row 9 or 10 vs. 8). The last variant (CCE-Kahan-FullC) is particularly interesting for pretraining, where the numerical precision makes a difference. For fine-tuning all variants of CCE perform equivalently, as shown in Section 5.3.
+
+In Appendix B, we demonstrate that CCE (and other methods) can be made up to 3 times faster by removing tokens that are ignored. In Appendix C we benchmark with more models. We find that as the vocabulary size ( $|V|$ ) to hidden size ( $D$ ) ratio decreases, CCE’s advantage in computation time for Loss+Gradient decreases, but continues to save a substantial amount of memory.
+
+![Figure 3: Average probability for the i-th most likely token, log-log plot. The x-axis is 'N-th most likely token (log-scale)' from 10^0 to 10^5. The y-axis is 'Probability (log-scale)' from 10^-14 to 10^-2. A blue line represents 'Token Probabilities', which decreases linearly from approximately 10^-2 at N=10^0 to approximately 10^-14 at N=10^5. A horizontal black line represents the 'BF16 Cutoff' at approximately 10^-5. The blue line crosses the black line at approximately N=10^1.5.](aa14b9ec884bf40ce06c161be468cd84_img.jpg)
+
+Figure 3: Average probability for the i-th most likely token, log-log plot. The x-axis is 'N-th most likely token (log-scale)' from 10^0 to 10^5. The y-axis is 'Probability (log-scale)' from 10^-14 to 10^-2. A blue line represents 'Token Probabilities', which decreases linearly from approximately 10^-2 at N=10^0 to approximately 10^-14 at N=10^5. A horizontal black line represents the 'BF16 Cutoff' at approximately 10^-5. The blue line crosses the black line at approximately N=10^1.5.
+
+Figure 3: Average probability for the  $i$ th most likely token, log-log plot. The probabilities very quickly vanish below numerical precision.
+
+{8}------------------------------------------------
+
+![Figure 4: Training loss curves for four models on the Alpaca dataset. The figure consists of four subplots: (a) Gemma 2 2B, (b) Phi 3.5 Mini, (c) Qwen 2.5 7B, and (d) Mistral Nemo. Each subplot shows 'Training Loss' on the y-axis (ranging from 0.7 to 1.3) against 'Gradient Steps' on the x-axis (ranging from 0 to 700). Three lines are plotted in each: a blue line for 'Confidence Interval (p=0.95)', a green line for 'torch.compile', and an orange line for 'Cut Cross-Entropy (Ours)'. In all cases, the orange and green lines are nearly perfectly overlaid, showing identical convergence behavior, while the blue line represents the variability across 5 seeds.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 4: Training loss curves for four models on the Alpaca dataset. The figure consists of four subplots: (a) Gemma 2 2B, (b) Phi 3.5 Mini, (c) Qwen 2.5 7B, and (d) Mistral Nemo. Each subplot shows 'Training Loss' on the y-axis (ranging from 0.7 to 1.3) against 'Gradient Steps' on the x-axis (ranging from 0 to 700). Three lines are plotted in each: a blue line for 'Confidence Interval (p=0.95)', a green line for 'torch.compile', and an orange line for 'Cut Cross-Entropy (Ours)'. In all cases, the orange and green lines are nearly perfectly overlaid, showing identical convergence behavior, while the blue line represents the variability across 5 seeds.
+
+Figure 4: Training loss curves for four models on the Alpaca dataset (Taori et al., 2023). The loss curves for CCE and `torch.compile` are nearly indistinguishable, showing that the gradient filtering in CCE does not impair convergence. Results averaged over 5 seeds.
+
+### 5.2 GRADIENT FILTERING
+
+Fig. 3 shows the sorted softmax probability of vocabulary entries. Note that the probabilities vanish very quickly and, for the top  $10^5$  most likely tokens, there is a linear relationship between log rank and log probability. Second, by the  $\sim 50$ th most likely token, the probability has fallen bellow our threshold for gradient filtering.
+
+This explains why we are able to filter so many values from the gradient computation without affecting the result. At these sparsity levels, most blocks of the softmax matrix  $\mathbf{S}$  are empty.
+
+### 5.3 TRAINING STABILITY
+
+**Fine-tuning.** We fine-tune Qwen 2.5 7B Instruct (Qwen Team, 2024), Phi 3.5 Mini Instruct (Abdin et al., 2024), Gemma 2 2B Instruct (Rivière et al., 2024), and Mistral NeMo (Mistral AI Team, 2024) on the Alpaca Dataset (Taori et al., 2023) using CCE and `torch.compile` as the control. CCE and `torch.compile` have indistinguishable loss curves, demonstrating that the gradient filtering in CCE does not impair convergence (Fig. 4).
+
+**Pretraining.** In our initial experiments using CCE for pretraining, we found that validation perplexity suffered due to two sources of error. First, gradient filtering when applied to  $\nabla C$  causes no gradient to be propagated to tokens that have little to no support in the training set. This does not cause issues when fine-tuning but does when pretraining. Second, CCE performs a summation in global memory. It is most efficient to perform this reduction in the desired final floating point type. In pretraining, the resulting loss of precision reduces performance. We use Kahan summation (Kahan, 1965) to recover this loss of precision. This changes correspond to CCE-Kahan-FullC.
+
+We pretrain Qwen 2.5 7B Instruct (Qwen Team, 2024), Phi 3.5 Mini Instruct (Abdin et al., 2024), Gemma 2 2B Instruct (Rivière et al., 2024), and Mistral NeMo (Mistral AI Team, 2024) on the 5% of the Open WebText Dataset (Gokaslan et al., 2019) using CCE-Kahan-FullC and `torch.compile`. We report validation perplexity on a held-out 0.25% of Open WebText and find that CCE-Kahan-FullC produces identical curves as `torch.compile` (Fig. 5).
+
+We make two notes about CCE-Kahan-FullC. First, the increased memory usage of CCE-Kahan-FullC vs. CCE is due to temporary buffers used in the backward pass. The size of these buffers
+
+{9}------------------------------------------------
+
+![Figure 5: Validation perplexity curves for four models (Gemma 2 2B, Phi 3.5 Mini, Qwen 2.5 7B, and Mistral NeMo) trained using 5% of the Open WebText dataset. Each plot shows Validation Perplexity (y-axis, 40-200) vs. Gradient Steps (x-axis, 0-1500). Three curves are shown: torch.compile (blue), CCE-Kahan-FullC (Ours) (orange), and a shaded blue area representing the Confidence Interval (p=0.95). In all cases, the orange curve (CCE-Kahan-FullC) closely matches the blue curve (torch.compile), indicating similar performance. The models are: (a) Gemma 2 2B, (b) Phi 3.5 Mini, (c) Qwen 2.5 7B, and (d) Mistral NeMo.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 5: Validation perplexity curves for four models (Gemma 2 2B, Phi 3.5 Mini, Qwen 2.5 7B, and Mistral NeMo) trained using 5% of the Open WebText dataset. Each plot shows Validation Perplexity (y-axis, 40-200) vs. Gradient Steps (x-axis, 0-1500). Three curves are shown: torch.compile (blue), CCE-Kahan-FullC (Ours) (orange), and a shaded blue area representing the Confidence Interval (p=0.95). In all cases, the orange curve (CCE-Kahan-FullC) closely matches the blue curve (torch.compile), indicating similar performance. The models are: (a) Gemma 2 2B, (b) Phi 3.5 Mini, (c) Qwen 2.5 7B, and (d) Mistral NeMo.
+
+Figure 5: Validation perplexity curves for four models on trained using 5% of the Open WebText dataset (Gokaslan et al., 2019). The validation set is a 0.25% subset of Open WebText that does not overlap with the train set. We find that CCE-Kahan-FullC matches torch.compile. Results averaged over 5 seeds.
+
+is typically less than the amount of free memory needed to rematerialize activations when using activation/gradient checkpoint (Chen et al., 2016). Thus CCE-Kahan-FullC often shares the same memory saving benefits as CCE. Second, the increased computation time of CCE-Kahan-FullC vs. torch.compile is often offset by the larger batch sizes CCE-Kahan-FullC enables. In our experiments with Mistral NeMo, CCE-Kahan-FullC enabled doubling the batch size, thereby decreasing training time by 2 hours (16%) compared to torch.compile.
+
+## 6 DISCUSSION
+
+As vocabulary size  $|V|$  has grown in language models, so has the memory footprint of the loss layer. The memory used by this one layer dominates the training-time memory footprint of many recent language models. We described CCE, an algorithm to compute  $\ell_i = \log \text{softmax}_i(\mathbf{C}^T f(x_1 \dots x_{i-1}))$  and its gradient with negligible memory footprint.
+
+Beyond the immediate impact on compact large-vocabulary LLMs, as illustrated in Fig. 1, we expect that CCE may prove beneficial for training very large models. Specifically, very large models are trained with techniques such as pipeline parallelism (Huang et al., 2019; Narayanan et al., 2019). Pipeline parallelism works best when all stages are equally balanced in computation load. Achieving this balance is easiest when all blocks in the network have similar memory-to-computation ratios. The classification head is currently an outlier, with a disproportionately high memory-to-computation ratio. CCE may enable better pipeline balancing or reducing the number of stages.
+
+We implemented CCE using Triton (Tillet et al., 2019). Triton creates efficient GPU kernels and enables rapid experimentation but has some limitations in control flow. Specifically, the control flow must be specified at the block level and therefore our thread-safe log-add-exp and gradient filtering are constrained to operate at the block level as well. We expect that implementing CCE in CUDA may bring further performance gains because control flow could be performed at finer-grained levels.
+
+It could also be interesting to extend CCE to other classification problems where the number of classes is large, such as image classification and contrastive learning.
+
+ Rest of paper (reference and Appendix) is removed.

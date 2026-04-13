@@ -1,0 +1,309 @@
+
+
+{0}------------------------------------------------
+
+# TENSOR ATTENTION TRAINING: PROVABLY EFFICIENT LEARNING OF HIGHER-ORDER TRANSFORMERS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Tensor Attention, a multi-view attention that is able to capture high-order correlations among multiple modalities, can overcome the representational limitations of classical matrix attention. However, the  $O(n^3)$  time complexity of tensor attention poses a significant obstacle to its utilization in transformers, where  $n$  is the input sequence length. In this work, we prove that the backward gradient of tensor attention training can be computed in almost linear time  $n^{1+o(1)}$ , the same complexity as its forward computation under the bounded entries assumption. We provide a closed-form solution for the gradient and propose a fast computation method utilizing polynomial approximation methods and tensor algebraic techniques. Furthermore, we prove the necessity and tightness of our assumption through hardness analysis, showing that slightly weakening it renders the gradient problem unsolvable in truly subcubic time. Our theoretical results establish the feasibility of efficient higher-order transformer training and may facilitate practical applications of tensor attention architectures.
+
+## 1 INTRODUCTION
+
+The generative large language models (LLMs), such as Mistral (Jiang et al., 2023), Llama (Touvron et al., 2023a), Llama2 (Touvron et al., 2023b), Llama3 (AI, 2024), Gemma (Team et al., 2024), GPT-3 (Brown et al., 2020), GPT-4 (Achiam et al., 2023), Claude3 (Anthropic, 2024), Grok-1 (xAI, 2024) and many more, have been widely involved in people’s living and work in these two years, such as bio-informatics (Thirunavukarasu et al., 2023), coding (Hou et al., 2024), education (Kasneci et al., 2023), finance (Li et al., 2023b), law (Sun, 2023), and even writing NeurIPS conference reviews (Liang et al., 2024). The success of LLMs is based on the transformer architecture introduced by Vaswani et al. (2017), which also has been introduced into other modality (Dosovitskiy et al., 2020), such as vision-language models, e.g., CLIP (Radford et al., 2021), Flamingo (Alayrac et al., 2022), LLaMA-Adapter (Zhang et al., 2023a; Gao et al., 2023), LLava (Liu et al., 2024; 2023b), BLIP (Li et al., 2022; 2023a), MiniGPT-4 (Zhu et al., 2023), Qwen (Bai et al., 2023a;b), Gemini (Team et al., 2023), MM1 (McKinzie et al., 2024).
+
+The above open-sourced large models use two-view matrix attention, i.e., each attention score/entry is related to two tokens (one query token and one key token) to capture the data correlation. More specifically, let  $Z$  be hidden representations and  $Q = ZW_Q, K = ZW_K, V = ZW_V$  be the corresponding query, key, and value matrices after projections using weights  $W_Q, W_K, W_V$  respectively. Then, the classical/matrix attention head can be written as  $\text{Att}(Z) = \text{Softmax}(QK^\top)V$ .
+
+On the other hand, many studies find that multi-view is crucial for high-order correlation in various kinds of data, e.g., math (Sanford et al., 2023), graph (Demirel et al., 2022; Luo et al., 2023), and multi-modality (Lahat et al., 2015). For example, recently, OpenAI released GPT-4o (OpenAI, 2024), and Google released Project Astra (Google, 2024), two flagship multi-modality models that aim to reason across three views, i.e., audio, vision, and text in real-time.
+
+However, Sanford et al. (2023) theoretically and empirically shows that classical attention can capture pairwise correlation but not triple-wise correlation due to the representational limitations of matrix attention. Sanford et al. (2023) introduces a triple detection task, demonstrating that classical attention layers have complexity scaling linearly with the input size, while high-order attention can efficiently perform this computation within a single head. In other words, one classical matrix
+
+{1}------------------------------------------------
+
+attention head “cannot” capture the information relevant to multi-views simultaneously unless using multiple layers with careful architecture design. This poses a fundamental technical obstacle for multi-modality models to efficiently fuse multiple representations/views to capture the high-order correlation among them, e.g., the high-order correlations among multi-modalities such as audio, text, and images.
+
+To fundamentally solve the above obstacle, Sanford et al. (2023) and Alman & Song (2024b) introduce *Tensor Attention*, which is a higher-order generalization of matrix attention that can capture high-order/multi-view information intrinsically. More specifically, it is defined as  $\text{Softmax}(Q(K_1 \odot K_2)^\top)(V_1 \odot V_2)$  (Definition 3.5, and illustrated in Figure 1), where  $\odot$  is column-wise Kronecker product, and  $Q, K_1/V_1, K_2/V_2$  can be from different views/modalities.
+
+However, to implement Tensor Attention practically, we must overcome the complexity bottleneck. Let the input token length be  $n$ , then the forward and backward time complexity of tensor attention will be  $O(n^3)$  as  $Q(K_1 \odot K_2)^\top \in \mathbb{R}^{n \times n^2}$  (Ma et al., 2019), while the time complexity of matrix attention is  $O(n^2)$  only as  $QK^\top \in \mathbb{R}^{n \times n}$  (Keles et al., 2023). For example, the input length of Llama2 (Touvron et al., 2023b) is 4096. So, intuitively, if we put tensor attention in Llama2, the input length will reduce to 256 to keep the same complexity in running speed and memory consumption.
+
+Table 1: Comparison to previous works.
+
+| Reference | For/Backward | Matrix/Tensor |
+|-|-|-|
+| Zandieh et al. (2023) | Forward | Matrix |
+| Alman & Song (2023) | Forward | Matrix |
+| Han et al. (2024) | Forward | Matrix |
+| Alman & Song (2024a) | Backward | Matrix |
+| Alman & Song (2024b) | Forward | Tensor |
+| Ours (Theorem 5.2) | Backward | Tensor |
+
+![Figure 1: Visualization of tensor attention with Softmax activation function. The diagram shows two main components. On the left, a 'Softmax' label is next to a green 3D structure representing a matrix. This structure is composed of several smaller green blocks, with a blue arrow pointing from one block to another, labeled with 'Q' and 'K'. On the right, an orange 3D structure represents the output, also composed of smaller blocks, with a blue arrow pointing from one block to another, labeled with 'V'. The two structures are connected by a large parenthesis, indicating the overall operation.](895d588a848d9963890c938763de9ecf_img.jpg)
+
+Figure 1: Visualization of tensor attention with Softmax activation function. The diagram shows two main components. On the left, a 'Softmax' label is next to a green 3D structure representing a matrix. This structure is composed of several smaller green blocks, with a blue arrow pointing from one block to another, labeled with 'Q' and 'K'. On the right, an orange 3D structure represents the output, also composed of smaller blocks, with a blue arrow pointing from one block to another, labeled with 'V'. The two structures are connected by a large parenthesis, indicating the overall operation.
+
+Figure 1: The visualization of tensor attention with Softmax activation function (Definition 3.5). We give an example of input token length  $n = 8$ , feature dimension  $d = 4$ .
+
+There are several recent works to overcome the time complexity bottleneck above, e.g.,  $O(n^2)$  for matrix attention and  $O(n^3)$  for tensor attention. Zandieh et al. (2023) accelerate matrix attention forward via kernel density estimation and get truly sub-quadratic time running time. Alman & Song (2023) uses the polynomial approximation method to map the matrix attention into low-rank matrices during forward computation, leading to an almost linear time complexity  $n^{1+o(1)}$  when entries are bounded. Similarly, under sparsity assumptions, Han et al. (2024) achieves nearly linear time computation for matrix attention forward by identifying the larger entries in the attention matrix. On the one hand, with fine-grained analysis, Alman & Song (2024a) proposes a new backward algorithm to compute the gradient of matrix attention in almost linear time complexity  $n^{1+o(1)}$  as well, under the same bounded entry assumption. On the other hand, Alman & Song (2024b) surprisingly finds that the *forward* computation of tensor attention can also be achieved in almost linear time  $n^{1+o(1)}$  rather than almost quadratic time  $n^{2+o(1)}$ , under similar assumptions as Alman & Song (2023). See a summary in Table 1. Thus, it is natural to ask,
+
+*Can we achieve almost linear time for gradient computation in Tensor Attention Training?*
+
+We provide a positive answer in this work. Under the same bounded entries assumption as Alman & Song (2024b), we propose Algorithm 1 to fast compute the backward gradient of Tensor Attention Training in almost linear time  $n^{1+o(1)}$  as its forward computation. Thus, our results may make the tensor attention practical, as we can get around the  $O(n^3)$  complexity barrier both in its forward and backward computation. **Our contributions are summarized as follows:**
+
+{2}------------------------------------------------
+
+- Under fine-grained analysis, we give the closed-form solution of the gradient computation of tensor attention (Lemma 4.1) and its time complexity without acceleration (Theorem 4.3).
+- Based on the closed-form solution, by utilizing polynomial approximation methods and tensor computation techniques, we propose Algorithm 1 to fast compute the backward gradient of tensor attention training in almost linear time as its forward computation (Theorem 5.2).
+- Furthermore, we prove that our assumption is necessary and “tight” by hardness analysis, i.e., if we slightly weaken the assumption, there is no algorithm that can solve the tensor attention gradient computation in truly sub-cubic complexity (Theorem 6.3).
+
+## 2 RELATED WORK
+
+**Fast attention computation.** In recent years, significant advances have been made in the development of efficient attention computation. One research direction involves employing low-rank approximations, polynomial kernel, or random features for the attention matrix (Zheng et al., 2022; Alman & Song, 2023; Kacham et al., 2023; Song et al., 2024; Gu et al., 2024), which scales the computational complexity sub-quadratically with sequence length. Another method explores patterns of sparse attention that lessen the computational load (Han et al., 2024). Additionally, using linear attention as an alternative to softmax attention has emerged as a substantial area of study (Katharopoulos et al., 2020; Schlag et al., 2021; Zhang et al., 2023b; Ahn et al., 2024; Zhang et al., 2024). These innovations have enhanced the capability of transformer-based models to handle longer sequences, thereby broadening their potential applications across various fields (Chen et al., 2023; Su et al., 2024; Peng et al., 2024; Ding et al., 2024; Ma et al., 2024; Bertsch et al., 2023; Jin et al., 2024).
+
+**Tensor computation for high-order representation.** Tensors excel over matrices in capturing higher-order relationships within data. Calculating low-rank factorizations or approximations of tensors is essential in a wide range of computer science applications, such as natural language processing (Lei et al., 2015; Bouchard et al., 2015), computer vision (Lu et al., 2016; Chen et al., 2017), computer graphics (Wang et al., 2005; Vasilescu, 2009), security (Acar et al., 2006; Kolda & Bader, 2006), and data mining (Karatzoglou et al., 2010; Rendle & Schmidt-Thieme, 2010; Mørup, 2011). Moreover, tensors are crucial in numerous machine learning applications (Podosinnikova et al., 2015; Zhong et al., 2017; Yang et al., 2019) and other diverse fields (Reps et al., 2016; Yi et al., 2016; Ray et al., 2016).
+
+**Roadmap.** In Section 3, we introduce the notations, several useful definitions, and our loss function. In Section 4, we give the closed form of the gradient of our loss function, and also its computational time complexity. In Section 5, we prove that we can compute the gradient in almost linear time. In Section 6, we provide the hardness analysis. In Section 7, we give the conclusion of our paper.
+
+## 3 PRELIMINARY
+
+In this section, we first provide the notations we use. In Section 3.1, we provide general definitions related to tensor operation. In Section 3.2, we provide key definitions that we utilize in this paper.
+
+**Basic notations.** We use  $[n]$  to denote  $\{1, 2, \dots, n\}$ . We use  $e_i$  to denote a column vector where only  $i$ -th location is 1 and zeros everywhere else. We denote an all 1 vector using  $\mathbf{1}_n \in \mathbb{R}^n$ . We use  $\langle a, b \rangle$  to denote the inner product of  $a, b \in \mathbb{R}^d$  i.e.  $\langle a, b \rangle := \sum_{i=1}^d a_i b_i$ . We use  $\|x\|_p$  to denote the  $\ell_p$  norm of a vector  $x \in \mathbb{R}^n$ , i.e.  $\|x\|_p := (\sum_{i=1}^n x_i^p)^{1/p}$ , and  $\|x\|_\infty := \max_{i \in [n]} |x_i|$ . We use  $\circ$  to denote the Hadamard product, i.e., the  $(i, j)$ -entry of  $A \circ B$  is  $A_{i,j} B_{i,j}$ .
+
+We use  $\text{tr}[A] := \sum_{i=1}^n A_{i,i}$  to denote the trace of a matrix  $A \in \mathbb{R}^{n \times n}$ . We use  $\exp(A)$  to denote a matrix where  $\exp(A)_{i,j} := \exp(A_{i,j})$  for a matrix  $A \in \mathbb{R}^{n \times d}$ . We use  $\|A\|_\infty$  to denote the  $\ell_\infty$  norm of a matrix  $A \in \mathbb{R}^{n \times d}$ , i.e.  $\|A\|_\infty := \max_{i \in [n], j \in [d]} |A_{i,j}|$ . We use  $\|A\|_F$  to denote the Frobenius norm of a matrix  $A \in \mathbb{R}^{n \times d}$ , i.e.  $\|A\|_F := \sqrt{\sum_{i \in [n]} \sum_{j \in [d]} |A_{i,j}|^2}$ . We use  $\text{poly}(n)$  to denote polynomial time complexity w.r.t.  $n$ .
+
+**Tensor related notations.** Let  $A \in \mathbb{R}^{n \times d}$ . We use  $a := \text{vec}(A)$  to denote the length  $nd$  vector obtained by stacking rows of  $A$  into a column vector, i.e.  $\text{vec}(A) := [a_1^\top, a_2^\top, \dots, a_n^\top]^\top$  where  $a_i^\top$  is
+
+{3}------------------------------------------------
+
+the  $i$ -th row of  $A$ , or simply  $\text{vec}(A)_{j+(i-1)d} := A_{i,j}$  for any  $i \in [n], j \in [d]$ , visualized in Fig. 2. Let  $I_d \in \mathbb{R}^{d \times d}$  denote the identity matrix. Let  $I_d \in \mathbb{R}^{d \times d \times d}$  denote the identity tensor, i.e., the diagonal entries are 1 and zeros everywhere else. Let  $X \in \mathbb{R}^{d \times d^2}$ . Let  $x \in \mathbb{R}^{d^3}$  denote the vectorization of  $X \in \mathbb{R}^{d \times d^2}$ . Let  $X \in \mathbb{R}^{d \times d \times d}$  be the tensorization of  $X \in \mathbb{R}^{d \times d^2}$ , where  $X_{a,b,c} = X_{a,(b-1)d+c}$  for any  $a, b, c \in [d]$ . We define the corresponding function  $\text{mat} : \mathbb{R}^{d \times d \times d} \rightarrow \mathbb{R}^{d \times d^2}$  as  $X = \text{mat}(X)$  where  $X_{a,(b-1)d+c} = X_{a,b,c}$  for any  $a, b, c \in [d]$ .
+
+### 3.1 DEFINITION OF TENSOR OPERATIONS
+
+We define some operations like the Kronecker product, which is a matrix operation applied to two matrices of any size, producing a block matrix. It is different from regular matrix multiplication and will be useful for our introduction and analysis of tensor attention.
+
+**Definition 3.1** ( $\otimes$  Kronecker product). *Given  $K_1 \in \mathbb{R}^{n_1 \times d_1}$  and  $K_2 \in \mathbb{R}^{n_2 \times d_2}$ , for any  $i_1 \in [n_1], i_2 \in [n_2], j_1 \in [d_1], j_2 \in [d_2]$ , we define the matrix  $K := K_1 \otimes K_2 \in \mathbb{R}^{n_1 n_2 \times d_1 d_2}$  as follows*
+
+$$K_{i_1+(i_2-1)n_1, j_1+(j_2-1)d_1} = (K_1)_{i_1, j_1} \cdot (K_2)_{i_2, j_2}.$$
+
+In this work, we will primarily use the following column-wise and row-wise versions of the Kronecker product, which are special kinds of Kronecker product.
+
+**Definition 3.2** ( $\oslash$  column-wise Kronecker product, also known as Kathri-Rao product). *Given matrices  $K_1 \in \mathbb{R}^{n_1 \times d}$ ,  $K_2 \in \mathbb{R}^{n_2 \times d}$ , we define the matrix  $K := K_1 \oslash K_2 \in \mathbb{R}^{n_1 n_2 \times d}$  as follows*
+
+$$\begin{aligned} K_{i_1+(i_2-1)n_1, j} &:= (K_1)_{i_1, j} \cdot (K_2)_{i_2, j}, \\ \forall i_1 \in [n_1], i_2 \in [n_2], j &\in [d]. \end{aligned}$$
+
+**Definition 3.3** ( $\ominus$  row-wise Kronecker product, also referred to as the face-splitting product). *Given matrices  $K_1 \in \mathbb{R}^{n \times d_1}$ ,  $K_2 \in \mathbb{R}^{n \times d_2}$ , we define the matrix  $K := K_1 \ominus K_2 \in \mathbb{R}^{n \times d_1 d_2}$  as follows*
+
+$$K_{i, j_1+(j_2-1)d_1} := (K_1)_{i, j_1} \cdot (K_2)_{i, j_2}, \quad \forall i \in [n], j_1 \in [d_1], j_2 \in [d_2].$$
+
+### 3.2 KEY DEFINITIONS OF TENSOR ATTENTION
+
+Now, we are ready to introduce the tensor attention. First, we introduce the parameters and input.
+
+**Definition 3.4** (Input and weight matrix). *We define the input sequence as  $Z \in \mathbb{R}^{n \times d}$  and the key, query, and value weight matrix as  $W_{K_1}, W_{K_2}, W_Q, W_{V_1}, W_{V_2} \in \mathbb{R}^{d \times d}$ . Then, we define the key, query, and value matrix as  $K_1 := ZW_{K_1} \in \mathbb{R}^{n \times d}$ ,  $K_2 := ZW_{K_2} \in \mathbb{R}^{n \times d}$ ,  $Q := ZW_Q \in \mathbb{R}^{n \times d}$ ,  $V_1 := ZW_{V_1} \in \mathbb{R}^{n \times d}$ ,  $V_2 := ZW_{V_2} \in \mathbb{R}^{n \times d}$ .*
+
+Then, based on Kronecker product, we define tensor attention in the following way.
+
+**Definition 3.5** (Tensor attention, Definition 7 in Sanford et al. (2023), Definition 1.1 in Alman & Song (2024b)). *Given input matrices  $Q, K_1, K_2, V_1, V_2 \in \mathbb{R}^{n \times d}$ , compute the following matrix*
+
+$$\underbrace{D^{-1}}_{n \times n} \underbrace{A}_{n \times n^2} \underbrace{V}_{n^2 \times d} \in \mathbb{R}^{n \times d},$$
+
+where (1)  $A := \exp(QK^T/d) \in \mathbb{R}^{n \times n^2}$  and  $K := K_1 \otimes K_2 \in \mathbb{R}^{n^2 \times d}$ , (2)  $D := \text{diag}(A\mathbf{1}_{n^2}) \in \mathbb{R}^{n \times n}$ , and (3)  $V := V_1 \otimes V_2 \in \mathbb{R}^{n^2 \times d}$ .
+
+**Remark 3.6.** In Definition 3.5, on the one hand, we separate the Softmax operation into an element-wise exp operation and a diagonal normalization matrix  $D$  for a more transparent formulation. On the other hand, we change  $K, V \in \mathbb{R}^{n \times d}$  in classical attention to  $K_1 \otimes K_2, V_1 \otimes V_2 \in \mathbb{R}^{n^2 \times d}$  in tensor attention, where  $\otimes$  is column-wise Kronecker product defined in Definition 3.2.
+
+{4}------------------------------------------------
+
+$$\begin{aligned}
+& \min_{X \in \mathbb{R}^{d \times d^2}} 0.5 \left\| \begin{bmatrix} n \\ & \ddots \\ & & \ddots \\ & & & & n \end{bmatrix}^{-1} \otimes \exp \left( A_1 \times_d X \times_{d^2} (A_2 \otimes A_3)^\top \right) \times_{n^2} (A_4 \otimes A_5) \times_d Y - E \right\|_F^2 \\
+& \begin{bmatrix} n \\ & \ddots \\ & & \ddots \\ & & & & n \end{bmatrix} = \text{diag} \left( \exp \left( A_1 \times_d X \times_{d^2} (A_2 \otimes A_3)^\top \right) \times_{n^2} \right)
+\end{aligned}$$
+
+Figure 3: The visualization of loss function defined in Definition 3.8. Let  $A_1, A_2, A_3, A_4, A_5$  and  $E$  be  $n \times d$  input matrices. Let  $Y$  be a given matrix with size  $d^2 \times d$ . The Kronecker product operator  $\otimes$  is defined in Definition 3.1. We minimize matrix  $X \in \mathbb{R}^{d \times d^2}$  in our loss function. We first compute  $\exp(A_1 X (A_2 \otimes A_3)^\top)$ , then we compute  $D(X) := \text{diag}(\exp(A_1 X (A_2 \otimes A_3)^\top) \mathbf{1}_{n^2})$ . Afterwards, we compute  $D(X)^{-1} \exp(A_1 X (A_2 \otimes A_3)^\top) (A_4 \otimes A_5) Y - E$ . Finally, we optimize  $X$  to compute the minimum of its Frobenius norm with a scaling factor 0.5.
+
+Our Definition 3.5 covers the self-attention setting, when the query/key/values  $Q, K_1, K_2, V_1, V_2$  follow Definition 3.4 where they share the same input. It is then a tensor self-attention, which can capture high-order information of the input  $Z$ . When the query/key/values have different inputs, it is then a tensor cross-attention that can capture high-order relationships among multiple inputs.
+
+Also, note that we have  $A \in \mathbb{R}^{n \times n^2}$  in Definition 3.5. Although  $QK^\top$  is a low-rank matrix with rank at most  $d$ ,  $\exp(QK^\top)$  may be a full-rank matrix in general. Thus, it is clear to see the exact forward computation of tensor attention takes  $O(n^3)$  time. Here, we introduce a forward tensor attention approximation task, which will help us formulate the tensor attention gradient approximation task later. Furthermore, Alman & Song (2024b) show that they can solve this approximation task in almost linear time  $n^{1+o(1)}$  (Lemma 5.1).
+
+**Definition 3.7** (Approximate Tensor Attention Computation (ATAttC( $n, d, B, \epsilon$ )). Definition 1.2 in Alman & Song (2024b)). *Given input matrices  $Q, K_1, K_2, V_1, V_2 \in \mathbb{R}^{n \times d}$  and parameters  $\epsilon, B > 0$ , where  $\max\{\|Q\|_\infty, \|K_1\|_\infty, \|K_2\|_\infty, \|V_1\|_\infty, \|V_2\|_\infty\} \leq B$ . Let  $A, D, V$  be defined in Definition 3.5. Then, our target is to output a matrix  $T \in \mathbb{R}^{n \times d}$  satisfying*
+
+$$\left\| \underbrace{T}_{n \times d} - \underbrace{D^{-1}}_{n \times n} \underbrace{A}_{n \times n^2} \underbrace{V}_{n^2 \times d} \right\|_\infty \leq \epsilon.$$
+
+For our focus, tensor attention training, we would like to find weights to fit the tensor attention to a desired output  $E$ . We first simplify the attention expression of Definition 3.5, whose inputs are from Definition 3.4 with weight matrices  $W_Q, W_{K_1}, W_{K_2}, W_{V_1}, W_{V_2} \in \mathbb{R}^{d \times d}$ . Let  $X := W_Q \cdot (W_{K_1} \otimes W_{K_2})^\top \in \mathbb{R}^{d \times d^2}$  and  $Y := W_{V_1} \otimes W_{V_2} \in \mathbb{R}^{d^2 \times d}$ . It can be verified that the tensor attention equals  $D^{-1} \exp(Z X (Z \otimes Z)^\top / d) (Z \otimes Z) Y$ , where  $Z \in \mathbb{R}^{n \times d}$  is defined as the input sequence in Definition 3.4.
+
+The naive gradient computation for the tensor attention training takes  $\Omega(n^3)$  time. The gradient for  $X$  is the bottleneck while that for  $Y$  is not, since  $A_1 X (A_2 \otimes A_3)^\top \in \mathbb{R}^{n \times n^2}$  lies in the non-linear function Softmax. Also, note that with gradients of  $X$  and  $Y$ , it is easy to get the gradients of the weight matrices  $W_Q, W_{K_1}, W_{K_2}, W_{V_1}, W_{V_2}$ . Therefore, we model the tensor attention training as the following tensor attention optimization problem (where  $A_1, A_2, A_3, A_4, A_5$  are introduced to replace  $Z$  to capture more general settings such as cross-attention). See Figure 3 for an illustration.
+
+**Definition 3.8** (Tensor attention optimization). *Suppose that  $A_1, A_2, A_3, A_4, A_5, E \in \mathbb{R}^{n \times d}$  and  $Y_1, Y_2 \in \mathbb{R}^{d \times d}$  are given. We formulate the attention optimization problem as*
+
+$$\min_{X \in \mathbb{R}^{d \times d^2}} \text{Loss}(X) := 0.5 \|D(X)^{-1} \exp(A_1 X (A_2 \otimes A_3)^\top / d) (A_4 \otimes A_5) Y - E\|_F^2,$$
+
+{5}------------------------------------------------
+
+![Figure 4: Computational graph for tensor attention backward. The graph shows the flow of gradients through various matrix operations. Inputs (blue boxes) include E, A4, A5, Y, X, A1, A2, and A3. Intermediate matrices (gray boxes) include V = SL - E, S = D^{-1}K, D = diag(K * 1_{n^2}), L = (A4 ⊗ A5)Y, W = VL^T, F0 = S * W, K = exp(A1X(A2 ⊗ A3)^T), F = F0 - Fb, and Fb = diag(F0 * 1_{n^2}) * S. The final gradient matrix (orange box) is g = A1^T F(A2 ⊗ A3). Arrows indicate the direction of gradient flow between these components.](191a4a245a7d36d03be9a990d0f758f5_img.jpg)
+
+Figure 4: Computational graph for tensor attention backward. The graph shows the flow of gradients through various matrix operations. Inputs (blue boxes) include E, A4, A5, Y, X, A1, A2, and A3. Intermediate matrices (gray boxes) include V = SL - E, S = D^{-1}K, D = diag(K \* 1\_{n^2}), L = (A4 ⊗ A5)Y, W = VL^T, F0 = S \* W, K = exp(A1X(A2 ⊗ A3)^T), F = F0 - Fb, and Fb = diag(F0 \* 1\_{n^2}) \* S. The final gradient matrix (orange box) is g = A1^T F(A2 ⊗ A3). Arrows indicate the direction of gradient flow between these components.
+
+**Figure 4:** The computational graph for tensor attention backward. The blue boxes are input matrices, the gray boxes are intermediate matrices, and the orange box is the final gradient matrix. Here,  $A_1, A_2, A_3, A_4, A_5$  denote the previous inputs,  $E$  denotes the target matrix, and  $X, Y$  denote the attention weights. More detailed definitions of each variable can be found in Section C, D and E.
+
+where (1)  $A_2 \otimes A_3 \in \mathbb{R}^{n^2 \times d^2}$  is the tensor product between  $A_2$  and  $A_3$ , (2)  $D(X) = \text{diag}(\exp(A_1 X (A_2 \otimes A_3)^\top / d) \mathbf{1}_{n^2}) \in \mathbb{R}^{n \times n}$ , and (3)  $Y = Y_1 \otimes Y_2 \in \mathbb{R}^{d^2 \times d}$ .
+
+Our main focus is the following Approximate Tensor Attention Loss Gradient Computation task.
+
+**Definition 3.9** (Approximate Tensor Attention Loss Gradient Computation (ATAttLGC( $n, d, B, \epsilon$ ))). Let  $\epsilon, B > 0$ . Let  $A_1, A_2, A_3, A_4, A_5, E \in \mathbb{R}^{n \times d}$  and let  $X_1, X_2, X_3, Y_1, Y_2 \in \mathbb{R}^{d \times d}$  (see Definition 3.8). Let  $X = X_1 \cdot (X_2 \otimes X_3)^\top \in \mathbb{R}^{d \times d^2}$ . Assume that  $\max\{\|A_1 X_1\|_\infty, \|A_2 X_2\|_\infty, \|A_3 X_3\|_\infty, \|A_4 Y_1\|_\infty, \|A_5 Y_2\|_\infty\} \leq B$ . Let us assume that any numbers in the previous matrices are in the  $\log(n)$  bits model<sup>1</sup>. We define  $\text{Loss}(X)$  the same as Definition 3.8. Let the gradient of loss function  $\text{Loss}(X)$  be  $\frac{d\text{Loss}(X)}{dX} \in \mathbb{R}^{d \times d^2}$ . Then, our target is to output a matrix  $\tilde{g} \in \mathbb{R}^{d \times d^2}$  satisfying  $\|\tilde{g} - \frac{d\text{Loss}(X)}{dX}\|_\infty \leq \epsilon$ .
+
+## 4 EXACT TENSOR ATTENTION GRADIENT COMPUTATION AND COMPLEXITY
+
+In this section, we provide the closed form of the tensor attention gradient of the loss function (Definition 3.8) and also its computational time. First, we calculate the closed form of the gradient in the following lemma, whose proof is in Appendix D.5.
+
+**Lemma 4.1** (Closed form of gradient, informal version of Lemma D.6). Define the function  $F(x) \in \mathbb{R}^{n \times n^2}$  as in Definition C.6 (see Fig. 4 for an illustration). Suppose that  $A_1, A_2, A_3 \in \mathbb{R}^{n \times d}$  are three given matrices. Suppose that  $\text{Loss}(x)$  is defined as Definition 3.8, where  $x = \text{vec}(X)$ . Then, we have
+
+$$\frac{d\text{Loss}(x)}{dx} = \text{vec}(A_1^\top F(x)(A_2 \otimes A_3)) \in \mathbb{R}^{d^3}.$$
+
+Note that,  $F(x)$  is a size  $n \times n^2$  matrix which is the bottleneck obstacle in time complexity.
+
+**Definition 4.2.** Let  $\mathcal{T}_{\text{mat}}(a, b, c)$  denote the time of multiplying  $a \times b$  matrix and  $b \times c$  matrix.
+
+Then, with straightforward analysis, we get the following theorem about the time complexity of naive computation. The complete proof is in Appendix D.6.
+
+<sup>1</sup>Each entry in the matrix is represented by at most  $\log(n)$  bits. This assumption is well-accepted and widely used in the computational complexity community, e.g., Feng et al. (2024); Liu et al. (2023a); Merrill & Sabharwal (2023).
+
+{6}------------------------------------------------
+
+**Theorem 4.3** (Tensor attention gradient computation, informal version of Theorem D.7). *Suppose that  $A_1, A_2, A_3, A_4, A_5, E \in \mathbb{R}^{n \times d}$  are input fixed matrices. We denote matrix variables as  $X \in \mathbb{R}^{d \times d^2}$  and  $Y \in \mathbb{R}^{d^2 \times d}$  (gradient computation is w.r.t.  $X$ ). Let  $g = \frac{d\text{Loss}(X)}{dX} \in \mathbb{R}^{d \times d^2}$  (for definition of  $\text{Loss}(X)$ , see Definition 3.8). Then, we show that computing the gradient  $g \in \mathbb{R}^{d \times d^2}$  requires  $\mathcal{T}_{\text{mat}}(n, d^2, n^2)$  time.*
+
+Note that  $\mathcal{T}_{\text{mat}}(n, d^2, n^2) \geq \Omega(n^3)$ . Thus, the naive tensor attention gradient computation is a complexity obstacle in practice as discussed in Section 1. Based on the closed formulation in Lemma 4.1, we derive our acceleration method, which will be introduced in the following section.
+
+## 5 FAST TENSOR ATTENTION GRADIENT COMPUTATION
+
+In this section, we show how to compute the tensor attention matrix gradient in almost linear time. In Section 5.1, we demonstrate our main results. In Section 5.2, we introduce some key tensor techniques used in our proof.
+
+#### Algorithm 1 Almost Linear Time Tensor Attention Gradient Computation
+
+```
+
+1: procedure FASTTENSORATTENTION( $A_1, A_2, A_3, A_4, A_5, E \in \mathbb{R}^{n \times d}, X_1, X_2, X_3, Y_1, Y_2 \in \mathbb{R}^{d \times d}, n \in \mathbb{N}_+, d \in \mathbb{N}_+, \epsilon \in (0, 0.1)$ ) ▷ Definition 3.9, Theorem 5.2
+2: ▷  $n$  can be viewed as the length of the sentence
+3: ▷  $d$  can be viewed as the feature of dimension, and we assume  $d = O(\log n)$ 
+4: ▷  $\epsilon$  is the accuracy output, and we typically pick  $1/\text{poly}(n)$ 
+5: Get  $U_1, V_1, W_1 \in \mathbb{R}^{n \times n^{o(1)}}$  to approximate  $S(x)$  via Lemma E.1 ▷  $O(n^{1+o(1)})$  time
+6:  $U_2 \leftarrow U_1(V_1 \odot W_1)^\top L(y) - E$  to approximate  $V(x)$  via Lemma 5.6 ▷  $O(n^{1+o(1)})$  time
+7:  $V_2, W_2 \leftarrow A_4 Y_1, A_5 Y_2$  to approximate  $W(x)$  via Lemma E.3 ▷  $O(nd^2)$  time
+8:  $U_3, V_3, W_3 \leftarrow U_1 \odot U_2, V_1 \odot V_2, W_1 \odot W_2$  to approximate  $F_a(x)$  via Lemma E.5 ▷  $O(n^{1+o(1)})$  time
+9: Precompute  $V_1^\top V_2$  and  $W_1^\top W_2$  to approximate  $F_b(x)$  via Lemma E.7 ▷  $O(n^{1+o(1)})$  time
+10: for  $j_0 \in [n]$  do ▷ Overall  $\tilde{\mathcal{R}}(x)$  takes  $O(n^{1+o(1)})$  time
+11:  $\tilde{\mathcal{R}}(x)_{j_0} \leftarrow (U_1)_{j_0,*} ((V_1^\top V_2) \odot (W_1^\top W_2)) ((U_2)_{j_0,*})^\top$ 
+12: end for
+13:  $U_4 \leftarrow \text{diag}(\tilde{\mathcal{R}}(x)) U_1$  ▷  $O(n^{1+o(1)})$  time
+14:  $V_4, W_4 \leftarrow V_1, W_1$  ▷  $O(n^{1+o(1)})$  time
+15: /* Approximate  $F(x)$ , Theorem E.8 */
+16:  $U_5, V_5, W_5 \leftarrow [U_3, -U_4], [V_3, V_4], [W_3, W_4]$  ▷  $O(n^{1+o(1)})$  time
+17: /* Approximate  $g$ , Theorem E.8 */
+18: Precompute  $A_1^\top U_5, A_2^\top V_5, A_3^\top W_5$  separately ▷  $O(dn^{1+o(1)})$  time
+19:  $\tilde{g} \leftarrow (A_1^\top U_5) \odot (A_2^\top V_5) \odot (A_3^\top W_5)$  ▷ in Definition B.3,  $O(d^3 n^{o(1)})$  time
+20: return  $\tilde{g}$  ▷ As  $d = O(\log n)$ , the total complexity is  $O(n^{1+o(1)})$  time
+21: end procedure
+
+```
+
+### 5.1 MAIN RESULTS FOR FAST GRADIENT COMPUTATION
+
+Polynomial approximation methods involve representing complex functions through simpler polynomial forms to facilitate easier analysis and computation. They are crucial in numerical analysis, aiding in the efficient solution of differential equations and optimization problems, and are widely used in simulations and machine learning (Aggarwal & Alman, 2022; Alman et al., 2020).
+
+Based on the polynomial approximation methods, Alman & Song (2024b) get the following result about tensor attention acceleration, which will be used to prove our main result.
+
+**Lemma 5.1** (Theorem 1.4 in Alman & Song (2024b)). *There is an algorithm that solves  $\text{ATAttC}(n, d = O(\log n), B = o(\sqrt[3]{\log n}), \epsilon = 1/\text{poly}(n))$  (see Definition 3.7) in time  $n^{1+o(1)}$ .*
+
+Using similar polynomial approximation methods, and combined with a series of tensor analysis techniques (Section 5.2), we get our main acceleration results.
+
+{7}------------------------------------------------
+
+**Theorem 5.2** (Main result for fast gradient computation). *Assuming the entries of  $A_1, A_2, A_3, A_4, A_5, E \in \mathbb{R}^{n \times d}$  and  $X_1, X_2, X_3, Y_1, Y_2 \in \mathbb{R}^{d \times d}$  are represented using  $O(\log n)$  bits. Then, there exist an algorithm (Algorithm 1) that runs in  $n^{1+o(1)}$  time to solve  $\text{ATAttLGC}(n, d = O(\log n), B = o(\sqrt[3]{\log n}), \epsilon = 1/\text{poly}(n))$  (see Definition 3.9), i.e., our algorithm computes a gradient matrix  $\tilde{g} \in \mathbb{R}^{d \times d^2}$  satisfying  $\|\frac{d\text{Loss}(X)}{dX} - \tilde{g}\|_\infty \leq 1/\text{poly}(n)$ .*
+
+*Proof sketch of Theorem 5.2.* The complete proof can be found in Appendix E.6.
+
+We use the polynomial approximation method to obtain low-rank approximation results for  $D^{-1} \exp(A_1 \tilde{X} (A_2 \otimes A_3)^\top / d)$  in Lemma E.1. However, this cannot be directly used for the closed form of the tensor attention gradient solution in Theorem 4.3. Utilizing a series of tensor techniques (Section 5.2 and Appendix B), we smartly convey these low rank properties throughout the gradient formulation and computation, where two key steps are fixed in Lemma E.5 and Lemma E.7.  $\square$
+
+**Remark 5.3.** *The assumption in Theorem 5.2 is practical. In practice, especially in recent long context tasks, the  $n$  is large, e.g.  $n = 2 \times 10^6$  for Google's Gemini 1.5 Pro (Gemini, 2024), while the model training uses a half-precision floating-point format, e.g., the bit number is 16. Furthermore, our assumption is "tight", where if we slightly weaken the assumption, there is no algorithm that can solve the tensor attention gradient computation in truly sub-cubic complexity (Theorem 6.3).*
+
+Our Theorem 5.2 accurately approximates ( $\epsilon = 1/\text{poly}(n)$ ) the tensor attention gradient computation in almost linear time  $n^{1+o(1)}$  under practical assumptions (see the above Remark 5.3). Thus, our methods solve the last puzzle of tensor attention acceleration. Combined with previous work on tensor attention inference, this may make tensor attention practical, as we overcome the theoretical cubic time complexity barrier both in inference and training.
+
+We provide Algorithm 1 for our almost linear time tensor attention training method. In the detailed algorithm, first, we construct  $U_1, V_1, W_1$  in Lemma E.1. Then, we construct  $U_2, V_2, W_2$  in Lemma E.3 and  $U_3, V_3, W_3$  in Lemma E.5. We show how to construct  $U_4, V_4, W_4$  in Lemma E.7. Finally, we construct  $U_5, V_5, W_5$  and compute the gradient  $g$  in almost linear time in Theorem E.8.
+
+### 5.2 TENSOR OPERATION ANALYSIS TECHNIQUES
+
+Here, we introduce some key techniques for proving Theorem 5.2. These techniques make it possible to convey the low-rank property even during the tensor operations, solving the novel technical challenges in tensor attention gradient computation.
+
+We first introduce a swap rule and a distributed rule, where both proofs are in Appendix B.2.
+
+**Fact 5.4** (Swap rule for tensor and matrix product). *Let  $W_1, W_2 \in \mathbb{R}^{d \times d}, A_1, A_2 \in \mathbb{R}^{n \times d}$ . We have*
+
+$$\underbrace{(A_1 \otimes A_2)}_{n^2 \times d^2} \cdot \underbrace{(W_1 \otimes W_2)}_{d^2 \times d} = \underbrace{(A_1 \cdot W_1)}_{n \times d} \otimes \underbrace{(A_2 \cdot W_2)}_{n \times d}.$$
+
+Fact 5.4 tells us that we can swap the order of tensor operation and matrix multiplication, allowing us to always compute the low dimension first to reduce the complexity.
+
+**Fact 5.5.** *Let  $U_1 \in \mathbb{R}^{n_1 \times d}$  and  $U_2 \in \mathbb{R}^{n_1 \times k}$ . Let  $V_1 \in \mathbb{R}^{n_2 \times d}$  and  $V_2 \in \mathbb{R}^{n_2 \times k}$ . Let  $W_1 \in \mathbb{R}^{n_3 \times d}$  and  $W_2 \in \mathbb{R}^{n_3 \times k}$ . We have*
+
+$$\underbrace{(U_1 \otimes U_2)}_{n_1 \times dk} \cdot \underbrace{((V_1 \otimes V_2) \otimes (W_1 \otimes W_2))^\top}_{n_2 \times dk \cdot n_3 \times dk} = \underbrace{(U_1 \cdot (V_1 \otimes W_1)^\top)}_{n_1 \times d \cdot n_2 \times d \cdot n_3 \times d} \circ \underbrace{(U_2 \cdot (V_2 \otimes W_2)^\top)}_{n_1 \times k \cdot n_2 \times k \cdot n_3 \times k}$$
+
+Fact 5.5 tells us that the multiple tensor operation can be distributed to a different format. If we have some low-rank matrix/tensor, we can distribute them into each component, so that each component can be accelerated via the low-rank property. Intuitively, this allows us to borrow some low-rank benefits from other terms to fix the bottleneck terms.
+
+We provide an important tool whose proof is in Appendix B.2.
+
+**Lemma 5.6** (Informal version of Lemma B.13). *Given  $A_1 \in \mathbb{R}^{n_1 \times d_1}, A_2 \in \mathbb{R}^{n_2 \times d_1}$ , let  $A := (A_1 \otimes A_2) \in \mathbb{R}^{n_1 n_2 \times d_1}$ . Given  $B_1 \in \mathbb{R}^{n_1 \times d_2}, B_2 \in \mathbb{R}^{n_2 \times d_2}$ , let  $B := (B_1 \otimes B_2) \in \mathbb{R}^{n_1 n_2 \times d_2}$ . We define  $C \in \mathbb{R}^{d_1 \times d_2}$  as  $C := A^\top B$  and  $C_1 := A_1^\top B_1 \in \mathbb{R}^{d_1 \times d_2}, C_2 := A_2^\top B_2 \in \mathbb{R}^{d_1 \times d_2}$ . Then, we have  $C_1 \circ C_2 = C$  and given  $A_1, A_2, B_1, B_2$ , we can get  $C$  in  $\mathcal{T}_{\text{mat}}(d_1, \max\{n_1, n_2\}, d_2)$  time.*
+
+{8}------------------------------------------------
+
+Lemma 5.6 is a highly non-trivial method to handle tensor operation,  $\circ$  and matrix multiplication together. By using the method, we save the computation time from  $\mathcal{T}_{\text{mat}}(d, n^2, d)$  to  $\mathcal{T}_{\text{mat}}(d, n, d)$ , which gets rid of the bottleneck quadratic term  $n^2$ .
+
+Lastly, we introduce a tensor trick, which can reduce a tensor operation to a matrix multiplication operation. The proof is in Appendix B.3.
+
+**Fact 5.7 (Tensor-trick).** *Given matrices  $A_1 \in \mathbb{R}^{n_1 \times d_1}$ ,  $A_2 \in \mathbb{R}^{n_2 \times d_2}$  and  $X \in \mathbb{R}^{d_1 \times d_2}$ , we have  $\text{vec}(A_1 X A_2^\top) = (A_1 \otimes A_2) \text{vec}(X) \in \mathbb{R}^{n_1 n_2}$ .*
+
+**Technical novelty over previous works.** We generalize beyond the results of Alman & Song (2024b), which only provide methods for *tensor attention forward*. Our paper presents a detailed analysis for *tensor attention backward*, providing both upper bound and lower bound. Though we build on some results from Alman & Song (2024b) and Alman & Song (2024a), generalizing to tensor attention backward posed many technical challenges. These challenges are unique to our setting and not presented in previous settings like matrix attention (Alman & Song, 2023; 2024a) or tensor attention forward (Alman & Song, 2024b). To be more specific, we prove many key properties for tensor operation needed for backward though not needed for forward, including Facts 5.4 (swap rule for tensor and matrix product), 5.5 (distribution rule for tensor and matrix product), B.11 (tensor computation reduction to matrix product), B.12 (distribution rule for tensor computation), Claim B.20 (tensor product to matrix product). Fact 5.4, used as a key part to prove Lemmas E.1 and E.3, gives the swap rule for tensor operations. Lemma 5.6 supports the proof of Fact 5.5 and helps bypass the  $O(n^3 d^2)$  time complexity bottleneck in the fast computation of  $U_2$ . Fact 5.5, crucial in proving Lemma E.5, shows the distributive nature of tensor operations. Using Facts B.11, B.12, and Claim B.20, we leverage the structure of low-rank matrices  $U_5, V_5, W_5$  to prove Theorem 5.2.
+
+## 6 TENSOR ATTENTION GRADIENT COMPLEXITY LOWER BOUND
+
+In this section, we show that our assumption is necessary. First, we introduce some hardness analysis background in Section 6.1. Then, we introduce our main hardness result in Section 6.2.
+
+### 6.1 SETH AND TENSOR ATTENTION FORWARD HARDNESS
+
+We provide the findings that our results are based on. We first introduce a well-known hypothesis in hardness analysis. The Strong Exponential Time Hypothesis (SETH), a well-established conjecture, has been instrumental in establishing fine-grained lower bounds for numerous algorithmic problems, as highlighted in the survey by Williams (2018). More than two decades ago, Impagliazzo & Paturi (2001) introduced SETH as an enhanced version of the well-known  $P \neq NP$  conjecture, positing that current algorithms solving the SAT problem are nearly optimal in terms of efficiency.
+
+**Hypothesis 6.1** (Strong Exponential Time Hypothesis (SETH), Impagliazzo & Paturi (2001)). *Given  $\epsilon > 0$ , there exists  $k \geq 3 \in \mathbb{Z}$  such that it is impossible to solve  $k$ -SAT problem with  $n$  variables in  $O(2^{(1-\epsilon)n})$  time, including using any randomized algorithms.*
+
+We will critically utilize the hardness result of the forward tensor attention computation.
+
+**Lemma 6.2** (Theorem 1.3 in Alman & Song (2024b)). *Assuming SETH, for any constant  $\delta > 0$ , no algorithm can solve  $\text{ATAttC}(n, d = \Theta(\log n), B = \Theta(\sqrt[\gamma]{(1+\gamma)\log n}), \epsilon = n^{\gamma-O(1)})$  (Definition 3.7) in  $O(n^{3-\delta})$  time, even if the inputs meet the following conditions for any  $\gamma \geq 0$ : (1)  $V \in \{0, 1\}^{n^2 \times d}$ , (2) There exists  $B_a \leq O((1+\gamma)\log^2 n) = O(d(\sqrt[\gamma]{(1+\gamma)\log n})^3)$  where all entries of  $Q(K_1 \otimes K_2)^\top$  are within the range  $[1, B_a]$  and more than half entries in each row of  $Q(K_1 \otimes K_2)^\top$  are equal to  $B_a$ .*
+
+This result shows that assuming SETH, if we just slightly weaken the assumption from  $B = O(\sqrt[\gamma]{\log n})$  to  $B = \Theta(\sqrt[\gamma]{(1+\gamma)\log n})$  with  $\gamma = \omega(1)$ , then the tensor attention forward computation is hard, i.e., no algorithm can solve it in truly sub-cubic time.
+
+### 6.2 MAIN RESULT FOR HARDNESS
+
+Based on the above observation (Lemma 6.2), we prove our main result for tensor attention gradient computation hardness.
+
+{9}------------------------------------------------
+
+**Theorem 6.3** (Main result for hardness). *Let  $\gamma : \mathbb{N} \rightarrow \mathbb{N}$  be any function with  $\gamma(n) = o(\log n)$  and  $\gamma(n) = \omega(1)$ . Assuming SETH, for any constant  $\delta > 0$ , it is impossible to solve ATAttLGC( $n, d = \Theta(\log n), B = \Theta(\sqrt[\gamma]{\gamma(n)} \cdot \log n), \epsilon = O(1/(\log n)^4)$ ) (Definition 3.9) in time  $O(n^{3-\delta})$  when  $E = 0, Y = I_d, X = \lambda I_d$  for some scalar  $\lambda \in [0, 1]$ .*
+
+See the formal proof in Appendix F.2. The intuition is that if we can solve ATAttLGC in  $O(t)$  time, then we can solve ATAttC in  $O(t \cdot \log^{11}(n))$  time by interpolation and “integral”. We see a similar sharp complexity transition as forward computation (Lemma 6.2): assuming SETH, if we slightly weaken the assumption from  $B = O(\sqrt[\gamma]{\log n})$  to  $B = \Theta(\sqrt[\gamma]{(1+\gamma)\log n})$  with  $\gamma = \omega(1)$ , then the tensor attention gradient computation will be unsolvable in truly sub-cubic time as well.
+
+## 7 DISCUSSION AND CONCLUSION
+
+In this work, we proved that the backward gradient of tensor attention training can be computed in almost linear  $n^{1+o(1)}$  time, the same complexity as its forward computation, under a bounded entries assumption. We provided a closed-form solution for the gradient and proposed a fast computation method utilizing polynomial approximation and tensor algebraic techniques. Furthermore, we proved the necessity and tightness of our assumption through hardness analysis, showing that slightly weakening it renders the tensor attention gradient problem unsolvable in truly subcubic time. Our theoretical results establish the feasibility of efficient higher-order transformer training and may facilitate practical applications of tensor attention architectures. Due to space limits, we provide our further discussion and extension in Appendix A. Future work can perform empirical evaluations of the method in practical large language models, and explore how these findings can be implemented in real-world scenarios to enable the development of powerful higher-order models.
+
+## REFERENCES
+
+- Evrim Acar, Seyit A. Camtepe, and Bülent Yener. Collective sampling and analysis of high order tensors for chatroom communications. In *International Conference on Intelligence and Security Informatics*, pp. 213–224. Springer, 2006.
+- Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Florencia Leoni Aleman, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, et al. Gpt-4 technical report. *arXiv preprint arXiv:2303.08774*, 2023.
+- Amol Aggarwal and Josh Alman. Optimal-degree polynomial approximations for exponentials and gaussian kernel density estimation. *arXiv preprint arXiv:2205.06249*, 2022.
+- Kwangjun Ahn, Xiang Cheng, Minhak Song, Chulhee Yun, Ali Jadbabaie, and Suvrit Sra. Linear attention is (maybe) all you need (to understand transformer optimization). In *The Twelfth International Conference on Learning Representations*, 2024.
+- Meta AI. Introducing meta llama 3: The most capable openly available llm to date, 2024. <https://ai.meta.com/blog/meta-llama-3/>.
+- Jean-Baptiste Alayrac, Jeff Donahue, Pauline Luc, Antoine Miech, Iain Barr, Yana Hasson, Karel Lenc, Arthur Mensch, Katherine Millican, Malcolm Reynolds, et al. Flamingo: a visual language model for few-shot learning. *Advances in neural information processing systems*, 35:23716–23736, 2022.
+- Josh Alman and Zhao Song. Fast attention requires bounded entries. *Advances in Neural Information Processing Systems*, 36, 2023.
+- Josh Alman and Zhao Song. The fine-grained complexity of gradient computation for training large language models. *arXiv preprint arXiv:2402.04497*, 2024a.
+- Josh Alman and Zhao Song. How to capture higher-order correlations? generalizing matrix softmax attention to kronicker computation. In *The Twelfth International Conference on Learning Representations*, 2024b.
+
+ Rest of paper (reference and Appendix) is removed.

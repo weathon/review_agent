@@ -1,0 +1,479 @@
+
+
+{0}------------------------------------------------
+
+# RoRA-VLM: ROBUST RETRIEVAL AUGMENTATION FOR VISION LANGUAGE MODELS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Though vision-language models (VLMs) have demonstrated impressive capabilities as general-purpose visual assistants, they still exhibit inferior performance on knowledge-intensive tasks such as information-seeking visual question answering, primarily due to the challenge of accurately encoding all the associations between visual objects and scenes to their corresponding entities and background knowledge. While retrieval augmentation methods offer an efficient way to integrate external knowledge, extending them to vision-language domain presents unique challenges in (1) precisely retrieving relevant information from external sources due to the inherent discrepancy within the multimodal queries, and (2) being resilient to the irrelevant, extraneous and noisy information contained in the retrieved multimodal knowledge snippets. In this work, we introduce RoRA-VLM, a novel and robust retrieval augmentation framework specifically tailored for VLMs, with two key innovations: (1) a 2-stage retrieval process with Image-anchored Textual-query Expansion to synergistically combine the visual and textual information in the query and retrieve the most relevant multimodal knowledge snippets; and (2) a robust retrieval augmentation method that strengthens the resilience of VLMs against irrelevant information in the retrieved multimodal knowledge by injecting adversarial noises into the retrieval-augmented training process, and filters out extraneous visual information, such as unrelated entities presented in images, via a query-oriented visual token refinement strategy. We conduct extensive experiments to validate the effectiveness and robustness of our proposed methods on three widely adopted benchmark datasets: OVEN, InfoSeek and Enc-VQA. Our results demonstrate that with a minimal amount of training instance, RoRA-VLM enables the LLaVA-v1.5 model to achieve significant performance improvement and constantly outperform state-of-the-art retrieval-augmented VLMs on all benchmarks while also exhibiting a novel zero-shot domain transfer capability.
+
+## 1 INTRODUCTION
+
+Vision-language models (VLMs) (Li et al., 2023; Alayrac et al., 2022; Liu et al., 2023b; Dai et al., 2023), built on pre-trained visual encoders and large language models (LLMs), have achieved remarkable progress across a range of visual perception and generation tasks (Antol et al., 2015; Marino et al., 2019; Dai et al., 2024). However, despite these advancements, recent studies (Chen et al., 2023d; Hu et al., 2023; Mensink et al., 2023) reveal that VLMs still face significant challenges in knowledge-intensive tasks, such as visual entity grounding (Hu et al., 2023) and information-seeking visual question answering (Chen et al., 2023d), where VLMs must effectively link the visual objects and scenes to their corresponding entities and background knowledge. For instance, as illustrated in Figure 1, given the question “*Who designed the tallest building in the picture?*” alongside an image of several buildings, VLMs need to accurately iden-
+
+|                                                                                                                                                                                                                                                                                                                                                                                                    |                                                                                                                                                                                                                                           |
+|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| <p><b>Question:</b> Who designed the tallest building in the picture?</p> <img alt="A photograph of the New York City skyline, with the Freedom Tower (1 World Trade Center) prominently visible in the center. Other skyscrapers are visible in the background and foreground." data-bbox="587 1019 762 1136" src="ef1a3fba3c723ddbe1e8423959838bca_img.jpg"/> <p><b>Answer:</b> David Childs</p> | <p><b>Background Knowledge</b></p> <p><b>Entity:</b> Freedom Tower</p> <p><b>Retrieved Content:</b> Freedom Tower is the main building of the rebuilt World Trade Center complex in Lower Manhattan, designed by David Childs of SOM.</p> |
+|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+
+Figure 1: An example question for information-seeking visual question answering.
+
+{1}------------------------------------------------
+
+tify the building based on its visual attributes and retrieve the associated background knowledge encoded in LLMs. However, the vast and dynamic nature of visual knowledge in the open world makes it impractical for VLMs to store all possible associations between visual appearances and their corresponding entities and background knowledge in their parameters.
+
+One promising solution is retrieval-augmented generation (RAG), which integrates knowledge retrieved from external sources with VLMs and has demonstrated success in improving text-based knowledge-intensive tasks for LLMs (Guu et al., 2020; Lewis et al., 2020; Yoran et al., 2023). However, extending RAG to vision-language tasks presents several unique challenges: (1) **Modality Discrepancy:** Vision-language tasks usually rely on both visual and textual information, and neither modality can fully substitute for the other due to their inherent discrepancy, thus formulating precise retrieval queries is often difficult. For instance, textual inputs, such as “Who designed the tallest building in the picture?”, usually contain generic terms or anaphoric references (“the tallest building”) that lack specificity without visual context while visual information alone may not sufficiently clarify the query’s intent, leading to ambiguity. This interplay between modalities makes it challenging to precisely retrieve relevant information from external sources. (2) **Information Noise:** Retrieved multimodal knowledge snippets, particularly those containing both images and text, often introduce irrelevant or extraneous information. A common type of noise arises when the primary entity in the retrieved image differs from the entity in the query image, leading to the retrieval of irrelevant textual knowledge. Another source of noise occurs within the retrieved images themselves, where background elements or unrelated objects, such as *Brookfield Place* in Figure 1, may distract the VLMs during perception and reasoning. This extraneous information can mislead the model and reduce the accuracy of its response to the query.
+
+To tackle these challenges, we introduce RoRA-VLM, a robust retrieval-augmented framework aiming at enhancing vision-language models on knowledge-seeking tasks. RoRA-VLM consists of three novel components, each of which is tailored to address a unique challenge outlined above. To mitigate the modality discrepancy, we design IMAGE-ANCHORED TEXTUAL-QUERY EXPANSION, a 2-stage retrieval method that synergistically integrate vision-language information for more accurate and comprehensive vision-language retrieval. In the first stage, the query image, serving as a visual anchor, is used to retrieve visually similar images. For each retrieved image, we extract its associated entity name and brief description to augment the textual query and disambiguate the anaphoric references. The expanded query is then employed in the second stage to accurately retrieve the most relevant answers from a textual knowledge base. This 2-stage retrieval process ensures that the retrieved content is comprehensive and closely aligned with the multimodal query, minimizing the risk of incomplete or modality-restricted results. With this 2-stage retrieval process, we obtain multiple multimodal knowledge snippets to augment the VLMs, where each multimodal knowledge snippet is the concatenation of an image and entity description from the first stage and its corresponding retrieved texts from the second stage.
+
+To further address the challenges posed by irrelevant information in retrieved multimodal knowledge snippets, we propose a two-fold approach, NOISE-RESILIENT RETRIEVAL-AUGMENTED GENERATION. First, we introduce an adversarial noise injection training strategy for robust augmentation, which encourages VLMs to selectively utilize retrieved knowledge for generation. Specifically, we construct training instances by intentionally introducing irrelevant information into the retrieved knowledge, compelling the model to become resilient to noises. By fine-tuning VLMs on a small number of instances of knowledge-intensive tasks, the model implicitly learns to compare visual nuances between the query image and retrieved images, thereby discarding irrelevant knowledge associated with images containing non-matching entities. Second, to handle the extraneous visual information, such as background objects or unrelated entities in images, we design a query-oriented visual token refinement strategy. VLMs typically encode each input image into a sequence of  $n$  visual tokens via a CLIP image encoder (Radford et al., 2021) and each token corresponds to a distinct image patch. We refine the visual tokens of the query image by only keeping  $M$  tokens ( $m \ll n$ ) that are most related to the text query based on their CLIP embeddings, and similarly, for each retrieved image, we also identify and only keep the most relevant  $m$  tokens to the query image.
+
+We conduct extensive experiments to evaluate the effectiveness and robustness of our proposed framework on three widely adopted knowledge-seeking benchmarks: OVEN (Hu et al., 2023), InfoSeek (Chen et al., 2023d), and Enc-VQA (Mensink et al., 2023). Our results demonstrate that, with only a minimal number of training instances (e.g., 10,000), the framework achieves significant improvements over baseline models, yielding up to 14.36% accuracy improvement, and consistently
+
+{2}------------------------------------------------
+
+outperforms Wiki-LLaVA (Caffagni et al., 2024), the current state-of-the-art retrieval-augmented VLM. Additionally, our extensive analysis reveals that: (1) The IMAGE-ANCHORED TEXTUAL-QUERY EXPANSION method comprehensively leverages multimodal information to enhance query intent understanding and improve retrieval accuracy in knowledge-intensive tasks, achieving up to an 11.52% increase in retrieval precision compared to the general single-stage retrieval approach. (2) The NOISE-RESILIENT RETRIEVAL-AUGMENTED GENERATION enables VLMs to identify valuable information relevant to the entity in query image from the retrieval knowledge and focus on visual tokens that are closely related to the entity concerned in the input text query. (3) Pre-training on entity-rich image-caption pairs (Burns et al., 2023) substantially enhances the VLMs’ performance on information-seeking VQA tasks. (4) RORA-VLM also demonstrates strong zero-shot transfer to knowledge-intensive tasks from unseen domains.
+
+## 2 RELATED WORK
+
+**Vision-Language Models** Recent advancements in vision-language models (VLMs), such as BLIP-2 (Li et al., 2023), Flamingo (Alayrac et al., 2022), LLaVA (Liu et al., 2023b), and Instruct-BLIP (Dai et al., 2023), have demonstrated remarkable performance on various visual perception tasks, such as image captioning (Lin et al., 2014; Schuhmann et al., 2022; Chen et al., 2023a), visual question answering (Antol et al., 2015; Marino et al., 2019; Schwenk et al., 2022), object detection (Lin et al., 2014; Everingham et al.), visual grounding (Hu et al., 2023; Kazemzadeh et al., 2014), and visual relationship detection (Lu et al., 2016), etc. These models typically employ an architecture consisting of a pre-trained visual encoder (Radford et al., 2021; Dosovitskiy et al., 2021; Chen et al., 2024), a pre-trained large language model (Touvron et al., 2023; Almazrouei et al., 2023), and a projection function that maps visual features to the text embedding space (Liu et al., 2023b). However, this method often falls short in aligning visual features with the extensive knowledge embedded in language models. Alternative architectures, such as the Q-former used in BLIP-2 (Li et al., 2023) and the perceiver resampler in Flamingo (Alayrac et al., 2022), have been proposed to enhance the perception of visual content. These architectures focus on improving the models’ ability to understand the color, shape, and layout of objects and scenes. Despite these advancements, VLMs still struggle with knowledge-intensive tasks that require deep integration of visual and textual information. This gap highlights the need for more sophisticated methods to align visual features with the rich semantic knowledge stored in language models.
+
+**Retrieval-Augmented Generation Work** Augmenting models with external knowledge sources has proven effective in enhancing their performance on knowledge-intensive tasks. In the text-only domain, models like REALM (Guu et al., 2020), RAG (Lewis et al., 2020), and RobustRAG (Yoran et al., 2023) have demonstrated the benefits of retrieval-based augmentation. These models retrieve relevant information from external sources to provide additional context for generating accurate responses. Applying retrieval-augmented generation to the vision-language domain presents unique challenges due to modality discrepancies and differing model architectures (Wei et al., 2023). Several recent studies (Gui et al., 2021; Lin et al., 2023; 2024) have explored multimodal retrieval to enhance LLMs by retrieving textual knowledge from visual queries. However, they primarily focus on improving retrieval quality, while our research focuses more on addressing the fundamental challenge of how to effectively and robustly leverage external knowledge to augment the reasoning and generation of vision-language models. Given that the state-of-the-art retriever can only achieve modest performance, e.g., lower than 0.2 for recall@1 on InfoSeek (Chen et al., 2023d), managing and denoising the noise becomes more crucial for VLMs. This work distinctively addresses this challenge by introducing a robust retrieval augmentation framework. Our proposed RORA-VLM framework distinctively addresses this challenge by mitigating retrieval-induced noise while enhancing VLMs’ ability to handle interleaved visual-textual contexts, ultimately improving generalizability to unseen entities, events, and scenes.
+
+**Knowledge-Intensive Tasks and Benchmarks** Knowledge-intensive tasks pose significant challenges for VLMs, requiring them to connect visual appearances with semantic knowledge and perform complex reasoning. Benchmarks such as OVEN (Hu et al., 2023) and InfoSeek (Chen et al., 2023d) have been developed to evaluate VLMs on tasks like visual entity grounding and information-seeking visual question answering. For instance, tasks like identifying the designer of a building from an image require VLMs to recognize the building based on its visual properties and infer the designer using stored knowledge. Studies have shown that extensive fine-tuning on knowledge-intensive task instances does not substantially improve VLMs’ performance (Chen
+
+{3}------------------------------------------------
+
+![Figure 2: Overview of architecture of RORA-VLM. The diagram illustrates the flow from a question and image input through two-stage retrieval and visual token refinement to VLM inputs, which are then processed by a Noise-Resilient Retrieval-Augmented Generation module to produce an answer.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+The diagram shows the architecture of RORA-VLM. It starts with a **Question**: "In which year was this building built?" and an **Image** of a building. These are processed through **Two-Stage Retrieval with Image-anchored Textual-query Expansion** to produce **Retrieved knowledge**: "Castle of Good Hope", "Cape Town", and "Fort Scratchley". This knowledge is then processed through **Query-oriented Visual Token Refinement** (using a formula  $x_i = \text{top}_k \left( \left\{ s_{ij} \mid \sum_{i=1}^k s_{ij} \right\}_{j=1}^n \right)$ ) to produce **VLM Inputs**: three images with captions like "Built by the Dutch East India Company", "Jan van Riebeeck's arrival on 6 April ...", and "The fort was originally built after ...". These inputs are then processed by a **Noise-Resilient Retrieval-Augmented Generation** module, which uses a graph-based approach to refine the retrieved knowledge and generate the **Answer**: "This building was built between 1666 - 1679.".
+
+Figure 2: Overview of architecture of RORA-VLM. The diagram illustrates the flow from a question and image input through two-stage retrieval and visual token refinement to VLM inputs, which are then processed by a Noise-Resilient Retrieval-Augmented Generation module to produce an answer.
+
+Figure 2: Overview of architecture of RORA-VLM.
+
+et al., 2023d; Hu et al., 2023; Mensink et al., 2023). This indicates that current architectures are not sufficiently equipped to handle the dynamic and detailed nature of visual-semantic associations. Our RORA-VLM framework aims to bridge this gap by explicitly aligning visual features with internal knowledge and augmenting VLMs with external knowledge sources. By integrating both visual and textual information more effectively, RORA-VLM seeks to improve VLMs’ capabilities on knowledge-intensive tasks and set new benchmarks for performance in this domain.
+
+## 3 METHOD
+
+### 3.1 PROBLEM FORMULATION
+
+In this work, we mainly focus on improving VLMs on knowledge-intensive VQA tasks via retrieval-augmented generation. Given a text query  $q$  together with an image  $I$ , a VLM is expected to generate a response  $y$  by leveraging the multimodal knowledge snippets  $\mathbf{R}$  retrieved from an external database as context. The objective of the retrieval-augmented generation can be formulated as:
+
+$$y = \arg \max_y P(y|q, I, \mathbf{R}), \quad (1)$$
+
+Figure 2 depicts an overview of our proposed framework, RORA-VLM, which consists of two novel designs to robustly enhance VLMs with retrieval augmentation: (1) two-stage vision-language retrieval with Image-anchored Textual-query Expansion; and (2) Noise-Resilient Retrieval-Augmented Generation. We detail each design as follows.
+
+### 3.2 IMAGE-ANCHORED TEXTUAL-QUERY EXPANSION
+
+Queries in knowledge-intensive VQA tasks typically consist of complementary visual and textual information—query images highlight the key entities concerned in the question, while query texts express the intent of the question using generic terms or anaphoric references to those entities. To comprehensively leverage the combined visual and textual information in the queries and retrieve relevant knowledge effectively, we design a 2-stage retrieval process with image-anchored textual-query expansion as follows. Figure 6 in Appendix A.10 also provides a detailed illustration of the 2-stage retrieved process.
+
+**Stage-1: Image-anchored Entity Retrieval.** In this stage, we utilize the input query image  $I$ , as an anchor, to retrieve visually similar images  $\hat{\mathbf{I}}_{\text{re}} = \{\hat{I}_1, \hat{I}_2, \dots\}$  from an image database. Specifically, the image database is built upon WIT (Srinivasan et al., 2021) which contains 37.6 million entity-rich image-text pairs, with each text providing the name and background information of the entity depicted in the image, sourced from Wikipedia. To enable efficient retrieval, we encode each image in WIT into a vector using the CLIP (Radford et al., 2021) image encoder, and construct a dense
+
+{4}------------------------------------------------
+
+vector-search database<sup>1</sup>. In this database, the encoded image features  $\mathbf{z}_i = \text{CLIP}(\tilde{I}_i) \in \mathbb{R}^d$ , where  $d$  is the dimension of the CLIP embedding, serve as search indexes  $\mathbf{Z} = \{\mathbf{z}_1, \mathbf{z}_2, \dots, \mathbf{z}_N\}$ , while the corresponding entity names and background information for these images are stored as search values  $\mathbf{E} = \{e_1, e_2, \dots, e_N\}$ , where  $e_i$  denotes the entity name and background information for candidate image  $\tilde{I}_i$  and  $N$  is the total number of entries in the database. Given a query image  $I$ , the image retriever  $\phi^{\text{img}}$  computes the cosine similarity between the query image and all search indexes using their CLIP embeddings and fetches the top- $k$  most similar images along with their associated entity name and background information. More details of the image retriever are provided in Appendix A.1.
+
+**Stage-2: Query-expanded Text Retrieval** With the entity name and description of each retrieved image from the first stage, we further use them to expand the original text query and develop the second stage query-expanded text retrieval with a *Google Search*<sup>2</sup> engine, leveraging the vast resources of the web to enhance retrieval accuracy. Specifically, given the original text query  $q$  and a retrieved entity name and description  $e_i$ , the text retriever  $\phi^{\text{txt}}$  searches for top- $l$  textual knowledge snippets that are most relevant to the expanded query:
+
+$$\mathbf{c}_i = \{c_{i,1}, c_{i,2}, \dots, c_{i,l}\} = \phi^{\text{txt}}(q, e_i), \quad (2)$$
+
+where  $\mathbf{c}_i$  denotes the set of textual knowledge snippets related to the entity description  $e_i$  and the retrieved image  $\tilde{I}_i$ .
+
+Finally, we concatenate each retrieved image  $\tilde{I}_i$  from the first stage and the corresponding textual knowledge snippets  $\mathbf{c}_i$  from the second stage as a sequence  $\mathbf{r}_i = [\tilde{I}_i : \mathbf{c}_i]$ , where  $:$  denotes the concatenation operation, and obtain the multimodal knowledge snippets  $\mathbf{R} = \{\mathbf{r}_1, \mathbf{r}_2, \dots, \mathbf{r}_k\}$  to later augment the VLMs.
+
+### 3.3 NOISE-RESILIENT RETRIEVAL-AUGMENTED GENERATION
+
+Since the retrieving process is not perfect, the retrieved multimodal knowledge snippets may contain irrelevant information to the given query. In this section, we present NOISE-RESILIENT RETRIEVAL-AUGMENTED GENERATION, a two-fold denoising approach that enables VLMs to selectively utilize the retrieved knowledge for answer prediction and ignore irrelevant retrieval noise.
+
+**Adversarial Noise Injection for Robust Augmentation** For training, we design an adversarial noise injection for robust augmentation that intentionally introduces irrelevant information into the retrieved knowledge, forcing the model to be robust to noises when leveraging the retrieved knowledge for answer prediction. For each training instance, i.e., a text query alongside an image  $(I, q)$ , of the knowledge-intensive VQA task, we first retrieve the top- $(k-1)$  multimodal knowledge snippets  $\mathbf{R} = \{\mathbf{r}_1, \mathbf{r}_2\}$  and randomly sample an irrelevant knowledge snippet<sup>3</sup>  $\mathbf{r}^l = [\tilde{I}^l : \mathbf{c}^l]$  from the retrieval database. We then concatenate them together with the original query to form a sequence of interleaved images and text:  $[\mathbf{r}_1 : \mathbf{r}_2 : \mathbf{r}^l : I : q]$ , which is further fed as input to VLMs for answer prediction. We fine-tune VLMs on such retrieval-augmented training instances with noise and minimize the cross-entropy loss of predicting the target answers.
+
+**Query-oriented Visual Token Refinement** Images often contain much noise, such as objects or visual scenes that are unrelated to the concerned entities. To further filter out query-irrelevant visual information within the retrieved images as well as the query image, we design a *query-oriented visual token refinement* strategy<sup>4</sup>. Given a text query  $q$  alongside a query image  $I$ , we first encode the text query using the CLIP text encoder, producing a text embedding  $\mathbf{x}_q \in \mathbb{R}^d$ , where  $d$  is the embedding dimension. Similarly, the image  $I$  is encoded into a sequence of visual embeddings  $\mathbf{X}_I = \{\mathbf{x}_{I,1}, \mathbf{x}_{I,2}, \dots, \mathbf{x}_{I,n}\} \in \mathbb{R}^{n \times d}$ , where  $\mathbf{x}_{I,i} \in \mathbb{R}^d$  denotes a visual token embedding corresponding to
+
+<sup>1</sup>We construct the vector-search database based on a hierarchical navigable small-world (HNSW) graph (Malkov & Yashunin, 2018).
+
+<sup>2</sup>We query Google search via the Serper service: <https://serper.dev/>
+
+<sup>3</sup>We randomly sample an entity from our retrieval database, together with its image and corresponding knowledge, as the irrelevant sample. We make sure the sampled entity is mismatched with the target entity.
+
+<sup>4</sup>Figure 7 in Appendix A.11 provides an example to illustrate the query-oriented visual token refinement process.
+
+{5}------------------------------------------------
+
+an image patch, and  $n$  is the number of visual tokens. The details of the encoding process can be found in Appendix A.2. For each visual token embedding  $\mathbf{x}_{I,i}$ , we calculate its similarity to the text embedding by dot product:  $s_i = \mathbf{x}_{I,i} \cdot \mathbf{x}_q$ . Then, the top- $m$  most similar visual tokens are selected, forming the refined visual token sequence  $\tilde{\mathbf{X}}_I \in \mathbb{R}^{m \times d}$  of the query image:
+
+$$\tilde{\mathbf{X}}_I = \text{Top-}m \left( \left\{ \mathbf{x}_{I,i} \mid s_i \right\}_{i=1}^n \right). \quad (3)$$
+
+Similarly, we also encode each of the retrieved image  $\tilde{I}_i \in \tilde{\mathbb{I}}_{re}$  into a sequence of visual token embeddings  $\tilde{\mathbf{X}}_{\tilde{I}_i} = \{\mathbf{x}_{\tilde{I}_i,1}, \mathbf{x}_{\tilde{I}_i,2}, \dots, \mathbf{x}_{\tilde{I}_i,n}\} \in \mathbb{R}^{n \times d}$ . For each visual token embedding  $\mathbf{x}_{\tilde{I}_i,j} \in \mathbb{R}^d$ , we compute its similarity to the query image by calculating the sum of its dot product with all of the selected visual tokens of the query image:  $s_j = \sum_{i=1}^m (\mathbf{x}_{I,i} \cdot \mathbf{x}_{\tilde{I}_i,j})$  where  $\mathbf{x}_{I,i} \in \tilde{\mathbf{X}}_I$ . Then, the top- $m$  most relevant visual tokens of the retrieved image are selected, forming the refined visual token sequence  $\tilde{\mathbf{X}}_{\tilde{I}_i} \in \mathbb{R}^{m \times d}$  for each of the query image:
+
+$$\tilde{\mathbf{X}}_{\tilde{I}_i} = \text{Top-}m \left( \left\{ \mathbf{x}_{\tilde{I}_i,j} \mid \sum_{i=1}^m s_j \right\}_{j=1}^n \right). \quad (4)$$
+
+## 4 EXPERIMENT SETUP
+
+**Evaluation Benchmarks** To evaluate the effectiveness and robustness of RORA-VLM, we conduct experiments on three benchmark datasets, including OVEN (Hu et al., 2023) for visual entity grounding, and InfoSeek (Chen et al., 2023d) and Encyclopedic-VQA (Mensink et al., 2023) for information-seeking visual question answering. As the test sets of OVEN and InfoSeek are not available at the time of submission, we report our results on their validation sets. More details of these datasets can be found in Appendix A.8.
+
+**Evaluation Metrics** We adopt evaluation metrics in line with previous studies (Hu et al., 2023; Chen et al., 2023d; Mensink et al., 2023). For visual entity recognition task, we use the standard *accuracy* metric to assess the model’s capability to correctly identify entities in images. For knowledge-seeking visual question answering (VQA) task, we apply two different metrics tailored to the specific types of questions. For questions expecting a string-based response, such as entity names, we report accuracy using the *VQA accuracy* metric (Antol et al., 2015). This metric allows for multiple valid answers by considering slight variations in phrasing (e.g., “New York City” and “NYC”) as correct. The model is evaluated based on whether its answer matches any of these valid responses. For questions requiring numeric answers, we use *relaxed accuracy* (Methani et al., 2020), which accounts for small deviations from the exact numerical value. This metric considers an answer correct if it falls within an acceptable tolerance range around the ground truth.
+
+**Baselines** We compare our framework with several state-of-the-art vision-language models. **LLaVA-v1.5** (Liu et al., 2023a) integrates pre-trained visual and language models for strong performance in multimodal tasks, while **LLaVA-v1.6** (Liu et al., 2024) introduces improved fine-tuning techniques. **PaLI-17B** (Chen et al., 2023c) utilizes a 17-billion-parameter architecture, excelling in image captioning and visual question answering, with **PaLI-X** (Chen et al., 2023b) improving performance on vision-language tasks by scaling up the model size and incorporating a high-capacity visual encoder. **BLIP-2** (Li et al., 2023) introduces efficient visual grounding through a Q-former, and **InstructBLIP** (Dai et al., 2023) enhances it for instruction-following tasks. **CLIP2CLIP** (Hu et al., 2023) leverages a CLIP-based model for improved image captioning. Recent work **Wiki-LLaVA** (Caffagni et al., 2024) is designed for entity-centric question answering, aligning visual data with external knowledge from Wikipedia. **PreFLMR** Lin et al. (2024) introduces a robust multimodal retriever pre-trained on a vision-language corpus comprising over ten million samples, enabling high-quality retrieval to augment the generation processes. **RA-CM3** Yasunaga et al. (2023) employs a cross-modality retrieval mechanism to access and leverage multimodal information to enhance the performance of multimodal generation. To ensure a fair comparison, all the baseline models are fine-tuned on the OVEN Hu et al. (2023), InfoSeek Chen et al. (2023d), and Enc-VQA Mensink et al. (2023) datasets respectively, and then evaluated on the corresponding tasks.
+
+**Model Tuning** Building on the pre-trained VLMs, we conduct an additional **visual-knowledge alignment pre-training** on a knowledge-intensive multimodal dataset WikiWeb2M (Burns et al.,
+
+{6}------------------------------------------------
+
+2023). We curated 1 million entity-rich image-text instances from the WikiWeb2M, and each instance consists of a unique image depicting an entity, its corresponding image caption, and the title and main content of the section associated with that image. For the training process, we treat each image-text instance as a single-turn conversation by randomly sampling a language instruction  $\mathbf{X}_q$  from a pre-defined instruction pool, prompting the model to caption the image and provide background knowledge. The input for each training instance consists of an image and a query. The ground-truth answer is formed by concatenating the original caption, section title, and section content. To align the visual appearance of entities and their background knowledge stored in LLM, we only freeze the weights of the visual encoder during the training and optimize the parameters of both the projection layer and the LLM. After pre-training, for each of the OVEN (Hu et al., 2023), InfoSeek (Chen et al., 2023d), and Encyclopedic-VQA (Mensink et al., 2023) datasets, we further randomly sampled 1,000 instances to perform a **lightweight fine-tuning** of the VLM on these subsets for specific downstream knowledge-intensive VQA tasks. More implementation details are shown in Appendix A.9
+
+## 5 RESULT & DISCUSSION
+
+**Main Results** Table 1 presents the main results for visual entity grounding on the OVEN dataset and information-seeking visual question answering on the InfoSeek and Encyclopedic-VQA datasets.
+
+Though only with 7B parameters and fine-tuned on less than 10,000 instances per dataset, RoRA-VLM significantly outperforms all baselines that are with much larger model sizes (including 17B and 55B models) and fine-tuned on substantially more instances (i.e., up to 1 million) across nearly all benchmarks, except for the Query subset of the OVEN dataset. The Query subset
+
+of OVEN primarily focuses on visual perception questions (e.g., “What is in the bowl?” with the answer “egg”) that require less reliance on fine-grained entity knowledge (Hu et al., 2023). Compared to our base model LLaVA-v1.5, LLaVA-v1.6 enhances its capacity to better perceive details in images with higher-resolution image inputs and is trained on large-scale visual perception datasets (Chen et al., 2023a). In contrast, our approach focuses on robust retrieval augmentation for tasks that depend heavily on entity background knowledge, thus improving the visual perception capabilities of VLMs is beyond the scope of our work.
+
+### Effect of Query-oriented Visual Token Refinement
+
+We conduct an ablation study to demonstrate the effectiveness of Query-oriented Visual Token Refinement, with the results presented in Table 2. In the “w/o VK-Refinement” setting, we use the widely adopted average pooling (kernel size of 2, stride of 2) to obtain the same number of visual tokens as our refinement approach. The details of the pooling process can be found in Appendix A.3.
+
+As we can see, without explicitly filtering out the irrelevant visual information, the performance drops on both subsets of InfoSeek. In Figure 3, we show the qualitative results of the Query-oriented Visual Token Refinement method. From the query image, we select  $m=144$  visual tokens that are most related to the text query (i.e., the Question), while each visual token corresponds to an image patch (highlighted in yellow). As we can see, this method effectively identifies and selects patches corresponding to the key visual entity, even with the presence of anaphoric
+
+Table 1: Evaluation results in accuracy (%). The best performance is highlighted in **bold**. The Entity groups expect an entity name as the target answer, while Query groups target a general object name or concept as the answer. \* denotes our implementation of Wiki-LLaVA as its original source code is not publicly available.
+
+| Model        | Size (B) | OVEN         |              | InfoSeek     |              | Enc-VQA      |
+|--------------|----------|--------------|--------------|--------------|--------------|--------------|
+|              |          | Entity       | Query        | Entity       | Query        |              |
+| CLIP2CLIP    | 0.86     | 10.10        | 2.10         | -            | -            | -            |
+| PaLI         | 17       | 12.40        | 22.40        | 16.00        | 20.70        | -            |
+| PaLI-X       | 55       | -            | -            | 20.80        | 23.50        | -            |
+| BLIP-2       | 12       | -            | -            | 13.30        | 14.50        | -            |
+| InstructBLIP | 12       | -            | -            | 13.20        | 14.30        | -            |
+| RA-CM3       | 7        | -            | -            | 17.09        | 21.64        | -            |
+| PreFLMR      | 7        | -            | -            | 19.37        | 22.21        | -            |
+| LLaVA-v1.6   | 7        | 3.72         | <b>24.55</b> | 14.16        | 15.98        | 13.54        |
+| LLaVA-v1.5   | 7        | 3.63         | 20.04        | 10.34        | 12.98        | 12.21        |
+| Wiki-LLaVA*  | 7        | 14.43        | 20.4         | 21.44        | 23.68        | 18.61        |
+| RoRA-VLM     | 7        | <b>15.08</b> | 24.06        | <b>25.10</b> | <b>27.34</b> | <b>20.29</b> |
+
+Table 2: Ablation studies for query-oriented visual token refinement (w/o VK-Refinement) and noise-resilient retrieval-augmented generation (text-only RAG) on InfoSeek. Performance is reported in accuracy (%).
+
+| Model               | Entity | Query |
+|---------------------|--------|-------|
+| RoRA-VLM(ours)      | 24.56  | 26.33 |
+| - w/o VK-Refinement | 23.94  | 24.85 |
+| - text-only RAG     | 17.29  | 19.28 |
+
+{7}------------------------------------------------
+
+![Query image of a penguin Retrieved image 1 of a penguin Retrieved image 2 of a penguin Retrieved image 3 of a penguin Query image of a cow Retrieved image 1 of a cow Retrieved image 2 of a cow Retrieved image 3 of a cow Query image of an ATR 42 aircraft Retrieved image 1 of an ATR 42 aircraft Retrieved image 2 of an ATR 42 aircraft Retrieved image 3 of an ATR 42 aircraft Query image of Buland Darwaza Retrieved image 1 of Buland Darwaza Retrieved image 2 of Buland Darwaza Retrieved image 3 of Buland Darwaza](892f25e3d71d8e315a2a51092a8a8da7_img.jpg)
+
+378
+
+379
+
+380
+
+381
+
+382
+
+383
+
+384
+
+385
+
+386
+
+387
+
+388
+
+389
+
+390
+
+391
+
+392
+
+393
+
+394
+
+395
+
+396
+
+397
+
+398
+
+399
+
+| Query Image                                                                                                                    | Retrieved Img 1 | Retrieved Img 2 | Retrieved Img 3 |  |
+|--------------------------------------------------------------------------------------------------------------------------------|-----------------|-----------------|-----------------|--|
+| <b>Question:</b> What is the closest parent taxonomy of this bird?<br><b>Answer:</b> Sphenisciformes<br><b>Entity:</b> penguin |                 |                 |                 |  |
+| <b>Question:</b> What product does this animal produce?<br><b>Answer:</b> milk<br><b>Entity:</b> cow                           |                 |                 |                 |  |
+| <b>Question:</b> Which country's company manufactured this aircraft?<br><b>Answer:</b> France<br><b>Entity:</b> ATR 42         |                 |                 |                 |  |
+| <b>Question:</b> What is the location of this building?<br><b>Answer:</b> Fatehpur Sikri<br><b>Entity:</b> Buland Darwaza      |                 |                 |                 |  |
+
+Query image of a penguin Retrieved image 1 of a penguin Retrieved image 2 of a penguin Retrieved image 3 of a penguin Query image of a cow Retrieved image 1 of a cow Retrieved image 2 of a cow Retrieved image 3 of a cow Query image of an ATR 42 aircraft Retrieved image 1 of an ATR 42 aircraft Retrieved image 2 of an ATR 42 aircraft Retrieved image 3 of an ATR 42 aircraft Query image of Buland Darwaza Retrieved image 1 of Buland Darwaza Retrieved image 2 of Buland Darwaza Retrieved image 3 of Buland Darwaza
+
+Figure 3: Qualitative results for query-oriented visual token refinement.
+
+400 references in the query. Similarly, for each retrieved image, we also select  $m=144$  visual tokens  
+ 401 that are most related to the query image. For retrieved images containing the same entities as the  
+ 402 query image (highlighted with a green box), the selected patches tend to cluster around the key  
+ 403 entity. Conversely, when retrieved images contain different entities from those in the query image  
+ 404 (highlighted with a red box), the distribution of selected patches is more scattered. These qualitative  
+ 405 results underscore the effectiveness of our token refinement strategy in filtering out irrelevant visual  
+ 406 information, enabling the retrieval augmentation of VLMs more robust.
+
+407  
+ 408 **Effect of Adversarial Noise Injection for Robust Augmentation** The essential assumption of  
+ 409 adversarial noise injection for robust augmentation is that by training with adversarial noise, VLMs  
+ 410 implicitly learn to compare the visual appearances of entities in the retrieved images and the query  
+ 411 image, thereby discarding irrelevant information from the textual knowledge snippets corresponding  
+ 412 to the irrelevant retrieved images. To validate this assumption and demonstrate that the performance  
+ 413 improvement is not solely due to the retrieved textual knowledge, we remove the retrieved images  
+ 414 from the multimodal knowledge snippets in RoRA-VLM during both training and inference, while  
+ 415 keeping all other hyperparameters and the 2-stage retrieval process identical. In this configuration,  
+ 416 the multimodal knowledge snippets are reduced to textual-only knowledge snippets, and we refer  
+ 417 to this setting as RoRA-VLM with textual-only RAG. During training, the model can still leverage  
+ 418 the retrieved textual knowledge to answer questions; however, without the presence of images, it  
+ 419 cannot learn to differentiate the relevance of the textual knowledge based on the visual appearances  
+ 420 of entities. As shown in Table 2, without retrieved images to provide visual cues for selecting  
+ 421 relevant knowledge, RoRA-VLM with textual-only RAG exhibits significantly worse performance  
+ 422 compared to the standard RoRA-VLM, despite having access to the same textual knowledge during  
+ 423 inference. Additionally, we analyze the robustness of RoRA-VLM under varying levels of retrieval  
+ 424 noise, with the results presented in Appendix A.4.
+
+425 To complement our findings on retrieval noise and better understand how RoRA-VLM prioritizes  
+ 426 relevant information during inference, we visualize the attention scores assigned to each input token  
+ 427 during answer generation. As shown in Figure 4, the left column presents the input queries, images,  
+ 428 target answers, and RoRA-VLM’s predictions. The middle column displays the retrieved images  
+ 429 along with their associated textual knowledge. The green highlights indicate the model’s attention  
+ 430 to individual tokens, with darker shades denoting higher attention scores. The right column provides  
+ 431 a detailed breakdown of the attention distribution, with gray bars representing the positions of  
+ 432 the retrieved images. By examining these qualitative results, we observe that RoRA-VLM effectively  
+ 433 learns to focus on the textual knowledge corresponding to images containing entities that match  
+ 434 those in the query image. For instance, in the second row of Figure 4, RoRA-VLM predom-
+
+{8}------------------------------------------------
+
+![Figure 4: Visualization of attention scores assigned to VLM input tokens during next-token generation. The figure shows three examples of Model Inputs (Question, Target, Prediction, Image) and Retrieval Passages. For each example, an attention plot shows the attention score assigned to input tokens, with tokens highlighted in green. The first example shows attention to 'width' and '18'. The second example shows attention to 'Brazil', 'râne', and 'vireon'. The third example shows attention to 'asser' and 'river'. Image of a Chevrolet Camaro 2020 Image of a tiger Image of a viaduct](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+432
+
+433
+
+434
+
+435
+
+436
+
+437
+
+438
+
+439
+
+440
+
+441
+
+442
+
+443
+
+444
+
+445
+
+446
+
+447
+
+448
+
+449
+
+450
+
+451
+
+452
+
+453
+
+454
+
+455
+
+456
+
+457
+
+458
+
+459
+
+460
+
+461
+
+462
+
+463
+
+464
+
+465
+
+466
+
+467
+
+468
+
+469
+
+470
+
+471
+
+472
+
+473
+
+474
+
+475
+
+476
+
+477
+
+478
+
+479
+
+480
+
+481
+
+482
+
+483
+
+484
+
+485
+
+**Model Inputs**
+
+**Question:** How wide is the vehicle in the image (in millimetre)?  
+**Target:** [1728.0, 2112.0]  
+**Prediction:** 1897  
+**Image:**
+
+**Retrieval Passages**
+
+Dimensions for the Chevrolet Camaro 2020 include 1344 mm height, 1937 mm **width**. The height, measured from the ground to the top of the car, ranges from ... rolet Pressroom CAMARO LS & LT - 2023 ; Type: 2.0L I-4 DOHC VVT DI Turbocharged ; Bore & Stroke (in. / mm): 3.39 x volet Camaro Coupé ; Length/**width**/height (mm): 4835.8 ; 1917 ; 1360 ; Wheelbase (mm): 2852 ; Seats front and rear. 2 +
+
+**Attention to Input Tokens**
+
+Attention from "18"
+
+Attention from "Brazil"
+
+Attention from "asser"
+
+**Model Inputs**
+
+**Question:** Which geographic area is this animal found?  
+**Target:** Brazil  
+**Prediction:** Brazil  
+**Image:**
+
+**Retrieval Passages**
+
+is a World Heritage property of 169,695.88 hectares located in the State of Paraná, in southern **Brazil**, adjacent to the Iguaçu National ... History - Réserve Africaine de Ségan <Snippet> Thanks to its geographical location close to the Mediterranean coast Viréo aux yeux rouges Viréo olivaceus. Red-eyed vireo. Vireonidae. Mélangée du Canada Perseus Canadensis.
+
+**Attention to Input Tokens**
+
+**Model Inputs**
+
+**Question:** What has this river crossed over?  
+**Target:** Landwasser  
+**Prediction:** Landwasser  
+**Image:**
+
+**Retrieval Passages**
+
+Landwasser Viaduct - Wikipedia <Snippet> the Landwasser Viaduct (German: **Landwasserviadukt**) is a single- It spans the Landwasser southwest of the <Title> Rhaetian Railways Landwasser Viaduct - Switzerland Tourism cursor to the Landwasser Viaduct near Elsur <Snippet> At this village of Alvaneud bad we crossed the **river** on this bridge, but the next hour was all in dark forest.
+
+**Attention to Input Tokens**
+
+Figure 4: Visualization of attention scores assigned to VLM input tokens during next-token generation. The figure shows three examples of Model Inputs (Question, Target, Prediction, Image) and Retrieval Passages. For each example, an attention plot shows the attention score assigned to input tokens, with tokens highlighted in green. The first example shows attention to 'width' and '18'. The second example shows attention to 'Brazil', 'râne', and 'vireon'. The third example shows attention to 'asser' and 'river'. Image of a Chevrolet Camaro 2020 Image of a tiger Image of a viaduct
+
+Figure 4: Visualization of attention scores assigned to VLM input tokens during next-token generation. Tokens are highlighted in green, with darker shades indicating higher attention scores.
+
+inantly focuses on the first two knowledge snippets, while disregarding the third, which pertains to a completely different animal.
+
+**Effect of Knowledge-Intensive Pre-training** To demonstrate the effectiveness of our proposed knowledge-intensive pre-training, we design two sets of experiments and report the results in Table 3. For the original LLaVA-v1.5 without retrieval augmentation, by performing knowledge-intensive pre-training, the performance is significantly improved on both InfoSeek. Similar improvements are also observed by comparing RoRA-VLM to RoRA-VLM w/o WikiWeb2M. Additionally, we compare pre-training dataset between WikiWeb2M and ShareGPT4V (Chen et al., 2023a)), a generic image-caption dataset where the captions only describe the image context without many fine-grained entities or entity descriptions. As we shown, the performance of RoRA-VLM w/ ShareGPT4V is much lower than RoRA-VLM pre-trained on WikiWeb2M, demonstrating the benefit of knowledge-intensive pre-training on better aligning the visual appearance of objects to their corresponding entities and entity background knowledge.
+
+Table 3: Performance in accuracy (%) for VLMs with or without knowledge-intensive pre-training on InfoSeek.
+
+| Model           | Entity | Query |
+|-----------------|--------|-------|
+| LLaVA-v1.5      | 10.34  | 12.98 |
+| - w/ WikiWeb2M  | 18.00  | 20.98 |
+| RoRA-VLM (ours) | 24.56  | 26.33 |
+| - w/o WikiWeb2M | 20.68  | 23.41 |
+| - w/ ShareGPT4V | 21.28  | 22.84 |
+
+**Domain Transfer Capability** In this subsection, we examine the generalizability of the proposed RoRA-VLM using the Encyclopedic-VQA dataset. The iNaturalist subset of the Encyclopedic-VQA dataset consists of questions concerning 11 categories (e.g., Plant, Insect, Lake, etc.) of entities. To create a domain transfer setting, we select "Insect" as the target domain, and modify the training set by filtering out instances from the "Insect" category. We fine-tune both the baseline model and our RoRA-VLM on the original training set of the iNaturalist subset as well as the modified training set for domain transfer, and evaluate on the
+
+Table 4: Performance in accuracy (%) for domain transfer on Encyclopedic-VQA.
+
+| Model          | SFT   | Domain Transfer |
+|----------------|-------|-----------------|
+| LLaVA-v1.5     | 18.23 | 17.18           |
+| RoRA-VLM(ours) | 24.36 | 20.26           |
+
+{9}------------------------------------------------
+
+|                       | (a)                                                                                                                                    | (b)                                                                                                      | (c)                                                                                          | (d)                                                                                                         |
+|-----------------------|----------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------|
+| Query Text:           | What is this building in the picture?                                                                                                  | What is the creature in the picture?                                                                     | What is the plant in the picture?                                                            | In which country is this building located?                                                                  |
+| Query Image:          | <p>Image: Query image for (a): A large, white, classical-style building with a clock tower, identified as the Castle of Good Hope.</p> | <p>Image: Query image for (b): A single, light-colored puffball fungus on a bed of leaves.</p>           | <p>Image: Query image for (c): A close-up of green fern fronds, identified as Asplenium.</p> | <p>Image: Query image for (d): A large, classical-style church building, identified as the Fraumünster.</p> |
+| Retrieved Images:     | <p>Image: Retrieved image for (a): A different view of the Castle of Good Hope.</p>                                                    | <p>Image: Retrieved image for (b): Multiple puffball fungi on a bed of leaves.</p>                       | <p>Image: Retrieved image for (c): A different view of green fern fronds.</p>                | <p>Image: Retrieved image for (d): A different view of the Fraumünster church.</p>                          |
+| Entity Name:          | Castle of Good Hope                                                                                                                    | Puffball                                                                                                 | Asplenium                                                                                    | Fraumünster                                                                                                 |
+| Retrieved Knowledge:  | The Castle of Good Hope is a bastion fort built in the 17th century in Cape Town, South Africa.                                        | Puffballs are a type of fungus featuring a ball-shaped fruit body that bursts on impact, releasing a ... | Asplenium is a genus of about 700 species of ferns, often treated as the only genus in ...   | The Fraumünster is a church in Zürich which was built on the remains of a ...                               |
+| LLaVA-v1.5: RoRA-VLM: | Fort San Francisco<br>Castle of Good Hope                                                                                              | Amanita caesarea<br>Puffball                                                                             | Conferiflorum<br>Asplenium                                                                   | Austria<br>Zurich                                                                                           |
+
+Figure 5: Qualitative results of 2-stage retrieval with image-anchored textual-query expansion.
+
+complete test set of the iNaturalist subset. Table 4 shows the results, where “SFT” refers to models fine-tuned on the full training set, while “Domain Transfer” refers to models fine-tuned on the modified training set for domain transfer. The results clearly show that, even without being fine-tuned on the “Insect” category, RoRA-VLM still outperforms the baseline model that is trained on the complete training set. This demonstrates the generalizability of our proposed method, as it enables the VLM to surpass its base model even without access to in-domain knowledge during training.
+
+**Evaluation of the Two-Stage Retrieval** We report the retrieval precision at each stage of our proposed two-stage retrieval process in Table 5. In the first stage, given a query image, if the target entity shown in the query image matches any of the retrieved  $m$  images, we take it as correct. Similarly, in the second stage, if the golden answer is included in any of the retrieved textual knowledge snippets, we also view it as correct. Figure 5 presents several examples for qualitative analysis. Our retrieval method effectively identifies images that contain entities matching those in the query images. Although the perspectives of the entities in the retrieved images differ from those in the query images, the retrieved images provide sufficient visual attributes for entity identification (e.g., the gap in the wall in Figure 5(a) and the shape of the leaves in Figure 5(c)). Additionally, we performed an ablation experiment using only a single-stage retrieval method to emphasize the effectiveness of our two-stage retrieval approach, with the results presented in Appendix A.5.
+
+Table 5: Retrieval precision (%) for the first and second stage of retrieval.
+
+| Stage        | OVEN   |       | InfoSeek |       |
+|--------------|--------|-------|----------|-------|
+|              | Entity | Query | Entity   | Query |
+| First Stage  | 35.16  | 34.45 | 38.53    | 37.67 |
+| Second Stage | -      | -     | 27.01    | 26.97 |
+
+## 6 CONCLUSION
+
+In this work, we introduce RoRA-VLM, a novel and robust retrieval-augmented framework specifically designed for VLMs to address two key challenges: (1) the intrinsic discrepancy between multimodal queries, and (2) the presence of irrelevant and extraneous information embedded in the retrieved multimodal knowledge snippets. RoRA-VLM incorporates two technical innovations: (1) a two-stage retrieval process with image-anchored textual-query expansion that synergistically integrates visual and textual information for more comprehensive retrieval results, and (2) a robust retrieval augmentation method that enhances the VLMs’ resilience against noise. Our experimental results demonstrate that RoRA-VLM achieves state-of-the-art performance on three widely adopted benchmark datasets, including OVEN, InfoSeek, and Enc-VQA.
+
+ Rest of paper (reference and Appendix) is removed.

@@ -1,0 +1,321 @@
+
+
+{0}------------------------------------------------
+
+# MODEL PREDICTIVE CONTROL IS ALMOST OPTIMAL FOR RESTLESS BANDITS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+We consider the discrete time infinite horizon average reward restless markovian bandit (RMAB) problem. We propose a *model predictive control* based non-stationary policy with a rolling computational horizon  $\tau$ . At each time-slot, this policy solves a  $\tau$  horizon linear program whose first control value is kept as a control for the RMAB. Our solution requires minimal assumptions and quantifies the loss in optimality in terms of  $\tau$  and the number of arms,  $N$ . We show that its sub-optimality gap is  $O(1/\sqrt{N})$  in general, and  $\exp(-\Omega(N))$  under a local-stability condition. Our proof is based on a framework from dynamic control known as *dissipativity*. Our solution is easy to implement and performs very well in practice when compared to the state of the art. Further, both our solution and our proof methodology can easily be generalized to more general constrained MDP settings and should thus, be of great interest to the burgeoning RMAB community.
+
+## 1 INTRODUCTION
+
+This work investigates the sequential decision making problem of Restless Multi-Armed Bandits (RMAB for short) over an infinite discrete time horizon. In this problem there are  $N$  statistically identical arms. At each time step, the decision maker must choose for each arm if they would like to pull the arm or leave it as is. The decision maker has a constraint  $\alpha N$  on the maximal number of arms that they may pull at each time instance. Each arm has a known state belonging to a common finite state space and upon choosing an action, produces a known state and action dependent reward. Next, the arms evolve to a new state independently according to a known state-action dependent transition kernel. These arms are only coupled through the budget constraint on the number of arms that maybe pulled at each time instance. The state and reward are both revealed to the decision maker before the next decision needs to be made. The objective of the decision maker is to maximize the long term time average reward.
+
+This problem was first proposed by Whittle (1988). Over the years RMABs have been used to model a number of practical problems. These applications include web-crawling, queuing, communication systems, scheduling problems and many more, (Veatch & Wein, 1996), (Dance & Silander, 2019), (Niño-Mora, 2002), (O’Meara & Patel, 2001). The problem of choosing a subset of tasks to perform among a larger collection of tasks under resource constraints shows up time and time again in various resource constrained control problems. For a comprehensive review on RMABs and their applications, the interested reader is directed towards Niño-Mora (2023). While the existence of an optimal policy for RMABs straightforward, Papadimitriou & Tsitsiklis (1999) showed that the exact solution to this problem is PSPACE-hard. Consequently, most work focused on designing approximate solutions with good performance guarantees.
+
+In the seminal paper, Whittle (1988) suggested that under a condition known as indexability, an index can be associated with each state. This index is now referred to as the Whittle’s index (WI) and it was conjectured that a priority policy based on this index would be an optimal solution for this problem. This setting naturally lends itself to mean field approximations where one may replace the  $N$  armed problem with a dynamical system in order to find these approximate solutions. (Weber & Weiss, 1990) were the first to point out that under a (hard to verify) condition on the dynamical system known as uniform global attractor property (UGAP), the (WI) was asymptotically optimal. Recently, many of the results in the RMAB literature have focused on two major aspects of the problem. Firstly, how quickly do proposed asymptotically optimal policies converge to the optimal solution
+
+{1}------------------------------------------------
+
+as a function of the number of arms. Secondly, can the underlying assumptions such as indexability and UGAP be made less restrictive to obtain more general conditions under which optimal solutions can be found. In the former category, under the assumptions of Weber & Weiss (1990), Gast et al. (2023a) showed that the WI policy is exponentially close to the optimal solution. More recently still, several works have been able to show an exponential order of convergence, Gast et al. (2023b); Hong et al. (2024a) under less restrictive assumptions. On the other hand, in the latter category, Hong et al. (2023) showed an asymptotic convergence result under a far less restrictive assumption known as the *synchronization assumption*. Similar works following this steering dynamics include Yan (2024) and Hong et al. (2024b) to show asymptotically optimal algorithms. Furthermore, Hong et al. (2024a) loosened the restrictions further to not only show asymptotic convergence but describe fundamental conditions in order to achieve exponential convergence rates for any algorithm. A more comprehensive view of recent results can be found in Appendix A with descriptions of both assumptions and the algorithm.
+
+In this work, we return to the dynamical control perspective but do not look to steer our system towards an optimal fixed point. Instead, we focus on the notion of *dissipativity*, to make the case for a well known set of policies known as *model predictive control*. We show that a simple MPC with a finite planning horizon produces an asymptotically optimal solution to the RMAB problem without any need to relax constraints. In doing so, not only do we bring a new perspective to this decades old problem but also describe a simple tractable algorithm that performs exceptionally well in practice with a small planning horizon.
+
+**Main Contributions** The main contribution of our paper is the proof that a very natural model predictive control (LP-update) provides both an algorithm that works well in practice as well as the theoretical guarantees *under very weak and easy to verify assumptions on the system parameters only, using the framework of dissipativity*. The idea of resolving an LP for finite-horizon restless bandits already exists in the literature, however, all the papers that proposed to use this idea either analyzed the algorithm in the finite-horizon case or used the hard to verify UGAP assumption (*uniform global attractor property*) on the system. This is primarily because without the framework of dissipativity, analyzing how a finite horizon policy translates to the infinite horizon reward seems to be infeasible. The use of this framework is one of the key technical novelties of our approach. A greater exposition on our work’s place in the current literature is relegated to the Related works section, Appendix A due to lack of space. Apart from the main result, we make several fresh observations about the nature of RMAB problems:
+
+1. Our proof is of independent interest since it uses a new framework known as *dissipativity*. Dissipativity is a closely studied phenomenon in the model predictive literature and is used to study how a policy drives a system towards optimal fixed points Damm et al. (2014).
+2. Returning to the dynamics around the fixed point, we can tighten the rate of convergence to  $e^{-cN}$  under a local stability condition.
+3. Perhaps the most helpful portion of our results, for practical purposes; the MPC algorithm works well in practice and is easy to implement. It performs well both in terms of the number of arms  $N$  as well as the computational time horizon  $T$  beating state of the art algorithms in our bench marks.
+
+**Road-map** The rest of the paper is organized as follows. We describe the system model and the corresponding linear relaxation in Section 2. We build the LP-update algorithm in Section 3 and present its performance guarantee in Section 4. We provide the main ingredients of the proof in Section 5 postponing the most technical lemmas to the appendix. We illustrate the performance of the algorithm in Section 6. The appendix contains additional literature review A, details of the algorithm and their extension to multi-constraints MDPs B, additional proofs C, D and details about the numerical experiments F.
+
+## 2 SYSTEM MODEL AND LINEAR RELAXATION
+
+### 2.1 SYSTEM MODEL
+
+We consider an infinite horizon discrete time restless Markovian bandit problem parameterized by the tuple  $\langle S, P^0, P^1, r^0, r^1; \alpha, N \rangle$ . A decision maker is facing  $N$  statistically identical arms, and
+
+{2}------------------------------------------------
+
+each arm has a state that belongs to the finite state-space  $\mathcal{S}$ . At each time-instant, the decision maker observes the states of all arms  $\mathbf{s} = \{s_1 \dots s_N\}$  and chooses a vector of actions  $\mathbf{a} = \{a_1 \dots a_N\}$ , where the action  $a_n = 1$  (respectively  $a_n = 0$ ) corresponds to pulling the arm  $n$  (or to leave it). The decision maker is constrained to pull at most  $\alpha N$  arms at each decision epoch.
+
+The matrices  $\mathbf{P}^0$  and  $\mathbf{P}^1$  denote the transitions matrices of each arm and the vectors  $\mathbf{r}^0, \mathbf{r}^1$  denote the  $|\mathcal{S}|$  dimensional vector for the rewards. We assume that all the rewards  $\mathbf{r}$  lie between 0 and 1. As the state-space is finite, this assumption can be made without loss of generality by scaling and centering the reward vector. We assume that the transitions of all arms are Markovian and independent. This means that if the arms are in state  $\mathbf{s} \in \mathcal{S}^N$  and the decision maker takes an action  $\mathbf{a} \in \{0, 1\}^N$ , then the decision maker earns a reward  $\sum_n r_{a_n}^n$  and the next state becomes  $\mathbf{s}' \in \mathcal{S}^N$  with probability
+
+$$\begin{aligned} \mathbb{P}(\mathbf{S}(t+1) = \mathbf{s}' | \mathbf{S}(t) = \mathbf{s}, \mathbf{A}(t) = \mathbf{a}, \dots, \mathbf{S}(0), \mathbf{A}(0)) \\ = \mathbb{P}(\mathbf{S}(t+1) = \mathbf{s}' | \mathbf{S}(t) = \mathbf{s}, \mathbf{A}(t) = \mathbf{a}) = \prod_{n=1}^N P_{s_n, s'_n}^{a_n}. \end{aligned} \quad (1)$$
+
+It is important to note that the arms are only coupled through the budget constraint  $\alpha$ .
+
+Let  $\pi$  be a stationary policy mapping each state to a probability of choosing actions, i.e.,  $\pi : \mathcal{S}^N \rightarrow \Delta(\{0, 1\}^N)$  subject to the budget constraint ( $\alpha$ ). Let  $\Pi^{(N)}$  denote the space of all such policies. Given a policy  $\pi$ , mapping the joint state of the arms to a realization of the  $N$  length joint action vector at time  $t$ ,  $\mathbf{A}^N(t) := \{a_1(t), a_2(t) \dots a_N(t)\}$ , and an initial set of arm states  $\mathbf{S}^{(N)}(0) = \mathbf{s}$ , we define the average gain of policy  $\pi$  as
+
+$$V_\pi^{(N)}(\mathbf{s}) = \lim_{T \rightarrow \infty} \frac{1}{T} \mathbb{E}_\pi \left[ \sum_{t=0}^{T-1} \frac{1}{N} \sum_{n=1}^N r_{S_n(t)}^{A_n(t)} | \mathbf{S}^{(N)}(0) = \mathbf{s} \right]. \quad (2)$$
+
+Here  $(S_n^N(t), A_n^N(t))$  denotes the state-action pair of the  $n$ th arm at time  $t$  and  $r_{S_n^N(t)}^{A_n^N(t)}$  denotes the  $S_n^N(t)$ th entry of the  $\mathbf{r}^{A_n(t)}$  vector. As the state-space and action space is finite, for any stationary policy  $\pi$ , the limit is well defined Puterman (2014). The RMAB problem amounts to computing a policy  $\pi$  that maximizes the infinite average reward. We denote the optimal value of the problem as
+
+$$V_{\text{opt}}^N(\mathbf{s}) := \max_{\pi \in \Pi^{(N)}} V_\pi^{(N)}(\mathbf{s}). \quad (3)$$
+
+The optimal policy exists and the limit is well defined, Puterman (2014). Under mild conditions (which will be verified in our case), this value does not depend on the initial state in which case we will simply write it as  $V_{\text{opt}}^N$ . **Note, by restricting our policies to  $\Pi^{(N)}$  we are enforcing the budget constraints at each time step.**
+
+### 2.2 ALTERNATIVE STATE REPRESENTATION VIA EMPIRICAL DISTRIBUTION
+
+In order to build an approximation of (3), we introduce an alternative representation of the state space, that we will use extensively in the paper. Given any joint state of the arms  $\mathbf{s} \in \mathcal{S}^N$ , we denotes the empirical distribution of these arms as  $\mathbf{x}(\mathbf{s}) \in \Delta_{\mathcal{S}}$ , where  $\Delta_{\mathcal{S}}$  is the simplex of dimension  $|\mathcal{S}|$ .  $\mathbf{x}(\mathbf{s})$  is a vector with  $|\mathcal{S}|$  dimensions and  $x_i(\mathbf{s})$  is the fraction of arms that are in state  $i$ . Next, given an action vector  $\mathbf{a}$ , we denote by  $\mathbf{u}(\mathbf{s}, \mathbf{a})$  the empirical distribution of the state-action pairs  $(s, i)$ . In words,  $u_i(\mathbf{s}, \mathbf{a})$  is the fraction of arms that are in state  $i$  and that are pulled. Since no more than  $N\alpha$  arms can be pulled at any time instance and no more than  $Nx_s$  ( $x_s$  is the fraction of arms in state  $s$ ) arms can be pulled in state  $s$ , it follows that when  $\mathbf{x}$  is fixed,  $\mathbf{u}$  satisfies the following inequalities,
+
+$$0 \leq \mathbf{u} \leq \mathbf{x} \quad \|\mathbf{u}\|_1 \leq \alpha \|\mathbf{x}\|_1 = \alpha, \quad (4)$$
+
+where  $\mathbf{u} \leq \mathbf{x}$  denotes a component-wise inequality and  $\|\cdot\|_1$  denotes the  $l_1$  norm. We denote by  $\mathcal{U}(\mathbf{x})$  the set of feasible actions for a given  $\mathbf{x}$ , i.e., the set of  $\mathbf{u}$  that satisfy (4).
+
+### 2.3 LINEAR RELAXATION
+
+We consider the following linear program:
+
+$$V_{\text{opt}}^\infty := \max_{\mathbf{x}, \mathbf{u} \in \Delta_{\mathcal{S}}} \mathbf{r}^0 \cdot \mathbf{x} + (\mathbf{r}^1 - \mathbf{r}^0) \cdot \mathbf{u}, \quad (5a)$$
+
+$$\text{Subject to: } \mathbf{u} \in \mathcal{U}(\mathbf{x}) \quad (5b)$$
+
+$$\mathbf{x} = \mathbf{xP}^0 + \mathbf{u}(\mathbf{P}^1 - \mathbf{P}^0) \quad (5c)$$
+
+{3}------------------------------------------------
+
+This linear program is known to be a relaxation of (3) that is asymptotically tight, that is  $V_{\text{opt}}^N \leq V_{\text{opt}}^\infty$  for all  $N$  and  $\lim_{N \rightarrow \infty} V_{\text{opt}}^N = V_{\text{opt}}^\infty$ , see Gast et al. (2023b); Hong et al. (2024a).
+
+To give some intuition on the relationship between (3) and (5), we remark that if  $\mathbf{X}(t) := \mathbf{x}(\mathbf{S}^N(t))$  is the empirical distribution of states at time  $t$  and  $\mathbf{U}(t) = \mathbf{u}(\mathbf{S}(t), \mathbf{A}(t))$  is the joint control, then it is shown in Gast et al. (2023b) that the Markovian evolution (1) implies
+
+$$\mathbb{E}[\mathbf{X}(t+1) \mid \mathbf{X}(t), \mathbf{U}(t)] = \mathbf{X}(t)\mathbf{P}^0 + \mathbf{U}(t)(\mathbf{P}^1 - \mathbf{P}^0). \quad (6)$$
+
+In (5), the variable  $x_i$  corresponds to the time-averaged fraction of arms in state  $i$  and similarly the variable  $u_i$  corresponds to the time-averaged fraction of arms in state  $i$  that are pulled. The constraint (5b) imposes that *on average*, no more than  $\alpha N$  arms are pulled. This is in contrast with the condition imposed for problem (3) that enforces this condition at each time step.
+
+## 3 CONSTRUCTION OF THE LP-UPDATE POLICY
+
+### 3.1 THE FINITE-HORIZON MEAN FIELD CONTROL PROBLEM
+
+To build the LP-update policy, we consider a *controlled dynamical system*, also called the *mean field model*, that is a finite-time equivalent of (5). For a given initial condition  $\mathbf{x}(0)$  and a time-horizon  $\tau$ , the states and actions of this dynamical system are constrained by the evolution equations
+
+$$\mathbf{u}(t) \in \mathcal{U}(\mathbf{x}(t)) \quad (7a)$$
+
+$$\mathbf{x}(t+1) = \mathbf{x}(t)\mathbf{P}^0 + \mathbf{u}(t)(\mathbf{P}^1 - \mathbf{P}^0), \quad (7b)$$
+
+$\forall t \in \{0, \dots, \tau-1\}$ . In the above equation, (7b) should be compared with (6) and indicates that  $\mathbf{x}(t)$  and  $\mathbf{u}(t)$  correspond to the quantities  $\mathbb{E}[\mathbf{X}(t)]$  and  $\mathbb{E}[\mathbf{U}(t)]$  of the original stochastic system. As the constraint (7a) must be ensured by  $\mathbf{x}(t)$  and  $\mathbf{u}(t)$ , this constraint (4) must be satisfied for the expectations:  $\mathbb{E}[\mathbf{U}(t)] \in \mathcal{U}(\mathbb{E}[\mathbf{X}(t)])$ .
+
+The reward collected at time  $t$  for this dynamical system is  $\mathbf{r}^0 \cdot \mathbf{x}(t) + (\mathbf{r}^1 - \mathbf{r}^0) \cdot \mathbf{u}(t)$ . Let  $\lambda$  be the dual multiplier of the constraint (5c) of an optimal solution of (5). We define a *deterministic* finite-horizon optimal control problem as:
+
+$$W_\tau(\mathbf{x}(0)) = \max_{\mathbf{x}, \mathbf{u}} \sum_{t=0}^{\tau-1} (\mathbf{r}^0 \cdot \mathbf{x}(t) + (\mathbf{r}^1 - \mathbf{r}^0) \cdot \mathbf{u}(t)) + \lambda \cdot \mathbf{x}(\tau), \quad (8a)$$
+
+$$\text{Subject to: } \mathbf{x} \text{ and } \mathbf{u} \text{ satisfy (7) for all } t \in \{0, \dots, \tau-1\}, \quad (8b)$$
+
+Before moving forward, the above equation deserves some remarks. First, for any finite  $\tau$ , the objective and the constraints (7) of the optimization problem (8) are linear in the variables  $(\mathbf{x}(t), \mathbf{u}(t))$ . This means that this optimization problem is computationally easy to solve. In what follows, we denote by  $\mu_\tau(\mathbf{x})$  the value of  $\mathbf{u}(0)$  of an optimal solution to (8).
+
+Second, the definition of (8) imposes that the constraint  $\|\mathbf{u}\|_1 \leq \alpha \|\mathbf{x}\|_1 = \alpha$  holds for each time  $t$ . This is in contrast to the way this constraint is typically treated in RMAB problems, in which case (4) is replaced with the time-averaged constraint  $\frac{1}{\tau} \sum_{t=0}^{\tau-1} \|\mathbf{u}(t)\|_1 \leq \alpha$ . The latter relaxation was introduced in Whittle (1988) and is often referred to as Whittle's relaxation (Avrachenkov & Borkar, 2020; Avrachenkov et al., 2021). This is the constraint that we use to write (5). Gast et al. (2023a) showed that for any finite  $T$ , the finite-horizon equivalent of (3) converges to (8) as  $N$  goes to infinity. The purpose of this paper is to show that the solution of the finite  $T$ -horizon LP (8) provides an almost-optimal solution to the original  $N$ -arm average reward problem (3).
+
+Last, as we will discuss later, taking  $\lambda$  as the dual multiplier of the constraint (5c) helps to make a connection between the finite and the infinite-horizon problems (8) and (5). Our proofs will hold with minor modification by replacing  $\lambda$  by 0 and in practice we do not use this multiplier for our algorithm.
+
+### 3.2 THE MODEL PREDICTIVE CONTROL ALGORITHM
+
+The pseudo-code of the LP-update policy is presented in Algorithm 1. The LP-update policy takes as an input a time-horizon  $\tau$ . At each time-slot, the policy solves the finite horizon linear program
+
+{4}------------------------------------------------
+
+#### **Algorithm 1** Evaluation of the LP-Update policy
+
+**Input:** Horizon  $\tau$ , Initial state  $\mathbf{S}^{(N)}(0)$ , model parameters  $\langle \mathbf{P}^0, \mathbf{P}^1, \mathbf{r}^0, \mathbf{r}^1 \rangle$ , and time horizon  $T$   
+Total-reward  $\leftarrow 0$ .  
+**for**  $t = 0$  to  $T - 1$  **do**  
+     $\mathbf{u}(t) \leftarrow \mu_\tau(\mathbf{x}(\mathbf{S}^{(N)}(t)))$ .  
+     $\mathbf{A}^{(N)}(t) \leftarrow$  Randomized Rounding ( $\mathbf{u}(t)$ ) (by using Algorithm 2).  
+    Total-reward  $\leftarrow$  Total-reward  $+ R(\mathbf{S}^{(N)}(t), \mathbf{A}^{(N)}(t))$ .  
+    Simulate the transitions according to (1) to get  $\mathbf{S}^{(N)}(t + 1)$   
+**end for**  
+**Output:** Average reward :  $\frac{\text{Total-reward}}{T} \approx V_{\text{LP}, \tau}^{(N)}(\infty)$
+
+(8) to obtain  $\mu_\tau(\mathbf{x})$  that is the value of  $\mathbf{u}(0)$  of an optimal solution to (8). Note that such a policy may not immediately translate to an applicable policy as we do not require that  $N\mu_\tau(\mathbf{x})$  to be integers. We therefore use *randomized rounding* to obtain a feasible policy for our  $N$  armed problem,  $\mathbf{A}^{(N)}(t)$ . Applying these actions to each arm gives an instantaneous reward and a next state. This form of control has been referred to as *rolling horizon* Puterman (2014) but more commonly referred to as *model predictive control* Damm et al. (2014). Our algorithm maybe summarized more succinctly as:
+
+$$\mathbf{S}^{(N)}(t) \xrightarrow{\text{Solve LP (8)}} \mu_\tau(\mathbf{x}(\mathbf{S}^{(N)}(t))) \xrightarrow[\text{rounding}]{\text{Randomized}} \mathbf{A}^{(N)}(t) \xrightarrow[\text{new state}]{\text{Observe}} \mathbf{S}^{(N)}(t + 1). \quad (9)$$
+
+The randomized rounding procedure that we use is similar to the one described in Gast et al. (2023a). We discuss it in Appendix B.1.
+
+## 4 MAIN THEORETICAL RESULTS
+
+The main result of our paper is to show that a finite-horizon model predictive control algorithm, that we call the LP-update policy, is asymptotically optimal for the infinite horizon bandit problem. Note that this LP-update policy is introduced in Gast et al. (2023a;b); Ghosh et al. (2022) for finite-horizon restless bandit.
+
+### 4.1 FIRST RESULT: LP-UPDATE IS ASYMPTOTIC OPTIMAL
+
+Our result will show that the LP-update policy is asymptotically optimal as the number of arms  $N$  goes to infinity, under an easily verifiable mixing assumption on the transition matrices. To express this condition, for a fixed integer and a sequence of action  $\mathbf{a} = (a_1 \dots a_k) \in \{0, 1\}^k$ , we denote by  $P_{i,j}^{\mathbf{a}}$  the  $(i, j)$ th entry of the matrix  $\prod_{t=1}^k \mathbf{P}^{a_t}$ . We then denote by  $\rho_k$  the following quantity<sup>1</sup>:
+
+$$\rho_k \triangleq \min_{s, s' \in \mathcal{S}, \mathbf{a} \in \{0, 1\}^k} \sum_{s^* \in \mathcal{S}} \min\{P_{s, s^*}^{a_1, a_2, \dots, a_k}, P_{s', s^*}^{0, 0, \dots, 0}\} \quad (10)$$
+
+In the above equation, the minimum is taken over all possible initial states  $s, s'$  and all possible sequence of actions. The quantity  $\rho_k$  can be viewed as the probability (under the best coupling) that two arms starting in states  $s$  and  $s'$  reach the same state after  $k$  iterations, if the sequence  $a_1 \dots a_k$  is used for the first arm while the second arm only uses the action 0. The assumption that we use for our result is that  $\rho_k > 0$  for some integer  $k$ .
+
+**Assumption 1.** *There exists a finite  $k$  such that  $\rho_k > 0$ .*
+
+While the assumption may look abstract, note that when the  $\mathbf{P}^0$  matrix is ergodic, it ensures that assumption 1 holds. Indeed in this case, there exists a  $k > 0$  such that  $P_{ij}^{0, 0, \dots, 0} > 0$  for all  $i, j$  which would imply that  $\rho_k > 0$ . Related assumptions and their relationship to Ergodicity can be found in Hernandez-Lerma & Lasserre (2012). Assumption 1 is similar to the unichain and aperiodic condition imposed in Hong et al. (2024b). Note that as this quantity involves the best coupling and
+
+<sup>1</sup>The definition (10) is related to the notion of ergodic coefficient defined in (Puterman, 2014) that used a related constant to prove convergence of value iteration algorithms in span norm for the unconstrained discounted Markov Decision Process.
+
+{5}------------------------------------------------
+
+not a specific coupling, it is more general than the synchronization assumption used in Hong et al. (2023).
+
+We are now ready to state our first theorem, where we provide a performance bound of the average reward of the LP-update policy, that we denote by  $V_{LP,\tau}^{(N)}(\infty)$ .
+
+**Theorem 4.1.** Assume 1. There exist constants  $C_\lambda, C_\Phi > 0$  such that for any  $\epsilon > 0$ , there exists  $\tau(\epsilon)$  such that, Algorithm 1 has the following guarantee of performance:
+
+$$V_{LP,\tau(\epsilon)}^{(N)}(\infty) \geq V_{opt}^N(\infty) - \epsilon - \left( \frac{kC_\Phi}{\rho} + C_\lambda C_\Phi + 1 \right) \frac{(\alpha N - \lfloor \alpha N \rfloor)}{N} - \left( \frac{k}{\rho_k} + C_\lambda \right) \left( \sqrt{\frac{|\mathcal{S}|}{N}} \right) \quad (11)$$
+
+This result shows that the LP-update policy becomes optimal as  $\tau$  and  $N$  go to infinity. The sub-optimality gap of LP-update decomposes in three terms. The first term corresponds to an upper-bound on the sub-optimality of using the finite-horizon  $\tau$  when solving the LP-problem (8). Note, our proof shows that one can take  $\tau(\epsilon) = \mathcal{O}(\frac{1}{\epsilon})$ . Moreover, in the numerical section, we will show that choosing a small value like  $\tau = 10$  is sufficient for most problems. The second term corresponds to a rounding error: for all  $\alpha$  such that  $N\alpha$  is an integer, this term equals 0. The dominating error term is the last term,  $O(1/\sqrt{N})$ , corresponding to the difference between the  $N$ -arm problem and the LP-problem with  $\tau + \infty$ .
+
+### 4.2 SECOND RESULT: EXPONENTIALLY SMALL GAP UNDER A STABILITY CONDITION
+
+Theorem 4.1 shows that the sub-optimality gap of the LP-update policy is of order  $O(1/\sqrt{N})$  under quite general conditions. While one could not hope for a better convergence rate in general, there are known cases for which one can construct policies that become optimal exponentially fast when  $N$  goes to infinity. This is the case for Whittle index under the conditions of indexability, uniform global attractor property (UGAP), non-degeneracy and global exponential stability Gast et al. (2023a). More details can be found in Appendix A. In this section, we show that LP-update also becomes optimal exponentially fast under essentially the same conditions as the ones presented in Hong et al. (2024a). The first condition that we impose is that the solution of the above LP-problem is non-degenerate (as defined in Gast et al. (2023a); Hong et al. (2024a)).
+
+**Assumption 2** (Non-degenerate). We assume that the solution  $(\mathbf{x}^*, \mathbf{u}^*)$  to the linear program (5) is unique and satisfies that  $x_i^* > 0$  for all  $i \in \mathcal{S}$  and that there exists a (unique) state  $i^* \in \mathcal{S}$  such that  $0 < u_{i^*}^* < x_{i^*}^*$ .
+
+The second condition concerns the local stability of a map around the fixed point.
+
+**Assumption 3.** Assume 2 and let  $P^*$  be the  $|\mathcal{S}| \times |\mathcal{S}|$  matrix such that
+
+$$P_{ij}^* = \begin{cases} P_{ij}^0 & \text{if } i \text{ is such that } u_i^* < x_i^*. \\ P_{ij}^1 - P_{i^*j}^1 + P_{i^*j}^0 & \text{if } i \text{ is such that } u_i^* = x_i^*. \end{cases}$$
+
+We assume that the matrix  $P^*$  is stable, i.e., that the  $l_2$  norm of all but one of the Eigenvalues of  $P^*$  are strictly smaller than 1.
+
+Both these conditions are equivalent to the assumption of non-degeneracy and local stability defined in Hong et al. (2024a).
+
+The last condition that we impose is a technical assumption that simplifies the proofs.
+
+**Assumption 4** (Unicity). We assume that for all  $\mathbf{x} \in \Delta_{\mathcal{S}}$ , the LP program (8) has a unique solution.
+
+This assumption guarantees that the LP-update policy is uniquely defined. Note that the assumptions of unicity of the fixed point are often made implicitly in papers when authors talk about “the” optimal solution instead of “an” optimal solution.
+
+**Theorem 4.2.** Assume 1, 2, 3, and 4 then there exist constants  $C', C'' > 0$  (independent on  $N$  and  $\tau$ ) such that for all  $\epsilon > 0$ , with  $\tau(\epsilon)$  (set according to Theorem 4.1) and  $N$  such that  $\alpha N$  is an integer, Algorithm 1 has the following guarantee of performance
+
+$$V_{LP,\tau(\epsilon)}^{(N)}(\infty) \geq V_{opt}^N(\infty) - \epsilon - C' e^{-C'' N}. \quad (12)$$
+
+The first term of the bound above is identical to the one used in Theorem 4.1. What is more important is that the last term decays exponentially with  $N$ .
+
+{6}------------------------------------------------
+
+## 5 PROOFS: MAIN IDEAS
+
+In this section, we provide the major ingredients of the proofs of the two main theorems. We provide more details for the proof of Theorem 4.1 because this is the more original of the two. The proofs of all lemmas and some details of computation are deferred to Appendix C.
+
+### 5.1 SKETCH FOR THEOREM 4.1:
+
+Three major components are required in-order to complete the proof.
+
+**Part 1, Properties of the dynamical control problem (8)** For  $\mathbf{x}, \mathbf{u}$ , we denote by  $\Phi(\mathbf{x}, \mathbf{u}) := \mathbf{x}\mathbf{P}^0 + \mathbf{u}(\mathbf{P}^1 - \mathbf{P}^0)$  the deterministic transition kernel, and we recall that the instantaneous reward is  $R(\mathbf{x}, \mathbf{u}) := \mathbf{r}^0 \cdot \mathbf{x} + (\mathbf{r}^1 - \mathbf{r}^0) \cdot \mathbf{u}$ . In Lemma C.2, we establish several properties that relate the finite-horizon problem (8) and the finite-horizon problem (5) that hold under Assumption 1. First we show that the average gain of the finite-time horizon problem (8) converges to the average gain of the infinite-horizon problem, that is  $\lim_{\tau \rightarrow \infty} W_\tau(\mathbf{x})/\tau = g^*$  for all  $\mathbf{x}$ . Second, we also show that the *bias function*  $h^*(\cdot) : \Delta_S \rightarrow \mathbb{R}$  given by :
+
+$$h^*(\mathbf{x}) := \lim_{\tau \rightarrow \infty} W_\tau(\mathbf{x}) - \tau g^* \quad (13)$$
+
+is well defined and Lipschitz-continuous with constant  $k/\rho_k$  and the convergence in (13) is uniform in  $\mathbf{x}$ . Moreover, the gain and the bias function satisfy
+
+$$h^*(\mathbf{x}) + g^* = \max_{\mathbf{u} \in \mathcal{U}(\mathbf{x})} R(\mathbf{x}, \mathbf{u}) + h^*(\Phi(\mathbf{x}, \mathbf{u})). \quad (14)$$
+
+While both these definitions are well known in the average reward *unichain MDP* setting *without constraints*, Lemma C.2 establishes these definitions for the *constrained, deterministic problem*.
+
+**Part 2, Dissipativity and rotated cost** Let  $(\mathbf{x}^*, \mathbf{u}^*)$  be the<sup>2</sup> optimal solution of the infinite-horizon problem (5), and let  $l(\mathbf{x}, \mathbf{u}) := g^* - \mathbf{r}^0 \cdot \mathbf{x} - (\mathbf{r}^1 - \mathbf{r}^0) \cdot \mathbf{u}$ . Following Damm et al. (2014), an optimal control problem with stage cost  $l(\mathbf{x}, \mathbf{u})$  and dynamic  $\mathbf{x}(t+1) := \Phi(\mathbf{x}, \mathbf{u})$  is called *dissipative* if there exists a *storage function*  $\lambda : \Delta_S \rightarrow \mathbb{R}$  that satisfies the following equation:
+
+$$\tilde{l}(\mathbf{x}, \mathbf{u}) := l(\mathbf{x}, \mathbf{u}) + \lambda(\mathbf{x}) - \lambda(\Phi(\mathbf{x}, \mathbf{u})) \geq l(\mathbf{x}^*, \mathbf{u}^*) = \tilde{l}(\mathbf{x}^*, \mathbf{u}^*) = 0.$$
+
+The cost,  $\tilde{l}(\mathbf{x}, \mathbf{u})$  is called the *rotated cost function*.
+
+In Lemma C.3, we show that our problem is dissipative by setting the storage function  $\lambda(\mathbf{x}) := \lambda \cdot \mathbf{x}$ , where  $\lambda$  is the optimal dual multiplier of the constraint (8a). It is important to note, the rotated cost so defined is always non-negative.
+
+**Part 3, MPC is optimal for the deterministic control problem** By using our definition of rotated cost, we define the following minimization problem
+
+$$L_\tau(\mathbf{x}) := \min \sum_{t=0}^{\tau-1} \tilde{l}(\mathbf{x}(t), \mathbf{u}(t)). \quad (15)$$
+
+Subject to:  $\mathbf{x}(t)$  and  $\mathbf{u}(t)$  satisfy (7) for all  $t \in \{0, T-1\}$ .
+
+By dissipativity,  $L_\tau(\mathbf{x})$  is monotone increasing. Moreover, we have that  $L_T(\mathbf{x}) \geq 0 = L_T(\mathbf{x}^*)$ . Hence, the problem is *operated optimally at the fixed point*,  $(\mathbf{x}^*, \mathbf{u}^*)$ . The optimal operation at a fixed point is a key observation, made by several works, (Goldsztajn & Avramchenkov, 2024; Gast et al., 2023b; Yan, 2024; Hong et al., 2023), we recover this result as a natural consequence of dissipativity. By Lemma C.4,  $L_\tau(\mathbf{x}) = \tau g^* - W_\tau(\mathbf{x}) + \lambda \cdot \mathbf{x}$  because<sup>3</sup> of a telescopic sum of the terms  $\lambda \cdot \mathbf{x}(t)$ . Combining this with (13) implies that  $\lim_{\tau \rightarrow \infty} L_\tau(\mathbf{x}) = h^*(\mathbf{x}) + \lambda \cdot \mathbf{x}$ . As  $L_\tau(\mathbf{x})$  is monotone, it follows that, for any  $\epsilon > 0$ , there exists a  $\tau(\epsilon)$  such that for  $L_{\tau(\epsilon)}(\mathbf{x}) - L_{\tau(\epsilon)-1}(\mathbf{x}) < \epsilon$ . Note that the fact that  $L_\tau(\mathbf{x})$  is monotone is crucial to obtain this property, leading us to use dissipativity. Putting the three components together, we can now prove the final steps.
+
+*Proof of Theorem 4.1.* We begin by considering the difference between the optimal value and the model predictive value function. We let  $\mathbf{X}(t)$  denote the empirical distribution of the arms at time
+
+<sup>2</sup>For clarity we will present the proof as if this point is unique although the proof can be rendered without this requirement.
+
+<sup>3</sup>In fact, the two control problems are equivalent:  $\mathbf{u}^*$  is optimal for (8) if and only if it is for (15).
+
+{7}------------------------------------------------
+
+$$\begin{aligned}
+V_{\text{opt}}^N(\mathbf{x}) - V_{\text{LP},T}^N(\mathbf{x}) &\leq \lim_{T \rightarrow \infty} \frac{1}{\tau} \sum_{t=0}^{\tau-1} \mathbb{E}[g^* - R(\mathbf{X}(t), \mathbf{U}(t))] \\
+&= \lim_{T \rightarrow \infty} \frac{1}{T} \sum_{t=0}^{T-1} \mathbb{E}[g^* - \mathbf{r}^0 \cdot \mathbf{X}(t) - (\mathbf{r}^1 - \mathbf{r}^0) \cdot \mathbf{u}(t) + (\mathbf{r}^1 - \mathbf{r}^0) \cdot (\mathbf{u}(t) - \mathbf{U}(t))] \\
+&\leq \lim_{T \rightarrow \infty} \frac{1}{T} \sum_{t=0}^{T-1} \mathbb{E}[l(\mathbf{X}(t), \mathbf{u}(t))] + \frac{\alpha N - |\alpha N|}{N}
+\end{aligned} \tag{16}$$
+
+The first inequality follows from the well known result  $V_{\text{opt}}^N(\mathbf{x}) \leq g^*$ , (Yan, 2024; Gast et al., 2023a; Hong et al., 2023). The last inequality follows from randomized rounding and Lemma B.1. Let  $(A) := \lim_{T \rightarrow \infty} \frac{1}{T} \sum_{t=0}^{T-1} \mathbb{E}[l(\mathbf{X}(t), \mathbf{u}(t))]$  denotes the first term of (16). Adding and subtracting the storage cost we have:
+
+$$(A) = \lim_{T \rightarrow \infty} \frac{1}{T} \sum_{t=0}^{T-1} \mathbb{E}[\tilde{l}(\mathbf{X}(t), \mathbf{u}(t)) - \lambda \cdot \mathbf{X}(t) + \lambda \cdot \Phi(\mathbf{X}(t), \mathbf{u}(t))].$$
+
+Now note, by the dynamic programming principle  $\tilde{l}(\mathbf{x}, \mathbf{u}) = L_\tau(\mathbf{x}) - L_{\tau-1}(\Phi(\mathbf{x}, \mathbf{u}))$ . Further, for any state  $\mathbf{x}$  and its corresponding control  $\mathbf{u}$  consider:
+
+$$L_\tau(\mathbf{x}) - L_{\tau-1}(\Phi(\mathbf{x}, \mathbf{u})) = L_\tau(\mathbf{x}) - L_\tau(\Phi(\mathbf{x}, \mathbf{u})) + L_\tau(\Phi(\mathbf{x}, \mathbf{u})) - L_{\tau-1}(\Phi(\mathbf{x}, \mathbf{u})).$$
+
+By choosing  $\tau = \tau(\epsilon)$  so that,  $L_\tau(\mathbf{x}) - L_{\tau-1}(\mathbf{x}) < \epsilon$ , we can ensure,
+
+$$L_\tau(\mathbf{x}) - L_{\tau-1}(\Phi(\mathbf{x}, \mathbf{u})) \leq L_\tau(\mathbf{x}) - L_\tau(\Phi(\mathbf{x}, \mathbf{u})) + \epsilon \tag{17}$$
+
+Plugging these inequalities together, introducing a telescopic sum, and manipulating the order of variables slightly (shown in Appendix C.4), we have the following relation:
+
+$$(A) \leq \epsilon + \lim_{T \rightarrow \infty} \frac{1}{T} \sum_{t=0}^{T-1} \mathbb{E}[L_\tau(\mathbf{X}(t+1)) - L_\tau(\Phi(\mathbf{X}(t), \mathbf{u}(t))) - \lambda \cdot [\mathbf{X}(t+1) - \Phi(\mathbf{X}(t), \mathbf{u}(t))]]. \tag{18}$$
+
+$L_\tau(\mathbf{x})$  is Lipschitz in  $\mathbf{x}$  for any  $\tau$ . Since,  $\mathbb{E}[\mathbf{X}(t+1)|\mathbf{X}(t), \mathbf{U}(t)] = \Phi(\mathbf{X}(t), \mathbf{U}(t))$ , Lemma 1 of Gast et al. (2023b) implies:
+
+$$\|\mathbb{E}[\mathbf{X}(t+1)|\mathbf{X}(t), \mathbf{U}(t)] - \Phi(\mathbf{X}(t), \mathbf{u}(t))\|_1 \leq \frac{\sqrt{|\mathcal{S}|}}{\sqrt{N}} + \frac{C_\Phi(\alpha N - |\alpha N|)}{N},$$
+
+where  $C_\Phi$  is the Lipschitz constant of the map  $\Phi$ . The Lipschitz constant of  $L_\tau(\cdot)$  in the  $l1$  norm is  $\frac{k}{\rho_k}$  and  $C_\lambda$  is equal to  $\|\lambda\|_\infty$ . Passing to the limit  $\tau \rightarrow \infty$  we have:
+
+$$V_{\text{opt}}^N(\mathbf{x}) - V_{\text{LP},\tau}^N(\mathbf{x}) \leq \epsilon + \left(\frac{k}{\rho} + C_\lambda\right) \left(\frac{\sqrt{|\mathcal{S}|}}{\sqrt{N}} + \frac{C_\Phi(\alpha N - |\alpha N|)}{N}\right) + \frac{(\alpha N - |\alpha N|)}{N} \tag{19}$$
+
+□
+
+### 5.2 THEOREM 4.2
+
+The proof Theorem 4.2 is more classical and follows the same line as the proof of the exponential asymptotic optimality of Gast et al. (2023a); Hong et al. (2024a). The first ingredient is Lemma D.1 that shows that, by non-degeneracy, there exists a neighborhood of  $\mathbf{x}^*$  such that  $\mu_\tau(\mathbf{x}^*)$  is locally linear around  $\mathbf{x}^*$ . The second ingredient is Lemma D.2 that shows that  $\mathbf{X}(t)$  is concentrated around  $\mathbf{x}^*$  as  $t \rightarrow \infty$ , i.e., for all  $\epsilon > 0$ , there exists  $C > 0$  such that  $\lim_{t \rightarrow \infty} \Pr[\|\mathbf{X}(t) - \mathbf{x}^*\| \geq \epsilon] \leq e^{-CN}$ . Combining the two points imply the result. For more details, see Appendix D.
+
+{8}------------------------------------------------
+
+## 6 NUMERICAL ILLUSTRATIONS
+
+In this section, we illustrate numerically the performance of the LP-update policy. We show that it performs very well in practice and outperform classical heuristics in most cases. We choose to compare against two heuristics of the literature: the LP-priority policy of Gast et al. (2023a) and the follow the virtual advice policy (FTVA) of Hong et al. (2023). The LP-priority policy computes a solution to (5) and uses it to compute a priority order on states, arms are then pulled according to this priority order till the budget is exhausted. FTVA constructs a virtual collection of  $N$  arms associated with each arm which follow the solution to (5). If a virtual arm is pulled, the corresponding real arm is pulled if the budget allows it, otherwise the real arm is left alone. When the virtual and real arm choose the same actions, they evolve identically, otherwise they evolve independently.
+
+We choose these two heuristics because they are natural and simple to implement and do not rely on hard-to-tune hyper-parameters (further discussion for our choice can be found in Appendix F). All parameters of the examples are provided in Appendix F. All codes are provided in supplementary material. In the future, a Github link will be provided.
+
+**Comparison on representative examples** For our first comparison, we consider three representative examples: a randomly generated example (in dimension 8), the main example used in Hong et al. (2023) and described in their Appendix G.2 (abbreviated Example Hong et al. (2023) in the following), and Example 2 of Figure 7.4 of Yan (2022) (abbreviated Example Yan (2022)). We report the result in Figure 1. We observe that in all three cases, both the LP-update and the FTVA policies are asymptotically optimal, but the LP-update policy outperforms FTVA substantially. The situation for LP-priority is quite different: as shown in Gast et al. (2023a), in dimension 8, the LP-priority policy is asymptotically optimal for most of the randomly generated examples. This is the case for example (a) of Figure 1 for which LP-update and LP-priority give an essentially equivalent performance and are essentially almost optimal. Note, the authors of Yan (2022) provide the numerical value of the optimal policy  $N$  for Example Yan (2022), which can be done because  $|\mathcal{S}| = 3$ . We observe that the LP-update is very close to this value.
+
+![Figure 1: Performance as a function of N. Three subplots (a, b, c) showing Average reward vs N. (a) Random example: LP-update10 (blue dashed) and LP-priority (green dashed) are near the upper bound (red dashed), while FTVA (orange solid) is lower. (b) Example Hong et al. (2023): LP-update10 (blue dashed) and LP-priority (green dashed) are near the upper bound (red dashed), while FTVA (orange solid) is lower. (c) Example Yan (2022): LP-update (orange solid) is near the upper bound (red dashed) and optimal value (blue dashed), while FTVA (orange solid) and LP-priority (green dashed) are lower.](925f55ce69802b9d3b00546382663ee2_img.jpg)
+
+Figure 1: Performance as a function of N. Three subplots (a, b, c) showing Average reward vs N. (a) Random example: LP-update10 (blue dashed) and LP-priority (green dashed) are near the upper bound (red dashed), while FTVA (orange solid) is lower. (b) Example Hong et al. (2023): LP-update10 (blue dashed) and LP-priority (green dashed) are near the upper bound (red dashed), while FTVA (orange solid) is lower. (c) Example Yan (2022): LP-update (orange solid) is near the upper bound (red dashed) and optimal value (blue dashed), while FTVA (orange solid) and LP-priority (green dashed) are lower.
+
+Figure 1: Performance as a function of  $N$
+
+**System dynamics:** To explore the difference of performance between the LP-update policy and FTVA, we study the dynamics as a function of time of the different policies for the first two examples of Figure 1. We plot in Figure 2 the evolution of the system as a function of time (for a single trajectory). We observe that if the distance between  $X_t$  and  $x^*$  are similar for LP-update and FTVA, the rotated cost is much smaller for LP-update, which explains its good performance. To explore
+
+![Figure 2: Distance ||X_t - x^*|| and rotated cost as a function of time for N = 100. (a) Random example: ||X_t - x^*|| (left) is similar for LP-update10 (blue dashed) and FTVA (orange solid). Rotated cost (right) is much smaller for LP-update10 (blue dashed) than FTVA (orange solid). (b) Example from Hong et al.: ||X_t - x^*|| (left) is similar for LP-update10 (blue dashed) and FTVA (orange solid). Rotated cost (right) is much smaller for LP-update10 (blue dashed) than FTVA (orange solid).](0d5fdb87a392819c7d2e3b6230912a0b_img.jpg)
+
+Figure 2: Distance ||X\_t - x^\*|| and rotated cost as a function of time for N = 100. (a) Random example: ||X\_t - x^\*|| (left) is similar for LP-update10 (blue dashed) and FTVA (orange solid). Rotated cost (right) is much smaller for LP-update10 (blue dashed) than FTVA (orange solid). (b) Example from Hong et al.: ||X\_t - x^\*|| (left) is similar for LP-update10 (blue dashed) and FTVA (orange solid). Rotated cost (right) is much smaller for LP-update10 (blue dashed) than FTVA (orange solid).
+
+Figure 2: Distance  $\|X_t - x^*\|$  and rotated cost as a function of time for  $N = 100$ . For the system dynamics in more details, we focus on Example Yan (2022) and study the behavior of
+
+{9}------------------------------------------------
+
+![Figure 3: Example 2 from Gast et al. 22. Simulation for N = 100. (a) LP-update: A ternary plot showing the trajectory of the policy in the simplex. The points are concentrated around a fixed point (green dot). (b) FTVA: A ternary plot showing the trajectory of the policy. The points are more spread out than in (a). (c) LP-priority: A ternary plot showing the trajectory of the policy. The points are concentrated around a fixed point (green dot). (d) CDF of rotated cost: A plot showing the cumulative distribution function of the rotated cost for LP-priority (blue), FTVA (orange), and LP-update (green). LP-update has the highest CDF, followed by FTVA, and then LP-priority.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 3: Example 2 from Gast et al. 22. Simulation for N = 100. (a) LP-update: A ternary plot showing the trajectory of the policy in the simplex. The points are concentrated around a fixed point (green dot). (b) FTVA: A ternary plot showing the trajectory of the policy. The points are more spread out than in (a). (c) LP-priority: A ternary plot showing the trajectory of the policy. The points are concentrated around a fixed point (green dot). (d) CDF of rotated cost: A plot showing the cumulative distribution function of the rotated cost for LP-priority (blue), FTVA (orange), and LP-update (green). LP-update has the highest CDF, followed by FTVA, and then LP-priority.
+
+Figure 3: Example 2 from Gast et al. 22. Simulation for  $N = 100$ .
+
+**Influence of parameters** In Figure 4, we study the influence of different parameters on the performance of LP-update. In each case, we generated 20 examples and plot the average “normalized” performance among these 20 examples. “normalized” here means we divide the performance of the policy by the value of the LP problem (5). The first plot 4(a) shows that the influence of the parameter  $\tau$  is marginal (the curves are not distinguishable for  $\tau \in \{3, 5, 10\}$ ). Plot 4(b) indicates that the sub-optimality gap of LP-update is not too sensitive to the state space size unlike FTVA which degrades when  $|\mathcal{S}|$  is large, probably because there are fewer synchronized arms. The last plot 4(c) studies the performance as a function of the budget parameter,  $\alpha$ .
+
+![Figure 4: Comparison of the gains as a function of some parameters. (a) For various tau: A plot showing normalized average gain vs N for LP-priority (blue), LP-update with tau=3 (green), LP-update with tau=5 (orange), LP-update with tau=10 (red), and FTVA (yellow). The curves for LP-update are nearly identical and higher than FTVA. (b) For various S: A plot showing normalized gain vs N for LP-update (blue), LP-priority (green), and FTVA (yellow) for S=8, 20, 30, 50. LP-update and LP-priority are stable, while FTVA decreases as S increases. (c) For various alpha (N=50): A plot showing normalized gain vs budget alpha for LP-update (blue), LP-priority (green), and FTVA (yellow). LP-update and LP-priority are stable, while FTVA decreases as alpha increases.](6b32b7b928d34eeccb15c29cdf9d2cb3_img.jpg)
+
+Figure 4: Comparison of the gains as a function of some parameters. (a) For various tau: A plot showing normalized average gain vs N for LP-priority (blue), LP-update with tau=3 (green), LP-update with tau=5 (orange), LP-update with tau=10 (red), and FTVA (yellow). The curves for LP-update are nearly identical and higher than FTVA. (b) For various S: A plot showing normalized gain vs N for LP-update (blue), LP-priority (green), and FTVA (yellow) for S=8, 20, 30, 50. LP-update and LP-priority are stable, while FTVA decreases as S increases. (c) For various alpha (N=50): A plot showing normalized gain vs budget alpha for LP-update (blue), LP-priority (green), and FTVA (yellow). LP-update and LP-priority are stable, while FTVA decreases as alpha increases.
+
+Figure 4: Comparison of the gains as a function of some parameters.
+
+## 7 CONCLUSION
+
+In this paper, we study the problem of constructing an efficient policy for restless multi-armed bandit for the average reward case. We show that under quite general condition, a simple model-predictive control algorithm provides a solution that achieves both the best known upper bound up to know  $(O(1/\sqrt{N}))$  or  $\exp(-\Omega N)$  for stable non-degenerate problems), but also works very efficiently in practice. Our paper provides the first analysis of this policy for the average reward criterion. Our paper uses a novel framework based on dissipativity that helps up to make a crisp connection between the finite- and the infinite-horizon problems and we are the first to us it in this context. We believe that this framework is what makes our analysis simple and easily generalizable to other settings. As an example, we discuss in Appendix B.2 potential generalization to the multi-action multi-constraint bandits, that is an interesting direction for future work.
+
+ Rest of paper (reference and Appendix) is removed.

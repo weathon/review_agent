@@ -1,0 +1,273 @@
+
+
+{0}------------------------------------------------
+
+# AN EFFICIENT FRAMEWORK FOR CREDITING DATA CONTRIBUTORS OF DIFFUSION MODELS
+
+Chris Lin\*, Mingyu Lu\*, Chanwoo Kim, Su-In Lee
+
+Paul G. Allen School of Computer Science & Engineering
+
+University of Washington
+
+{clin25,mingyulu,chanwkim,suinlee}@cs.washington.edu
+
+## ABSTRACT
+
+As diffusion models are deployed in real-world settings, and their performance is driven by training data, appraising the contribution of data contributors is crucial to creating incentives for sharing quality data and to implementing policies for data compensation. Depending on the use case, model performance corresponds to various global properties of the distribution learned by a diffusion model (e.g., overall aesthetic quality). Hence, here we address the problem of attributing global properties of diffusion models to data contributors. The Shapley value provides a principled approach to valuation by uniquely satisfying game-theoretic axioms of fairness. However, estimating Shapley values for diffusion models is computationally impractical because it requires retraining on many training data subsets corresponding to different contributors and rerunning inference. We introduce a method to efficiently retrain and rerun inference for Shapley value estimation, by leveraging model pruning and fine-tuning. We evaluate the utility of our method with three use cases: (i) image quality for a DDPM trained on a CIFAR dataset, (ii) demographic diversity for an LDM trained on CelebA-HQ, and (iii) aesthetic quality for a Stable Diffusion model LoRA-finetuned on Post-Impressionist artworks. Our results empirically demonstrate that our framework can identify important data contributors across models' global properties, outperforming existing attribution methods for diffusion models<sup>1</sup>.
+
+## 1 INTRODUCTION
+
+Diffusion models have demonstrated impressive performance on image generation (Ho et al., 2020; Song et al., 2020b), with models such as Dall-E 2 (Ramesh et al., 2022) and Stable Diffusion (Rombach et al., 2022) showing versatile utilities and enabling downstream applications via customization (Hu et al., 2021; Ruiz et al., 2023). A key driver for the performance of diffusion models is the data used for training and fine-tuning. The data for commercial diffusion models are often scraped from the internet (Schuhmann et al., 2022), raising concerns about credit attribution for those who created the data in the first place (e.g., artists and their artworks) (Jiang et al., 2023). Additionally, as labor is required to label and curate data to further improve model performance, demands for data labeling platforms have risen, with workers often underpaid (Widder et al., 2023; Wong, 2023). To create incentives for sharing quality data and implement policies for data compensation, a pressing question arises: *How do we fairly credit data contributors of diffusion models?*
+
+*Data attribution*, which aims to trace machine learning model behaviors back to training data, has the potential to address the above question. Indeed, in the context of supervised learning, several works have proposed methods for valuating the contribution of individual datum to model performance such as accuracy (Ghorbani & Zou, 2019; Kwon & Zou, 2021; Wang & Jia, 2023). Some recent work has developed data attribution methods for diffusion models (Dai & Gifford, 2023; Georgiev et al., 2023; Wang et al., 2023a; Zheng et al., 2023). However, two gaps remain when applying these recent methods to credit data contributors of diffusion models. First, these methods focus on *local* properties related to the generation of a given image. For example, Zheng et al. (2023) showcase their
+
+<sup>\*</sup>Equal contribution.
+
+<sup>1</sup>Our code is available at [https://github.com/q8888620002/data\\_attribution](https://github.com/q8888620002/data_attribution)
+
+{1}------------------------------------------------
+
+method D-TRAK to study the changes in pixel values of particular generated images. In contrast, the performance of diffusion models is evaluated based on *global* properties of the learned generative distributions. For example, the demographic diversity of generated images can be considered a global property for evaluation (Luccioni et al., 2023). Second, existing attribution methods for diffusion models consider the contribution of each training datum instead of each data contributor, but a contributor can provide multiple data points. One reasonable approach is to aggregate the valuations of data provided by a contributor as the contributor’s total contribution. However, previous work has shown this approach to incur errors between the aggregated and actual contribution (Koh et al., 2019). Here, we aim to address these two gaps by attributing global properties of diffusion models to data contributors.
+
+Attribution methods based on cooperative game theory are particularly desirable because of their axiomatic justification. Specifically, the Shapley value provides a principled approach to fairly distribute credit among contributors, since it is the unique notion that satisfies game-theoretic axioms for equitable valuation (Ghorbani & Zou, 2019; Shapley, 1953). Briefly, the Shapley value assesses each contributor based on the average gain incurred by adding the contributor’s data to different contributor combinations. To estimate the Shapley values for data contributors in our setting, we need to (i) retrain diffusion models on data subsets corresponding to different combinations of contributors; and (ii) measure global properties of the retrained models by rerunning inference. However, training a diffusion model can take hundreds of GPU days, and inference can also be expensive (e.g., approximately 5 GPU days to generate 50,000 images for image quality metrics) (Dharwal & Nichol, 2021). Therefore, estimating Shapley values with vanilla retraining and inference is computationally impractical. Here, we propose to efficiently approximate retraining and inference on retrained models through model pruning and fine-tuning, providing a framework that enables Shapley value estimation (Figure 1).
+
+![Figure 1: Schematic overview of the proposed framework. The diagram is divided into two main stages: Training Stage and Crediting Stage. In the Training Stage, a 'Data contributor' provides data points (labeled c1, c2, ..., cn) which are used to 'Train' a 'Diffusion model' to produce a trained model theta*. In the Crediting Stage, the model theta* is 'Pruned' to produce an approximated model theta-hat*. This pruned model is then 'Fine-tune on data of contributor subsets'. Three examples of subsets are shown: {c1, c2}, {c4, c5}, and {c3}. For each subset, the model is 'Run inference' to produce a global property F(theta-hat*_subset). Finally, these global properties are used to 'Estimate contributor Shapley values', resulting in a list of values for contributors c1, c2, ..., cn.](4792a2ccd62226861fadc22117edb7b1_img.jpg)
+
+Figure 1: Schematic overview of the proposed framework. The diagram is divided into two main stages: Training Stage and Crediting Stage. In the Training Stage, a 'Data contributor' provides data points (labeled c1, c2, ..., cn) which are used to 'Train' a 'Diffusion model' to produce a trained model theta\*. In the Crediting Stage, the model theta\* is 'Pruned' to produce an approximated model theta-hat\*. This pruned model is then 'Fine-tune on data of contributor subsets'. Three examples of subsets are shown: {c1, c2}, {c4, c5}, and {c3}. For each subset, the model is 'Run inference' to produce a global property F(theta-hat\*\_subset). Finally, these global properties are used to 'Estimate contributor Shapley values', resulting in a list of values for contributors c1, c2, ..., cn.
+
+Figure 1: Schematic overview of our proposed framework, where  $\theta^*$  denotes a trained diffusion model for which we aim to credit data contributors, and  $\hat{\theta}^*$  denotes the pruned model that approximates  $\theta^*$ . After fine-tuning the pruned model on data corresponding to various subsets of contributors, denoted as  $\hat{\theta}^h$ , and rerunning inference; global model properties ( $\mathcal{F}$ ) are measured to estimate the Shapley value for each data contributor.
+
+**Related work.** Data attribution methods for diffusion models have been developed by recent work. Some methods require models be trained with specialized paradigms. For example, to assess the importance for a training sample, Dai & Gifford (2023) first train an ensemble of diffusion models on data splits, followed by ablating models trained on splits containing the specific sample. Wang et al. (2023a) evaluate data attribution for text-to-image models by customizing a pretrained model toward an exemplar style. In contrast, other methods can be applied to already trained models in a post hoc manner. For example, the TRAK framework has been adapted to find important training data for intermediate latents along a generative process (Georgiev et al., 2023), while Zheng et al. (2023) introduce empirical approaches that improve the performance of TRAK for diffusion models. All these methods attribute local model properties to each individual datum, whereas our work focuses on attributing global model properties to each data contributor.
+
+**Contributions.** (1) To our knowledge, we are the first to investigate how to attribute global properties of diffusion models to data contributors. (2) We propose a framework that efficiently approximates retraining and rerunning inference for diffusion models, enabling the estimation of Shapley values for
+
+{2}------------------------------------------------
+
+data contributors. (3) We empirically demonstrate that our framework outperforms existing attribution methods across three datasets, model architectures, and global properties.
+
+## 2 PRELIMINARIES
+
+This section provides an overview for diffusion models, attributing global model properties to data contributors, and existing attribution methods for diffusion models.
+
+### 2.1 DIFFUSION MODELS
+
+Our research primarily focuses on discrete-time diffusion models, specifically denoising diffusion probabilistic models (DDPMs) (Ho et al., 2020) and latent diffusion models (LDMs) (Rombach et al., 2022). Generally, diffusion models are trained to approximate a data distribution  $q(\mathbf{x}_0)$ . To perform learning, a training sample  $\mathbf{x}_0 \sim q(\mathbf{x}_0)$  is sequentially corrupted by additive noise (Ho et al., 2020). This procedure is called the *forward process* and is defined by  $q(\mathbf{x}_t|\mathbf{x}_{t-1}) := \mathcal{N}(\mathbf{x}_t; \sqrt{1 - \beta_t}\mathbf{x}_{t-1}, \beta_t \mathbf{I})$ , for  $t = 1, \dots, T$ , where  $\{\beta_t\}_{t=1}^T$  corresponds to a variance schedule. Notably, the forward process allows sampling of  $\mathbf{x}_t$  at any time step  $t$  from  $\mathbf{x}_0$ , with the closed form  $q(\mathbf{x}_t|\mathbf{x}_0) = \mathcal{N}(\mathbf{x}_t; \sqrt{\bar{\alpha}_t}\mathbf{x}_0, (1 - \bar{\alpha}_t)\mathbf{I})$ , where  $\alpha_t := 1 - \beta_t$  and  $\bar{\alpha}_t := \prod_{s=1}^t \alpha_s$ . Then, a diffusion model learns to denoise  $\mathbf{x}_{1:T}$ , following the *reverse process* defined by  $p_\theta(\mathbf{x}_{t-1}|\mathbf{x}_t) := \mathcal{N}(\mathbf{x}_{t-1}; \mu_\theta(\mathbf{x}_t, t), \sigma_t^2 \mathbf{I})$ , where  $\theta \in \mathbb{R}^d$  is the model parameters, and  $\sigma_t$  corresponds to some sampling schedule (Karras et al., 2022). Instead of modeling the conditional means  $\mu_\theta$ , it is standard to predict the added noises with a neural network  $\epsilon_\theta$  using the reparameterization trick. The training objective corresponds to a variational bound and is formulated as
+
+$$\mathcal{L}_{\text{Simple}}(\mathbf{x}; \theta) = \mathbb{E}_{t, \epsilon} \left[ \|\epsilon - \epsilon_\theta(\sqrt{\bar{\alpha}_t}\mathbf{x} + \sqrt{(1 - \bar{\alpha}_t)}\epsilon, t)\|_2^2 \right] \quad (1)$$
+
+Once a diffusion model has been trained, a new image can be generated by sampling an initial noise  $\mathbf{x}_T \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$  and iteratively applying  $\epsilon_\theta$  at each step  $t = T, \dots, 1$  for denoising.
+
+### 2.2 ATTRIBUTING GLOBAL MODEL PROPERTIES TO DATA CONTRIBUTORS
+
+To gain a comprehensive understanding of machine learning models, it is often beneficial to study global model properties (Covert et al., 2020), which assess the model’s performance across samples, rather than focusing on individual outputs. For example, in the setting of supervised learning, global model property can be test accuracy. In the context of generative models, it can be a quality metric for generated samples. For example, in image generation, the global model property of interest can be the Inception Score (Goodfellow et al., 2014) or FID (Heusel et al., 2017). More formally, a global model property for generative models is defined by any application-specific function  $\mathcal{F} : \Theta \rightarrow \mathbb{R}$ , which maps a generative model to a scalar value, thereby quantifying the overall distribution learned by the model. Building on this, we introduce the problem of attributing global model properties to data contributors. The goal of contributor attribution is to identify important groups of training data for a model’s global properties, where each group of data is provided by a contributor. More formally, we have the following definition.
+
+**Definition 1. (Contributor attribution)** Consider  $n$  contributors of training samples  $\mathcal{D} = \{\mathcal{C}_1, \mathcal{C}_2, \dots, \mathcal{C}_n\}$ , with the  $i$ th contributor providing a set of data points denoted as  $\mathcal{C}_i$ , and a global model property function  $\mathcal{F}$ . A contributor attribution method is a function  $\tau(\mathcal{F}, \{\mathcal{C}_i\}_{i=1}^n)$  that assigns scores to all contributors to indicate each contributor’s importance to the global model property  $\mathcal{F}$ .
+
+### 2.3 EXISTING ATTRIBUTION METHODS FOR DIFFUSION MODELS
+
+In the context of diffusion models, recent work has focused on attributing local model properties to each datum by adapting the TRAK framework (Park et al., 2023), such as D-TRAK (Zheng et al., 2023) and Journey-TRAK (Georgiev et al., 2023). Formally, let  $\mathcal{X}$  denote the input space and  $\Theta$  the parameter space of a diffusion model. Suppose there are  $N$  training data points  $\{\mathbf{x}^{(1)}, \mathbf{x}^{(2)}, \dots, \mathbf{x}^{(N)}\}$ , and  $\bar{\mathbf{x}}$  is the generated image of interest for local attribution. Given a loss function  $\mathcal{L} : \mathcal{X} \times \Theta \rightarrow \mathbb{R}$ , a local model property  $f : \mathcal{X} \times \Theta \rightarrow \mathbb{R}$ , and models  $\{\theta_s^*\}_{s=1}^S$  trained on  $S$  data subsets<sup>2</sup>, TRAK for
+
+<sup>2</sup>In practice, we consider the computationally efficient retraining-free setting by Zheng et al. (2023). That is,  $S = 1$ , and  $\theta_1^* = \theta^*$  is the original model trained on the entire dataset.
+
+{3}------------------------------------------------
+
+diffusion models is defined as:
+
+$$\frac{1}{S} \sum_{s=1}^S \Phi_s (\Phi_s^\top \Phi_s + \lambda I)^{-1} \gamma_s(\tilde{\mathbf{x}}), \text{ and} \quad (2)$$
+
+$$\Phi_s = \left[ \phi_s(\mathbf{x}^{(1)}), \dots, \phi_s(\mathbf{x}^{(N)}) \right]^\top, \quad (3)$$
+
+where  $\phi_s(\mathbf{x}) = \mathcal{P}_s^\top \nabla_{\theta} \mathcal{L}(\mathbf{x}; \theta_s^*)$ ,  $\gamma_s(\mathbf{x}) = \mathcal{P}_s^\top \nabla_{\theta} f(\mathbf{x}; \theta_s^*)$ ,  $\mathcal{P}_s$  is a random projection matrix, and  $\lambda I$  serves for numerical stability and regularization. More details on Journey-TRAK (Georgiev et al., 2023) and D-TRAK (Zheng et al., 2023) are in Appendix E.
+
+## 3 CREDITING DATA CONTRIBUTORS OF DIFFUSION MODELS USING THE SHAPLEY VALUE
+
+Here, we motivate the use of the Shapley value for crediting data contributors of diffusion models. While estimating Shapley values for diffusion models require computationally expensive retraining and inference, we propose to address the computational challenge with model pruning and fine-tuning.
+
+### 3.1 THE SHAPLEY VALUE FOR CONTRIBUTOR ATTRIBUTION
+
+The Shapley value was developed in cooperative game theory to fairly attribute credit in coalition games (Shapley, 1953). In the context of contributor attribution, for training data with  $n$  contributors, the Shapley value attributed to the  $i$ th contributor is defined as:
+
+$$\beta_i = \frac{1}{n} \sum_{S \subseteq D \setminus C_i} \binom{n-1}{|S|}^{-1} \left( \mathcal{F}(\theta_{S \cup C_i}^*) - \mathcal{F}(\theta_S^*) \right) \quad (4)$$
+
+where  $\theta_{S \cup C_i}^*$  and  $\theta_S^*$  are models trained on the subsets  $S \cup C_i$  and  $S$ , respectively. The Shapley value appraises each contributor's contribution based on the weighted *marginal contribution*,  $\mathcal{F}(\theta_{S \cup C_i}^*) - \mathcal{F}(\theta_S^*)$ . It satisfies axioms desirable for equitable attribution, including *linearity*, *dummy player*, *symmetry*, and *efficiency* (see Ghorbani & Zou (2019) for a succinct summary). There are arguments that the efficiency axiom,  $\sum_{i=1}^n \beta_i = \mathcal{F}(\theta^*) - \mathcal{F}(\theta_{\emptyset})$ , where  $\theta^*$  denotes the model trained on the entire dataset, and  $\theta_{\emptyset}$  denotes the model without training, may not always be essential in use cases where the primary goal is to remove detrimental data points (Wang & Jia, 2023). In that setting, ranking is more important than exact attribution values. However, in the context of diffusion models, particularly in applications involving monetary or credit allocation related to model performance, having the total attribution matches the model utility can directly quantify reward for each contributor.
+
+Despite its advantages, evaluating the *exact* Shapley value is challenging as it involves retraining  $2^n$  (all possible subsets) models and computing their corresponding model properties. Fortunately, many sampling-based estimators for Shapley values have been developed (Lundberg & Lee, 2017; Ghorbani & Zou, 2019; Strumbelj & Kononenko, 2010). In particular, we adopt KernelSHAP in the feature attribution literature for contributor attribution, by solving a weighted least squares problem with sampling (Lundberg & Lee, 2017; Covert & Lee, 2021):
+
+$$\hat{\beta} = \min_{\beta_0, \dots, \beta_n} \frac{1}{M} \sum_{j=1}^M \left[ \mathcal{F}(\theta_{\emptyset}) + \mathbf{1}_{S_j}^\top \beta - \mathcal{F}(\theta_{S_j}^*) \right]^2 \quad \text{s.t.} \quad \mathbf{1}^\top \beta = \mathcal{F}(\theta^*) - \mathcal{F}(\theta_{\emptyset}) \quad (5)$$
+
+where  $S_j$  is sampled following the distribution  $\mu(S) \propto \frac{n-1}{\binom{n}{|S|} |S| (n-|S|)}$  for  $1 < \mathbf{1}_{S_j}^\top < n$ , and  $\mathbf{1}_S$  is an indicator vector representing the presence of contributors in  $S$ . By solving the least squares problem with the constraint, a closed-form solution can be derived (Covert & Lee, 2021). The obtained parameters  $\hat{\beta}_1, \dots, \hat{\beta}_n$  are the contributor attribution scores.
+
+### 3.2 SPEED UP RETRAINING AND INFERENCE WITH SPARSIFIED FINE-TUNING
+
+Although using the Shapley value for contributor attribution is well motivated, and existing sampling approach can be used, the main challenge is in computing  $\mathcal{F}(\theta_{S_j}^*)$ . First, a diffusion model needs to
+
+{4}------------------------------------------------
+
+be trained again from random initialization on the subset  $S_j$  to obtain  $\theta_{S_j}^*$ . Then inference needs to be rerun on the retrained model  $\theta_{S_j}^*$  to measure  $\mathcal{F}(\theta_{S_j}^*)$ . For diffusion models, both retraining and rerunning inference can take multiple GPU days (Dhariwal & Nichol, 2021), making the estimator in Equation (5) computationally impractical.
+
+To address this computational challenge, we propose to speed up retraining and rerunning inference with *sparsified fine-tuning* (Figure 1). Sparsified fine-tuning enhances the efficiency of both retraining and inference, by reducing the number of model parameters through pruning (Jia et al., 2023). Specifically,  $\theta^*$  is pruned and initially fine-tuned on the full dataset  $\mathcal{D}$  to obtain a performant pruned model  $\tilde{\theta}^*$  that approximates  $\theta^*$ . To furthermore improve the retraining efficiency,  $\tilde{\theta}^*$  is fine-tuned on each subset  $S_j$  for  $k$  steps to obtain  $\tilde{\theta}_{S_j,k}^*$ , instead of retraining the pruned model on  $S_j$  from random initialization. The diffusion loss objective used to train the original model  $\theta^*$  is used for all fine-tuning. Overall, sparsified fine-tuning aims to efficiently achieve
+
+$$\mathcal{F}(\tilde{\theta}_{S_j,k}^*) \text{ (sparsified fine-tuning)} \approx \mathcal{F}(\theta_{S_j}^*) \text{ (retraining full model from scratch)}. \quad (6)$$
+
+In other words, under the same computational budget and compared to retaining the full model from scratch, sparsified fine-tuning can increase the number of sampled subsets  $S_j$  for estimating Shapley values, thus making feasible a framework for crediting data contributors of diffusion models.
+
+In practice, computing  $\mathcal{F}(\theta)$  requires sampling  $N$  initial noises  $\mathbf{x}_T^{(r)} \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$ , for  $r = 1, \dots, N$ , denoising those noises into generated samples with the denoising network  $\epsilon_\theta$ , and computing some quantity over the generated samples (e.g., FID). Hence, to formally analyze the approximation in Equation (6), we consider the expected error<sup>3</sup>  $\mathbb{E}_{\{\mathbf{x}_T^{(r)}\}_{r=1}^N} [|\mathcal{F}(\tilde{\theta}_{S_j,k}^*) - \mathcal{F}(\theta_{S_j}^*)|]$ . For notational ease, the dependency of  $\mathcal{F}$  on  $\{\mathbf{x}_T^{(r)}\}_{r=1}^N$  is omitted, and all expectations are taken with respect to  $\{\mathbf{x}_T^{(r)}\}_{r=1}^N$  for the rest of the paper unless otherwise noted. We then have the following proposition to formalize the intuition behind Equation (6).
+
+**Proposition 1.** Suppose an objective function  $\ell: \mathbb{R}^d \mapsto \mathbb{R}$  on the data provided by a given subset of data contributors  $S$  is convex and differentiable, and that its gradient is Lipschitz-continuous with some constant  $L > 0$ , i.e.
+
+$$\|\nabla \ell(\theta_1) - \nabla \ell(\theta_2)\|_2 \leq L \|\theta_1 - \theta_2\|_2$$
+
+for any  $\theta_1, \theta_2 \in \mathbb{R}^d$ . Let  $\tilde{\theta}_{S,k}^*$  denote a pruned model after  $k$  fine-tuning steps on the given subset  $S$  with learning rate  $\alpha \leq 1/L$ ,  $\tilde{\theta}_S^*$  the optimal pruned model trained on  $S$  with the same sparsity structure as  $\tilde{\theta}_{S,k}^*$ , and  $\theta_S^*$  the optimal full-parameter model trained on  $S$ . Furthermore, assume that  $\mathbb{E}[|\mathcal{F}(\tilde{\theta}_S^*) - \mathcal{F}(\theta_S^*)|] \leq B$  for some constant  $B$ . Then the expected error  $\mathbb{E}[|\mathcal{F}(\tilde{\theta}_{S,k}^*) - \mathcal{F}(\theta_S^*)|] \leq B$  as  $k \rightarrow \infty$ .
+
+The proof is in Appendix A. The assumption that  $\ell$  is convex and differentiable with Lipschitz-continuous gradient is a standard setting for the theoretical analysis of approximating retraining with fine-tuning, instantiated as a quadratic objective<sup>4</sup> in Golatkar et al. (2020) and Georgiev et al. (2024). The assumption that  $\mathbb{E}[|\mathcal{F}(\tilde{\theta}_S^*) - \mathcal{F}(\theta_S^*)|] \leq B$  corresponds to the *lottery ticket hypothesis* that a sparser neural network can approximate the performance of a dense, full-parameter network (Frankle & Carbin, 2018), which has been shown to hold for diffusion models (Fang et al., 2023). The main takeaway from Proposition 1 is that more steps of sparsified fine-tuning should lead to a bounded approximation error between  $\mathcal{F}(\tilde{\theta}_{S_j,k}^*)$  and  $\mathcal{F}(\theta_{S_j}^*)$  in Equation (6). We further relate Proposition 1 to the expected error in Shapley values with the following proposition.
+
+**Proposition 2.** Let  $\tilde{\beta}_k^\ell \in \mathbb{R}^n$  be the Shapley values for the data contributors evaluated with  $\{\mathcal{F}(\tilde{\theta}_{S,k}^*)\}_{S \in 2^{\mathcal{D}}}$ , and  $\beta^* \in \mathbb{R}^n$  the Shapley values evaluated with  $\{\mathcal{F}(\theta_S^*)\}_{S \in 2^{\mathcal{D}}}$ . Suppose the assumptions on  $\ell$  in Proposition 1 hold for all subsets of data contributors. Furthermore, assume that  $\mathbb{E}[\max_{S \in 2^{\mathcal{D}}} |\mathcal{F}(\tilde{\theta}_S^*) - \mathcal{F}(\theta_S^*)|] \leq C$ . Then  $\mathbb{E}[\|\tilde{\beta}_k^\ell - \beta^*\|_2] \leq 2\sqrt{n}C$  as  $k \rightarrow \infty$ .
+
+<sup>3</sup>We consider the setting where the same  $\{\mathbf{x}_T^{(r)}\}_{r=1}^N$  are inputs for both  $\epsilon_{\tilde{\theta}_{S_j,k}^*}$  and  $\epsilon_{\theta_{S_j}^*}$  to represent the use case of generating samples with the same random seed across multiple inference runs.
+
+<sup>4</sup>A quadratic objective has the form  $\ell(\theta) = (\theta - B)^\top A(\theta - B)$ , with Lipschitz-continuous gradient such that  $\|\nabla \ell(\theta_1) - \nabla \ell(\theta_2)\|_2 \leq 2\sigma_{\max}(A) \cdot \|\theta_1 - \theta_2\|_2$ , where  $\sigma_{\max}(A)$  is the maximum singular value of  $A$ .
+
+{5}------------------------------------------------
+
+The proof is in Appendix A. The assumption that convexity, differentiability, and the Lipschitz continuity of gradient hold for all subsets is implied by the standard setting of a quadratic loss<sup>5</sup>, as in Golatkar et al. (2020) and Georgiev et al. (2024). The key takeaway is that the Shapley value error is bounded with more steps of sparsified fine-tuning. Finally, we note that both Proposition 1 and Proposition 2 are asymptotic results, and that Proposition 2 is based on exact Shapley values. We leave theoretical results incorporating finite-step bounds and Shapley value estimation for future work. Nevertheless, we verify the insights from our theoretical results under empirical settings for diffusion models in Appendix D.
+
+## 4 EXPERIMENTS
+
+In this section, we compare our approach with existing attribution methods across three settings. We employ two metrics for evaluation: linear datamodeling score (LDS) and counterfactual analysis. Our results demonstrate that our method outperforms existing attribution methods for diffusion models.
+
+### 4.1 DATASETS AND CONTRIBUTORS
+
+Datasets used for our experiments include CIFAR-20, a subset of CIFAR-100 with 20 contributors, one per class, as described in Krizhevsky et al. (2009); CelebA-HQ, with 50 celebrity identities as contributors; and ArtBench (Post-Impressionism), with 258 artists as contributors. More details about datasets and contributors can be found in Appendix B.
+
+### 4.2 EXPERIMENT SETTINGS
+
+**Model training.** For CIFAR-20, we follow the original implementation of the unconditional DDPM (Ho et al., 2020) where the model has 35.7M parameters. For CelebA-HQ, we follow the implementation of LDM (Rombach et al., 2022) with 274M parameters and a pre-trained VQ-VAE (Razavi et al., 2019). For ArtBench (Post-Impressionism), a Stable Diffusion model (Rombach et al., 2022) is fine-tuned using LoRA (Hu et al., 2021) with rank = 256, corresponding to 5.1M LoRA parameters. The prompt for the Stable Diffusion model is set to *"a Post-Impressionist painting"* for each image. Please refer to Appendix C for more details about model training and inference.
+
+**Sparsified fine-tuning.** Magnitude-based pruning (Han et al., 2015) is used to remove model weights according to their magnitudes, resulting in sparse diffusion models with reduced parameters: from 35.7M to 19.8M for CIFAR-20, from 274M to 70.9M for CelebA-HQ, and from 5.1M to 2.6M for ArtBench (Post-Impressionism). To estimate Shapley values, the pruned models are fine-tuned on data subsets corresponding to different contributor combinations, with 1,000 steps, 500 steps, and 200 steps for CIFAR-20, CelebA-HQ, and ArtBench (Post-Impressionism), respectively.
+
+**Global model properties.** For CIFAR-20, we aim to study the contribution of each labeler. As each labeler is tasked to filter out noisy samples in each class (Krizhevsky et al., 2009), high-quality labeling should ensure that generated images are well separated with respect to image classes. Therefore, for the global model property, we choose the Inception Score (Salimans et al., 2016):
+
+$$\text{IS} = \exp(\mathbb{E}_{\mathbf{x}}[\text{KL}(p(y|\mathbf{x})||p(y))]), \quad (7)$$
+
+where  $p(y)$  represents the marginal class distribution over the generated data and  $p(y|\mathbf{x})$  represents the conditional class distribution given a generated image  $\mathbf{x}$ .
+
+For CelebA-HQ, our goal is to investigate how individual celebrities contribute to the demographic diversity of the model. Following Luccioni et al. (2023), we measure diversity using entropy:
+
+$$\mathcal{H} = -\sum_{k=1}^K p_k \log(p_k), \quad (8)$$
+
+where  $p_k$  is the proportion of generated samples in the  $k$ th demographic cluster. We generate images using the full model and extract their embeddings with BLIP-VQA (Li et al., 2022) to create 20
+
+<sup>5</sup>A Lipschitz constant applicable across all subsets can be defined as  $\max_{S \subseteq \mathcal{D}} \sigma_{\max}(A_S)$ , where  $A_S$  is defined by the subset  $S$ . For example, in linear regression,  $A_S = X_S^\top X_S$ , where  $X_S$  denotes the feature matrix contributed by the data contributors in  $S$ .
+
+{6}------------------------------------------------
+
+reference clusters. Subsequently, we assign these reference clusters to images generated from various retrained models to calculate the entropy.
+
+For ArtBench (Post-Impressionism), we consider the use case where images are generated and the most aesthetically pleasing ones are kept. We simulate this use case by computing aesthetic scores<sup>6</sup> for 50 generated images and considering the 90th percentile as the global model property.
+
+More details about these global model properties are in Appendix B.
+
+### 4.3 BASELINE METHODS
+
+We mainly categorize baseline attribution methods into three categories<sup>7</sup>: (i) similarity-based methods (e.g., pixel similarity between the generated and training images); (ii) leave-one-out (LOO) and its approximate variants such as the influence functions (Koh & Liang, 2017) and TRAK-based methods (Park et al., 2023); and (iii) application-specific metrics such as the aesthetic score of each training image for ArtBench (Post-Impressionism). Because retraining diffusion models is computationally expensive, gradients are computed using the original model  $\theta^*$  for TRAK-based methods, as done in Zheng et al. (2023). Local attribution scores are averaged across the images generated by the original model for computing global model properties. To aggregate datum-level attributions, the sum of attributions corresponding to each contributor is taken for the influence functions and TRAK-based methods, since this is the principled aggregation (Koh et al., 2019). For similarity-based and application-specific methods, datum-level attribution scores are aggregated for contributor attribution by taking either the average or maximum. More details about baseline methods can be found in Appendix E.
+
+### 4.4 EVALUATING THE PERFORMANCE OF CONTRIBUTOR ATTRIBUTION
+
+**Linear datamodeling score (LDS).** From Definition 1, for a given subset of contributors  $S \subseteq \mathcal{D}$ , where  $\mathcal{D} = \{\mathcal{C}_1, \dots, \mathcal{C}_n\}$ , we can define an additive datamodel of global properties based on a given set of attribution scores  $\tau$  for the contributors:
+
+$$g(S, \tau) = \sum_{i: \mathcal{C}_i \in S} \tau_i. \quad (9)$$
+
+Therefore, the evaluation for an attribution method  $\tau$  can be constructed as follows:
+
+**Definition 2. (Linear datamodeling score)** *Contributor attribution performance is measured using the linear datamodeling score (LDS) (Ilyas et al., 2022), which evaluates an attribution method by comparing predicted model properties based on the additive datamodel against actual retrained model properties. Let  $S_1, \dots, S_B$  be randomly sampled subsets of  $\mathcal{D}$ , each of size  $\alpha \cdot n$  for some  $\alpha \in (0, 1)$ . The LDS for a contributor attribution score  $\tau \in \mathbb{R}^n$  is defined as*
+
+$$LDS = \rho(\{\mathcal{F}(\theta_{S_b}^*)\}_{b=1}^B, \{\mathcal{F}(S_b, \tau)\}_{b=1}^B), \text{ where } S_b \sim \text{Uniform}\{S \subset \mathcal{D} : |S| = \alpha \cdot n\}, \quad (10)$$
+
+where  $\rho$  is the Spearman rank correlation (Spearman, 1961), and  $\theta_{S_b}^*$  denotes a model retrained from scratch with the contributor subset  $S_b$ .
+
+We evaluate the LDS using 100 held-out subsets  $S_b$ , each sampled from the datamodel distribution with  $\alpha = 0.25, 0.5, 0.75$  for each dataset. We report the LDS means and 95% confidence intervals across three independent sets of  $\{S_b\}_{b=1}^{100}$ .
+
+**Counterfactual evaluation.** Following Zheng et al. (2023), we also apply counterfactual evaluation (Hooker et al., 2019). We assess the relative change in model property,  $\Delta \mathcal{F} = \frac{\mathcal{F}(\theta_K^*) - \mathcal{F}(\theta^*)}{\mathcal{F}(\theta^*)}$ , by comparing the models trained before and after excluding (or retaining only) the top  $K$  most influential contributors identified by each attribution method. Counterfactual evaluation requires retraining models on different subsets for each method, so only baseline methods with the best LDS in each category are chosen for computational feasibility.
+
+<sup>6</sup><https://github.com/LAION-AI/aesthetic-predictor>
+
+<sup>7</sup>TracIn (Pruthi et al., 2020) is not considered since intermediate checkpoints may not be available in practice.
+
+{7}------------------------------------------------
+
+### 4.5 EXPERIMENT RESULTS
+
+### SHAPLEY ATTRIBUTION OUTPERFORMS BASELINE METHODS IN CONTRIBUTOR ATTRIBUTION
+
+In Table 1, we present the LDS results for baseline methods and our approach. Interestingly, similarity-based methods such as raw pixel similarity, CLIP similarity, and gradient similarity occasionally outperform TRAK-based methods. We observe that TRAK-based methods sometimes yield poor or even negative correlations. Among TRAK-based approaches, attribution using noisy latents during generation (i.e., Journey-TRAK) can result in a negative LDS for model properties such as the Inception Score and aesthetic score. Our findings indicate that simply aggregating individual attributions derived from diffusion loss or its alternative functions is insufficient for accurately determining contributor attribution of global properties. Such an approach can perform worse than simple heuristics based on model properties (e.g., the average aesthetic score).
+
+Table 1: LDS (%) results with  $\alpha = 0.5$ . Means and 95% confidence intervals across three random initializations are reported.
+
+| Method                              | CIFAR-20                           | CelebA-HQ                          | ArtBench<br>(Post-Impressionism)   |
+|-------------------------------------|------------------------------------|------------------------------------|------------------------------------|
+| Pixel similarity (average)          | $-11.81 \pm 4.56$                  | $-8.91 \pm 0.93$                   | $11.24 \pm 0.63$                   |
+| Pixel similarity (max)              | $-31.80 \pm 2.90$                  | $21.70 \pm 2.05$                   | $14.61 \pm 2.72$                   |
+| Embedding dist. (average)           | -                                  | $13.83 \pm 1.12$                   | -                                  |
+| Embedding dist. (max)               | -                                  | $7.32 \pm 3.16$                    | -                                  |
+| CLIP similarity (average)           | $5.79 \pm 3.67$                    | $-32.23 \pm 0.87$                  | $-6.96 \pm 4.08$                   |
+| CLIP similarity (max)               | $11.31 \pm 0.37$                   | $-0.93 \pm 3.83$                   | $-1.75 \pm 4.07$                   |
+| Gradient similarity (average)       | $5.79 \pm 3.67$                    | $-18.32 \pm 0.65$                  | $0.25 \pm 1.18$                    |
+| Gradient similarity (max)           | $-0.89 \pm 3.17$                   | $-12.90 \pm 1.60$                  | $10.48 \pm 3.11$                   |
+| Aesthetic score (average)           | -                                  | -                                  | $24.85 \pm 2.30$                   |
+| Aesthetic score (max)               | -                                  | -                                  | $21.36 \pm 3.70$                   |
+| Relative IF                         | $5.23 \pm 5.50$                    | $-1.07 \pm 0.68$                   | $-5.02 \pm 1.77$                   |
+| Renormalized IF                     | $11.39 \pm 6.79$                   | $10.17 \pm 0.57$                   | $-11.41 \pm 0.93$                  |
+| TRAK                                | $7.94 \pm 5.67$                    | $3.22 \pm 0.75$                    | $-8.18 \pm 1.30$                   |
+| Journey-TRAK                        | $-42.92 \pm 2.15$                  | $-2.88 \pm 4.02$                   | $-11.41 \pm 4.22$                  |
+| D-TRAK                              | $10.90 \pm 1.21$                   | $-27.23 \pm 2.80$                  | $11.30 \pm 3.47$                   |
+| Leave-one-out (LOO)                 | $30.66 \pm 6.11$                   | $-1.22 \pm 6.34$                   | $3.74 \pm 8.00$                    |
+| <b>Sparsified-FT Shapley (Ours)</b> | <b><math>61.48 \pm 2.27</math></b> | <b><math>26.34 \pm 3.42</math></b> | <b><math>61.44 \pm 2.04</math></b> |
+
+In contrast, our approach, sparsified fine-tuning (sparsified-FT) Shapley, computes contributor attribution using the Shapley value, achieving the highest LDS results of 61.48%, 26.34%, and 61.44% for CIFAR-20, CelebA-HQ, and ArtBench (Post-Impressionism), respectively. While leave-one-out (LOO) achieves 30.66% LDS on CIFAR-20, its performance declines as the number of contributors increase, e.g., CelebA-HQ and ArtBench (Post-Impressionism). This shows that attribution based on the marginal contribution of Shapley subsets with respect to  $\mathcal{F}$  provides the most accurate importance score. Despite achieving the best results for CelebA-HQ compared to the baseline methods, we observe that the LDS performance of sparsified-FT Shapley, 26.32%, is relatively low compared to those of CIFAR-20 and ArtBench. We also perform evaluation with additional datamodel subset sizes ( $\alpha = 0.25, 0.75$ ), and our approach consistently outperforms others (Appendix F).
+
+### ENHANCING RETRAINING AND INFERENCE EFFICIENCY THROUGH SPARSIFIED FINE-TUNING
+
+As described in Section 3.2, computing  $\mathcal{F}(\theta_{S_j}^s)$  is the primary computational bottleneck. Our sparsified fine-tuning approach significantly reduces the runtime required to obtain  $\theta_{S_j}^s$ , compared to retraining and fine-tuning without sparsification. On average, retraining and inference with sparsified fine-tuning for a Shapley subset take 18.3 minutes for CIFAR-20, 22.9 minutes for CelebA-HQ, and 10.5 minutes for ArtBench (Post-Impressionism), making it 5.3, 10.4, and 18.6 times faster than retraining, respectively (Table 2). By enabling faster computation and obtaining more models retrained on different subsets, sparsified FT yields the best LDS results under the same computational budgets (Figure 2). This demonstrates that sparsified-FT Shapley is both more computationally
+
+{8}------------------------------------------------
+
+feasible and accurate with limited computational resources. To the best of our knowledge, we are the first to overcome the computational bottleneck and enable contributor attribution using Shapley values for diffusion models.
+
+![Figure 2: Comparison of LDS (%) with alpha = 0.5 among Shapley values estimated with sparsified fine-tuning (FT), fine-tuning (FT), and retraining under the same computational budgets. The figure contains three line plots for CIFAR-20, CelebA-HQ, and ArtBench (Post-Impressionism). Each plot shows LDS (%) on the y-axis against Computational Budget on the x-axis. Three methods are compared: Sparsified-FT (orange line with circles), FT (blue line with squares), and Retrain (purple line with triangles). In all datasets, Sparsified-FT consistently achieves the highest LDS, followed by FT, and then Retrain. The performance gap is most pronounced in the ArtBench dataset.](91be14371a97fb5ce9eeb29ae18d07c3_img.jpg)
+
+Figure 2: Comparison of LDS (%) with alpha = 0.5 among Shapley values estimated with sparsified fine-tuning (FT), fine-tuning (FT), and retraining under the same computational budgets. The figure contains three line plots for CIFAR-20, CelebA-HQ, and ArtBench (Post-Impressionism). Each plot shows LDS (%) on the y-axis against Computational Budget on the x-axis. Three methods are compared: Sparsified-FT (orange line with circles), FT (blue line with squares), and Retrain (purple line with triangles). In all datasets, Sparsified-FT consistently achieves the highest LDS, followed by FT, and then Retrain. The performance gap is most pronounced in the ArtBench dataset.
+
+Figure 2: Comparison of LDS (%) with  $\alpha = 0.5$  among Shapley values estimated with sparsified fine-tuning (FT), fine-tuning (FT), and retraining under the same computational budgets (1 unit = runtime to retrain and run inference on a full model). Specific runtimes are shown in Table 2.
+
+### IMPACT OF CONTRIBUTORS ON MODEL PROPERTY
+
+Here we present the results of our counterfactual evaluation, analyzing changes in model behavior after either removing the top contributors or including only the top contributors identified by each method. In CIFAR-20, our approach shows a change of -23.23%, compared to -14.95% for CLIP similarity and -17.30% for LOO, as shown in Figure 3 (top). For CelebA-HQ, the changes are -7.83% for our method, -6.64% for pixel similarity, and 0.21% for renormalized IF. For ArtBench (Post-Impressionism), the changes are 0.58%, -0.05%, -1.27%, and -1.86% for D-TRAK, maximum pixel similarity, average aesthetic score, and sparsified-FT Shapley, respectively.
+
+Conversely, when retaining the top 60% of contributors, model properties improve. In the CIFAR-20 dataset, our method leads to a 16.98% positive change in model properties, compared to -9.45% for CLIP similarity and 9.51% for LOO. For CelebA-HQ, the model behavior change was 20.0% for our method, 8.89% for pixel similarity, and 6.02% for renormalized IF (bottom of Figure 3). These findings, along with the results in Section 4.5, demonstrate that our approach effectively identifies the top contributors and provides accurate attribution.
+
+### WHO ARE THE TOP CONTRIBUTORS?
+
+We analyze the top contributors identified by sparsified-FT Shapley in CIFAR-20, including contributors to classes such as motorcycles, buses, and lawnmowers (Figure 4). High-quality labeling by these contributors should ensure that the training images contain clear and meaningful objects, which should result in low entropy (i.e., high confidence) of a classifier (i.e., Inception v3) (Barratt & Sharma, 2018). We therefore compute the entropy of each image and find that the top 20% classes have a lower average entropy of 5.18, compared to 6.03 for the remaining classes (Figure 16). For CelebA-HQ, the most important celebrities ranked by sparsified-FT Shapley encompass a diverse range of demographics and tend to belong to non-majority demographic clusters (Figure 16). Excluding images corresponding to these celebrities can have a negative impact on the diversity score. For ArtBench, we observe that images from the top contributors are more vivid and exhibit more vibrant colors, as shown in Figure 4.
+
+## 5 DISCUSSION
+
+In this work, we introduce the problem of attributing global model properties to data contributors of diffusion models. We develop an efficient framework to estimate the Shapley values for data contributors by leveraging model pruning and fine-tuning, speeding up retraining and inference runtime while ensuring accurate attribution. Our framework can have a range of implications, such as creating incentives for data contributors, rewarding data labelers in a way that satisfies game-theoretic fairness, assessing label quality, and improving model performance and fairness. Empirical results for multiple datasets and global model properties show that our framework outperforms existing attribution approaches based on the diffusion loss, such as TRAK (Park et al., 2023) and its variant
+
+{9}------------------------------------------------
+
+![Figure 3: Relative percentage changes in global properties. The figure consists of six subplots arranged in a 2x3 grid. The top row shows box plots for 'Relative Change (%) in Inception Score' for CIFAR-20, 'Relative Change (%) in Inception Score' for CelebA-HQ, and 'Relative Change (%) in Aesthetic Score (90th Percentile)' for ArtBench (Post-Impressionism). The bottom row shows line plots for 'Relative Changes in (%) Inception Score' and 'Relative Changes in (%) Aesthetic Score (90th Percentile)' against the 'Percentage of Top Contributors (%)' (90, 80, 70, 60). Methods compared include CLIP Similarity (Max), LDO, Shapley (Sparsified FT), Renormalized FT, Pixel Similarity (Max), D-TRAK, Pixel Similarity (Max), Aesthetic score (average), and Shapley (Sparsified FT).](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 3: Relative percentage changes in global properties. The figure consists of six subplots arranged in a 2x3 grid. The top row shows box plots for 'Relative Change (%) in Inception Score' for CIFAR-20, 'Relative Change (%) in Inception Score' for CelebA-HQ, and 'Relative Change (%) in Aesthetic Score (90th Percentile)' for ArtBench (Post-Impressionism). The bottom row shows line plots for 'Relative Changes in (%) Inception Score' and 'Relative Changes in (%) Aesthetic Score (90th Percentile)' against the 'Percentage of Top Contributors (%)' (90, 80, 70, 60). Methods compared include CLIP Similarity (Max), LDO, Shapley (Sparsified FT), Renormalized FT, Pixel Similarity (Max), D-TRAK, Pixel Similarity (Max), Aesthetic score (average), and Shapley (Sparsified FT).
+
+Figure 3: Relative percentage changes in global properties, comparing the original fully trained models to models retrained after removing the top 40% contributors (top) and including only the top contributors (bottom), as identified by various attribution methods.
+
+![Figure 4: Top contributors and their corresponding training images for each dataset (top). Below this is a grid of generated images for three conditions: 'exclude top contributors', 'all contributors', and 'top contributors included'. Each condition shows an aesthetic score and a pair of generated images. The text '“a Post-Impressionist painting”' is centered above the generated images.](07f537f57749b75157f742525e6a8dbc_img.jpg)
+
+Figure 4: Top contributors and their corresponding training images for each dataset (top). Below this is a grid of generated images for three conditions: 'exclude top contributors', 'all contributors', and 'top contributors included'. Each condition shows an aesthetic score and a pair of generated images. The text '“a Post-Impressionist painting”' is centered above the generated images.
+
+Figure 4: Top contributors and their corresponding training images for each dataset (top). Pairs of generated images above and below the 90th percentile of aesthetic score from Stable Diffusion models LoRA-finetuned under three conditions: excluding the data from the top 40% of artists, using the data from all the artists, and including only the data from the top 60% of artists (bottom).
+
+D-TRAK (Zheng et al., 2023), in crediting data contributors. There are several promising directions for future research. Beyond fine-tuning, recent unlearning methods designed for diffusion models (Gandikota et al., 2023; Heng & Soh, 2023) could be explored in combination with various pruning strategies (Ding et al., 2019; Fang et al., 2024; Liu et al., 2021). Beyond diffusion models, our proposed framework can also be extended to models that are expensive to retrain, such as large language models (LLMs), whenever appropriate pruning and unlearning approaches are available. Finally, our approach and existing attribution methods for diffusion models assume access to training data and model parameters, which are not necessarily available for deployed models. For text-to-image models, membership inference and in-context learning may be useful in addressing this challenge (Hu & Pang, 2023; Wang et al., 2023b).
+
+ Rest of paper (reference and Appendix) is removed.
