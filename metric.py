@@ -7,7 +7,8 @@ from matplotlib.lines import Line2D
 from itertools import combinations
 import sys
 
-SCALE = [0, 2, 4, 6, 8, 10]
+SCALE = [1, 3, 5, 6, 8, 10]
+# SCALE = [0, 2, 4, 6, 8, 10]
 
 def round_to_scale(x):
     return min(SCALE, key=lambda v: abs(v - x))
@@ -110,13 +111,30 @@ def analyze_and_plot(path):
     one_vs_rest = one_vs_rest_baseline(df, gt_score_cols)
     split_half = split_half_baseline(df, gt_score_cols)
 
-    # Weighted MAE: weight by inverse frequency of GT score bins
-    # Bins: [0,2), [2,4), [4,6), [6,8), [8,10]
+    # Bin-based MAE summaries using GT score bins: [0,2), [2,4), [4,6), [6,8), [8,10]
     bin_edges = [0, 2, 4, 6, 8, 10.01]
     bin_labels = ["0-2", "2-4", "4-6", "6-8", "8-10"]
     bin_indices = np.digitize(gt_avg, bin_edges) - 1
     bin_indices = np.clip(bin_indices, 0, len(bin_labels) - 1)
     bin_counts = np.bincount(bin_indices, minlength=len(bin_labels))
+    bin_maes_raw = [None] * len(bin_labels)
+    bin_maes_rounded = [None] * len(bin_labels)
+    nonempty_bin_maes_raw = []
+    nonempty_bin_maes_rounded = []
+    for i in range(len(bin_labels)):
+        if bin_counts[i] == 0:
+            continue
+        bin_mask = bin_indices == i
+        bin_mae_raw = float(np.mean(np.abs(pred[bin_mask] - gt_avg[bin_mask])))
+        bin_mae_rounded = float(np.mean(np.abs(pred_rounded[bin_mask] - gt_avg[bin_mask])))
+        bin_maes_raw[i] = bin_mae_raw
+        bin_maes_rounded[i] = bin_mae_rounded
+        nonempty_bin_maes_raw.append(bin_mae_raw)
+        nonempty_bin_maes_rounded.append(bin_mae_rounded)
+
+    mean_bin_mae_raw = float(np.mean(nonempty_bin_maes_raw))
+    mean_bin_mae_rounded = float(np.mean(nonempty_bin_maes_rounded))
+
     # Weight = 1/count for each bin (0 if bin is empty)
     bin_weights = np.where(bin_counts > 0, 1.0 / bin_counts, 0.0)
     sample_weights = bin_weights[bin_indices]
@@ -158,6 +176,8 @@ def analyze_and_plot(path):
     print(f"  Pearson (raw):         {pe_raw:.4f}  (p={pe_raw_p:.4f})")
     print(f"  MAE (raw):             {mae_raw:.4f}")
     print(f"  MAE (rounded):         {mae_rounded:.4f}")
+    print(f"  Mean bin MAE (raw):    {mean_bin_mae_raw:.4f}")
+    print(f"  Mean bin MAE (rounded):{mean_bin_mae_rounded:.4f}")
     print(f"  Weighted MAE (raw):    {wmae_raw:.4f}")
     print(f"  Weighted MAE (rounded):{wmae_rounded:.4f}")
     print(f"  Bias (pred-gt):        {bias_raw:+.4f}")
@@ -178,9 +198,7 @@ def analyze_and_plot(path):
     print(f"  Score bin weights (inverse freq):")
     for i, label in enumerate(bin_labels):
         if bin_counts[i] > 0:
-            bin_mask = bin_indices == i
-            bin_mae = np.mean(np.abs(pred[bin_mask] - gt_avg[bin_mask]))
-            print(f"    [{label}]: n={bin_counts[i]:>3}, MAE={bin_mae:.4f}")
+            print(f"    [{label}]: n={bin_counts[i]:>3}, MAE={bin_maes_raw[i]:.4f}, Rounded MAE={bin_maes_rounded[i]:.4f}")
     print(f"  {'─'*45}")
     if valid_dec_mask.any():
         valid_decisions = int(valid_dec_mask.sum())
