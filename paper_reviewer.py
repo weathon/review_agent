@@ -658,7 +658,7 @@ async def run_merge(
     neutral_review: str,
     spark_review: str,
     related_work: str,
-    paper_content: str,
+    paper_path: str,
     skip_neutral: bool = False,
     skip_spark: bool = False,
     skip_related_work: bool = False,
@@ -666,12 +666,16 @@ async def run_merge(
 ) -> tuple[str, float] | tuple[str, float, float]:
     """
     Merger only — synthesize sub-agent reviews into a consolidated review.
+    Uses Claude Agent SDK with sandboxed file tools so the model reads the
+    paper directly from disk instead of receiving it in the prompt.
     Returns `(review_text, cost)` by default, or
     `(review_text, score, cost)` when `pred_score=True`.
     """
-    print(f"  [merger] started ({MODEL_MERGER}) ...")
+    from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, AssistantMessage, TextBlock
 
-    merger_prompt = _build_merger_prompt(
+    print(f"  [merger] started (claude-sonnet-4-6 agent) ...")
+
+    merger_system_prompt = _build_merger_prompt(
         skip_neutral=skip_neutral,
         skip_spark=skip_spark,
         skip_related_work=skip_related_work,
@@ -679,7 +683,7 @@ async def run_merge(
 
     if pred_score:
         with open("prompts/merger_score.txt", "r", encoding="utf-8") as f:
-            merger_prompt += "\n\n" + f.read()
+            merger_system_prompt += "\n\n" + f.read()
 
     review_num = 1
     reviews_section = f"# Review {review_num}: Harsh Critic\n{harsh_review}\n\n"
@@ -698,21 +702,53 @@ async def run_merge(
             f"{related_work}\n\n"
         )
 
-    user_prompt_review = (
-        f"Here is the paper being reviewed (extracted from PDF — formatting "
-        f"artifacts are parser issues, not paper problems):\n\n"
-        f"--- PAPER CONTENT START ---\n"
-        f"{paper_content}\n"
-        f"--- PAPER CONTENT END ---\n\n"
-        f"Here are the inputs:\n\n"
-        f"{reviews_section}" 
+    abs_paper_path = str(Path(paper_path).resolve())
+    paper_dir = str(Path(abs_paper_path).parent)
+
+    merger_agent_template = _load_prompt("merger_agent.txt")
+    agent_prompt = merger_agent_template.format(
+        merger_system_prompt=merger_system_prompt,
+        paper_path=abs_paper_path,
+    )
+
+    user_message = (
+        f"Here are the sub-reviews to synthesize:\n\n"
+        f"{reviews_section}"
         f"Now produce the final consolidated review following your instructions. "
         f"Remember: many of the harsh critic's points may be nonsensical or overly "
         f"picky — cross-check everything against the actual paper before including it."
     )
-    review_text, cost = await _call_openai(
-        client, "merger", merger_prompt, user_prompt_review, MODEL_MERGER,
+
+    merger_fs = _make_sandboxed_mcp_server("merger_fs", [paper_dir])
+
+    options = ClaudeAgentOptions(
+        model="claude-sonnet-4-6",
+        allowed_tools=[
+            "mcp__merger_fs__read_file",
+            "mcp__merger_fs__glob_files",
+        ],
+        permission_mode="bypassPermissions",
+        disallowed_tools=["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
+        mcp_servers={"merger_fs": merger_fs},
+        effort="medium",
+        max_turns=15,
     )
+
+    review_text = ""
+    async with ClaudeSDKClient(options=options) as sdk_client:
+        await sdk_client.query(f"{agent_prompt}\n\n{user_message}")
+        async for message in sdk_client.receive_response():
+            if isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if isinstance(block, TextBlock):
+                        review_text += block.text
+
+    if not review_text.strip():
+        raise ValueError("merger agent returned empty output")
+
+    # Cost is not tracked for Claude SDK calls (subscription-based)
+    cost = 0.0
+
     if not pred_score:
         return review_text, cost
     else:
@@ -826,6 +862,7 @@ async def run_merger(
     neutral_review: str,
     spark_review: str,
     related_work: str,
+    paper_path: str,
     paper_content: str,
     calibration_context: str = "",
     cal_dir: str = "",
@@ -840,11 +877,12 @@ async def run_merger(
     """
     review_text, cost_merge = await run_merge(
         client, harsh_review, neutral_review,
-        spark_review, related_work, paper_content,
+        spark_review, related_work, paper_path,
         skip_neutral=skip_neutral,
         skip_spark=skip_spark,
         skip_related_work=skip_related_work,
     )
+
     score, cost_score = await run_scorer(
         client, review_text, paper_content,
         calibration_context=calibration_context,
@@ -939,14 +977,14 @@ async def run_pipeline(
         else:
             related_work = "Related work search was skipped."
 
-    if skip_score: 
+    if skip_score:
         merged_review, merge_cost = await run_merge(
             client,
             harsh_review,
             neutral_review,
             spark_review,
             related_work,
-            cleaned_paper_content,
+            pp,
             skip_neutral=skip_neutral,
             skip_spark=skip_spark,
             skip_related_work=skip_related_work,
@@ -956,12 +994,12 @@ async def run_pipeline(
         decision = None
     elif merger_output_score:
         merged_review, score, merge_cost = await run_merge(
-            client, 
+            client,
             harsh_review,
             neutral_review,
             spark_review,
             related_work,
-            cleaned_paper_content,
+            pp,
             skip_neutral=skip_neutral,
             skip_spark=skip_spark,
             skip_related_work=skip_related_work,
@@ -977,7 +1015,8 @@ async def run_pipeline(
             neutral_review,
             spark_review,
             related_work,
-            cleaned_paper_content,
+            paper_path=pp,
+            paper_content=cleaned_paper_content,
             calibration_context=calibration_context,
             cal_dir=cal_dir,
             skip_neutral=skip_neutral,
@@ -1164,7 +1203,9 @@ async def review_paper(
     print("\nPhase 2: Merger ...")
     final_review, final_score, merger_cost = await run_merger(
         client, harsh_review, neutral_review,
-        spark_review, related_work, paper_content,
+        spark_review, related_work,
+        paper_path=str(path),
+        paper_content=paper_content,
         calibration_context=calibration_context,
         cal_dir=cal_dir,
         skip_neutral=skip_neutral,
