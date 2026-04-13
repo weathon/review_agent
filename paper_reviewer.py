@@ -45,6 +45,7 @@ MODEL_SPARK = "qwen/qwen3.5-plus-02-15"
 MODEL_RELATED_WORK = f"{base_model}:online" 
 MODEL_FILTER = f"{base_model}"
 # MODEL_MERGER = f"zai:glm-5.1" #用zai coding plan白嫖
+# MODEL_MERGER = f"ollama:glm-5:cloud" 
 MODEL_MERGER = f"z-ai/glm-5" 
 MODEL_PARSER = "openai/gpt-5.4-nano"
 
@@ -661,10 +662,12 @@ async def run_merge(
     skip_neutral: bool = False,
     skip_spark: bool = False,
     skip_related_work: bool = False,
-) -> tuple[str, float]:
+    pred_score: bool = False,
+) -> tuple[str, float] | tuple[str, float, float]:
     """
     Merger only — synthesize sub-agent reviews into a consolidated review.
-    Returns (review_text, cost).
+    Returns `(review_text, cost)` by default, or
+    `(review_text, score, cost)` when `pred_score=True`.
     """
     print(f"  [merger] started ({MODEL_MERGER}) ...")
 
@@ -673,6 +676,10 @@ async def run_merge(
         skip_spark=skip_spark,
         skip_related_work=skip_related_work,
     )
+
+    if pred_score:
+        with open("prompts/merger_score.txt", "r", encoding="utf-8") as f:
+            merger_prompt += "\n\n" + f.read()
 
     review_num = 1
     reviews_section = f"# Review {review_num}: Harsh Critic\n{harsh_review}\n\n"
@@ -706,7 +713,11 @@ async def run_merge(
     review_text, cost = await _call_openai(
         client, "merger", merger_prompt, user_prompt_review, MODEL_MERGER,
     )
-    return review_text, cost
+    if not pred_score:
+        return review_text, cost
+    else:
+        score, parser_cost = await _parse_score(client, review_text)
+        return review_text, score, cost + parser_cost
 
 
 async def run_scorer(
@@ -796,11 +807,12 @@ async def run_scorer(
     if leakage_matches:
         matched_text = ", ".join(sorted(set(leakage_matches), key=str.lower))
         warning_msg = (
-            f"Potential calibration leakage warning: scorer output contains "
+            f"🚨 Potential calibration leakage warning: scorer output contains "
             f"suspicious phrase(s): {matched_text}"
         )
         print(f"  [scorer-agent] WARNING: {warning_msg}")
         _error_logger.error(warning_msg)
+        raise ValueError(warning_msg)
 
     # Use _parse_score to extract the numerical score
     score, cost_parse = await _parse_score(client, result_text)
@@ -855,6 +867,7 @@ async def run_pipeline(
     calibration_context: str = "",
     cal_dir: str = "",
     gt_score: float | None = None,
+    merger_output_score: bool = False,
 ) -> dict:
     """Compatibility wrapper used by calibration and benchmark scripts."""
     pp = str(Path(paper_path).expanduser().resolve())
@@ -926,7 +939,7 @@ async def run_pipeline(
         else:
             related_work = "Related work search was skipped."
 
-    if skip_score:
+    if skip_score: 
         merged_review, merge_cost = await run_merge(
             client,
             harsh_review,
@@ -941,6 +954,22 @@ async def run_pipeline(
         total_cost += merge_cost
         score = None
         decision = None
+    elif merger_output_score:
+        merged_review, score, merge_cost = await run_merge(
+            client, 
+            harsh_review,
+            neutral_review,
+            spark_review,
+            related_work,
+            cleaned_paper_content,
+            skip_neutral=skip_neutral,
+            skip_spark=skip_spark,
+            skip_related_work=skip_related_work,
+            pred_score=True,
+        )
+        total_cost += merge_cost
+        score = round(float(score), 1)
+        decision = score_to_decision(score)
     else:
         merged_review, score, merge_cost = await run_merger(
             client,

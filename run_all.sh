@@ -81,7 +81,7 @@ echo ">>> Step 2: Dataset distribution check"
 python -c "
 import csv
 from collections import Counter
-with open('iclr2026_balanced/ratings.csv') as f:
+with open('iclr2025/ratings.csv') as f:
     rows = list(csv.DictReader(f))
 print(f'Total papers: {len(rows)}')
 decs = Counter(r['gt_binary'] for r in rows)

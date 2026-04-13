@@ -11,6 +11,7 @@ import asyncio
 import csv
 import json
 import random
+import re
 import sys
 import time
 from datetime import datetime
@@ -125,8 +126,36 @@ def _snap_score(raw: float) -> float:
     return min(VALID_SCORES, key=lambda v: abs(v - raw))
 
 
+def _shorten_title(title: str, max_len: int = 60) -> str:
+    name = re.sub(r"[^a-z0-9 ]", "", title.lower())
+    name = re.sub(r"\s+", "_", name.strip())
+    if len(name) > max_len:
+        name = name[:max_len].rstrip("_")
+    return name or "untitled"
+
+
+def _load_calibration_ids_from_cal_dir(cal_dir: Path, gt_data: list[dict]) -> set[str]:
+    review_files = sorted(cal_dir.glob("*_review.md"))
+    review_bases = [review_file.name.removesuffix("_review.md") for review_file in review_files]
+    title_to_id = {}
+    for row in gt_data:
+        title = row.get("title", "").strip()
+        if not title:
+            continue
+        shortened = _shorten_title(title)
+        if shortened in title_to_id and title_to_id[shortened] != row["paper_id"]:
+            raise ValueError(f"Duplicate shortened calibration title mapping for '{shortened}'")
+        title_to_id[shortened] = row["paper_id"]
+    calibration_ids = [title_to_id[base] for base in review_bases if base in title_to_id]
+    assert len(calibration_ids) == len(review_bases), (
+        f"Calibration title->id mapping mismatch: mapped {len(calibration_ids)} ids "
+        f"for {len(review_bases)} calibration review files in {cal_dir}"
+    )
+    return set(calibration_ids)
+
+
 async def review_single_paper(
-    paper_id: str, paper_path: Path, parallel: bool = False, skip_related_work: bool = False, skip_spark: bool = False, skip_neutral: bool = False, calibration_context: str = "", cal_dir: str = "", gt_score: float | None = None,
+    paper_id: str, paper_path: Path, parallel: bool = False, skip_related_work: bool = False, skip_spark: bool = False, skip_neutral: bool = False, calibration_context: str = "", cal_dir: str = "", gt_score: float | None = None, merger_output_score: bool = False
 ) -> dict:
     """Run the full pipeline on one paper."""
     paper_content = paper_path.read_text(encoding="utf-8", errors="replace")
@@ -145,6 +174,7 @@ async def review_single_paper(
         skip_spark=skip_spark,
         skip_neutral=skip_neutral,
         skip_score=False,
+        merger_output_score=merger_output_score,
         venue="ICLR",
         calibration_context=calibration_context,
         cal_dir=cal_dir,
@@ -192,7 +222,7 @@ def stratified_sample(papers: list[dict], n: int, seed: int) -> list[dict]:
     return samples
 
 
-async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip_related_work: bool = False, skip_spark: bool = False, skip_neutral: bool = False, balanced: bool = False, data_dir: str | None = None, calibration_path: str | None = None):
+async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip_related_work: bool = False, skip_spark: bool = False, skip_neutral: bool = False, balanced: bool = False, data_dir: str | None = None, calibration_path: str | None = None, merger_output_score: bool = False) -> list[dict]:
     bench_dir = Path(data_dir) if data_dir else DEFAULT_BENCH_DIR
 
     print("=" * 72)
@@ -207,6 +237,9 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
     print(f"  Neutral:                         {MODEL_NEUTRAL}")
     print(f"  Related Work:                    {MODEL_RELATED_WORK}")
 
+    gt_data, papers_dir = load_ground_truth(bench_dir)
+    print(f"\nLoaded {len(gt_data)} papers from ground truth.")
+
     # Load calibration if provided
     calibration_context = ""
     cal_dir = ""
@@ -218,19 +251,13 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
         if cal_dir_candidate.is_dir():
             cal_dir = str(cal_dir_candidate)
             print(f"\nUsing RAG calibration: {cal_dir} (Agent SDK scorer)")
+            calibration_ids = _load_calibration_ids_from_cal_dir(cal_dir_candidate, gt_data)
+            print(f"Excluding {len(calibration_ids)} calibration papers based on titles in {cal_dir_candidate}")
         elif cal_path.exists():
             calibration_context = cal_path.read_text(encoding="utf-8")
             print(f"\nLoaded calibration: {cal_path} ({len(calibration_context):,} chars)")
         else:
             print(f"\nWARNING: calibration file not found: {cal_path}")
-        # Load excluded IDs
-        ids_path = cal_path.parent / "calibration_ids.json"
-        if ids_path.exists():
-            calibration_ids = set(json.load(open(ids_path)))
-            print(f"Excluding {len(calibration_ids)} calibration papers from sampling")
-
-    gt_data, papers_dir = load_ground_truth(bench_dir)
-    print(f"\nLoaded {len(gt_data)} papers from ground truth.")
 
     available = [r for r in gt_data if (papers_dir / f"{r['paper_id']}.txt").exists()]
     if calibration_ids:
@@ -303,7 +330,7 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
             for attempt in range(1, max_paper_retries + 1):
                 start = time.time()
                 try:
-                    review_result = await review_single_paper(pid, paper_path, parallel=parallel, skip_related_work=skip_related_work, skip_spark=skip_spark, skip_neutral=skip_neutral, calibration_context=calibration_context, cal_dir=cal_dir, gt_score=paper_info["avg_score"])
+                    review_result = await review_single_paper(pid, paper_path, parallel=parallel, skip_related_work=skip_related_work, skip_spark=skip_spark, skip_neutral=skip_neutral, calibration_context=calibration_context, cal_dir=cal_dir, gt_score=paper_info["avg_score"], merger_output_score=merger_output_score)
                     elapsed = time.time() - start
 
                     pred_score = review_result["predicted_score"]
@@ -478,6 +505,8 @@ if __name__ == "__main__":
     skip_spark = "--no-spark" in sys.argv
     skip_neutral = "--no-neutral" in sys.argv
     balanced = "--balanced" in sys.argv
+    merger_output_score = "--merger-output-score" in sys.argv
+
     data_dir = None
     calibration_path = None
     if "--data-dir" in sys.argv:
@@ -492,4 +521,4 @@ if __name__ == "__main__":
     args = [a for a in sys.argv[1:] if not a.startswith("--") and a not in flag_values]
     n = int(args[0]) if len(args) > 0 else 10
     seed = int(args[1]) if len(args) > 1 else 42
-    asyncio.run(main(n_samples=n, seed=seed, parallel=parallel, skip_related_work=skip_related, skip_spark=skip_spark, skip_neutral=skip_neutral, balanced=balanced, data_dir=data_dir, calibration_path=calibration_path))
+    asyncio.run(main(n_samples=n, seed=seed, parallel=parallel, skip_related_work=skip_related, skip_spark=skip_spark, skip_neutral=skip_neutral, balanced=balanced, data_dir=data_dir, calibration_path=calibration_path, merger_output_score=merger_output_score))

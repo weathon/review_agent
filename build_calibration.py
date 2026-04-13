@@ -194,13 +194,16 @@ async def main(
 
     if done_ids:
         print(f"\nFound {len(done_ids)}/{len(samples)} papers already completed in {cal_dir}.")
-        choice = input("Continue (skip done papers) or restart? [c/r]: ").strip().lower()
-        if choice == "r":
+        choice = input("Continue (skip done papers) or overwrite cal? [c/o]: ").strip().lower()
+        if choice == "o":
             import shutil
             if cal_dir.exists():
                 shutil.rmtree(cal_dir)
                 print(f"Deleted {cal_dir}")
-            print("Restarting: will re-run all papers.")
+            if ids_path.exists():
+                ids_path.unlink()
+                print(f"Deleted {ids_path}")
+            print("Overwriting: cleared calibration outputs and will re-run all papers.")
         else:
             print(f"Continuing: skipping {len(done_ids)} done papers.")
             samples = [s for s in samples if s["paper_id"] not in done_ids]

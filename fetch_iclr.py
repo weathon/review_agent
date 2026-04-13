@@ -395,7 +395,7 @@ def main(n_samples: int = 100, seed: int = 42, balanced: bool = False, data_dir:
         review_path = REVIEWS_DIR / f"{pid}.md"
         conversion_jobs.append((paper, pdf_path, md_path, review_path))
 
-    worker_count = 10
+    worker_count = 5
     print(
         f"Converting {len(conversion_jobs)} PDFs from {PDFS_DIR} with {worker_count} workers..."
     )
