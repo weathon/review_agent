@@ -37,12 +37,12 @@ ZAI_BASE_URL = "https://api.z.ai/api/coding/paas/v4/"
 #base_model = "qwen/qwen3.6-plus:free" #用限时免费模型白嫖
 base_model = "qwen/qwen3.5-flash-02-23"
 MODEL_HARSH = f"claude:claude-sonnet-4-6" #用claude subscription白嫖
-MODEL_NEUTRAL = f"ollama:{base_model}"
-MODEL_SPARK = "ollama:qwen/qwen3.5-plus-02-15"
+MODEL_NEUTRAL = f"{base_model}"
+MODEL_SPARK = "ollama:qwen3.5:397b-cloud"
 MODEL_RELATED_WORK = f"{base_model}:online" 
 MODEL_FILTER = f"{base_model}"
 # MODEL_MERGER = f"zai:glm-5.1" #用zai coding plan白嫖
-MODEL_MERGER = f"z-ai/glm-5" #rate limit is very tight on zai coding plan, switch back to openrouter if needed
+MODEL_MERGER = f"z-ai/glm-5" 
 MODEL_PARSER = "openai/gpt-5.4-nano"
 
 MAX_RETRIES = 5
