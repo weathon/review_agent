@@ -37,8 +37,8 @@ ZAI_BASE_URL = "https://api.z.ai/api/coding/paas/v4/"
 #base_model = "qwen/qwen3.6-plus:free" #用限时免费模型白嫖
 base_model = "qwen/qwen3.5-flash-02-23"
 MODEL_HARSH = f"claude:claude-sonnet-4-6" #用claude subscription白嫖
-MODEL_NEUTRAL = f"{base_model}"
-MODEL_SPARK = "ollama:qwen3.5:397b-cloud"
+MODEL_NEUTRAL = f"ollama:{base_model}"
+MODEL_SPARK = "ollama:qwen/qwen3.5-plus-02-15"
 MODEL_RELATED_WORK = f"{base_model}:online" 
 MODEL_FILTER = f"{base_model}"
 # MODEL_MERGER = f"zai:glm-5.1" #用zai coding plan白嫖
@@ -74,7 +74,9 @@ class ScoreSchema(BaseModel):
 
 
 def score_to_decision(score: float | None) -> str | None:
-    return "N/A"
+    if score is None:
+        return None
+    return "Accept" if float(score) >= 5.0 else "Reject"
 
 
 def decision_match(predicted: str | None, gt_binary: str) -> bool | None:
@@ -660,6 +662,137 @@ async def run_merger(
         gt_score=gt_score
     )
     return review_text, score, cost_merge + cost_score
+
+
+async def run_pipeline(
+    paper_path: str,
+    paper_content: str,
+    client: AsyncOpenAI,
+    parallel: bool = True,
+    skip_related_work: bool = True,
+    skip_spark: bool = False,
+    skip_neutral: bool = False,
+    skip_score: bool = False,
+    venue: str = "ICLR",
+    calibration_context: str = "",
+    cal_dir: str = "",
+    gt_score: float | None = None,
+) -> dict:
+    """Compatibility wrapper used by calibration and benchmark scripts."""
+    pp = str(Path(paper_path).expanduser().resolve())
+    cleaned_paper_content = sanitize_text(paper_content)
+
+    total_cost = 0.0
+    if parallel:
+        if MODEL_HARSH.startswith("ollama:"):
+            tasks = [
+                run_reviewer(ollama_client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, cleaned_paper_content, MODEL_HARSH.replace("ollama:", "", 1), venue=venue),
+            ]
+        else:
+            tasks = [
+                run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, cleaned_paper_content, MODEL_HARSH, venue=venue),
+            ]
+        if not skip_neutral:
+            if MODEL_NEUTRAL.startswith("ollama:"):
+                tasks.append(run_reviewer(ollama_client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, cleaned_paper_content, MODEL_NEUTRAL.replace("ollama:", "", 1), venue=venue))
+            else:
+                tasks.append(run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, cleaned_paper_content, MODEL_NEUTRAL, venue=venue))
+        if not skip_spark:
+            if MODEL_SPARK.startswith("ollama:"):
+                tasks.append(run_reviewer(ollama_client, "spark_finder", SPARK_FINDER_PROMPT, pp, cleaned_paper_content, MODEL_SPARK.replace("ollama:", "", 1), venue=venue))
+            else:
+                tasks.append(run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, cleaned_paper_content, MODEL_SPARK, venue=venue))
+        if not skip_related_work:
+            tasks.append(run_related_work_search(client, cleaned_paper_content))
+
+        results_list = await asyncio.gather(*tasks)
+        idx = 0
+        harsh_review, c = results_list[idx]; total_cost += c; idx += 1
+        if not skip_neutral:
+            neutral_review, c = results_list[idx]; total_cost += c; idx += 1
+        else:
+            neutral_review = "Neutral reviewer was skipped."
+        if not skip_spark:
+            spark_review, c = results_list[idx]; total_cost += c; idx += 1
+        else:
+            spark_review = "Spark finder was skipped."
+        if not skip_related_work:
+            related_work, c = results_list[idx]; total_cost += c
+        else:
+            related_work = "Related work search was skipped."
+    else:
+        if MODEL_HARSH.startswith("ollama:"):
+            harsh_review, c = await run_reviewer(ollama_client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, cleaned_paper_content, MODEL_HARSH.replace("ollama:", "", 1), venue=venue)
+        else:
+            harsh_review, c = await run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, cleaned_paper_content, MODEL_HARSH, venue=venue)
+        total_cost += c
+        if not skip_neutral:
+            if MODEL_NEUTRAL.startswith("ollama:"):
+                neutral_review, c = await run_reviewer(ollama_client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, cleaned_paper_content, MODEL_NEUTRAL.replace("ollama:", "", 1), venue=venue)
+            else:
+                neutral_review, c = await run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, cleaned_paper_content, MODEL_NEUTRAL, venue=venue)
+            total_cost += c
+        else:
+            neutral_review = "Neutral reviewer was skipped."
+        if not skip_spark:
+            if MODEL_SPARK.startswith("ollama:"):
+                spark_review, c = await run_reviewer(ollama_client, "spark_finder", SPARK_FINDER_PROMPT, pp, cleaned_paper_content, MODEL_SPARK.replace("ollama:", "", 1), venue=venue)
+            else:
+                spark_review, c = await run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, cleaned_paper_content, MODEL_SPARK, venue=venue)
+            total_cost += c
+        else:
+            spark_review = "Spark finder was skipped."
+        if not skip_related_work:
+            related_work, c = await run_related_work_search(client, cleaned_paper_content)
+            total_cost += c
+        else:
+            related_work = "Related work search was skipped."
+
+    if skip_score:
+        merged_review, merge_cost = await run_merge(
+            client,
+            harsh_review,
+            neutral_review,
+            spark_review,
+            related_work,
+            cleaned_paper_content,
+            skip_neutral=skip_neutral,
+            skip_spark=skip_spark,
+            skip_related_work=skip_related_work,
+        )
+        total_cost += merge_cost
+        score = None
+        decision = None
+    else:
+        merged_review, score, merge_cost = await run_merger(
+            client,
+            harsh_review,
+            neutral_review,
+            spark_review,
+            related_work,
+            cleaned_paper_content,
+            calibration_context=calibration_context,
+            cal_dir=cal_dir,
+            skip_neutral=skip_neutral,
+            skip_spark=skip_spark,
+            skip_related_work=skip_related_work,
+            gt_score=gt_score,
+        )
+        total_cost += merge_cost
+        score = round(float(score), 1)
+        decision = score_to_decision(score)
+
+    return {
+        "harsh_review": harsh_review,
+        "neutral_review": neutral_review,
+        "spark_review": spark_review,
+        "related_work": related_work,
+        "merged_review": merged_review,
+        "score": score,
+        "decision": decision,
+        "cost": total_cost,
+        "sdk_savings": 0.0,
+    }
 
 
 # ── Main orchestration ────────────────────────────────────────────────
