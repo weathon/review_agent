@@ -75,9 +75,6 @@ echo "============================================"
 # rm -f iclr2026_balanced/ratings.csv  # force re-sample
 # python fetch_iclr2025.py 200 42 --balanced
 
-# ── Step 2: Check dataset distribution ── 
-ollama serve &
-
 
 echo ""
 echo ">>> Step 2: Dataset distribution check"
