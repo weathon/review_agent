@@ -1,67 +1,53 @@
-=== CALIBRATION EXAMPLE 25 ===
+=== CALIBRATION EXAMPLE 10 ===
 
 # Final Consolidated Review
 ## Summary
-This paper proposes LIAR, a jailbreak method that treats adversarial prompt generation through an alignment-style lens and implements a training-free best-of-\(N\) attack: sample many suffixes from a small base LM (primarily GPT-2), score them via target-model behavior, and keep the best. Empirically, the paper shows that this simple black-box sampling approach can produce very low-perplexity jailbreak prompts quickly, but the main comparative claims are weakened by mismatched evaluation protocols and by theory that is only loosely connected to the implemented method.
+The paper proposes LIAR, a training-free jailbreak method that reframes adversarial suffix generation as an alignment problem using best-of-N sampling from a small adversarial LLM (GPT-2). The authors introduce a theoretical framework characterizing why safety-aligned models remain vulnerable and provide bounds on the "safety net" concept, while empirically demonstrating faster attack generation and lower perplexity prompts compared to training-based baselines.
 
 ## Strengths
-- **The paper surfaces a practically important attack regime: cheap multi-attempt black-box jailbreaking with readable prompts.** Concretely, LIAR uses a very small adversarial generator (GPT-2, 124M) and achieves very low suffix perplexity in Table 1 (around 2.1, versus 12.09 for AdvPrompter and far higher for GCG/AutoDAN). This is a specific and meaningful observation: strong attacks need not rely on unnatural strings or expensive optimization.
-- **The method is genuinely lightweight and black-box with respect to the target model.** The paper does not require gradients/logits from the target model, and the attack setup in Figure 1 / Section 3 is operationally simple: generate candidate suffixes externally and test them by querying the target. That makes the work relevant for API-only threat models.
-- **The ablations are useful and concrete.** Tables 2–5 show how adversarial generator choice, temperature, suffix length, and target response length affect success rate, perplexity, and latency. In particular, the temperature ablation provides a useful empirical insight that moderate temperature reduction improves ASR while preserving diversity enough for best-of-\(N\).
-- **The paper’s conceptual framing is interesting even if overstated.** Rewriting prompt search as a KL-regularized reward optimization problem (Eq. 4) does provide a clean bridge between alignment-style objectives and jailbreak generation. As a lens for thinking about the problem, this is a worthwhile perspective.
+- **Significant efficiency gains**: Eliminates training overhead entirely, enabling 100 adversarial queries in ~14 minutes vs. ~22 hours for AdvPrompter. The lack of training phase allows immediate attack generation, addressing a real practical limitation of existing methods.
+- **Extremely low perplexity prompts**: Achieves perplexity ~2.14 compared to >90,000 for GCG and >80 for AutoDAN on Vicuna-7b (Table 1). These human-readable adversarial suffixes present a genuine challenge to perplexity-based defenses that filter unnatural text.
+- **Novel theoretical framing**: Conceptualizing jailbreaking as "inverse alignment" provides a principled lens for understanding safety vulnerabilities, with formal bounds on the "safety net" (Theorem 1) and best-of-N suboptimality (Theorem 2).
 
 ## Weaknesses
+- **Black-box claim contradicted by theoretical formulation**: The paper claims "fully black-box" operation (Abstract, Figure 1) yet defines the reward as $R_u(\mathbf{x},\mathbf{q}) = -J(\mathbf{x},\mathbf{q},\mathbf{y})$ requiring target model log-probabilities (Eq. 3). The practical implementation appears to use keyword matching on responses ("an attack is considered successful if at least one of the k attempts bypasses the TargetLLM's censorship mechanisms"), but this is never explicitly stated. This gap between theory and implementation undermines the theoretical narrative—best-of-N requires knowing rewards *before* selecting samples, while the empirical evaluation counts successes *after* evaluating all samples.
 
-### Major:
-- **The headline empirical comparison is not like-for-like, so the central “comparable ASR in seconds rather than hours” claim is not adequately established.**  
-  This is explicit in the paper itself. Table 1 states: **“TTA1 for our method is computed for ASR@100, whereas TTA1 for all other methods are computed for ASR@1.”** That asymmetry makes the speed/effectiveness claim hard to interpret as a fair comparison. The paper’s framing repeatedly leans on “comparable to SoTA” while using different query budgets and asymmetric TTA accounting. Since this is a central empirical claim in the abstract, Figure 1, and Section 5, it is a substantive issue rather than a presentation nit.
-- **The ASR evaluation protocol differs from standard settings in a way the paper acknowledges can affect ASR, weakening cross-method comparisons.**  
-  Section 5.3 states that the paper reports ASR based on the **first 32 generated target tokens instead of the more standard 150**, and further notes that this can change ASR: *“Generating fewer \(y\) tokens does result in a slightly lower chance of an unsuccessful attack keyword being present resulting in a higher ASR.”* The paper claims the difference is “relatively small,” but does not provide matched comparisons against baselines under the same 32-vs-150 protocol. Because both ASR and TTA depend on this choice, the reported superiority is not fully supported by apples-to-apples evidence.
-- **The implemented method is much simpler than the paper’s central “jailbreaking via alignment” framing suggests.**  
-  The actual attack used in experiments is Eq. (6): sample \(N\) suffixes from a base model and select the highest-reward one. No policy optimization or alignment update is performed. The RLHF-style formulation in Eqs. (4)–(5) is therefore more of a conceptual reinterpretation than an algorithm the paper actually instantiates. That does not make the paper invalid, but it does mean the novelty is narrower than the title/abstract imply: the concrete contribution is a best-of-\(N\) black-box attack with a small unsafeguarded generator, not an alignment procedure in the usual sense.
-- **The theoretical section is only loosely aligned with the implemented attack, and some notation/object mismatches reduce confidence in the claimed insights.**  
-  There are several places where the formal objects shift in a confusing way: Section 3 defines optimization over suffix distributions \(\rho(q|x)\), while Section 4 introduces quantities over output distributions \(\pi(y|x)\); Eq. (9) defines the suboptimality gap in terms of \(y \sim \rho(\cdot|x)\), conflating prompter distributions and response distributions. This is not just cosmetic, because the paper uses these results to motivate claims about why LIAR works and how close it is to optimality. As written, the theory reads as a stylized analogy rather than a tight analysis of the actual attack pipeline.
-- **The practical success metric appears to rely on a brittle notion of attack success, and the paper itself acknowledges susceptibility to prompt-drift / keyword-matching artifacts.**  
-  Section 5.3 explicitly notes a limitation: longer suffixes can cause **“prompt-drift”** where \([x,q]\) may ask for content far from \(x\), and this is *“a limitation of the keyword matching aspect of the ASR metric being used.”* Given that the method is a high-volume sampler, this matters: some apparent successes may be artifacts of the evaluation criterion rather than genuine harmful compliance with the original request. The paper would need a stronger evaluator or case-based validation to support its stronger effectiveness claims.
+- **Poor performance on safety-aligned models**: ASR@100 on Llama-2-7b is only 3.85% (Table 1)—dramatically lower than Vicuna-7b's 97.12% or GCG's 23.7% at ASR@1. This failure on the most practically relevant safety target receives minimal discussion despite undermining claims about "inherent vulnerabilities in current alignment strategies."
 
-### Minor
-- **Performance is uneven across targets, which weakens the broad claims about alignment vulnerability.**  
-  Table 1 shows strong results on some models (e.g., Vicuna-7b, Mistral-7b, Falcon-7b, Pythia-7b by ASR@100), but much weaker results on LLaMA-2-7b (3.85% ASR@100). Given the paper’s framing around inherent vulnerabilities of current alignment strategies, this heterogeneity should be discussed more carefully rather than folded into a broad general claim.
-- **The “unsafe reward” used in practice is under-specified.**  
-  The formalism introduces \(R_u\), but the paper does not clearly spell out how this reward is computed operationally during selection beyond the downstream success metric discussion. Since LIAR depends on ranking sampled suffixes by reward, this is an important missing methodological clarification.
-- **Some formal definitions/equations are imprecise.**  
-  For example, Eq. (1) omits the target token inside the log-probability term, and the notation around \(\Delta_{\text{sub-gap}}\) vs. \(\tilde{\Delta}_{\text{sub-gap}}\) is inconsistent. These are not fatal on their own, but they contribute to the broader impression that the theory section was not executed with sufficient care.
+- **Asymmetric time comparisons**: Table 1 explicitly states "TTA1 for our method is computed for ASR@100, whereas TTA1 for all other methods are computed for ASR@1." This makes time comparisons misleading—LIAR's favorable speed requires 100 queries while baselines are measured at single-query success.
 
-### Trivial
-- **Some claims are overstated relative to the evidence.**  
-  In particular, claims that low perplexity “challenges the effectiveness of perplexity-based defenses” or that the work reveals broad “inherent vulnerabilities in current alignment strategies” go beyond what the presented experiments rigorously show.
+- **Low single-query success rate**: ASR@1 of 12.55% on Vicuna-7b is substantially below AdvPrompter (26.92%), AutoDAN (92.70%), and GCG (99.10%). For rate-limited or cost-sensitive black-box scenarios, requiring 100 queries per attack attempt is a significant practical limitation.
+
+- **Missing relevant baselines and ablations**: No comparison to other black-box methods like PAIR or TAP, which would be natural baselines. No random suffix ablation to establish whether GPT-2's language modeling provides attack signal beyond random perturbation—particularly important given that Falcon-7b and Pythia-12b show 100% ASR@1 for all methods (Table 1), suggesting trivial jailbreakability.
+
+- **Theoretical contributions lack depth**: Theorem 1's bound ($\Delta_{\text{safety-net}} \leq \text{range}(R_u - R_s)$) is a trivial range bound that doesn't use specific properties of RLHF alignment or provide predictive insight. Theorem 2's suboptimality bound is a direct application of Amini et al. (2024) without sufficient novel adaptation to the jailbreaking context.
+
+- **Model selection unexplained**: Table 2 shows GPT2-PMC achieves 19.68% ASR@1 vs. GPT-2's 12.55%, yet the paper uses GPT-2 for main results, justifying this choice only as "foundational." The performance gap warrants explanation or use of the better-performing model.
 
 ## Nice-to-Haves
-- Report comparisons under a matched protocol: same response length, same ASR@\(\!k\), and preferably equal total time budget.
-- Add a stronger success evaluator (e.g., judge-based or manual validation) to separate genuine harmful compliance from prompt-drift and keyword-matching false positives.
-- Show concrete adversarial suffix examples and failure cases, especially on weak-performing targets like LLaMA-2-7b.
-- Clarify exactly how \(R_u\) is computed during best-of-\(N\) selection and what computational cost it incurs.
-- Discuss the query-budget tradeoff more directly from both attacker and defender perspectives, since LIAR’s strength is speed but its mechanism is also query-heavy.
+- Evaluation against GPT-4 or Claude-3 to demonstrate effectiveness against state-of-the-art safety alignment
+- Defense evasion experiments against perplexity filters and LLM-based detectors
+- Compute-normalized comparison (total GPU-hours) rather than query-normalized metrics
+- Failure mode analysis: why does ASR drop from 97% (Vicuna) to 4% (Llama-2)?
 
 ## Removed Points
-These points are flagged to be removed, treat them with caution.
+*These points are flagged to be removed, treat them with caution*
 
-- **“The paper should evaluate more diverse application domains / high-stakes domains.”**  
-  Removed as scope creep. The paper is a jailbreak method paper evaluated on a standard harmful-instruction benchmark; lack of healthcare/finance-specific tests is not a core flaw.
-- **“The paper should include broader attack-generator diversity beyond the chosen pipeline.”**  
-  Weakened/removed as a core criticism. While broader comparisons would help, the current method’s main issue is not lack of extra datasets or generators but the fairness and validity of the existing evaluation.
-- **“The paper should evaluate long-term durability / extended fine-tuning behavior.”**  
-  Removed as outside the paper’s scope; this is not a method about post-training robustness over epochs.
+- The claim that the title's "seconds" is misleading because competitive ASR requires 100 queries: while technically true that high ASR requires multiple queries, generating 100 queries in 45 seconds IS meaningfully fast compared to hours of training overhead. The efficiency claim is legitimate, though the asymmetric comparison in Table 1 should be addressed as a weakness.
+
+- The claim that contribution (4) bundles "incompatible favorable numbers": the paper correctly states that 99% ASR requires k=100, consistent with the method description. This is not misrepresentation.
+
+- The demand for standard deviations across multiple runs: while good practice, this is not a critical flaw for a method that achieves near-100% ASR with deterministic sampling parameters.
 
 ## Novel Insights
-The most important synthesis is that this paper’s real contribution is not a new optimization-based “alignment attack,” but the demonstration that **fast, repeated, black-box sampling from a small unsafeguarded LM can be operationally competitive while producing highly natural-looking prompts**. That is a useful practical security insight. However, the paper currently wraps that insight in a stronger conceptual and theoretical narrative than the implementation and evaluation can support. In other words, the spark is real, but it is narrower and more empirical than the paper claims.
+The inverse alignment framing provides a clean theoretical lens: if alignment machinery can steer models toward safety, the same machinery can steer them away. The perplexity results reveal an important practical tension—gradient-based methods find adversarial suffixes that are unnatural (perplexity >90,000), while sampling from pretrained models produces natural text (perplexity ~2) but weaker attacks. This suggests that the adversarial signal from pretrained language models is fundamentally limited, explaining why the method fails on strongly-aligned models like Llama-2. The "safety net" concept, while boundedly weak, points toward a measurable quantity: models with larger reward divergence between safety and harmlessness objectives should be more robust.
 
 ## Suggestions
-- Reframe the contribution more honestly around **training-free best-of-\(N\) black-box jailbreak generation**, with the alignment formulation presented as motivation rather than the core realized algorithm.
-- Redo the main comparison under a strictly matched protocol: same target response length, same ASR@\(\!k\), and ideally same total wall-clock budget.
-- Strengthen attack validation with a more reliable success criterion than keyword-based matching, especially given the paper’s own acknowledgment of prompt-drift.
-- Tighten the theory so that the random variables and distributions consistently refer either to suffixes or outputs, and explicitly connect the theory to the actual best-of-\(N\) implementation.
-- Add qualitative examples of generated suffixes and failure cases to substantiate the claims of readability and to show whether successes genuinely answer the original harmful query.
+- Resolve the reward computation ambiguity: explicitly state whether the practical implementation uses keyword matching, a classifier model, or target model log-probabilities, and revise the "black-box" claim if log-probabilities are required.
+- Report ASR@1 with standard query budget (e.g., 1 query for all methods, or 100 queries for all methods) to enable fair efficiency comparisons.
+- Add a random suffix baseline to establish whether GPT-2's language modeling provides meaningful adversarial signal.
+- Discuss Llama-2 failures prominently—this limitation is critical for understanding method applicability.
+- Clarify whether Theorem 2's best-of-N selection (picking highest-reward sample before evaluation) matches the empirical ASR@k protocol (counting successes across independent trials).
 
 # Actual Human Scores
 Individual reviewer scores: [5.0, 3.0, 6.0, 5.0, 6.0]

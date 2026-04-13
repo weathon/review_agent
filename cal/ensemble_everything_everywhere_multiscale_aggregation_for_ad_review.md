@@ -1,78 +1,62 @@
-=== CALIBRATION EXAMPLE 16 ===
+=== CALIBRATION EXAMPLE 8 ===
 
 # Final Consolidated Review
 ## Summary
-The paper proposes a robustness pipeline that combines three ideas: multi-resolution channel-stacked inputs with stochastic perturbations, self-ensembling of intermediate-layer predictions, and a new aggregation rule, CrossMax, based on per-predictor/per-class normalization followed by top-k or median aggregation. Empirically, the paper reports strong adversarial accuracy on CIFAR-10/100 under RobustBench AutoAttack, especially for model ensembles, and the intermediate-layer analysis is an interesting attempt to explain why self-ensembling may help.
+
+This paper proposes an approach to adversarial robustness through multi-resolution input representations and a novel aggregation mechanism called CrossMax, inspired by Vickrey auctions. By stacking multiple downsampled versions of an input image channel-wise and ensembling predictions from intermediate network layers, the authors achieve strong adversarial accuracy on CIFAR-10 (~72%) and CIFAR-100 (~48%) without adversarial training, using only ImageNet-pretrained models fine-tuned with standard training.
 
 ## Strengths
-- **The combination of multi-resolution inputs and intermediate-layer self-ensembling is a genuinely interesting design, not just a standard adversarial-training variant.** The method explicitly leverages the observation from Figures 4 and 5 that attacks targeting the final classifier do not uniformly transfer across all layers, and turns that into a self-ensemble defense.
-- **The layerwise probe analysis is one of the paper’s most novel and insightful components.** Figures 4 and 5 provide concrete evidence, on the studied ResNet152/CIFAR setup, that adversarial susceptibility is only partially shared across layers; this is a useful empirical observation that could motivate follow-up work beyond this paper.
-- **CrossMax is a specific, implementable aggregation mechanism rather than a vague “robust ensemble” claim.** Algorithm 1 clearly defines the two normalization steps and the final median/top-k reduction, and the Vickrey-auction intuition gives a plausible adversarial motivation for discouraging domination by a single predictor or class.
-- **The paper shows additive gains from stacking multiple robustness mechanisms rather than relying on one trick.** In the reported CIFAR results, robustness improves from the multi-resolution backbone alone, then again with self-ensembling, and again with multi-model ensembling, suggesting the components are at least partially complementary.
-- **The best reported CIFAR-100 numbers, if validated more rigorously, would be important.** In particular, the claim that strong robustness can be obtained without conventional adversarial training is potentially significant, and the paper does evaluate with AutoAttack including the `rand` setting, which is more appropriate than standard attacks for stochastic models.
+
+- **Strong empirical results without adversarial training**: The paper achieves 71.88% adversarial accuracy on CIFAR-10 and 48.16% on CIFAR-100 under AutoAttack ($L_\infty = 8/255$) without any adversarial training (Table 1). This is notable because leading RobustBench entries typically require extensive adversarial training.
+- **Novel aggregation mechanism (CrossMax)**: Algorithm 1 introduces a principled ensembling approach that subtracts per-predictor and per-class maxima before median/top-k selection. This provides defense against any single predictor or class dominating the ensemble—a concrete contribution to ensemble theory for robustness.
+- **Empirical insight on intermediate layer de-correlation**: Figure 5 demonstrates that adversarial attacks targeting specific layers do not transfer well to layers in different depth bands (early/middle/late). This finding justifies the self-ensembling approach and is independently interesting.
+- **Visual evidence of interpretable adversarial examples**: Figures 7-10 show that attacks against the proposed model produce semantically meaningful changes (e.g., pear→apple by adding a dividing edge), supporting the authors' Interpretability-Robustness Hypothesis.
 
 ## Weaknesses
 
-### Major:
-- **The headline robustness comparisons are not like-for-like because the strongest results come from multi-model ensembles, while the paper often phrases them as direct “SOTA” improvements.**  
-  This concern is directly supported by Table 1 and the abstract. The most prominent no-adversarial-training results are from a **“3-ensemble of self-ensembles”**, and the paper states in the abstract and Figure 6 text that it is “comparable with the top three models on CIFAR-10” and “+5% gain” / “improving SOTA by 5% and 9%.” Those claims are materially different when they rely on three separately trained models plus intermediate heads and stochastic multi-resolution inference rather than a single model. This does not invalidate the empirical result, but it materially weakens the fairness of the headline comparison and the significance of the claimed advance.
-- **The evaluation sample sizes are too small to support strong leaderboard-style claims.**  
-  Table 1 reports `# = 128` for several CIFAR-10/ResNet152 evaluations and `# = 512` for CIFAR-100. For claims such as “top three” or “+5% over current best,” this is not enough to establish reliable ranking against benchmark numbers that are typically interpreted on the full test set. The paper itself reports variability on CIFAR-100 (e.g., `48.16 ± 2.65`), which reinforces that these comparisons are currently too noisy for strong SOTA framing.
-- **The attack validation is not yet strong enough for such an unusual stochastic/ensemble defense making very strong no-adversarial-training claims.**  
-  The paper deserves credit for using AutoAttack and specifically the `rand` version: “Finally, to evaluate our models using the hardest method possible, we ran the AutoAttack with the `rand` flag that is tailored against models using randomness.” However, for a defense that combines stochastic jitter/noise, multi-resolution processing, many intermediate heads, and nonstandard aggregation, the paper does not provide enough attack-side diagnostics to rule out residual attack mismatch. There is no explicit EOT-style analysis, no convergence/sensitivity study with stronger attack budgets or more restarts, and no deterministic-vs-stochastic evaluation to isolate how much robustness comes from structural effects versus optimization difficulty.
-- **CrossMax is under-ablated relative to its importance in the paper.**  
-  Although Algorithm 1 is clear, the paper does not convincingly isolate whether the gains come from the full CrossMax design or from simpler robust aggregators. In particular, comparisons against mean, median-only, trimmed mean, majority vote, or top-k without the double normalization are missing. Since CrossMax is presented as a central methodological contribution, this omission makes it hard to assess how much of the robustness should be attributed to CrossMax itself.
-- **The paper overclaims mechanism and broader implications beyond what is empirically demonstrated.**  
-  The CIFAR robustness experiments support improved empirical robustness on those benchmarks, and the qualitative visualizations are suggestive. But the manuscript repeatedly goes further: “alignment,” “high-quality, natural representations,” the “Interpretability-Robustness Hypothesis,” controllable image generation from classifiers, and transferable attacks on large vision-language models are all stated as contributions or implications. In the provided main paper, these broader claims are not substantiated at the same level as the CIFAR robustness results. In particular, the interpretability hypothesis is not rigorously tested, only illustrated qualitatively.
+- **Evaluation conducted on small subsets rather than full test sets**: Table 1 reports results on 128 examples (CIFAR-10) and 512 examples (CIFAR-100), while RobustBench standard protocol uses all 10,000 test images. At n=128, a 95% confidence interval around 71.88% adversarial accuracy spans approximately ±8 percentage points, making the claimed comparison to SOTA (73.71%) statistically inconclusive. Full test set evaluation is essential for claims of matching or exceeding RobustBench leaders.
 
-### Minor
-- **The decomposition of gains across components is incomplete.**  
-  Figure 6 gives a coarse incremental picture, but the paper does not sufficiently disentangle the contributions of: number of resolutions, exact resolution choices, amount of noise/jitter, which intermediate layers are used, and whether simpler ensembles of standard models would recover a similar fraction of the gain. This matters because the current strongest results combine several changes at once.
-- **The mechanistic interpretation of intermediate-layer robustness is plausible but narrower than the paper suggests.**  
-  The evidence in Figures 4 and 5 is compelling for the studied ResNet152/CIFAR setup with post-hoc linear probes, but it does not establish a general “3-way split” phenomenon across architectures or datasets. Also, because the probes are trained post hoc and only for 1 epoch, the observed behavior could partly reflect probe limitations rather than purely intrinsic semantic robustness of the underlying features.
-- **The clean/robustness tradeoff is under-discussed.**  
-  The paper reports clean accuracies in Table 1, but the discussion emphasizes robustness gains much more than the clean-accuracy cost and does not compare this tradeoff against the baselines it cites as SOTA. For robust ML this tradeoff is expected, but it should be more explicitly analyzed before making strong claims about “high-quality representations.”
-- **Several qualitative robustness/interpretability examples use much larger perturbation budgets than the standard benchmark setting.**  
-  Figures 7–10 include examples at `64/255` or `128/255`, or optimization from a gray image. These are interesting illustrations, but they are not direct evidence for robustness or human alignment under the standard `8/255` setting emphasized elsewhere.
+- **Potential gradient masking not ruled out**: The method combines stochastic test-time transformations (jitter, noise), non-differentiable aggregation operations (topk, median), and multi-resolution channel stacking—all hallmarks of obfuscated gradient defenses. While the authors use AutoAttack with the `rand` flag, no BPDA (Backward Pass Differentiable Approximation) attack or adaptive attack specifically designed for CrossMax is provided. For a defense centered on non-differentiable aggregation, this is a serious omission that leaves genuine robustness unverified.
 
-### Trivial
-- **Some methodological choices are described as arbitrary and could be better justified.**  
-  For example, the choice of `N=4`, resolutions `{32,16,8,4}`, and some augmentation strengths are stated as arbitrary. This is not a fatal issue, but modest sensitivity analysis would improve confidence that the method is not overly dependent on hand-picked settings.
+- **No ablation comparing CrossMax to standard aggregation**: The paper does not present a controlled comparison of CrossMax versus mean logit, mean softmax, or geometric mean ensembling under the same attack suite. This is the most critical ablation for evaluating whether CrossMax provides benefit over simpler alternatives.
+
+- **Compute-unfair comparison with SOTA**: The best results (71.88% on CIFAR-10) use "3-ensemble of self-ensembles"—three independent ResNet152 models, each with 12-channel multi-resolution input and intermediate-layer predictions. This inference budget is roughly 10-15× that of single-model SOTA baselines being compared against. A fair comparison would report results for a 3-ensemble of adversarially trained SOTA models, or report single-model performance.
+
+- **Inconsistent clean accuracy reporting**: Table 1 reports clean test accuracy of 89.17% for the "Multires backbone" ResNet152 on CIFAR-10, while Figure 6 reports 73.7% for the same configuration. Similarly, Table 1 shows 87.14% for "Self-ensemble" while Figure 6 shows 68.9%. These discrepancies are unexplained and undermine confidence in the experimental reporting.
+
+- **Linear probes trained for only one epoch**: The intermediate-layer linear probes used to demonstrate layer de-correlation (Section 2.3) are trained for a single epoch. Undertrained probes may appear "robust" simply because they haven't learned to be vulnerable, rather than reflecting genuine representational properties.
+
+- **VLM attack and image generation claims are unsubstantiated in main paper**: The abstract and conclusion claim "successful transferable attacks on large vision language models" and "turn pre-trained classifiers...into controllable image generators," but these results appear only in the appendix (which was not included). Major claims must be substantiated in the main submission.
 
 ## Nice-to-Haves
-- Evaluate on the full CIFAR test sets, ideally with multiple seeds, and report uncertainty intervals suitable for leaderboard-level comparisons.
-- Clearly separate **single-model**, **self-ensemble within one model**, and **multi-model ensemble** claims throughout the abstract, figures, and conclusions.
-- Add ablations comparing CrossMax against mean, median, trimmed mean, and simpler top-k variants on the exact same predictor sets.
-- Include attack-diagnostics tailored to stochastic defenses: deterministic-seed evaluation, EOT/adaptive attack analysis, and convergence checks.
-- Quantify inference and memory overhead of multi-resolution stacking, intermediate probes, and 3-model ensembling.
-- If the authors want to retain the interpretability/alignment hypothesis as a central message, add a quantitative perceptual or human-evaluation component.
+
+- **ImageNet evaluation**: The method uses ImageNet-pretrained models but evaluates only on CIFAR-10/100. Testing on ImageNet would strengthen claims about scalability and representation quality.
+- **Ablation over resolution choices**: The resolution set $\rho = \{32, 16, 8, 4\}$ is described as "arbitrary" (Section 3). An ablation varying N and specific scales would show whether robustness gains generalize beyond this specific configuration.
+- **Quantitative interpretability metrics**: The Interpretability-Robustness Hypothesis is supported only by qualitative visual examples. Human evaluation scores or similarity metrics would strengthen this claim.
 
 ## Removed Points
-These points are flagged to be removed, treat them with caution.
 
-- **“The paper lacks standard robustness evaluation; only FGSM/CW are mentioned.”**  
-  Removed because it is factually incorrect for this submission. The paper explicitly evaluates with RobustBench AutoAttack, including APGD-CE, APGD-T, FAB-T, SQUARE, and the `rand` setting for stochastic models.
-- **Generic complaints about missing unrelated modalities / architectures (e.g., RGB-T models or detectors).**  
-  Removed as out of scope and unrelated to the paper’s stated contribution, which is CIFAR image classification robustness.
-- **Purely generic requests for theory proving robustness.**  
-  Weakened/removed as a core criticism because this is an empirical robustness paper; lack of a formal proof is not by itself a defect. The retained issue is the lack of empirical ablation isolating CrossMax, which is more germane.
-- **Formatting/parser artifacts or presentation noise from the extracted text.**  
-  Removed because they are not paper issues.
+*These points are flagged to be removed, treat them with caution.*
+
+- **"Biological motivation is loose"**: The analogy to microsaccades and foveal vision is indeed imprecise, but this is a motivation critique, not a weakness of the technical contribution. The method stands on its empirical merits regardless of whether the biological analogy is tight.
+
+- **"Interpretability-Robustness Hypothesis is philosophically vague"**: While not rigorously quantified, the hypothesis is empirically supported through visual evidence and serves as a framing device rather than a formal theorem. Requiring formal quantification would be scope creep.
+
+- **"No L2 results"**: The paper consistently uses $L_\infty = 8/255$ and compares to RobustBench entries using the same threat model. Demanding L2 evaluation is asking for additional experiments outside the stated scope.
+
+- **"ResNet18 from scratch uses different sample size (1024 vs 128)"**: The paper reports 1024 samples for ResNet18 and 128 for ResNet152—different but internally consistent for each configuration. This is not a fatal flaw.
 
 ## Novel Insights
-The most interesting underlying idea in the paper is not the leaderboard claim but the possibility that robustness can be built from **intra-model disagreement structure**: intermediate layers may fail differently enough under attack that one can create a useful self-ensemble inside a single backbone. This is more conceptually interesting than the biological framing, and it suggests a broader research direction: adversarial robustness might be improved not only by training stronger final classifiers, but by explicitly exploiting the hierarchy of representations and the non-uniform transferability of adversarial errors across that hierarchy.
+
+The intermediate layer de-correlation finding (Figure 5) is genuinely novel: adversarial attacks designed to fool early layers do not transfer to middle/late layers, and vice versa. This empirical "three-way split" suggests that different network depths encode fundamentally different vulnerability surfaces, and that self-ensembling across layers is not merely a trick but exploits genuine structure in how adversarial perturbations propagate through deep networks. If verified on other architectures, this finding could inform new defense strategies beyond the specific method proposed.
 
 ## Suggestions
-- Reframe the empirical claims to distinguish sharply between:
-  - single multi-resolution backbone,
-  - single-model self-ensemble,
-  - 3-model ensemble of self-ensembles.
-- Re-run the main CIFAR comparisons on the full test sets and report confidence intervals across seeds.
-- Add a focused CrossMax ablation table against mean/median/top-k baselines using the same predictors.
-- Add adaptive attack diagnostics for the stochastic pipeline, including EOT or an equivalent attack-convergence study.
-- Reduce the scope of the paper’s claims unless additional evidence is added: the CIFAR robustness story is already interesting and does not need unsupported claims about alignment, VLM attacks, or controllable generation.
-- Expand the analysis of which layers are included in the self-ensemble and why, since this is central to the method’s mechanism.
-- Include a compute/latency table so readers can judge whether the robustness gains are practically attractive relative to simpler ensembles.
+
+- **Report full test set results** with standard AutoAttack (no subset sampling) to enable fair comparison with RobustBench entries.
+- **Provide BPDA or adaptive attack evaluation** specifically designed for CrossMax to rule out gradient masking as the source of robustness gains.
+- **Include compute-matched baselines**: either report single-model CrossMax results, or compare against a 3-ensemble of standard adversarially trained models.
+- **Clarify clean accuracy discrepancies** between Table 1 and Figure 6—these appear to report incompatible numbers for the same experimental conditions.
+- **Substantiate or remove appendix-only claims** (VLM attacks, image generation) from the main paper if space permits, or clearly note them as preliminary findings requiring separate investigation.
 
 # Actual Human Scores
 Individual reviewer scores: [6.0, 8.0, 8.0, 5.0]

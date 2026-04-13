@@ -1,60 +1,71 @@
-=== CALIBRATION EXAMPLE 34 ===
+=== CALIBRATION EXAMPLE 18 ===
 
 # Final Consolidated Review
 ## Summary
-This paper proposes EG-XC, a non-local exchange-correlation model for Kohn–Sham DFT that compresses the electron density into nuclei-centered SO(3)-equivariant features, propagates them with an equivariant GNN, and uses them to modulate a semi-local meta-GGA term plus an additional graph-level correction. The model is trained end-to-end through a differentiable SCF loop using only energy supervision. Empirically, the method shows strong results on the chosen benchmarks, particularly for OOD conformations on 3BPA and size extrapolation on QM9.
+
+The paper introduces Equivariant Graph Exchange Correlation (EG-XC), a machine-learned exchange-correlation functional for density functional theory that captures non-local interactions using SO(3)-equivariant graph neural networks. The key innovation is compressing the electron density into nuclei-centered equivariant point cloud embeddings, enabling efficient molecular-range message passing while integrating with a differentiable self-consistent field solver for energy-only training.
 
 ## Strengths
-- **Technically distinctive integration of equivariant geometric learning into a differentiable DFT functional.** The core design is more than “apply a GNN to molecules”: the model first constructs **density-derived**, nuclei-centered equivariant embeddings via Eq. (13), then performs equivariant message passing, and finally injects the resulting non-local information back into the XC energy through the reweighted meta-GGA term in Eq. (21) and the graph readout in Eq. (22). This density-to-point-cloud-to-functional pipeline is a specific and nontrivial contribution.
-- **Energy-only training through SCF is a meaningful practical advantage.** The paper explicitly avoids requiring reference densities, which are expensive and uncommon, by differentiating through the SCF solver and optimizing converged energies directly (Section 5, “Setup” and “Loss”). This is an important capability for learned XC models.
-- **The strongest empirical evidence is on extrapolation, where the method substantially outperforms the tested baselines.** On 3BPA, EG-XC improves over the next-best tested method across all reported splits, including the hardest OOD setting (1200K: 1.39 vs 2.27 relative MAE for Dick, Table 2). The QM9 size-extrapolation results are also compelling: Figure 3 supports the claim that EG-XC maintains an advantage as test molecules grow beyond the training regime.
-- **The ablation study shows the method is not carried by a single trivial component.** Table 3 indicates the mGGA backbone is essential, while the graph readout and equivariant GNN each contribute additional gains. The “no GNN” variant remains fairly strong, but the full model is consistently best, supporting the value of the full architecture.
-- **The paper is unusually candid about conceptual limitations.** Section 4 explicitly states that the method is “not truly universal, i.e., independent of the external potential,” that most physical constraints are not enforceable for the non-local part, and that the current approach does not handle nucleus-free or open-shell systems. This honesty helps delimit what is and is not established.
+
+- **Novel architectural design for non-local XC functionals**: The compression of continuous electron density into SO(3)-equivariant nuclei-centered point cloud embeddings (Eq. 9-13) is methodologically innovative. Unlike prior semi-local ML functionals that rely on fixed-size local descriptors, this representation enables equivariant GNNs to capture molecular-range interactions (e.g., Van der Waals forces) while remaining trainable via standard SCF differentiation.
+
+- **Strong out-of-distribution generalization**: On the 3BPA dataset, EG-XC reduces relative MAE by 35–50% compared to the next-best method across temperature extrapolation (300K → 1200K) and dihedral angle slices (Table 2). The potential energy surface visualizations (Fig. 2) demonstrate qualitatively better reproduction of OOD energy landscapes than force fields.
+
+- **Impressive data efficiency for size extrapolation**: On QM9, EG-XC trained on molecules with ≤6 heavy atoms achieves lower MAE on 9-heavy-atom test molecules than the best baseline trained on ≤7 atoms with 5× more samples (Fig. 3). This demonstrates meaningful transfer from small to large molecules.
+
+- **Energy-only training via differentiable SCF**: Unlike kernel-based non-local functionals that require reference densities, EG-XC trains on energy labels alone by differentiating through the SCF procedure (Eq. 23), substantially reducing data generation costs.
 
 ## Weaknesses
 
-###: Fatal
+- **Conceptual departure from true density functionals**: EG-XC explicitly depends on nuclear positions $R_i$ for its embeddings (Eq. 9–13), meaning two different molecular systems with identical electron densities would yield different XC energies. This violates the Hohenberg-Kohn theorem's guarantee that $E_{XC}$ is a functional of $\rho$ alone. While acknowledged in Section 4 ("Limitations"), the framing throughout the paper (including the title) presents EG-XC as a "density functional" when it is more accurately a nuclear-position-dependent functional—a hybrid between DFT and force-field approaches. This affects theoretical interpretation and transferability to systems without clear nuclear centers (e.g., homogeneous electron gas, periodic materials).
 
-### Major:
-- **The paper’s broad framing as learning a non-local XC functional is somewhat stronger than what the experiments actually validate.** The evaluation mostly demonstrates that this architecture is a strong **DFT-embedded molecular energy model** on several benchmark settings. On 3BPA and QM9, the targets are themselves energies from approximate DFT methods (the paper states 3BPA uses ωB97X/6-31G(d), and QM9 uses B3LYP/6-31G(2df,p)), so these experiments do not by themselves establish improved approximation to the exact XC functional. On MD17, the labels are higher-level, but training is performed **per molecule**, which supports accurate PES fitting rather than transferable functional learning. The paper can still make a strong case, but the strongest supported claim is narrower than “push[ing] the frontier” of XC functionals in a general sense.
-- **The method is not a pure universal density functional in the sense the framing sometimes suggests.** This is not a reviewer-imposed standard; the paper itself acknowledges the issue in the limitations: “as we rely on the nuclear positions to represent the electronic density, it is not truly universal, i.e., independent of the external potential.” That matters because the architecture explicitly depends on nuclei-centered embeddings and includes a direct graph readout over those embeddings (Eq. (22)). Conceptually, the contribution is better understood as a nuclei-conditioned, non-local XC model inside KS-DFT rather than a general density-only functional.
-- **The evidence does not fully isolate how much of the gain comes specifically from the proposed equivariant non-local machinery versus from the broader DFT prior and SCF-based setup.** The paper compares against force fields, Δ-ML baselines, and one semi-local learned XC baseline. This is enough to show EG-XC is strong relative to these tested alternatives, but less enough to pinpoint the source of the advantage. In particular, the main-text Δ-ML setup uses an LDA/STO-6G reference, which the authors themselves present as a weak baseline choice for reducing the residual. Also, Table 3 shows the **no-GNN** variant is already quite competitive, indicating that the density embedding itself may account for a large portion of the benefit. So the paper convincingly establishes that the full system works well, but less convincingly that equivariant message passing is the decisive ingredient.
-- **Several claims about physical usefulness remain unsupported because the evaluation is almost entirely energy-based.** The paper itself notes that missing constraints may allow the model to “correct basis set errors through the XC functional” and could lead to “unphysical matches between densities and energies.” Given that concern, it is a notable omission that the paper reports neither density quality nor force quality, even though molecular dynamics and PES fidelity are central motivations. Accurate energies alone do not rule out poor densities or noisy forces.
+- **Baseline fairness concerns**: The main-text ∆-ML baselines use LDA/STO-6G as the reference—a minimal basis set yielding an extremely weak baseline. Stronger ∆-ML results with better reference functionals are relegated to Appendix I. While EG-XC still performs well, presenting the weakest baselines in the main text without justification is problematic for fair comparison.
 
-### Minor
-- **Runtime and practicality are under-discussed in the main paper.** The text points to Appendix M/N for complexity and runtime, but the main narrative repeatedly compares against force fields and Δ-ML methods without giving a concise main-text accounting of inference/training cost. Since EG-XC requires SCF at training and inference, practical tradeoffs should be more explicit.
-- **The scope of empirical validation is still limited to small, closed-shell molecular systems.** The limitations section appropriately admits that open-shell systems would require extensions and that nucleus-free systems are out of scope. Still, this narrows the demonstrated significance relative to the broad framing around computational discovery.
-- **On MD17, gains are not uniform.** EG-XC is best on 3 of 5 molecules in Table 1, but Δ-NequIP remains better on benzene and toluene. This does not negate the contribution, but the paper does not analyze which molecular characteristics favor or disfavor the proposed non-local correction.
+- **Lack of statistical significance testing**: No error bars or multiple-run statistics are reported. On MD17, differences like malonaldehyde (0.27 vs. 0.29 $mE_h$) and toluene (0.20 vs. 0.13) are small enough that significance cannot be assessed. EG-XC underperforms on benzene and toluene (aromatic systems with π-delocalization) without discussion of this potential systematic failure mode.
 
-### Trivial
+- **Limited scope of ablations**: Ablations (Table 3) are performed only on 3BPA, not on MD17 or QM9 where EG-XC shows qualitatively different behavior. The "no GNN" variant still substantially outperforms the semi-local baseline (0.60 vs. 0.96 at 300K), suggesting the density embedding itself contributes significantly to gains—but this cannot be confirmed across datasets.
+
+- **SCF convergence stability not analyzed**: Training differentiates through SCF iterations, but no discussion addresses what happens when SCF fails to converge during training (early epochs, OOD structures). Practical reliability for deployment requires understanding convergence robustness.
+
+- **No comparison to standard non-local DFT functionals**: The paper compares against ML force fields and one ML-functional (Dick), but not against established non-local functionals like vdW-DF, SCAN, or r2SCAN. This leaves unclear whether EG-XC advances beyond conventional physics-based approaches or merely matches them with different tradeoffs.
 
 ## Nice-to-Haves
-- Add a compact main-text runtime table comparing EG-XC with Δ-ML and pure force fields at training and inference time.
-- Include diagnostics beyond total energy, especially force errors and SCF convergence statistics on the OOD splits.
-- Evaluate density quality on at least a small subset, especially because the paper explicitly raises the possibility of basis-set-error compensation and unphysical densities.
-- Clarify the abstract’s aggregated claims (e.g., the “51% lower MAEs” statement) by directly tying them to a specific table or averaging protocol.
-- Expand the discussion of why the no-GNN ablation is already strong, and what specific regimes require message passing.
+
+- **Runtime comparison in main text**: Wall-clock times in Appendix N should be summarized in the main paper. Since EG-XC requires full SCF iterations per evaluation while force fields do not, readers need quantitative understanding of the accuracy-vs-cost tradeoff.
+
+- **Electron density error analysis**: Training on energies alone allows error cancellation; reporting density errors against reference CCSD(T) or DFT densities would strengthen the claim that EG-XC learns physically meaningful corrections.
+
+- **Single multi-molecule model on MD17**: Per-molecule training masks potential generalization failures across chemical space. A universal functional trained across all MD17 molecules would better test the "functional" claim.
 
 ## Removed Points
-These points are flagged to be removed, treat them with caution.
 
-- **Complaint about missing baseline to DM21 or other external non-local ML functionals.** Removed because this is fundamentally a missing-related-work / missing-baseline argument that cannot be verified here, and the paper should be judged against the baselines it actually includes.
-- **Claim that the empirical evaluation is restricted to “2D toy examples” or “a small-scale QM9 conformational generation task.”** Removed as factually wrong for this paper. The paper evaluates on MD17, 3BPA, and QM9 size extrapolation; this criticism appears to be imported from another context.
-- **Concern about reliance on a “differentiable verifier” or analogous black-box-check limitation.** Removed as irrelevant/misapplied to this paper.
-- **Pure reproducibility nitpicks about hyperparameter sensitivity or omitted low-level training details.** The paper already points to appendices for hyperparameters and implementation details, and such concerns are not core scientific weaknesses here.
-- **Criticism that force fields should have been compared only under their usual force-supervised setting as a fairness issue.** Weakened/removed as a core weakness because the paper explicitly states that all methods are trained on **energy labels only**, making the supervision regime intentionally matched. It remains reasonable as a nice-to-have for broader context, but not as a substantive flaw in the presented comparisons.
-- **Parser-artifact concern about Eq. (3) dimensionality.** Removed because the paper extraction explicitly warns about formatting/parser issues.
+*These points are flagged to be removed, treat them with caution.*
+
+- **"Basis-set independence overclaiming"**: The harsh critic claims the paper overclaims basis-set independence. However, the paper correctly states that the *embeddings* (not the full calculation) are derived from density rather than basis set. This distinction is maintained throughout. Not a valid criticism.
+
+- **Equation 19 index collision**: While there appears to be a notational inconsistency (summation index $s$ appearing on both sides), this is a minor typo that does not affect the technical contribution. Not substantive for acceptance decisions.
+
+- **"Costly reference data is disingenuous"**: The paper correctly distinguishes between methods requiring reference *densities* (kernel methods) versus energy-only training (EG-XC). This is accurate and not misleading.
+
+- **Minor notation clarity in Eq. 20**: While the non-local feature density formula could be clearer, the technical content is correct and follows from the embedding definitions. This is a writing improvement, not a flaw.
+
+- **Comparison to human-designed non-local functionals as mandatory**: Requiring comparison to vdW-DF/SCAN would strengthen the paper but is beyond its stated scope, which focuses on ML methods. The current baselines are appropriate for the ML-XC literature.
 
 ## Novel Insights
-The most interesting synthesis across the paper and reviews is that EG-XC’s real contribution is not merely “a better GNN” or “a better DFA,” but a hybridization strategy: it keeps a semi-local density-based scaffold to anchor the model in DFT structure, then adds learned non-locality through a density-derived equivariant point cloud. The empirical pattern supports this interpretation: the mGGA backbone is indispensable, the non-local density embedding is already powerful, and message passing adds a smaller but consistent final improvement. This suggests the paper’s strongest scientific message is that **DFT-structured non-local learning can outperform pure molecular surrogates particularly in extrapolative regimes**, rather than that it has already solved the broader problem of learning universal XC functionals.
+
+The paper's insight that compressing electron density into nuclei-centered equivariant point clouds enables GNN-based molecular-range interactions while remaining compatible with differentiable SCF training is genuinely novel. The ablation showing that the embedding alone (without GNN message passing) still yields substantial improvements over semi-local functionals suggests that the equivariant density representation itself captures significant non-local physics—this deserves more emphasis. The qualitative PES reconstructions (Fig. 2) reveal that EG-XC captures energy surface topology that force fields miss entirely, indicating the method learns something fundamentally different about the quantum mechanical energy landscape.
 
 ## Suggestions
-- Reframe the headline claims more carefully: emphasize that the paper demonstrates a strong **nuclei-conditioned non-local XC architecture within KS-DFT** and excellent benchmark generalization, rather than implying a general solution to XC functional learning.
-- Add at least one evaluation of **forces** and one of **SCF convergence behavior** on OOD data; both would materially strengthen the practical case.
-- Include a small-scale analysis of **electron densities** or another density-sensitive diagnostic, especially because the paper explicitly acknowledges the possibility of unphysical density/energy compensation.
-- Make the contribution of the equivariant GNN more explicit by expanding ablations or analysis around the strong **no-GNN** baseline.
-- Bring a concise **runtime/compute tradeoff** summary into the main text so readers can assess where EG-XC sits relative to Δ-ML and force-field alternatives.
-- Discuss failure cases such as benzene/toluene on MD17 to clarify when the proposed non-local correction helps most.
+
+- **Add error bars and multiple seeds**: Report mean ± std across at least 3 runs for all quantitative results to enable significance assessment.
+
+- **Discuss aromatic system underperformance**: Investigate and discuss why EG-XC underperforms on benzene and toluene (systems with π-electron delocalization), as this may reveal limitations of nuclear-centered embeddings.
+
+- **Include one strong ∆-ML baseline in main text**: Move at least one ∆-ML result with a reasonable basis set (e.g., PBE/def2-SVP) from Appendix I to Table 1 for fair comparison.
+
+- **Analyze SCF convergence rates**: Report convergence statistics during training and inference, particularly for OOD structures, to characterize practical reliability.
+
+- **Report density errors**: Even a subset of density MAE against reference calculations would strengthen claims about learning correct physics.
 
 # Actual Human Scores
 Individual reviewer scores: [8.0, 6.0, 8.0, 8.0]

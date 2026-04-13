@@ -1,64 +1,77 @@
-=== CALIBRATION EXAMPLE 24 ===
+=== CALIBRATION EXAMPLE 8 ===
 
 # Final Consolidated Review
 ## Summary
-This paper studies localized machine unlearning through the lens of memorization. It first empirically examines several localization strategies motivated by memorization hypotheses, then proposes a new one-shot, batched localization method that combines channel-level selection with weighted-gradient scoring, and pairs it with reset-and-finetune to form DEL. Across the reported CIFAR-10/ResNet-18 and SVHN/ViT settings, DEL is consistently stronger than the compared localized methods and also competitive against or better than the included full-parameter baselines on the paper’s chosen proxy unlearning metrics.
+
+This paper investigates localized machine unlearning, proposing a new localization strategy that identifies critical parameters using channel-wise weighted gradients (inspired by memorization literature) and pairing it with a reset-and-finetune algorithm called DEL (Deletion by Example Localization). The method outperforms prior localized and full-parameter unlearning methods on CIFAR-10 and SVHN across various forget set distributions and parameter budgets, while modifying only 30% of parameters.
 
 ## Strengths
-- **The paper does more than just introduce another heuristic; it decomposes the design space of localization strategies in a useful way.** Section 4 compares Deepest, Shallowest, CritMem, and SalLoc, and Section 5/ Tables 1 and 4 isolate two concrete axes—granularity and criticality criterion—before assembling the final method. This makes the contribution scientifically more valuable than a pure “ours beats baseline” paper.
-- **A specific and non-obvious empirical finding is that simple data-agnostic localization rules behave very differently than commonly assumed.** In Figure 2, Deepest preserves test accuracy but forgets poorly at small budgets, while Shallowest forgets better but hurts utility. That is a meaningful insight for localized unlearning design, not a generic strength.
-- **The proposed localization strategy appears modular rather than overfit to a single downstream unlearning rule.** Figure 3 shows gains when paired with multiple unlearning algorithms, not only the authors’ DEL pairing, which supports the claim that the main contribution is the localization mechanism itself.
-- **The random-mask control is genuinely informative.** Table 3 keeps the same layerwise masking structure and budget while randomizing which parameters/channels are selected, and performance degrades substantially. This directly supports the claim that the benefit comes from identifying critical parameters, not merely touching fewer weights.
-- **The paper includes a nuanced analysis of forget-set specificity.** Table 4 distinguishes IID vs. non-IID forget sets and shows that tailoring localization to the forget set matters more in the non-IID case. That is a useful insight about when data-dependent localization is likely to pay off.
-- **Within the paper’s evaluation protocol, DEL’s empirical performance is strong.** Table 2 and Figure 4 show clear improvements over SalLoc-RL and several full-parameter baselines on the reported unlearning metrics, while utility is often improved relative to other localized methods.
+
+- **Systematic ablation of localization design choices:** Table 1 provides a clean $2 \times 2$ factorial analysis of granularity (parameter vs. channel) and criticality criterion (gradient vs. weighted gradient), demonstrating that channel-level granularity with weighted gradients yields the best trade-offs. This is a principled way to isolate what makes localization effective.
+
+- **Strong empirical performance across settings:** DEL consistently outperforms baselines on both IID and non-IID forget sets, across two datasets (CIFAR-10 and SVHN) and two architectures (ResNet-18 and ViT). The method achieves near-oracle performance on forget accuracy and MIA efficacy while modifying only 30% of parameters.
+
+- **Effective control experiments:** The random-masking ablation (Table 3) convincingly demonstrates that parameter selection matters, not just parameter count. The analysis of forget-set-specific vs. data-agnostic criticality criteria (Table 4) provides insight into when tailoring to the forget set matters most.
+
+- **Practical efficiency improvements over CritMem:** By replacing the iterative, example-by-example gradient computation of CritMem with a batched, one-shot approach, DEL achieves similar or better localization quality with substantially lower computational overhead.
 
 ## Weaknesses
 
-### Major:
-- **The paper’s “state-of-the-art” framing is stronger than the evidence supports because the evaluation relies on limited proxy metrics.** The paper itself acknowledges in Section 2.1 that “Evaluating unlearning rigorously is an ongoing area of research” and that stronger evaluation methods exist but are expensive; nevertheless, the main claims in the abstract, introduction, and conclusion are phrased as broad SOTA claims. The actual evaluation centers on forget accuracy and a single confidence-based MIA efficacy metric, plus utility. These are standard community metrics, so using them is not itself a flaw; the issue is that the headline claims should be calibrated to “improves standard benchmark metrics” rather than implying a stronger conclusion about unlearning writ large.
-- **Efficiency is a central motivation but is not quantified in a convincing end-to-end way.** The introduction and Section 2.1 frame localized unlearning around forgetting/utility/efficiency tradeoffs, and Section 5 argues the proposed method is more efficient than CritMem due to one-shot batched localization. However, the evidence presented is largely parameter budget, not runtime, FLOPs, memory, or full unlearning cost including localization and finetuning. Since localization itself can be nontrivial, parameter fraction is not enough to establish the efficiency claim.
-- **The main comparative results are not organized as clean tradeoff frontiers under matched constraints.** The paper states in Section 4 that “throughout the paper, we tune hyperparameters separately for each budget and localization strategy,” and Section 6 reports each localized method using its “best identified parameter budget and its best-paired unlearning algorithm for that setting.” This is useful for showing best achievable behavior, but it weakens the stronger claim that DEL is broadly superior on the forgetting/utility/efficiency tradeoff. A more compelling presentation would compare methods along common budget/compute frontiers rather than best-picked operating points.
-- **The empirical scope is still fairly limited for the breadth of the claims.** The paper evaluates on CIFAR-10/ResNet-18 and SVHN/ViT, with IID and non-IID 10% forget sets on CIFAR-10. These are reasonable benchmarks, and the paper is stronger than a single-dataset study, but the claims in the abstract and conclusion read broader than what these settings can fully support. In particular, it remains unclear how the method behaves for larger models/datasets, substantially different forget-set sizes, or repeated unlearning requests.
+- **Limited experimental scope:** Experiments are confined to CIFAR-10 and SVHN with 10% forget sets. The paper does not evaluate on larger-scale datasets (e.g., CIFAR-100, ImageNet), larger models, or smaller forget set sizes (e.g., ≤1% of training data, which is more representative of real-world deletion requests). This limits confidence in scalability claims.
 
-### Minor
-- **The memorization framing is somewhat overstated relative to what the experiments actually establish.** The paper’s strongest scientific result is not that memorization hypotheses directly yield good unlearning strategies; in fact, Section 4 finds that direct translations like Deepest and CritMem are weak or impractical. The successful method is better described as a practical synthesis of design choices inspired by memorization-localization work (channel granularity, weighted gradients, one-shot batching) rather than validation of a strong memorization-to-unlearning theory.
-- **A few important design choices are under-analyzed, especially the channel score hyperparameter \(h\).** Section 5.2 defines neuron criticality as the average of the top-\(h\) parameter scores in a channel, but the main paper gives little evidence about sensitivity to \(h\). Since this is part of the core localization rule, robustness analysis would strengthen confidence that the method is not delicately tuned.
-- **The role of the always-updated classifier layer is not isolated.** In Section 4, the reset+finetune setup updates the identified critical parameters “and the classifier layer.” Because this appears to be part of the localized recipe, an ablation would help clarify how much of the gain comes from the localization strategy versus the classifier update.
-- **Some causal language is too strong for the evidence.** For example, Section 6 says Table 3 indicates “beyond doubt” that localized unlearning succeeds due to pinpointing critical parameters. The random-mask control is strong evidence, but “beyond doubt” overstates what a single control can establish.
+- **Unablated hyperparameter $h$:** The neuron criticality score uses "the average of the top-$h$ scores" of constituent parameters (Section 5.2), but the value of $h$ is never specified, discussed, or ablated in the main text. This is a notable omission for a key design choice.
 
-### Trivial
-- **Some tables are harder to interpret than necessary because the \(\Delta\) conventions are not immediately intuitive.** A brief reminder of the sign/direction near the tables would improve readability, though this does not affect the substance.
+- **No runtime benchmarks:** The paper claims efficiency improvements over CritMem and comparisons to SalLoc, but provides no wall-clock time measurements for the localization step. Since all three methods require backward passes over the forget set, the actual efficiency gain from channel-wise aggregation versus parameter-wise sorting is unclear.
+
+- **Missing SCRUB baseline:** SCRUB (Kurmanji et al., 2024) is mentioned in related work as a strong recent unlearning method that builds on NegGrad+ via distillation, but does not appear in the experimental comparisons. Its absence is a gap given its prominence in recent literature.
+
+- **Statistical significance unclear for key comparisons:** Several important comparisons have overlapping uncertainty intervals (e.g., DEL $\Delta_{\text{forget}} = 0.43 \pm 1.06$ vs. SalLoc-RL $\Delta_{\text{forget}} = -2.8 \pm 1.45$ in Table 2 for Non-IID). Without formal significance tests, claims of superiority should be more cautious.
+
+- **CritMem comparison at unequal budgets:** CritMem is evaluated at $\alpha=16\%$ because its algorithm terminates when predictions flip, while DEL uses $\alpha=30\%$. This asymmetry makes direct comparison difficult—CritMem is constrained to a budget it was not designed to work well at, rather than evaluated fairly at its optimum.
 
 ## Nice-to-Haves
-- Add wall-clock/FLOP/memory measurements for localization and full unlearning, not just parameter budget.
-- Show common-budget or common-compute tradeoff curves for DEL, SalLoc, and strong full-parameter baselines.
-- Include an ablation over forget-set size, since all main experiments appear to use 10% forget sets.
-- Add sensitivity analysis for \(h\) and for the decision to always update the classifier layer.
-- Include one stronger privacy audit or additional attack variant to test whether gains persist beyond the chosen MIA metric.
-- Report retain accuracy more prominently in the main paper, since it is an important utility measure and is currently mostly deferred to the appendix.
+
+- **Theoretical justification for weighted gradients:** The paper attributes the success of $|\theta \cdot g|$ over $|g|$ to "smoothing" and "regularization," but this remains heuristic. A deeper understanding (e.g., linking to influence functions or Fisher information) would strengthen the contribution.
+
+- **Formal privacy guarantees:** The paper does not discuss whether DEL provides any differential privacy or divergence guarantees—important for GDPR-style applications.
+
+- **Sequential unlearning:** The paper considers only single-batch unlearning; sequential or continual unlearning with multiple forget requests is unaddressed.
 
 ## Removed Points
-These points are flagged to be removed, treat them with caution.
 
-- **“Deepest at high budget amounts to retraining the whole model” is incorrect.** The harsh review rightly objected to the literal equivalence. The paper says this only loosely: “amounts to retraining (almost) the entire model.” Strictly speaking, reset+finetune of most layers with some layers frozen is not retraining from scratch, so this wording is imprecise. However, this is not a substantive methodological flaw and should not be elevated as a real weakness.
-- **Complaints about omitted implementation details / reproducibility knobs.** The paper explicitly states hyperparameter details are in Section A.2 and notes per-budget/per-strategy tuning. Demands for more low-level detail would be outside scope for a main-review criticism.
-- **Claims centered on whether cited methods/tools exist or are available.** Per instructions, such concerns are removed.
-- **Missing-related-work style criticism in the abstract.** The user instructions prohibit external “missing related works” complaints, so these are not included.
-- **“Need significance tests” as a core weakness.** The paper already reports means with uncertainty (e.g., \(\pm\) values) in tables. Asking for formal significance testing is at most a nice-to-have here, not a core flaw by community standards for this kind of empirical systems/benchmark paper.
+These points are flagged to be removed, treat them with caution:
+
+- **"The abstract does not explicitly flag 2–3% lower test accuracy than oracle":** The abstract accurately summarizes contributions. Margin differences from oracle are standard in approximate unlearning; explicitly highlighting them in the abstract is unnecessary.
+
+- **"Definition 2.1 is exact unlearning; gap with approximate methods should be acknowledged":** The paper correctly uses retrain-from-scratch as an aspirational benchmark and discusses approximate methods throughout. This is standard practice in the field.
+
+- **"MIA evaluation is weak; stronger attacks should be used":** The paper acknowledges that more rigorous evaluations exist but are expensive. Using standard MIA efficacy from Fan et al. (2023) is reasonable for an empirical methods paper.
+
+- **"The four contributions are repetitive":** The contributions are clearly distinct: (1) investigation of localization strategies, (2) improved localization strategy, (3) DEL algorithm, and (4) empirical results. This is appropriately structured.
+
+- **"No mechanistic explanation for why Shallowest is strong":** This is a valid observation for future work, not a weakness of the current paper. The authors correctly identify it as an interesting finding.
+
+- **"Δ sign convention unclear":** The paper defines Δ as Oracle − Algorithm, and lower absolute values are better. This is explained in Table 2 caption.
+
+- **"Negative Δ_test values (test accuracy above oracle) are unexplained":** This occurs when the original model has higher test accuracy than the oracle (which is retrained on a smaller retain set). The phenomenon is natural and not problematic.
+
+- **"Scalability to larger models and memory constraints":** The method operates on gradients; this is a valid concern but speculative without evidence. Memory overhead exists for all gradient-based unlearning methods.
 
 ## Novel Insights
-The most interesting synthesis across the reviews and the paper is that the work’s real contribution is not “memorization localization solves unlearning,” but something subtler: direct memorization hypotheses do *not* transfer cleanly to unlearning, yet certain *inductive biases* from that literature do. In particular, the paper suggests that coarse, channel-level localization with a conservative weighted-gradient score may act as a useful regularized selection mechanism—more robust than parameter-level saliency—without requiring the literal correctness of the underlying memorization theory. This makes the paper more valuable as a study of what kinds of localization bias are useful for unlearning than as evidence for a strong mechanistic connection between memorization and forgetting.
+
+The paper's key insight—that memorization localization insights transfer to unlearning when adapted properly—is valuable. Directly applying memorization hypotheses (e.g., "deepest layers memorize") fails for unlearning, but the granularity and criticality criteria from CritMem, combined with batched non-iterative computation, yield a practical improvement. The finding that forget-set-specific localization matters more for non-IID forget sets (Table 4) provides guidance for practitioners: when the forget set distribution matches the training distribution, simpler criteria may suffice.
 
 ## Suggestions
-- **Recalibrate the headline claims.** Replace broad “sets a new state-of-the-art” language with a claim tied to the paper’s actual evidence: e.g., “improves standard proxy unlearning metrics on the evaluated benchmarks.”
-- **Quantify efficiency directly.** Report end-to-end runtime and/or FLOPs for localization plus unlearning, and compare against SalLoc, CritMem, and representative full-parameter methods.
-- **Present matched-frontier comparisons.** In addition to best-case points, show curves under fixed parameter budget and, ideally, fixed compute.
-- **Clarify the scientific claim about memorization.** Emphasize that the paper finds direct memorization-localization hypotheses are not sufficient, but design principles extracted from that literature improve localized unlearning.
-- **Add targeted ablations.** In particular, vary \(h\), isolate the effect of always updating the classifier layer, and vary forget-set size.
-- **Strengthen evaluation if possible.** Even one additional privacy audit or attack variant would materially improve confidence in the unlearning claims.
-- **Temper causal phrasing.** Replace formulations like “beyond doubt” with more measured language aligned with the strength of the evidence.
 
+- **Ablate $h$ explicitly:** Report the value used and test sensitivity across a reasonable range (e.g., $h \in \{1, 5, 10, 25\}$).
 
+- **Add wall-clock time comparison:** Report localization runtime for SalLoc, CritMem, and the proposed method on the same hardware.
+
+- **Include smaller forget set experiments:** Test 1% and 5% forget sets to demonstrate real-world applicability.
+
+- **Add SCRUB baseline:** Include this strong recent method in comparisons, or explain why it was excluded.
+
+- **Clarify budget fairness:** If CritMem cannot operate at higher budgets due to algorithm design, either acknowledge this as a limitation or extend CritMem fairly (e.g., by running multiple iterations).
 
 # Actual Human Scores
 Individual reviewer scores: [3.0, 6.0, 6.0, 5.0]

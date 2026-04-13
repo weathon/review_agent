@@ -1,17 +1,3 @@
-# ICLR Benchmark Results
-
-Date: 2026-04-12 22:21
-Critic/Merger: claude:claude-sonnet-4-6 (OpenRouter)
-Neutral: qwen/qwen3.5-plus-02-15, Related Work: qwen/qwen3.5-flash-02-23:online (OpenRouter)
-
-## 0GC81gpjOo
-
-- GT: Reject (avg 4.5)
-- Predicted: Reject (4.8/10)
-- Match: YES
-
-### Final Review
-
 ## Summary
 This paper investigates the relationship between Theory of Mind (ToM) capabilities and cooperative trends in LLM-based multi-agent systems, finding that higher-level ToM agents (k=2) do not always exhibit better cooperation than lower-level ToM agents (k=1). The authors propose a stable coalition matching mechanism that forms teams based on belief-action alignment and specialized abilities, demonstrating improved cooperation and task performance across programming, debate, and reasoning tasks.
 
@@ -58,6 +44,3 @@ The finding that higher ToM can impair cooperation—attributed to "overthinking
 - Provide a focused ablation in the main paper showing: (a) random matching vs. proposed matching, (b) matching without the specialized ability term, (c) matching with k=1 vs k=2 agents separately.
 - Clarify Algorithm 1's re-matching trigger logic with corrected pseudocode and explicit threshold handling for individual vs. coalition-wide misalignment.
 - Add computational cost analysis: report average token usage and latency per cooperation round for k=1 vs k=2 agents across task types.
-
----
-

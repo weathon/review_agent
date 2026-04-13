@@ -2,70 +2,70 @@
 
 # Final Consolidated Review
 ## Summary
-This paper proposes PINCO, an unsupervised physics-informed GNN for AC-OPF that combines graph-based prediction with an hPINN-style constrained training objective. The paper’s most concrete contributions are: enforcing inequality constraints empirically across all reported experiments, introducing a node-splitting construction for multiple generators per bus, and demonstrating very fast inference once trained on several IEEE benchmark cases. However, the paper’s stronger claims—particularly around being a competitive AC-OPF “solver,” broad generalization, and outperforming traditional methods—are not fully supported by the current evaluation.
+
+PINCO proposes a physics-informed graph neural network combining GNNs with hard-constraint PINNs (H-PINN) to solve the AC-OPF problem in an unsupervised manner. The method achieves feasible solutions with zero reported inequality constraint violations and demonstrates ~60× inference speedup over the MIPS solver on IEEE benchmark systems, while introducing a node-splitting technique to handle buses with multiple generators.
 
 ## Strengths
-- **The paper targets a specific and nontrivial gap: unsupervised AC-OPF with empirical inequality-feasible outputs.** Unlike prior supervised approaches discussed in the paper, PINCO does not require labels from an external solver; the training objective is derived directly from the AC-OPF formulation via the hPINN-style constrained loss in Eq. (5).
-- **The handling of multiple generators per bus is a concrete modeling contribution rather than a generic engineering detail.** Section 3.1 explicitly introduces a node-splitting construction with artificial generator nodes so that each generator can retain its own cost while sharing voltage magnitude/angle with the original bus. This is directly exercised on IEEE24, where some buses contain up to 6 generators.
-- **The paper clearly distinguishes two operating regimes—single-instance optimization and amortized multi-demand prediction—and evaluates both.** Section 4.1 studies a single loading condition as a proof of concept, while Section 4.2 tests a model trained over many loading conditions, which is the practically meaningful amortized setting.
-- **Inference is indeed substantially faster than MIPS once training is complete.** Figure 4 reports roughly \(2\times 10^{-3}\)–\(5\times 10^{-3}\) s for PINCO versus about \(2\times 10^{-1}\)–\(3\times 10^{-1}\) s for MIPS on the tested cases, i.e., around two orders of magnitude faster at test time.
-- **The paper is commendably explicit about some limitations rather than hiding them.** Section 5 acknowledges 10–24 hour training times and notes that equality-constraint satisfaction deteriorates when training across multiple demand scenarios.
+
+- **Unsupervised formulation eliminates labeled data dependency:** Unlike supervised GNN approaches for OPF, PINCO trains directly on the AC-OPF objective and physical constraints, avoiding the computational burden of generating datasets from conventional solvers and avoiding inherited solver biases (Section 2.4).
+
+- **Inference efficiency with practical speedup:** The method achieves inference times of ~0.005s compared to ~0.3s for MIPS across all tested systems (Figure 4), which could be meaningful for applications requiring rapid re-optimization or contingency screening.
+
+- **Novel handling of multi-generator buses:** The node-splitting technique (Section 3.1, Figure 2) addresses a gap in prior work by allowing the GNN to distinguish between generators with different cost functions on the same bus—an engineering contribution not addressed in Owerko et al. (2022).
 
 ## Weaknesses
 
-### Fatal
-None.
+- **No numerical comparison with prior ML-based OPF methods:** The paper explicitly positions itself against Owerko et al. (2022), Huang et al. (2024), Chen et al. (2022), and supervised GNN approaches like Donon et al. (2020) in the introduction and related work. Yet the experimental section compares only against MIPS, providing no head-to-head evaluation with these closely related methods. This makes it impossible to assess the claimed improvements over prior ML approaches.
 
-### Major:
-- **The paper overstates what is established about “solving” AC-OPF as an optimization problem.** The method is evaluated primarily through cost relative to MIPS, empirical inequality feasibility, and the custom “equality loss” metric in Eq. (7). That is useful evidence of approximate feasibility/quality, but it is not enough to support the strongest solver-style claims in the Abstract and Conclusion such as “solve the AC-OPF” and “outperforms traditional solvers.” In particular, the reported solutions can still have noticeable equality residuals and nontrivial cost gaps (e.g., 4.9% relative cost difference on IEEE30 in Table 1; 16 MW equality loss on IEEE118 in Table 2). The evidence supports “feasibility-oriented amortized approximation with fast inference” more clearly than “competitive AC-OPF solver.”
-- **The comparative evaluation is too narrow to substantiate broad competitiveness claims.** The paper compares only against MIPS, despite explicitly positioning itself against prior unsupervised / physics-informed AC-OPF learning methods in the introduction. For a paper arguing a field advance, comparison to only one conventional solver is not sufficient to establish relative merit, especially when many of the central claims are comparative (“more accurate,” “can compete,” “outperforms traditional solvers”).
-- **The interpretation of the MIPS comparison is too aggressive given the evidence provided.** Section 4.1 argues that PINCO is “physically more accurate” on IEEE24 and IEEE118 because MIPS has larger equality loss in Table 1. But the paper does not provide enough analysis to justify that conclusion. Since this claim hinges on Eq. (7), solver settings, and implementation details, stronger verification is needed before concluding that a mature solver is meaningfully worse on physical consistency.
-- **The generalization claims are broader than the experiments support.** The multi-demand setting in Section 4.2 samples loads uniformly within only 90%–110% of the reference case, using 500 total samples per system and train/validation/test splits from the same synthetic distribution. This supports interpolation within a narrow local demand box, not broad generalization across “a diverse set of loading conditions,” and not topology generalization. The paper also motivates GNNs partly by cross-topology flexibility, but each IEEE system is trained/evaluated separately rather than through a shared cross-topology model.
-- **The practical speedup story is incomplete because the paper mixes amortized and per-instance regimes.** Inference is fast, but Section 5 states training takes 10–24 hours. For the single-loading “solver” setting of Section 4.1, this is not a practically competitive alternative to a 0.2–0.3 s conventional solve. The speed advantage is only meaningful in an amortized setting over many future OPF instances, but that distinction is not made sharply enough in the claims.
+- **Anomalously high MIPS equality losses undermine baseline validity:** Table 1 reports MIPS equality losses of 6.5 MW (IEEE24) and 20 MW (IEEE118)—values that are orders of magnitude higher than expected for a standard interior-point solver on these well-studied benchmarks. MATPOWER's MIPS typically enforces power balance to near-machine precision. Either the metric calculation differs from standard practice, or there is an implementation issue in the evaluation pipeline. The explanation that MIPS "prioritizes cost over equality" is insufficient; this discrepancy requires investigation and clarification.
 
-### Minor
-- **Equation (7) is insufficiently justified and possibly ambiguously formulated.** The metric is presented as
-  \[
-  e_{loss} = \sum_{S \in \{P, Q\}} \sum_{i \in N} \sum_{j \in E} |S_i^{gen} - S_i^{load} - s_{ij}|
-  \]
-  which is not a standard nodal mismatch expression as written. Since several key conclusions depend on this metric, the paper needs to clarify exactly how branch terms are aggregated per node and why this definition is physically appropriate.
-- **The paper claims zero inequality violations but does not report the actual violation statistics in a transparent way.** The text says: “Our approach consistently achieves solutions with zero inequality constraint violations, rendering the need for an inequality violation-based metric unnecessary.” That is too dismissive; if this is a central contribution, the paper should explicitly report max/mean violation margins or counts rather than only asserting zero violations.
-- **The mechanism behind the zero-violation claim is not described crisply enough.** Section 2.2 presents the hPINN loss, but it remains unclear whether inequality handling is purely empirical through the augmented Lagrangian / penalty objective or partly enforced by output parameterization. Since the paper repeatedly emphasizes “without inequality constraint violations,” this distinction matters.
-- **The architecture description in the main paper is too high-level to support scientific interpretation of results.** Section 2.4 and Figure 1 are schematic; the main text does not clearly describe the specific graph operator, role of edge features, exact feedback implementation, or the design choices that matter most for performance. Even if full details are in the appendix/code, the main paper should expose the key modeling decisions.
-- **There is no ablation isolating what drives performance.** The paper combines several ideas—GNN structure, the hPINN/Augmented-Lagrangian training objective, masking, and node-splitting—but does not show which components are necessary. For example, it is unclear whether the benefits come mainly from the constrained loss, the graph inductive bias, or both.
-- **Reliability/stability is under-characterized.** The submission reports single results without variance across seeds or convergence diagnostics. For an unsupervised nonconvex training procedure, some evidence of stability would materially strengthen the paper.
-- **The multiple-demand results show substantial degradation in equality satisfaction, and the paper somewhat understates its importance.** Table 2 shows noticeable growth in equality loss versus the single-demand regime, particularly for IEEE24, IEEE30, and IEEE118. That does not invalidate the approach, but it does weaken the claim that the method generalizes strongly while still acting as a solver.
+- **"Zero violation" claim lacks quantitative substantiation:** The paper repeatedly claims zero inequality constraint violations (Abstract, Section 4) but provides no tolerance threshold or residual magnitudes. The H-PINN formulation (Eq. 5) uses penalty and augmented Lagrangian terms, which asymptotically drive violations toward zero but cannot guarantee algebraic satisfaction. For safety-critical power system applications, readers need to know: what is the maximum observed violation magnitude across all constraints and test samples?
 
-### Trivial
-- **The term “universal function approximator” is used too loosely in the experimental narrative.** The experiments demonstrate approximate interpolation over a narrow load range, not a meaningful empirical validation of universality in the usual sense.
+- **Limited test set size with no uncertainty quantification:** With 500 total samples and an 80/10/10 split, only 50 test samples are used for evaluation in the multi-demand experiments. No confidence intervals, standard deviations, or statistical significance tests are reported. For a problem with non-convex solution landscapes, this sample size is insufficient for reliable conclusions.
+
+- **Topology generalization claim is misleading:** The abstract states the method "can be easily adapted to different power systems with minimal adjustments to the hyperparameters," and the introduction claims GNNs enable handling "different topologies." However, experiments train separate models for each IEEE system with no demonstration of cross-topology transfer (e.g., train on IEEE30, test on IEEE118). The "adaptation" actually requires full retraining—standard practice, not a GNN-specific advantage.
+
+- **Critical architectural details missing for reproducibility:** Figure 1 shows a "feedback loop" connecting outputs back to GNN inputs, but the text never explains: How many iterations? What is the stopping criterion? Appendix A.1 containing hyperparameters is referenced but not provided. These gaps make reproduction difficult.
+
+- **Training cost undermines real-world deployment narrative:** Training requires 10–24 hours (Section 5), but this cost is never contextualized against the speedup benefit. If grid topology changes (new lines, generator retirements), retraining is required. A break-even analysis—how many inference calls amortize the training investment—would clarify practical applicability.
 
 ## Nice-to-Haves
-- Add direct comparisons to the most relevant learning-based AC-OPF baselines discussed in the paper, especially prior unsupervised / physics-informed methods.
-- Include an ablation study: GNN vs. non-graph model, augmented-Lagrangian vs. penalty-only, and effect of the node-splitting construction.
-- Test broader and more realistic demand variation, or moderate the generalization language accordingly.
-- Provide an amortized cost analysis showing how many OPF queries are needed before the training cost is recovered.
-- Add a cross-topology experiment if topology generalization is intended as a substantive claim.
-- Discuss infeasible-loading scenarios and how PINCO behaves when no feasible AC-OPF solution exists.
+
+- **Ablation studies on the H-PINN formulation:** Experiments isolating the contribution of the Augmented Lagrangian terms vs. simple penalty methods, and sensitivity analysis on the penalty schedule (β factor), would strengthen the methodological contribution.
+
+- **Larger-scale benchmarks:** Testing on systems beyond IEEE118 (e.g., IEEE300, Polish 2383-bus, or RTE cases) would substantiate claims about applicability to modern grid scales.
+
+- **Broader operating range evaluation:** The ±10% demand perturbation is narrow compared to operational dispatch requirements, which typically span ±30–50% and include stress scenarios. Demonstrating robustness under larger perturbations would strengthen the generalization claim.
+
+- **N-1 contingency evaluation:** The authors mention N-1 security as future work, but this is a fundamental operational requirement for AC-OPF; preliminary evaluation would significantly increase practical relevance.
 
 ## Removed Points
-These points are flagged to be removed, treat them with caution.
 
-- **Criticism that code/data availability or cited tools/models/benchmarks are unverifiable.** The paper cites and links these resources; questioning their existence or release status is not valid.
-- **Pure reproducibility nitpicks about omitted low-level hyperparameters or implementation details.** The paper explicitly points to Appendix A.1 and code for hyperparameters; while the main text could summarize key choices better, this is not a core scientific flaw by itself.
-- **Generic complaint that the paper should include confidence intervals because all ML papers should.** Variance reporting would help here because the method is nonconvex and unsupervised, but the absence of confidence intervals alone is not a decisive flaw.
-- **Overstated claim that the paper says it guarantees optimality.** The paper does not claim global optimality; in fact, it repeatedly compares against MIPS and frames results as approximate/competitive. The real issue is overclaiming solver competitiveness, not falsely claiming proven optimality.
-- **Formatting/style complaints from the extracted text.** Parser artifacts are not paper issues.
+*These points are flagged to be removed—treat them with caution.*
+
+- **"Training cost glossed over"**: The paper explicitly acknowledges 10–24 hour training in Section 5 (Limitations). While the amortization analysis is missing, claiming the cost is "ignored" is inaccurate.
+
+- **"Universal function approximator terminology is loose"**: The usage is consistent with common ML terminology for neural networks that learn mappings across input distributions. This is a minor quibble that doesn't affect technical correctness.
+
+- **"Contribution statement is just a description"**: Whether a stated contribution is sufficiently novel is reflected in the overall novelty assessment; identifying this as a separate weakness is redundant.
+
+- **Table numbering (Table 4.1 vs Table 1)**: This appears to be a parser artifact or minor inconsistency, not a substantive issue.
 
 ## Novel Insights
-The most interesting underlying tension in this paper is that its strongest evidence is for **amortized feasible operating-point generation**, while its rhetoric is aimed at **general nonlinear optimization solving**. PINCO appears potentially valuable precisely because it trades some optimality/equality accuracy for very fast inference and empirical inequality feasibility; that is a legitimate and possibly impactful point, especially in repeated-query settings. Framing the contribution more explicitly as an amortized, feasibility-aware neural surrogate for AC-OPF—rather than a broadly competitive replacement for traditional solvers—would make the paper’s empirical strengths look more coherent and credible.
+
+The most interesting observation emerging from the reviews is the tension between the method's two modes: as a "solver" for single loading conditions, PINCO achieves competitive equality losses but incurs slightly higher costs (0.6–4.9%); as a "universal function approximator" for multiple demands, equality loss degrades substantially (38× increase for IEEE30) while cost remains comparable. This trade-off suggests the physics-informed loss may struggle to simultaneously enforce power balance equality constraints and minimize generation cost when the network must generalize across diverse operating points. The paper does not analyze this fundamental tension—whether it stems from the penalty formulation's inability to prioritize equality constraints, or from local optima in the non-convex loss landscape.
 
 ## Suggestions
-- Reframe the core claim more narrowly and accurately: emphasize **fast amortized AC-OPF approximation with empirical inequality-feasible outputs**, rather than broad claims of solving/outperforming conventional AC-OPF solvers.
-- Clarify Eq. (7) carefully and verify the reported MIPS equality-loss numbers with a more transparent description of the evaluation pipeline.
-- Add at least one direct comparison to a prior unsupervised/physics-informed AC-OPF learning method and one ablation isolating the effect of the constrained-loss formulation versus the graph architecture.
-- Separate the two use cases more cleanly: single-instance optimization versus amortized multi-instance inference, including a simple break-even analysis for training cost.
-- Moderate the generalization and topology claims unless supported by stronger experiments beyond the current ±10% in-distribution perturbation setting.
-- Report explicit inequality-violation statistics (even if all zeros), along with worst-case equality mismatch and, ideally, seed-to-seed stability.
+
+- Provide maximum constraint violation magnitudes (not just binary satisfaction) across all test samples, with explicit tolerance thresholds for "zero violation."
+
+- Compare numerically against at least one prior ML-based OPF method (e.g., Owerko et al. 2022) on shared benchmark cases to establish relative performance.
+
+- Investigate and explain the anomalously high MIPS equality losses in Table 1, with verification of MATPOWER configuration and metric calculation.
+
+- Include the referenced Appendix A.1 with complete hyperparameter settings, network architecture details (layers, hidden dimensions), and feedback loop iteration parameters.
+
+- Add a break-even analysis quantifying how many inference calls are needed to amortize the 10–24 hour training cost compared to running MIPS repeatedly.
 
 # Actual Human Scores
 Individual reviewer scores: [1.0, 3.0, 1.0, 5.0, 3.0]

@@ -1,78 +1,44 @@
-=== CALIBRATION EXAMPLE 4 ===
+=== CALIBRATION EXAMPLE 3 ===
 
 # Final Consolidated Review
 ## Summary
-The paper studies zeroth-order nonsmooth convex optimization and stochastic multi-armed bandits under **symmetric heavy-tailed noise** with bounded \(\kappa\)-th moment for **any \(\kappa>0\)**, including regimes where the noise may have unbounded expectation. Its main idea is to use a component-wise median over repeated two-point gradient-difference samples to build an estimator that remains unbiased and has bounded second moment, enabling high-probability convergence rates that, in the key Lipschitz-oracle setting, match bounded-variance zeroth-order rates and yield \(\tilde O(\sqrt{dT})\) regret for MAB.
-
-This is a meaningful theoretical contribution: the paper identifies symmetry as the structural property that breaks the usual \(\kappa>1\) barrier and extends median-based robustness to zeroth-order optimization and bandits. However, the empirical side is materially weaker than the theoretical side, and several practical claims in the abstract/introduction are overstated relative to the evidence shown.
+The paper addresses zeroth-order optimization and multi-armed bandits under extremely heavy-tailed symmetric noise (κ > 0, including κ ≤ 1 where the mean may not exist). By combining median gradient estimation with clipping, the authors achieve convergence rates (Õ(d²ε⁻²) for optimization, Õ(√(dT)) for MAB regret) that match optimal bounds for bounded-variance settings, avoiding the degeneration of prior clipping-only methods as κ → 1.
 
 ## Strengths
-- **A nontrivial theoretical extension beyond the \(\kappa>1\) regime.** The paper explicitly targets the gap left by prior clipped zeroth-order methods whose rates deteriorate as \(\kappa\to 1\), and proves results for any \(\kappa>0\). This is central and substantive, not incremental.
-- **The oracle/noise modeling is genuinely tailored to exploit symmetry.** Assumption 3 is not just a rephrasing of standard heavy-tail assumptions: it is formulated on the distribution of the two-point noise difference \(\phi(\xi\mid x,y)\), which is exactly what enables median-based analysis. The paper also clearly contrasts this with prior oracle assumptions in §3.1.1.
-- **The key technical step is substantial:** Lemma 1 states that the medianized two-point estimator is unbiased and has bounded second moment despite potentially infinite first moment of the raw noise. If correct, this is the paper’s core conceptual advance and underlies the downstream optimization and MAB guarantees.
-- **The main rates are theoretically significant in the intended regime.** In particular, Theorem 1 gives bounded-variance-style rates for the Lipschitz oracle, and Theorem 3 gives \(\tilde O(\sqrt{dT})\) regret for stochastic MAB under symmetric heavy-tailed noise, matching the bounded-variance lower-bound scaling.
-- **The paper does a useful job delineating scope and limitations.** Section 6 explicitly acknowledges the symmetry assumption and the need to know \(\kappa\) to choose \(m\), which are real restrictions.
+- **Novel extension to κ ≤ 1:** Prior work required κ ∈ (1, 2], which fails when the noise has undefined mean. This paper handles symmetric Cauchy noise and similar distributions where even the first moment diverges—a genuine theoretical advance.
+- **Matching optimal rates under symmetry:** The key insight—exploiting symmetry via median estimators to recover variance-like convergence—is technically meaningful and yields rates matching the bounded-variance optimal rates.
+- **Unified treatment across settings:** The framework handles both unconstrained/constrained ZO optimization and MAB with consistent methodology, providing a versatile toolkit.
+- **Empirical validation in extreme noise regimes:** Figure 3 clearly demonstrates that median-based methods remain stable when κ ≤ 1 while baselines fail, validating the core claim about handling distributions with undefined means.
 
 ## Weaknesses
+- **Assumption 3 is not justified for the importance-weighted MAB estimator:** The MAB analysis (Theorem 3) relies on Assumption 3 holding for the importance-weighted gradient estimator ĝ_{t,i} = g_{t,i}/x_{k,i}. However, Assumption 3 is stated for the two-point oracle noise φ(ξ|x,y), not for importance-weighted estimators. The distribution of ĝ_{t,i} is a mixture—point mass at 0 with probability 1−x_{k,i} and a scaled continuous component—which is not obviously symmetric. The paper provides no justification that this mixture satisfies Assumption 3. This is a substantive gap in the MAB theoretical claims.
 
-### Major:
-- **The empirical evidence for the MAB contribution is not convincing, and Figure 1 appears inconsistent with the paper’s textual claim.**  
-  In §5.1, the only bandit experiment uses just **2 arms**, which is far too narrow for a contribution whose theorem is dimension-dependent and claims \(\tilde O(\sqrt{dT})\) regret. More importantly, the text says: “HTINF and APE do not have convergence in probability, while our Clipped-INF-med-SMD does,” but the displayed figure/caption indicates that **HTINF attains a much higher probability of selecting the best arm** than the proposed method. Even allowing for some ambiguity between “expected regret” and “best-arm identification,” the figure as presented does not support the stated conclusion. Since MAB is one of the paper’s three headline contributions, this mismatch matters.
-- **The real-world portfolio experiment does not validate the analyzed MAB setting.**  
-  §5.2 explicitly states that this task has **full feedback** (“we observe the whole income vector for each asset”) and that the authors **adjust** their method accordingly. That is not the same problem analyzed in §4, which is a stochastic MAB / bandit-feedback setting. The baselines there (“hold ETH” and Efficient Frontier) are also not the relevant heavy-tailed bandit baselines. This section is acceptable as an application vignette, but it is not meaningful evidence for the paper’s MAB theorem.
-- **The practical claims are broader than the experiments justify.**  
-  The abstract says the methods “do not lose to SOTA approaches and dramatically outperform them for \(\kappa \le 1\).” The evidence shown in the main paper does not support such a broad claim. For bandits, there is only a 2-arm synthetic study and an inapposite full-feedback portfolio example. For zeroth-order optimization, the main text reports only **3 launches** in §5.3, which is not enough to characterize behavior under heavy-tailed stochasticity, especially when the theory emphasizes high-probability guarantees. The empirical section is suggestive, but not strong enough to support the paper’s strongest practical messaging.
-- **The “matching bounded-variance rates” message is incomplete unless total oracle/sample cost is foregrounded.**  
-  The paper’s high-level presentation emphasizes iteration complexity, but each iteration costs \((2m+1)b\) oracle calls in Theorem 1 and \((2m+1)\) in Theorem 2, with \(m=2/\kappa+1\). Moreover, Lemma 1’s variance proxy contains factors like \((4/\kappa)^{2/\kappa}\), which become enormous as \(\kappa\to 0\). So the paper’s improvement is real at the level of asymptotic iteration dependence on \(\varepsilon\), but the practical cost for very small \(\kappa\) can still be severe. This does not invalidate the theory, but the current framing overstates the sense in which the method “matches bounded-variance rates.”
+- **Hidden constants blow up as κ → 0:** The variance bound in Lemma 1 has σ² ∝ (4/κ)^(2/κ) which diverges as κ → 0. The median size m = 2/κ + 1 also grows without bound. While the abstract correctly claims "any κ > 0," the practical meaning of this claim diminishes for small κ—the constants become arbitrarily large, and the per-iteration oracle cost grows as Õ(1/κ). The paper should explicitly acknowledge this limitation.
 
-### Minor
-- **The symmetry assumption is powerful but restrictive, and the paper’s defense of it is not fully persuasive.**  
-  The paper does acknowledge this in §6.1, but the argument that one can simply run several algorithms in practice does not really mitigate the theoretical narrowness of the assumption. The improvement here comes from changing the admissible noise class, not from improving guarantees under standard generic heavy-tail assumptions.
-- **MAB experiments are under-scaled relative to the theorem.**  
-  Using only \(d=2\) arms leaves the paper without empirical evidence for the claimed \(\sqrt d\) scaling advantage. A few experiments at larger \(d\) would substantially improve the paper.
-- **The zeroth-order experiments do not validate the high-probability nature of the theory.**  
-  Since the paper emphasizes high-probability results, empirical tail behavior across many runs would be much more appropriate than a small number of trajectories.
-- **There is some ambiguity/inconsistency in the experimental presentation around the median size \(m\).**  
-  In §5.3 the text says “For ZO-clipped-med-SSTM, the best median size is \(m=2\),” while later the tuning paragraph says the grid search range is \([3,5,7]\). This could be a notation/parser issue, but as extracted it is inconsistent and should be clarified.
-- **The method depends on knowing \(\kappa\) to set \(m = 2/\kappa + 1\).**  
-  The paper acknowledges this limitation, but it remains a real practical gap since \(\kappa\) is generally unknown.
+- **MAB experiment contradicts textual claims:** Section 5.1 states "HTINF and APE do not have convergence in probability, while our Clipped-INF-med-SMD does," but Figure 1's right panel shows HTINF achieving ~0.9 probability of best arm selection while the proposed method reaches only ~0.6. The text appears to claim convergence in regret (left panel), but the conflation with "probability" creates confusion about what the method actually achieves.
 
-### Trivial
-- The theorem-level distinction between the strongest result being in the **Lipschitz-oracle** setting versus the **independent-oracle** setting could be communicated more prominently in the introduction/summary claims. In Theorem 1, the independent-oracle case still carries a stronger noise-dependent term, so the bounded-variance-style message is most compelling for the Lipschitz-oracle regime.
+- **Assumption 3's generality is overstated:** The paper claims Assumption 3 "covers a majority of symmetric absolutely continuous distributions with bounded up to κ-th moments" without rigorous justification. The Cauchy-type tail bound in Eq. (4) imposes a specific algebraic form; the paper should provide examples of distributions that satisfy bounded κ-th moments but fail this density bound, or properly characterize the assumption's scope.
+
+- **Practical gap for unknown κ:** The optimal median size m = 2/κ + 1 requires knowing κ. For κ ≥ 1, the suggestion of m = 3 is reasonable, but for κ < 1—the regime where this method uniquely offers value—no adaptive mechanism exists. A practitioner facing unknown heavy-tailed noise cannot practically deploy the method at its theoretical optimum.
 
 ## Nice-to-Haves
-- Add experiments varying **dimension \(d\)** for both ZO and MAB, since the claimed rates are dimension-dependent.
-- Report **total oracle/sample complexity**, not only iteration counts, especially as a function of \(\kappa\).
-- Include at least one **asymmetric-noise experiment in the main paper**, since practical robustness outside exact symmetry is important and is currently deferred to the appendix/discussion.
-- Add an ablation on sensitivity to **median size \(m\)** and possibly clipping levels, since the paper claims \(m\) is not very sensitive in practice.
-- For MAB, include a more direct heavy-tailed clipping-based baseline if available in the cited setup, and evaluate at \(d \gg 2\).
+- **Dimension scaling validation for MAB:** Experiments use only d = 2 arms. Testing with d ∈ {10, 50, 100} would empirically validate the claimed Õ(√(dT)) scaling.
+- **Asymmetry robustness analysis:** Real-world noise often has skew. An empirical study of performance degradation under asymmetric noise would clarify practical applicability beyond the theoretical symmetry assumption.
+- **Adaptive median size mechanism:** A heuristic or theoretical approach for selecting m without knowing κ would significantly improve practical utility.
 
 ## Removed Points
-These points are flagged to be removed, treat them with caution.
-
-- **“The paper lacks standalone constrained ZO experiments, so Theorem 2 is unsupported.”**  
-  This is too strong. It is fair to say the constrained setting is not directly validated, but the paper does provide theory and some bandit-related constrained optimization evidence. This is a scope/coverage limitation, not a substantive flaw.
-- **Generic complaints about missing hyperparameters or reproducibility details.**  
-  The main issue is not missing low-level details; it is that the experiments shown are too narrow to support the strongest claims.
-- **Claims about unavailable/nonstandard baselines or cited methods.**  
-  Per instruction, criticisms questioning existence/release/availability of cited tools/methods are removed.
-- **Pure formatting/writing complaints.**  
-  The extraction has parser artifacts, and style issues are not central here.
+These points are flagged to be removed, treat them with caution:
+- **Dimensional scaling discrepancy for Theorem 1:** The critic claimed the new method has an extra factor of d in the deterministic term compared to baselines. Upon verification against Table 1, both methods have d^(1/2)M₂'/ε in the deterministic term for the Lipschitz oracle case, so this criticism does not hold as stated—the notation between M₂' and M₂ requires clarification but the scaling appears consistent.
+- **Portfolio experiment baseline criticism:** The Efficient Frontier is criticized as an unfair static baseline. This misses the purpose of the experiment: demonstrating practical applicability on real heavy-tailed data (cryptocurrency), not establishing SOTA in portfolio optimization. The comparison serves as proof-of-concept, not comprehensive benchmarking.
 
 ## Novel Insights
-The clearest synthesis across the reviews is that this paper is best understood as a **theory-first contribution whose main novelty is not merely “median is more robust than clipping,” but that symmetry in the *two-point oracle noise difference* is the precise structural lever that restores bounded-second-moment behavior in zeroth-order estimation even when raw moments may not exist**. That is the real conceptual spark. At the same time, the paper somewhat obscures its own strongest message by overselling practical superiority: the core result is a sharp separation between generic heavy-tail assumptions and symmetric heavy-tail assumptions, whereas the experiments mainly show promise rather than decisive practical dominance.
+The median-of-means approach has deep roots in robust statistics, but its systematic application to zeroth-order optimization under symmetric heavy-tailed noise—particularly achieving optimal rates without variance assumptions—is a genuine contribution. The insight that symmetry enables recovery of variance-like bounds even when variance is undefined (κ < 2) is theoretically meaningful. The interplay between the density bound (Eq. 4) and the moment condition deserves deeper analysis: not all symmetric distributions with bounded κ-th moments satisfy this specific Cauchy-type tail form, and characterizing the gap would strengthen the paper's foundations.
 
 ## Suggestions
-- **Tighten the empirical claims** in the abstract/introduction to match what is actually demonstrated. The theory appears stronger than the experiments; the paper should say so rather than oversell practical superiority.
-- **Fix the interpretation of Figure 1** and explicitly explain what metric is being shown and why the conclusion follows. As written, the text and figure seem at odds.
-- **Reframe §5.2 as an application demo**, not as validation of the MAB theorem, unless the authors add a true bandit-feedback real-world experiment.
-- **Add larger-scale MAB experiments** with more arms and stronger baselines aligned with the theory.
-- **Report total oracle complexity** including the \((2m+1)\) factor and discuss the practical effect of the \((4/\kappa)^{2/\kappa}\) constants.
-- **Increase the number of random runs** in ZO experiments and present empirical distributions / failure probabilities if the paper wants to emphasize high-probability guarantees.
-- **Clarify the median-size tuning inconsistency** around \(m\) in §5.3.
-- **Emphasize in the high-level summary that the strongest bounded-variance-style claim is for the Lipschitz-oracle setting under symmetry.**
-
-Overall, the paper looks **theoretically interesting and potentially significant**, with a real novelty in how symmetry is exploited in zeroth-order and bandit settings. The main obstacle is that the **empirical section does not yet carry the same level of credibility or support the breadth of the paper’s practical claims**.
+1. **Address the MAB theoretical gap:** Either provide a lemma proving that the importance-weighted gradient estimator satisfies Assumption 3 under the stated conditions, or modify the algorithm/analysis to handle the mixture distribution that arises from importance weighting.
+2. **Clarify MAB experimental claims in Section 5.1:** Explicitly state whether "convergence in probability" refers to regret or arm selection, and reconcile the text with Figure 1's right panel showing HTINF at ~0.9 probability vs. the proposed method at ~0.6.
+3. **Add explicit discussion of κ-dependence:** Acknowledge in the main text how the constants scale with κ and what practical range of κ the method is suited for, given the blow-up as κ → 0.
+4. **Provide κ-sensitivity experiments:** Show empirical robustness to misspecified m when κ is unknown, demonstrating that the method remains practical even without exact knowledge of the tail index.
 
 # Actual Human Scores
 Individual reviewer scores: [5.0, 6.0, 5.0, 6.0]

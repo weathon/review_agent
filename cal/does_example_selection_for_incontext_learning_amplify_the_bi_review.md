@@ -1,61 +1,71 @@
-=== CALIBRATION EXAMPLE 30 ===
+=== CALIBRATION EXAMPLE 19 ===
 
 # Final Consolidated Review
 ## Summary
-This paper studies whether demonstration/example selection for in-context learning changes the social bias profile of LLMs, focusing on gender and race bias in sentiment classification. It introduces a paraphrased bias-evaluation dataset derived from EEC, reports that example selection can increase worst-case bias across random seeds even when accuracy improves, and proposes ReBE, a prompt-tuning method with a demographic-aware contrastive objective intended to reduce such bias while preserving ICL performance.
+
+This paper investigates whether example selection for In-Context Learning (ICL) amplifies social biases in Large Language Models. The authors construct a new dataset (EEC-paraphrase) by paraphrasing the Equity Evaluation Corpus with GPT-3.5-Turbo, and across 8 LLMs and 4 example selection methods, find that while mean bias often decreases with example selection, the *maximum* bias values tend to increase. To mitigate this, they propose ReBE (Remind with Bias-aware Embedding), which uses contrastive learning with demographic-aware sampling to obtain bias-aware embeddings via prompt tuning.
 
 ## Strengths
-- **The paper isolates an underexplored failure mode of ICL selection: fairness tail risk rather than just mean performance.** Section 3.3 explicitly shows a nuanced pattern: example selection can reduce **mean** bias while increasing **maximum** bias across seeds, and Figure 2/Table 2 make this distinction concrete across multiple model families and four common selection methods. This is more specific and more useful than a generic “bias exists” claim.
-- **The empirical diagnosis spans a reasonably broad set of LLMs and selection strategies for the analysis phase.** The main analysis covers 8 LLMs and 4 example selection baselines, including random, similarity, perplexity, and DPP selection. For the core observational claim that seed-dependent selection can worsen worst-case fairness outcomes, this breadth is a meaningful asset.
-- **ReBE is a practical, parameter-efficient intervention that is designed to compose with existing ICL pipelines.** The method freezes the base LLM and learns virtual prompt tokens via prompt tuning, making it operationally lightweight relative to full fine-tuning. The compatibility angle is borne out at least partially by the DPP+ReBE and Random+ReBE results in Tables 3 and 5.
-- **The bias-contrastive construction is sensible and task-aware.** In Eq. (4), positives are samples with the same label but different demographic attribute, while negatives are samples with different label and the same demographic attribute. This directly targets the intended invariance structure rather than applying a generic contrastive loss.
-- **The paper does provide some mechanism-oriented analysis rather than only aggregate metrics.** Figure 3’s group-conditioned confusion matrices are useful for showing how the disparity manifests (e.g., sadness→fear asymmetry), and the ablation in Table 4 does support the claim that the fairness-accuracy tradeoff is driven by the proposed two-term objective rather than accuracy loss alone.
+
+- **Novel and important empirical finding**: The discovery that example selection for ICL can increase *worst-case* bias even while improving accuracy on average is a significant contribution that the fairness community should be aware of. The experiments across 8 LLMs (LLaMA-2-7/13/70B, OPT-6.7/13/30B, GPT-J-6B, GPT-neo-2.7B) and 4 example selection methods (Random, Similarity, Perplexity, DPP) provide solid empirical breadth.
+
+- **Clear problem formulation and analysis pipeline**: The paper systematically isolates potential sources of bias through the null-prompt experiment (Figure 4), attempting to separate the LLM's native bias from bias induced by example selection. The use of AvgGF, MaxTG, and MaxFG metrics is appropriate for capturing different aspects of fairness violations.
+
+- **Practical compatibility with existing methods**: ReBE is designed to work alongside existing example selection strategies rather than replace them. Table 5 demonstrates that DPP+ReBE achieves both higher accuracy (0.87) and lower maximum bias (MaxTG: 0.250 vs 0.273 baseline) compared to DPP alone, showing the method can improve fairness while maintaining task performance.
 
 ## Weaknesses
 
-### Major:
-- **The central claim “example selection for ICL amplifies the biases of LLMs” is overstated relative to the evidence.** The paper’s strongest empirical finding is that example selection often increases the **maximum** bias across random seeds, while Section 3.3 itself states that mean bias often decreases. That supports a narrower and important claim about **increased tail risk / seed sensitivity of bias**, not a blanket statement that example selection generally amplifies bias. The current framing conflates “worse worst-case outcomes under prompt/example variability” with “higher bias overall,” which weakens the scientific precision of the main contribution.
-- **The paper does not cleanly isolate the effect of *selection* from the effect of using ICL context at all.** Much of the headline argument compares selected-example ICL against zero-shot. That comparison establishes that adding demonstrations can change fairness behavior, but it does not by itself show that the *selection mechanism* is the causal driver, as opposed to ICL context, prompt length, or demonstration composition more broadly. The paper does include multiple selection baselines, which helps, but the claim “example selection amplifies bias” would be better supported by a more controlled attribution specifically to selection policy.
-- **The mechanistic claim that example selection “contributes to spurious correlations” is suggestive but not established at the level stated.** Section 3.4 uses one case study (OPT-6.7B) plus null prompts to argue that the observed asymmetry is not fully explained by native parameter bias. That is interesting evidence, but it falls short of demonstrating that example selection is the source of the spurious correlation in a causal or general sense. At most, the paper shows that some prompt-conditioned ICL behavior introduces or accentuates such correlations beyond what is visible from the null-prompt probe.
-- **The evaluation of ReBE is too selective to support the broad effectiveness claims made in the abstract and conclusion.** While the diagnosis stage uses 8 models, Section 5.1 evaluates debiasing only on “the two LLMs with the largest AvgGF in each baseline,” and excludes OPT-30B and Llama-2-70B. That is an understandable practical limitation, but it means the paper does not substantiate claims like “ReBE effectively mitigates biases of LLMs” or “is highly compatible with existing example selection methods” in a broad sense.
-- **ReBE’s empirical gains are mixed, and the paper does not confront those mixed results candidly enough.** Table 3 includes several cases where post-debiasing metrics worsen, especially under the Perplexity baseline, and some maximum metrics also increase. The text emphasizes the improved entries and the overall trend, but for a method paper the failure cases deserve direct analysis. As written, the claims are stronger than the evidence supports.
+- **Maximum vs. mean bias framing requires clearer justification**: The paper's central claim—"example selection amplifies the biases of LLMs"—relies specifically on *maximum* bias values, while Figure 2 clearly shows that *mean* bias typically *decreases* with example selection. This distinction is mentioned in Section 3.3 but not foregrounded in the abstract or introduction. Relying on maximum values over random seeds is methodologically fragile: if zero-shot evaluation uses fewer seeds than few-shot conditions, the comparison is asymmetric. The paper does not clearly explain what varies across seeds for zero-shot (since no examples are selected), making the baseline comparison unclear.
 
-### Minor
-- **The dataset contribution is useful but modestly validated in the main paper.** EEC-paraphrase is still built from EEC-style demographic substitutions and emotion statements, now paraphrased by GPT-3.5. That likely improves surface naturalness, but the main text does not fully establish the stronger claim that it “better” captures real-world bias phenomena beyond Appendix-based quality validation.
-- **Race-bias evidence is underexposed in the main paper despite being part of the stated contribution.** The paper repeatedly claims gender and race coverage, but the debiasing section in the main text focuses on gender, with race results moved to the appendix. This makes the main-paper support for generality across bias types weaker than the framing suggests.
-- **The reporting and metric presentation could be clearer.** Table 2 and Table 3 are hard to parse, and the signed fairness metrics are not always easy to interpret when the concern is disparity magnitude or volatility across seeds. This is not fatal, but it makes it harder to assess the claims precisely.
-- **The practical accuracy-preservation claim should be stated more carefully.** In several settings, accuracy drops after ReBE, and although some drops are small, the phrase “without significantly compromising accuracy” is stronger than what the mixed table entries justify unless backed by formal significance analysis.
+- **ReBE requires demographic attribute labels during training, a practical limitation not acknowledged**: Section 4.1 specifies that ReBE requires (x, y, s) where s is demographic information. In real deployment, obtaining ground-truth demographic labels is often impossible or ethically problematic. This constraint significantly limits practical applicability but is never discussed as a limitation.
 
-### Trivial
-- **The paper would benefit from clearer wording around what exactly is being claimed as novel:** bias amplification in the mean, amplification in the maximum over seeds, or increased fairness instability under example selection. These are not the same.
-- **A brief discussion of sensitivity to the tradeoff parameter \(\alpha\)** would improve usability, since \(\alpha\) is the core fairness-accuracy knob in Eq. (5)/(total loss), but this is more completeness than a core flaw.
+- **Inconsistent debiasing results undermine effectiveness claims**: Table 3 shows that ReBE *increases* average bias metrics for Perplexity-based selection: GPT-J-6B shows AvgGF +0.024, MaxTG +0.060, MaxFG +0.079 (red subscripts). Similarity-based selection shows MaxTG +0.047 increase for GPT-neo-2.7B. The abstract's claim that "ReBE effectively mitigates biases" overstates the evidence—results are inconsistent across selection methods, and the paper offers no explanation for these failures.
+
+- **Contrastive loss design (Equation 4) lacks justification for asymmetric negative set**: The bias-contrastive loss defines negatives as A(i) = {k: y_k ≠ y_i, s_k = s_i}—same demographic, different label. This asymmetrically excludes cross-demographic, different-label pairs from the negative set. Standard SupCon uses all non-positives as negatives. The paper provides no ablation on alternative negative set definitions to validate this choice.
+
+- **Race bias results relegated to appendix**: The paper prominently includes race as a key motivation and constructs EEC-paraphrase with race attributes, yet all race debiasing results are deferred to Appendix D.2. Given the paper's stated scope, these should appear in the main results.
+
+- **Large models excluded from debiasing experiments**: OPT-30B and Llama-2-70B are excluded due to hardware limitations, leaving the largest deployed models untested. The paper's claims about ReBE's effectiveness cannot be verified for models commonly used in practice.
+
+- **No statistical significance testing**: Bias comparisons rely on point estimates without confidence intervals or significance tests. The maximum bias metric is particularly vulnerable—single pathological seeds can drive results.
 
 ## Nice-to-Haves
-- Add a controlled experiment that separates **ICL with arbitrary/fixed demonstrations** from **ICL with strategically selected demonstrations**, to attribute the observed fairness change specifically to selection policy.
-- Expand ReBE evaluation to more of the 8 analyzed models, even if only smaller ones, to better support broad compatibility claims.
-- Report the race-bias debiasing results in the main text, not only the appendix.
-- Provide a sensitivity curve over \(\alpha\) to show the fairness-accuracy Pareto tradeoff.
-- Include a small qualitative analysis of selected prompts/demographic composition to help explain why some selectors have worse tail fairness behavior.
+
+- **Sensitivity analysis for the α hyperparameter**: While referenced in Appendix D.3, a brief treatment in the main text would clarify the stability of the accuracy-fairness trade-off.
+
+- **Comparison with standard debiasing methods**: The paper compares only against context augmentation baselines. Comparison with inference-time intervention or representation engineering methods would better position ReBE's contribution.
+
+- **Human validation of EEC-paraphrase**: Since the dataset is GPT-3.5-generated, human validation that bias signals were not inadvertently altered during paraphrasing would strengthen confidence in the benchmark.
 
 ## Removed Points
-These points are flagged to be removed, treat them with caution.
 
-- **Complaint that the paper lacks enough debiasing baselines from the literature.** I do not keep this as a core weakness because, based on the paper text, the authors explicitly state that there are no other debiasing methods specifically for ICL and compare against context-augmentation alternatives. Without external verification, it would be inappropriate to fault them for omitting unspecified prior methods.
-- **Pure formatting/style complaints about table notation.** The tables are indeed somewhat hard to read, but this is minor presentation friction, not a substantive scientific flaw.
-- **Reproducibility complaints centered on omitted low-level implementation details.** The paper provides code and enough methodological detail for a conference submission; demanding exhaustive hyperparameter minutiae would be disproportionate here.
-- **Strong endorsement of the null-prompt analysis as rigorous causal isolation.** Review 2 overstates this. The null-prompt probe is informative, but it does not truly isolate causality, so that strength was weakened rather than kept in full.
+*These points are flagged to be removed, treat them with caution*
+
+- **Weakness about "no dedicated limitations section"**: This is a formatting convention, not a substantive flaw.
+
+- **Weakness about the name "Remind"**: Naming choices are not methodological issues.
+
+- **Weakness about k=18 being unusually large for few-shot**: Figure 7 explicitly shows results across different k values, and the parameter analysis addresses this. The default was empirically chosen based on the accuracy-bias trade-off.
+
+- **Weakness demanding theoretical analysis of L_bias**: This is an empirical systems paper; theoretical proofs of disentanglement are not standard requirements.
+
+- **Request for human evaluation of dataset quality**: While valuable, human evaluation is not required for bias benchmark papers—the EEC original dataset already established the template-based approach.
+
+- **Criticism about "no explanation for ReBE failures on Perplexity"**: While the results show inconsistency, demanding an explanation for negative results is scope creep—the empirical observation itself is a valid finding.
 
 ## Novel Insights
-The most interesting synthesis across the reviews and the paper itself is that the work is strongest when interpreted not as proving a universal “bias amplification” law, but as uncovering a **fairness reliability problem in ICL**: example selection can make fairness substantially more unstable across prompt seeds, creating harmful worst-case outcomes even when average accuracy and even average bias look acceptable. This reframing is more precise, better aligned with Figure 2/Table 2, and potentially more significant than the paper’s current wording because it identifies a deployment-relevant risk mode that standard average-case evaluations would miss.
+
+Beyond the paper's own contributions, the distinction between *mean* and *maximum* bias reveals an important tension in fairness work: methods that improve average-case fairness may still create rare but severe fairness violations. The paper's focus on maximum bias is well-motivated from a worst-case fairness perspective, but the methodological asymmetry between deterministic zero-shot evaluation and stochastic few-shot evaluation (varying seeds) needs explicit resolution. If zero-shot has no seeds while few-shot has many, comparing maximum values is statistically invalid—the maximum of a distribution with more samples will tend to be higher regardless of whether the underlying distribution differs.
 
 ## Suggestions
-- Reframe the main empirical claim from broad “bias amplification” to **increased worst-case bias / fairness tail risk under example selection**, unless stronger causal evidence is added.
-- Tone down the mechanistic claim in the abstract and introduction from “example selection contributes to spurious correlations” to a more defensible statement such as “ICL with selected examples can induce or exacerbate group-specific error patterns consistent with spurious correlations.”
-- Expand ReBE evaluation beyond the selected worst-AvgGF models, or explicitly narrow the claimed scope of effectiveness.
-- Analyze the negative cases in Table 3 directly: identify when ReBE hurts and whether that correlates with selector type, model family, or baseline bias profile.
-- Add a controlled attribution experiment comparing zero-shot, fixed random-context ICL, and strategic selection ICL to distinguish the effect of **having context** from the effect of **how examples are selected**.
-- Surface at least one race-bias debiasing result in the main paper if race is part of the headline contribution.
-- Clarify in the writing that the paper’s strongest contribution is an **empirical diagnosis of fairness instability in ICL selection**, while ReBE is a promising but not yet comprehensively validated mitigation.
+
+- **Clarify zero-shot baseline methodology**: Explicitly state what varies across "random seeds" for zero-shot evaluation. If nothing varies, report mean and variance across multiple zero-shot runs (varying test subsets) or clearly state that zero-shot is deterministic and compare against the *distribution* of few-shot bias values (e.g., showing zero-shot is within the few-shot distribution).
+
+- **Acknowledge the demographic label requirement**: Add discussion of ReBE's training-time dependency on demographic attributes as a practical limitation, with potential workarounds (e.g., inferred demographics, synthetic data).
+
+- **Report statistical uncertainty**: Add confidence intervals or bootstrap standard errors for bias metrics, especially for maximum values. Consider comparing distributions via statistical tests rather than point estimates.
+
+- **Explain selection-dependent failures**: Investigate why ReBE fails for Perplexity-based selection but works for DPP and Random. This could reveal important interactions between example selection strategies and debiasing effectiveness.
 
 # Actual Human Scores
 Individual reviewer scores: [5.0, 3.0, 6.0]

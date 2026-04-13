@@ -1,79 +1,60 @@
-=== CALIBRATION EXAMPLE 29 ===
+=== CALIBRATION EXAMPLE 15 ===
 
 # Final Consolidated Review
 ## Summary
-This paper proposes PIN, an INR that replaces standard activations with Prolate Spheroidal Wave Functions (PSWFs), motivated by PSWFs’ classical optimal space-frequency concentration properties. The paper combines this activation design with a simple learnable affine modulation of the activation and evaluates it on image regression, 3D occupancy representation, inpainting, and a small NeRF setup, with generally promising empirical results but also substantial overclaiming and some important inconsistencies.
+
+PIN proposes using Prolate Spheroidal Wave Functions (PSWFs) as activation functions in Implicit Neural Representations, leveraging their optimal space-frequency energy concentration property. The authors argue that PSWFs' simultaneous localization in both spatial and frequency domains addresses limitations of existing INR activations (SIREN, WIRE, GAUSS) that struggle with balancing fine detail representation and smooth regions, and with generalizing to unseen coordinates in sparse reconstruction tasks. Experiments span image representation, 3D occupancy fields, image inpainting, and neural radiance fields.
 
 ## Strengths
-- **The activation choice is genuinely novel and technically well-motivated.** Using PSWFs as INR activations is a distinctive idea rooted in classical signal processing, and the paper clearly ties this choice to the space/frequency localization issues that matter in coordinate-based networks. This is more principled than many ad hoc activation proposals.
-- **The paper identifies a specific INR failure mode and targets it directly.** The discussion around preserving fine detail without injecting artifacts into smooth regions is concrete and reflected in the image regression examples (Figures 2–3), rather than merely claiming generic performance gains.
-- **Kodak image representation results appear meaningfully strong.** Among the experiments shown in the main paper, the Kodak image regression section is the most convincing: it evaluates over a dataset rather than a single exemplar, and the reported trend is that PIN consistently outperforms SIREN, WIRE, GAUSS, and ReLU+PE.
-- **The paper attempts to connect activation structure to expressivity rather than presenting a purely empirical tweak.** Theorem 1 is not sufficient to support all of the paper’s downstream claims, but the effort to analyze PIN as a polynomial in first-layer PSWF atoms is still a substantive contribution.
-- **The learnable activation modulation is practically useful.** Section 6’s use of \(\tilde{\psi}(x)=T\psi(wx)+b\) gives PIN some task adaptivity without requiring manual grid search over handcrafted activation parameters, which addresses a real nuisance in prior INR activations.
+
+- **Grounded theoretical motivation**: The use of PSWFs for optimal joint space-frequency concentration is well-founded in classical signal processing theory (Slepian-Pollak), providing a principled alternative to heuristically-chosen activation functions like sinusoids or Gabor wavelets.
+- **Consistent image representation improvements**: On the 24-image Kodak dataset (Figure 2), PIN achieves 36.00 dB PSNR compared to WIRE's 31.81 dB and SIREN's 33.10 dB, demonstrating substantial and consistent improvements across a reasonably-sized benchmark.
+- **Broad task coverage**: The paper evaluates PIN across multiple relevant tasks—image representation, 3D occupancy fields, image inpainting, and novel view synthesis—demonstrating the proposed activation's versatility beyond single-task optimization.
 
 ## Weaknesses
 
-### Fatal
-- **The paper’s central theoretical explanation is not technically supported as written.**  
-  After Theorem 1, the paper claims: “Since \(\psi\) is band-limited, and the convolution of band-limited functions is band-limited, then \(\Phi_\theta(\mathbf{r})\) is also band-limited.” This is not a valid general justification for the claimed localization mechanism. Even granting Theorem 1’s polynomial representation, the subsequent argument does not establish the strong conclusions the paper repeatedly draws about preserved band-limitation and rapid spatial decay of the full network output. Because the paper’s main novelty is not just empirical performance but the claim that PSWF optimal concentration *explains* superior expressivity/generalization, this unsupported theoretical leap materially weakens the core contribution.
+- **Contradiction between claims and data in inpainting experiments**: The abstract states PIN "significantly outperforms existing methods in various vision tasks that require INR generalization, including image inpainting," and Section 7.4 claims "PIN is the only architecture that maintains the highest PSNR value in both instances." However, Figure 5's table shows WIRE achieving 25.56 dB PSNR versus PIN's 23.18 dB on one inpainting experiment. The paper never clarifies which experimental protocol (70% random sampling vs. text mask) the reported numbers correspond to, creating ambiguity and an apparent contradiction between textual claims and presented data. This discrepancy must be resolved for the empirical claims to be credible.
 
-### Major:
-- **There is a direct inconsistency between the inpainting claims and the numbers shown in Figure 5.**  
-  The text says PIN is “the only architecture that maintains the highest PSNR value in both instances” and “the top image inpainting performer,” but the visible table under Figure 5 shows WIRE at **25.56 dB** versus PIN at **23.18 dB**. This is not a minor presentation issue: it undermines trust in one of the headline application claims. If the figure only reflects one of two settings, the paper needs to state that clearly; as written, the main-text claim is contradicted by the displayed results.
-- **The empirical evidence is too limited for the breadth of the paper’s claims.**  
-  The abstract and conclusion claim strong gains across image representation, 3D shapes, inpainting, novel view synthesis, denoising, and edge detection. But in the main paper, several of these are supported only weakly: occupancy uses only two shapes, NeRF uses only a single scene (“drums”), and denoising/edge detection are not shown in the main body at all. For a paper making broad superiority claims across INR tasks, the evidence shown is not commensurate with the scope of the claims.
-- **The NeRF evaluation is especially underpowered.**  
-  Section 7.5 evaluates on one scene with a vanilla NeRF and reports a small gain over GAUSS (25.70 vs. 25.21 PSNR). That is not enough to substantiate the paper’s strong claims about novel view synthesis, especially when no multi-scene averages or robustness evidence are provided.
-- **The paper does not isolate what actually drives the gains: PSWF itself or the added learnable activation modulation.**  
-  Section 6 introduces \(\tilde{\psi}(x)=T\psi(wx)+b\), but the experimental section does not cleanly disentangle the contribution of the PSWF shape from the contribution of this adaptive scaling/shifting. Since the paper explicitly criticizes prior methods for hyperparameter sensitivity, this matters: without controlled ablations, it remains unclear whether the gains are due to PSWF’s intrinsic properties or simply to giving the activation additional learnable flexibility.
-- **The practical cost of PSWF activations is not analyzed.**  
-  The method relies on numerical approximation of PSWFs rather than a simple closed-form activation such as sine or Gaussian. The paper provides no training-time, inference-time, or memory analysis. Since the claimed gains are modest in some settings and PSWF evaluation is plausibly more expensive, this omission limits the practical significance of the contribution.
+- **Missing computational efficiency analysis**: PSWFs have no closed-form expression and require numerical approximation via Legendre polynomial expansion. The paper provides no discussion of training time, inference cost, or memory overhead compared to SIREN (sinusoidal activations) or WIRE (Gabor wavelets). For INRs—where efficiency is a practical concern—this omission prevents readers from assessing the trade-off between performance gains and computational cost.
 
-### Minor
-- **Theoretical claims are overstated relative to what Theorem 1 actually proves.**  
-  Theorem 1 shows a polynomial-in-PSWF form under a polynomial approximation assumption for the activation. It does not by itself prove the stronger downstream claims repeatedly made in Sections 4–5 about superior localization/generalization behavior. The paper should state the theorem’s scope more carefully.
-- **The approximation assumptions in Theorem 1 are underspecified.**  
-  The theorem assumes PSWF can be approximated by a polynomial of degree \(K\), but the paper does not discuss the approximation regime, truncation error, or how this affects the claimed expressivity/localization conclusions.
-- **The PSWF-specific design space is not adequately ablated.**  
-  The paper uses PSWF of order 0 and discusses bandwidth-related properties, but the main paper does not analyze sensitivity to PSWF order, the underlying PSWF bandwidth parameter, or initialization of the learnable modulation parameters. The existing ablation mostly studies generic network hyperparameters instead.
-- **Some conclusions from qualitative examples are stronger than the evidence supports.**  
-  For instance, Section 7.2 claims PIN “can resolve this wide frequency spectrum challenge” based essentially on one example image. This is suggestive, but not sufficient to establish a general capability.
-- **Some experiments would benefit from more objective task-specific metrics.**  
-  In occupancy representation, the paper relies heavily on visual comparison when GAUSS has similar reported SSIM to PIN. If visual artifact reduction is a key point, more discriminative shape-quality metrics would strengthen the claim.
+- **No ablations on critical PSWF-specific design choices**: The paper uses only order-0 PSWFs throughout all experiments without justification or exploration of higher orders. The bandwidth parameter c, which fundamentally determines what "optimal" concentration means for PSWFs, is never discussed in the main text. Additionally, there is no ablation comparing the proposed adaptive formulation $\tilde{\psi}(x) = T\psi(wx) + b$ against fixed-parameter PSWF to validate that this adaptive mechanism is responsible for performance gains.
 
-### Trivial
-- **A few methods appearing in Figure 5 are not introduced in the main text.**  
-  C-INR and Susper appear in the inpainting figure but are not contextualized in the main narrative, which makes that comparison harder to interpret.
+- **Limited NeRF evaluation**: The novel view synthesis experiment evaluates only the "drums" scene from a single dataset, comparing against SIREN, WIRE, and GAUSS but omitting modern NeRF baselines such as Instant-NGP, TensoRF, or Mip-NeRF. A PSNR improvement of 0.49 dB over GAUSS on one scene is insufficient to establish robust advantages in this domain.
+
+- **Theoretical gap between motivation and claims**: The paper argues that better space-frequency concentration in activations leads to better generalization from partial observations (inpainting), but provides no theoretical justification for this causal link. Theoretical analysis (Theorem 1) shows that PIN outputs can be expressed as polynomials of the first-layer activations, but this result applies to any polynomial-approximable activation and does not uniquely characterize PSWFs or explain their empirical advantages.
 
 ## Nice-to-Haves
-- Add spectral analyses of reconstructed outputs, not just activation plots, to verify the claimed balance of low- and high-frequency preservation.
-- Include per-pixel error maps or region-wise analyses to support the claim that PIN improves both smooth areas and detailed areas simultaneously.
-- Discuss failure cases or regimes where PSWF activations are less advantageous.
-- Expand the robustness analysis across seeds if feasible, especially in settings where gains are small.
+
+- Comparison against modern NeRF architectures (Instant-NGP, TensoRF) to establish relevance beyond vanilla INR baselines
+- Ablation study on PSWF order (why only order 0?) and bandwidth parameter c sensitivity
+- Larger-scale NeRF evaluation across multiple scenes from standard benchmarks like Mip-NeRF 360
+- Wall-clock training time comparison to quantify the practical cost of PSWF numerical evaluation
 
 ## Removed Points
-These points are flagged to be removed, treat them with caution.
 
-- **Complaints about missing unrelated or external baselines (e.g., Gaussian Splatting, video diffusion methods, unspecified newer methods).**  
-  These are outside the paper’s stated scope as an INR-activation paper and/or rely on external knowledge not verifiable from the submission.
-- **Generic reproducibility complaints about omitted training details or hyperparameters in the main text.**  
-  For this kind of paper, such details may reasonably live in the appendix/supplement and are not themselves a core scientific flaw.
-- **Claims that the paper is invalid because some cited tools/methods are unavailable or unverifiable.**  
-  Per instruction, cited entities are assumed to exist.
-- **Purely generic praise such as “the paper is well-written” or “the topic is important.”**  
-  These were omitted because they do not identify specific strengths of this paper.
+These points are flagged to be removed, treat them with caution:
+
+- **"Theorem 1 is mathematically trivial"**: While the theorem is not groundbreaking, it does characterize the expressivity of the INR architecture. However, the weakness about the theorem not uniquely advantaging PSWFs is retained above.
+
+- **"SSIM contradiction invalidates the paper"**: Figure 3 shows PIN achieving higher PSNR (28.10 dB) than SIREN/GAUSS (26.18 dB) but lower SSIM (0.749 vs 0.862). This is an interesting observation that merits discussion but does not invalidate the results—PSNR and SSIM measure different aspects of reconstruction quality, and the paper does not claim uniform superiority on all metrics.
+
+- **"Polynomials are not band-limited"**: The critic's claim that polynomial approximation undermines the band-limited proof mischaracterizes the paper's argument. PSWFs themselves are band-limited; the polynomial approximation is for computational purposes, not theoretical replacement.
+
+- **"Missing modern NeRF baselines is a fatal flaw"**: This is a valid criticism for NeRF-specific contributions, but retained above as a weakness rather than rejection criterion since the paper's primary contribution is the activation function itself, not a NeRF architecture.
 
 ## Novel Insights
-The most interesting underlying tension in this submission is that the empirical story and the theoretical story are not equally strong. The paper may indeed have found a practically useful activation family for INRs—especially for image regression-like settings where balancing detail and smoothness matters—but the current manuscript over-attributes these gains to a propagation of PSWF optimal localization properties through the full deep network. A stronger version of this paper would likely succeed by narrowing and sharpening its claim: PSWF activations appear promising empirically and are plausibly motivated by localization theory, but the current proof machinery does not yet justify the stronger mechanistic narrative the paper adopts.
+
+The paper identifies a genuine phenomenon: existing space-frequency compact INR activations (Gabor/Gaussian) tend to focus on fine details at the expense of smooth regions, introducing noise-like artifacts. PSWFs' provably optimal energy concentration within finite bandwidth constraints offers a principled solution to this trade-off. However, the empirical evidence for this theoretical advantage is undermined by the inpainting data contradictions and limited NeRF evaluation, leaving the core claim plausible but not convincingly demonstrated.
 
 ## Suggestions
-- **Correct the Figure 5 inconsistency immediately.** Either the figure/table is wrong, the text is wrong, or the setup contains two cases that are not clearly separated. This must be reconciled.
-- **Substantially tone down the theory claims unless they are repaired.** In particular, revise the post-Theorem 1 argument about band-limitation/localization, and clearly distinguish what is proved from what is intuition.
-- **Scale the empirical claims to match the evidence, or add more evidence.** At minimum, multi-scene NeRF evaluation and clearer aggregation for inpainting/3D tasks would be needed to support the breadth of the abstract and conclusion.
-- **Add PSWF-specific ablations.** Analyze the effect of PSWF order, the underlying bandwidth parameter, and the learnable modulation \(T,w,b\).
-- **Isolate the source of improvement.** Compare fixed PSWF vs. learnably modulated PSWF, and if possible include equally modulated baselines to test whether the gains are due to PSWF specifically.
-- **Report computational overhead.** Even a simple wall-clock and memory comparison against SIREN/GAUSS/WIRE would materially improve the practical credibility of the method.
-- **Tighten the paper’s claims around significance and generality.** As written, novelty is solid, but technical soundness and empirical support do not yet justify the strongest statements in the abstract and conclusion.
+
+- **Correct the inpainting section immediately**: Audit Figure 5's table against the experimental protocols (70% random sampling vs. text mask). If the reported numbers show WIRE outperforming PIN, revise the text to accurately describe the results rather than claiming uniform superiority. If there are two experiments with different winners, report both sets of numbers clearly.
+
+- **Add computational efficiency metrics**: Report training time per 1000 iterations and inference time per image for PIN vs. SIREN, WIRE, and GAUSS on a standardized benchmark. This is essential for practical adoption.
+
+- **Provide PSWF implementation details**: State the number of Legendre polynomial terms used for PSWF approximation in the main text, and discuss any numerical stability considerations.
+
+- **Clarify the adaptive parameter scope**: Specify whether T, w, b are learned per-layer, per-neuron, or globally, and report their learned values or distributions across layers to demonstrate that meaningful adaptation occurs.
 
 # Actual Human Scores
 Individual reviewer scores: [6.0, 6.0, 6.0, 6.0]

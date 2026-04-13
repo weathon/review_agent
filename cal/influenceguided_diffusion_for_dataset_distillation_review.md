@@ -1,70 +1,50 @@
-=== CALIBRATION EXAMPLE 27 ===
+=== CALIBRATION EXAMPLE 12 ===
 
 # Final Consolidated Review
 ## Summary
-This paper proposes Influence-Guided Diffusion (IGD), a sampling-time method for dataset distillation that steers a pretrained or fine-tuned diffusion model toward generating training-effective synthetic images. The core idea is to connect dataset distillation to trajectory influence, then use an influence-based guidance term together with a diversity-promoting deviation term during diffusion sampling. Empirically, the method is quite strong: it consistently improves both vanilla DiT and Minimax across ImageNette, ImageWoof, and ImageNet-1K, including a reported 60.3% top-1 at IPC=50 on ImageNet-1K.
+The paper proposes Influence-Guided Diffusion (IGD), a method for dataset distillation that uses trajectory influence functions to guide the sampling process of pre-trained diffusion models without fine-tuning them. The framework combines influence guidance (steering generation toward training-effective data) with deviation guidance (ensuring diversity), achieving state-of-the-art performance on ImageNet-1K (60.3% at IPC=50).
 
 ## Strengths
-- **A genuinely useful reframing of large-scale dataset distillation as sampling-time controlled generation rather than pixel optimization or generator retraining.** This is a concrete conceptual shift, not just a rebranding: the method improves an existing diffusion model at inference time, and the paper shows it works both on raw DiT and on Minimax-tuned DiT.
-- **Strong and consistent empirical gains over the most relevant diffusion baselines.** The most convincing evidence is not against older pixel-space methods, but against DiT and Minimax. Across Table 1 and Table 2, IGD gives sizable improvements, often around 4–7 points, and those gains persist on ImageNet-1K.
-- **Clear evidence of complementarity rather than mere replacement.** IGD improves both pretrained DiT and Minimax-tuned DiT, and Minimax-IGD is usually best. That makes the contribution stronger than a baseline swap.
-- **Cross-architecture usefulness is better supported than in many distillation papers.** The paper evaluates distilled data on multiple unseen architectures (ResNet101, MobileNet-V2, EfficientNet-B0, Swin in Table 3), and IGD-based datasets generally remain superior there, which is important because the distillation objective should not only fit one training architecture.
-- **Ablations identify both guidance terms as materially useful.** Table 5 shows that both the influence term and deviation term matter, and their combination is strongest; this is especially helpful because the method could otherwise look like a monolithic heuristic.
-- **The paper includes some nontrivial analysis beyond headline accuracy.** The checkpoint-selection ablation (Table 6), surrogate-architecture study (Table 4), and early-stage guidance analysis (Figure 2) all provide actionable understanding of where the gains come from and how the method behaves.
+- **Novel methodological approach**: Using trajectory influence functions as guidance signals for diffusion sampling is innovative. Unlike prior diffusion-based distillation methods that fine-tune the generator (e.g., Minimax), this operates as a training-free sampling strategy on pre-trained models, offering a distinct paradigm for dataset distillation.
+
+- **Strong and consistent empirical improvements**: The method demonstrates consistent gains across ImageNette, ImageWoof, and ImageNet-1K datasets. Table 2 shows 60.3% accuracy at IPC=50 on ImageNet-1K, surpassing prior state-of-the-art RDED (56.5%). Tables 1 and 3 demonstrate robust cross-architecture generalization across ConvNet-6, ResNet variants, MobileNet-V2, EfficientNet, and Swin Transformer.
+
+- **Practical design choices with empirical validation**: The early-stage guidance strategy (Figure 2) and gradient-similarity-based checkpoint selection (Table 6) are empirically validated techniques that mitigate overfitting and improve efficiency. The ablation showing these choices improve over full-stage guidance provides actionable insights.
+
+- **Synergistic guidance combination**: The ablation in Table 5 confirms that combining influence and deviation guidance yields complementary benefits, with the combined approach (81.0%, 84.4%) substantially outperforming either component alone (76.5%, 78.2%).
 
 ## Weaknesses
+- **Misleading "training-free" framing in abstract**: The abstract claims the method works "without the need to retrain diffusion models," creating an impression of a purely sampling-time method. However, Section 4.1 reveals that training a surrogate ConvNet-6 on the full dataset for 50 epochs is required to collect checkpoints for influence calculation. This preprocessing overhead—potentially comparable to or greater than Minimax's fine-tuning cost—is not acknowledged in the framing and should be quantified.
 
-### Fatal
-- None.
+- **Ablation reveals diversity guidance as primary driver**: Table 5 shows that for raw DiT, deviation guidance alone (G_D only: 78.2% at IPC=50) substantially outperforms influence guidance alone (G_I only: 76.5%). While the paper acknowledges diversity's importance, the theoretical framing around influence functions may overstate their role relative to the diversity mechanism, which appears to be the stronger contributor to performance gains.
 
-### Major:
-- **The theoretical framing is stronger than what the paper actually establishes.** The paper presents a sequence of approximations from the dataset distillation objective to trajectory influence and then to the practical guided loss in Eq. (7). But several key steps are heuristic rather than derived guarantees. In particular, Section 3.2 says replacing synthetic-data checkpoints with real-data checkpoints is an “optimally equivalent target,” yet the stated equivalence only holds under the condition that the synthetic sample already reproduces the real training dynamics:  
-  > “This equivalence holds because these two targets converge to the same optimal solution when \( \mathbf{z} \) can provide the same training dynamics as \( \mathcal{T}_c \)...”  
-  That is a much weaker statement than practical equivalence. The method looks empirically effective, but the paper should present the influence connection as a motivated surrogate rather than a near-principled derivation.
-- **The central claim that trajectory influence is the key reason for the gains is not isolated strongly enough from simpler alternatives.** The paper shows that IGD improves accuracy, and Table 5 shows the influence term helps. However, it does not compare against simpler sampling-time guidance signals computed from the same surrogate machinery, such as plain classifier loss, confidence, gradient norm, or reranking/rejection based on surrogate trainability. Without such controls, it remains unclear how much of the gain is specific to the trajectory-influence formulation versus coming from a broader class of surrogate-gradient guidance methods.
-- **The ImageNet-1K headline claim is somewhat under-analyzed because the evaluation uses soft labels, but the contribution of that protocol is not disentangled.** Section 4.2 states:  
-  > “Following the evaluation protocol of the RDED, we employ a ResNet-18 model, trained on the original dataset, to generate soft labels for synthetic images.”  
-  This is a legitimate protocol choice and should not be treated as unfair by itself. However, because the headline large-scale result relies on this setup, the paper should better separate the gain from IGD itself versus the gain from the soft-label training protocol, e.g., by including a hard-label IGD result on ImageNet-1K or an explicit discussion of what exactly is being claimed as state of the art.
-- **The practical overhead is not quantified carefully enough for a paper motivated partly by efficiency.** The paper does say results can be obtained on a single RTX 4090 and explains that early-stage guidance reduces runtime, but it does not provide wall-clock cost, generation time per image, checkpoint-storage cost, or precomputation cost for the surrogate checkpoints and averaged gradients. Since the method avoids retraining the diffusion model but still requires training a surrogate and storing/using checkpoint gradients, a more explicit cost breakdown is needed to support the practicality narrative.
+- **Theoretical approximations insufficiently justified**: The derivation from Eq. 6 to Eq. 7 involves substituting class-specific checkpoints (θ^S) with full-dataset checkpoints (θ^T) and switching from dot product to cosine similarity. The paper claims these targets are "optimally equivalent," but this equivalence holds only at convergence (if z already provides optimal training dynamics), which is circular reasoning. The substitutions are presented as principled derivations when they are practical engineering choices.
 
-### Minor
-- **Several important design choices remain empirical, with limited sensitivity analysis.** These include the guided range \([A,B]\), the influence scale \(k\), deviation weight \(\gamma_t\), checkpoint similarity threshold, and surrogate architecture. Figure 2 studies \(k\) on ImageWoof, and Tables 4–6 help, but robustness across datasets/settings is not fully established.
-- **The deviation guidance is effective but conceptually simple and weakly justified.** Eq. (8) is nearest-neighbor cosine repulsion against previously generated latents. The ablation suggests it matters a lot, but the paper does not analyze whether this local heuristic is enough to ensure meaningful global diversity or whether the gains mostly arise from generic diversification.
-- **The connection between the global DD objective and the actual realized objective is narrower than the problem statement suggests.** Equation (1) is framed broadly in terms of preserving trainability for “any model initialized with parameters \(\theta_0\),” but the guidance is computed using one surrogate architecture and one training trajectory. The later cross-architecture results help empirically, but the paper should acknowledge this gap more directly.
-- **Ablation and analysis are concentrated on the smaller subsets rather than the main large-scale benchmark.** The paper’s strongest claim is on ImageNet-1K, yet the deeper analyses (component ablations, checkpoint selection, guidance schedule) are all on ImageNette/ImageWoof. This weakens confidence that the same mechanisms explain the main benchmark gains.
+- **Missing computational cost analysis**: Despite efficiency being a stated motivation, the paper provides no wall-clock time or FLOP comparison against Minimax or pixel-based methods. The overhead of computing backpropagation through the DDIM denoiser, decoder, and surrogate network at each guided step should be quantified to evaluate the efficiency claims.
 
-### Trivial
-- **The paper could discuss limitations more openly.** For example, Table 4 shows some architecture dependence in the surrogate used for influence, and Figure 2 shows guidance can overfit or degrade image quality when pushed too hard. These are useful findings, but they are presented mostly as tuning observations rather than explicit limitations.
+- **No ablation of guidance window [A, B]**: The choice of applying guidance in steps [30, 45] out of 50 DDIM steps is presented as a key practical contribution, yet no sensitivity analysis is provided. Given that this parameter controls the trade-off between guidance strength and generation quality, its absence from ablations is notable.
+
+- **Greedy diversity constraint**: The deviation guidance (Eq. 8) penalizes cosine similarity to only the single most similar previously-generated sample, not all pairs as stated. This greedy sequential approach depends on generation order and may not enforce the stated constraint effectively when many samples already exist.
 
 ## Nice-to-Haves
-- Add a direct comparison to simpler guidance baselines using the same surrogate, such as classifier-loss guidance, confidence guidance, gradient-norm guidance, or post-hoc reranking of vanilla samples.
-- Quantify the approximation gap behind Eq. (7) on a smaller setting where both synthetic-trajectory and real-trajectory versions are computable.
-- Report a full computational cost table: surrogate training, checkpoint filtering/precomputation, sampling cost per image, and total cost to build the distilled set.
-- Provide at least one ablation on ImageNet-1K itself, especially for the influence/deviation terms or the guidance schedule.
-- Analyze diversity more directly with quantitative within-class diversity/coverage metrics, not only accuracy and a t-SNE/Wasserstein visualization.
-- Include a hard-label ImageNet-1K result to disentangle the role of soft labels from the effect of IGD.
+- Wall-clock time comparison against Minimax and pixel-level methods to substantiate efficiency claims
+- Correlation analysis between computed influence scores (G_I) and downstream validation loss reduction to validate that the guidance measures training effectiveness
+- Comparison with alternative guidance methods (classifier guidance, energy-based guidance) to isolate whether gains come from the influence formulation specifically
+- Extension to other diffusion architectures (UNet-based) beyond DiT
 
 ## Removed Points
-These points are flagged to be removed, treat them with caution.
-
-- **“Missing related methods X/Y/Z”** — Removed because external completeness of related work cannot be verified here, and the review should not speculate about uncited papers.
-- **Generic reproducibility complaints about appendix hyperparameters or implementation details** — Weakened/removed as standalone criticisms. The main issue is not missing trivial details but the lack of sensitivity/cost analysis for method-defining choices.
-- **Claims doubting fairness because baselines may not have received equal tuning effort** — Removed in the strong form. The paper clearly compares IGD as an add-on to DiT and Minimax, and asymmetry that favors the baseline is not a valid criticism under the reviewing rules. The remaining valid issue is that the method has several tunable inference-time knobs whose robustness is only partially characterized.
-- **Overly broad criticism that evaluation is “narrow” because it only covers ImageNet-1K and two subsets** — Removed as overstated. For this topic, ImageNet-1K plus ImageNette/ImageWoof is already a meaningful and relevant evaluation suite, especially with cross-architecture testing.
-- **Complaints about formatting/parser artifacts or missing appendix text in the extracted PDF content** — Removed; not paper issues.
+These points are flagged to be removed, treat them with caution:
+- The citation of Fubini's Theorem being "unusual" for finite sums — this is a mathematical nitpick that does not affect the validity of the derivation
+- Theoretical concerns about Taylor expansion and mini-batch approximations being "well-known to break down" — these are standard approximations in influence function literature and empirically validated by the results
 
 ## Novel Insights
-The strongest reading of this paper is not “influence functions solve dataset distillation,” but rather that **sampling-time guidance can be a surprisingly powerful lever for distillation when the generator is already strong**. The empirical results suggest that a good portion of the remaining gap in diffusion-based distillation is not necessarily in retraining the generator, but in selecting which regions of the learned distribution to sample from. IGD’s success on top of both raw DiT and Minimax supports this interpretation. At the same time, the ablations indicate that training-effectiveness alone is insufficient: the large contribution of deviation guidance implies that avoiding redundant training signals is at least as important as promoting individually influential ones.
+The synthesis reveals that the paper's empirical contribution is substantial but the mechanism of improvement may differ from the theoretical framing. The ablation shows diversity enhancement is at least as important as influence guidance, suggesting the primary benefit comes from preventing mode collapse rather than optimizing for training influence specifically. The early-stage guidance finding—that applying strong guidance during semantic generation phases while allowing vanilla sampling for detail refinement—effectively avoids overfitting to the surrogate model and is a useful contribution for guided diffusion beyond dataset distillation.
 
 ## Suggestions
-- Recast the theoretical claims more carefully: describe Eq. (7) as a practical surrogate inspired by trajectory influence, not as an equivalence-derived objective.
-- Add a control experiment comparing influence guidance against simpler surrogate-based guidance signals.
-- Include a small-scale experiment directly measuring the gap between guidance computed from \(\theta_e^S\) and \(\theta_e^{\mathcal T}\).
-- Report end-to-end cost numbers so readers can judge the efficiency tradeoff against Minimax and other DD methods.
-- Add at least one ImageNet-1K ablation and one hard-label ImageNet-1K result.
-- Expand the discussion of failure modes, especially over-guidance, surrogate mismatch, and diversity limitations.
-
-
+- Quantify total computational cost (surrogate training + guided sampling) against baselines in GPU hours to enable fair efficiency comparisons
+- Add ablation for the guidance window [A, B] to justify the [30, 45] selection and provide guidance for other diffusion schedulers
+- Acknowledge surrogate training cost prominently in the abstract or introduction rather than burying it in implementation details
+- Consider analyzing the correlation between influence score and downstream accuracy across methods and datasets to validate the influence metric as a proxy for training effectiveness
 
 # Actual Human Scores
 Individual reviewer scores: [8.0, 6.0, 6.0, 6.0, 6.0]

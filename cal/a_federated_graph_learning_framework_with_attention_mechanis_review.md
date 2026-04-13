@@ -1,83 +1,58 @@
-=== CALIBRATION EXAMPLE 15 ===
+=== CALIBRATION EXAMPLE 11 ===
 
 # Final Consolidated Review
 ## Summary
-This paper proposes **FGL\_AC**, a federated graph classification framework that combines two ideas: (i) client-side spectral clustering as a preprocessing step, and (ii) server-side attention-weighted aggregation of client updates instead of plain FedAvg/FedProx. Experiments on MUTAG, ENZYMES, and PROTEINS under several partition settings report modest gains over FedAvg/FedProx variants.
+The paper proposes $FGL_{AC}$, a federated graph learning framework that combines client-side spectral clustering for data preprocessing with server-side attention-weighted aggregation. The goal is to reduce communication burden and improve model accuracy by selecting representative data subsets and adaptively weighting client contributions during aggregation.
 
 ## Strengths
-- **The paper tests heterogeneous partition regimes rather than a single toy split.** In Table 2 and the accompanying discussion, the authors evaluate balanced/unbalanced and overlap/no-overlap settings, which is more informative than evaluating only one federation scenario.
-- **The method combines two levers at different stages of the pipeline.** The design is not just “replace FedAvg with attention”: it attempts to improve both local data handling (via spectral clustering preprocessing) and server aggregation (via adaptive weighting), and the ablation figures are at least directionally consistent with both components helping.
-- **There is some evidence of empirical improvement over the chosen baselines.** Table 2 shows FGL\_AC often achieving the best accuracy and sometimes the best F1 among the listed GCN/SAGE + FedAvg/FedProx baselines, though the gains are uneven and sometimes small.
-- **The paper raises an intuitively meaningful hypothesis for federated graph learning:** not all client updates should contribute equally, especially under heterogeneous graph distributions. That intuition is plausible and worth exploring.
+- **Comprehensive data distribution settings:** The evaluation covers four distinct data distribution scenarios (balance/unbalance × overlap/no-overlap) across three TU benchmark datasets, which systematically tests robustness to data heterogeneity—a key challenge in federated learning.
+- **Ablation studies included:** Section 4.2 provides ablation experiments isolating the clustering component ($FGL_{AC}-C$) and attention component ($FGL_{AC}-A$), demonstrating that both contribute to performance gains on MUTAG.
 
 ## Weaknesses
+- **Critical undefined: graph representation for clustering.** The spectral clustering in Section 3.2 uses Euclidean distance $\|g_i - g_j\|_2^2$ (Eq. 1) between graphs, but graphs do not naturally reside in Euclidean space. The paper never defines how each graph $g_i$ is converted to a vector representation for distance computation. Without specifying the graph embedding method (e.g., Graph2Vec, WL kernel features, graph statistics), this preprocessing step is irreproducible. This is a fundamental methodological gap, not a minor omission.
 
-### Major:
-- **The clustering component’s claimed efficiency/communication benefit is not supported by the method as described.**  
-  This is a central issue because the abstract, introduction, and methodology repeatedly claim that spectral clustering “reduces the overall model training burden,” “improves communication performance,” and “reduces communication overhead.” However, Section 3.2 only describes clustering graphs and then says: *“Then the clustering results are mapped back to the space of the original solution, which is used as the input of the graph classification task.”* There is no defined mechanism showing reduced transmitted message size, fewer communication rounds, fewer local examples, graph coarsening for transmission, or any measured reduction in bandwidth/runtime/FLOPs. As written, this is a preprocessing step that may alter the input representation, but the paper does not substantiate the stronger systems-style claims attached to it.
+- **Critical undefined: client feature vectors for attention.** Equation 8 defines the attention mechanism using $c_i$ and $c_j$ described as "feature vectors of the current client and another client," but these are never defined. Are they the full model parameters $z_k$? Flattened weights? Gradients? Loss values? Learned embeddings? The computational feasibility of Eq. 8 depends entirely on what $c_i$ is—if it's full model parameters, concatenation and matrix multiplication may be prohibitively expensive. The method cannot be implemented as described.
 
-- **The core attention-based aggregation mechanism is underspecified at the level of the main contribution.**  
-  Section 3.3 is the heart of the paper, yet important pieces are missing or ambiguous. Eq. (8) defines a GAT-style attention score over client feature vectors \(c_i, c_j\), but the paper never clearly defines what these client-level features are, how model parameters \(Z_i\) are represented as \(c_i\), or how the attention parameters \(W\) and \(a\) are learned in the federated optimization loop. The text says weights are assigned *“according to the contribution to the server aggregation”* and elsewhere *“according to the different training effects of the clients,”* but no concrete mapping from training effect to attention input is provided. Eq. (9) then jumps to a weighted sum of client parameter sets. This leaves the paper’s main novelty insufficiently specified to evaluate technically.
+- **Vague mechanism for clustering-to-classification pipeline.** Section 3.2 states clustering results "are mapped back to the space of the original solution, which is used as the input of the graph classification task." This is opaque. How exactly do cluster assignments inform the downstream task? Are cluster labels used as auxiliary features? Are representative graphs selected? Is data reweighted? The central claim that clustering improves accuracy cannot be evaluated without understanding this mechanism.
 
-- **The connection between spectral clustering and the downstream graph classifier is unclear.**  
-  Section 3.2 does not explain how the clustering output is actually consumed by the GNN/classifier. The paper says each subgraph is treated as a point, clustered, and then the result is “mapped back” and used as input, but does not specify whether cluster assignments become graph features, whether representative graphs are selected, whether graphs are relabeled/reweighted, or whether the model trains on clustered prototypes. This is not a minor implementation omission: it is necessary to understand what the preprocessing actually changes and why it should help classification.
+- **Overstated abstract claims.** The abstract reports "improvement of 2.63%–4.03%," but Table 2 shows cases where $FGL_{AC}$ underperforms baselines (e.g., MUTAG balance-no-overlap F1: 83.55% vs. GCN-FedAvg 84.41%; PROTEINS unbalance-overlap F1: 33.50% vs. SAGE-FedProx 36.73%). The claimed range appears cherry-picked from favorable conditions without acknowledging unfavorable results.
 
-- **The experimental evidence is too limited for the breadth of the claims.**  
-  The evaluation uses only three datasets, appears to use only three clients throughout, and compares primarily to GCN/SAGE with FedAvg/FedProx. For a paper claiming a new federated graph learning framework with better training effect and reduced burden, this is not enough to establish robustness or generality. The paper also does not report variance across runs, statistical uncertainty, runtime, communication volume, or convergence-speed comparisons, despite making claims about burden/efficiency. This matters especially because some reported gains are small and some metrics are tied or inconsistent.
+- **Unmeasured efficiency claims.** The abstract and introduction claim clustering reduces "communication overhead" and "training burden," but no measurements of communication cost, wall-clock time, FLOPs, or convergence speed are provided. Spectral clustering has $O(n^3)$ complexity—whether it actually reduces total training cost is an empirical question the paper does not address.
 
-- **Some of the paper’s claims overstate what the reported results show.**  
-  The abstract claims improvements of “2.63% - 4.03% compared to other federated graph learning frameworks,” but Table 2 is more mixed: not all gains are in that range, and FGL\_AC is not uniformly best on every metric. For example, on PROTEINS under one unbalanced-overlap F1 row, FGL\_AC is worse than a baseline. Similarly, Section 4.3 concludes the method *“also has certain advantages for centralized model training,”* but the experiment mainly shows that clients participating in federation benefit from shared information compared with an isolated client; it does not establish a meaningful centralized-learning contribution.
+- **Inconsistent privacy claims.** Figure 2 explicitly labels "Differential Privacy" in the communication channel between clients and server, but Section 3 never describes any DP mechanism, privacy budget, or noise addition. Either the framework includes DP and the methodology is incomplete, or the figure is misleading.
 
-### Minor
-- **The novelty is incremental rather than strong by ICLR standards.**  
-  Spectral clustering as preprocessing and GAT-style attention for weighting are both established ideas; the contribution here is mainly their combination in a federated graph classification pipeline. That can still be publishable with strong execution, but the paper currently does not provide enough technical depth or evidence to elevate the combination into a compelling methodological advance.
+- **No statistical significance reporting.** Table 2 reports single numbers with no standard deviations, confidence intervals, or information about random seeds. The improvements are often 1–3 percentage points, which could easily fall within run-to-run variance.
 
-- **Ablation evidence is directionally useful but too narrow to isolate the proposed effects convincingly.**  
-  The ablations are only shown on MUTAG, only with accuracy curves, and do not investigate key design choices such as number of clusters, KNN parameter, scale parameter \(\psi\), or the structure of the attention mechanism. Since the paper’s contribution is exactly “clustering + attention,” stronger component analysis is needed.
+- **Limited experimental scale.** All experiments use exactly 3 clients—trivially small for federated learning evaluation. Real FL systems often involve tens to thousands of clients. Whether attention aggregation provides benefit at larger scale is unknown.
 
-- **The setup with only three clients is a poor stress test for a client-attention method.**  
-  A mechanism meant to adaptively weight heterogeneous clients is more convincing when demonstrated beyond a trivial small-client regime. With only three clients, the heterogeneity and scaling claims remain weakly supported.
+- **Terminology error.** The introduction states "Unlike European data governed by structural principles" (line 17), clearly meaning "Euclidean data." While likely a typo, it suggests insufficient proofreading for technical precision.
 
-- **Notation and algorithm specification are confusing in places.**  
-  For example, Table 1 uses \(L\) both for local iterations and Laplacian matrix, and Algorithm 1 omits crucial detail for the aggregation step. This is not just cosmetic: it contributes to the difficulty of understanding and reproducing the method.
+- **Notation collision.** Table 1 defines $L$ as both "quantity of local iterations" and "Laplacian matrix"—a basic inconsistency that should have been caught.
 
-- **Figure 2 suggests differential privacy, but the method does not describe or evaluate any DP mechanism.**  
-  Since the diagram explicitly labels communication with “Differential Privacy,” the absence of any corresponding methodological or experimental treatment is misleading and should be corrected.
-
-### Trivial
-- **The claimed degeneration to FedAvg is asserted rather than demonstrated.**  
-  The idea is plausible if attention weights become uniform, but the paper does not formally derive the equivalence under the actual update rule and weighting scheme.
+- **Ablation limited to single dataset.** Given that PROTEINS and ENZYMES show weaker or negative results for $FGL_{AC}$, ablation experiments on those datasets would be more informative than additional MUTAG conditions.
 
 ## Nice-to-Haves
-- Add sensitivity analyses for clustering hyperparameters (number of clusters, KNN \(k\), scale \(\psi\)) and show how clustering affects downstream accuracy.
-- Visualize learned client attention weights over rounds to demonstrate whether the mechanism learns meaningful non-uniform weighting or effectively collapses to near-uniform averaging.
-- Report per-client performance trajectories to support the claim that stronger clients help weaker ones through attention-weighted aggregation.
-- Strengthen Section 4.3 by comparing FGL\_AC against other FL methods under the same setup, rather than only contrasting federated participation with isolated local training.
+- Comparison with recent FGL-specific baselines (e.g., GCFL, FedSage, SpreadGNN) would better position the contribution within the FGL literature, though FedAvg/Prox baselines provide meaningful comparison.
+- Larger-scale graph classification benchmarks (e.g., OGB datasets) would strengthen generalization claims beyond small bioinformatics graphs.
+- Analysis of attention weight dynamics over training rounds would verify the claimed "adaptive" behavior.
 
 ## Removed Points
-These points are flagged to be removed, treat them with caution:
-
-- **Requests to cite or compare with specific external methods as a hard criticism.**  
-  Several reviews asked for comparisons to named methods or additional related work. It is reasonable to say the baseline set is limited, and that stronger/more directly relevant baselines would improve the paper. However, I am not turning “missing related work” into a standalone criticism, since that requires external verification beyond the submission.
-
-- **Pure reproducibility nitpicks about omitted appendix details or complete implementation specifics.**  
-  The real issue is not missing minor hyperparameters; it is that the main method itself is underspecified in core places (especially Section 3.3 and the clustering-to-classifier pipeline). Those substantive concerns are kept above.
-
-- **Any concern questioning the existence/availability of cited tools, models, datasets, or references.**  
-  Such criticisms are not valid grounds here.
+*These points are flagged to be removed, treat them with caution.*
+- **Harsh critic's claim that contributions are "not contributions":** Contribution 3 ("validating effectiveness through experiments") is indeed a validation claim, but this is standard paper structure—the contribution is the framework itself, with experiments supporting it. This criticism is overblown.
+- **Harsh critic's demand for theoretical proof of FedAvg degeneration:** The claim that $FGL_{AC}$ "degenerates to FedAvg" in worst case is informal intuition, not a formal theorem. While unsupported, it's not a critical flaw requiring proof.
+- **Demand for formal privacy analysis of parameter storage:** While the server accumulating historical parameters raises privacy concerns, this is noted but not a blocking issue for the current contribution scope.
 
 ## Novel Insights
-The most important synthesis across the reviews is that the paper’s main weakness is not merely “needs more experiments,” but a mismatch between **what is claimed** and **what is actually specified and validated**. The paper would be substantially stronger if reframed more modestly as an empirical combination of clustering-based preprocessing and adaptive aggregation for graph classification, rather than as a method that also reduces communication burden. Right now, the clustering piece reads like an input transformation with unclear downstream use, while the attention piece reads like a promising intuition without a complete federated learning formulation. That gap in specification, more than the incremental novelty alone, is what prevents the current submission from reading as technically solid at ICLR level.
+The paper's attempt to unify client-side data preprocessing with server-side adaptive aggregation addresses an important gap in FGL: most existing work focuses on one or the other. The conceptual framing that clustering can reduce client-side data burden before training (rather than during) is underexplored. However, the execution gaps (undefined embeddings and vectors) prevent evaluation of whether this framing is meaningfully realized.
 
 ## Suggestions
-- **Precisely define the attention aggregation pipeline.** State what \(c_i\) is, how it is computed from each client, how \(W\) and \(a\) are optimized, and whether the method produces one global model or client-specific personalized models.
-- **Explicitly describe how spectral clustering alters the training data or features.** A step-by-step mapping from raw graphs to clustered representation to GNN input is necessary.
-- **Either remove the communication-efficiency claims or support them with measurements.** Report communication bytes, rounds to convergence, runtime, and/or local computation cost.
-- **Expand experiments beyond three clients** and show that the adaptive weighting remains useful under more realistic client counts and heterogeneity.
-- **Report results across multiple random seeds** with mean and variance; otherwise many of the small gains in Table 2 are hard to interpret.
-- **Broaden and strengthen ablations** to cover clustering hyperparameters and the attention design itself.
-- **Revise Figure 2 or add the missing methodology** if differential privacy is meant to be part of the contribution.
-- **Tighten the claims in the abstract and conclusion** to reflect the actual evidence, especially where improvements are mixed rather than uniform.
+1. **Define the graph embedding explicitly:** Specify exactly how each graph $g_i$ is converted to a vector for computing Eq. 1. Cite the embedding method and discuss its computational cost.
+2. **Define $c_i$ for attention:** Clarify what "client feature vectors" means—full parameters, compressed representations, or learned embeddings—and justify the computational choice.
+3. **Explain the clustering-to-training pipeline:** Describe precisely how cluster assignments affect the downstream classification (selection, reweighting, or auxiliary features).
+4. **Remove or implement differential privacy:** Either add a complete DP mechanism with noise scale and privacy budget, or remove the claim from Figure 2.
+5. **Report statistical significance:** Include standard deviations across multiple runs and indicate number of random seeds.
+6. **Acknowledge and analyze unfavorable results:** Discuss why $FGL_{AC}$ underperforms in certain conditions rather than ignoring these cases.
+7. **Measure efficiency:** Provide actual communication/computation metrics to substantiate efficiency claims, or remove these claims from the abstract.
 
 # Actual Human Scores
 Individual reviewer scores: [3.0, 1.0, 3.0, 3.0]

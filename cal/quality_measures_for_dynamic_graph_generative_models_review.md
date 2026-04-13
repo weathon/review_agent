@@ -1,68 +1,67 @@
-=== CALIBRATION EXAMPLE 17 ===
+=== CALIBRATION EXAMPLE 3 ===
 
 # Final Consolidated Review
 ## Summary
-This paper proposes a scalar evaluation metric for continuous-time dynamic graph generative models based on two-stage random projections inspired by the Johnson–Lindenstrauss (JL) lemma. The method embeds variable-length per-node event histories and then aggregates node embeddings into a fixed-size graph representation, enabling cosine-distance comparison between whole dynamic graphs; the paper also introduces a perturbation-based benchmark for assessing CTDG metrics along fidelity, diversity, sample efficiency, and runtime axes.
+
+This paper proposes a novel evaluation metric for Continuous-Time Dynamic Graph (CTDG) generative models based on Johnson-Lindenstrauss random projections. The method encodes each node's temporal event sequence into a fixed-dimensional embedding via random projections, then aggregates across nodes to produce a unified scalar distance metric. The authors argue this overcomes limitations of existing snapshot-based metrics: i.i.d. assumptions between snapshots, lack of unified feature-topology sensitivity, and computational inefficiency from explicit snapshot instantiation.
 
 ## Strengths
-- **The paper isolates a real blind spot in current CTDG evaluation: sensitivity to joint topology/feature/temporal perturbations.** In particular, the event-permutation experiment is specific and compelling: topological baselines are insensitive because topology is preserved, and feature-marginal baselines are insensitive because the feature multiset is preserved, whereas the proposed JL-metric achieves a median Spearman correlation of **0.988** (Table 1). This is concrete evidence that the proposed representation captures some interaction between event content and temporal/topological context that the baselines miss.
-- **The paper contributes a reasonably coherent evaluation protocol for CTDG metrics rather than just a new score.** The fidelity/diversity/sample-efficiency/runtime framework is adapted carefully to the single-graph-many-events CTDG setting, and the perturbation suite is more thoughtful than a simple “add random noise” stress test: edge rewiring, time perturbation, event permutation, mode dropping, and mode collapse each target a different failure mode.
-- **The method is practically efficient relative to snapshot-based baselines, and the efficiency claim is supported by the design.** The use of structured random matrices instead of explicit dense projections is not just generic engineering: it directly supports the paper’s goal of avoiding explicit snapshot instantiation, and the reported runtime gap versus snapshot-based graph statistics is substantial (Table 1).
-- **The paper’s central practical goal—a unified scalar metric for CTDG comparison—is well matched to the proposed construction.** Existing baselines in the paper indeed fragment evaluation across multiple handcrafted statistics and separate feature-vs-topology measures, whereas the proposed metric yields one score from a single graph-level representation.
+
+- **Addresses a genuine methodological gap.** The paper correctly identifies that existing CTDG evaluation relies on discretizing continuous temporal data into snapshots, then applying i.i.d. assumptions that are violated for temporally dependent events. The proposed approach avoids snapshot instantiation entirely, which is both conceptually cleaner and computationally more efficient.
+
+- **Captures feature-topology interactions uniquely.** As shown in Figure 1 and Table 1, the JL-Metric is the only method with measurable sensitivity to "Event Permutation" perturbations (median Spearman correlation 0.988), where event features are permuted while preserving topology and marginal feature distributions. This demonstrates genuine capability to capture dependencies between topology and features that classical metrics miss.
+
+- **Computational efficiency demonstrated empirically.** Table 1 shows JL-Metric runs at 1.05 s/100 events compared to 8.41–11.99 s/100 events for snapshot-based topological metrics, confirming the theoretical complexity advantages of avoiding explicit snapshot construction.
+
+- **Comprehensive empirical framework.** The evaluation adapts established protocols from image and static graph domains (fidelity, diversity, sample efficiency, computational efficiency) across five datasets with multiple perturbation types, providing a thorough assessment of metric behavior.
 
 ## Weaknesses
 
-###: Fatal
-None.
+- **Variable-length projection may not satisfy JL distance-preservation guarantees.** The paper applies projection matrix $W_1^{M \times n}$ to node event sequences of different lengths by "ignoring unused rows of the matrix where necessary" (Section 3). This means nodes with fewer events are effectively projected by a different sub-matrix than nodes with more events. The JL lemma guarantees distance preservation for a *fixed* projection applied to all points in a set; using different effective projections for different nodes breaks this guarantee as stated. The claim that "JL embedding quality is agnostic to vector length" addresses comparing two vectors of equal dimension, not comparing embeddings derived from vectors of different dimensions via different projections. A formal argument or alternative formulation (e.g., consistent zero-padding) would strengthen the theoretical foundation.
 
-### Major:
-- **The paper does not validate its central claim as a metric for evaluating generative models, only as a metric sensitive to synthetic perturbations.** The title, abstract, and introduction repeatedly position this as a “quality metric for evaluating generative models of dynamic graphs,” but Section 4 evaluates only perturbed copies of real graphs, not outputs from actual CTDG generative models. This is a meaningful gap: monotonicity under controlled corruptions is useful, but it does not establish that the metric ranks real DGGMs sensibly, distinguishes stronger from weaker generators, or aligns with any downstream notion of sample quality. For a metric paper at ICLR, this missing validation materially limits significance.
-- **The representation discards important adjacency information, weakening the claim of jointly modeling graph topology and features in a general sense.** In Section 3, each node history is built from the time-ordered concatenation of events the node participates in, but the event representation is explicitly simplified to  
-  \[
-  \tilde c(t_i)=(t_i,\mathbf e_{\text{src,dst}}(t_i)),
-  \]
-  after “dropping the node identifier.” As written, this means a node embedding retains timestamp and edge-feature information for its incident events, but not the identity of the counterpart node in each interaction. That omission matters because partner assignment is central topological information. The experiments do show sensitivity to some topological perturbations (e.g., rewiring), so the method is not topology-blind; however, the paper’s stronger claim that it generally captures topology and feature-topology dependencies is overstated given that explicit neighborhood identity is removed from the formal representation.
-- **The JL-based conceptual justification is substantially weaker than the paper’s framing suggests.** Section 3 is explicit that the connection is a hypothesis (“we argue,” “we posit”), not a theorem, but the paper still leans heavily on JL as the conceptual reason the metric should work. The mismatch is that standard JL guarantees apply to a finite set of points in a common Euclidean space under one random linear map, whereas the method uses variable-length node histories, “ignores unused rows” of \(W_1\), and applies a second projection \(W_2\) across variable-size node sets. No target dynamic-graph distance is defined and no preservation theorem is proved for the actual two-stage construction. This does not make the empirical method invalid, but it does mean the main theoretical narrative is more speculative than established.
-- **The method’s handling of variable-length inputs raises unresolved theoretical and methodological questions.** The paper claims that “JL embedding quality is agnostic to vector length,” then uses a projection matrix \(W_1^{M\times n}\) where shorter vectors simply use fewer rows. That is not a standard statement of the JL lemma; more importantly, the paper does not analyze what similarity notion is preserved when different nodes/graphs effectively experience different truncated submaps. The same issue reappears in the second projection over varying numbers of nodes. Since this variable-size handling is core to the method, the lack of analysis is a substantive weakness rather than a minor missing proof.
-- **Permutation invariance over node ordering is not specified, even though the second projection depends on arranging node embeddings into a graph-level object.** Section 3 says each graph is transformed into \(\tilde{\mathcal G}=\{\tilde{\mathbf x}_1,\dots,\tilde{\mathbf x}_o\}\) and then compared by Frobenius cosine distance, but the paper does not clearly state how nodes are ordered before applying \(W_2\), nor why the resulting metric is invariant or robust to relabeling. For graph data, this is not a cosmetic detail: if ordering is arbitrary, the graph-level representation may depend on indexing conventions rather than structure.
+- **Node ordering sensitivity limits general applicability.** The second projection $W_2^{Z \times o}$ requires aggregating per-node embeddings into a matrix, then computing Frobenius cosine similarity. For this to yield consistent distances, nodes must be ordered identically across compared graphs. The paper does not address how this works when generated graphs have different node sets or different node identifiers than the reference graph—common scenarios in generative modeling. The metric in its current form is not permutation-invariant to node relabeling.
 
-### Minor
-- **The formal CTDG definition is narrower than the surrounding prose.** Section 2.1 says CTDG events can include node or edge creation/deletion and feature changes, but Equation (1) instantiates events only as timestamped directed edge events with edge features. This does not invalidate the experiments, but it weakens the paper’s generality claims about dynamic graphs more broadly.
-- **Some critiques of baseline metrics are stated too categorically.** For example, the paper says classical estimators such as KS/MMD “assume an i.i.d. relationship” and are therefore challenged in this setting. That concern is directionally reasonable, but the wording overstates the case: even if their formal interpretation is imperfect for temporally dependent descriptors, such distances can still be useful heuristics. The paper would be stronger if it distinguished “not statistically ideal” from “empirically ineffective.”
-- **The computational comparison is somewhat tilted toward the proposed method by evaluating snapshot baselines only at the Nyquist rate.** The paper does justify this choice as the lossless resolution, so this is not an unfair comparison in the usual sense, but it should be presented more carefully as a strong-form baseline regime rather than the only practically relevant one.
-- **The diversity benchmark depends on TGN embeddings to define modes, which introduces model dependence into an otherwise “application-agnostic” evaluation pipeline.** This is not unreasonable as a benchmark construction, but it should be acknowledged more explicitly.
+- **No evaluation on actual generative model outputs.** All experiments use synthetic perturbations of real graphs (edge rewiring, time perturbation, event permutation, mode dropping/collapse). There is no experiment evaluating actual outputs from CTDG generative models (TagGen, TIGGER, Dymond, TG-GAN) against independent quality criteria such as downstream task performance or human evaluation. A metric that responds well to synthetic perturbations may still fail to distinguish real generative model failures if those failures don't align with the perturbation types tested.
 
-### Trivial
-- **Cosine distance on the final graph embeddings is only lightly justified.** It is a reasonable default, but the paper provides little argument for why this is the right comparison operator beyond convenience and familiarity.
-- **Hyperparameter robustness for the embedding dimensions \(n\) and \(o\) is not analyzed in the main paper.** The paper mentions grid search in Appendix D, but the main text would benefit from at least a brief robustness summary given that these dimensions are central to the method.
+- **Missing random temporal GNN baseline.** The paper motivates its approach by connecting random neural network feature extraction (Thompson et al., 2022) to JL projections, but does not compare against a random temporal GNN baseline. A natural comparison would apply random weights to an existing temporal GNN architecture (e.g., TGN) and use the resulting embeddings for distance computation. Without this baseline, it's unclear whether the advantage comes from the JL formulation specifically versus simply using any neural embedding approach.
+
+- **Hyperparameter selection raises potential for data leakage.** Appendix D describes grid search over embedding dimensions $n$ and $o$. If this grid search uses the same datasets and perturbation experiments as the evaluation, the reported performance may be optimistic. For an "application-agnostic" metric, hyperparameters should either be fixed universally or selected on held-out data.
 
 ## Nice-to-Haves
-- Evaluate the metric on outputs from at least two actual CTDG generative models and show whether rankings align with expected model quality or with a reasonable consensus of existing metrics.
-- Add an ablation probing **temporal-order sensitivity** directly, e.g., shuffle event order within node histories while preserving event multisets.
-- Compare the second random projection \(W_2\) against simpler graph-level aggregations such as mean/sum pooling over node embeddings.
-- Provide per-dataset score-vs-perturbation curves in addition to aggregated violin plots, to expose dataset-specific failures or brittleness.
-- Clarify whether and how the method can incorporate richer event types, node features, deletions, or explicit counterpart-node identity without losing its efficiency advantages.
+
+- **Downstream task correlation:** Demonstrating that generated graphs ranked higher by the JL-Metric perform better on downstream tasks (e.g., link prediction, node classification) would strengthen the claim that the metric captures practically meaningful quality.
+
+- **Ablation on projection dimensions:** Including sensitivity analysis for $n$ and $o$ in the main text would improve confidence in robustness without requiring dataset-specific tuning.
+
+- **Handling graphs with different node counts:** A practical discussion of how the metric handles cases where generated graphs have vastly different numbers of nodes than reference graphs.
 
 ## Removed Points
-These points are flagged to be removed, treat them with caution.
 
-- **Claims imported from unrelated papers/reviews about node2vec-style walks, Transformers, temporal random-walk bias, or the paper “not even being about temporal generation.”** These do not correspond to the submitted paper and are factually inapplicable.
-- **Pure reproducibility complaints about omitted low-level implementation details or release status.** The paper provides a repository link and cites all referenced artifacts; such criticisms are not appropriate here.
-- **Generic strength claims such as “the paper is well-written” or “the topic is important.”** These are too generic to be meaningful strengths.
-- **Requests for statistical significance testing as a core flaw.** Confidence intervals or hypothesis tests would be useful, but for this style of empirical metric benchmark they are a nice-to-have rather than a substantive defect.
-- **Complaints that the comparison is unfair because baselines are expensive at the chosen snapshot resolution.** The paper explicitly evaluates static metrics at the Nyquist rate to avoid information loss; while this accentuates the efficiency advantage, the asymmetry does not favor the authors’ method in a way that invalidates the comparison.
+These points are flagged to be removed, treat them with caution:
+
+- **Likelihood-based methods dismissal:** The harsh critic notes the paper dismisses likelihood-based methods as intractable, suggesting diffusion-based or flow-based models may have tractable likelihoods. However, this is scope creep—the paper explicitly focuses on sample-based methods, which is a valid methodological choice.
+
+- **Theoretical justification for why random GNNs work:** The harsh critic notes the paper discusses random GNNs but doesn't use them, calling this "unnecessary scaffolding." While valid as a writing critique, the GNN discussion serves as motivational context for why random projections might work, not as a claimed contribution. The actual method directly applies random projections to event sequences.
+
+- **Single-sample distribution estimation:** The critic argues the single-sample approach cannot capture distributional diversity. However, the paper explicitly notes this is "common in the CTDG literature" due to stationarity assumptions, and the diversity experiments test sensitivity to structural perturbations within one graph—which is a valid design choice given field conventions.
+
+- **Frobenius cosine not being a proper metric:** The triangle inequality concern is technically valid but not central to the paper's claims, since the metric is used for ranking rather than metric-space operations.
+
+- **Multiple additional experiments requested by spark finder:** Many (trained embedding baselines, additional 2023-2024 baselines, differentiable loss function extension) are beyond the paper's stated scope of introducing a sample-based metric.
 
 ## Novel Insights
-The most important synthesis across the reviews is that the paper is strongest not as a theoretically grounded JL result, but as an empirical demonstration that **random-projection summaries of event histories can detect perturbations involving feature-topology coupling that standard CTDG metrics miss**. At the same time, the exact construction reveals a key conceptual limitation: by removing counterpart-node identity from each event, the method behaves more like a metric over **incident event streams per node** than a full dynamic-graph metric in the strict graph-theoretic sense. This suggests the paper’s true contribution is narrower and more precise than its framing: it offers an efficient scalar similarity measure for dynamic interaction traces, with promising sensitivity properties, but not yet a fully justified general-purpose quality metric for CTDG generative models.
+
+The connection between random neural network feature extraction (as in Inception Score, FID, and random GNN metrics) and the Johnson-Lindenstrauss lemma is an insightful theoretical contribution. While the extension to variable-length sequences breaks the formal guarantee, the core insight—that random projections can provide unified embeddings for dynamic graph data without training—deserves attention. The empirical finding that only the JL-Metric detects event permutation perturbations (where feature-topology relationships are altered but marginal statistics preserved) suggests that classical metrics fundamentally miss a class of generative failures that this approach captures.
 
 ## Suggestions
-- **Narrow or recalibrate the main claim** unless you can add stronger validation: present the method as an empirically effective CTDG similarity metric under perturbation-based evaluation, rather than fully established DGGM evaluation metric.
-- **Add experiments on actual generated graphs** from existing CTDG generators; even a small model-ranking study would substantially strengthen practical significance.
-- **Address the representation gap directly**: either incorporate counterpart-node identity into \(\tilde c(t_i)\) or explicitly discuss the resulting limitation and test adversarial rewiring cases that preserve per-node timestamps/features while changing partners.
-- **Clarify permutation handling and invariance** for the second-stage graph embedding. State the node ordering convention and test sensitivity to relabeling.
-- **Strengthen the theory section by downgrading claims or adding a formal proposition.** If a full theorem is out of reach, a careful statement of what the two-stage random map can and cannot be expected to preserve would still improve technical soundness.
-- **Include temporal-order ablations and \(W_2\) ablations** to demonstrate that the proposed architecture, not just random compression in general, is responsible for the reported gains.
-- **Be more precise about scope** in the CTDG formalism: specify whether the method currently handles only timestamped edge events with edge features, or general dynamic graphs with node features and deletion events.
+
+- Provide a formal specification (algorithm box) for handling variable-length sequences, clarifying whether zero-padding or sub-matrix selection is used and how this affects distance preservation properties.
+
+- Evaluate the metric on samples from at least one actual CTDG generative model, comparing the metric's rankings against an independent quality measure (e.g., likelihood on held-out events or downstream task performance).
+
+- Add a simple experiment using a random temporal GNN as a feature extractor to isolate whether the benefit comes from the JL projection specifically or from any random embedding approach.
+
+- Clarify how node ordering is handled when comparing graphs with different node sets, or acknowledge this as a limitation for the specific use case of comparing generated graphs to reference graphs with different node identities.
 
 # Actual Human Scores
 Individual reviewer scores: [8.0, 6.0, 8.0, 8.0]

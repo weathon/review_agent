@@ -22,6 +22,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from openai import APITimeoutError, AsyncOpenAI
 from pydantic import BaseModel
+from rank_bm25 import BM25Okapi
 
 load_dotenv()  # loads .env from cwd or parent dirs
 
@@ -37,8 +38,10 @@ ZAI_BASE_URL = "https://api.z.ai/api/coding/paas/v4/"
 #base_model = "qwen/qwen3.6-plus:free" #用限时免费模型白嫖
 base_model = "qwen/qwen3.5-flash-02-23"
 MODEL_HARSH = f"claude:claude-sonnet-4-6" #用claude subscription白嫖
-MODEL_NEUTRAL = "ollama:qwen3.5:397b-cloud"
-MODEL_SPARK = "ollama:qwen3.5:397b-cloud"
+# MODEL_NEUTRAL = "ollama:qwen3.5:397b-cloud"
+# MODEL_SPARK = "ollama:qwen3.5:397b-cloud"
+MODEL_NEUTRAL = "qwen/qwen3.5-plus-02-15"
+MODEL_SPARK = "qwen/qwen3.5-plus-02-15"
 MODEL_RELATED_WORK = f"{base_model}:online" 
 MODEL_FILTER = f"{base_model}"
 # MODEL_MERGER = f"zai:glm-5.1" #用zai coding plan白嫖
@@ -98,6 +101,156 @@ def _detect_leakage_warning_phrases(text: str) -> list[str]:
         if found:
             matches.append(found.group(0))
     return matches
+
+
+def _make_search_mcp_server(search_path: str):
+    from claude_agent_sdk import create_sdk_mcp_server, tool
+
+    abs_search_path = os.path.abspath(search_path)
+    all_files: list[str] = []
+    all_file_paths: list[str] = []
+    for root, _dirs, files in os.walk(abs_search_path):
+        for file_name in files:
+            if file_name.endswith(".txt") or file_name.endswith(".md"):
+                file_path = os.path.join(root, file_name)
+                with open(file_path, "r", errors="replace") as file_handle:
+                    all_files.append(file_handle.read())
+                    all_file_paths.append(file_path)
+
+    tokenized = [doc.split(" ") for doc in all_files if doc.strip()]
+    if not tokenized:
+        return None
+
+    bm25 = BM25Okapi(tokenized)
+
+    @tool(
+        "search_file",
+        "Search for a pattern in a directory using the BM25 index. Returns the top n matching files with their first 1000 chars.",
+        {"query": str, "path": str, "n": int},
+    )
+    async def _search_file_tool(args: dict) -> dict:
+        query = args["query"]
+        path = os.path.abspath(args["path"])
+        n = args.get("n", 5)
+        if path != abs_search_path:
+            print(f"  [search_file] WARNING: Attempt to search path '{path}' which is outside the indexed path '{abs_search_path}'")
+            return {
+                "content": [{"type": "text", "text": f"ERROR: Path '{path}' is not indexed. Expected: {abs_search_path}"}],
+                "is_error": True,
+            }
+        tokenized_query = query.split(" ")
+        doc_scores = bm25.get_scores(tokenized_query)
+        top_indices = doc_scores.argsort()[-n:][::-1]
+        results = []
+        for idx in top_indices:
+            file_path = os.path.abspath(all_file_paths[idx])
+            score = doc_scores[idx]
+            with open(file_path, "r", errors="replace") as file_handle:
+                content = file_handle.read()
+            results.append(f"{file_path}\nscore: {score:.2f}\n first 1000 chars:\n{content[:1000]}\n")
+        text = "\n---\n".join(results) if results else "No relevant files found."
+        return {"content": [{"type": "text", "text": text}]}
+
+    return create_sdk_mcp_server(
+        name="search",
+        version="1.0.0",
+        tools=[_search_file_tool],
+    )
+
+
+def _make_sandboxed_tools(allowed_paths: list[str]):
+    from claude_agent_sdk import tool
+    import glob as _glob_mod
+
+    resolved_allowed = [os.path.abspath(path) for path in allowed_paths]
+
+    def _check_path(path: str) -> str | None:
+        resolved = os.path.abspath(path)
+        if any(resolved.startswith(allowed_path) for allowed_path in resolved_allowed):
+            return None
+        return f"ERROR: Access denied. Path '{resolved}' is not under any allowed directory: {resolved_allowed}"
+
+    @tool(
+        "read_file",
+        "Read a file. Returns the full content with line numbers. Restricted to allowed directories only.",
+        {"abs_path": str, "start_line": int, "end_line": int},
+    )
+    async def _read_file(args: dict) -> dict:
+        print(f"  [read_file] requested: {args['abs_path']} (lines {args.get('start_line', 1)}-{args.get('end_line', 'end')})")
+        abs_path = args["abs_path"]
+        start_line = args.get("start_line", 1) or 1
+        end_line = args.get("end_line", 0) or 0
+        err = _check_path(abs_path)
+        if err:
+            return {"content": [{"type": "text", "text": err}], "is_error": True}
+        try:
+            with open(abs_path, "r", errors="replace") as file_handle:
+                lines = file_handle.readlines()
+            selected = lines[max(0, start_line - 1):end_line if end_line > 0 else len(lines)]
+            text = "".join(f"{start_line + i}: {line}" for i, line in enumerate(selected))
+            return {"content": [{"type": "text", "text": text}]}
+        except FileNotFoundError:
+            print(f"  [read_file] ERROR: File not found: {abs_path}")
+            return {"content": [{"type": "text", "text": f"ERROR: File not found: {abs_path}"}], "is_error": True}
+
+    @tool(
+        "grep_files",
+        "Search file contents for a regex pattern in a directory. Returns matching lines with file paths and line numbers. Restricted to allowed directories only.",
+        {"pattern": str, "directory": str, "file_glob": str},
+    )
+    async def _grep_files(args: dict) -> dict:
+        print(f"  [grep_files] requested: pattern='{args['pattern']}' in directory='{args.get('directory', '.')}' with glob='{args.get('file_glob', '**/*')}'")
+        pattern = args["pattern"]
+        directory = args.get("directory", ".")
+        file_glob = args.get("file_glob", "**/*")
+        err = _check_path(directory)
+        if err:
+            return {"content": [{"type": "text", "text": err}], "is_error": True}
+        matches = []
+        files = sorted(_glob_mod.glob(file_glob, root_dir=directory, recursive=True))
+        for filename in files[:500]:
+            file_path = os.path.join(directory, filename)
+            if not os.path.isfile(file_path):
+                continue
+            try:
+                with open(file_path, "r", errors="replace") as file_handle:
+                    for line_number, line in enumerate(file_handle, 1):
+                        if re.search(pattern, line):
+                            matches.append(f"{file_path}:{line_number}: {line.rstrip()}")
+            except Exception:
+                continue
+            if len(matches) >= 200:
+                break
+        text = "\n".join(matches) if matches else "No matches found."
+        return {"content": [{"type": "text", "text": text}]}
+
+    @tool(
+        "glob_files",
+        "Find files matching a glob pattern under a directory. Returns one path per line. Restricted to allowed directories only.",
+        {"pattern": str, "directory": str},
+    )
+    async def _glob_files(args: dict) -> dict:
+        print(f"  [glob_files] requested: pattern='{args['pattern']}' in directory='{args.get('directory', '.')}'")
+        pattern = args["pattern"]
+        directory = args.get("directory", ".")
+        err = _check_path(directory)
+        if err:
+            return {"content": [{"type": "text", "text": err}], "is_error": True}
+        matches = sorted(_glob_mod.glob(pattern, root_dir=directory, recursive=True))
+        text = "\n".join(os.path.join(directory, match) for match in matches) if matches else "No files matched."
+        return {"content": [{"type": "text", "text": text}]}
+
+    return [_read_file, _grep_files, _glob_files]
+
+
+def _make_sandboxed_mcp_server(name: str, allowed_paths: list[str]):
+    from claude_agent_sdk import create_sdk_mcp_server
+
+    return create_sdk_mcp_server(
+        name=name,
+        version="1.0.0",
+        tools=_make_sandboxed_tools(allowed_paths),
+    )
 
 # ── Prompt loading ────────────────────────────────────────────────────
 _PROMPTS_DIR = Path(__file__).parent / "prompts"
@@ -324,6 +477,7 @@ async def _run_reviewer_claude_sdk(
     from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, AssistantMessage, TextBlock
 
     paper_abs = str(Path(paper_path).resolve())
+    paper_dir = str(Path(paper_abs).parent)
     venue_line = (
         f"This paper was submitted to **{venue}**. "
         f"You MUST evaluate it against {venue}'s specific standards, acceptance bar, "
@@ -341,17 +495,24 @@ async def _run_reviewer_claude_sdk(
         f"issues, NOT problems with the paper itself. Do NOT treat formatting "
         f"artifacts as weaknesses.\n\n"
         f"The paper is located at: {paper_abs}\n"
-        f"Use the Read tool to read the paper file, then produce your review."
+        f"Use the read_file tool to read the paper file, then produce your review."
     )
 
     print(f"  [{name}] starting Claude Agent SDK ({model_id}) ...")
 
     result_text = ""
+    reviewer_fs = _make_sandboxed_mcp_server("reviewer_fs", [paper_dir])
     options = ClaudeAgentOptions(
         model=model_id,
-        cwd="./tmp",
-        allowed_tools=["Read", "Glob", "Grep"],
+        cwd=paper_dir,
+        allowed_tools=[
+            "mcp__reviewer_fs__read_file",
+            "mcp__reviewer_fs__grep_files",
+            "mcp__reviewer_fs__glob_files",
+        ],
         permission_mode="bypassPermissions",
+        disallowed_tools=["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
+        mcp_servers={"reviewer_fs": reviewer_fs},
         max_turns=30,
     )
     async with ClaudeSDKClient(options=options) as sdk_client:
@@ -562,6 +723,7 @@ async def run_scorer(
     from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, AssistantMessage, TextBlock
 
     cal_dir_abs = str(Path(cal_dir).resolve()) if cal_dir else ""
+    search_mcp = _make_search_mcp_server(cal_dir_abs) if cal_dir_abs else None
 
     # Write review and paper to temp files so the agent can Read them
     # (avoids CLI character limit on the prompt)
@@ -570,6 +732,10 @@ async def run_scorer(
     paper_path = tmp_dir / "paper.txt"
     review_path.write_text(review_text, encoding="utf-8")
     paper_path.write_text(paper_content, encoding="utf-8")
+    scorer_fs = _make_sandboxed_mcp_server(
+        "scorer_fs",
+        [cal_dir_abs, str(tmp_dir)] if cal_dir_abs else [str(tmp_dir)],
+    )
 
     scorer_agent_template = _load_prompt("scorer_agent.txt")
     prompt = scorer_agent_template.format(
@@ -585,8 +751,18 @@ async def run_scorer(
     options = ClaudeAgentOptions(
         model="claude-sonnet-4-6",
         cwd=cal_dir_abs or None,
-        allowed_tools=["Grep", "Read", "Glob", "Agent"],
+        allowed_tools=[
+            "mcp__scorer_fs__read_file",
+            "mcp__scorer_fs__grep_files",
+            "mcp__scorer_fs__glob_files",
+            "Agent",
+        ] + (["mcp__search__search_file"] if search_mcp else []),
         permission_mode="bypassPermissions",
+        disallowed_tools=["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
+        mcp_servers={
+            "scorer_fs": scorer_fs,
+            **({"search": search_mcp} if search_mcp else {}),
+        },
         effort="medium",
         max_turns=30,
     )

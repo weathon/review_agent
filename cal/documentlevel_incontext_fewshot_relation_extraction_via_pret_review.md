@@ -1,75 +1,47 @@
-=== CALIBRATION EXAMPLE 18 ===
+=== CALIBRATION EXAMPLE 5 ===
 
 # Final Consolidated Review
 ## Summary
-The paper proposes REPLM, a document-level relation extraction framework that reframes extraction as relation-conditioned in-context generation using pretrained LMs. Its main technical idea is to retrieve semantically similar distantly supervised documents, form multiple sets of in-context demonstrations, and aggregate predictions with similarity-based weights; experiments show this multi-set aggregation is consistently better than random or single-best-context prompting across several datasets and backbones.
+The paper proposes REPLM, a framework for document-level relation extraction using in-context few-shot learning with pre-trained language models. The method retrieves distantly-supervised examples based on semantic similarity, constructs multiple context sets, and aggregates outputs via a weighted probabilistic framework. The authors claim their approach eliminates the need for named entity recognition, human annotations, and fine-tuning while achieving state-of-the-art performance across six datasets.
 
 ## Strengths
-- **A genuinely distinct formulation of document-level RE.** The paper does more than swap in prompting for a standard classifier: it reformulates document-level RE as relation-conditioned triplet generation without an explicit NER pipeline, which is a meaningful departure from the dominant entity-pair classification setup described in Sec. 3–4.
-- **The multi-context aggregation idea is the strongest technical contribution, and it is empirically validated.** The key move in Eq. (1) is to aggregate over multiple sampled context sets rather than trust a single retrieved prompt. This is supported well in Table 2 and especially Table 5, where the complete framework consistently outperforms both random-context and single best-context variants across all six datasets and all listed backbones.
-- **The paper includes unusually broad within-paper validation of its own design choices.** Beyond headline results, it studies random vs. retrieved context selection, ordering/recency effects, backbone scaling, number of in-context examples, and a random-entity-name stress test. This gives credible evidence that the proposed framework itself, not just one prompt configuration, contributes to the observed gains.
-- **The random-entity-name experiment is insightful.** The perturbation in Sec. 8/Fig. 4b is a useful attempt to test whether the method is merely recalling memorized entity facts. The relatively small drop on CONLL04 suggests the system is using contextual extraction ability, not only entity memorization.
-- **The paper surfaces an important evaluation issue for generative RE.** Sec. 6.2 and the surrounding discussion highlight that exact-match evaluation against incomplete annotations can undercount correct generations. While the paper’s proposed remedy is not fully definitive, identifying this failure mode is valuable and relevant to the community.
+- **Novel task formulation:** Reformulating document-level relation extraction as in-context few-shot learning is genuinely novel. Prior ICL work for RE (GPT-RE, CodeIE) is explicitly sentence-level and does not scale to documents due to computational constraints—a gap the paper correctly identifies and addresses.
+- **Strong empirical breadth:** The evaluation spans six datasets (three document-level, three sentence-level), five LM backbones, and over 30 baseline methods. The ablation study (Table 5) cleanly isolates the contribution of semantic retrieval vs. aggregation across all backbone models.
+- **Practical flexibility:** The framework genuinely requires no fine-tuning and can incorporate new relations or new backbone LMs without retraining. The random entity experiment (Fig. 4b) provides evidence that the model learns extraction patterns from context rather than relying on memorized facts—performance drops only slightly (72.9 → 70.47 F1) when entities are replaced with novel names.
+- **Critical examination of benchmark quality:** The external KB validation (Sec. 6.2) identifies missing annotations in DocRED, a valuable contribution. However, see weaknesses for methodological concerns about this analysis.
 
 ## Weaknesses
-###: Fatal
-- **The paper’s headline “state-of-the-art” framing is not technically supported as stated for document-level RE.**  
-  The paper repeatedly claims broad SOTA performance in the abstract, Sec. 1, and Sec. 6, but its main DocRED comparison in Table 2 is restricted to REBEL/REBEL-sent because they “do not require named entity recognition pipelines.” That is a narrower comparison class than standard document-level RE on DocRED. The paper itself later shows in Table 4 that many prior document-level systems report much higher DocRED F1 than REPLM with the main open model used in Sec. 5–6 (e.g., DocRED-CLiP 68.13 vs. REPLM/GPT-JT 35.09). With GPT-4o, REPLM becomes competitive or slightly better in Table 4, but then the claim is no longer about the core method alone—it is entangled with a much stronger backbone. As written, the paper overstates what has actually been established.
-
-### Major:
-- **The empirical evidence does not cleanly separate gains from the REPLM method versus gains from stronger backbone LMs.**  
-  Table 4 is useful as a practical benchmark, but comparisons there mix method changes with very different foundation models. REPLM with GPT-4o does very well, but many baselines were built on older or smaller encoders and different training regimes. The ablations in Table 5 do show that the REPLM aggregation framework helps relative to simpler prompting variants, which supports the method locally; however, they do not establish broad superiority over prior RE methods under matched backbone strength or comparable compute budgets. This weakens the stronger methodological claims in Sec. 7.
-- **The “no human annotations” claim is overstated and should be narrowed.**  
-  The paper is correct that REPLM does not require human-annotated training documents for its main setup. However, the method still relies centrally on supervision in the form of a predefined relation inventory and distantly supervised document-triplet pairs from `D^dist` (Sec. 4.1), created via KB alignment. The more accurate claim is “no manually annotated task-specific training documents are needed,” not the broader formulation that the framework “circumvents the need for human annotations” in general.
-- **The external-KB evaluation in Sec. 6.2 is suggestive but not strong enough to support the paper’s strongest conclusions about mislabeled benchmarks.**  
-  The augmented ground truth is constructed by collecting relations proposed by systems and then validating them against Wikidata. This is proposal-limited: it can only recover missing positives that some system already generated. It is therefore not an independent reannotation of the benchmark. Also, from the main text alone it is not fully clear whether KB matching ensures that the relation is expressed in the document, rather than merely true in the world. The section supports the possibility of missing annotations, but the paper pushes the conclusion too far when it argues that REPLM “actually performs much better than the original labels” on this basis.
-- **The practical efficiency argument is incomplete and at times one-sided.**  
-  The paper criticizes fine-tuning for computational overhead and retraining cost, which is fair, but REPLM inference is also potentially expensive: the system runs relation-conditioned prompting, effectively per relation type, using multiple context sets and multiple in-context examples. On DocRED this means operating over a large relation inventory. Since efficiency and flexibility are central selling points, the paper should provide concrete cost/latency/API-budget analysis rather than only qualitative claims about baseline overhead.
-
-### Minor
-- **The probabilistic language in Sec. 4 is stronger than the method warrants.**  
-  Eq. (1)–(4) are best understood as a heuristic weighted aggregation scheme based on semantic similarity, not a principled probabilistic estimator of `p(s,o | d_i, r)`. This does not invalidate the method, but the presentation overstates the probabilistic grounding.
-- **The framework’s scalability in the number of relation types is not adequately analyzed.**  
-  Because REPLM is relation-conditioned, flexibility to add new relations comes with a cost: extraction appears to require running the process per relation. This is a real tradeoff relative to joint predictors, and the paper should discuss it explicitly.
-- **Failure-mode analysis is limited.**  
-  The paper gives plausible post-hoc explanations for weaker results on some datasets and discusses unlabeled true positives, but it provides little systematic analysis of where REPLM still fails—e.g., hallucinated triplets, relation confusions, or precision/recall tradeoffs induced by the thresholding scheme.
-- **The core scoring rule in Eq. (5) is hard to parse from the text provided.**  
-  The paper says it uses the exponent of average log probabilities, but the rendered formula is unclear. Since this scoring rule directly affects ranking, the final version should present it unambiguously in the main text or a clearly referenced appendix.
-
-### Trivial
-- **The paper should more carefully phrase the comparison to REBEL regarding dev-set use.**  
-  The sentence “REBEL was even fine-tuned on some samples of the dev set” is stronger than what is directly established in the text around it. If the intended meaning is model selection/early stopping on dev, it should be stated precisely.
+- **Factually incorrect SOTA claims:** The abstract claims "state-of-the-art results across six relation extraction datasets," but Table 4 contradicts this. On CDR, SAIS achieves 79.0 F1 vs. REPLM (GPT-4o) at 73.62; on GDA, SAIS achieves 87.1 vs. 74.11; on NYT, REBEL achieves 92.02 vs. 90.12. The paper incorrectly bolds REPLM scores as best in these columns. This is not a minor misstatement—it fundamentally misrepresents the empirical contribution.
+- **Unfair model-scale comparison:** The strongest REPLM results use GPT-4o, a closed-source frontier model with orders of magnitude more parameters than fine-tuned baselines (SAIS, ATLOP, SSAN use ~400M parameter models). The paper never asks: would fine-tuning GPT-4o beat REPLM? Would RAG + fine-tuning of a smaller model provide comparable results at lower inference cost? Without scale-controlled experiments, the SOTA claim reduces to "larger models perform better," which is not a methodological contribution.
+- **Missing computational cost analysis:** The paper criticizes fine-tuning for "large computational overhead" yet never quantifies REPLM's inference cost. For DocRED's 96 relation types, REPLM issues L LM calls per relation per document—potentially 96×L=1,920 calls for L=20. A single GPT-4o API call is expensive; this multiplicative cost must be compared against a single forward pass through a fine-tuned 400M model. The absence of wall-clock time, token usage, or cost metrics undermines the practical claims.
+- **Circular external KB evaluation design:** Section 6.2 augments ground truth by adding any predicted relation verifiable in Wikidata. Since REPLM predicts ~20 triplets per document vs. REBEL's ~4.93, the augmented set preferentially includes REPLM's outputs. The paper notes in footnote 8 that "the increase...does not necessarily imply an improvement in F1," but this caveat does not address the fundamental circularity: the evaluation metric is inflated by the method being evaluated.
+- **No precision-recall breakdown:** Tables 2 and 3 report only micro F1. Given that REPLM generates 4× more predictions than REBEL, understanding precision vs. recall is essential. A method that over-generates will improve recall at the cost of precision, and F1 alone masks this trade-off.
+- **One main variant uses human annotations:** The paper claims REPLM "eliminates the need for human annotations," yet REPLM (params adj)—one of the two main submitted variants—uses the human-annotated training set for hyperparameter selection (Sec. 5). This contradiction should be clarified or the variant renamed.
+- **Unjustified design choices in the method:** Equation 5 uses geometric-mean probability normalization (taking the length-th root of the product of token probabilities). This is non-standard; typical approaches use sum of log-probabilities or beam search. The paper provides no justification for why this normalization is appropriate. Additionally, K=5 in-context examples is used across all backbone models, but GPT-4o has a vastly larger context window than GPT-JT—why not use more examples when capacity permits?
 
 ## Nice-to-Haves
-- Report precision and recall alongside F1, especially since REPLM generates substantially more triplets per document than REBEL.
-- Add a more systematic manual audit of predicted false positives to quantify how many are genuinely correct-but-unlabeled versus unsupported.
-- Include a compact prompt template in the main paper, since prompt construction is central to the method.
-- Clarify the exact practical deployment regime: whether all relations are queried exhaustively, whether batching is used, and how this scales with larger schemas.
-- If space permits, separate claims about the framework itself from claims about what stronger modern LMs enable when plugged into it.
+- A controlled experiment where REBEL is trained on distant supervision only (matching REPLM's supervision), to isolate the contribution of the framework from the training data advantage.
+- Human evaluation of the "missing annotations" claim: manually validate a statistically significant sample of REPLM's false positives to determine whether they represent genuine DocRED annotation gaps or hallucinations.
+- Zero-shot and 1-shot ablations to show whether few-shot learning is necessary or if direct prompting would suffice.
 
 ## Removed Points
-These points are flagged to be removed, treat them with caution.
-
-- **Concern about unreleased/unverifiable models or tools.** Removed per instruction. The paper cites the models and tools it uses; existence/release-status objections are not valid here.
-- **Generic reproducibility complaints about missing implementation details.** Removed. The paper points to code and supplementary material, and the remaining issues are more about claim framing than missing trivial details.
-- **Criticism that the paper should include more related work beyond what is cited.** Removed because this cannot be verified here and is not needed to assess the core contribution.
-- **Claims that the paper only evaluates on one backbone or one setup.** Removed as factually incorrect: Sec. 7–8 report five backbones across six datasets.
-- **Concern that the method does not test transfer to new label spaces at all.** Weakened/removed as a core criticism: the paper’s stated scope is relation extraction on fixed benchmark schemas, though broader transfer would be a useful extension.
-- **Potential data contamination concerns between cited resources.** Removed as a main weakness because the current paper text does not provide evidence of leakage or duplicate-document contamination; this would require external verification.
+These points are flagged to be removed, treat them with caution:
+- **"Dataset contamination" concern:** The critic speculates about DocRED appearing in GPT-4o's training data, but this is unverified. The paper includes a random entity experiment showing performance holds on novel entities, which partially addresses memorization concerns.
+- **"Closed-world assumption" and hallucination:** While valid for LLM-based RE generally, this is not a specific weakness of REPLM's methodology beyond what any generative RE approach faces.
+- **"Research gap is incremental" criticism:** This is subjective and not substantive; applying ICL to document-level RE with a weighted aggregation mechanism is a distinct technical contribution.
+- **"Missing related work" claims:** Without external verification, I cannot confirm these references exist or are missing.
 
 ## Novel Insights
-The most important synthesis is that this paper is stronger as a **framework paper about relation-conditioned in-context extraction with robust prompt-set aggregation** than as a **benchmark-beating SOTA paper**. The technical core—retrieval plus multi-set aggregation—appears real and consistently useful, and the paper does a good job showing that this design transfers across datasets and backbones. The main problem is not that the method is weak; it is that the paper frames its contribution too broadly. A more defensible positioning would emphasize a new training-free document-level RE paradigm with competitive performance that improves substantially as backbone LMs improve, rather than claiming unconditional SOTA over the established DocRED literature.
+The random entity experiment (Fig. 4b) provides compelling evidence that REPLM learns extraction patterns from context rather than retrieving memorized facts. The F1 drop from 72.9 to 70.47 when using completely novel entity names is modest, suggesting the model generalizes structurally. However, a stronger test would randomize relation labels or use entirely novel domains to disentangle pattern learning from domain familiarity.
+
+The paper's investigation into DocRED's annotation gaps is methodologically interesting but requires human validation to be credible. Annotating a sample of false positives would distinguish genuine annotation omissions from model hallucinations—a distinction the paper asserts but does not prove.
 
 ## Suggestions
-- Reframe the central claim precisely: present REPLM as a **training-free, document-level, relation-conditioned RE framework** that is competitive in its setting, rather than broad SOTA for document-level RE.
-- Split empirical claims into two layers:  
-  1. evidence that the **REPLM framework** improves over simpler prompting/retrieval variants, and  
-  2. evidence that **plugging in stronger LMs** yields strong end-task performance.
-- Add a concrete inference cost analysis: number of LM calls per document, runtime, memory, and approximate API cost for the closed models.
-- Temper the “no human annotations” wording to “no manually annotated task-specific training documents” and explicitly acknowledge reliance on distantly supervised exemplars and a known relation schema.
-- Strengthen Sec. 6.2 by including a small independent manual validation of sampled false positives and clarifying whether KB-based augmentation verifies document support rather than just KB existence.
-- Provide a clearer discussion of the tradeoff introduced by relation-conditioned inference: easier extensibility to new relations, but potentially linear scaling in the number of queried relations.
-
+- **Correct all SOTA claims:** Revise the abstract and Table 4 to accurately reflect which datasets REPLM leads on (DocRED, CoNLL04, ADE) and where it trails fine-tuned baselines (CDR, GDA, NYT). Discuss why biomedical datasets (CDR, GDA) may favor domain-specific fine-tuning over general ICL.
+- **Add inference cost metrics:** Report wall-clock time and token usage per document for REPLM vs. fine-tuned baselines. This is essential for readers to evaluate the trade-off between training overhead and inference cost.
+- **Report precision and recall separately:** Given the ~4× difference in prediction volume, F1 alone is insufficient. Show the precision-recall trade-off.
+- **Fix the external KB evaluation:** Either (a) use an independent entity-linking pipeline to find missing annotations without relying on method outputs, or (b) have human annotators validate the augmented ground truth.
+- **Clarify the human annotation claim:** Either remove REPLM (params adj) from main results, or reframe the claim as "no human annotations for training, optional hyperparameter calibration."
 
 # Actual Human Scores
 Individual reviewer scores: [5.0, 6.0, 3.0, 3.0]

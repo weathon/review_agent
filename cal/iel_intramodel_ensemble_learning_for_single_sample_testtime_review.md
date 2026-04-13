@@ -1,85 +1,61 @@
-=== CALIBRATION EXAMPLE 14 ===
+=== CALIBRATION EXAMPLE 17 ===
 
 # Final Consolidated Review
 ## Summary
-The paper proposes Intra-model Ensemble Learning (IEL), a test-time adaptation method for the restrictive batch-size-1 setting. Given multiple pretrained classifiers, IEL selects, for each test sample, the model with the highest confidence among those predicting the majority-voted class, and uses that soft prediction as a target to update all ensemble members online. Experiments on CIFAR-10C, CIFAR-100C, and ImageNet-C show that this procedure can substantially improve a static ensemble and even improve individual constituent models on many corruption types.
+The paper proposes Intra-model Ensemble Learning (IEL), a test-time adaptation method that adapts an ensemble of pre-trained models using unlabeled data one sample at a time. IEL selects the ensemble member with highest confidence for the majority-voted class as a dynamic "teacher" and minimizes the cross-entropy between this soft target and all other members via backpropagation. Experiments on CIFAR-10-C, CIFAR-100-C, and ImageNet-C demonstrate accuracy improvements over static ensemble baselines across most corruption types.
 
 ## Strengths
-- **Targets a genuinely restrictive and practically meaningful setting:** the method is explicitly designed for single-sample test-time adaptation, where batch-statistics-based methods are less applicable. The paper is clear that it uses batch size 1 and freezes BN parameters “to ensure that we are not benefiting from updating batch normalization statistics on new data.”
-- **The dynamic teacher-selection rule is simple and specific:** rather than a fixed teacher or simple averaging, IEL chooses the most confident model among those supporting the majority class. This is a concrete mechanism that is easy to implement across heterogeneous models and is more interesting than a static voting ensemble.
-- **The paper demonstrates that adaptation can improve not only the ensemble output but also individual members:** e.g., Tables 1–3 show large gains for specific constituent models, especially on blur/compression-type corruptions, which is more distinctive than merely improving the ensemble vote.
-- **Empirical gains on ImageNet-C are substantial relative to the static ensemble baseline:** Table 3 shows consistent positive improvements across all listed corruption types, often with double-digit gains for both the ensemble and individual models.
-- **The paper is unusually candid about failure modes:** it explicitly notes catastrophic forgetting, acknowledges that performance can later decline, and states below Algorithm 1 that “in some experiments we found that the average model accuracy of the IEL ensemble reduced below the static model accuracy by the final epoch.”
+- **Practical single-sample setting:** The method operates with batch size 1, which is genuinely restrictive and relevant for real-world applications where batch statistics cannot be reliably estimated. The authors explicitly freeze BN layers to ensure adaptation comes from weight updates rather than batch statistics exploitation.
+- **Heterogeneous ensemble support:** IEL does not require identical architectures for ensemble members, demonstrating flexibility with combinations of ResNet, VGG, MobileNet, ShuffleNet, and RepVGG models (Tables 1-2).
+- **Dual improvement mechanism:** Unlike standard ensemble methods that only improve aggregate predictions, IEL shows that individual member models can improve during inference (Figure 2, Table 1), with some models gaining 15-20% accuracy on specific corruptions.
+- **Comprehensive corruption coverage:** Evaluation across 15 corruption types on three datasets (CIFAR-10-C, CIFAR-100-C, ImageNet-C) provides a thorough assessment of the method's behavior across diverse distribution shifts.
 
 ## Weaknesses
+- **No comparison to existing TTA methods:** The paper compares only against a static (unadapted) ensemble baseline. TENT, EATA, CoTTA, ROID, and TTT are all discussed in related work but none appear in experimental comparisons. Without comparing against single-model TTA methods configured for batch-size 1, it is impossible to determine whether IEL's gains exceed what existing methods would achieve under the same conditions. This is a critical omission for establishing contribution.
 
-### Major:
-- **The evaluation protocol does not fully support the paper’s practical TTA claims because results are reported as the best epoch chosen with labels after adaptation.**  
-  This concern is directly supported by the paper. Tables 1–3 are explicitly titled “Highest accuracy improvements (%) over all epochs,” and Section 3.1 states “No termination is required,” while also acknowledging that accuracy can later diminish. In a deployable test-time adaptation setting, the method needs a principled stopping rule or a fixed online evaluation protocol; otherwise, best-over-epochs reporting gives an optimistic upper bound rather than realized inference-time performance. This is the most important empirical issue because it affects the central claim of practical adaptation during inference.
+- **Cherry-picking by reporting best accuracy across epochs:** Tables 1-3 report "highest accuracy improvements over all epochs" rather than accuracy at a principled stopping point. The paper acknowledges accuracy can degrade below the static baseline at later epochs (Section 3.1, Figure 3), yet no termination criterion is provided. In practice, one cannot select the best epoch post-hoc without access to labels, making the reported numbers optimistic and not reproducible under realistic deployment.
 
-- **Baseline comparisons are too weak for the paper’s positioning as a TTA method.**  
-  In practice, the experiments compare only against static, non-adapted models/ensembles. The paper discusses TENT, EATA, ROID, and CoTTA in the introduction/related work, but does not evaluate against them or even against simpler adaptation baselines that would isolate the contribution of the proposed teacher-selection objective. As a result, the evidence supports the narrower claim that IEL can improve over a frozen ensemble under this protocol, but not the stronger claim that it advances the state of the art in single-sample or online TTA.
+- **Multi-epoch adaptation contradicts single-sample framing:** The method is motivated as fitting the "single sample" setting, yet experiments pass through 9,000+ samples per corruption type for up to 5 epochs (45,000 ordered samples total). This is fundamentally online mini-batch adaptation with batch size 1, not the restrictive "only one sample" setting described. The contrast with batch-based methods is therefore overstated.
 
-- **The experimental setting is narrower than the paper’s broader framing suggests: adaptation is done separately per corruption type with model resets, under stationary shifts.**  
-  Section 4 states that samples from a “single corruption type” are streamed, and after finishing one corruption, the models are reset and adaptation starts “from scratch on the new corruption type.” This is a legitimate experimental setting, and the paper does mention stationary shifts, but many of the broader claims around TTA and continual learning read more generally than what is actually validated. Because nonstationary or mixed-shift streams are where adaptation methods often fail, the current results should be interpreted as evidence for stationary, corruption-specific adaptation rather than general online robustness.
+- **Systematic failures on noise corruptions unexplained:** IEL produces negative results (catastrophic forgetting) on Gaussian Noise, Shot Noise, and Impulse Noise in CIFAR-10-C and CIFAR-100-C (Tables 1-2). The paper notes these failures but provides no analysis of why noise corruptions are problematic. Understanding failure modes is essential for practitioners to know when IEL should not be applied.
 
-- **The method’s conceptual framing around “diversity as a new optimization signal” is imprecise and somewhat misleading relative to the actual objective.**  
-  The paper itself says, “we minimize the diversity of the ensemble (we force models to agree with each other),” while the contributions claim it “proposes diversity as a new optimization signal.” The mechanism is better described as consensus-forcing or mutual distillation using pre-existing ensemble disagreement only to choose a teacher. This does not invalidate the empirical idea, but it weakens the conceptual clarity of the contribution and leaves the justification underdeveloped: why should reducing disagreement after teacher selection improve adaptation rather than amplify majority mistakes?
+- **Core design choice unvalidated:** The central design decision—selecting the highest-confidence model for the majority class as teacher—receives no ablation. Why not use the average ensemble softmax as the target? Why not the model with minimum entropy? This choice is asserted but not empirically justified.
 
-- **The paper does not sufficiently disentangle IEL from entropy minimization or other simpler pseudo-labeling effects.**  
-  The authors explicitly note that their chosen target is likely low-entropy and that IEL minimizes entropy “as a side effect,” with Figure 1 showing correlation between IEL loss and entropy. But the paper does not compare against straightforward alternatives such as entropy minimization on each member, self-training from the majority pseudo-label, or using an averaged soft target instead of the selected majority-confident teacher. Without such ablations, it remains unclear how much of the gain comes from the specific intra-ensemble learning mechanism versus generic confidence sharpening.
+- **Gradient flow through teacher unclear:** The loss function uses H(x) as the soft target, but the paper does not specify whether gradients flow through H(x) (the selected model's output) or if stop-gradient is applied. This distinction fundamentally affects what is being optimized and should be clarified.
 
-- **Failure modes are real and nontrivial, especially on noise corruptions, but are not analyzed in depth.**  
-  The CIFAR tables show sizable degradations for several corruption types, including Gaussian Noise, Shot Noise, and Impulse Noise, and the text acknowledges catastrophic forgetting. This honesty is appreciated, but the paper does not probe why these failures occur, whether they are tied to incorrect majority pseudo-labels, or whether simple safeguards could mitigate them. Since the method’s central risk is propagating confident ensemble mistakes, this deserves more direct analysis.
+- **No ablation studies:** Key questions remain unanswered: How does performance scale with ensemble size M? Does architectural diversity matter (ImageNet uses only ResNet variants)? What is the effect of learning rate? Without ablations, the method's sensitivity and requirements cannot be assessed.
 
-### Minor
-- **Absolute accuracies are not presented in the main result tables, only improvements over the static baseline.**  
-  This makes it harder to assess practical significance and compare performance across datasets/corruptions. Improvement-only reporting is useful, but it is not enough on its own for a methods paper.
-
-- **Computational cost is acknowledged but not quantified.**  
-  IEL requires forward and backward passes through multiple models at test time for every sample. The limitations section notes that the approach is more computationally expensive, but there is no runtime, FLOPs, or memory analysis to help judge whether the observed gains justify the overhead.
-
-- **Some key design choices are left underexplained or unablated.**  
-  Examples include the near-zero regularization constant (\(\alpha = 10e^{-11}\)), the choice to update the selected teacher as well as the students, and the sensitivity to ensemble size / architecture diversity. These do not make the paper unsound, but they leave the method under-characterized.
-
-- **The algorithm is underspecified for some edge cases such as ties in majority vote or ties in confidence within the majority class.**  
-  Since teacher selection is central to the method, these details should be made explicit.
-
-### Trivial
-- None.
+- **Small evaluation set for ImageNet:** The 90/10 split on a 7,000-sample subset yields only ~700 evaluation samples for 1,000 classes—fewer than one sample per class on average. This introduces substantial variance into accuracy estimates.
 
 ## Nice-to-Haves
-- Evaluate a more realistic nonstationary or mixed-corruption stream without resetting model weights between corruptions.
-- Add ablations on ensemble size, same-architecture vs mixed-architecture ensembles, and alternate target constructions (majority hard label, average soft target, KL instead of cross-entropy).
-- Report fixed-epoch results or use an unsupervised stopping criterion alongside best-epoch numbers.
-- Include a small set of learning curves on both successful and failing corruptions, plus simple diagnostics for when the majority vote is wrong.
-- Quantify test-time overhead with wall-clock/runtime and memory measurements.
+- Analysis of how often each model acts as the teacher (to verify collaboration vs. domination)
+- Calibration assessment (reliability diagrams) to check whether entropy minimization causes overconfidence
+- Computational efficiency metrics (latency, FLOPs, memory) comparing IEL to static inference and other TTA methods
 
 ## Removed Points
-These points are flagged to be removed, treat them with caution.
+*These points are flagged to be removed, treat them with caution.*
 
-- **Claim that the paper is “not true one-sample deployment” because it adapts over many samples.**  
-  Removed as a criticism of the single-sample setting itself. The paper’s claim is that each *update step* requires only one sample, not that adaptation consists of exactly one total sample. The valid issue is instead the best-epoch evaluation/stopping-rule problem.
+- **Title "intra-model" misleading:** The naming is a reasonable stylistic choice given the paper's framing of models learning "from each other" within the ensemble. The criticism is semantic and not substantively problematic.
 
-- **Criticism that “all trainable parameters” is false because BN parameters are frozen.**  
-  Removed as a strawman. The paper clearly states BN parameters are frozen during testing; this is an implementation choice, not a contradiction that undermines the method.
+- **"Diversity as new optimization signal" contradiction:** While the reviewer notes the method minimizes diversity rather than using it as a signal, the paper itself acknowledges this explicitly ("by minimizing it we force members to agree"). The framing could be clearer but is not factually incorrect.
 
-- **Reproducibility-style complaint about missing low-level implementation details.**  
-  Removed because the paper provides the core algorithm, model sets, datasets, and optimization setup, and this line of critique would be a routine nitpick rather than a substantive weakness here.
+- **"Solid step forward in understanding human collaboration" claim:** This is vague marketing language in the contributions section, not a substantive technical claim. While unnecessary, it does not constitute a core weakness.
 
-- **Strong novelty attacks based on unspecified external related work.**  
-  Removed because they depend on outside literature claims that cannot be verified from the submission alone. The retained novelty concern is limited to the paper’s own framing versus its actual mechanism.
+- **Human collaboration analogy consuming space:** The analogy is a reasonable pedagogical device. Criticizing its presence is a stylistic preference rather than a weakness.
+
+- **Regularization constant α = 10e⁻¹¹ unexplained:** The paper states this "effectively makes our learning rate even smaller." While unusual, this is a minor hyperparameter detail, not a core flaw. The more important unexplained design choice is the teacher selection mechanism.
+
+- **Freezing BN not ablated:** While ablations would strengthen the paper, this design choice is reasonable and explicitly motivated (ensuring adaptation comes from weight updates). Requesting ablations for every design decision is scope creep.
 
 ## Novel Insights
-The most interesting signal in the submission is not just that an ensemble can outperform a static ensemble under shift, but that **mutual online adaptation can materially improve the constituent models themselves**, especially on structured corruptions like blur and compression, while failing much more on stochastic noise corruptions. That asymmetry suggests IEL may be leveraging cross-model agreement to recover stable structure under semantically preserving shifts, but becomes brittle when the majority pseudo-label is itself unreliable. Framed this way, the key research question is less “does reducing diversity help?” and more “when does consensus among heterogeneous pretrained models provide a trustworthy adaptation target under shift?”
+Beyond the paper's own contributions, the results reveal an interesting asymmetry in TTA difficulty: IEL shows substantial gains on blur-type corruptions (Defocus, Glass, Motion, Zoom) but systematic failures on noise-type corruptions. This pattern—where ensemble-based pseudo-labeling succeeds on structured corruptions but fails on additive noise—suggests that noise corruptions may produce confidently incorrect predictions that propagate through the ensemble, an observation that could inform future TTA method design. Additionally, the paper's finding that heterogeneous ensembles (different architectures) can mutually improve during inference opens an interesting direction: rather than treating ensemble diversity as a static property, actively leveraging it as an adaptation signal.
 
 ## Suggestions
-- Replace peak-over-epochs reporting with a deployable protocol: fixed budget, online cumulative accuracy, or an unsupervised stopping rule.
-- Add direct TTA baselines, at minimum a strong single-model baseline and a simple ensemble-based pseudo-label/entropy baseline, to isolate what IEL contributes.
-- Reframe the contribution more precisely as dynamic mutual distillation / consensus-based adaptation rather than “diversity optimization.”
-- Analyze failure cases on noise corruptions and test simple safeguards, such as confidence-thresholded updates, not updating the selected teacher, or partial weight restoration.
-- Report absolute accuracies and test-time cost alongside improvement numbers.
-- Add ablations on ensemble size and target choice to verify that the gains are genuinely due to the proposed teacher-selection mechanism.
+- **Critical:** Add comparisons against at least one single-model TTA baseline (e.g., EATA or ROID configured for batch-size 1) to establish whether IEL's ensemble approach provides benefits beyond existing adaptation strategies.
+- **Critical:** Report accuracy at a fixed epoch or provide a principled termination criterion rather than maximum accuracy across all epochs. At minimum, report results with and without oracle epoch selection to quantify the gap.
+- Analyze failure modes on noise corruptions: Are the majority-voted predictions systematically wrong? Do confident incorrect predictions cause error amplification?
+- Clarify gradient flow: explicitly state whether stop-gradient is applied to H(x) or whether gradients flow through the selected teacher model.
+- Add one ablation study: comparing the current teacher selection against using the average ensemble softmax as the target would validate the core design choice.
 
 # Actual Human Scores
 Individual reviewer scores: [3.0, 3.0, 3.0, 1.0]

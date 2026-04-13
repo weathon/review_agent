@@ -61,14 +61,17 @@ def split_half(rows):
 
     half_a = np.array(half_a)
     half_b = np.array(half_b)
+    mask = np.logical_and(half_a < 7, half_a > 3)
+    x = half_a[mask]
+    y = half_b[mask]
 
     return {
         "half_a": half_a,
         "half_b": half_b,
-        "pearson": float(stats.pearsonr(half_a, half_b).statistic),
-        "spearman": float(stats.spearmanr(half_a, half_b).statistic),
-        "mae": float(np.mean(np.abs(half_a - half_b))),
-        "n_pairs": len(half_a),
+        "pearson": float(stats.pearsonr(x, y).statistic),
+        "spearman": float(stats.spearmanr(x, y).statistic),
+        "mae": float(np.mean(np.abs(x - y))),
+        "n_pairs": len(x),
     }
 
 
@@ -144,7 +147,7 @@ def add_scatter(ax, x, y, title, x_label, y_label, color, metrics_text):
 
 def main():
     data = {
-        "ICLR 2025": load_rows(Path("iclr2025_data/all_notes.json")),
+        # "ICLR 2025": load_rows(Path("iclr2025/all_notes.json")),
         "ICLR 2026": load_rows(Path("iclr2026_unbalanced/all_notes.json")),
     }
 
@@ -165,14 +168,19 @@ def main():
         "ICLR 2026": "#d62728",
     }
 
-    for col, name in enumerate(["ICLR 2025", "ICLR 2026"]):
+    for col, name in enumerate(["ICLR 2026"]):
+    # for col, name in enumerate(["ICLR 2025", "ICLR 2026"]):
         sh = metrics[name]["split_half"]
         ovr = metrics[name]["one_vs_rest"]
 
+        mask = np.logical_and(sh["half_a"] < 7, sh["half_a"] > 3)
+        x = sh["half_a"][mask]
+        y = sh["half_b"][mask]
+
         add_scatter(
             axes[0, col],
-            sh["half_a"],
-            sh["half_b"],
+            x,
+            y,
             f"{name} Human Split-Half",
             "Half A Mean Score",
             "Half B Mean Score",
@@ -207,7 +215,8 @@ def main():
         )
 
     header_lines = []
-    for name in ["ICLR 2025", "ICLR 2026"]:
+    for name in ["ICLR 2026"]:
+    # for name in ["ICLR 2025", "ICLR 2026"]:
         summary = metrics[name]["summary"]
         header_lines.append(
             f"{name}: n={summary['n_papers']:,} | avg SD={summary['avg_score_sd']:.3f} | "
