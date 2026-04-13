@@ -222,7 +222,7 @@ def stratified_sample(papers: list[dict], n: int, seed: int) -> list[dict]:
     return samples
 
 
-async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip_related_work: bool = False, skip_spark: bool = False, skip_neutral: bool = False, balanced: bool = False, data_dir: str | None = None, calibration_path: str | None = None, merger_output_score: bool = False) -> list[dict]:
+async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip_related_work: bool = False, skip_spark: bool = False, skip_neutral: bool = False, balanced: bool = False, data_dir: str | None = None, calibration_path: str | None = None, merger_output_score: bool = False, csv_name: str = "bench_scores.csv") -> list[dict]:
     bench_dir = Path(data_dir) if data_dir else DEFAULT_BENCH_DIR
 
     print("=" * 72)
@@ -275,7 +275,7 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
     total_start = time.time()
 
     output_path = Path(__file__).parent / "bench_results.md"
-    csv_path = Path(__file__).parent / "bench_scores.csv"
+    csv_path = Path(__file__).parent / csv_name
     reviews_dir = Path(__file__).parent / "bench_reviews"
     reviews_dir.mkdir(exist_ok=True)
 
@@ -285,7 +285,7 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
         import pandas as pd
         existing_df = pd.read_csv(csv_path)
         existing_count = len(existing_df)
-        print(f"\nFound existing bench_scores.csv with {existing_count} results.")
+        print(f"\nFound existing {csv_path.name} with {existing_count} results.")
         choice = input("  [C]ontinue (skip finished papers) or [O]verwrite? [C/o]: ").strip().lower()
         if choice in ("o", "overwrite"):
             print("  Overwriting existing results.\n")
@@ -517,8 +517,16 @@ if __name__ == "__main__":
         idx = sys.argv.index("--calibration")
         if idx + 1 < len(sys.argv):
             calibration_path = sys.argv[idx + 1]
+
+    if "--save_path" in sys.argv:
+        idx = sys.argv.index("--save_path")
+        if idx + 1 < len(sys.argv):
+            csv_name = sys.argv[idx + 1]
+    else:
+        csv_name = "bench_scores.csv"
+        
     flag_values = {data_dir, calibration_path} - {None}
     args = [a for a in sys.argv[1:] if not a.startswith("--") and a not in flag_values]
     n = int(args[0]) if len(args) > 0 else 10
     seed = int(args[1]) if len(args) > 1 else 42
-    asyncio.run(main(n_samples=n, seed=seed, parallel=parallel, skip_related_work=skip_related, skip_spark=skip_spark, skip_neutral=skip_neutral, balanced=balanced, data_dir=data_dir, calibration_path=calibration_path, merger_output_score=merger_output_score))
+    asyncio.run(main(n_samples=n, seed=seed, parallel=parallel, skip_related_work=skip_related, skip_spark=skip_spark, skip_neutral=skip_neutral, balanced=balanced, data_dir=data_dir, calibration_path=calibration_path, merger_output_score=merger_output_score, csv_name=csv_name))
