@@ -18,12 +18,13 @@ Usage:
 
 import csv
 import json
+import multiprocessing
 import os
 import random
 import sys
 import time
 from collections import defaultdict
-from concurrent.futures import as_completed
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -354,40 +355,56 @@ def main(n_samples: int = 100, seed: int = 42, balanced: bool = False, data_dir:
             todo.append(paper)
     print(f"{skipped} already done, {len(todo)} to process.\n")
 
-    # ── Phase 1: download PDFs (throttled for OpenReview) ──
-    needs_conversion: list[tuple[dict, Path]] = []
+    # ── Phase 1: download PDFs for selected papers (throttled for OpenReview) ──
     for paper in tqdm.tqdm(todo):
         print(paper)
         pid = paper["paper_id"]
-        md_path = PAPERS_DIR / f"{pid}.txt"
-        if md_path.exists() and md_path.stat().st_size > 100:
-            needs_conversion.append((paper, md_path))
-            continue
         pdf_path = PDFS_DIR / f"{pid}.pdf"
-        if not (pdf_path.exists() and pdf_path.stat().st_size > 0):
-            try:
-                pdf_path = download_pdf(or_client, pid, PDFS_DIR)
-            except Exception as e:
-                print(f"  SKIPPED download: {paper['title'][:60]} | {e}")
-                continue
-            time.sleep(0.5)  # Be nice to OpenReview
-        needs_conversion.append((paper, pdf_path))
+        if pdf_path.exists() and pdf_path.stat().st_size > 0:
+            print(f"  SKIPPED download: {paper['title'][:60]} | already downloaded")
+            continue
+        try:
+            download_pdf(or_client, pid, PDFS_DIR)
+        except Exception as e:
+            print(f"  SKIPPED download: {paper['title'][:60]} | {e}")
+            continue
+        time.sleep(0.5)  # Be nice to OpenReview
 
-    # ── Phase 2: convert PDFs to markdown ──
-    success = 0
-    skipped_convert = 0
-    for i, (paper, path) in enumerate(needs_conversion, 1):
-        pid = paper["paper_id"]
-        title = paper["title"]
+    # ── Phase 2: convert every PDF in the pdf dir to markdown ──
+    pdf_paths = sorted(PDFS_DIR.glob("*.pdf"))
+    conversion_jobs: list[tuple[dict, Path, Path, Path]] = []
+    for pdf_path in pdf_paths:
+        pid = pdf_path.stem
+        paper = next((paper for paper in all_papers if paper["paper_id"] == pid), None)
+        if paper is None:
+            raise RuntimeError(f"Found PDF with no matching paper metadata: {pdf_path}")
         md_path = PAPERS_DIR / f"{pid}.txt"
         review_path = REVIEWS_DIR / f"{pid}.md"
+        conversion_jobs.append((paper, pdf_path, md_path, review_path))
 
-        if md_path.exists() and md_path.stat().st_size > 100:
-            skipped_convert += 1
-        else:
-            print(f"  Converting: {title[:60]}...")
+    worker_count = max(1, multiprocessing.cpu_count() // 2)
+    print(
+        f"Converting {len(conversion_jobs)} PDFs from {PDFS_DIR} with {worker_count} workers..."
+    )
+
+    success = 0
+    skipped_convert = 0
+    pending_conversions: dict = {}
+    with ProcessPoolExecutor(max_workers=worker_count) as executor:
+        for paper, pdf_path, md_path, review_path in conversion_jobs:
+            if md_path.exists() and md_path.stat().st_size > 100:
+                skipped_convert += 1
+                continue
+            title = paper["title"]
+            print(f"  Queueing conversion: {title[:60]}...")
+            future = executor.submit(pdf_to_markdown, pdf_path)
+            pending_conversions[future] = (paper, pdf_path, md_path, review_path)
+
+        for future in tqdm.tqdm(as_completed(pending_conversions), total=len(pending_conversions)):
+            paper, pdf_path, md_path, review_path = pending_conversions[future]
+            title = paper["title"]
             try:
-                text = pdf_to_markdown(path)
+                text = future.result()
             except Exception as e:
                 print(f"  SKIPPED conversion: {title[:60]} | {e}")
                 continue
@@ -395,7 +412,13 @@ def main(n_samples: int = 100, seed: int = 42, balanced: bool = False, data_dir:
                 print(f"  SKIPPED (conversion too short, got {len(text)} chars)")
                 continue
             md_path.write_text(text, encoding="utf-8")
-            print(f"  Saved: {len(text):,} chars")
+            print(f"  Saved: {md_path.name} ({len(text):,} chars)")
+
+    for paper, pdf_path, md_path, review_path in conversion_jobs:
+        pid = paper["paper_id"]
+        title = paper["title"]
+        if not (md_path.exists() and md_path.stat().st_size > 100):
+            continue
 
         if not (review_path.exists() and review_path.stat().st_size > 0):
             reviews = paper.get("human_reviews")
