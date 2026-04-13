@@ -182,6 +182,7 @@ def _make_sandboxed_tools(allowed_paths: list[str]):
         end_line = args.get("end_line", 0) or 0
         err = _check_path(abs_path)
         if err:
+            print(f"  [read_file] ERROR: {err}")
             return {"content": [{"type": "text", "text": err}], "is_error": True}
         try:
             with open(abs_path, "r", errors="replace") as file_handle:
@@ -205,6 +206,7 @@ def _make_sandboxed_tools(allowed_paths: list[str]):
         file_glob = args.get("file_glob", "**/*")
         err = _check_path(directory)
         if err:
+            print(f"  [grep_files] ERROR: {err}")
             return {"content": [{"type": "text", "text": err}], "is_error": True}
         matches = []
         files = sorted(_glob_mod.glob(file_glob, root_dir=directory, recursive=True))
