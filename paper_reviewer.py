@@ -70,7 +70,7 @@ MODEL_FILTER = f"{base_model}"
 MODEL_MERGER = "gpt-5.4"
 MODEL_PARSER = "openai/gpt-5.4-nano" 
 MODEL_FIND_HUMAN = "openai_agent:gpt-5.4-mini"
-MODEL_SCORER = "openai_agent:gpt-5.4"
+MODEL_SCORER = "openai_agent:gpt-5.4"l
 MODEL_QA = "minimax-m2.7"
 
 human_review_dir = "/home/wg25r/review_agent/iclr2026_balanced"
