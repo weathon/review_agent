@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-""" 
+"""
 Multi-Agent Paper Reviewer using OpenRouter chat completions.
 
 Usage:
@@ -19,19 +19,9 @@ import traceback
 from pathlib import Path
 
 
-from dotenv import load_dotenv 
+from dotenv import load_dotenv
 from openai import APITimeoutError, AsyncOpenAI
 from pydantic import BaseModel
-from review_agents.claude_backend import (
-    make_claude_file_mcp_server,
-    run_claude_agent_task,
-    run_claude_reviewer,
-)
-from review_agents.openai_backend import (
-    build_openai_file_tools,
-    run_openai_agent_task,
-    run_openai_reviewer,
-)
 
 load_dotenv()  # loads .env from cwd or parent dirs
 
@@ -39,46 +29,25 @@ load_dotenv()  # loads .env from cwd or parent dirs
 PROVIDER = "zai" 
 
 
-OPENROUTER_API_KEY = os.environ["OPENROUTER_API_KEY"]
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 OLLAMA_CLOUD_BASE_URL = "http://localhost:11434/v1/"
 ZAI_BASE_URL = "https://api.z.ai/api/coding/paas/v4/"
 
-base_model = "qwen/qwen3.5-flash-02-23" 
-# Reviewer models can use one of three backends:
-# - plain OpenRouter chat model id, e.g. "deepseek/deepseek-v3.2"
-# - Claude Agent SDK, e.g. "claude:claude-sonnet-4-5"
-# - OpenAI Agent SDK via OpenRouter, e.g. "openai_agent:deepseek/deepseek-v3.2"
-# MODEL_HARSH = f"gpt-5.4" 
-# MODEL_NEUTRAL = f"{base_model}" 
-# MODEL_SPARK = f"qwen/qwen3.6-plus" 
-# MODEL_RELATED_WORK = f"{base_model}:online" 
-# MODEL_FILTER = f"{base_model}"
-# # MODEL_MERGER = f"zai:glm-5.1" #用zai coding plan白嫖
-# MODEL_MERGER = "gpt-5.4"
-# MODEL_PARSER = "openai/gpt-5.4-nano" 
-# MODEL_FIND_HUMAN = "openai_agent:minimax-m2.7"
-# MODEL_SCORER = "openai_agent:gpt-5.4"
-
-# MODEL_HARSH = f"ollama:glm-5.1:cloud" 
-MODEL_HARSH = f"gpt-5.4" 
-MODEL_NEUTRAL = f"ollama:glm-5.1:cloud" 
-MODEL_SPARK = f"ollama:glm-5.1:cloud" 
+#base_model = "qwen/qwen3.6-plus:free" #用限时免费模型白嫖
+base_model = "qwen/qwen3.5-flash-02-23"
+MODEL_HARSH = f"claude:claude-sonnet-4-6" #用claude subscription白嫖
+MODEL_NEUTRAL = "ollama:glm-5.1:cloud"
+MODEL_SPARK = "ollama:glm-5.1:cloud"
 MODEL_RELATED_WORK = f"{base_model}:online" 
 MODEL_FILTER = f"{base_model}"
 # MODEL_MERGER = f"zai:glm-5.1" #用zai coding plan白嫖
-MODEL_MERGER = "gpt-5.4"
-MODEL_PARSER = "openai/gpt-5.4-nano" 
-MODEL_FIND_HUMAN = "openai_agent:gpt-5.4-mini"
-MODEL_SCORER = "openai_agent:gpt-5.4"l
-MODEL_QA = "minimax-m2.7"
+MODEL_MERGER = f"z-ai/glm-5" #rate limit is very tight on zai coding plan, switch back to openrouter if needed
+MODEL_PARSER = "openai/gpt-5.4-nano"
 
-human_review_dir = "/home/wg25r/review_agent/iclr2026_balanced"
-# human_review_dir = "/home/wg25r/review_agent/iclr2025_data"
-
-MAX_RETRIES = 10
+MAX_RETRIES = 5
 RETRY_DELAY = 10 
-REQUEST_TIMEOUT = 240 
+REQUEST_TIMEOUT = 120
 DEFAULT_CALIBRATION_PATH = Path(__file__).parent / "calibration.md"
 
 # ── Error logging ────────────────────────────────────────────────────
@@ -98,18 +67,6 @@ LEAKAGE_WARNING_PATTERNS = [
     r"\bcalibration copy\b",
 ]
 
-_total_sdk_savings: float = 0.0
-
-def _add_sdk_savings(amount: float) -> None:
-    global _total_sdk_savings
-    _total_sdk_savings += amount
-
-def get_sdk_savings() -> float:
-    return _total_sdk_savings
-
-def reset_sdk_savings() -> None:
-    global _total_sdk_savings
-    _total_sdk_savings = 0.0
 
 
 class ScoreSchema(BaseModel):
@@ -140,14 +97,6 @@ def _detect_leakage_warning_phrases(text: str) -> list[str]:
             matches.append(found.group(0))
     return matches
 
-
-def _extract_final_review_block(text: str) -> str | None:
-    match = re.search(r"<final_review>\s*(.*?)\s*</final_review>", text, flags=re.IGNORECASE | re.DOTALL)
-    if not match:
-        return None
-    content = match.group(1).strip()
-    return content
-
 # ── Prompt loading ────────────────────────────────────────────────────
 _PROMPTS_DIR = Path(__file__).parent / "prompts"
 
@@ -158,17 +107,13 @@ def _load_prompt(name: str) -> str:
 
 
 # ── Agent system prompts ──────────────────────────────────────────────
-import time
-timeline_prompt = "\n" + _load_prompt("timeline.txt").replace("{{CURRENT_DATE}}", time.strftime("%B %d, %Y"))
 
-HARSH_CRITIC_PROMPT = _load_prompt("harsh_critic.txt") + timeline_prompt
-NEUTRAL_REVIEWER_PROMPT = _load_prompt("neutral_reviewer.txt") + timeline_prompt
-SPARK_FINDER_PROMPT = _load_prompt("spark_finder.txt") + timeline_prompt
-RELATED_WORK_PROMPT = _load_prompt("related_work.txt") + timeline_prompt
-RELATED_WORK_FILTER_PROMPT = _load_prompt("related_work_filter.txt") + timeline_prompt
-_MERGER_PROMPT_TEMPLATE = _load_prompt("merger.txt") + timeline_prompt
-HUMAN_FINDER_PROMPT = _load_prompt("find_human_match.txt") + timeline_prompt
-
+HARSH_CRITIC_PROMPT = _load_prompt("harsh_critic.txt")
+NEUTRAL_REVIEWER_PROMPT = _load_prompt("neutral_reviewer.txt")
+SPARK_FINDER_PROMPT = _load_prompt("spark_finder.txt")
+RELATED_WORK_PROMPT = _load_prompt("related_work.txt")
+RELATED_WORK_FILTER_PROMPT = _load_prompt("related_work_filter.txt")
+_MERGER_PROMPT_TEMPLATE = _load_prompt("merger.txt")
 
 
 def _build_merger_prompt(skip_neutral: bool = False, skip_spark: bool = False, skip_related_work: bool = False) -> str:
@@ -200,6 +145,7 @@ def _build_merger_prompt(skip_neutral: bool = False, skip_spark: bool = False, s
 MERGER_PROMPT = _build_merger_prompt()
 
 
+SCORE_PROMPT = _load_prompt("scorer.txt")
 # ── Core logic ────────────────────────────────────────────────────────
 
 def sanitize_text(text: str) -> str:
@@ -219,9 +165,22 @@ def _get_client(api_key: str | None = None) -> AsyncOpenAI:
 
 
 
+def _get_zai_client(api_key: str | None = None) -> AsyncOpenAI:
+    """Create an AsyncOpenAI client pointed at OpenRouter."""
+    resolved_api_key = api_key
+    if not resolved_api_key:
+        raise ValueError(
+            "ZAI_API_KEY environment variable not set.\n"
+            "Set it in .env or export it."
+        )
+    return AsyncOpenAI(api_key=resolved_api_key, base_url=ZAI_BASE_URL)
+
+zai_client = _get_zai_client(os.environ.get("ZAI_API_KEY", ""))
+
+
 def _get_ollama_client() -> AsyncOpenAI:
-    resolved_api_key = "ollama"
-    return AsyncOpenAI(api_key=resolved_api_key, base_url=OLLAMA_CLOUD_BASE_URL)
+    return AsyncOpenAI(api_key="ollama", base_url=OLLAMA_CLOUD_BASE_URL)
+
 
 ollama_client = _get_ollama_client()
 
@@ -255,11 +214,14 @@ def _extract_cost(response) -> float:
     """Extract cost from OpenRouter response usage object."""
     usage = getattr(response, "usage", None)
     if usage is None:
-        return 0
+        return 0.0
     cost = getattr(usage, "cost", None)
     if cost is not None:
         return float(cost)
-    return 0
+    if isinstance(usage, dict):
+        return float(usage.get("cost", 0.0))
+    return 0.0
+
 
 async def _call_openai(
     client: AsyncOpenAI,
@@ -284,7 +246,7 @@ async def _call_openai(
             if extra:
                 kwargs["extra_body"] = extra
             response = await client.chat.completions.create(**kwargs)
-            result = response.choices[0].message.content
+            result = response.choices[0].message.content or ""
             cost = _extract_cost(response)
             usage = getattr(response, "usage", None)
             input_tokens = getattr(usage, "prompt_tokens", None) if usage else None
@@ -299,7 +261,8 @@ async def _call_openai(
                     print(f"  [{name}] empty response (attempt {attempt}/{MAX_RETRIES}), retrying ...")
                     await asyncio.sleep(RETRY_DELAY + _random.uniform(0, 5))
                     continue
-                raise RuntimeError(f"[{name}] empty response after {MAX_RETRIES} attempts, model={model}")
+                _error_logger.error(f"[{name}] empty response after {MAX_RETRIES} attempts, model={model}")
+                print(f"  [{name}] empty response after {MAX_RETRIES} attempts")
             print(f"  [{name}] done — {model} (OpenRouter) — {tokens} tokens — ${cost:.4f}")
             return result, cost
         except APITimeoutError as e:
@@ -322,7 +285,7 @@ async def _call_openai(
                 await asyncio.sleep(wait)
             else:
                 raise
-    raise RuntimeError(f"[{name}] failed after {MAX_RETRIES} attempts, model={model}")
+    return "", 0.0
 
 print("Testing ZAI client with a simple call ...")
 
@@ -332,262 +295,59 @@ print("Testing ZAI client with a simple call ...")
 #     print("🔥ZAI client test failed: unexpected answer")
 
 # ── Agent runners ─────────────────────────────────────────────────────
-from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, AssistantMessage, TextBlock, ResultMessage, tool, create_sdk_mcp_server
 
-# ── BM25 index for human review search ──────────────────────────────
-from rank_bm25 import BM25Okapi
+async def _run_reviewer_claude_sdk(
+    name: str,
+    system_prompt: str,
+    paper_path: str,
+    model_id: str,
+    venue: str = "",
+) -> tuple[str, float]:
+    """Run a reviewer via Claude Agent SDK. The agent reads the paper file itself.
+    Returns (review, cost=0.0) — SDK does not expose cost."""
+    from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, AssistantMessage, TextBlock
 
-_SEARCH_PATHS = [os.path.abspath(human_review_dir)]
-_bm25_database: dict = {}
+    paper_abs = str(Path(paper_path).resolve())
+    venue_line = (
+        f"This paper was submitted to **{venue}**. "
+        f"You MUST evaluate it against {venue}'s specific standards, acceptance bar, "
+        f"and expectations. Consider what {venue} reviewers typically look for.\n\n"
+    ) if venue else ""
 
-print("Indexing human reviews ...")
-_idx_start = time.time()
-for _sp in _SEARCH_PATHS:
-    _all_files = []
-    _all_file_paths = []
-    for _root, _dirs, _files in os.walk(_sp):
-        for _f in _files:
-            if _f.endswith(".txt") or _f.endswith(".md"):
-                with open(os.path.join(_root, _f), "r", errors="replace") as _fh:
-                    _all_files.append(_fh.read())
-                    _all_file_paths.append(os.path.join(_root, _f))
-    _tokenized = [doc.split(" ") for doc in _all_files if doc.strip()]
-    if not _tokenized:
-        print(f"  Skipping {_sp} (no files found)")
-        continue
-    _bm25_database[_sp] = {"files": _all_file_paths, "bm25": BM25Okapi(_tokenized)}
-print(f"Indexing complete. Time taken: {time.time() - _idx_start:.2f}s")
-
-
-@tool(
-    "search_file",
-    "Search for a pattern in a directory using the BM25 index. Returns the top n matching files with their first 1000 chars.",
-    {"query": str, "path": str, "n": int},
-)
-async def _search_file_tool(args: dict) -> dict:
-    query = args["query"]
-    path = os.path.abspath(args["path"])
-    n = args.get("n", 5)
-    if path not in _bm25_database:
-        return {"content": [{"type": "text", "text": f"ERROR: Path '{path}' is not indexed or allowed for searching."}], "is_error": True}
-    bm25 = _bm25_database[path]["bm25"]
-    files = _bm25_database[path]["files"]
-    tokenized_query = query.split(" ")
-    doc_scores = bm25.get_scores(tokenized_query)
-    top_indices = doc_scores.argsort()[-n:][::-1]
-    results = []
-    for idx in top_indices:
-        file_path = os.path.abspath(files[idx])
-        score = doc_scores[idx]
-        with open(file_path, "r", errors="replace") as f:
-            content = f.read()
-        results.append(f"{file_path}\nscore: {score:.2f}\n first 1000 chars:\n{content[:1000]}\n")
-    text = "\n---\n".join(results) if results else "No relevant files found."
-    return {"content": [{"type": "text", "text": text}]}
-
-
-_search_mcp_server = create_sdk_mcp_server(
-    name="search",
-    version="1.0.0",
-    tools=[_search_file_tool],
-)
-
-
-# ── Sandboxed file tools (path-restricted) ───────────────────────────
-# These replace built-in Read/Grep/Glob for Claude SDK agents to prevent
-# agents from reading files outside their allowed directories.
-
-def _make_sandboxed_tools(allowed_paths: list[str]):
-    """Create path-restricted read_file, grep_files, glob_files MCP tools.
-
-    Each tool checks that the resolved path starts with one of the allowed
-    directories before performing any I/O.
-    """
-    import glob as _glob_mod
-
-    resolved_allowed = [os.path.abspath(p) for p in allowed_paths]
-
-    def _check_path(path: str) -> str | None:
-        """Return resolved path if allowed, else return error string."""
-        resolved = os.path.abspath(path)
-        if any(resolved.startswith(ap) for ap in resolved_allowed):
-            return None  # allowed
-        return f"ERROR: Access denied. Path '{resolved}' is not under any allowed directory: {resolved_allowed}"
-
-    @tool(
-        "read_file",
-        "Read a file. Returns the full content with line numbers. "
-        "Restricted to allowed directories only.",
-        {"abs_path": str, "start_line": int, "end_line": int},
+    prompt = (
+        f"{system_prompt}\n\n"
+        f"---\n\n"
+        f"{venue_line}"
+        f"Review the following paper thoroughly.\n\n"
+        f"NOTE: This paper was extracted from PDF by an automated parser. "
+        f"There may be formatting artifacts such as broken equations, garbled "
+        f"tables, misplaced figure references, or OCR errors. These are parser "
+        f"issues, NOT problems with the paper itself. Do NOT treat formatting "
+        f"artifacts as weaknesses.\n\n"
+        f"The paper is located at: {paper_abs}\n"
+        f"Use the Read tool to read the paper file, then produce your review."
     )
-    async def _read_file(args: dict) -> dict:
-        abs_path = args["abs_path"]
-        start_line = args.get("start_line", 1) or 1
-        end_line = args.get("end_line", 0) or 0
-        err = _check_path(abs_path)
-        if err:
-            return {"content": [{"type": "text", "text": err}], "is_error": True}
-        try:
-            with open(abs_path, "r", errors="replace") as f:
-                lines = f.readlines()
-            selected = lines[max(0, start_line - 1):end_line if end_line > 0 else len(lines)]
-            text = "".join(f"{start_line + i}: {line}" for i, line in enumerate(selected))
-            return {"content": [{"type": "text", "text": text}]}
-        except FileNotFoundError:
-            return {"content": [{"type": "text", "text": f"ERROR: File not found: {abs_path}"}], "is_error": True}
 
-    @tool(
-        "grep_files",
-        "Search file contents for a regex pattern in a directory. "
-        "Returns matching lines with file paths and line numbers. "
-        "Restricted to allowed directories only.",
-        {"pattern": str, "directory": str, "file_glob": str},
+    print(f"  [{name}] starting Claude Agent SDK ({model_id}) ...")
+
+    result_text = ""
+    options = ClaudeAgentOptions(
+        model=model_id,
+        cwd="./tmp",
+        allowed_tools=["Read", "Glob", "Grep"],
+        permission_mode="bypassPermissions",
+        max_turns=30,
     )
-    async def _grep_files(args: dict) -> dict:
-        pattern = args["pattern"]
-        directory = args.get("directory", ".")
-        file_glob = args.get("file_glob", "**/*")
-        err = _check_path(directory)
-        if err:
-            return {"content": [{"type": "text", "text": err}], "is_error": True}
-        matches = []
-        files = sorted(_glob_mod.glob(file_glob, root_dir=directory, recursive=True))
-        for fname in files[:500]:
-            fpath = os.path.join(directory, fname)
-            if not os.path.isfile(fpath):
-                continue
-            try:
-                with open(fpath, "r", errors="replace") as fh:
-                    for i, line in enumerate(fh, 1):
-                        if re.search(pattern, line):
-                            matches.append(f"{fpath}:{i}: {line.rstrip()}")
-            except Exception:
-                continue
-            if len(matches) >= 200:
-                break
-        text = "\n".join(matches) if matches else "No matches found."
-        return {"content": [{"type": "text", "text": text}]}
+    async with ClaudeSDKClient(options=options) as sdk_client:
+        await sdk_client.query(prompt)
+        async for message in sdk_client.receive_response():
+            if isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if isinstance(block, TextBlock):
+                        result_text += block.text
 
-    @tool(
-        "glob_files",
-        "Find files matching a glob pattern under a directory. "
-        "Returns one path per line. Restricted to allowed directories only.",
-        {"pattern": str, "directory": str},
-    )
-    async def _glob_files(args: dict) -> dict:
-        pattern = args["pattern"]
-        directory = args.get("directory", ".")
-        err = _check_path(directory)
-        if err:
-            return {"content": [{"type": "text", "text": err}], "is_error": True}
-        matches = sorted(_glob_mod.glob(pattern, root_dir=directory, recursive=True))
-        text = "\n".join(os.path.join(directory, m) for m in matches) if matches else "No files matched."
-        return {"content": [{"type": "text", "text": text}]}
-
-
-
-    @tool(
-        "file_qa",
-        "Answer questions about a file's content. "
-        "Restricted to allowed directories only.",
-        {"abs_path": str, "question": str},
-    )
-    async def _file_qa(args: dict) -> dict:
-        abs_path = args["abs_path"]
-        question = args["question"]
-        err = _check_path(abs_path)
-        if err:
-            return {"content": [{"type": "text", "text": err}], "is_error": True}
-        try:
-            print(f"  [file_qa] reading file for QA: {abs_path} ... and answering question: {question}")
-            with open(abs_path, "r", errors="replace") as f:
-                file = f.read()
-            if len(file) > 200_000:
-                file = file[:200_000] + "\n\n[... truncated]"
-            answer, _cost = await _call_openai(
-                _get_client(OPENROUTER_API_KEY),
-                "file_qa",
-                "You are a helpful assistant that answers questions about the content of a file.",
-                f"Here is the content of the file:\n\n{file}\n\nQuestion: {question}",
-                MODEL_QA,
-            )
-
-            return {"content": [{"type": "text", "text": answer}]}
-            
-        except FileNotFoundError:
-            return {"content": [{"type": "text", "text": f"ERROR: File not found: {abs_path}"}], "is_error": True}
-
-    return [_read_file, _grep_files, _glob_files, _file_qa]
-
-
-def _make_sandboxed_mcp_server(name: str, allowed_paths: list[str]):
-    """Create an MCP server with path-restricted file tools."""
-    tools = _make_sandboxed_tools(allowed_paths)
-    return create_sdk_mcp_server(name=name, version="1.0.0", tools=tools)
-
-
-# async def _run_reviewer_claude_sdk(
-#     name: str,
-#     system_prompt: str,
-#     paper_path: str,
-#     model_id: str,
-#     venue: str = "",
-# ) -> tuple[str, float]:
-#     """Run a reviewer via Claude Agent SDK. The agent reads the paper file itself.
-#     Returns (review, cost=0.0) — SDK does not expose cost."""
-
-#     paper_abs = str(Path(paper_path).resolve())
-#     paper_dir = str(Path(paper_abs).parent)
-#     venue_line = (
-#         f"This paper was submitted to **{venue}**. "
-#         f"You MUST evaluate it against {venue}'s specific standards, acceptance bar, "
-#         f"and expectations. Consider what {venue} reviewers typically look for.\n\n"
-#     ) if venue else ""
-
-#     prompt = (
-#         f"{system_prompt}\n\n"
-#         f"---\n\n"
-#         f"{venue_line}"
-#         f"Review the following paper thoroughly.\n\n"
-#         f"NOTE: This paper was extracted from PDF by an automated parser. "
-#         f"There may be formatting artifacts such as broken equations, garbled "
-#         f"tables, misplaced figure references, or OCR errors. These are parser "
-#         f"issues, NOT problems with the paper itself. Do NOT treat formatting "
-#         f"artifacts as weaknesses.\n\n"
-#         f"The paper is located at: {paper_abs}\n"
-#         f"Use the read_file tool to read the paper file, then produce your review."
-#     )
-
-#     print(f"  [{name}] starting Claude Agent SDK ({model_id}) ...")
-
-#     reviewer_mcp = _make_sandboxed_mcp_server("reviewer_fs", [paper_dir])
-#     result_text = ""
-#     options = ClaudeAgentOptions(
-#         model=model_id,
-#         cwd="./tmp",
-#         allowed_tools=[
-#             "mcp__reviewer_fs__read_file",
-#             "mcp__reviewer_fs__grep_files",
-#             "mcp__reviewer_fs__glob_files",
-#         ],
-#         disallowed_tools=["Read", "Glob", "Grep", "Bash", "Edit", "Write", "Agent"],
-#         mcp_servers={"reviewer_fs": reviewer_mcp},
-#         max_turns=30,
-#     )
-#     cost = 0
-#     async with ClaudeSDKClient(options=options) as sdk_client:
-#         await sdk_client.query(prompt)
-#         async for message in sdk_client.receive_response():
-#             if isinstance(message, AssistantMessage):
-#                 for block in message.content:
-#                     if isinstance(block, TextBlock):
-#                         result_text += block.text
-#             if isinstance(message, ResultMessage):
-#                 cost += message.total_cost_usd
-
-#     print(f"  [{name}] done — {model_id} (Claude Agent SDK) — saved ${cost:.4f}")
-#     _add_sdk_savings(cost)
-#     return result_text, 0.0
+    print(f"  [{name}] done — {model_id} (Claude Agent SDK)")
+    return result_text, 0.0
 
 
 async def run_reviewer(
@@ -599,7 +359,14 @@ async def run_reviewer(
     model: str,
     venue: str = "",
 ) -> tuple[str, float]:
-    """Run a reviewer via plain OpenRouter chat completions. Returns (review, cost)."""
+    """Run a reviewer. Dispatches to Claude Agent SDK if model starts with 'claude:',
+    otherwise uses OpenRouter chat completions. Returns (review, cost)."""
+    if model.startswith("claude:"):
+        model_id = model[len("claude:"):]
+        return await _run_reviewer_claude_sdk(
+            name, system_prompt, paper_path, model_id, venue=venue,
+        )
+
     print(f"  [{name}] started ({model}) ...")
     venue_line = (
         f"This paper was submitted to **{venue}**. "
@@ -689,31 +456,6 @@ async def _parse_score(client: AsyncOpenAI, text: str) -> tuple[float, float]:
     return parsed.score, cost
 
 
-async def _answer_file_question(abs_path: str, question: str, allowed_paths: list[str]) -> str:
-    resolved = os.path.abspath(abs_path)
-    resolved_allowed = [os.path.abspath(path) for path in allowed_paths]
-    if not any(resolved.startswith(allowed_path) for allowed_path in resolved_allowed):
-        return (
-            f"ERROR: Access denied. Path '{resolved}' is not under any allowed directory: "
-            f"{resolved_allowed}"
-        )
-    try:
-        with open(resolved, "r", errors="replace") as file_handle:
-            file_content = file_handle.read()
-    except FileNotFoundError:
-        return f"ERROR: File not found: {resolved}"
-    if len(file_content) > 200_000:
-        file_content = file_content[:200_000] + "\n\n[... truncated]"
-    answer, _cost = await _call_openai(
-        _get_client(OPENROUTER_API_KEY),
-        "file_qa",
-        "You are a helpful assistant that answers questions about the content of a file.",
-        f"Here is the content of the file:\n\n{file_content}\n\nQuestion: {question}",
-        MODEL_QA,
-    )
-    return answer
-
-
 async def run_merge(
     client: AsyncOpenAI,
     harsh_review: str,
@@ -729,6 +471,8 @@ async def run_merge(
     Merger only — synthesize sub-agent reviews into a consolidated review.
     Returns (review_text, cost).
     """
+    print(f"  [merger] started ({MODEL_MERGER}) ...")
+
     merger_prompt = _build_merger_prompt(
         skip_neutral=skip_neutral,
         skip_spark=skip_spark,
@@ -764,19 +508,9 @@ async def run_merge(
         f"Remember: many of the harsh critic's points may be nonsensical or overly "
         f"picky — cross-check everything against the actual paper before including it."
     )
-    if MODEL_MERGER.startswith("claude:"):
-        review_text, cost = await run_claude_agent_task(
-            name="merger",
-            instructions=merger_prompt,
-            user_prompt=user_prompt_review,
-            model_id=MODEL_MERGER.split(":", 1)[1],
-        )
-    elif MODEL_MERGER.startswith("openai_agent:"):
-        review_text, cost = await run_openai_agent_task(
-            name="merger",
-            instructions=merger_prompt,
-            user_prompt=user_prompt_review,
-            model_id=MODEL_MERGER[len("openai_agent:"):],
+    if MODEL_MERGER.startswith("zai:"):
+        review_text, cost = await _call_openai(
+            zai_client, "merger", merger_prompt, user_prompt_review, MODEL_MERGER.split(":", 1)[1]
         )
     else:
         review_text, cost = await _call_openai(
@@ -788,68 +522,59 @@ async def run_merge(
 async def run_scorer(
     client: AsyncOpenAI,
     review_text: str,
-    paper_path: str,
+    paper_content: str,
     calibration_context: str = "",
     cal_dir: str = "",
     gt_score: float | None = None,
 ) -> tuple[float, float]:
     """
-    Scorer — uses an SDK backend to search calibration examples via
-    Grep/Read, then scores the paper. Returns (score, cost).
+    Scorer — uses Claude Agent SDK (claude-sonnet-4-6) to search calibration
+    examples via Grep/Read, then scores the paper. Returns (score, cost).
     """
+    import tempfile
+    from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, AssistantMessage, TextBlock
+
     cal_dir_abs = str(Path(cal_dir).resolve()) if cal_dir else ""
-    paper_abs = str(Path(paper_path).resolve())
-    paper_dir_abs = str(Path(paper_abs).parent)
-    paper_file_name = Path(paper_abs).name
-    scorer_allowed_paths = [path for path in [cal_dir_abs, paper_dir_abs] if path]
+
+    # Write review and paper to temp files so the agent can Read them
+    # (avoids CLI character limit on the prompt)
+    tmp_dir = Path(tempfile.mkdtemp(prefix="scorer_"))
+    review_path = tmp_dir / "review.txt"
+    paper_path = tmp_dir / "paper.txt"
+    review_path.write_text(review_text, encoding="utf-8")
+    paper_path.write_text(paper_content, encoding="utf-8")
 
     scorer_agent_template = _load_prompt("scorer_agent.txt")
-    scorer_instructions = scorer_agent_template.format(
-        cal_dir_abs=cal_dir_abs, 
-        paper_abs=paper_abs,
-        paper_dir_abs=paper_dir_abs,
-        paper_file_name=paper_file_name,
+    prompt = scorer_agent_template.format(
+        score_prompt=SCORE_PROMPT,
+        review_path=review_path,
+        paper_path=paper_path,
+        cal_dir_abs=cal_dir_abs,
     )
-    if MODEL_SCORER.startswith("claude:"):
-        scorer_mcp = make_claude_file_mcp_server(
-            "scorer_fs",
-            scorer_allowed_paths,
-            file_qa_callback=_answer_file_question,
-        ) if scorer_allowed_paths else None
-        scorer_mcp_tools = [
-            "mcp__scorer_fs__read_file",
-            "mcp__scorer_fs__grep_files",
-            "mcp__scorer_fs__glob_files",
-            "mcp__scorer_fs__file_qa",
-        ] if scorer_mcp else []
-        scorer_mcp_servers = {"scorer_fs": scorer_mcp} if scorer_mcp else {}
-        result_text, total_cost = await run_claude_agent_task(
-            name="scorer-agent",
-            instructions=scorer_instructions,
-            user_prompt=review_text,
-            model_id=MODEL_SCORER.split(":", 1)[1],
-            allowed_tools=scorer_mcp_tools,
-            mcp_servers=scorer_mcp_servers,
-            cwd=cal_dir_abs or paper_dir_abs or None,
-        )
-        print(f"  [scorer-agent] Claude Agent SDK savings: ${total_cost:.4f}")
-        _add_sdk_savings(total_cost)
-    elif MODEL_SCORER.startswith("openai_agent:"):
-        openai_tools = build_openai_file_tools(
-            scorer_allowed_paths,
-            file_qa_callback=_answer_file_question,
-        ) if scorer_allowed_paths else []
-        result_text, _agent_cost = await run_openai_agent_task(
-            name="scorer-agent",
-            instructions=scorer_instructions,
-            user_prompt=review_text,
-            model_id=MODEL_SCORER[len("openai_agent:"):],
-            tools=openai_tools,
-        )
-    else:
-        raise ValueError(
-            f"MODEL_SCORER must use an SDK backend prefix. Got: {MODEL_SCORER}"
-        )
+
+    print(f"  [scorer-agent] starting RAG scorer (claude-sonnet-4-6, cal={cal_dir_abs}) ...")
+
+    result_text = ""
+    options = ClaudeAgentOptions(
+        model="claude-sonnet-4-6",
+        cwd=cal_dir_abs or None,
+        allowed_tools=["Grep", "Read", "Glob", "Agent"],
+        permission_mode="bypassPermissions",
+        effort="medium",
+        max_turns=30,
+    )
+    async with ClaudeSDKClient(options=options) as sdk_client:
+        await sdk_client.query(prompt)
+        async for message in sdk_client.receive_response():
+            if isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if isinstance(block, TextBlock):
+                        result_text += block.text
+
+    # Clean up temp files
+    review_path.unlink(missing_ok=True)
+    paper_path.unlink(missing_ok=True)
+    tmp_dir.rmdir()
 
 
     # Log full scorer output to file for debugging
@@ -885,7 +610,6 @@ async def run_merger(
     spark_review: str,
     related_work: str,
     paper_content: str,
-    paper_path: str,
     calibration_context: str = "",
     cal_dir: str = "",
     skip_neutral: bool = False,
@@ -905,8 +629,7 @@ async def run_merger(
         skip_related_work=skip_related_work,
     )
     score, cost_score = await run_scorer(
-        client, review_text, 
-        paper_path=paper_path,
+        client, review_text, paper_content,
         calibration_context=calibration_context,
         cal_dir=cal_dir,
         gt_score=gt_score
@@ -938,268 +661,14 @@ def _resolve_calibration_inputs(
         resolved_path = DEFAULT_CALIBRATION_PATH.resolve()
 
     if resolved_path is None:
-        raise FileNotFoundError(
-            "No calibration source found: no cal_dir, no calibration_context, "
-            "no calibration_path provided, and default calibration.md does not exist."
-        )
+        return calibration_context, cal_dir
 
     cal_dir_candidate = resolved_path.parent / "cal"
     if cal_dir_candidate.is_dir():
         return "", str(cal_dir_candidate)
     if resolved_path.exists():
         return resolved_path.read_text(encoding="utf-8", errors="replace"), ""
-    raise FileNotFoundError(f"Calibration path does not exist: {resolved_path}")
-
-
-
-async def run_human_finder(pp, human_review_dir):
-    paper_abs = str(Path(pp).resolve())
-    human_review_abs = str(Path(human_review_dir).resolve())
-    query = (
-        f"{HUMAN_FINDER_PROMPT}\n\n"
-        f"Paper file path: {paper_abs}\n"
-        f"Human reviews directory: {human_review_abs}\n"
-    )
-    paper_dir = str(Path(paper_abs).parent)
-    raw_result_text = ""
-    last_message_text = ""
-
-    if MODEL_FIND_HUMAN.startswith("claude:"):
-        hf_mcp = _make_sandboxed_mcp_server("hf_fs", [human_review_abs, paper_dir])
-        options = ClaudeAgentOptions(
-            model=MODEL_FIND_HUMAN.split(":", 1)[1],
-            cwd=human_review_abs,
-            allowed_tools=[
-                "mcp__hf_fs__read_file",
-                "mcp__hf_fs__grep_files",
-                "mcp__hf_fs__glob_files",
-                "mcp__hf_fs__file_qa",
-                "mcp__search__search_file",
-            ],
-            disallowed_tools=["Read", "Glob", "Grep", "Bash", "Edit", "Write", "Agent"],
-            mcp_servers={"search": _search_mcp_server, "hf_fs": hf_mcp},
-            max_turns=30,
-        )
-        print(f"  [Human Finder] starting Claude Agent SDK ({MODEL_FIND_HUMAN}) ...")
-        sdk_savings = 0.0
-        async with ClaudeSDKClient(options=options) as sdk_client:
-            await sdk_client.query(query)
-            async for message in sdk_client.receive_response():
-                if isinstance(message, AssistantMessage):
-                    current_message_text = ""
-                    for block in message.content:
-                        if isinstance(block, TextBlock):
-                            current_message_text += block.text
-                    if current_message_text:
-                        raw_result_text += current_message_text
-                        last_message_text = current_message_text
-                if isinstance(message, ResultMessage):
-                    sdk_savings += message.total_cost_usd
-
-        _add_sdk_savings(sdk_savings)
-        print(f"  [Human Finder] done (Claude Agent SDK) — saved ${sdk_savings:.4f}")
-    elif MODEL_FIND_HUMAN.startswith("openai_agent:"):
-        from agents import function_tool
-
-        @function_tool
-        def search_file(query: str, path: str, n: int = 5) -> str:
-            """Search for a pattern in a directory using the BM25 index."""
-            path = os.path.abspath(path)
-            if path not in _bm25_database:
-                raise ValueError(f"Path '{path}' is not indexed or allowed for searching.")
-            bm25 = _bm25_database[path]["bm25"]
-            files = _bm25_database[path]["files"]
-            tokenized_query = query.split(" ")
-            doc_scores = bm25.get_scores(tokenized_query)
-            top_indices = doc_scores.argsort()[-n:][::-1]
-            results = []
-            for idx in top_indices:
-                file_path = os.path.abspath(files[idx])
-                score = doc_scores[idx]
-                with open(file_path, "r", errors="replace") as file_handle:
-                    content = file_handle.read()
-                results.append(f"{file_path}\nscore: {score:.2f}\n first 1000 chars:\n{content[:1000]}\n")
-            if not results:
-                return "No relevant files found."
-            return "\n---\n".join(results)
-
-        hf_tools = build_openai_file_tools(
-            [human_review_abs, paper_dir],
-            file_qa_callback=_answer_file_question,
-        )
-        hf_tools.append(search_file)
-        print(f"  [Human Finder] starting OpenAI Agent SDK via OpenRouter ({MODEL_FIND_HUMAN}) ...")
-        result_text, _sdk_cost = await run_openai_agent_task(
-            name="Human Finder",
-            instructions=HUMAN_FINDER_PROMPT,
-            user_prompt=(
-                f"Paper file path: {paper_abs}\n"
-                f"Human reviews directory: {human_review_abs}\n"
-            ),
-            model_id=MODEL_FIND_HUMAN[len("openai_agent:"):],
-            tools=hf_tools,
-        )
-        raw_result_text = result_text
-        last_message_text = result_text
-    else:
-        raise ValueError(f"MODEL_FIND_HUMAN must use an SDK backend prefix. Got: {MODEL_FIND_HUMAN}")
-
-    if not last_message_text.strip():
-        raise ValueError("Human finder returned no final assistant message")
-    parsed_result_text = _extract_final_review_block(last_message_text)
-    if parsed_result_text is None:
-        parsed_result_text = last_message_text.strip()
-    with open(Path(__file__).parent / "human_finder_debug.log", "a", encoding="utf-8") as f:
-        f.write(f"\n{'=' * 72}\n")
-        f.write(f"Paper path: {pp}\n")
-        f.write(f"Human review dir: {human_review_dir}\n")
-        f.write(f"{'-' * 72}\n")
-        f.write("RAW LAST MESSAGE\n")
-        f.write(f"{'-' * 72}\n")
-        f.write(last_message_text)
-        f.write(f"\n{'-' * 72}\n")
-        f.write("RAW TOTAL OUTPUT\n")
-        f.write(f"{'-' * 72}\n")
-        f.write(raw_result_text)
-        f.write(f"\n{'-' * 72}\n")
-        f.write("PARSED FINAL REVIEW\n")
-        f.write(f"{'-' * 72}\n")
-        f.write(parsed_result_text)
-        f.write(f"\n{'=' * 72}\n\n")
-        
-    return parsed_result_text, 0.0
-
-async def run_pipeline(
-    paper_path: str,
-    paper_content: str,
-    client: AsyncOpenAI,
-    parallel: bool = True,
-    skip_related_work: bool = True,
-    skip_spark: bool = False,
-    skip_neutral: bool = False,
-    skip_score: bool = False,
-    venue: str = "ICLR",
-    calibration_context: str = "",
-    cal_dir: str = "",
-    gt_score: float | None = None,
-) -> dict:
-    """
-    Core review pipeline: Phase 1 (reviewers) + Phase 2 (merger + optional scorer).
-
-    Returns a dict with keys:
-      harsh_review, neutral_review, spark_review, related_work,
-      merged_review, cost, sdk_savings,
-      score (float or None if skip_score), decision (str or None if skip_score).
-    """
-    pp = paper_path
-
-    # Guard against data leakage: paper ID must not exist in the human review set
-    paper_id = Path(pp).stem
-    human_review_path = Path(human_review_dir) / "human_reviews" / f"{paper_id}.md"
-    if human_review_path.exists():
-        raise ValueError(
-            f"Data leakage: paper {paper_id} has a human review in "
-            f"{human_review_dir}/human_reviews/. The input dataset and human "
-            f"review set must not share paper IDs."
-        )
-
-    savings_before = get_sdk_savings()
-
-    # ── Phase 1: All reviewers (parallel or sequential) ───────────
-    total_cost = 0.0
-    if parallel:
-        if MODEL_HARSH.startswith("ollama:"):
-            c = ollama_client
-            model_harsh = MODEL_HARSH.replace("ollama:", "")
-        else:
-            c = client
-            model_harsh = MODEL_HARSH
-        tasks = [
-            run_reviewer(c, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, model_harsh, venue=venue),
-        ]
-        if not skip_neutral:
-            if MODEL_NEUTRAL.startswith("ollama:"):
-                tasks.append(run_reviewer(ollama_client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL.replace("ollama:", ""), venue=venue))
-            else:
-                tasks.append(run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue=venue))
-        if not skip_spark:
-            if MODEL_SPARK.startswith("ollama:"):
-                tasks.append(run_reviewer(ollama_client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK.replace("ollama:", ""), venue=venue))
-            else:
-                tasks.append(run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue=venue))
-        if not skip_related_work:
-            tasks.append(run_related_work_search(client, paper_content))
-        tasks.append(run_human_finder(pp, human_review_dir))
-
-        print("  Phase 1: All reviewers in parallel ...")
-        results_list = await asyncio.gather(*tasks)
-
-        idx = 0
-        harsh_review, c = results_list[idx]; total_cost += c; idx += 1
-        if not skip_neutral:
-            neutral_review, c = results_list[idx]; total_cost += c; idx += 1
-        else:
-            neutral_review = "Neutral reviewer was skipped."
-        if not skip_spark:
-            spark_review, c = results_list[idx]; total_cost += c; idx += 1
-        else:
-            spark_review = "Spark finder was skipped."
-        if not skip_related_work:
-            related_work, c = results_list[idx]; total_cost += c; idx += 1
-        else:
-            related_work = "Related work search was skipped."
-        human_match_review, c = results_list[idx]; total_cost += c
-        harsh_review = (
-            f"{harsh_review.rstrip()}\n\n"
-            f"Additional transferable weaknesses from matched human reviews:\n"
-            f"{human_match_review.lstrip()}"
-        )
-    else:
-        raise NotImplementedError("Sequential mode is not implemented in this version.")
-
-    # ── Phase 2: Merger (+ optional scorer) ───────────────────────
-    if skip_score:
-        print("  Phase 2: Merger (no scoring) ...")
-        merged_review, merger_cost = await run_merge(
-            client, harsh_review, neutral_review,
-            spark_review, related_work, paper_content,
-            skip_neutral=skip_neutral,
-            skip_spark=skip_spark,
-            skip_related_work=skip_related_work,
-        )
-        total_cost += merger_cost
-        score = None
-        decision = None
-    else:
-        print("  Phase 2: Merger + Scorer ...")
-        merged_review, score, merger_cost = await run_merger(
-            client, harsh_review, neutral_review,
-            spark_review, related_work, paper_content, paper_path,
-            calibration_context=calibration_context,
-            cal_dir=cal_dir,
-            skip_neutral=skip_neutral,
-            skip_spark=skip_spark,
-            skip_related_work=skip_related_work,
-            gt_score=gt_score,
-        )
-        total_cost += merger_cost
-        score = round(float(score), 1)
-        decision = score_to_decision(score)
-
-    sdk_savings = get_sdk_savings() - savings_before
-
-    return {
-        "harsh_review": harsh_review,
-        "neutral_review": neutral_review,
-        "spark_review": spark_review,
-        "related_work": related_work,
-        "merged_review": merged_review,
-        "score": score,
-        "decision": decision,
-        "cost": total_cost,
-        "sdk_savings": sdk_savings,
-    }
-
+    return calibration_context, cal_dir
 
 async def review_paper(
     paper_path: str,
@@ -1235,7 +704,6 @@ async def review_paper(
         cal_dir=cal_dir,
         calibration_path=calibration_path,
     )
-    pp = str(path)
     print(f"Loaded paper: {path.name} ({len(paper_content):,} chars)")
     print(f"Mode: {'parallel' if parallel else 'sequential'}")
     print(f"Related work: {'disabled' if skip_related_work else 'enabled'}")
@@ -1252,33 +720,96 @@ async def review_paper(
     if not skip_related_work:
         print(f"  Related Work:   {MODEL_RELATED_WORK}")
     print(f"  Merger:         {MODEL_MERGER}")
-    print(f"  Scorer:         claude-haiku-4-5 (Agent SDK)\n")
+    print(f"  Scorer:         claude-sonnet-4-6 (Agent SDK)\n")
 
     client = _get_client(api_key=api_key)
+    pp = str(path)
 
-    result = await run_pipeline(
-        paper_path=pp,
-        paper_content=paper_content,
-        client=client,
-        parallel=parallel,
-        skip_related_work=skip_related_work,
-        skip_spark=skip_spark,
-        skip_neutral=skip_neutral,
-        venue=venue,
+    # ── Phase 1: All reviewers (parallel or sequential) ───────────
+    total_cost = 0.0
+    if parallel:
+        if MODEL_HARSH.startswith("ollama:"):
+            tasks = [
+                run_reviewer(ollama_client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH.replace("ollama:", "", 1), venue=venue),
+            ]
+        else:
+            tasks = [
+                run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue=venue),
+            ]
+        if not skip_neutral:
+            if MODEL_NEUTRAL.startswith("ollama:"):
+                tasks.append(run_reviewer(ollama_client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL.replace("ollama:", "", 1), venue=venue))
+            else:
+                tasks.append(run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue=venue))
+        if not skip_spark:
+            if MODEL_SPARK.startswith("ollama:"):
+                tasks.append(run_reviewer(ollama_client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK.replace("ollama:", "", 1), venue=venue))
+            else:
+                tasks.append(run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue=venue))
+        if not skip_related_work:
+            tasks.append(run_related_work_search(client, paper_content))
+
+        print("Phase 1: All reviewers in parallel ...")
+        results_list = await asyncio.gather(*tasks)
+
+        idx = 0
+        harsh_review, c = results_list[idx]; total_cost += c; idx += 1
+        if not skip_neutral:
+            neutral_review, c = results_list[idx]; total_cost += c; idx += 1
+        else:
+            neutral_review = "Neutral reviewer was skipped."
+        if not skip_spark:
+            spark_review, c = results_list[idx]; total_cost += c; idx += 1
+        else:
+            spark_review = "Spark finder was skipped."
+        if not skip_related_work:
+            related_work, c = results_list[idx]; total_cost += c
+        else:
+            related_work = "Related work search was skipped."
+    else:
+        print("Phase 1: Reviewers sequentially ...")
+        if MODEL_HARSH.startswith("ollama:"):
+            harsh_review, c = await run_reviewer(ollama_client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH.replace("ollama:", "", 1), venue=venue)
+        else:
+            harsh_review, c = await run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue=venue)
+        total_cost += c
+        if not skip_neutral:
+            if MODEL_NEUTRAL.startswith("ollama:"):
+                neutral_review, c = await run_reviewer(ollama_client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL.replace("ollama:", "", 1), venue=venue)
+            else:
+                neutral_review, c = await run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue=venue)
+            total_cost += c
+        else:
+            neutral_review = "Neutral reviewer was skipped."
+        if not skip_spark:
+            if MODEL_SPARK.startswith("ollama:"):
+                spark_review, c = await run_reviewer(ollama_client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK.replace("ollama:", "", 1), venue=venue)
+            else:
+                spark_review, c = await run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue=venue)
+            total_cost += c
+        else:
+            spark_review = "Spark finder was skipped."
+        if not skip_related_work:
+            related_work, c = await run_related_work_search(client, paper_content)
+            total_cost += c
+        else:
+            related_work = "Related work search was skipped."
+
+    # ── Phase 2: Merger + Score (same conversation) ───────────────
+    print("\nPhase 2: Merger ...")
+    final_review, final_score, merger_cost = await run_merger(
+        client, harsh_review, neutral_review,
+        spark_review, related_work, paper_content,
         calibration_context=calibration_context,
         cal_dir=cal_dir,
+        skip_neutral=skip_neutral,
+        skip_spark=skip_spark,
+        skip_related_work=skip_related_work,
     )
-
-    total_cost = result["cost"]
-    final_review = result["merged_review"]
-    final_score = result["score"]
-    final_decision = result["decision"]
-    harsh_review = result["harsh_review"]
-    neutral_review = result["neutral_review"]
-    spark_review = result["spark_review"]
-    related_work = result["related_work"]
-
+    total_cost += merger_cost
+    final_score = round(float(final_score), 1)
     print(f"Total cost for this paper: ${total_cost:.4f}")
+    final_decision = score_to_decision(final_score)
 
     # ── Output ────────────────────────────────────────────────────
     separator = "=" * 72
@@ -1287,15 +818,15 @@ async def review_paper(
         f"INDIVIDUAL REVIEWS\n"
         f"{separator}\n\n"
         f"{'─' * 40}\n"
-        f"HARSH CRITIC ({MODEL_HARSH} via OpenRouter)\n"
+        f"HARSH CRITIC ({MODEL_HARSH} via {'Ollama' if MODEL_HARSH.startswith('ollama:') else 'Claude Agent SDK' if MODEL_HARSH.startswith('claude:') else 'OpenRouter'})\n"
         f"{'─' * 40}\n"
         f"{harsh_review}\n\n"
         f"{'─' * 40}\n"
-        f"NEUTRAL REVIEWER ({MODEL_NEUTRAL} via OpenRouter)\n"
+        f"NEUTRAL REVIEWER ({MODEL_NEUTRAL} via {'Ollama' if MODEL_NEUTRAL.startswith('ollama:') else 'Claude Agent SDK' if MODEL_NEUTRAL.startswith('claude:') else 'OpenRouter'})\n"
         f"{'─' * 40}\n"
         f"{neutral_review}\n\n"
         f"{'─' * 40}\n"
-        f"SPARK FINDER ({MODEL_SPARK} via OpenRouter)\n"
+        f"SPARK FINDER ({MODEL_SPARK} via {'Ollama' if MODEL_SPARK.startswith('ollama:') else 'Claude Agent SDK' if MODEL_SPARK.startswith('claude:') else 'OpenRouter'})\n"
         f"{'─' * 40}\n"
         f"{spark_review}\n\n"
         f"{'─' * 40}\n"
@@ -1383,12 +914,12 @@ if __name__ == "__main__":
         print("  OPENROUTER_API_KEY   (required) Your OpenRouter API key")
         print()
         print("Models per stage:")
-        print(f"  Harsh Critic (OpenRouter):      {MODEL_HARSH}")
-        print(f"  Neutral (OpenRouter):           {MODEL_NEUTRAL}")
-        print(f"  Spark Finder (OpenRouter):      {MODEL_SPARK}")
+        print(f"  Harsh Critic ({'Ollama' if MODEL_HARSH.startswith('ollama:') else 'Claude Agent SDK' if MODEL_HARSH.startswith('claude:') else 'OpenRouter'}):      {MODEL_HARSH}")
+        print(f"  Neutral ({'Ollama' if MODEL_NEUTRAL.startswith('ollama:') else 'Claude Agent SDK' if MODEL_NEUTRAL.startswith('claude:') else 'OpenRouter'}):           {MODEL_NEUTRAL}")
+        print(f"  Spark Finder ({'Ollama' if MODEL_SPARK.startswith('ollama:') else 'Claude Agent SDK' if MODEL_SPARK.startswith('claude:') else 'OpenRouter'}):      {MODEL_SPARK}")
         print(f"  Related Work (OpenRouter):      {MODEL_RELATED_WORK}")
         print(f"  Merger (OpenRouter):            {MODEL_MERGER}")
-        print(f"  Scorer:                         claude-haiku-4-5 (Agent SDK)")
+        print(f"  Scorer:                         claude-sonnet-4-6 (Agent SDK)")
         sys.exit(0 if "--help" in sys.argv else 1)
 
     parallel = "--sequential" not in sys.argv
